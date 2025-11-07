@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sl-20251107124839';
+const CACHE_NAME = 'sl-20251107140010';
 const ASSETS = [
   '/',
   '/index.html',
