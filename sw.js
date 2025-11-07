@@ -1,11 +1,5 @@
-const CACHE_NAME = 'sl-20251107165130';
-const ASSETS = [
-  '/', '/index.html', '/manifest.webmanifest',
-  '/icon-192.png','/icon-512.png','/maskable-512.png',
-  '/img/whatsapp.svg','/img/soprolife-logo.jpg',
-  '/favicon.svg?v=1','/favicon-32.png?v=2','/favicon-16.png?v=2',
-  '/apple-touch-icon.png?v=2','/offline.html'
-];
+const CACHE_NAME = 'sl-$V';
+const ASSETS = [ '/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/maskable-512.png', '/img/whatsapp.svg', '/img/sopro-logo.svg', '/img/logo.jpg', '/favicon.svg?v=1', '/favicon-32.png?v=2', '/favicon-16.png?v=2', '/apple-touch-icon.png?v=2', '/offline.html' ];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
