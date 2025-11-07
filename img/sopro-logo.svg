@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" role="img" aria-label="Sopro Life">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0" stop-color="#0ea5e9"/><stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(16,16)">
+    <path d="M0 24c24 0 36-10 60-10 10 0 18 2 26 6" fill="none" stroke="url(#g)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M0 40c18 0 28-7 46-7 11 0 20 3 28 7" fill="none" stroke="#0ea5e9" stroke-width="8" stroke-linecap="round" opacity=".9"/>
+    <circle cx="86" cy="14" r="6" fill="#0ea5e9"/>
+  </g>
+  <g fill="#0b1220" font-family="system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif">
+    <text x="120" y="48" font-weight="800" font-size="28">Sopro</text>
+    <text x="225" y="48" font-weight="700" font-size="28" fill="#0ea5e9">Life</text>
+    <rect x="120" y="56" width="122" height="6" rx="3" fill="url(#g)"/>
+  </g>
+</svg>

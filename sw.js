@@ -1,13 +1,17 @@
-const CACHE_NAME = 'sl-20251107143626';
+const CACHE_NAME = 'sl-20251107155627';
 const ASSETS = [
   '/',
   '/index.html',
+  '/manifest.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/maskable-512.png',
+  '/img/whatsapp.svg',
+  '/img/sopro-logo.svg',
   '/favicon.svg?v=1',
   '/favicon-32.png?v=2',
   '/favicon-16.png?v=2',
   '/apple-touch-icon.png?v=2',
-  '/manifest.webmanifest?v=1',
-  '/og-image.svg?v=1',
   '/offline.html'
 ];
 
