@@ -206,6 +206,68 @@
   }
 }
 
+
+/* ===== Navegação principal no topo ===== */
+.sl-header-in{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:32px;
+  padding:10px 0;
+}
+.sl-main-nav{
+  display:flex;
+  align-items:center;
+  gap:20px;
+  margin-left:32px;
+  font-size:.95rem;
+  flex:1;
+}
+.sl-nav-link{
+  position:relative;
+  color:var(--sl-text-soft);
+  text-decoration:none;
+  padding:6px 0;
+  white-space:nowrap;
+}
+.sl-nav-link:hover{
+  color:var(--sl-primary);
+}
+.sl-nav-link::after{
+  content:"";
+  position:absolute;
+  left:0;
+  bottom:-3px;
+  width:0;
+  height:2px;
+  border-radius:999px;
+  background:var(--sl-accent);
+  transition:width .2s;
+}
+.sl-nav-link:hover::after{
+  width:100%;
+}
+.sl-nav-cta{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:8px 18px;
+  border-radius:999px;
+  background:var(--wa-green,#25D366);
+  color:#fff;
+  font-size:.9rem;
+  font-weight:600;
+  text-decoration:none;
+  box-shadow:0 10px 20px rgba(0,0,0,0.12);
+}
+.sl-nav-cta:hover{
+  filter:brightness(0.96);
+}
+@media (max-width:960px){
+  .sl-main-nav{ display:none; }
+  .sl-nav-cta{ margin-left:auto; }
+}
+
 </style>
 <style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
 <style id="sl-wa-override">
