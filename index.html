@@ -130,6 +130,28 @@
     }
   </style>
 <style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
+<style id="sl-wa-override">
+/* WhatsApp brand */
+:root{ --wa-green:#25D366; --wa-dark:#075E54; }
+.sl-whatsapp-pill[data-sl="wa"]{
+  display:inline-flex; align-items:center; gap:10px;
+  padding:6px 12px; border-radius:999px;
+  background: var(--wa-green) !important;
+  color:#fff !important; box-shadow:none;
+}
+.sl-whatsapp-pill[data-sl="wa"] .sl-dot{ background:#fff !important }
+.sl-whatsapp-pill[data-sl="wa"]::after{
+  content:""; width:18px; height:18px; margin-left:10px; flex:0 0 auto;
+  background-repeat:no-repeat; background-size:contain; background-position:center;
+  /* telefone branco em SVG inline */
+  background-image:url("data:image/svg+xml;utf8,<svg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'><path fill='%23FFFFFF' d='M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.05-.24c1.15.38 2.39.59 3.54.59a1 1 0 011 1V20a1 1 0 01-1 1C10.29 21 3 13.71 3 4a1 1 0 011-1h3.47a1 1 0 011 1c0 1.15.2 2.39.59 3.54a1 1 0 01-.25 1.05l-2.19 2.2z'/></svg>");
+}
+.sl-whatsapp-pill[data-sl="wa"]:hover{ filter:brightness(0.96); }
+@media (max-width:720px){
+  .sl-whatsapp-pill[data-sl="wa"]::after{ width:16px; height:16px; margin-left:8px; }
+}
+</style>
+
 </head>
 <body>
 
@@ -172,7 +194,7 @@
 
             <p class="sl-hero-note">Atendemos adultos e crianças acima da idade adequada para o exame (conforme avaliação).</p>
             
-      <a class="sl-whatsapp-pill" target="_blank" rel="noopener"
+      <a class="sl-whatsapp-pill" data-sl="wa" data-sl="wa" target="_blank" rel="noopener"
          href="https://api.whatsapp.com/send?phone=5521999417192&text=Ol%C3%A1,%20gostaria%20de%20agendar%20uma%20espirometria.">
         <span class="sl-dot"></span>
         Agendamento rápido pelo WhatsApp
