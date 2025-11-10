@@ -1,187 +1,369 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sopro Life — Espirometria no RJ (com e sem broncodilatador)</title>
-  <meta name="description" content="Espirometria ambulatorial e domiciliar no Rio de Janeiro. Agende pelo WhatsApp.">
-  <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <meta name="theme-color" content="#0ea5e9">
+  <meta charset="UTF-8" />
+  <title>Espirometria | Sopro Life</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Espirometria com e sem broncodilatador na Sopro Life. Atendimento humanizado, laudos ágeis e opção de parceria com clínicas, empresas e PCMSO." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
   <style>
     :root{
-      --brand:#0ea5e9;        /* azul Sopro */
-      --brand-2:#14b8a6;      /* verde-água */
-      --ink:#0b1220;          /* texto principal */
-      --muted:#475569;        /* texto secundário */
-      --line:#e2e8f0;         /* borda suave */
-      --bg:#ffffff;
-      --pill:#e6f6ff;
+      /* Paleta baseada na sua logo (navy + teal) */
+      --sl-primary: #0b2239;         /* navy */
+      --sl-primary-dark: #081829;    /* navy +1 */
+      --sl-accent: #1eb5ab;          /* teal vivo */
+      --sl-bg-soft: #f2fbfb;
+      --sl-bg-strong: #e3f6f6;
+      --sl-text-dark: #0b2239;
+      --sl-text-soft: #476172;
+      --sl-radius-lg: 18px;
+      --sl-radius-sm: 10px;
+      --sl-shadow-soft: 0 14px 35px rgba(0,0,0,0.08);
+      --sl-shadow-light: 0 8px 20px rgba(0,0,0,0.05);
+      --sl-green: #08a94f;
     }
     *{box-sizing:border-box}
-    html,body{height:100%}
-    body{margin:0;background:var(--bg);color:var(--ink);
-         font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif}
+    body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,Arial,sans-serif;color:var(--sl-text-dark);background:#fff}
 
-    .wrap{max-width:1200px;margin:0 auto;padding:0 24px}
-    /* topo */
-    .nav{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.88);
-         backdrop-filter:saturate(1.1) blur(6px);border-bottom:1px solid rgba(2,6,23,.06)}
-    .nav .inner{display:flex;align-items:center;justify-content:space-between;padding:10px 0;gap:16px}
-    .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
-    .brand img{height:64px;width:auto;border-radius:10px;background:#fff;box-shadow:0 2px 10px rgba(2,6,23,.06)}
-    .brand span{font-weight:800}
-    .btn{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:999px;
-         text-decoration:none;font-weight:700}
-    .btn-wa{background:#25D366;color:#053b1f;box-shadow:0 8px 22px rgba(0,0,0,.18)}
-    .btn-outline{border:1px solid var(--brand);color:var(--ink)}
-    .btn:focus{outline:2px solid var(--brand-2);outline-offset:2px}
+    a{color:inherit;text-decoration:none}
 
-    /* hero */
-    .hero{padding:56px 0 24px;text-align:center}
-    .hero h1{font-size:42px;margin:0 0 8px}
-    .hero p{margin:0;color:var(--muted)}
-    .cta-row{margin-top:22px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+    /* Header com logo alinhada à esquerda */
+    .sl-header{border-bottom:1px solid rgba(11,34,57,0.06);background:#fff;position:sticky;top:0;z-index:20}
+    .sl-wrap{max-width:1100px;margin:0 auto;padding:0 16px}
+    .sl-header-in{display:flex;align-items:center;gap:14px;padding:10px 0}
+    .sl-brand{display:flex;align-items:center}
+    .sl-brand img{height:68px;width:auto;display:block}
 
-    /* info cards curtinhas */
-    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin:28px 0}
-    .card{border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+    .sl-page{min-height:100vh;background:radial-gradient(circle at top left,#ebfbff 0,#ffffff 55%);padding-bottom:60px}
+    .sl-container{max-width:1100px;margin:0 auto;padding:0 16px}
 
-    /* seção abas */
-    .section{margin:34px 0}
-    .section h2{font-size:24px;margin:0 0 14px;text-align:center}
-    .tabs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
-    .tab{border:1px solid var(--brand);color:var(--ink);background:#fff;padding:10px 14px;border-radius:999px;cursor:pointer;font-weight:700}
-    .tab[aria-selected="true"]{background:var(--brand);color:#fff}
-    .panel{border:1px solid var(--line);border-radius:16px;padding:18px;background:#fafcff}
-    .panel h3{margin:0 0 10px}
-    .prep ul{margin:8px 0 0 20px}
+    /* HERO */
+    .sl-hero{padding:24px 0 36px}
+    .sl-breadcrumb{font-size:.8rem;color:var(--sl-text-soft);margin-bottom:8px}
+    .sl-hero-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:32px;align-items:center}
+    .sl-hero-kicker{font-size:.85rem;text-transform:uppercase;letter-spacing:.12em;color:var(--sl-primary-dark);font-weight:600;margin-bottom:8px}
+    .sl-hero-title{font-size:2.35rem;line-height:1.15;margin:0 0 10px}
+    .sl-hero-title span{color:var(--sl-accent)}
+    .sl-hero-subtitle{margin:0 0 18px;color:var(--sl-text-soft);font-size:1rem}
+    .sl-hero-list{list-style:none;padding:0;margin:0 0 22px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 18px;font-size:.92rem;color:var(--sl-text-soft)}
+    .sl-hero-list li::before{content:"•";color:var(--sl-accent);font-weight:700;margin-right:6px}
+    .sl-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:999px;cursor:pointer;font-weight:600;letter-spacing:.02em;transition:transform .15s,box-shadow .15s;background:#f5f9f9}
+    .sl-btn-primary{padding:11px 22px;background:linear-gradient(135deg,var(--sl-accent),#18a197);color:#fff;box-shadow:var(--sl-shadow-soft)}
+    .sl-btn-primary:hover{transform:translateY(-1px);box-shadow:0 18px 40px rgba(0,0,0,.16)}
+    .sl-btn-outline{padding:9px 18px;border:1px solid rgba(30,181,171,.28);color:var(--sl-primary-dark);background:rgba(255,255,255,.8);backdrop-filter:blur(8px)}
+    .sl-btn-outline:hover{background:#fff;box-shadow:var(--sl-shadow-light)}
+    .sl-hero-note{font-size:.82rem;color:var(--sl-text-soft);margin-top:6px}
+    .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border-radius:999px;background:rgba(30,181,171,.08);font-size:.8rem;margin-top:10px;color:var(--sl-text-soft)}
+    .sl-dot{width:8px;height:8px;border-radius:999px;background:#23c552}
 
-    /* CTA bar grande */
-    .bigcta{margin:18px auto 0;max-width:820px;border-radius:14px;padding:10px;border:1px solid var(--line);
-            display:flex;gap:10px;flex-wrap:wrap;justify-content:center;background:#f8feff}
-    .bigcta .btn{padding:12px 18px}
+    /* Card lateral */
+    .sl-hero-card{background:#fff;border-radius:24px;box-shadow:var(--sl-shadow-soft);padding:22px 20px 18px;border:1px solid rgba(0,0,0,.02)}
+    .sl-hero-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px}
+    .sl-hero-card-title{font-size:1.05rem;font-weight:600}
+    .sl-tag{font-size:.75rem;padding:4px 10px;border-radius:999px;background:var(--sl-bg-strong);color:var(--sl-primary-dark);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+    .sl-hero-card-badge{font-size:.83rem;color:var(--sl-text-soft);margin-bottom:10px}
+    .sl-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}
+    .sl-mode-pill{border-radius:999px;border:1px dashed rgba(30,181,171,.35);padding:6px 8px;font-size:.77rem;text-align:center;color:var(--sl-text-soft)}
+    .sl-card-divider{margin:12px 0;height:1px;background:linear-gradient(90deg,transparent,#e1f1f4,transparent)}
+    .sl-hero-mini-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;font-size:.78rem;color:var(--sl-text-soft)}
+    .sl-hero-mini-grid strong{font-size:.86rem;color:var(--sl-text-dark)}
+    .sl-hero-card-footer{margin-top:10px;font-size:.8rem;color:var(--sl-text-soft)}
 
-    footer{margin:48px 0 24px;padding-top:16px;border-top:1px solid var(--line);text-align:center;color:var(--muted)}
+    /* Seções */
+    .sl-section{padding:26px 0}
+    .sl-section-header{margin-bottom:18px}
+    .sl-section-kicker{font-size:.78rem;text-transform:uppercase;letter-spacing:.15em;color:var(--sl-primary-dark);margin-bottom:4px;font-weight:600}
+    .sl-section-title{font-size:1.5rem;margin:0 0 6px}
+    .sl-section-subtitle{margin:0;color:var(--sl-text-soft);font-size:.95rem;max-width:640px}
+    .sl-two-column{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:28px;align-items:flex-start}
+    .sl-text-block p{margin:0 0 10px;font-size:.96rem;color:var(--sl-text-soft)}
+    .sl-bullet-list{padding-left:1.1rem;margin:8px 0 0;font-size:.93rem;color:var(--sl-text-soft)}
+    .sl-bullet-list li{margin-bottom:4px}
+    .sl-highlight-box{background:var(--sl-bg-soft);border-radius:var(--sl-radius-lg);padding:16px 18px;box-shadow:var(--sl-shadow-light);font-size:.9rem}
+    .sl-highlight-box strong{color:var(--sl-primary-dark)}
 
-    /* botão flutuante do WhatsApp */
-    .sl-fab{position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:999px;background:#25D366;box-shadow:0 10px 26px rgba(0,0,0,.22)}
-    .sl-fab img{width:28px;height:28px}
-   (max-width:640px){.brand img{height:40px}}
-.sl-nav .inner{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0}
- (max-width:640px){.brand img{height:80px}}
-.sl-nav .inner{padding:14px 0}
- (max-width:640px){.brand img{height:84px}}
-.sl-nav .wrap{padding-left:0} /* tira padding esquerdo só no topo */
-.sl-nav .wrap{padding-left:0}
-.sl-nav .inner{justify-content:flex-start}
-.brand{gap:8px}
-.brand img{height:128px;width:auto}
-.sl-nav .wrap{padding-left:0}
-.sl-nav .inner{justify-content:flex-start}
-.brand{gap:8px}
-.brand img{height:144px;width:auto}
-.sl-nav .wrap{padding-left:0}
-.sl-nav .inner{justify-content:flex-start}
-.brand{gap:8px}
-.brand img{height:160px;width:auto;display:block}
-</style>
+    /* Tabs */
+    .sl-tabs{margin-top:10px;background:#fff;border-radius:22px;box-shadow:var(--sl-shadow-soft);padding:16px 16px 18px}
+    .sl-tab-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+    .sl-tab-button{border-radius:999px;border:1px solid transparent;padding:7px 14px;font-size:.83rem;cursor:pointer;background:#f5f9f9;color:var(--sl-text-soft);transition:background-color .15s,color .15s,border-color .15s}
+    .sl-tab-button[aria-selected="true"]{background:linear-gradient(135deg,var(--sl-accent),#18a197);color:#fff;border-color:transparent}
+    .sl-tab-panel{display:none;font-size:.9rem;color:var(--sl-text-soft)}
+    .sl-tab-panel.is-active{display:block}
+    .sl-tagline{font-size:.8rem;text-transform:uppercase;letter-spacing:.18em;color:var(--sl-text-soft);margin-bottom:8px}
+
+    /* Cartões de preparo */
+    .sl-card-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+    .sl-card{background:#fff;border-radius:var(--sl-radius-lg);padding:14px 16px 16px;box-shadow:var(--sl-shadow-light);font-size:.9rem}
+    .sl-card h3{margin:0 0 6px;font-size:1rem}
+    .sl-pill-label{display:inline-block;font-size:.72rem;text-transform:uppercase;letter-spacing:.16em;color:var(--sl-primary-dark);margin-bottom:4px}
+    .sl-card ul{margin:4px 0 0;padding-left:1.1rem;color:var(--sl-text-soft)}
+    .sl-card ul li{margin-bottom:4px}
+
+    /* CTA */
+    .sl-cta-section{padding:32px 0 10px}
+    .sl-cta-box{border-radius:24px;background:linear-gradient(120deg,var(--sl-primary-dark),#0f8f86);color:#fff;padding:18px 20px;box-shadow:var(--sl-shadow-soft);display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;align-items:center}
+    .sl-cta-title{margin:0 0 4px;font-size:1.4rem}
+    .sl-cta-sub{margin:0 0 10px;font-size:.93rem;opacity:.92}
+    .sl-cta-contacts{font-size:.9rem;line-height:1.4}
+    .sl-cta-contacts strong{font-size:1.02rem}
+    .sl-cta-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;align-items:center}
+    .sl-cta-small{font-size:.8rem;opacity:.88}
+
+    /* Barra fixa WhatsApp */
+    .sl-whatsapp-bar{position:fixed;left:0;right:0;bottom:0;background:var(--sl-green);color:#fff;font-size:.94rem;z-index:999;box-shadow:0 -4px 16px rgba(0,0,0,.16)}
+    .sl-whatsapp-bar a{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px}
+    .sl-whatsapp-bar strong{font-weight:600}
+
+    /* Responsivo */
+    @media (max-width:900px){
+      .sl-hero-grid,.sl-two-column,.sl-card-grid,.sl-cta-box{grid-template-columns:minmax(0,1fr)}
+      .sl-cta-actions{justify-content:flex-start}
+    }
+    @media (max-width:720px){
+      .sl-hero{padding-top:14px}
+      .sl-hero-title{font-size:1.9rem}
+      .sl-hero-grid{gap:22px}
+      .sl-hero-list{grid-template-columns:minmax(0,1fr)}
+      .sl-modes{grid-template-columns:minmax(0,1fr)}
+      .sl-page{padding-bottom:70px}
+    }
+  </style>
 </head>
 <body>
-  <!-- topo -->
-  <nav class="nav" role="navigation" aria-label="Sopro Life">
-    <div class="wrap inner">
-      </a>
-      <div class="cta-row" style="margin:0">
-        <a class="btn btn-wa" href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20vim%20do%20site%20Sopro%20Life%20e%20quero%20agendar%20uma%20espirometria%20ambulatorial.">Agendar (Ambulatorial)</a>
-        <a class="btn btn-outline" href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20vim%20do%20site%20Sopro%20Life%20e%20quero%20agendar%20uma%20espirometria%20domiciliar.">Agendar (Domiciliar)</a>
-      </div>
-    </div>
-  </nav>
 
-  <!-- hero -->
-  <header class="wrap hero">
-    <h1>Aqui o ar é de vitória.</h1>
-    <p>Espirometria móvel e em parceiros no Rio de Janeiro. Atendimento ágil, laudo confiável.</p>
-    <div class="cta-row">
-      <a class="btn btn-wa" href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20vim%20do%20site%20Sopro%20Life%20e%20quero%20agendar.">Agendar agora</a>
+  <!-- Header com logo encostada à esquerda -->
+  <header class="sl-header">
+    <div class="sl-wrap sl-header-in">
+      <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a>
     </div>
-
-    <section class="cards">
-      <div class="card"><strong>Onde atendemos</strong><br>Barra, Zona Sul, Zona Norte e parceiros.</div>
-      <div class="card"><strong>Como funciona</strong><br>Agende pelo WhatsApp. Vamos até você ou marque em um ponto parceiro.</div>
-      <div class="card"><strong>Contato</strong><br>WhatsApp: (21) 99941-7192</div>
-    </section>
   </header>
 
-  <!-- seção com abas -->
-  <section class="wrap section" id="tipos">
-    <h2>Tipos de Espirometria</h2>
-    <div class="tabs" role="tablist" aria-label="Tipos de Espirometria">
-      <button class="tab" role="tab" id="tab-combd" aria-controls="panel-combd" aria-selected="true">Com broncodilatador</button>
-      <button class="tab" role="tab" id="tab-sembd" aria-controls="panel-sembd" aria-selected="false">Sem broncodilatador</button>
+  <div class="sl-page">
+    <div class="sl-container">
+
+      <!-- HERO -->
+      <section class="sl-hero">
+        <div class="sl-breadcrumb">Início › Exames › Espirometria</div>
+
+        <div class="sl-hero-grid">
+          <div>
+            <div class="sl-hero-kicker">Respiração é vida</div>
+            <h1 class="sl-hero-title">Faça sua <span>Espirometria</span> com quem vive Pneumologia.</h1>
+            <p class="sl-hero-subtitle">
+              Exames bem feitos, interpretados por pneumologistas e com orientação clara para você e para o médico assistente.
+            </p>
+
+            <ul class="sl-hero-list">
+              <li>Espirometria simples e com broncodilatador</li>
+              <li>Protocolos alinhados às diretrizes nacionais</li>
+              <li>Parcerias com clínicas, empresas e médicos</li>
+              <li>Laudo padronizado, com gráficos e conclusões objetivas</li>
+            </ul>
+
+            <div class="sl-hero-actions">
+              <a class="sl-btn sl-btn-primary"
+                 href="https://api.whatsapp.com/send?phone=5521999417192&text=Ol%C3%A1,%20gostaria%20de%20agendar%20uma%20espirometria.">
+                Agendar seu exame
+              </a>
+              <a class="sl-btn sl-btn-outline" href="#agendamento">Ver opções de atendimento</a>
+            </div>
+
+            <p class="sl-hero-note">Atendemos adultos e crianças acima da idade adequada para o exame (conforme avaliação).</p>
+            <div class="sl-whatsapp-pill"><span class="sl-dot"></span> Agendamento rápido pelo WhatsApp – responda quando puder.</div>
+          </div>
+
+          <aside class="sl-hero-card">
+            <div class="sl-hero-card-header">
+              <div>
+                <div class="sl-hero-card-title">Modos de atendimento</div>
+                <div class="sl-hero-card-badge">Escolha o formato que encaixa melhor na sua rotina.</div>
+              </div>
+              <div class="sl-tag">Sopro Life</div>
+            </div>
+
+            <div class="sl-modes">
+              <div class="sl-mode-pill">Ambulatorial</div>
+              <div class="sl-mode-pill">Domiciliar (parceria)</div>
+              <div class="sl-mode-pill">Empresas / PCMSO</div>
+            </div>
+
+            <div class="sl-card-divider"></div>
+
+            <div class="sl-hero-mini-grid">
+              <div><strong>Laudo médico</strong><br>Emitido por pneumologista com experiência em função pulmonar.</div>
+              <div><strong>Equipamento portátil</strong><br>Calibração diária e filtros descartáveis individuais.</div>
+            </div>
+
+            <div class="sl-hero-card-footer">
+              Para clínicas, hospitais e empresas, montamos pacotes sob medida com volume de exames e treinamento da equipe.
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- SOBRE -->
+      <section class="sl-section">
+        <div class="sl-section-header">
+          <div class="sl-section-kicker">Sobre o exame</div>
+          <h2 class="sl-section-title">O que é a espirometria?</h2>
+          <p class="sl-section-subtitle">
+            A espirometria (prova de função respiratória) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório.
+          </p>
+        </div>
+
+        <div class="sl-two-column">
+          <div class="sl-text-block">
+            <p>Durante o exame, o paciente respira por um bocal conectado ao espirômetro. Fazemos manobras guiadas como inspirações profundas e sopros prolongados.</p>
+            <p>As curvas e índices apontam se há obstrução/restrição e se existe resposta a broncodilatadores.</p>
+            <ul class="sl-bullet-list">
+              <li>Diagnóstico e controle de asma e DPOC;</li>
+              <li>Avaliação de tabagistas e ex-tabagistas;</li>
+              <li>Ocupacional: poeiras/gases (PCMSO);</li>
+              <li>Pré-operatório;</li>
+              <li>Seguimento de doenças pulmonares.</li>
+            </ul>
+          </div>
+
+          <div class="sl-highlight-box">
+            <strong>Quem pede o exame?</strong>
+            <p>Pneumologistas, clínicos, cardiologistas, médicos do trabalho e cirurgiões, entre outros.</p>
+            <p>Na Sopro Life, o laudo é objetivo e útil ao médico solicitante, com recomendações quando necessário.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- TIPOS -->
+      <section class="sl-section">
+        <div class="sl-section-header">
+          <span class="sl-section-kicker">Modalidades</span>
+          <h2 class="sl-section-title">Tipos de espirometria que realizamos</h2>
+          <p class="sl-section-subtitle">Estrutura inspirada na concorrência, mas adaptada à Sopro Life.</p>
+        </div>
+
+        <div class="sl-tabs" id="tipos-espirometria">
+          <div class="sl-tab-list" role="tablist">
+            <button class="sl-tab-button" role="tab" aria-selected="true" data-tab="simples">Espirometria simples</button>
+            <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="bd">Espirometria com broncodilatador</button>
+            <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="ocupacional">Espirometria ocupacional / PCMSO</button>
+          </div>
+
+          <div class="sl-tab-panel is-active" data-panel="simples" role="tabpanel">
+            <div class="sl-tagline">Avaliação basal</div>
+            <h3>Espirometria simples</h3>
+            <p>Sem medicação durante o exame. Ótima para investigação inicial e acompanhamento periódico.</p>
+            <ul class="sl-bullet-list">
+              <li>Mede CV, VEF1, entre outros;</li>
+              <li>Identifica padrões obstrutivos/restritivos;</li>
+              <li>Permite comparação em seguimentos.</li>
+            </ul>
+          </div>
+
+          <div class="sl-tab-panel" data-panel="bd" role="tabpanel">
+            <div class="sl-tagline">Resposta a medicação</div>
+            <h3>Espirometria com broncodilatador</h3>
+            <p>Após a basal, aplica-se broncodilatador e repete-se o teste para avaliar melhora de parâmetros.</p>
+            <ul class="sl-bullet-list">
+              <li>Chave no diagnóstico e controle da asma;</li>
+              <li>Ajuda a diferenciar DPOC de outras obstruções;</li>
+              <li>Orienta ajustes de bombinhas.</li>
+            </ul>
+          </div>
+
+          <div class="sl-tab-panel" data-panel="ocupacional" role="tabpanel">
+            <div class="sl-tagline">Saúde do trabalhador</div>
+            <h3>Espirometria ocupacional / PCMSO</h3>
+            <p>Protocolos alinhados às normas para ambientes com poeiras/fumos/vapores. Admissional, periódico e demissional.</p>
+            <ul class="sl-bullet-list">
+              <li>Registros adequados a auditorias;</li>
+              <li>Campanhas in company mediante programação;</li>
+              <li>Relatórios padronizados.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- PREPARO -->
+      <section class="sl-section">
+        <div class="sl-section-header">
+          <span class="sl-section-kicker">Preparo</span>
+          <h2 class="sl-section-title">Como se preparar</h2>
+          <p class="sl-section-subtitle">Uma boa preparação melhora a qualidade do exame. Em dúvida, siga o médico solicitante.</p>
+        </div>
+
+        <div class="sl-card-grid">
+          <div class="sl-card">
+            <div class="sl-pill-label">No dia</div>
+            <h3>Cuidados gerais</h3>
+            <ul>
+              <li>Evite refeições muito pesadas até 2 h antes;</li>
+              <li>Roupas confortáveis (tórax livre);</li>
+              <li>Chegue com alguns minutos de antecedência;</li>
+              <li>Leve solicitação e documentos.</li>
+            </ul>
+          </div>
+
+          <div class="sl-card">
+            <div class="sl-pill-label">Medicações/Tabaco</div>
+            <h3>Quando suspender/manter</h3>
+            <ul>
+              <li>Não fume de 2 a 4 h antes;</li>
+              <li>Suspensão de bombinhas depende do seu médico; na dúvida, não suspenda por conta.</li>
+              <li>Leve suas medicações inalatórias.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA -->
+      <section class="sl-cta-section" id="agendamento">
+        <div class="sl-cta-box">
+          <div>
+            <h2 class="sl-cta-title">Agende sua espirometria</h2>
+            <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p>
+            <div class="sl-cta-contacts">
+              <strong>WhatsApp:</strong> (21) 99941-7192<br>
+              <strong>E-mail:</strong> contato@soprolife.com.br<br>
+              <strong>Atendimento:</strong> a combinar conforme parceria e local.
+            </div>
+          </div>
+
+          <div class="sl-cta-actions">
+            <a class="sl-btn sl-btn-primary"
+               href="https://api.whatsapp.com/send?phone=5521999417192&text=Ol%C3%A1,%20gostaria%20de%20agendar%20uma%20espirometria%20na%20Sopro%20Life.">
+              Agendar agora pelo WhatsApp
+            </a>
+            <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div>
+          </div>
+        </div>
+      </section>
+
     </div>
+  </div>
 
-    <div id="panel-combd" class="panel" role="tabpanel" aria-labelledby="tab-combd">
-      <h3>Espirometria com broncodilatador</h3>
-      <p>Indicado para avaliar resposta ao broncodilatador e ajudar na diferenciação entre asma e DPOC, entre outros.</p>
-      <div class="prep">
-        <strong>Preparo:</strong>
-        <ul>
-          <li>Trazer pedido médico (se houver).</li>
-          <li>Sem jejum; fazer refeição leve antes do exame (evitar refeições volumosas).</li>
-          <li>Evitar bebidas alcoólicas e não fumar por 6 horas antes.</li>
-          <li><b>Suspender broncodilatadores</b> conforme orientação médica (ex.: 12 h para curtos, 24 h para longos — quando aplicável).</li>
-        </ul>
-      </div>
-      <p><strong>Idade mínima:</strong> 7 anos • <strong>Sexos:</strong> todos.</p>
-    </div>
-
-    <div id="panel-sembd" class="panel" role="tabpanel" aria-labelledby="tab-sembd" hidden>
-      <h3>Espirometria sem broncodilatador</h3>
-      <p>Exame de função pulmonar basal para diagnóstico e seguimento de doenças respiratórias, aptidão ocupacional e pré-operatório.</p>
-      <div class="prep">
-        <strong>Preparo:</strong>
-        <ul>
-          <li>Trazer documento e exames prévios (se houver).</li>
-          <li>Sem jejum; fazer refeição leve antes do exame.</li>
-          <li>Evitar bebidas alcoólicas e não fumar por 6 horas antes.</li>
-          <li>Usar medicações habituais, salvo orientação contrária do seu médico.</li>
-        </ul>
-      </div>
-      <p><strong>Idade mínima:</strong> 7 anos • <strong>Sexos:</strong> todos.</p>
-    </div>
-
-    <div class="bigcta" aria-label="Agendamentos por WhatsApp">
-      <a class="btn btn-wa" href="https://wa.me/5521999417192?text=Quero%20espirometria%20ambulatorial.">Agendar ambulatorial</a>
-      <a class="btn btn-outline" href="https://wa.me/5521999417192?text=Quero%20espirometria%20domiciliar.">Agendar domiciliar</a>
-    </div>
-  </section>
-
-  <footer class="wrap">© Sopro Life. Diagnósticos e Soluções em Saúde.</footer>
-
-  <!-- botão flutuante -->
-  <a class="sl-fab" href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20tenho%20uma%20d%C3%BAvida%20sobre%20espirometria." aria-label="Fale no WhatsApp">
-    <img src="/img/logo.jpg" alt="">
-  </a>
+  <!-- Barra fixa WhatsApp -->
+  <div class="sl-whatsapp-bar">
+    <a href="https://api.whatsapp.com/send?phone=5521999417192&text=Ol%C3%A1,%20tenho%20d%C3%BAvidas%20sobre%20a%20espirometria."
+       target="_blank" rel="noopener">
+      <span>🤝</span>
+      <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span>
+    </a>
+  </div>
 
   <script>
-    // tabs acessíveis
+    // Tabs
     (function(){
-      const tabs = document.querySelectorAll('.tab');
-      const panels = {'tab-combd':document.getElementById('panel-combd'),
-                      'tab-sembd':document.getElementById('panel-sembd')};
-      tabs.forEach(t=>{
-        t.addEventListener('click', ()=>{
-          tabs.forEach(x=>x.setAttribute('aria-selected','false'));
-          Object.values(panels).forEach(p=>p.hidden=true);
-          t.setAttribute('aria-selected','true');
-          panels[t.id].hidden=false;
+      var root=document.getElementById("tipos-espirometria"); if(!root) return;
+      var buttons=root.querySelectorAll(".sl-tab-button");
+      var panels=root.querySelectorAll(".sl-tab-panel");
+      buttons.forEach(function(btn){
+        btn.addEventListener("click",function(){
+          var tab=btn.getAttribute("data-tab");
+          buttons.forEach(function(b){b.setAttribute("aria-selected",b===btn?"true":"false");});
+          panels.forEach(function(p){p.classList.toggle("is-active",p.getAttribute("data-panel")===tab);});
         });
       });
     })();
-    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js'); }
   </script>
 </body>
 </html>
