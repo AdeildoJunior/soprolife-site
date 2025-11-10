@@ -632,5 +632,28 @@
       });
     })();
   </script>
+
+<script id="sl-hide-breadcrumb">
+document.addEventListener('DOMContentLoaded', function () {
+  try {
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    var node;
+    while ((node = walker.nextNode())) {
+      var t = node.nodeValue;
+      if (!t) continue;
+      if (t.indexOf('Início') !== -1 && t.indexOf('Espirometria') !== -1) {
+        var el = node.parentElement;
+        if (el) {
+          el.style.display = 'none';
+        }
+        break;
+      }
+    }
+  } catch (e) {
+    console && console.warn && console.warn('sl-hide-breadcrumb:', e);
+  }
+});
+</script>
+
 </body>
 </html>
