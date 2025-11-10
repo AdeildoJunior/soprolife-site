@@ -30,13 +30,16 @@
 
     /* Header com logo alinhada à esquerda */
     .sl-header{border-bottom:1px solid rgba(11,34,57,0.06);background:#fff;position:sticky;top:0;z-index:20}
-    .sl-wrap{max-width:1100px;margin:0 auto;padding:0 16px}
-    .sl-header-in{display:flex;align-items:center;gap:14px;padding:10px 0}
+    .sl-wrap{max-width:1200px;margin:0 auto;padding:0 16px}
+    .sl-header-in{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0}
+    .sl-nav-list{display:flex;align-items:center;gap:28px;margin:0;padding:0;list-style:none;font-size:.9rem}
+    .sl-nav-link{color:var(--sl-text-dark);text-decoration:none;font-weight:500}
+    .sl-nav-link:hover{color:var(--sl-primary)}
     .sl-brand{display:flex;align-items:center}
     .sl-brand img{height:68px;width:auto;display:block}
 
     .sl-page{min-height:100vh;background:radial-gradient(circle at top left,#ebfbff 0,#ffffff 55%);padding-bottom:60px}
-    .sl-container{max-width:1100px;margin:0 auto;padding:0 16px}
+    .sl-container{max-width:1200px;margin:0 auto;padding:0 16px}
 
     /* HERO */
     /* Atalhos rápidos (pílula + botão WhatsApp) */
@@ -247,6 +250,15 @@
   <header class="sl-header">
     <div class="sl-wrap sl-header-in">
       <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a>
+      <nav class="sl-nav" aria-label="Navegação principal">
+        <ul class="sl-nav-list">
+          <li><a class="sl-nav-link" href="/">Início</a></li>
+          <li><a class="sl-nav-link" href="/#sobre">Sobre</a></li>
+          <li><a class="sl-nav-link" href="/#servicos">Serviços</a></li>
+          <li><a class="sl-nav-link" href="/#agendamento">Agendamento</a></li>
+          <li><a class="sl-nav-link" href="/#contato">Contato</a></li>
+        </ul>
+      </nav>
     </div>
   </header>
 
