@@ -128,7 +128,83 @@
       .sl-modes{grid-template-columns:minmax(0,1fr)}
       .sl-page{padding-bottom:70px}
     }
-  </style>
+  /* ===== Rodapé: Links úteis + redes sociais ===== */
+.sl-links-footer{
+  padding: 18px 0 28px;
+  border-top: 1px solid rgba(0,0,0,0.04);
+  font-size: 0.88rem;
+  color: var(--sl-text-soft);
+}
+
+.sl-links-footer-grid{
+  display: grid;
+  grid-template-columns: minmax(0,2fr) minmax(0,1.4fr);
+  gap: 24px;
+}
+
+.sl-links-footer h3{
+  margin: 0 0 6px;
+  font-size: 1rem;
+  color: var(--sl-text-dark);
+}
+
+.sl-links-list,
+.sl-social-list{
+  list-style: none;
+  padding-left: 0;
+  margin: 4px 0 0;
+}
+
+.sl-links-list li + li,
+.sl-social-list li + li{
+  margin-top: 3px;
+}
+
+.sl-links-list a{
+  color: inherit;
+  text-decoration: none;
+}
+
+.sl-links-list a:hover{
+  color: var(--sl-primary);
+  text-decoration: underline;
+}
+
+/* Redes sociais */
+.sl-social-list a{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.sl-social-icon{
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  background: #eef4f5;
+}
+
+/* Cores básicas das redes */
+.sl-social-icon--ig{
+  background: radial-gradient(circle at 30% 30%, #ffdd55, #ff543e 45%, #c837ab 70%);
+  color:#fff;
+}
+.sl-social-icon--li{ background:#0a66c2; color:#fff; }
+.sl-social-icon--yt{ background:#ff0000; color:#fff; }
+
+@media (max-width: 900px){
+  .sl-links-footer-grid{
+    grid-template-columns: minmax(0,1fr);
+  }
+}
+
+</style>
 <style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
 <style id="sl-wa-override">
 /* WhatsApp brand */
@@ -375,6 +451,62 @@
   </div>
 
   <!-- Barra fixa WhatsApp -->
+        <!-- Links úteis / rodapé -->
+      <section class="sl-section sl-links-footer" id="links-rodape">
+        <div class="sl-links-footer-grid">
+          <div>
+            <h3>Links úteis</h3>
+            <ul class="sl-links-list">
+              <li>
+                <a href="https://sbpt.org.br/" target="_blank" rel="noopener">
+                  SBPT — Sociedade Brasileira de Pneumologia e Tisiologia
+                </a>
+              </li>
+              <li>
+                <a href="https://www.gov.br/saude" target="_blank" rel="noopener">
+                  Ministério da Saúde (Brasil)
+                </a>
+              </li>
+              <li>
+                <a href="https://ginasthma.org/" target="_blank" rel="noopener">
+                  GINA — Global Initiative for Asthma
+                </a>
+              </li>
+              <li>
+                <a href="https://goldcopd.org/" target="_blank" rel="noopener">
+                  GOLD — Global Initiative for Chronic Obstructive Lung Disease
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3>Sopro Life nas redes</h3>
+            <ul class="sl-social-list">
+              <li>
+                <a href="https://instagram.com/" target="_blank" rel="noopener">
+                  <span class="sl-social-icon sl-social-icon--ig">IG</span>
+                  <span>Instagram da Sopro Life</span>
+                </a>
+              </li>
+              <li>
+                <a href="https://linkedin.com/" target="_blank" rel="noopener">
+                  <span class="sl-social-icon sl-social-icon--li">in</span>
+                  <span>LinkedIn da Sopro Life</span>
+                </a>
+              </li>
+              <li>
+                <a href="https://youtube.com/" target="_blank" rel="noopener">
+                  <span class="sl-social-icon sl-social-icon--yt">▶</span>
+                  <span>Canal da Sopro Life no YouTube</span>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+
   <div class="sl-whatsapp-bar">
     <a href="https://api.whatsapp.com/send?phone=5521999417192&text=Ol%C3%A1,%20tenho%20d%C3%BAvidas%20sobre%20a%20espirometria."
        target="_blank" rel="noopener">
