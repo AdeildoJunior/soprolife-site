@@ -132,8 +132,14 @@
       .sl-modes{grid-template-columns:minmax(0,1fr)}
       .sl-page{padding-bottom:70px}
     }
-  </style>
-<style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
+  
+/* Links úteis: permitir <a.sl-card> como card */
+.sl-card a, a.sl-card{display:block;color:inherit;text-decoration:none}
+</style>
+<style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}
+/* Links úteis: permitir <a.sl-card> como card */
+.sl-card a, a.sl-card{display:block;color:inherit;text-decoration:none}
+</style>
 <style id="sl-wa-override">
 /* WhatsApp brand */
 :root{ --wa-green:#25D366; --wa-dark:#075E54; }
@@ -154,6 +160,9 @@
 @media (max-width:720px){
   .sl-whatsapp-pill[data-sl="wa"]::after{ width:16px; height:16px; margin-left:8px; }
 }
+
+/* Links úteis: permitir <a.sl-card> como card */
+.sl-card a, a.sl-card{display:block;color:inherit;text-decoration:none}
 </style>
 
 </head>
@@ -374,6 +383,37 @@
           </div>
         </div>
       </section>
+<section class="sl-section" id="links-uteis">
+  <div class="sl-section-header">
+    <div class="sl-section-kicker">Referências</div>
+    <h2 class="sl-section-title">Links úteis</h2>
+    <p class="sl-section-subtitle">
+      Fontes confiáveis para quem deseja se aprofundar em Pneumologia e função pulmonar.
+    </p>
+  </div>
+
+  <div class="sl-card-grid">
+    <a class="sl-card" href="https://sbpt.org.br/" target="_blank" rel="noopener">
+      <h3>SBPT — Sociedade Brasileira de Pneumologia e Tisiologia</h3>
+      <p>Diretrizes, notas técnicas e cursos para profissionais e pacientes.</p>
+    </a>
+
+    <a class="sl-card" href="https://www.gov.br/saude" target="_blank" rel="noopener">
+      <h3>Ministério da Saúde (Brasil)</h3>
+      <p>Protocolos, campanhas e informações oficiais sobre saúde respiratória.</p>
+    </a>
+
+    <a class="sl-card" href="https://ginasthma.org/" target="_blank" rel="noopener">
+      <h3>GINA — Global Initiative for Asthma</h3>
+      <p>Relatórios anuais e recomendações atualizadas para asma.</p>
+    </a>
+
+    <a class="sl-card" href="https://goldcopd.org/" target="_blank" rel="noopener">
+      <h3>GOLD — Global Initiative for Chronic Obstructive Lung Disease</h3>
+      <p>Estratégias e relatórios para diagnóstico e manejo da DPOC.</p>
+    </a>
+  </div>
+</section>
 
     </div>
   </div>
