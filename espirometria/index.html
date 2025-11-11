@@ -334,6 +334,27 @@
 /* sl-nav-size */
 .sl-main-nav{font-size:1rem}
 .sl-mode-pill{cursor:pointer}
+
+/* Pills de modos de atendimento com cor do botão principal */
+.sl-hero-card .sl-modes{
+  gap:10px;
+}
+.sl-hero-card .sl-mode-pill{
+  display:inline-block;
+  padding:9px 16px;
+  border-radius:999px;
+  border:1px solid transparent;
+  background:linear-gradient(135deg,var(--sl-accent),#18a197);
+  color:#fff;
+  font-size:.8rem;
+  text-align:center;
+  text-decoration:none;
+  box-shadow:var(--sl-shadow-soft);
+}
+.sl-hero-card .sl-mode-pill:hover{
+  filter:brightness(0.97);
+}
+
 </style>
 <style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}
 /* Links úteis: permitir <a.sl-card> como card */
@@ -390,7 +411,7 @@
                  href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1,%20gostaria%20de%20agendar%20uma%20espirometria.">
                 Agendar seu exame
               </a>
-              <a class="sl-btn sl-btn-outline" href="#agendamento">Ver opções de atendimento</a>
+              
             </div>
 
             <p class="sl-hero-note">Atendemos adultos e crianças acima da idade adequada para o exame (conforme avaliação).</p>
