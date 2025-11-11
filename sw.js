@@ -1,5 +1,5 @@
 const CACHE_NAME = 'sl-$V';
-const ASSETS = [ '/conheca.html', '/conheca/index.html',  '/espirometria.html', '/espirometria/index.html',  '/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/maskable-512.png', '/img/whatsapp.svg', '/img/sopro-logo.svg', '/img/logo.png', '/favicon.svg?v=1', '/favicon-32.png?v=2', '/favicon-16.png?v=2', '/apple-touch-icon.png?v=2', '/offline.html' ];
+const ASSETS = [ '/servicos.html', '/servicos/index.html',  '/conheca.html', '/conheca/index.html',  '/espirometria.html', '/espirometria/index.html',  '/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/maskable-512.png', '/img/whatsapp.svg', '/img/sopro-logo.svg', '/img/logo.png', '/favicon.svg?v=1', '/favicon-32.png?v=2', '/favicon-16.png?v=2', '/apple-touch-icon.png?v=2', '/offline.html' ];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(ASSETS)));
