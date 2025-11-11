@@ -333,6 +333,7 @@
 
 /* sl-nav-size */
 .sl-main-nav{font-size:1rem}
+.sl-mode-pill{cursor:pointer}
 </style>
 <style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}
 /* Links úteis: permitir <a.sl-card> como card */
@@ -361,6 +362,34 @@
 
 /* Links úteis: permitir <a.sl-card> como card */
 .sl-card a, a.sl-card{display:block;color:inherit;text-decoration:none}
+</style>
+
+
+<style>
+/* Modos de atendimento - interativos */
+.sl-mode-pill{
+  cursor:pointer;
+}
+.sl-mode-pill.is-active{
+  background:rgba(30,181,171,.12);
+  border-style:solid;
+  border-color:var(--sl-accent);
+  color:var(--sl-primary-dark);
+}
+.sl-mode-description{
+  margin-top:8px;
+  font-size:.8rem;
+  color:var(--sl-text-soft);
+  line-height:1.4;
+}
+.sl-mode-description a{
+  color:var(--sl-primary-dark);
+  font-weight:600;
+  text-decoration:none;
+}
+.sl-mode-description a:hover{
+  text-decoration:underline;
+}
 </style>
 
 </head>
@@ -708,5 +737,77 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
-</body>
+
+<script>
+// Modos de atendimento: clique para ver explicação + link de agendamento
+(function(){
+  var pills = document.querySelectorAll('.sl-modes .sl-mode-pill');
+  if(!pills.length) return;
+
+  var modesMap = {
+    amb: {
+      title: 'Ambulatorial',
+      html: 'Exame realizado na estrutura da Sopro Life, em ambiente preparado para função pulmonar.<br>' +
+            '<a href="https://api.whatsapp.com/send?phone=5521998901775&text=' +
+            encodeURIComponent('Olá, gostaria de agendar uma espirometria modo ambulatorial.') +
+            '" target="_blank" rel="noopener">Agendar modo ambulatorial pelo WhatsApp</a>.'
+    },
+    dom: {
+      title: 'Domiciliar (parceria)',
+      html: 'Levamos o espirômetro até o endereço combinado, em parceria com serviços locais.<br>' +
+            '<a href="https://api.whatsapp.com/send?phone=5521998901775&text=' +
+            encodeURIComponent('Olá, gostaria de agendar uma espirometria domiciliar (parceria).') +
+            '" target="_blank" rel="noopener">Agendar modo domiciliar pelo WhatsApp</a>.'
+    },
+    emp: {
+      title: 'Empresas / PCMSO',
+      html: 'Programas de exames em volume para empresas (admissionais, periódicos e demissionais), conforme PCMSO.<br>' +
+            '<a href="https://api.whatsapp.com/send?phone=5521998901775&text=' +
+            encodeURIComponent('Olá, gostaria de agendar espirometrias para empresas / PCMSO.') +
+            '" target="_blank" rel="noopener">Falar sobre empresas / PCMSO pelo WhatsApp</a>.'
+    }
+  };
+
+  var card = document.querySelector('.sl-hero-card .sl-modes');
+  if(!card) return;
+
+  var desc = document.createElement('div');
+  desc.className = 'sl-mode-description';
+  card.parentNode.insertBefore(desc, card.nextSibling);
+
+  function setMode(modeKey){
+    pills.forEach(function(p){
+      p.classList.toggle('is-active', p.getAttribute('data-mode') === modeKey);
+    });
+    var mode = modesMap[modeKey];
+    if(mode){
+      desc.innerHTML = '<strong>' + mode.title + ':</strong> ' + mode.html;
+    }
+  }
+
+  pills.forEach(function(p){
+    var label = (p.textContent || '').toLowerCase();
+    var key = 'amb';
+    if(label.indexOf('domiciliar') !== -1){
+      key = 'dom';
+    }else if(label.indexOf('empresa') !== -1 || label.indexOf('pcms') !== -1){
+      key = 'emp';
+    }
+    p.setAttribute('data-mode', key);
+    p.setAttribute('role', 'button');
+    p.setAttribute('tabindex', '0');
+    p.addEventListener('click', function(){ setMode(key); });
+    p.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        setMode(key);
+      }
+    });
+  });
+
+  // Seleciona o modo ambulatorial por padrão
+  setMode('amb');
+})();
+</script>
+\n\n</body>
 </html>

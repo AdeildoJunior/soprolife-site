@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sopro Life — Espirometria no RJ</title>
+  <meta name="description" content="Espirometria com e sem broncodilatador — ambulatorial e domiciliar no Rio de Janeiro. Agende pelo WhatsApp.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="theme-color" content="#0ea5e9">
+  <style>
+    :root{
+      --brand:#0ea5e9; --brand-2:#38bdf8; --ink:#0b1220; --muted:#475569;
+      --soft:#e2e8f0; --bg:#ffffff; --wa:#25D366;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);
+         font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif}
+    .wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+    /* NAV */
+    .sl-nav{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.85);
+      backdrop-filter:saturate(1.15) blur(6px);border-bottom:1px solid rgba(2,6,23,.06)}
+    .sl-nav .row{display:flex;align-items:center;gap:18px;justify-content:space-between;padding:10px 0}
+    .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
+    .brand img{height:58px;width:auto;display:block}
+    .brand span{font-weight:800;font-size:18px;color:var(--ink)}
+    .menu{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+    .menu a{color:var(--muted);text-decoration:none;font-weight:600}
+    .menu a:hover{color:var(--ink)}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;
+      padding:12px 18px;border-radius:999px;font-weight:800;text-decoration:none}
+    .btn-wa{background:var(--wa);color:#053b1f;box-shadow:0 10px 26px rgba(0,0,0,.15)}
+    .btn-ghost{border:1px solid var(--soft);color:var(--ink);background:#fff}
+    /* HERO */
+    .hero{padding:56px 0 28px;text-align:center}
+    .hero h1{font-size:46px;margin:0 0 10px}
+    .hero p{margin:0 0 22px;color:var(--muted)}
+    .cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+    /* 3 cards */
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+        gap:16px;margin:30px 0 0}
+    .card{border:1px solid var(--soft);border-radius:16px;padding:16px}
+    .card strong{display:block;margin-bottom:6px}
+    /* sections */
+    section{padding:36px 0}
+    .h2{font-size:28px;margin:0 0 12px;text-align:center}
+    .lead{max-width:860px;margin:0 auto 8px;text-align:center;color:var(--muted)}
+    .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+    .tile{border:1px solid var(--soft);border-radius:16px;padding:16px}
+    .tile h3{margin:0 0 6px}
+    ul.clean{margin:10px 0 0 0;padding:0 0 0 20px}
+    /* Preço blocão */
+    .price{background:linear-gradient(180deg,rgba(14,165,233,.07),rgba(56,189,248,.07));border:1px solid var(--soft);border-radius:16px;padding:18px}
+    /* Rodapé e FAB */
+    footer{margin:38px 0 72px;padding-top:18px;border-top:1px solid var(--soft);color:var(--muted)}
+    .sl-fab{position:fixed;right:16px;bottom:16px;z-index:60;width:58px;height:58px;border-radius:999px;
+      display:flex;align-items:center;justify-content:center;background:var(--wa);
+      box-shadow:0 12px 28px rgba(0,0,0,.22);transition:transform .15s}
+    .sl-fab:hover{transform:translateY(-1px)}
+    .sl-fab img{width:28px;height:28px}
+    @media (max-width:640px){
+      .hero h1{font-size:36px}
+      .brand img{height:50px}
+      .sl-nav .menu .hide-sm{display:none}
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="sl-nav" role="navigation" aria-label="Sopro Life">
+    <div class="wrap row">
+      <a class="brand" href="/"><img src="/img/logo-header.jpg"
+           onerror="this.onerror=null;this.src='/img/sopro-logo.svg'"
+           alt="Sopro Life"><span>Sopro Life</span></a>
+      <div class="menu">
+        <a class="hide-sm" href="#como">Como funciona</a>
+        <a class="hide-sm" href="#tipos">Tipos</a>
+        <a class="hide-sm" href="#preparo">Preparo</a>
+        <a class="hide-sm" href="#preco">Preço</a>
+        <a class="hide-sm" href="#contato">Contato</a>
+        <a class="btn btn-wa" href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20vim%20do%20site%20Sopro%20Life%20e%20quero%20agendar%20uma%20espirometria.">Fale no WhatsApp</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero wrap">
+    <h1>Aqui o ar é de vitória.</h1>
+    <p>Espirometria móvel e ambulatorial no Rio de Janeiro. Atendimento ágil e laudo confiável.</p>
+    <div class="cta-row">
+      <a class="btn btn-wa" href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20vim%20do%20site%20Sopro%20Life%20e%20quero%20agendar%20uma%20espirometria.%20(Tipo%3A%20Ambulatorial)">Agendar EXAME Ambulatorial</a>
+      <a class="btn btn-ghost" href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20vim%20do%20site%20Sopro%20Life%20e%20quero%20agendar%20uma%20espirometria.%20(Tipo%3A%20Domiciliar)">Agendar exame Domiciliar</a>
+    </div>
+
+    <div class="cards">
+      <div class="card"><strong>Onde atendemos</strong>Barra, Zona Sul, Zona Norte e parceiros.</div>
+      <div class="card"><strong>Como funciona</strong>Agende no WhatsApp. Vamos até você ou marcamos em ponto parceiro.</div>
+      <div class="card"><strong>Contato</strong>WhatsApp/Telefone: (21) 99941-7192</div>
+    </div>
+  </header>
+
+  <section id="como" class="wrap">
+    <h2 class="h2">Como funciona</h2>
+    <p class="lead">Você escolhe <strong>domicílio</strong> ou <strong>ambulatorial</strong>. Confirmamos horário, realizamos o exame e enviamos o laudo assinado.</p>
+    <div class="cols">
+      <div class="tile"><h3>1) Agendamento</h3><p>Chame no WhatsApp e informe nome, CPF, data de nascimento e modalidade (ambulatorial ou domiciliar).</p></div>
+      <div class="tile"><h3>2) Realização</h3><p>Exame com técnica padronizada, bocal descartável e protocolos SBPT/GINA.</p></div>
+      <div class="tile"><h3>3) Resultado</h3><p>Laudo digital. Se precisar, enviamos também impresso.</p></div>
+    </div>
+  </section>
+
+  <section id="tipos" class="wrap">
+    <h2 class="h2">Tipos de Espirometria</h2>
+    <p class="lead">Escolha o protocolo conforme a solicitação médica.</p>
+    <div class="cols">
+      <div class="tile">
+        <h3>Sem broncodilatador</h3>
+        <p>Espirometria basal para avaliação de volumes e fluxos respiratórios.</p>
+      </div>
+      <div class="tile">
+        <h3>Com broncodilatador</h3>
+        <p>Mede a resposta após broncodilatador e auxilia no diagnóstico diferencial.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="preparo" class="wrap">
+    <h2 class="h2">Preparo</h2>
+    <div class="cols">
+      <div class="tile">
+        <ul class="clean">
+          <li>Não é necessário jejum. Prefira refeição leve antes do exame.</li>
+          <li>Evite bebidas alcoólicas e não fume nas <strong>6 horas</strong> anteriores.</li>
+          <li>Suspenda broncodilatadores por <strong>12 horas</strong> (salvo orientação médica).</li>
+          <li>Leve documento e solicitação médica, quando houver.</li>
+        </ul>
+      </div>
+      <div class="tile">
+        <p>Dúvidas sobre preparo? <a href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20vim%20do%20site%20Sopro%20Life%20e%20quero%20agendar%20uma%20espirometria.">Fale com a equipe no WhatsApp</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="preco" class="wrap">
+    <h2 class="h2">Preço & Pagamento</h2>
+    <div class="price">
+      <ul class="clean">
+        <li>Cartão de crédito</li>
+        <li>Cartão de débito</li>
+        <li>PIX/Dinheiro <strong>(5% de desconto)</strong></li>
+      </ul>
+      <p style="margin:12px 0 0"><a class="btn btn-wa" href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20vim%20do%20site%20Sopro%20Life%20e%20quero%20agendar%20uma%20espirometria.">Consultar valores e agendar</a></p>
+    </div>
+  </section>
+
+  <section id="contato" class="wrap">
+    <h2 class="h2">Contato</h2>
+    <div class="cols">
+      <div class="tile"><strong>WhatsApp:</strong> <a href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20vim%20do%20site%20Sopro%20Life%20e%20quero%20agendar%20uma%20espirometria.">(21) 99941-7192</a></div>
+      <div class="tile"><strong>Atendimento:</strong> Seg–Sáb, horário agendado.</div>
+    </div>
+  </section>
+
+  <footer class="wrap">© Sopro Life. Diagnósticos e Soluções em Saúde.</footer>
+
+  <a class="sl-fab" href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20vim%20do%20site%20Sopro%20Life%20e%20quero%20agendar%20uma%20espirometria." aria-label="WhatsApp Sopro Life">
+    <img src="/img/whatsapp.svg" alt="">
+  </a>
+
+  <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js');}</script>
+</body>
+</html>

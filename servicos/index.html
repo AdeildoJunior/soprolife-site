@@ -74,6 +74,9 @@
     .sl-whatsapp-bar{position:fixed;left:0;right:0;bottom:0;background:var(--sl-green);color:#fff;font-size:.94rem;z-index:999;box-shadow:0 -4px 16px rgba(0,0,0,.16)}
     .sl-whatsapp-bar a{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px;color:#fff;text-decoration:none}
   </style>
+<style>
+#ambulatorial, #domiciliar, #empresas { scroll-margin-top: 90px; }
+</style>
 </head>
 <body>
 
@@ -121,7 +124,7 @@
 
       <div class="sl-grid">
         <!-- Ambulatorial -->
-        <article class="sl-card">
+        <article class="sl-card" id="ambulatorial">
           <h3>Ambulatorial</h3>
           <ul class="sl-bullets">
             <li>Atendimento em consultório/ambiente parceiro;</li>
@@ -139,7 +142,7 @@
         </article>
 
         <!-- Domiciliar (parceria) -->
-        <article class="sl-card">
+        <article class="sl-card" id="domiciliar">
           <h3>Domiciliar (parceria)</h3>
           <ul class="sl-bullets">
             <li>Realizado em domicílio conforme elegibilidade;</li>
@@ -157,7 +160,7 @@
         </article>
 
         <!-- Empresas / PCMSO -->
-        <article class="sl-card">
+        <article class="sl-card" id="empresas">
           <h3>Empresas / PCMSO</h3>
           <ul class="sl-bullets">
             <li>Campanhas in company com cronograma e logística;</li>

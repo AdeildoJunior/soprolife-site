@@ -326,6 +326,7 @@
 
 /* sl-nav-size */
 .sl-main-nav{font-size:1rem}
+.sl-mode-pill{cursor:pointer}
 </style>
 <style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
 <style id="sl-wa-override">
@@ -436,9 +437,9 @@
             </div>
 
             <div class="sl-modes">
-              <div class="sl-mode-pill">Ambulatorial</div>
-              <div class="sl-mode-pill">Domiciliar (parceria)</div>
-              <div class="sl-mode-pill">Empresas / PCMSO</div>
+              <a class="sl-mode-pill" href="/servicos/#ambulatorial">Ambulatorial</a>
+              <a class="sl-mode-pill" href="/servicos/#domiciliar">Domiciliar (parceria)</a>
+              <a class="sl-mode-pill" href="/servicos/#empresas">Empresas / PCMSO</a>
             </div>
 
             <div class="sl-card-divider"></div>
@@ -506,7 +507,7 @@
             <h3>Espirometria simples</h3>
             <p>Sem medicação durante o exame. Ótima para investigação inicial e acompanhamento periódico.</p>
             <ul class="sl-bullet-list">
-              <li>Mede CV, VEF1, entre outros;</li>
+              <li>Mede CVF, VEF1, entre outros;</li>
               <li>Identifica padrões obstrutivos/restritivos;</li>
               <li>Permite comparação em seguimentos.</li>
             </ul>
