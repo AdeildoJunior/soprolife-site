@@ -273,6 +273,56 @@
   .sl-nav-cta{ margin-left:auto; }
 }
 
+
+/* ===== Menu: submenu em "Contato" ===== */
+.sl-has-sub{position:relative}
+.sl-has-sub>.sl-nav-link{display:inline-flex;align-items:center;gap:6px}
+.sl-submenu{
+  position:absolute;
+  top:100%;
+  left:0;
+  min-width:260px;
+  background:#fff;
+  border:1px solid rgba(0,0,0,.06);
+  border-radius:12px;
+  padding:8px;
+  box-shadow:0 12px 30px rgba(0,0,0,.08);
+  opacity:0;
+  transform:translateY(6px);
+  pointer-events:none;
+  transition:opacity .16s ease,transform .16s ease;
+  z-index:40;
+}
+.sl-has-sub:hover .sl-submenu,
+.sl-has-sub:focus-within .sl-submenu{
+  opacity:1;
+  transform:translateY(0);
+  pointer-events:auto;
+}
+.sl-submenu a{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 12px;
+  border-radius:10px;
+  text-decoration:none;
+  color:var(--sl-text-dark);
+}
+.sl-submenu a:hover{
+  background:rgba(2,179,154,.08);
+  color:var(--sl-primary);
+}
+@media (max-width:960px){
+  .sl-submenu{
+    position:static;
+    border:0;
+    box-shadow:none;
+    padding:0;
+    opacity:1;
+    transform:none;
+  }
+}
+
 </style>
 <style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
 <style id="sl-wa-override">
@@ -313,7 +363,14 @@
         <a href="/#sobre" class="sl-nav-link">Conheça a Sopro</a>
         <a href="/#servicos" class="sl-nav-link">Serviços</a>
         <a href="/#agendamento" class="sl-nav-link">Agendamento</a>
-        <a href="/#contato" class="sl-nav-link">Contato</a>
+        <div class="sl-has-sub">
+  <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a>
+  <div class="sl-submenu" role="menu" aria-label="Contato">
+    <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem">
+      ✉ contato@soprolife.com.br
+    </a>
+  </div>
+</div>
       </nav>
       <a class="sl-nav-cta" target="_blank" rel="noopener"
          href="https://api.whatsapp.com/send?phone=5521999417192&text=Ol%C3%A1,%20gostaria%20de%20agendar%20uma%20consulta%20na%20Sopro%20Life.">
