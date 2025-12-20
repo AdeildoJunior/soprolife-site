@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect x="0" y="0" width="512" height="512" rx="112" fill="rgb(26, 115, 232)"/>
-  <text x="256" y="308"
-        text-anchor="middle"
-        font-family="DejaVu Sans, Arial, sans-serif"
-        font-size="220"
-        font-weight="800"
-        fill="#ffffff">SL</text>
+  <rect x="18" y="18" width="476" height="476" rx="112" fill="#ffffff" stroke="#DCEBF0" stroke-width="16"/>
+  <ellipse cx="190" cy="308" rx="108" ry="150" fill="none" stroke="#1EB5AB" stroke-width="28" stroke-linecap="round"/>
+  <ellipse cx="322" cy="308" rx="108" ry="150" fill="none" stroke="#1EB5AB" stroke-width="28" stroke-linecap="round"/>
+  <line x1="256" y1="110" x2="256" y2="190" stroke="#1EB5AB" stroke-width="28" stroke-linecap="round"/>
+  <line x1="256" y1="190" x2="220" y2="235" stroke="#1EB5AB" stroke-width="22" stroke-linecap="round"/>
+  <line x1="256" y1="190" x2="292" y2="235" stroke="#1EB5AB" stroke-width="22" stroke-linecap="round"/>
+  <line x1="220" y1="235" x2="202" y2="270" stroke="#1EB5AB" stroke-width="18" stroke-linecap="round"/>
+  <line x1="292" y1="235" x2="310" y2="270" stroke="#1EB5AB" stroke-width="18" stroke-linecap="round"/>
 </svg>
