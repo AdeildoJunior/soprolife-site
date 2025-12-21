@@ -2,365 +2,9 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Espirometria | Sopro Life</title>
+  <title>Espirometria no Rio de Janeiro | Prova de Função Respiratória – Sopro Life</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Espirometria com e sem broncodilatador na Sopro Life. Atendimento humanizado, laudos ágeis e opção de parceria com clínicas, empresas e PCMSO." />
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-
-  <style>
-    :root{
-      /* Paleta baseada na sua logo (navy + teal) */
-      --sl-primary: #0b2239;         /* navy */
-      --sl-primary-dark: #081829;    /* navy +1 */
-      --sl-accent: #1eb5ab;          /* teal vivo */
-      --sl-bg-soft: #f2fbfb;
-      --sl-bg-strong: #e3f6f6;
-      --sl-text-dark: #0b2239;
-      --sl-text-soft: #476172;
-      --sl-radius-lg: 18px;
-      --sl-radius-sm: 10px;
-      --sl-shadow-soft: 0 14px 35px rgba(0,0,0,0.08);
-      --sl-shadow-light: 0 8px 20px rgba(0,0,0,0.05);
-      --sl-green: #08a94f;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,Arial,sans-serif;color:var(--sl-text-dark);background:#fff}
-
-    a{color:inherit;text-decoration:none}
-
-    /* Header com logo alinhada à esquerda */
-    .sl-header{border-bottom:1px solid rgba(11,34,57,0.06);background:#fff;position:sticky;top:0;z-index:20}
-    .sl-wrap{max-width:1200px;margin:0 auto;padding:0 16px}
-    .sl-header-in{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0}
-    .sl-nav-list{display:flex;align-items:center;gap:28px;margin:0;padding:0;list-style:none;font-size:.9rem}
-    .sl-nav-link{color:var(--sl-text-dark);text-decoration:none;font-weight:500}
-    .sl-nav-link:hover{color:var(--sl-primary)}
-    .sl-brand{display:flex;align-items:center}
-    .sl-brand img{height:68px;width:auto;display:block}
-
-    .sl-page{min-height:100vh;background:radial-gradient(circle at top left,#ebfbff 0,#ffffff 55%);padding-bottom:60px}
-    .sl-container{max-width:1200px;margin:0 auto;padding:0 16px}
-
-    /* HERO */
-    /* Atalhos rápidos (pílula + botão WhatsApp) */
-    .sl-hero-quick{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px}
-    .sl-btn-whats-mini{padding:8px 14px;font-size:.9rem}
-
-    .sl-hero{padding:24px 0 36px}
-    .sl-breadcrumb{display:none!important;font-size:.8rem;color:var(--sl-text-soft);margin-bottom:8px}
-    .sl-hero-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:32px;align-items:center}
-    .sl-hero-kicker{font-size:.85rem;text-transform:uppercase;letter-spacing:.12em;color:var(--sl-primary-dark);font-weight:600;margin-bottom:8px}
-    .sl-hero-title{font-size:2.35rem;line-height:1.15;margin:0 0 10px}
-    .sl-hero-title span{color:var(--sl-accent)}
-    .sl-hero-subtitle{margin:0 0 18px;color:var(--sl-text-soft);font-size:1rem}
-    .sl-hero-list{list-style:none;padding:0;margin:0 0 22px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 18px;font-size:.92rem;color:var(--sl-text-soft)}
-    .sl-hero-list li::before{content:"•";color:var(--sl-accent);font-weight:700;margin-right:6px}
-    .sl-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:999px;cursor:pointer;font-weight:600;letter-spacing:.02em;transition:transform .15s,box-shadow .15s;background:#f5f9f9}
-    .sl-btn-primary{padding:11px 22px;background:linear-gradient(135deg,var(--sl-accent),#18a197);color:#fff;box-shadow:var(--sl-shadow-soft)}
-    .sl-btn-primary:hover{transform:translateY(-1px);box-shadow:0 18px 40px rgba(0,0,0,.16)}
-    .sl-btn-outline{padding:9px 18px;border:1px solid rgba(30,181,171,.28);color:var(--sl-primary-dark);background:rgba(255,255,255,.8);backdrop-filter:blur(8px)}
-    .sl-btn-outline:hover{background:#fff;box-shadow:var(--sl-shadow-light)}
-    .sl-hero-note{font-size:.82rem;color:var(--sl-text-soft);margin-top:6px}
-    .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border-radius:999px;background:rgba(30,181,171,.08);font-size:.8rem;margin-top:10px;color:var(--sl-text-soft)}
-    .sl-dot{width:8px;height:8px;border-radius:999px;background:#23c552}
-
-    /* Card lateral */
-    .sl-hero-card{background:#fff;border-radius:24px;box-shadow:var(--sl-shadow-soft);padding:22px 20px 18px;border:1px solid rgba(0,0,0,.02)}
-    .sl-hero-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px}
-    .sl-hero-card-title{font-size:1.05rem;font-weight:600}
-    .sl-tag{font-size:.75rem;padding:4px 10px;border-radius:999px;background:var(--sl-bg-strong);color:var(--sl-primary-dark);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
-    .sl-hero-card-badge{font-size:.83rem;color:var(--sl-text-soft);margin-bottom:10px}
-    .sl-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}
-    .sl-mode-pill{border-radius:999px;border:1px dashed rgba(30,181,171,.35);padding:6px 8px;font-size:.77rem;text-align:center;color:var(--sl-text-soft)}
-    .sl-card-divider{margin:12px 0;height:1px;background:linear-gradient(90deg,transparent,#e1f1f4,transparent)}
-    .sl-hero-mini-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;font-size:.78rem;color:var(--sl-text-soft)}
-    .sl-hero-mini-grid strong{font-size:.86rem;color:var(--sl-text-dark)}
-    .sl-hero-card-footer{margin-top:10px;font-size:.8rem;color:var(--sl-text-soft)}
-
-    /* Seções */
-    .sl-section{padding:26px 0}
-    .sl-section-header{margin-bottom:18px}
-    .sl-section-kicker{font-size:.78rem;text-transform:uppercase;letter-spacing:.15em;color:var(--sl-primary-dark);margin-bottom:4px;font-weight:600}
-    .sl-section-title{font-size:1.5rem;margin:0 0 6px}
-    .sl-section-subtitle{margin:0;color:var(--sl-text-soft);font-size:.95rem;max-width:640px}
-    .sl-two-column{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:28px;align-items:flex-start}
-    .sl-text-block p{margin:0 0 10px;font-size:.96rem;color:var(--sl-text-soft)}
-    .sl-bullet-list{padding-left:1.1rem;margin:8px 0 0;font-size:.93rem;color:var(--sl-text-soft)}
-    .sl-bullet-list li{margin-bottom:4px}
-    .sl-highlight-box{background:var(--sl-bg-soft);border-radius:var(--sl-radius-lg);padding:16px 18px;box-shadow:var(--sl-shadow-light);font-size:.9rem}
-    .sl-highlight-box strong{color:var(--sl-primary-dark)}
-
-    /* Tabs */
-    .sl-tabs{margin-top:10px;background:#fff;border-radius:22px;box-shadow:var(--sl-shadow-soft);padding:16px 16px 18px}
-    .sl-tab-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
-    .sl-tab-button{border-radius:999px;border:1px solid transparent;padding:7px 14px;font-size:.83rem;cursor:pointer;background:#f5f9f9;color:var(--sl-text-soft);transition:background-color .15s,color .15s,border-color .15s}
-    .sl-tab-button[aria-selected="true"]{background:linear-gradient(135deg,var(--sl-accent),#18a197);color:#fff;border-color:transparent}
-    .sl-tab-panel{display:none;font-size:.9rem;color:var(--sl-text-soft)}
-    .sl-tab-panel.is-active{display:block}
-    .sl-tagline{font-size:.8rem;text-transform:uppercase;letter-spacing:.18em;color:var(--sl-text-soft);margin-bottom:8px}
-
-    /* Cartões de preparo */
-    .sl-card-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-    .sl-card{background:#fff;border-radius:var(--sl-radius-lg);padding:14px 16px 16px;box-shadow:var(--sl-shadow-light);font-size:.9rem}
-    .sl-card h3{margin:0 0 6px;font-size:1rem}
-    .sl-pill-label{display:inline-block;font-size:.72rem;text-transform:uppercase;letter-spacing:.16em;color:var(--sl-primary-dark);margin-bottom:4px}
-    .sl-card ul{margin:4px 0 0;padding-left:1.1rem;color:var(--sl-text-soft)}
-    .sl-card ul li{margin-bottom:4px}
-
-    /* CTA */
-    .sl-cta-section{padding:32px 0 10px}
-    .sl-cta-box{border-radius:24px;background:linear-gradient(120deg,var(--sl-primary-dark),#0f8f86);color:#fff;padding:18px 20px;box-shadow:var(--sl-shadow-soft);display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;align-items:center}
-    .sl-cta-title{margin:0 0 4px;font-size:1.4rem}
-    .sl-cta-sub{margin:0 0 10px;font-size:.93rem;opacity:.92}
-    .sl-cta-contacts{font-size:.9rem;line-height:1.4}
-    .sl-cta-contacts strong{font-size:1.02rem}
-    .sl-cta-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;align-items:center}
-    .sl-cta-small{font-size:.8rem;opacity:.88}
-
-    /* Barra fixa WhatsApp */
-    .sl-whatsapp-bar{position:fixed;left:0;right:0;bottom:0;background:var(--sl-green);color:#fff;font-size:.94rem;z-index:999;box-shadow:0 -4px 16px rgba(0,0,0,.16)}
-    .sl-whatsapp-bar a{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px}
-    .sl-whatsapp-bar strong{font-weight:600}
-
-    /* Responsivo */
-    @media (max-width:900px){
-      .sl-hero-grid,.sl-two-column,.sl-card-grid,.sl-cta-box{grid-template-columns:minmax(0,1fr)}
-      .sl-cta-actions{justify-content:flex-start}
-    }
-    @media (max-width:720px){
-      .sl-hero{padding-top:14px}
-      .sl-hero-title{font-size:1.9rem}
-      .sl-hero-grid{gap:22px}
-      .sl-hero-list{grid-template-columns:minmax(0,1fr)}
-      .sl-modes{grid-template-columns:minmax(0,1fr)}
-      .sl-page{padding-bottom:70px}
-    }
-  
-/* Links úteis: permitir <a.sl-card> como card */
-.sl-card a, a.sl-card{display:block;color:inherit;text-decoration:none}
-/* ===== Rodapé: Links úteis + redes sociais ===== */
-.sl-links-footer{
-  padding: 18px 0 40px;
-  margin-bottom: 64px;
-  border-top: 1px solid rgba(0,0,0,0.03);
-  font-size: 0.88rem;
-  color: var(--sl-text-soft);
-  background: linear-gradient(135deg, var(--sl-bg-soft), var(--sl-bg-strong));
-}
-
-.sl-links-footer-grid{
-  display: grid;
-  grid-template-columns: minmax(0,2fr) minmax(0,1.4fr);
-  gap: 24px;
-}
-
-.sl-links-footer h3{
-  margin: 0 0 6px;
-  font-size: 1rem;
-  color: var(--sl-text-dark);
-}
-
-.sl-links-list,
-.sl-social-list{
-  list-style: none;
-  padding-left: 0;
-  margin: 4px 0 0;
-}
-
-.sl-links-list li + li,
-.sl-social-list li + li{
-  margin-top: 3px;
-}
-
-.sl-links-list a{
-  color: inherit;
-  text-decoration: none;
-}
-
-.sl-links-list a:hover{
-  color: var(--sl-primary);
-  text-decoration: underline;
-}
-
-/* Redes sociais */
-.sl-social-list a{
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  text-decoration: none;
-  color: inherit;
-}
-
-.sl-social-icon{
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  background: #eef4f5;
-}
-
-/* Cores básicas das redes (pode ajustar depois) */
-.sl-social-icon--ig{ background: radial-gradient(circle at 30% 30%, #ffdd55, #ff543e 45%, #c837ab 70%); color:#fff; }
-.sl-social-icon--li{ background:#0a66c2; color:#fff; }
-.sl-social-icon--yt{ background:#ff0000; color:#fff; }
-
-@media (max-width: 900px){
-  .sl-links-footer-grid{
-    grid-template-columns: minmax(0,1fr);
-  }
-}
-
-
-/* ===== Navegação principal no topo ===== */
-/* Ajustes extras nav Sopro Life */
-.sl-main-nav{ font-size:1rem; }        /* ~16px */
-.sl-nav-link{ font-size:1rem; }        /* garante 16px também nos links */
-.sl-header-original{ display:none !important; }  /* esconde a logo antiga do topo */
-
-.sl-header-in{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:32px;
-  padding:10px 0;
-}
-.sl-main-nav{
-  display:flex;
-  align-items:center;
-  gap:20px;
-  margin-left:32px;
-  font-size:.95rem;
-  flex:1;
-}
-.sl-nav-link{
-  position:relative;
-  color:var(--sl-text-soft);
-  text-decoration:none;
-  padding:6px 0;
-  white-space:nowrap;
-}
-.sl-nav-link:hover{
-  color:var(--sl-primary);
-}
-.sl-nav-link::after{
-  content:"";
-  position:absolute;
-  left:0;
-  bottom:-3px;
-  width:0;
-  height:2px;
-  border-radius:999px;
-  background:var(--sl-accent);
-  transition:width .2s;
-}
-.sl-nav-link:hover::after{
-  width:100%;
-}
-.sl-nav-cta{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  padding:8px 18px;
-  border-radius:999px;
-  background:var(--wa-green,#25D366);
-  color:#fff;
-  font-size:.9rem;
-  font-weight:600;
-  text-decoration:none;
-  box-shadow:0 10px 20px rgba(0,0,0,0.12);
-}
-.sl-nav-cta:hover{
-  filter:brightness(0.96);
-}
-@media (max-width:960px){
-  .sl-main-nav{ display:none; }
-  .sl-nav-cta{ margin-left:auto; }
-}
-
-
-/* ===== Menu: submenu em "Contato" ===== */
-.sl-has-sub{position:relative}
-.sl-has-sub>.sl-nav-link{display:inline-flex;align-items:center;gap:6px}
-.sl-submenu{
-  position:absolute;
-  top:100%;
-  left:0;
-  min-width:260px;
-  background:#fff;
-  border:1px solid rgba(0,0,0,.06);
-  border-radius:12px;
-  padding:8px;
-  box-shadow:0 12px 30px rgba(0,0,0,.08);
-  opacity:0;
-  transform:translateY(6px);
-  pointer-events:none;
-  transition:opacity .16s ease,transform .16s ease;
-  z-index:40;
-}
-.sl-has-sub:hover .sl-submenu,
-.sl-has-sub:focus-within .sl-submenu{
-  opacity:1;
-  transform:translateY(0);
-  pointer-events:auto;
-}
-.sl-submenu a{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  padding:10px 12px;
-  border-radius:10px;
-  text-decoration:none;
-  color:var(--sl-text-dark);
-}
-.sl-submenu a:hover{
-  background:rgba(2,179,154,.08);
-  color:var(--sl-primary);
-}
-@media (max-width:960px){
-  .sl-submenu{
-    position:static;
-    border:0;
-    box-shadow:none;
-    padding:0;
-    opacity:1;
-    transform:none;
-  }
-}
-
-
-/* sl-nav-size */
-.sl-main-nav{font-size:1rem}
-.sl-mode-pill{cursor:pointer}
-
-/* Pills de modos de atendimento com cor do botão principal */
-.sl-hero-card .sl-modes{
-  gap:10px;
-}
-.sl-hero-card .sl-mode-pill{
-  display:inline-block;
-  padding:9px 16px;
-  border-radius:999px;
-  border:1px solid transparent;
-  background:linear-gradient(135deg,var(--sl-accent),#18a197);
-  color:#fff;
-  font-size:.8rem;
-  text-align:center;
-  text-decoration:none;
-  box-shadow:var(--sl-shadow-soft);
-}
-.sl-hero-card .sl-mode-pill:hover{
-  filter:brightness(0.97);
-}
-
-</style>
-<style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}
-/* Links úteis: permitir <a.sl-card> como card */
-.sl-card a, a.sl-card{display:block;color:inherit;text-decoration:none}
-</style>
-<style id="sl-wa-override">
+  <meta name="description" content="Agende Espirometria/Prova de Função Respiratória no Rio de Janeiro. Atendimento em consultórios parceiros (local definido no agendamento), com laudo por pneumologista – Sopro Life.">
 /* WhatsApp brand */
 :root{ --wa-green:#25D366; --wa-dark:#075E54; }
 .sl-whatsapp-pill[data-sl="wa"]{
@@ -384,6 +28,29 @@
 /* Links úteis: permitir <a.sl-card> como card */
 .sl-card a, a.sl-card{display:block;color:inherit;text-decoration:none}
 </style>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Service",
+  "name": "Espirometria / Prova de Função Respiratória",
+  "provider": {
+    "@type": "Organization",
+    "name": "Sopro Life",
+    "url": "https://soprolife.com.br",
+    "telephone": "+55 21 99890-1775"
+  },
+  "areaServed": [
+    {
+      "@type": "AdministrativeArea",
+      "name": "Rio de Janeiro - RJ"
+    }
+  ],
+  "serviceType": "Diagnóstico pulmonar",
+  "url": "https://soprolife.com.br/espirometria/"
+}
+</script>
 
 </head>
 <body>
