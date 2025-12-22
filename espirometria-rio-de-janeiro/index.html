@@ -349,6 +349,39 @@
   filter:brightness(0.97);
 }
 
+
+/* ===== Mini-bloco: Atendimento no Rio de Janeiro ===== */
+.sl-local-mini{
+  margin: 18px 0 6px;
+  padding: 14px 16px;
+  border: 1px solid rgba(11,34,57,0.10);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(13, 159, 150, 0.06), rgba(11,34,57,0.02));
+}
+.sl-local-mini h3{
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  color: var(--sl-primary);
+}
+.sl-local-mini p{
+  margin: 0;
+  color: rgba(11,34,57,0.85);
+  line-height: 1.45;
+}
+.sl-local-mini .sl-local-tags{
+  display:flex; flex-wrap:wrap; gap:8px;
+  margin-top:10px;
+}
+.sl-local-mini .sl-tag{
+  display:inline-flex; align-items:center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid rgba(11,34,57,0.10);
+  font-size: 0.92rem;
+  color: rgba(11,34,57,0.88);
+}
+
 </style>
 <style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
 <style id="sl-wa-override">
@@ -480,6 +513,21 @@
       <section class="sl-section">
         <div class="sl-section-header">
           <div class="sl-section-kicker">Sobre o exame</div>
+
+<div class="sl-local-mini" aria-label="Atendimento no Rio de Janeiro">
+  <h3>Atendimento em todo o Rio de Janeiro (RJ)</h3>
+  <p>Agende sua espirometria com e sem broncodilatador. Atendemos por parceria e/ou no local do cliente, com laudos ágeis e suporte pelo WhatsApp.</p>
+  <div class="sl-local-tags" aria-label="Regiões atendidas">
+    <span class="sl-tag">Centro</span>
+    <span class="sl-tag">Zona Sul</span>
+    <span class="sl-tag">Zona Norte</span>
+    <span class="sl-tag">Tijuca</span>
+    <span class="sl-tag">Barra</span>
+    <span class="sl-tag">Jacarepaguá</span>
+    <span class="sl-tag">Copacabana</span>
+  </div>
+</div>
+
           <h2 class="sl-section-title">O que é a espirometria?</h2>
           <p class="sl-section-subtitle">
             A espirometria (prova de função respiratória) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório.
