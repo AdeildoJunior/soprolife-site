@@ -348,6 +348,57 @@
   filter:brightness(0.97);
 }
 
+
+/* ===== Sopro Life: Typography cleanup (page-scoped) ===== */
+.sl-typo-clean{
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.sl-typo-clean h1{ font-size: 2.15rem; line-height: 1.12; margin: 0 0 10px; }
+.sl-typo-clean h2{ font-size: 1.55rem; line-height: 1.18; margin: 0 0 10px; }
+.sl-typo-clean h3{ font-size: 1.18rem; line-height: 1.22; margin: 0 0 8px; }
+
+.sl-typo-clean p,
+.sl-typo-clean li{
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.sl-typo-clean small,
+.sl-typo-clean .muted{
+  font-size: 0.95rem;
+}
+
+/* Respiro e organização */
+.sl-typo-clean section{ padding-top: 44px; padding-bottom: 44px; }
+.sl-typo-clean .container{ max-width: 1100px; }
+.sl-typo-clean p{ margin: 0 0 12px; }
+.sl-typo-clean ul{ margin: 10px 0 0 18px; }
+
+/* Evita “texto miúdo demais” em kicker/subtitle */
+.sl-typo-clean [class*="kicker"],
+.sl-typo-clean [class*="subtitle"],
+.sl-typo-clean [class*="sub"]{
+  font-size: 0.98rem;
+}
+
+/* Mantém tudo alinhado no mesmo eixo de leitura */
+.sl-typo-clean h1,
+.sl-typo-clean h2,
+.sl-typo-clean h3,
+.sl-typo-clean p,
+.sl-typo-clean ul{
+  max-width: 72ch;
+}
+
+/* Mobile */
+@media (max-width: 720px){
+  .sl-typo-clean h1{ font-size: 1.8rem; }
+  .sl-typo-clean h2{ font-size: 1.35rem; }
+}
+
 </style>
 <style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
 <style id="sl-wa-override">
@@ -373,7 +424,7 @@
 </style>
 
 </head>
-<body>
+<body class="sl-typo-clean">
 
   <!-- Header com logo encostada à esquerda -->
   <header class="sl-header">
