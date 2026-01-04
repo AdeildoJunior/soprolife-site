@@ -3,3 +3,10 @@
 SITE_DUMP.txt
 soprolife-site-snapshot.tgz
 *.report.html
+
+# backups gerados localmente
+*.bak.*
+*/**/*.bak.*
+
+# pacotes temporários
+*.tgz
