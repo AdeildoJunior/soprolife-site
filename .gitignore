@@ -1,0 +1,5 @@
+
+# arquivos internos (nao publicar no GitHub Pages)
+SITE_DUMP.txt
+soprolife-site-snapshot.tgz
+*.report.html
