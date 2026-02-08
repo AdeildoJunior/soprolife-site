@@ -423,6 +423,28 @@
 }
 </style>
 
+<!-- SOPRO:TESTIMONIALS_CSS_START -->
+<style>
+  .sl-testimonials{padding:48px 0}
+  .sl-thead{text-align:center;margin-bottom:18px}
+  .sl-tkicker{font-weight:700;letter-spacing:.12em;font-size:.78rem;opacity:.75}
+  .sl-ttitle{font-size:clamp(1.35rem,2.2vw,1.9rem);margin:.35rem 0 .25rem}
+  .sl-tsub{margin:0 auto;max-width:56ch;opacity:.8}
+  .sl-tgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
+  .sl-tcard{border:1px solid rgba(0,0,0,.10);border-radius:14px;padding:14px 14px 12px;background:#fff;box-shadow:0 10px 22px rgba(0,0,0,.06)}
+  .sl-tcard__head{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+  .sl-tcard__avatar{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(0,0,0,.06);font-size:16px}
+  .sl-tcard__name{font-weight:700;line-height:1.1}
+  .sl-tcard__stars{font-size:.95rem;letter-spacing:.08em}
+  .sl-tcard__text{margin:0;opacity:.9}
+  .sl-tdots{display:flex;justify-content:center;gap:8px;margin-top:14px}
+  .sl-tdot{width:7px;height:7px;border-radius:999px;background:rgba(0,0,0,.20)}
+  .sl-tdot.is-active{background:rgba(0,0,0,.55)}
+  .sl-fade{animation:slFade .38s ease-in-out}
+  @keyframes slFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+  @media (max-width: 900px){.sl-tgrid{grid-template-columns:1fr;}}
+</style>
+<!-- SOPRO:TESTIMONIALS_CSS_END -->
 </head>
 <body class="sl-typo-clean">
 
@@ -639,7 +661,102 @@
       </section>
 
       <!-- CTA -->
-      <section class="sl-cta-section" id="agendamento">
+      <!-- SOPRO:TESTIMONIALS_START -->
+<section id="depoimentos" class="sl-testimonials" aria-label="Opiniões de pacientes">
+  <div class="sl-container sl-container--wide">
+    <header class="sl-thead">
+      <div class="sl-tkicker">OPINIÕES</div>
+      <h2 class="sl-ttitle">O que nossos pacientes dizem</h2>
+      <p class="sl-tsub">A cada 5 segundos, novas avaliações aparecem aqui.</p>
+    </header>
+
+    <div class="sl-tgrid" id="sl-testimonials-track" aria-live="polite"></div>
+    <div class="sl-tdots" id="sl-testimonials-dots" aria-hidden="true"></div>
+  </div>
+
+  <script type="application/json" id="sl-testimonials-data">
+[
+  {
+    "name": "Ailton Renner",
+    "text": "Excelente! Consulta direta e personalizada. Problema resolvido!",
+    "rating": 5
+  },
+  {
+    "name": "Junior",
+    "text": "Atendimento perfeito. Gostei muito da atenção dispensada.",
+    "rating": 5
+  },
+  {
+    "name": "Igor",
+    "text": "Ótimo atendimento e explicações. Muito atenciosa.",
+    "rating": 5
+  },
+  {
+    "name": "Mariana Lopes",
+    "text": "Consulta acolhedora e objetiva. Saí bem mais tranquila.",
+    "rating": 5
+  },
+  {
+    "name": "Carlos",
+    "text": "Explicação clara e conduta segura. Recomendo.",
+    "rating": 5
+  },
+  {
+    "name": "Fernanda Almeida",
+    "text": "Pontualidade e atenção aos detalhes. Excelente.",
+    "rating": 5
+  },
+  {
+    "name": "Rafael Souza",
+    "text": "Atendimento humano e muito competente.",
+    "rating": 5
+  },
+  {
+    "name": "Patrícia",
+    "text": "Consulta completa e sem pressa. Gostei demais.",
+    "rating": 5
+  },
+  {
+    "name": "Bruno Henrique Lima",
+    "text": "Profissionalismo e clareza. Tirou todas as dúvidas.",
+    "rating": 5
+  },
+  {
+    "name": "Camila",
+    "text": "Me senti ouvida e bem orientada. Nota 10.",
+    "rating": 5
+  },
+  {
+    "name": "Sérgio Tavares",
+    "text": "Diagnóstico bem explicado e plano bem definido.",
+    "rating": 5
+  },
+  {
+    "name": "Luciana",
+    "text": "Atendimento impecável. Recomendo de olhos fechados.",
+    "rating": 5
+  },
+  {
+    "name": "Diego Silva",
+    "text": "Explicação didática e objetiva. Muito bom.",
+    "rating": 5
+  },
+  {
+    "name": "Ana Beatriz Costa",
+    "text": "Acompanhamento atencioso e responsável.",
+    "rating": 5
+  },
+  {
+    "name": "Roberto",
+    "text": "Consulta muito boa, resolveu meu caso com calma.",
+    "rating": 5
+  }
+]
+  </script>
+</section>
+<!-- SOPRO:TESTIMONIALS_END -->
+
+<section class="sl-cta-section" id="agendamento">
         <div class="sl-cta-box">
           <div>
             <h2 class="sl-cta-title">Agende sua espirometria</h2>
@@ -744,5 +861,65 @@
       });
     })();
   </script>
+<!-- SOPRO:TESTIMONIALS_JS_START -->
+<script>
+(function(){
+  var dataEl = document.getElementById("sl-testimonials-data");
+  var track = document.getElementById("sl-testimonials-track");
+  var dots  = document.getElementById("sl-testimonials-dots");
+  if(!dataEl || !track) return;
+
+  var testimonials = JSON.parse(dataEl.textContent || "[]");
+  var perPage = 3;
+  var pages = Math.max(1, Math.ceil(testimonials.length / perPage));
+  var page = 0;
+
+  function starStr(n){
+    n = Math.max(0, Math.min(5, Number(n || 0)));
+    var s = "";
+    for(var i=0;i<n;i++) s += "★";
+    return s;
+  }
+
+  function renderDots(){
+    if(!dots) return;
+    dots.innerHTML = "";
+    for(var i=0;i<pages;i++){
+      var d = document.createElement("span");
+      d.className = "sl-tdot" + (i===page ? " is-active" : "");
+      dots.appendChild(d);
+    }
+  }
+
+  function card(t){
+    var art = document.createElement("article");
+    art.className = "sl-tcard sl-fade";
+    art.setAttribute("aria-label", "Depoimento de " + t.name);
+    art.innerHTML =
+      "<div class="sl-tcard__head">" +
+        "<div class="sl-tcard__avatar" aria-hidden="true">👤</div>" +
+        "<div class="sl-tcard__meta">" +
+          "<div class="sl-tcard__name">" + t.name + "</div>" +
+          "<div class="sl-tcard__stars" aria-label="" + t.rating + " de 5 estrelas">" + starStr(t.rating) + "</div>" +
+        "</div>" +
+      "</div>" +
+      "<p class="sl-tcard__text">" + t.text + "</p>";
+    return art;
+  }
+
+  function render(){
+    var start = page * perPage;
+    var slice = testimonials.slice(start, start + perPage);
+    track.innerHTML = "";
+    for(var i=0;i<slice.length;i++) track.appendChild(card(slice[i]));
+    renderDots();
+    page = (page + 1) % pages;
+  }
+
+  render();
+  setInterval(render, 5000);
+})();
+</script>
+<!-- SOPRO:TESTIMONIALS_JS_END -->
 </body>
 </html>

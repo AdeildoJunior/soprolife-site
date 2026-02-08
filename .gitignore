@@ -10,3 +10,6 @@ soprolife-site-snapshot.tgz
 
 # pacotes temporários
 *.tgz
+
+# backups locais (scripts)
+*.bak.testimonials.*
