@@ -20,23 +20,63 @@
 <!-- SOPRO:TESTIMONIALS_CSS_START -->
 <style>
   .sl-testimonials{padding:48px 0}
-  .sl-thead{text-align:center;margin-bottom:18px}
+  .sl-tframe{
+    border:2px solid rgba(0,128,128,.35);
+    border-radius:18px;
+    background:#fff;
+    box-shadow:0 14px 34px rgba(0,0,0,.10);
+    padding:18px 16px 16px;
+  }
+  .sl-thead{text-align:center;margin:6px 0 14px}
   .sl-tkicker{font-weight:700;letter-spacing:.12em;font-size:.78rem;opacity:.75}
   .sl-ttitle{font-size:clamp(1.35rem,2.2vw,1.9rem);margin:.35rem 0 .25rem}
-  .sl-tsub{margin:0 auto;max-width:56ch;opacity:.8}
-  .sl-tgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
-  .sl-tcard{border:1px solid rgba(0,0,0,.10);border-radius:14px;padding:14px 14px 12px;background:#fff;box-shadow:0 10px 22px rgba(0,0,0,.06)}
+  .sl-tsub{margin:0 auto;max-width:56ch;opacity:.75}
+
+  .sl-tcarousel{position:relative;display:flex;align-items:center;gap:10px}
+  .sl-tarrow{
+    width:38px;height:38px;border-radius:999px;
+    border:1px solid rgba(0,0,0,.14);
+    background:#fff; cursor:pointer;
+    box-shadow:0 10px 22px rgba(0,0,0,.10);
+    display:grid;place-items:center;
+    font-size:20px; line-height:1;
+    flex:0 0 auto;
+  }
+  .sl-tgrid{
+    flex:1 1 auto;
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:12px;
+    align-items:stretch;
+  }
+
+  .sl-tcard{
+    border:1px solid rgba(0,128,128,.25);
+    border-radius:14px;
+    padding:12px 12px 10px;
+    background:#fff;
+    box-shadow:0 10px 22px rgba(0,0,0,.06);
+  }
   .sl-tcard__head{display:flex;gap:10px;align-items:center;margin-bottom:10px}
-  .sl-tcard__avatar{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(0,0,0,.06);font-size:16px}
+  .sl-tcard__avatar{
+    width:34px;height:34px;border-radius:10px;
+    display:grid;place-items:center;
+    background:rgba(0,0,0,.06);font-size:16px
+  }
   .sl-tcard__name{font-weight:700;line-height:1.1}
-  .sl-tcard__stars{font-size:.95rem;letter-spacing:.08em}
+  .sl-tcard__stars{font-size:.95rem;letter-spacing:.08em;opacity:.9}
   .sl-tcard__text{margin:0;opacity:.9}
-  .sl-tdots{display:flex;justify-content:center;gap:8px;margin-top:14px}
+
+  .sl-tdots{display:flex;justify-content:center;gap:8px;margin-top:12px}
   .sl-tdot{width:7px;height:7px;border-radius:999px;background:rgba(0,0,0,.20)}
   .sl-tdot.is-active{background:rgba(0,0,0,.55)}
-  .sl-fade{animation:slFade .38s ease-in-out}
-  @keyframes slFade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
-  @media (max-width: 900px){.sl-tgrid{grid-template-columns:1fr;}}
+  .sl-fade{animation:slFade .32s ease-in-out}
+  @keyframes slFade{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
+
+  @media (max-width: 980px){
+    .sl-tgrid{grid-template-columns:1fr}
+    .sl-tarrow{display:none}
+  }
 </style>
 <!-- SOPRO:TESTIMONIALS_CSS_END -->
 </head>
@@ -47,14 +87,54 @@
 <section class="sl-section"> <div class="sl-section-header"> <div class="sl-section-kicker">Sobre o exame</div> <h2 class="sl-section-title">O que é a espirometria?</h2> <p class="sl-section-subtitle"> A espirometria (prova de função respiratória) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório. </p> </div> <div class="sl-two-column"> <div class="sl-text-block"> <p>Durante o exame, o paciente respira por um bocal conectado ao espirômetro. Fazemos manobras guiadas como inspirações profundas e sopros prolongados.</p> <p>As curvas e índices apontam se há obstrução/restrição e se existe resposta a broncodilatadores.</p> <ul class="sl-bullet-list"> <li>Diagnóstico e controle de asma e DPOC;</li> <li>Avaliação de tabagistas e ex-tabagistas;</li> <li>Ocupacional: poeiras/gases (PCMSO);</li> <li>Pré-operatório;</li> <li>Seguimento de doenças pulmonares.</li> </ul> </div> <div class="sl-highlight-box"> <strong>Quem pede o exame?</strong> <p>Pneumologistas, clínicos, cardiologistas, médicos do trabalho e cirurgiões, entre outros.</p> <p>Na Sopro Life, o laudo é objetivo e útil ao médico solicitante, com recomendações quando necessário.</p> </div> </div> </section> <!-- TIPOS --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Modalidades</span> <h2 class="sl-section-title">Tipos de espirometria que realizamos</h2> <p class="sl-section-subtitle">Estrutura inspirada na concorrência, mas adaptada à Sopro Life.</p> </div> <div class="sl-tabs" id="tipos-espirometria"> <div class="sl-tab-list" role="tablist"> <button class="sl-tab-button" role="tab" aria-selected="true" data-tab="simples">Espirometria simples</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="bd">Espirometria com broncodilatador</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="ocupacional">Espirometria ocupacional / PCMSO</button> </div> <div class="sl-tab-panel is-active" data-panel="simples" role="tabpanel"> <div class="sl-tagline">Avaliação basal</div> <h3>Espirometria simples</h3> <p>Sem medicação durante o exame. Ótima para investigação inicial e acompanhamento periódico.</p> <ul class="sl-bullet-list"> <li>Mede CVF, VEF1, entre outros;</li> <li>Identifica padrões obstrutivos/restritivos;</li> <li>Permite comparação em seguimentos.</li> </ul> </div> <div class="sl-tab-panel" data-panel="bd" role="tabpanel"> <div class="sl-tagline">Resposta a medicação</div> <h3>Espirometria com broncodilatador</h3> <p>Após a basal, aplica-se broncodilatador e repete-se o teste para avaliar melhora de parâmetros.</p> <ul class="sl-bullet-list"> <li>Chave no diagnóstico e controle da asma;</li> <li>Ajuda a diferenciar DPOC de outras obstruções;</li> <li>Orienta ajustes de bombinhas.</li> </ul> </div> <div class="sl-tab-panel" data-panel="ocupacional" role="tabpanel"> <div class="sl-tagline">Saúde do trabalhador</div> <h3>Espirometria ocupacional / PCMSO</h3> <p>Protocolos alinhados às normas para ambientes com poeiras/fumos/vapores. Admissional, periódico e demissional.</p> <ul class="sl-bullet-list"> <li>Registros adequados a auditorias;</li> <li>Campanhas in company mediante programação;</li> <li>Relatórios padronizados.</li> </ul> </div> </div> </section> <!-- PREPARO --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Preparo</span> <h2 class="sl-section-title">Como se preparar</h2> <p class="sl-section-subtitle">Uma boa preparação melhora a qualidade do exame. Em dúvida, siga o médico solicitante.</p> </div> <div class="sl-card-grid"> <div class="sl-card"> <div class="sl-pill-label">No dia</div> <h3>Cuidados gerais</h3> <ul> <li>Evite refeições muito pesadas até 2 h antes;</li> <li>Roupas confortáveis (tórax livre);</li> <li>Chegue com alguns minutos de antecedência;</li> <li>Leve solicitação e documentos.</li> </ul> </div> <div class="sl-card"> <div class="sl-pill-label">Medicações/Tabaco</div> <h3>Quando suspender/manter</h3> <ul> <li>Não fume de 2 a 4 h antes;</li> <li>Suspensão de bombinhas depende do seu médico; na dúvida, não suspenda por conta.</li> <li>Leve suas medicações inalatórias.</li> </ul> </div> </div> </section> <!-- CTA --> <!-- SOPRO:TESTIMONIALS_START -->
 <section id="depoimentos" class="sl-testimonials" aria-label="Opiniões de pacientes">
   <div class="sl-container sl-container--wide">
-    <header class="sl-thead">
-      <div class="sl-tkicker">OPINIÕES</div>
-      <h2 class="sl-ttitle">O que nossos pacientes dizem</h2>
-      <p class="sl-tsub">A cada 5 segundos, novas avaliações aparecem aqui.</p>
-    </header>
+    <div class="sl-tframe">
+      <header class="sl-thead">
+        <div class="sl-tkicker">OPINIÕES</div>
+        <h2 class="sl-ttitle">O que nossos pacientes dizem</h2>
+        <p class="sl-tsub">Passe para o lado para ver mais →</p>
+      </header>
 
-    <div class="sl-tgrid" id="sl-testimonials-track" aria-live="polite"></div>
-    <div class="sl-tdots" id="sl-testimonials-dots" aria-hidden="true"></div>
+      <div class="sl-tcarousel" aria-label="Carrossel de depoimentos">
+        <button class="sl-tarrow sl-tarrow--left" type="button" aria-label="Depoimentos anteriores">‹</button>
+
+        <div class="sl-tgrid" id="sl-testimonials-track" aria-live="polite">
+      <article class="sl-tcard" aria-label="Depoimento de Ailton Renner">
+        <div class="sl-tcard__head">
+          <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+          <div class="sl-tcard__meta">
+            <div class="sl-tcard__name">Ailton Renner</div>
+            <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+          </div>
+        </div>
+        <p class="sl-tcard__text">Excelente! Consulta direta e personalizada. Problema resolvido!</p>
+      </article>
+      <article class="sl-tcard" aria-label="Depoimento de Junior">
+        <div class="sl-tcard__head">
+          <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+          <div class="sl-tcard__meta">
+            <div class="sl-tcard__name">Junior</div>
+            <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+          </div>
+        </div>
+        <p class="sl-tcard__text">Atendimento perfeito. Gostei muito da atenção dispensada.</p>
+      </article>
+      <article class="sl-tcard" aria-label="Depoimento de Igor">
+        <div class="sl-tcard__head">
+          <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+          <div class="sl-tcard__meta">
+            <div class="sl-tcard__name">Igor</div>
+            <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+          </div>
+        </div>
+        <p class="sl-tcard__text">Ótimo atendimento e explicações. Muito atenciosa.</p>
+      </article>
+        </div>
+
+        <button class="sl-tarrow sl-tarrow--right" type="button" aria-label="Próximos depoimentos">›</button>
+      </div>
+
+      <div class="sl-tdots" id="sl-testimonials-dots" aria-hidden="true"></div>
+    </div>
   </div>
 
   <script type="application/json" id="sl-testimonials-data">
@@ -149,14 +229,18 @@ document.addEventListener('DOMContentLoaded', function () { try { var walker = d
 <script>
 (function(){
   var dataEl = document.getElementById("sl-testimonials-data");
-  var track = document.getElementById("sl-testimonials-track");
-  var dots  = document.getElementById("sl-testimonials-dots");
+  var track  = document.getElementById("sl-testimonials-track");
+  var dots   = document.getElementById("sl-testimonials-dots");
   if(!dataEl || !track) return;
 
-  var testimonials = JSON.parse(dataEl.textContent || "[]");
+  var testimonials = [];
+  try { testimonials = JSON.parse(dataEl.textContent || "[]"); }
+  catch(e){ return; }
+
   var perPage = 3;
   var pages = Math.max(1, Math.ceil(testimonials.length / perPage));
   var page = 0;
+  var timer = null;
 
   function starStr(n){
     n = Math.max(0, Math.min(5, Number(n || 0)));
@@ -194,14 +278,38 @@ document.addEventListener('DOMContentLoaded', function () { try { var walker = d
   function render(){
     var start = page * perPage;
     var slice = testimonials.slice(start, start + perPage);
+    if(slice.length === 0) return;
+
     track.innerHTML = "";
     for(var i=0;i<slice.length;i++) track.appendChild(card(slice[i]));
     renderDots();
+  }
+
+  function next(){
     page = (page + 1) % pages;
+    render();
+  }
+  function prev(){
+    page = (page - 1 + pages) % pages;
+    render();
+  }
+
+  function restart(){
+    if(timer) clearInterval(timer);
+    timer = setInterval(next, 5000);
+  }
+
+  // hooks nas setas (se existirem)
+  var root = track.closest(".sl-testimonials");
+  if(root){
+    var left = root.querySelector(".sl-tarrow--left");
+    var right = root.querySelector(".sl-tarrow--right");
+    if(left) left.addEventListener("click", function(){ prev(); restart(); });
+    if(right) right.addEventListener("click", function(){ next(); restart(); });
   }
 
   render();
-  setInterval(render, 5000);
+  restart();
 })();
 </script>
 <!-- SOPRO:TESTIMONIALS_JS_END -->
