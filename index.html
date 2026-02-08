@@ -426,62 +426,59 @@
 <!-- SOPRO:TESTIMONIALS_CSS_START -->
 <style>
   .sl-testimonials{padding:48px 0}
-  .sl-tframe{
-    border:2px solid rgba(0,128,128,.35);
-    border-radius:18px;
-    background:#fff;
-    box-shadow:0 14px 34px rgba(0,0,0,.10);
-    padding:18px 16px 16px;
-  }
+  .sl-tframe{border:2px solid rgba(0,128,128,.35);border-radius:18px;background:#fff;box-shadow:0 14px 34px rgba(0,0,0,.10);padding:18px 16px 16px}
   .sl-thead{text-align:center;margin:6px 0 14px}
   .sl-tkicker{font-weight:700;letter-spacing:.12em;font-size:.78rem;opacity:.75}
   .sl-ttitle{font-size:clamp(1.35rem,2.2vw,1.9rem);margin:.35rem 0 .25rem}
   .sl-tsub{margin:0 auto;max-width:56ch;opacity:.75}
 
-  .sl-tcarousel{position:relative;display:flex;align-items:center;gap:10px}
-  .sl-tarrow{
-    width:38px;height:38px;border-radius:999px;
-    border:1px solid rgba(0,0,0,.14);
-    background:#fff; cursor:pointer;
-    box-shadow:0 10px 22px rgba(0,0,0,.10);
-    display:grid;place-items:center;
-    font-size:20px; line-height:1;
-    flex:0 0 auto;
+  .sl-tcarousel{position:relative}
+  .sl-ttrack{position:relative;min-height:140px;padding:6px 4px}
+
+  .sl-tpage{
+    position:absolute;inset:0;
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:12px;opacity:0;pointer-events:none;
+    animation: slCycle 25s infinite;
   }
-  .sl-tgrid{
-    flex:1 1 auto;
-    display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:12px;
-    align-items:stretch;
+  .sl-tpage[data-page="1"]{animation-delay:0s}
+  .sl-tpage[data-page="2"]{animation-delay:5s}
+  .sl-tpage[data-page="3"]{animation-delay:10s}
+  .sl-tpage[data-page="4"]{animation-delay:15s}
+  .sl-tpage[data-page="5"]{animation-delay:20s}
+
+  @keyframes slCycle{
+    0%{opacity:1;transform:none}
+    18%{opacity:1;transform:none}
+    20%{opacity:0;transform:translateY(2px)}
+    100%{opacity:0;transform:translateY(2px)}
   }
 
-  .sl-tcard{
-    border:1px solid rgba(0,128,128,.25);
-    border-radius:14px;
-    padding:12px 12px 10px;
-    background:#fff;
-    box-shadow:0 10px 22px rgba(0,0,0,.06);
-  }
+  .sl-tcard{border:1px solid rgba(0,128,128,.25);border-radius:14px;padding:12px 12px 10px;background:#fff;box-shadow:0 10px 22px rgba(0,0,0,.06)}
   .sl-tcard__head{display:flex;gap:10px;align-items:center;margin-bottom:10px}
-  .sl-tcard__avatar{
-    width:34px;height:34px;border-radius:10px;
-    display:grid;place-items:center;
-    background:rgba(0,0,0,.06);font-size:16px
-  }
+  .sl-tcard__avatar{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(0,0,0,.06);font-size:16px}
   .sl-tcard__name{font-weight:700;line-height:1.1}
   .sl-tcard__stars{font-size:.95rem;letter-spacing:.08em;opacity:.9}
   .sl-tcard__text{margin:0;opacity:.9}
 
   .sl-tdots{display:flex;justify-content:center;gap:8px;margin-top:12px}
-  .sl-tdot{width:7px;height:7px;border-radius:999px;background:rgba(0,0,0,.20)}
-  .sl-tdot.is-active{background:rgba(0,0,0,.55)}
-  .sl-fade{animation:slFade .32s ease-in-out}
-  @keyframes slFade{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
+  .sl-tdot{width:7px;height:7px;border-radius:999px;background:rgba(0,0,0,.20);opacity:.35}
+  .sl-tdot--1{animation: slDot 25s infinite; animation-delay:0s}
+  .sl-tdot--2{animation: slDot 25s infinite; animation-delay:5s}
+  .sl-tdot--3{animation: slDot 25s infinite; animation-delay:10s}
+  .sl-tdot--4{animation: slDot 25s infinite; animation-delay:15s}
+  .sl-tdot--5{animation: slDot 25s infinite; animation-delay:20s}
 
-  @media (max-width: 980px){
-    .sl-tgrid{grid-template-columns:1fr}
-    .sl-tarrow{display:none}
+  @keyframes slDot{
+    0%{opacity:1;background:rgba(0,0,0,.55)}
+    18%{opacity:1;background:rgba(0,0,0,.55)}
+    20%{opacity:.35;background:rgba(0,0,0,.20)}
+    100%{opacity:.35;background:rgba(0,0,0,.20)}
+  }
+
+  @media (max-width:980px){
+    .sl-tpage{grid-template-columns:1fr}
+    .sl-ttrack{min-height:240px}
   }
 </style>
 <!-- SOPRO:TESTIMONIALS_CSS_END -->
@@ -708,131 +705,183 @@
       <header class="sl-thead">
         <div class="sl-tkicker">OPINIÕES</div>
         <h2 class="sl-ttitle">O que nossos pacientes dizem</h2>
-        <p class="sl-tsub">Passe para o lado para ver mais →</p>
+        <p class="sl-tsub">A cada 5 segundos, novas avaliações aparecem aqui.</p>
       </header>
 
       <div class="sl-tcarousel" aria-label="Carrossel de depoimentos">
-        <button class="sl-tarrow sl-tarrow--left" type="button" aria-label="Depoimentos anteriores">‹</button>
-
-        <div class="sl-tgrid" id="sl-testimonials-track" aria-live="polite">
-      <article class="sl-tcard" aria-label="Depoimento de Ailton Renner">
-        <div class="sl-tcard__head">
-          <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-          <div class="sl-tcard__meta">
-            <div class="sl-tcard__name">Ailton Renner</div>
-            <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-          </div>
-        </div>
-        <p class="sl-tcard__text">Excelente! Consulta direta e personalizada. Problema resolvido!</p>
-      </article>
-      <article class="sl-tcard" aria-label="Depoimento de Junior">
-        <div class="sl-tcard__head">
-          <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-          <div class="sl-tcard__meta">
-            <div class="sl-tcard__name">Junior</div>
-            <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-          </div>
-        </div>
-        <p class="sl-tcard__text">Atendimento perfeito. Gostei muito da atenção dispensada.</p>
-      </article>
-      <article class="sl-tcard" aria-label="Depoimento de Igor">
-        <div class="sl-tcard__head">
-          <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-          <div class="sl-tcard__meta">
-            <div class="sl-tcard__name">Igor</div>
-            <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-          </div>
-        </div>
-        <p class="sl-tcard__text">Ótimo atendimento e explicações. Muito atenciosa.</p>
-      </article>
-        </div>
-
-        <button class="sl-tarrow sl-tarrow--right" type="button" aria-label="Próximos depoimentos">›</button>
-      </div>
-
-      <div class="sl-tdots" id="sl-testimonials-dots" aria-hidden="true"></div>
+        <div class="sl-ttrack" id="sl-testimonials-track" aria-live="polite">
+        <div class="sl-tpage" data-page="1">
+<article class="sl-tcard" aria-label="Depoimento de Ailton Renner">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Ailton Renner</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
     </div>
   </div>
+  <p class="sl-tcard__text">Excelente! Consulta direta e personalizada. Problema resolvido!</p>
+</article>
+<article class="sl-tcard" aria-label="Depoimento de Junior">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Junior</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Atendimento perfeito. Gostei muito da atenção dispensada.</p>
+</article>
+<article class="sl-tcard" aria-label="Depoimento de Igor">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Igor</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Ótimo atendimento e explicações. Muito atenciosa.</p>
+</article>
+        </div>
+        <div class="sl-tpage" data-page="2">
+<article class="sl-tcard" aria-label="Depoimento de Mariana Lopes">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Mariana Lopes</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Consulta acolhedora e objetiva. Saí bem mais tranquila.</p>
+</article>
+<article class="sl-tcard" aria-label="Depoimento de Carlos">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Carlos</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Explicação clara e conduta segura. Recomendo.</p>
+</article>
+<article class="sl-tcard" aria-label="Depoimento de Fernanda Almeida">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Fernanda Almeida</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Pontualidade e atenção aos detalhes. Excelente.</p>
+</article>
+        </div>
+        <div class="sl-tpage" data-page="3">
+<article class="sl-tcard" aria-label="Depoimento de Rafael Souza">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Rafael Souza</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Atendimento humano e muito competente.</p>
+</article>
+<article class="sl-tcard" aria-label="Depoimento de Patrícia">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Patrícia</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Consulta completa e sem pressa. Gostei demais.</p>
+</article>
+<article class="sl-tcard" aria-label="Depoimento de Bruno Henrique Lima">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Bruno Henrique Lima</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Profissionalismo e clareza. Tirou todas as dúvidas.</p>
+</article>
+        </div>
+        <div class="sl-tpage" data-page="4">
+<article class="sl-tcard" aria-label="Depoimento de Camila">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Camila</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Me senti ouvida e bem orientada. Nota 10.</p>
+</article>
+<article class="sl-tcard" aria-label="Depoimento de Sérgio Tavares">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Sérgio Tavares</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Diagnóstico bem explicado e plano bem definido.</p>
+</article>
+<article class="sl-tcard" aria-label="Depoimento de Luciana">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Luciana</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Atendimento impecável. Recomendo de olhos fechados.</p>
+</article>
+        </div>
+        <div class="sl-tpage" data-page="5">
+<article class="sl-tcard" aria-label="Depoimento de Diego Silva">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Diego Silva</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Explicação didática e objetiva. Muito bom.</p>
+</article>
+<article class="sl-tcard" aria-label="Depoimento de Ana Beatriz Costa">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Ana Beatriz Costa</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Acompanhamento atencioso e responsável.</p>
+</article>
+<article class="sl-tcard" aria-label="Depoimento de Roberto">
+  <div class="sl-tcard__head">
+    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
+    <div class="sl-tcard__meta">
+      <div class="sl-tcard__name">Roberto</div>
+      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
+    </div>
+  </div>
+  <p class="sl-tcard__text">Consulta muito boa, resolveu meu caso com calma.</p>
+</article>
+        </div>
+        </div>
+      </div>
 
-  <script type="application/json" id="sl-testimonials-data">
-[
-  {
-    "name": "Ailton Renner",
-    "text": "Excelente! Consulta direta e personalizada. Problema resolvido!",
-    "rating": 5
-  },
-  {
-    "name": "Junior",
-    "text": "Atendimento perfeito. Gostei muito da atenção dispensada.",
-    "rating": 5
-  },
-  {
-    "name": "Igor",
-    "text": "Ótimo atendimento e explicações. Muito atenciosa.",
-    "rating": 5
-  },
-  {
-    "name": "Mariana Lopes",
-    "text": "Consulta acolhedora e objetiva. Saí bem mais tranquila.",
-    "rating": 5
-  },
-  {
-    "name": "Carlos",
-    "text": "Explicação clara e conduta segura. Recomendo.",
-    "rating": 5
-  },
-  {
-    "name": "Fernanda Almeida",
-    "text": "Pontualidade e atenção aos detalhes. Excelente.",
-    "rating": 5
-  },
-  {
-    "name": "Rafael Souza",
-    "text": "Atendimento humano e muito competente.",
-    "rating": 5
-  },
-  {
-    "name": "Patrícia",
-    "text": "Consulta completa e sem pressa. Gostei demais.",
-    "rating": 5
-  },
-  {
-    "name": "Bruno Henrique Lima",
-    "text": "Profissionalismo e clareza. Tirou todas as dúvidas.",
-    "rating": 5
-  },
-  {
-    "name": "Camila",
-    "text": "Me senti ouvida e bem orientada. Nota 10.",
-    "rating": 5
-  },
-  {
-    "name": "Sérgio Tavares",
-    "text": "Diagnóstico bem explicado e plano bem definido.",
-    "rating": 5
-  },
-  {
-    "name": "Luciana",
-    "text": "Atendimento impecável. Recomendo de olhos fechados.",
-    "rating": 5
-  },
-  {
-    "name": "Diego Silva",
-    "text": "Explicação didática e objetiva. Muito bom.",
-    "rating": 5
-  },
-  {
-    "name": "Ana Beatriz Costa",
-    "text": "Acompanhamento atencioso e responsável.",
-    "rating": 5
-  },
-  {
-    "name": "Roberto",
-    "text": "Consulta muito boa, resolveu meu caso com calma.",
-    "rating": 5
-  }
-]
-  </script>
+      <div class="sl-tdots" id="sl-testimonials-dots" aria-hidden="true">
+      <span class="sl-tdot sl-tdot--1" aria-hidden="true"></span>
+      <span class="sl-tdot sl-tdot--2" aria-hidden="true"></span>
+      <span class="sl-tdot sl-tdot--3" aria-hidden="true"></span>
+      <span class="sl-tdot sl-tdot--4" aria-hidden="true"></span>
+      <span class="sl-tdot sl-tdot--5" aria-hidden="true"></span>
+      </div>
+    </div>
+  </div>
 </section>
 <!-- SOPRO:TESTIMONIALS_END -->
 
@@ -943,105 +992,7 @@
   </script>
 <!-- SOPRO:TESTIMONIALS_JS_START -->
 <script>
-(function(){
-  var dataEl = document.getElementById("sl-testimonials-data");
-  var track  = document.getElementById("sl-testimonials-track");
-  var dots   = document.getElementById("sl-testimonials-dots");
-  if(!dataEl || !track) return;
-
-  var testimonials = [];
-  try { testimonials = JSON.parse(dataEl.textContent || "[]"); }
-  catch(e){ return; }
-
-  // exatamente 15 (5 grupos de 3)
-  testimonials = testimonials.slice(0, 15);
-
-  var perPage = 3;
-  var pages = Math.max(1, Math.ceil(testimonials.length / perPage));
-  var page = 0;
-  var timer = null;
-
-  function starStr(n){
-    n = Math.max(0, Math.min(5, Number(n || 0)));
-    var s = "";
-    for(var i=0;i<n;i++) s += "★";
-    return s;
-  }
-
-  function escapeHtml(str){
-    return String(str || "").replace(/[&<>"']/g, function(m){
-      return ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\":"&#92;", """:"&quot;", "'":"&#39;" })[m];
-    });
-  }
-
-  function renderDots(){
-    if(!dots) return;
-    dots.innerHTML = "";
-    for(var i=0;i<pages;i++){
-      var d = document.createElement("span");
-      d.className = "sl-tdot" + (i===page ? " is-active" : "");
-      dots.appendChild(d);
-    }
-  }
-
-  function card(t){
-    var art = document.createElement("article");
-    art.className = "sl-tcard sl-fade";
-    art.setAttribute("aria-label", "Depoimento de " + (t && t.name ? t.name : "paciente"));
-
-    var name = escapeHtml(t && t.name ? t.name : "");
-    var text = escapeHtml(t && t.text ? t.text : "");
-    var rating = (t && t.rating) ? Number(t.rating) : 5;
-
-    art.innerHTML =
-      "<div class="sl-tcard__head">" +
-        "<div class="sl-tcard__avatar" aria-hidden="true">👤</div>" +
-        "<div class="sl-tcard__meta">" +
-          "<div class="sl-tcard__name">" + name + "</div>" +
-          "<div class="sl-tcard__stars" aria-label="" + rating + " de 5 estrelas">" + starStr(rating) + "</div>" +
-        "</div>" +
-      "</div>" +
-      "<p class="sl-tcard__text">" + text + "</p>";
-
-    return art;
-  }
-
-  function render(){
-    var start = page * perPage;
-    var slice = testimonials.slice(start, start + perPage);
-    if(slice.length === 0) return;
-
-    track.innerHTML = "";
-    for(var i=0;i<slice.length;i++) track.appendChild(card(slice[i]));
-    renderDots();
-  }
-
-  function next(){
-    page = (page + 1) % pages;
-    render();
-  }
-  function prev(){
-    page = (page - 1 + pages) % pages;
-    render();
-  }
-
-  function restart(){
-    if(timer) clearInterval(timer);
-    timer = setInterval(next, 5000);
-  }
-
-  // setas
-  var root = document.getElementById("depoimentos");
-  if(root){
-    var left  = root.querySelector(".sl-tarrow--left");
-    var right = root.querySelector(".sl-tarrow--right");
-    if(left)  left.addEventListener("click", function(){ prev(); restart(); });
-    if(right) right.addEventListener("click", function(){ next(); restart(); });
-  }
-
-  render();
-  restart();
-})();
+// Rotação feita 100% via CSS (25s = 5 páginas x 5s). JS não é necessário aqui.
 </script>
 <!-- SOPRO:TESTIMONIALS_JS_END -->
 </body>
