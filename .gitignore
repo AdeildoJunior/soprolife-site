@@ -13,3 +13,6 @@ soprolife-site-snapshot.tgz
 
 # backups locais (scripts)
 *.bak.testimonials.*
+
+# backups locais (scripts)
+*.bak.fixjs.*

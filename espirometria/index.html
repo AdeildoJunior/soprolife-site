@@ -237,6 +237,9 @@ document.addEventListener('DOMContentLoaded', function () { try { var walker = d
   try { testimonials = JSON.parse(dataEl.textContent || "[]"); }
   catch(e){ return; }
 
+  // exatamente 15 (5 grupos de 3)
+  testimonials = testimonials.slice(0, 15);
+
   var perPage = 3;
   var pages = Math.max(1, Math.ceil(testimonials.length / perPage));
   var page = 0;
@@ -247,6 +250,12 @@ document.addEventListener('DOMContentLoaded', function () { try { var walker = d
     var s = "";
     for(var i=0;i<n;i++) s += "★";
     return s;
+  }
+
+  function escapeHtml(str){
+    return String(str || "").replace(/[&<>"']/g, function(m){
+      return ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\":"&#92;", """:"&quot;", "'":"&#39;" })[m];
+    });
   }
 
   function renderDots(){
@@ -262,16 +271,22 @@ document.addEventListener('DOMContentLoaded', function () { try { var walker = d
   function card(t){
     var art = document.createElement("article");
     art.className = "sl-tcard sl-fade";
-    art.setAttribute("aria-label", "Depoimento de " + t.name);
+    art.setAttribute("aria-label", "Depoimento de " + (t && t.name ? t.name : "paciente"));
+
+    var name = escapeHtml(t && t.name ? t.name : "");
+    var text = escapeHtml(t && t.text ? t.text : "");
+    var rating = (t && t.rating) ? Number(t.rating) : 5;
+
     art.innerHTML =
       "<div class="sl-tcard__head">" +
         "<div class="sl-tcard__avatar" aria-hidden="true">👤</div>" +
         "<div class="sl-tcard__meta">" +
-          "<div class="sl-tcard__name">" + t.name + "</div>" +
-          "<div class="sl-tcard__stars" aria-label="" + t.rating + " de 5 estrelas">" + starStr(t.rating) + "</div>" +
+          "<div class="sl-tcard__name">" + name + "</div>" +
+          "<div class="sl-tcard__stars" aria-label="" + rating + " de 5 estrelas">" + starStr(rating) + "</div>" +
         "</div>" +
       "</div>" +
-      "<p class="sl-tcard__text">" + t.text + "</p>";
+      "<p class="sl-tcard__text">" + text + "</p>";
+
     return art;
   }
 
@@ -296,15 +311,15 @@ document.addEventListener('DOMContentLoaded', function () { try { var walker = d
 
   function restart(){
     if(timer) clearInterval(timer);
-    timer = timer = setInterval(next, 5000);
+    timer = setInterval(next, 5000);
   }
 
-  // hooks nas setas (se existirem)
-  var root = track.closest(".sl-testimonials");
+  // setas
+  var root = document.getElementById("depoimentos");
   if(root){
-    var left = root.querySelector(".sl-tarrow--left");
+    var left  = root.querySelector(".sl-tarrow--left");
     var right = root.querySelector(".sl-tarrow--right");
-    if(left) left.addEventListener("click", function(){ prev(); restart(); });
+    if(left)  left.addEventListener("click", function(){ prev(); restart(); });
     if(right) right.addEventListener("click", function(){ next(); restart(); });
   }
 
