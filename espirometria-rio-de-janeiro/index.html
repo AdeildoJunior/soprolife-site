@@ -190,6 +190,9 @@
       </header>
 
       <div class="sl-tcarousel" aria-label="Carrossel de depoimentos">
+<button class="sl-tarrow sl-tarrow--left" type="button" aria-label="Depoimento anterior">‹</button>
+<button class="sl-tarrow sl-tarrow--right" type="button" aria-label="Próximo depoimento">›</button>
+
         <div class="sl-ttrack" id="sl-testimonials-track" aria-live="polite">
         <div class="sl-tpage" data-page="1">
 <article class="sl-tcard" aria-label="Depoimento de Ailton Renner">
@@ -364,6 +367,55 @@
     </div>
   </div>
 </section>
+<!-- SOPRO:ARROWS_STYLE_START -->
+<style>
+  /* Setas dos depoimentos (injetado) */
+  #depoimentos .sl-tcarousel{position:relative}
+  #depoimentos .sl-tarrow{
+    position:absolute;
+    top:50%;
+    transform:translateY(-50%);
+    width:34px;height:34px;
+    border-radius:999px;
+    border:1px solid rgba(0,128,128,.25);
+    background:rgba(255,255,255,.92);
+    box-shadow:0 10px 22px rgba(0,0,0,.10);
+    display:grid;place-items:center;
+    cursor:pointer;
+    z-index:9999;
+    color:#0b2a3a;
+    font-size:22px;
+    line-height:1;
+  }
+  #depoimentos .sl-tarrow--left{left:8px}
+  #depoimentos .sl-tarrow--right{right:8px}
+  #depoimentos .sl-tarrow:active{transform:translateY(-50%) scale(.98)}
+  #depoimentos .sl-tarrow:focus{outline:2px solid rgba(0,128,128,.35); outline-offset:2px}
+
+  /* clique: trava a página escolhida sem quebrar o auto */
+  #depoimentos[data-manual] .sl-tpage{animation:none !important;opacity:0 !important;pointer-events:none !important;}
+  #depoimentos[data-manual="1"] .sl-tpage[data-page="1"],
+  #depoimentos[data-manual="2"] .sl-tpage[data-page="2"],
+  #depoimentos[data-manual="3"] .sl-tpage[data-page="3"],
+  #depoimentos[data-manual="4"] .sl-tpage[data-page="4"],
+  #depoimentos[data-manual="5"] .sl-tpage[data-page="5"]{opacity:1 !important;pointer-events:auto !important;}
+
+  #depoimentos[data-manual] .sl-tdot{animation:none !important;opacity:.35 !important;background:rgba(0,0,0,.20) !important;}
+  #depoimentos[data-manual="1"] .sl-tdot--1,
+  #depoimentos[data-manual="2"] .sl-tdot--2,
+  #depoimentos[data-manual="3"] .sl-tdot--3,
+  #depoimentos[data-manual="4"] .sl-tdot--4,
+  #depoimentos[data-manual="5"] .sl-tdot--5{opacity:1 !important;background:rgba(0,0,0,.55) !important;}
+
+  /* no mobile, setas um pouco menores */
+  @media (max-width: 980px){
+    #depoimentos .sl-tarrow{width:30px;height:30px;font-size:20px}
+    #depoimentos .sl-tarrow--left{left:6px}
+    #depoimentos .sl-tarrow--right{right:6px}
+  }
+</style>
+<!-- SOPRO:ARROWS_STYLE_END -->
+
 <!-- SOPRO:TESTIMONIALS_END -->
 
 <section class="sl-section"> <div class="sl-section-header"> <div class="sl-section-kicker">Sobre o exame</div> <div class="sl-local-mini" aria-label="Atendimento no Rio de Janeiro"> <h3>Atendimento em todo o Rio de Janeiro (RJ)</h3> <p>Agende sua espirometria com e sem broncodilatador. Atendemos por parceria e/ou no local do cliente, com laudos ágeis e suporte pelo WhatsApp.</p> <div class="sl-local-tags" aria-label="Regiões atendidas"> <span class="sl-tag">Centro</span> <span class="sl-tag">Zona Sul</span> <span class="sl-tag">Zona Norte</span> <span class="sl-tag">Tijuca</span> <span class="sl-tag">Barra</span> <span class="sl-tag">Jacarepaguá</span> <span class="sl-tag">Copacabana</span> </div>
@@ -373,5 +425,60 @@
 // Rotação feita 100% via CSS (25s = 5 páginas x 5s). JS não é necessário aqui.
 </script>
 <!-- SOPRO:TESTIMONIALS_JS_END -->
+<!-- SOPRO:ARROWS_SCRIPT_START -->
+<script>
+(function(){
+  var root = document.getElementById("depoimentos");
+  if(!root) return;
+
+  var pages = root.querySelectorAll(".sl-tpage");
+  if(!pages || !pages.length) return;
+
+  var total = pages.length;
+  var clearTimer = null;
+
+  function currentPage(){
+    var best = 1, bestOp = -1;
+    for(var i=0;i<pages.length;i++){
+      var o = parseFloat(getComputedStyle(pages[i]).opacity || "0");
+      if(o > bestOp){ bestOp = o; best = i+1; }
+    }
+    return best;
+  }
+
+  function setManual(n){
+    n = Math.max(1, Math.min(total, n));
+    root.setAttribute("data-manual", String(n));
+    if(clearTimer) clearTimeout(clearTimer);
+    clearTimer = setTimeout(function(){ root.removeAttribute("data-manual"); }, 12000);
+  }
+
+  function next(){ var c=currentPage(); setManual((c % total) + 1); }
+  function prev(){ var c=currentPage(); setManual(((c + total - 2) % total) + 1); }
+
+  var left  = root.querySelector(".sl-tarrow--left");
+  var right = root.querySelector(".sl-tarrow--right");
+  if(left)  left.addEventListener("click", prev);
+  if(right) right.addEventListener("click", next);
+
+  // swipe simples (combina com “Passe pro lado…”)
+  var sx=0, sy=0;
+  root.addEventListener("touchstart", function(e){
+    if(!e.touches || !e.touches[0]) return;
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+  }, {passive:true});
+  root.addEventListener("touchend", function(e){
+    if(!e.changedTouches || !e.changedTouches[0]) return;
+    var dx = e.changedTouches[0].clientX - sx;
+    var dy = e.changedTouches[0].clientY - sy;
+    if(Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)){
+      if(dx < 0) next(); else prev();
+    }
+  }, {passive:true});
+})();
+</script>
+<!-- SOPRO:ARROWS_SCRIPT_END -->
+
 </body>
 </html>
