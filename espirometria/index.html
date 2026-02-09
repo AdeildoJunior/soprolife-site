@@ -107,6 +107,21 @@
   }
 </style>
 
+<style>
+/* SOPRO:ARROWS_FORCE_START */
+/* Cria "corredor" para as setas não ficarem em cima dos cards */
+#depoimentos .sl-tcarousel{ padding:0 56px !important; }
+
+/* Setas nas bordas do frame (fora dos cards) */
+#depoimentos .sl-tarrow--left{ left:16px !important; }
+#depoimentos .sl-tarrow--right{ right:16px !important; }
+
+/* No mobile: esconde as setas (swipe + dots já resolvem) */
+@media (max-width:980px){
+  #depoimentos .sl-tarrow{ display:none !important; }
+}
+/* SOPRO:ARROWS_FORCE_END */
+</style>
 </head>
 <body> <header class="sl-header">
 <div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> <a href="/espirometria-rio-de-janeiro/" class="sl-nav-link">Espirometria RJ</a> <a href="/#agendamento" class="sl-nav-link">Agendamento</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
@@ -320,10 +335,7 @@
     font-size:22px;
     line-height:1;
   }
-  #depoimentos .sl-tarrow--left{left:8px}
-  #depoimentos .sl-tarrow--right{right:8px}
-  #depoimentos .sl-tarrow:active{transform:translateY(-50%) scale(.98)}
-  #depoimentos .sl-tarrow:focus{outline:2px solid rgba(0,128,128,.35); outline-offset:2px}
+  #depoimentos .sl-tarrow--left{left:16px !important; outline-offset:2px}
 
   /* clique: trava a página escolhida sem quebrar o auto */
   #depoimentos[data-manual] .sl-tpage{animation:none !important;opacity:0 !important;pointer-events:none !important;}
@@ -343,19 +355,7 @@
   /* no mobile, setas um pouco menores */
   @media (max-width: 980px){
     #depoimentos .sl-tarrow{width:30px;height:30px;font-size:20px}
-    #depoimentos .sl-tarrow--left{left:6px}
-    #depoimentos .sl-tarrow{display:none}
-
-    #depoimentos .sl-tarrow--right{right:6px}
-  }
-</style>
-<!-- SOPRO:ARROWS_STYLE_END -->
-
-<!-- SOPRO:TESTIMONIALS_END -->
-
-<section class="sl-cta-section" id="agendamento"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua espirometria</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section>
-<section class="sl-section" id="links-uteis"> <div class="sl-section-header"> <div class="sl-section-kicker">Referências</div> <h2 class="sl-section-title">Links úteis</h2> <p class="sl-section-subtitle"> Fontes confiáveis para quem deseja se aprofundar em Pneumologia e função pulmonar. </p> </div> <div class="sl-card-grid"> <a class="sl-card" href="https://sbpt.org.br/" target="_blank" rel="noopener"> <h3>SBPT — Sociedade Brasileira de Pneumologia e Tisiologia</h3> <p>Diretrizes, notas técnicas e cursos para profissionais e pacientes.</p> </a> <a class="sl-card" href="https://www.gov.br/saude" target="_blank" rel="noopener"> <h3>Ministério da Saúde (Brasil)</h3> <p>Protocolos, campanhas e informações oficiais sobre saúde respiratória.</p> </a> <a class="sl-card" href="https://ginasthma.org/" target="_blank" rel="noopener"> <h3>GINA — Global Initiative for Asthma</h3> <p>Relatórios anuais e recomendações atualizadas para asma.</p> </a> <a class="sl-card" href="https://goldcopd.org/" target="_blank" rel="noopener"> <h3>GOLD — Global Initiative for Chronic Obstructive Lung Disease</h3> <p>Estratégias e relatórios para diagnóstico e manejo da DPOC.</p> </a> </div>
-</section> </div> </div> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list"> <li> <a href="https://instagram.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--ig">IG</span> <span>Instagram da Sopro Life</span> </a> </li> <li> <a href="https://linkedin.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--li">in</span> <span>LinkedIn da Sopro Life</span> </a> </li> <li> <a href="https://youtube.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--yt">▶</span> <span>Canal da Sopro Life no YouTube</span> </a> </li> </ul> </div> </div> </section> <!-- Barra fixa WhatsApp --> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script> // Tabs (function(){ var root=document.getElementById("tipos-espirometria"); if(!root) return; var buttons=root.querySelectorAll(".sl-tab-button"); var panels=root.querySelectorAll(".sl-tab-panel"); buttons.forEach(function(btn){ btn.addEventListener("click",function(){ var tab=btn.getAttribute("data-tab"); buttons.forEach(function(b){b.setAttribute("aria-selected",b===btn?"true":"false");}); panels.forEach(function(p){p.classList.toggle("is-active",p.getAttribute("data-panel")===tab);}); }); }); })(); </script> <script id="sl-hide-breadcrumb">
+    #depoimentos .sl-tarrow--left{left:16px !important; if(!root) return; var buttons=root.querySelectorAll(".sl-tab-button"); var panels=root.querySelectorAll(".sl-tab-panel"); buttons.forEach(function(btn){ btn.addEventListener("click",function(){ var tab=btn.getAttribute("data-tab"); buttons.forEach(function(b){b.setAttribute("aria-selected",b===btn?"true":"false");}); panels.forEach(function(p){p.classList.toggle("is-active",p.getAttribute("data-panel")===tab);}); }); }); })(); </script> <script id="sl-hide-breadcrumb">
 document.addEventListener('DOMContentLoaded', function () { try { var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); var node; while ((node = walker.nextNode())) { var t = node.nodeValue; if (!t) continue; if (t.indexOf('Início') !== -1 && t.indexOf('Espirometria') !== -1) { var el = node.parentElement; if (el) { el.style.display = 'none'; } break; } } } catch (e) { console && console.warn && console.warn('sl-hide-breadcrumb:', e); }
 });
 </script> </main>
