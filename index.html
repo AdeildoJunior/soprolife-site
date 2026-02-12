@@ -528,6 +528,24 @@
 }
 /* SOPRO:ARROWS_FORCE_END */
 </style>
+<style>
+/* SOPRO:FIX_DEPOIMENTOS_MOBILE_V3
+   Mobile: evita cortar borda/sombra dos cards (o corte vem de .sl-ttrack{overflow:hidden}).
+*/
+@media (max-width: 980px) {
+  #depoimentos .sl-ttrack{
+    overflow: visible !important;
+    padding: 12px 12px !important;
+  }
+  #depoimentos .sl-tcarousel{
+    padding: 0 !important;
+  }
+  #depoimentos .sl-tcard{
+    box-sizing: border-box !important;
+  }
+}
+</style>
+
 
 <style>
 /* SOPRO:FIX_DEPOIMENTOS_CARD_BORDER_MOBILE
