@@ -528,6 +528,34 @@
 }
 /* SOPRO:ARROWS_FORCE_END */
 </style>
+
+<style>
+/* SOPRO:FIX_DEPOIMENTOS_CARD_BORDER_MOBILE
+   Mobile: evita cortar a borda dos cards dentro do carrossel (overflow/edge clipping).
+*/
+@media (max-width: 768px) {
+  /* Dá respiro no viewport/track do slider, sem mexer no layout desktop */
+  #depoimentos .sl-testimonials-viewport,
+  #depoimentos .sl-carousel-viewport,
+  #depoimentos .sl-testimonials-track,
+  #depoimentos .sl-carousel-track,
+  #depoimentos .sl-testimonials-slider,
+  #depoimentos .sl-carousel,
+  #depoimentos .sl-testimonials {
+    box-sizing: border-box;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  /* Garante que a borda do card conte na largura e não “estoure” 1–2px */
+  #depoimentos .sl-testimonial-card,
+  #depoimentos .sl-testimonials-card,
+  #depoimentos .sl-card {
+    box-sizing: border-box;
+  }
+}
+</style>
+
 </head>
 <body class="sl-typo-clean">
 
