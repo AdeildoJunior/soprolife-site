@@ -1824,6 +1824,81 @@ body{
 }
 </style>
 
+
+<style id="soprolife-agendamento-fix-v1">
+/* Corrige leitura e posicionamento da seção Agendamento */
+
+/* Quando clicar no menu, a seção não fica escondida atrás do header */
+#agendamento{
+  scroll-margin-top: 150px !important;
+}
+
+/* Dá respiro visual entre depoimentos e agendamento */
+.sl-cta-section#agendamento{
+  padding-top: 72px !important;
+  padding-bottom: 72px !important;
+}
+
+/* Corrige contraste do CTA escuro */
+#agendamento .sl-cta-box,
+.sl-cta-section#agendamento .sl-cta-box{
+  color: #fff !important;
+}
+
+#agendamento .sl-cta-title,
+#agendamento h2,
+.sl-cta-section#agendamento h2{
+  color: #fff !important;
+  opacity: 1 !important;
+}
+
+#agendamento .sl-cta-sub,
+#agendamento .sl-cta-contacts,
+#agendamento .sl-cta-small,
+#agendamento p,
+#agendamento div{
+  color: rgba(255,255,255,.92) !important;
+}
+
+#agendamento .sl-cta-contacts strong{
+  color: #fff !important;
+}
+
+/* Botão dentro do CTA */
+#agendamento .sl-btn-primary{
+  background: #25D366 !important;
+  color: #fff !important;
+  box-shadow: 0 12px 24px rgba(37,211,102,.20) !important;
+}
+
+/* Android/mobile: evita encavalamento e melhora leitura */
+@media (max-width: 720px){
+  #agendamento{
+    scroll-margin-top: 120px !important;
+  }
+
+  .sl-cta-section#agendamento{
+    padding-top: 56px !important;
+    padding-bottom: 96px !important;
+  }
+
+  #agendamento .sl-cta-box{
+    grid-template-columns: 1fr !important;
+    gap: 18px !important;
+    padding: 24px 20px !important;
+  }
+
+  #agendamento .sl-cta-actions{
+    justify-content: flex-start !important;
+  }
+
+  #agendamento .sl-btn-primary{
+    width: 100% !important;
+    text-align: center !important;
+  }
+}
+</style>
+
 </head>
 <body class="sl-typo-clean">
 
