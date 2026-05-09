@@ -190,9 +190,357 @@
 }
 /* SOPRO:ARROWS_FORCE_END */
 </style>
+
+<style id="soprolife-typography-standard-v1">
+/* SoproLife Typography Standard v1 — padronização final de fontes e hierarquia */
+
+:root{
+  --sl-font-main: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --sl-type-title: #0b2239;
+  --sl-type-muted: #5f7485;
+  --sl-type-accent: #0f8f86;
+}
+
+/* Fonte base igual em todas as páginas */
+html,
+body{
+  font-family: var(--sl-font-main) !important;
+  font-size: 16px !important;
+  line-height: 1.5 !important;
+  color: var(--sl-type-title) !important;
+  -webkit-font-smoothing: antialiased !important;
+  text-rendering: optimizeLegibility !important;
+}
+
+/* Menu */
+.sl-main-nav,
+.sl-nav-link{
+  font-size: .95rem !important;
+  line-height: 1.2 !important;
+  font-weight: 650 !important;
+  letter-spacing: -.01em !important;
+}
+
+.sl-nav-cta{
+  font-size: .9rem !important;
+  line-height: 1.1 !important;
+  font-weight: 800 !important;
+}
+
+/* Kicker / chapéu das seções */
+.sl-hero-kicker,
+.sl-page-hero-kicker,
+.sl-section-kicker,
+.sl-kicker,
+.sl-tagline,
+.sl-pill-label,
+.sl-tkicker,
+.sl-espiro-kicker{
+  font-size: .74rem !important;
+  line-height: 1.2 !important;
+  letter-spacing: .14em !important;
+  text-transform: uppercase !important;
+  font-weight: 850 !important;
+  color: var(--sl-type-accent) !important;
+}
+
+/* Títulos principais de páginas */
+.sl-hero-title,
+.sl-page-hero-title,
+.sl-espiro-title{
+  font-size: clamp(2.1rem, 4vw, 3.45rem) !important;
+  line-height: 1.04 !important;
+  letter-spacing: -.045em !important;
+  font-weight: 850 !important;
+  color: var(--sl-type-title) !important;
+}
+
+.sl-hero-title span,
+.sl-page-hero-title span,
+.sl-espiro-title span{
+  color: #1eb5ab !important;
+}
+
+/* Subtítulos principais */
+.sl-hero-subtitle,
+.sl-page-hero-lead,
+.sl-espiro-subtitle,
+.sl-hero .lead{
+  font-size: clamp(1rem, 1.2vw, 1.12rem) !important;
+  line-height: 1.62 !important;
+  font-weight: 450 !important;
+  color: var(--sl-type-muted) !important;
+  letter-spacing: -.005em !important;
+}
+
+/* Observações/pílulas abaixo do hero */
+.sl-page-hero-note,
+.sl-espiro-note,
+.sl-hero-note,
+.sl-whatsapp-pill{
+  font-size: .88rem !important;
+  line-height: 1.35 !important;
+  font-weight: 500 !important;
+  color: var(--sl-type-muted) !important;
+}
+
+/* Títulos de seção */
+.sl-section-title,
+.sl-ttitle,
+.sl-cta-title,
+.sl-section h2{
+  font-size: clamp(1.55rem, 2.15vw, 2.15rem) !important;
+  line-height: 1.12 !important;
+  letter-spacing: -.035em !important;
+  font-weight: 820 !important;
+  color: var(--sl-type-title) !important;
+}
+
+/* Subtítulos de seção */
+.sl-section-subtitle,
+.sl-tsub{
+  font-size: .98rem !important;
+  line-height: 1.6 !important;
+  font-weight: 450 !important;
+  color: var(--sl-type-muted) !important;
+}
+
+/* Títulos de cards */
+.sl-card h3,
+.sl-highlight strong,
+.sl-highlight-box strong,
+.sl-hero-card-title,
+.sl-espiro-card-title,
+.sl-tcard__name,
+.sl-tabs h3,
+.sl-tab-panel h3{
+  font-size: 1.03rem !important;
+  line-height: 1.22 !important;
+  letter-spacing: -.015em !important;
+  font-weight: 800 !important;
+  color: var(--sl-type-title) !important;
+}
+
+/* Texto comum em cards e blocos */
+.sl-card,
+.sl-card p,
+.sl-highlight,
+.sl-highlight p,
+.sl-highlight-box,
+.sl-highlight-box p,
+.sl-text-block p,
+.sl-tab-panel,
+.sl-tab-panel p,
+.sl-hero-card-badge,
+.sl-hero-card-footer,
+.sl-tcard__text{
+  font-size: .95rem !important;
+  line-height: 1.62 !important;
+  font-weight: 450 !important;
+  color: var(--sl-type-muted) !important;
+}
+
+/* Listas */
+.sl-bullets li,
+.sl-bullet-list li,
+.sl-card ul li,
+.sl-highlight ul li,
+.sl-highlight-box ul li,
+.sl-tab-panel ul li,
+.sl-hero-list li,
+.sl-espiro-card-list li{
+  font-size: .94rem !important;
+  line-height: 1.52 !important;
+  font-weight: 500 !important;
+  color: var(--sl-type-muted) !important;
+}
+
+/* Botões */
+.sl-btn,
+.sl-btn-primary,
+.sl-btn-outline,
+.sl-btn.primary,
+.sl-btn.outline,
+.sl-espiro-btn,
+.sl-mode-pill,
+.sl-tab-button{
+  font-size: .9rem !important;
+  line-height: 1.1 !important;
+  font-weight: 800 !important;
+  letter-spacing: -.005em !important;
+}
+
+/* CTA final */
+.sl-cta,
+.sl-cta-box{
+  font-size: .96rem !important;
+}
+
+.sl-cta h2,
+.sl-cta-box h2{
+  font-size: clamp(1.45rem, 2vw, 2rem) !important;
+  line-height: 1.14 !important;
+  letter-spacing: -.03em !important;
+  font-weight: 850 !important;
+}
+
+/* Rodapé e links úteis */
+.sl-links-footer h3{
+  font-size: 1.05rem !important;
+  line-height: 1.2 !important;
+  font-weight: 800 !important;
+}
+
+.sl-links-footer a,
+.sl-social-list a,
+.sl-links-list a{
+  font-size: .94rem !important;
+  line-height: 1.45 !important;
+  font-weight: 500 !important;
+}
+
+/* Barra/botão de WhatsApp */
+.sl-whatsapp-bar a{
+  font-size: .88rem !important;
+  line-height: 1.25 !important;
+  font-weight: 500 !important;
+}
+
+.sl-whatsapp-bar strong{
+  font-weight: 850 !important;
+}
+
+/* Ajuste mobile */
+@media (max-width: 720px){
+  html,
+  body{
+    font-size: 15.5px !important;
+  }
+
+  .sl-hero-title,
+  .sl-page-hero-title,
+  .sl-espiro-title{
+    font-size: clamp(2rem, 8vw, 2.75rem) !important;
+  }
+
+  .sl-section-title,
+  .sl-ttitle,
+  .sl-section h2{
+    font-size: clamp(1.4rem, 6vw, 1.85rem) !important;
+  }
+
+  .sl-main-nav,
+  .sl-nav-link{
+    font-size: .92rem !important;
+  }
+}
+</style>
+
+
+<style id="soprolife-typography-soften-v2">
+/* SoproLife Typography Soften v2 — reduz peso excessivo da fonte */
+
+/* Títulos principais: fortes, mas mais elegantes */
+.sl-hero-title,
+.sl-page-hero-title,
+.sl-espiro-title{
+  font-weight: 760 !important;
+  letter-spacing: -.04em !important;
+}
+
+/* Kicker/chapeuzinho: continua marcante, mas menos duro */
+.sl-hero-kicker,
+.sl-page-hero-kicker,
+.sl-section-kicker,
+.sl-kicker,
+.sl-tagline,
+.sl-pill-label,
+.sl-tkicker,
+.sl-espiro-kicker{
+  font-weight: 760 !important;
+  letter-spacing: .13em !important;
+}
+
+/* Títulos de seção */
+.sl-section-title,
+.sl-ttitle,
+.sl-cta-title,
+.sl-section h2{
+  font-weight: 720 !important;
+  letter-spacing: -.03em !important;
+}
+
+/* Títulos de cards */
+.sl-card h3,
+.sl-highlight strong,
+.sl-highlight-box strong,
+.sl-hero-card-title,
+.sl-espiro-card-title,
+.sl-tcard__name,
+.sl-tabs h3,
+.sl-tab-panel h3{
+  font-weight: 700 !important;
+}
+
+/* Menu e CTA: menos “negrito de propaganda” */
+.sl-main-nav,
+.sl-nav-link{
+  font-weight: 560 !important;
+}
+
+.sl-nav-cta,
+.sl-btn,
+.sl-btn-primary,
+.sl-btn-outline,
+.sl-btn.primary,
+.sl-btn.outline,
+.sl-espiro-btn,
+.sl-mode-pill,
+.sl-tab-button{
+  font-weight: 700 !important;
+}
+
+/* Textos comuns com leitura mais leve */
+.sl-card,
+.sl-card p,
+.sl-highlight,
+.sl-highlight p,
+.sl-highlight-box,
+.sl-highlight-box p,
+.sl-text-block p,
+.sl-tab-panel,
+.sl-tab-panel p,
+.sl-hero-card-badge,
+.sl-hero-card-footer,
+.sl-tcard__text,
+.sl-section-subtitle,
+.sl-tsub,
+.sl-hero-subtitle,
+.sl-page-hero-lead{
+  font-weight: 400 !important;
+}
+
+/* Listas: reduz peso, mantém legibilidade */
+.sl-bullets li,
+.sl-bullet-list li,
+.sl-card ul li,
+.sl-highlight ul li,
+.sl-highlight-box ul li,
+.sl-tab-panel ul li,
+.sl-hero-list li,
+.sl-espiro-card-list li{
+  font-weight: 430 !important;
+}
+
+/* Barra/botão de WhatsApp */
+.sl-whatsapp-bar strong{
+  font-weight: 700 !important;
+}
+</style>
+
 </head>
 <body> <!-- Header com logo encostada à esquerda --> <header class="sl-header">
-<div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> <a href="/espirometria-rio-de-janeiro/" class="sl-nav-link">Espirometria RJ</a> <a href="/#agendamento" class="sl-nav-link">Agendamento</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
+<div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> <a href="/#agendamento" class="sl-nav-link">Agendamento</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
 </div> </nav> <a class="sl-nav-cta" target="_blank" rel="noopener" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life."> Agendar pelo WhatsApp </a> </div>
 </header> <div class="sl-page"> <div class="sl-container"> <!-- HERO --> <section class="sl-hero"> <div class="sl-breadcrumb">Início › Exames › Espirometria</div> <div class="sl-hero-grid"> <div> <div class="sl-hero-kicker">Respiração é vida</div> <h1 class="sl-hero-title">Espirometria no <span>Rio de Janeiro</span></h1> <p class="sl-hero-subtitle">Espirometria no Rio de Janeiro com e sem broncodilatador. Atendimento humanizado, laudos ágeis e agendamento pelo WhatsApp.</p> <ul class="sl-hero-list"> <li>Espirometria simples e com broncodilatador</li> <li>Protocolos alinhados às diretrizes nacionais</li> <li>Parcerias com clínicas, empresas e médicos</li> <li>Laudo padronizado, com gráficos e conclusões objetivas</li> </ul> <div class="sl-hero-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life."> Agendar seu exame </a> </div> <p class="sl-hero-note">Atendemos adultos e crianças acima da idade adequada para o exame (conforme avaliação).</p> <a class="sl-whatsapp-pill" data-sl="wa" data-sl="wa" target="_blank" rel="noopener" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life."> <span class="sl-dot"></span> Agendamento rápido pelo WhatsApp <svg class="sl-wa-ico" viewBox="0 0 24 24" aria-hidden="true"> <path fill="currentColor" d="M20.5 3.5a9.9 9.9 0 0 0-14 14L3 21l3.6-3.6a9.9 9.9 0 0 0 13.9-13.9Zm-7.7 3.1c3.6 0 6.5 2.9 6.5 6.5s-2.9 6.5-6.5 6.5a6.5 6.5 0 0 1-3.1-.8l-.2-.1-1.9 1 .4-2.1-.1-.2A6.5 6.5 0 0 1 12.8 6.6Zm3.2 7.9c-.2.6-1.1 1-1.5 1-.4 0-1 .1-2-.4s-1.7-1.5-1.9-1.8c-.2-.3-.5-.9-.2-1.5.3-.6.7-.9.9-1 .1-.1.2-.1.3 0 .1 0 .2.1.3.3.1.2.4.9.5 1 .1.1.1.2 0 .3-.1.1-.2.3-.3.4-.1.1-.2.2-.1.4.2.2.6.9 1.3 1.4.9.6 1.1.5 1.3.4.2-.1.4-.3.5-.4.1-.1.2-.1.3 0l.9.4c.1.1.2.1.2.2Z"/> </svg> </a> </div> <aside class="sl-hero-card"> <div class="sl-hero-card-header"> <div> <div class="sl-hero-card-title">Modos de atendimento</div> <div class="sl-hero-card-badge">Escolha o formato que encaixa melhor na sua rotina.</div> </div> <div class="sl-tag">Sopro Life</div> </div> <div class="sl-modes"> <a class="sl-mode-pill" href="/servicos/#ambulatorial">Ambulatorial</a> <a class="sl-mode-pill" href="/servicos/#domiciliar">Domiciliar</a> <a class="sl-mode-pill" href="/servicos/#empresas">Empresas / PCMSO</a> </div> <div class="sl-card-divider"></div> <div class="sl-hero-mini-grid"> <div><strong>Laudo médico</strong><br>Emitido por pneumologista com experiência em função pulmonar.</div> <div><strong>Equipamento portátil</strong><br>Calibração diária e filtros descartáveis individuais.</div> </div> <div class="sl-hero-card-footer"> Para clínicas, hospitais e empresas, montamos pacotes sob medida com volume de exames e treinamento da equipe. </div> </aside> </div> </section> <!-- SOBRE --> <!-- SOPRO:TESTIMONIALS_START -->
 <section id="depoimentos" class="sl-testimonials" aria-label="Opiniões de pacientes">

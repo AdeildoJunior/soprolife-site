@@ -122,11 +122,792 @@
 }
 /* SOPRO:ARROWS_FORCE_END */
 </style>
+
+<style id="soprolife-clean-visual-v1">
+/* SoproLife Clean Visual v1 — camada visual não destrutiva */
+:root{
+  --sl-clean-max: 1120px;
+  --sl-clean-text: #102a43;
+  --sl-clean-muted: #5f7485;
+  --sl-clean-line: rgba(11,34,57,.08);
+  --sl-clean-soft: #f7fbfc;
+}
+
+/* Base mais limpa */
+body{
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif !important;
+  color: var(--sl-clean-text) !important;
+  background: #fff !important;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Containers menos largos para leitura melhor */
+.sl-wrap,
+.sl-container,
+.sl-container--wide{
+  max-width: var(--sl-clean-max) !important;
+  padding-left: 24px !important;
+  padding-right: 24px !important;
+}
+
+/* Header mais leve */
+.sl-header{
+  background: rgba(255,255,255,.94) !important;
+  border-bottom: 1px solid var(--sl-clean-line) !important;
+  box-shadow: 0 8px 24px rgba(15,35,52,.035) !important;
+}
+
+.sl-header-in{
+  min-height: 76px !important;
+  gap: 22px !important;
+}
+
+.sl-brand img{
+  max-height: 58px !important;
+  width: auto !important;
+}
+
+.sl-main-nav{
+  gap: 18px !important;
+  font-size: .95rem !important;
+}
+
+.sl-nav-link{
+  color: var(--sl-clean-muted) !important;
+  font-weight: 500 !important;
+}
+
+.sl-nav-cta{
+  box-shadow: 0 8px 18px rgba(37,211,102,.18) !important;
+  font-weight: 700 !important;
+  padding: 9px 18px !important;
+}
+
+/* Hero mais premium e com menos cara de bloco cheio */
+.sl-page{
+  background:
+    radial-gradient(circle at 12% 0%, rgba(30,181,171,.10), transparent 34%),
+    linear-gradient(180deg,#ffffff 0%,#f8fcfd 42%,#ffffff 100%) !important;
+}
+
+.sl-hero{
+  padding-top: 54px !important;
+  padding-bottom: 54px !important;
+}
+
+.sl-hero-grid{
+  gap: 52px !important;
+  align-items: center !important;
+}
+
+.sl-hero-kicker,
+.sl-section-kicker,
+.sl-tagline,
+.sl-pill-label,
+.sl-tkicker{
+  letter-spacing: .14em !important;
+  font-size: .74rem !important;
+  color: #0f8f86 !important;
+  font-weight: 800 !important;
+}
+
+.sl-hero-title{
+  max-width: 760px !important;
+  font-size: clamp(2.15rem, 4.6vw, 4rem) !important;
+  line-height: 1.04 !important;
+  letter-spacing: -.045em !important;
+  margin-bottom: 18px !important;
+}
+
+.sl-hero-subtitle{
+  max-width: 660px !important;
+  font-size: clamp(1rem, 1.4vw, 1.16rem) !important;
+  line-height: 1.65 !important;
+  color: var(--sl-clean-muted) !important;
+  margin-bottom: 24px !important;
+}
+
+/* Menos sensação de lista jogada */
+.sl-hero-list{
+  max-width: 640px !important;
+  gap: 10px 18px !important;
+  line-height: 1.45 !important;
+  margin-bottom: 26px !important;
+}
+
+.sl-hero-list li{
+  background: rgba(255,255,255,.72) !important;
+  border: 1px solid rgba(30,181,171,.10) !important;
+  border-radius: 999px !important;
+  padding: 7px 12px !important;
+}
+
+/* Cards mais elegantes */
+.sl-hero-card,
+.sl-card,
+.sl-highlight-box,
+.sl-tabs,
+.sl-cta-box,
+.sl-tcard{
+  border: 1px solid rgba(11,34,57,.07) !important;
+  box-shadow: 0 18px 45px rgba(15,35,52,.07) !important;
+}
+
+.sl-hero-card{
+  border-radius: 30px !important;
+  padding: 28px !important;
+}
+
+.sl-card,
+.sl-highlight-box{
+  border-radius: 22px !important;
+  padding: 22px !important;
+}
+
+.sl-card h3,
+.sl-hero-card-title{
+  letter-spacing: -.015em !important;
+}
+
+/* Seções com mais respiro */
+.sl-section{
+  padding-top: 58px !important;
+  padding-bottom: 58px !important;
+}
+
+.sl-section-header{
+  max-width: 780px !important;
+  margin-bottom: 28px !important;
+}
+
+.sl-section-title,
+.sl-ttitle{
+  font-size: clamp(1.65rem, 2.4vw, 2.35rem) !important;
+  line-height: 1.12 !important;
+  letter-spacing: -.035em !important;
+}
+
+.sl-section-subtitle,
+.sl-tsub,
+.sl-text-block p,
+.sl-card,
+.sl-bullet-list,
+.sl-tab-panel,
+.sl-hero-card-badge,
+.sl-hero-card-footer{
+  color: var(--sl-clean-muted) !important;
+  line-height: 1.65 !important;
+}
+
+/* Grades mais limpas */
+.sl-card-grid,
+.sl-grid,
+.sl-two-column{
+  gap: 24px !important;
+}
+
+/* Abas com menos ruído visual */
+.sl-tabs{
+  border-radius: 26px !important;
+  padding: 22px !important;
+}
+
+.sl-tab-list{
+  gap: 10px !important;
+  margin-bottom: 20px !important;
+}
+
+.sl-tab-button{
+  font-weight: 700 !important;
+  padding: 10px 16px !important;
+}
+
+/* CTA final mais limpo */
+.sl-cta-box{
+  border-radius: 30px !important;
+  padding: 30px !important;
+}
+
+/* Depoimentos menos pesados */
+.sl-testimonials{
+  padding-top: 54px !important;
+  padding-bottom: 54px !important;
+}
+
+.sl-tcard{
+  border-radius: 20px !important;
+  padding: 18px !important;
+}
+
+/* Barra fixa mais discreta */
+.sl-whatsapp-bar{
+  box-shadow: 0 -8px 24px rgba(0,0,0,.12) !important;
+}
+
+.sl-whatsapp-bar a{
+  font-size: .92rem !important;
+}
+
+/* Responsivo */
+@media (max-width: 900px){
+  .sl-wrap,
+  .sl-container,
+  .sl-container--wide{
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+  }
+
+  .sl-hero{
+    padding-top: 34px !important;
+    padding-bottom: 38px !important;
+  }
+
+  .sl-section{
+    padding-top: 42px !important;
+    padding-bottom: 42px !important;
+  }
+
+  .sl-hero-title{
+    font-size: clamp(2rem, 8vw, 2.8rem) !important;
+  }
+
+  .sl-hero-card{
+    padding: 22px !important;
+  }
+
+  .sl-card,
+  .sl-highlight-box,
+  .sl-tabs{
+    padding: 18px !important;
+  }
+}
+
+@media (max-width: 720px){
+  .sl-brand img{
+    max-height: 52px !important;
+  }
+
+  .sl-hero-list li{
+    border-radius: 16px !important;
+  }
+
+  .sl-nav-cta{
+    padding: 8px 14px !important;
+    font-size: .86rem !important;
+  }
+}
+</style>
+
+
+<style id="soprolife-clean-visual-v2">
+/* SoproLife Clean Visual v2 — ajustes finos */
+
+/* Corrige header/menu também nas páginas que não tinham CSS completo do topo */
+header,
+.sl-header{
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 40 !important;
+  background: rgba(255,255,255,.96) !important;
+  border-bottom: 1px solid rgba(11,34,57,.08) !important;
+  box-shadow: 0 8px 24px rgba(15,35,52,.035) !important;
+}
+
+.sl-header-in{
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 22px !important;
+  min-height: 76px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+.sl-brand{
+  display: inline-flex !important;
+  align-items: center !important;
+  text-decoration: none !important;
+}
+
+.sl-brand img{
+  max-height: 58px !important;
+  width: auto !important;
+  display: block !important;
+}
+
+.sl-main-nav{
+  display: flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+  margin-left: 24px !important;
+  flex: 1 !important;
+  font-size: .95rem !important;
+}
+
+.sl-nav-link{
+  display: inline-flex !important;
+  align-items: center !important;
+  position: relative !important;
+  color: #5f7485 !important;
+  text-decoration: none !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  padding: 7px 0 !important;
+}
+
+.sl-nav-link:hover{
+  color: #0b2239 !important;
+}
+
+.sl-nav-link::after{
+  content: "" !important;
+  position: absolute !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  width: 0 !important;
+  height: 2px !important;
+  border-radius: 999px !important;
+  background: #1eb5ab !important;
+  transition: width .2s ease !important;
+}
+
+.sl-nav-link:hover::after{
+  width: 100% !important;
+}
+
+.sl-nav-cta{
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+  background: #25D366 !important;
+  color: #fff !important;
+  padding: 9px 18px !important;
+  font-size: .92rem !important;
+  font-weight: 800 !important;
+  text-decoration: none !important;
+  box-shadow: 0 8px 18px rgba(37,211,102,.18) !important;
+  white-space: nowrap !important;
+}
+
+/* Submenu contato */
+.sl-has-sub{
+  position: relative !important;
+}
+
+.sl-submenu{
+  position: absolute !important;
+  top: 100% !important;
+  left: 0 !important;
+  min-width: 260px !important;
+  background: #fff !important;
+  border: 1px solid rgba(11,34,57,.08) !important;
+  border-radius: 14px !important;
+  padding: 8px !important;
+  box-shadow: 0 16px 34px rgba(15,35,52,.10) !important;
+  opacity: 0 !important;
+  transform: translateY(8px) !important;
+  pointer-events: none !important;
+  transition: opacity .16s ease, transform .16s ease !important;
+}
+
+.sl-has-sub:hover .sl-submenu,
+.sl-has-sub:focus-within .sl-submenu{
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  pointer-events: auto !important;
+}
+
+.sl-submenu-link,
+.sl-submenu a{
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 10px 12px !important;
+  border-radius: 10px !important;
+  color: #0b2239 !important;
+  text-decoration: none !important;
+}
+
+/* Home: título um pouco menor e mais equilibrado */
+.sl-hero-title{
+  font-size: clamp(2rem, 4vw, 3.45rem) !important;
+  max-width: 700px !important;
+}
+
+/* Card lateral da home menos pesado */
+.sl-hero-card{
+  max-width: 440px !important;
+  margin-left: auto !important;
+}
+
+.sl-mode-pill{
+  background: #17a99f !important;
+  color: #fff !important;
+  border: 0 !important;
+  box-shadow: 0 8px 18px rgba(30,181,171,.12) !important;
+}
+
+/* Barra inferior: menos gritante e mais premium */
+.sl-whatsapp-bar{
+  background: rgba(37,211,102,.94) !important;
+  font-size: .88rem !important;
+  box-shadow: 0 -8px 22px rgba(0,0,0,.10) !important;
+}
+
+.sl-whatsapp-bar a{
+  padding: 8px 14px !important;
+}
+
+/* Evita excesso de largura visual nas páginas internas */
+main.sl-container,
+.sl-container{
+  max-width: 1120px !important;
+}
+
+/* Mobile */
+@media (max-width: 960px){
+  .sl-main-nav{
+    display: none !important;
+  }
+
+  .sl-header-in{
+    min-height: 70px !important;
+  }
+
+  .sl-brand img{
+    max-height: 52px !important;
+  }
+
+  .sl-nav-cta{
+    margin-left: auto !important;
+    padding: 8px 14px !important;
+    font-size: .86rem !important;
+  }
+}
+</style>
+
+
+<style id="soprolife-clean-visual-v4">
+/* SoproLife Clean Visual v4 — padronização de listas, cards e alinhamento */
+
+/* Mantém eixo visual igual nas páginas internas */
+main.sl-container,
+.sl-container,
+.sl-wrap,
+.sl-container--wide{
+  max-width: 1120px !important;
+}
+
+/* Padroniza cards e caixas informativas */
+.sl-card,
+.sl-highlight,
+.sl-highlight-box,
+.sl-tabs,
+.sl-cta,
+.sl-cta-box{
+  border-radius: 24px !important;
+  border: 1px solid rgba(11,34,57,.07) !important;
+  box-shadow: 0 18px 45px rgba(15,35,52,.065) !important;
+}
+
+/* Padroniza listas internas sem mexer nas pílulas da home */
+.sl-bullets,
+.sl-bullet-list,
+.sl-card ul,
+.sl-highlight ul,
+.sl-highlight-box ul,
+.sl-tab-panel ul{
+  list-style: none !important;
+  padding-left: 0 !important;
+  margin: 12px 0 0 !important;
+  display: grid !important;
+  gap: 9px !important;
+}
+
+/* Marcador teal único para listas técnicas */
+.sl-bullets li,
+.sl-bullet-list li,
+.sl-card ul li,
+.sl-highlight ul li,
+.sl-highlight-box ul li,
+.sl-tab-panel ul li{
+  position: relative !important;
+  padding-left: 22px !important;
+  margin: 0 !important;
+  color: #5f7485 !important;
+  line-height: 1.55 !important;
+}
+
+/* Bolinha discreta e padronizada */
+.sl-bullets li::before,
+.sl-bullet-list li::before,
+.sl-card ul li::before,
+.sl-highlight ul li::before,
+.sl-highlight-box ul li::before,
+.sl-tab-panel ul li::before{
+  content: "" !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: .72em !important;
+  width: 7px !important;
+  height: 7px !important;
+  border-radius: 999px !important;
+  background: #1eb5ab !important;
+  box-shadow: 0 0 0 4px rgba(30,181,171,.10) !important;
+}
+
+/* A home mantém pílulas no hero, mas com marcador mais limpo */
+.sl-hero-list{
+  list-style: none !important;
+}
+
+.sl-hero-list li::before{
+  content: "" !important;
+  display: inline-block !important;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 999px !important;
+  background: #1eb5ab !important;
+  margin-right: 8px !important;
+  vertical-align: middle !important;
+}
+
+/* Alinha melhor grids internos entre páginas */
+.sl-two-col,
+.sl-two-column,
+.sl-card-grid,
+.sl-grid{
+  gap: 26px !important;
+}
+
+/* Títulos internos mais consistentes */
+.sl-section-title,
+.sl-ttitle,
+.sl-cta-title{
+  letter-spacing: -.03em !important;
+}
+
+.sl-section-header{
+  max-width: 760px !important;
+}
+
+/* Cards de serviços com CTA alinhado no fim */
+.sl-grid .sl-card,
+.sl-card-grid .sl-card{
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.sl-grid .sl-card .sl-actions,
+.sl-card-grid .sl-card .sl-actions{
+  margin-top: auto !important;
+  padding-top: 16px !important;
+}
+
+/* Evita que listas fiquem visualmente coladas em parágrafos */
+.sl-text-block p + .sl-bullet-list,
+.sl-card p + ul,
+.sl-highlight p + ul,
+.sl-highlight-box p + ul{
+  margin-top: 14px !important;
+}
+
+/* Mobile */
+@media (max-width: 720px){
+  .sl-bullets,
+  .sl-bullet-list,
+  .sl-card ul,
+  .sl-highlight ul,
+  .sl-highlight-box ul,
+  .sl-tab-panel ul{
+    gap: 8px !important;
+  }
+
+  .sl-bullets li,
+  .sl-bullet-list li,
+  .sl-card ul li,
+  .sl-highlight ul li,
+  .sl-highlight-box ul li,
+  .sl-tab-panel ul li{
+    padding-left: 20px !important;
+  }
+}
+</style>
+
+
+<style id="soprolife-espirometria-hero-v1">
+/* Hero da página Espirometria — alinhado ao padrão visual das demais páginas */
+.sl-espiro-hero{
+  background:
+    radial-gradient(circle at 12% 0%, rgba(30,181,171,.12), transparent 34%),
+    linear-gradient(180deg,#ffffff 0%,#f8fcfd 58%,#ffffff 100%);
+  padding: 56px 0 48px;
+}
+
+.sl-espiro-hero .sl-container{
+  max-width: 1120px !important;
+}
+
+.sl-espiro-hero-grid{
+  display: grid;
+  grid-template-columns: minmax(0,1.35fr) minmax(320px,.85fr);
+  gap: 52px;
+  align-items: center;
+}
+
+.sl-espiro-kicker{
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  color: #0f8f86;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.sl-espiro-title{
+  max-width: 720px;
+  margin: 0 0 16px;
+  font-size: clamp(2rem, 4vw, 3.45rem);
+  line-height: 1.04;
+  letter-spacing: -.045em;
+  color: #0b2239;
+}
+
+.sl-espiro-title span{
+  color: #1eb5ab;
+}
+
+.sl-espiro-subtitle{
+  max-width: 660px;
+  margin: 0 0 22px;
+  color: #5f7485;
+  font-size: clamp(1rem,1.4vw,1.15rem);
+  line-height: 1.65;
+}
+
+.sl-espiro-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.sl-espiro-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 11px 20px;
+  background: #25D366;
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 12px 24px rgba(37,211,102,.20);
+}
+
+.sl-espiro-note{
+  color: #5f7485;
+  font-size: .9rem;
+}
+
+.sl-espiro-card{
+  border-radius: 30px;
+  background: #fff;
+  border: 1px solid rgba(11,34,57,.07);
+  box-shadow: 0 18px 45px rgba(15,35,52,.07);
+  padding: 26px;
+}
+
+.sl-espiro-card-title{
+  margin: 0 0 12px;
+  color: #0b2239;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.sl-espiro-card-list{
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.sl-espiro-card-list li{
+  position: relative;
+  padding-left: 22px;
+  color: #5f7485;
+  line-height: 1.5;
+}
+
+.sl-espiro-card-list li::before{
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .65em;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #1eb5ab;
+  box-shadow: 0 0 0 4px rgba(30,181,171,.10);
+}
+
+@media (max-width: 900px){
+  .sl-espiro-hero{
+    padding: 38px 0 34px;
+  }
+
+  .sl-espiro-hero-grid{
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .sl-espiro-card{
+    padding: 22px;
+  }
+}
+</style>
+
 </head>
 <body> <header class="sl-header">
-<div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> <a href="/espirometria-rio-de-janeiro/" class="sl-nav-link">Espirometria RJ</a> <a href="/#agendamento" class="sl-nav-link">Agendamento</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
+<div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> <a href="/#agendamento" class="sl-nav-link">Agendamento</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
 </div> </nav> <a class="sl-nav-cta" target="_blank" rel="noopener" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life."> Agendar pelo WhatsApp </a> </div>
-</header> <main class="sl-container">
+</header>
+
+<section class="sl-espiro-hero" aria-label="Espirometria na Sopro Life">
+  <div class="sl-container">
+    <div class="sl-espiro-hero-grid">
+      <div>
+        <div class="sl-espiro-kicker">Exame de função pulmonar</div>
+        <h1 class="sl-espiro-title">Espirometria com <span>orientação clara</span> e laudo confiável.</h1>
+        <p class="sl-espiro-subtitle">
+          Avaliação respiratória para investigação e acompanhamento de sintomas como falta de ar, tosse persistente, chiado no peito, asma, DPOC, tabagismo e demandas ocupacionais.
+        </p>
+        <div class="sl-espiro-actions">
+          <a class="sl-espiro-btn" target="_blank" rel="noopener"
+             href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life.">
+            Agendar pelo WhatsApp
+          </a>
+          <span class="sl-espiro-note">Atendimento por agendamento.</span>
+        </div>
+      </div>
+
+      <aside class="sl-espiro-card" aria-label="Indicações comuns da espirometria">
+        <h2 class="sl-espiro-card-title">Quando o exame pode ser indicado?</h2>
+        <ul class="sl-espiro-card-list">
+          <li>Tosse persistente, falta de ar ou chiado no peito;</li>
+          <li>Acompanhamento de asma, DPOC e tabagismo;</li>
+          <li>Espirometria simples ou com broncodilatador;</li>
+          <li>Avaliação ocupacional, empresas e PCMSO.</li>
+        </ul>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<main class="sl-container">
 <section class="sl-section"> <div class="sl-section-header"> <div class="sl-section-kicker">Sobre o exame</div> <h2 class="sl-section-title">O que é a espirometria?</h2> <p class="sl-section-subtitle"> A espirometria (prova de função respiratória) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório. </p> </div> <div class="sl-two-column"> <div class="sl-text-block"> <p>Durante o exame, o paciente respira por um bocal conectado ao espirômetro. Fazemos manobras guiadas como inspirações profundas e sopros prolongados.</p> <p>As curvas e índices apontam se há obstrução/restrição e se existe resposta a broncodilatadores.</p> <ul class="sl-bullet-list"> <li>Diagnóstico e controle de asma e DPOC;</li> <li>Avaliação de tabagistas e ex-tabagistas;</li> <li>Ocupacional: poeiras/gases (PCMSO);</li> <li>Pré-operatório;</li> <li>Seguimento de doenças pulmonares.</li> </ul> </div> <div class="sl-highlight-box"> <strong>Quem pede o exame?</strong> <p>Pneumologistas, clínicos, cardiologistas, médicos do trabalho e cirurgiões, entre outros.</p> <p>Na Sopro Life, o laudo é objetivo e útil ao médico solicitante, com recomendações quando necessário.</p> </div> </div> </section> <!-- TIPOS --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Modalidades</span> <h2 class="sl-section-title">Tipos de espirometria que realizamos</h2> <p class="sl-section-subtitle">Estrutura inspirada na concorrência, mas adaptada à Sopro Life.</p> </div> <div class="sl-tabs" id="tipos-espirometria"> <div class="sl-tab-list" role="tablist"> <button class="sl-tab-button" role="tab" aria-selected="true" data-tab="simples">Espirometria simples</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="bd">Espirometria com broncodilatador</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="ocupacional">Espirometria ocupacional / PCMSO</button> </div> <div class="sl-tab-panel is-active" data-panel="simples" role="tabpanel"> <div class="sl-tagline">Avaliação basal</div> <h3>Espirometria simples</h3> <p>Sem medicação durante o exame. Ótima para investigação inicial e acompanhamento periódico.</p> <ul class="sl-bullet-list"> <li>Mede CVF, VEF1, entre outros;</li> <li>Identifica padrões obstrutivos/restritivos;</li> <li>Permite comparação em seguimentos.</li> </ul> </div> <div class="sl-tab-panel" data-panel="bd" role="tabpanel"> <div class="sl-tagline">Resposta a medicação</div> <h3>Espirometria com broncodilatador</h3> <p>Após a basal, aplica-se broncodilatador e repete-se o teste para avaliar melhora de parâmetros.</p> <ul class="sl-bullet-list"> <li>Chave no diagnóstico e controle da asma;</li> <li>Ajuda a diferenciar DPOC de outras obstruções;</li> <li>Orienta ajustes de bombinhas.</li> </ul> </div> <div class="sl-tab-panel" data-panel="ocupacional" role="tabpanel"> <div class="sl-tagline">Saúde do trabalhador</div> <h3>Espirometria ocupacional / PCMSO</h3> <p>Protocolos alinhados às normas para ambientes com poeiras/fumos/vapores. Admissional, periódico e demissional.</p> <ul class="sl-bullet-list"> <li>Registros adequados a auditorias;</li> <li>Campanhas in company mediante programação;</li> <li>Relatórios padronizados.</li> </ul> </div> </div> </section> <!-- PREPARO --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Preparo</span> <h2 class="sl-section-title">Como se preparar</h2> <p class="sl-section-subtitle">Uma boa preparação melhora a qualidade do exame. Em dúvida, siga o médico solicitante.</p> </div> <div class="sl-card-grid"> <div class="sl-card"> <div class="sl-pill-label">No dia</div> <h3>Cuidados gerais</h3> <ul> <li>Evite refeições muito pesadas até 2 h antes;</li> <li>Roupas confortáveis (tórax livre);</li> <li>Chegue com alguns minutos de antecedência;</li> <li>Leve solicitação e documentos.</li> </ul> </div> <div class="sl-card"> <div class="sl-pill-label">Medicações/Tabaco</div> <h3>Quando suspender/manter</h3> <ul> <li>Não fume de 2 a 4 h antes;</li> <li>Suspensão de bombinhas depende do seu médico; na dúvida, não suspenda por conta.</li> <li>Leve suas medicações inalatórias.</li> </ul> </div> </div> </section> <!-- CTA --> <!-- SOPRO:TESTIMONIALS_START -->
 <section id="depoimentos" class="sl-testimonials" aria-label="Opiniões de pacientes">
   <div class="sl-container sl-container--wide">
