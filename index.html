@@ -2342,6 +2342,50 @@ body{
 }
 </style>
 
+
+<style id="soprolife-instagram-mobile-android-fix-v1">
+/* Sopro Life: no mobile, Instagram fica junto do WhatsApp, não colado na logo */
+@media (max-width: 960px) {
+  .sl-header-in {
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .sl-main-nav {
+    display: none !important;
+  }
+
+  .sl-header-instagram {
+    margin-left: auto !important;
+    margin-right: 8px !important;
+    flex: 0 0 42px !important;
+    width: 42px !important;
+    height: 42px !important;
+  }
+
+  .sl-nav-cta {
+    margin-left: 0 !important;
+    flex: 0 0 auto !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .sl-header-instagram {
+    flex-basis: 38px !important;
+    width: 38px !important;
+    height: 38px !important;
+    margin-right: 6px !important;
+  }
+
+  .sl-nav-cta {
+    min-width: 88px !important;
+    max-width: 104px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+</style>
+
 </head>
 <body class="sl-typo-clean">
 

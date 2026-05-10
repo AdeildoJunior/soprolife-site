@@ -1176,6 +1176,50 @@ body{
 }
 </style>
 
+
+<style id="soprolife-instagram-mobile-android-fix-v1">
+/* Sopro Life: no mobile, Instagram fica junto do WhatsApp, não colado na logo */
+@media (max-width: 960px) {
+  .sl-header-in {
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .sl-main-nav {
+    display: none !important;
+  }
+
+  .sl-header-instagram {
+    margin-left: auto !important;
+    margin-right: 8px !important;
+    flex: 0 0 42px !important;
+    width: 42px !important;
+    height: 42px !important;
+  }
+
+  .sl-nav-cta {
+    margin-left: 0 !important;
+    flex: 0 0 auto !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .sl-header-instagram {
+    flex-basis: 38px !important;
+    width: 38px !important;
+    height: 38px !important;
+    margin-right: 6px !important;
+  }
+
+  .sl-nav-cta {
+    min-width: 88px !important;
+    max-width: 104px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+</style>
+
 </head>
 <body> <!-- HEADER --> <header class="sl-header">
 <div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> <a href="/#agendamento" class="sl-nav-link">Agendamento</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
