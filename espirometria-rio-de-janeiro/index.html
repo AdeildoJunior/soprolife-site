@@ -83,8 +83,88 @@
 .sl-whatsapp-pill[data-sl="wa"]:hover{ filter:brightness(0.96); }
 @media (max-width:720px){ .sl-whatsapp-pill[data-sl="wa"]::after{ width:16px; height:16px; margin-left:8px; }
 }
-</style> <script type="application/ld+json">\n{ "@context": "https://schema.org", "@type": "MedicalBusiness", "name": "Sopro Life", "url": "https://soprolife.com.br", "sameAs": [], "areaServed": [ { "@type": "City", "name": "Rio de Janeiro" }, { "@type": "AdministrativeArea", "name": "Rio de Janeiro - RJ" } ], "telephone": "+55 21 99890-1775", "availableService": [ { "@type": "MedicalProcedure", "name": "Espirometria (Prova de Função Respiratória)" } ], "serviceArea": { "@type": "AdministrativeArea", "name": "Rio de Janeiro - RJ" }, "mainEntityOfPage": "https://soprolife.com.br/espirometria-rio-de-janeiro/"
-}\n</script>
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebPage",
+      "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#webpage",
+      "url": "https://soprolife.com.br/espirometria-rio-de-janeiro/",
+      "name": "Espirometria no Rio de Janeiro | Prova de Função Respiratória – Sopro Life",
+      "description": "Agende Espirometria no Rio de Janeiro (RJ). Atendimento em consultórios parceiros, com laudo por pneumologista – Sopro Life.",
+      "inLanguage": "pt-BR",
+      "isPartOf": {
+        "@id": "https://soprolife.com.br/#website"
+      },
+      "mainEntity": {
+        "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#service"
+      }
+    },
+    {
+      "@type": "MedicalBusiness",
+      "@id": "https://soprolife.com.br/#organization",
+      "name": "Sopro Life",
+      "url": "https://soprolife.com.br/",
+      "logo": "https://soprolife.com.br/img/logo.png",
+      "telephone": "+55 21 99890-1775",
+      "email": "contato@soprolife.com.br",
+      "areaServed": {
+        "@type": "AdministrativeArea",
+        "name": "Rio de Janeiro - RJ"
+      },
+      "medicalSpecialty": "Pulmonary"
+    },
+    {
+      "@type": "Service",
+      "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#service",
+      "name": "Espirometria no Rio de Janeiro",
+      "serviceType": "Espirometria / Prova de Função Respiratória",
+      "description": "Serviço de espirometria no Rio de Janeiro com e sem broncodilatador, atendimento humanizado, laudos ágeis e agendamento pelo WhatsApp.",
+      "provider": {
+        "@id": "https://soprolife.com.br/#organization"
+      },
+      "areaServed": [
+        {
+          "@type": "City",
+          "name": "Rio de Janeiro"
+        },
+        {
+          "@type": "AdministrativeArea",
+          "name": "Rio de Janeiro - RJ"
+        }
+      ],
+      "availableChannel": {
+        "@type": "ServiceChannel",
+        "serviceUrl": "https://api.whatsapp.com/send?phone=5521998901775"
+      },
+      "mainEntityOfPage": {
+        "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#webpage"
+      },
+      "subjectOf": {
+        "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#procedure"
+      }
+    },
+    {
+      "@type": "DiagnosticProcedure",
+      "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#procedure",
+      "name": "Espirometria",
+      "alternateName": "Prova de Função Respiratória",
+      "description": "Exame de função pulmonar usado para avaliar volumes e fluxos respiratórios.",
+      "bodyLocation": "Pulmões e vias respiratórias",
+      "procedureType": "https://schema.org/NoninvasiveProcedure",
+      "relevantSpecialty": "https://schema.org/Pulmonary",
+      "provider": {
+        "@id": "https://soprolife.com.br/#organization"
+      },
+      "mainEntityOfPage": {
+        "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#webpage"
+      }
+    }
+  ]
+}
+</script>
 <!-- SOPRO:TESTIMONIALS_CSS_START -->
 <style>
   .sl-testimonials{padding:48px 0}
