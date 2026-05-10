@@ -1098,6 +1098,84 @@ body{
 }
 </style>
 
+
+<style id="soprolife-mobile-header-cta-fix-v1">
+/* Corrige header no mobile: logo + Instagram + CTA sem cortar */
+
+@media (max-width: 720px){
+  .sl-header-in{
+    gap: 8px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+    min-height: 74px !important;
+  }
+
+  .sl-brand{
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  .sl-brand img{
+    max-height: 56px !important;
+    max-width: 168px !important;
+    width: auto !important;
+    object-fit: contain !important;
+  }
+
+  .sl-header-social{
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    margin-left: 4px !important;
+    margin-right: 4px !important;
+    flex: 0 0 36px !important;
+  }
+
+  .sl-nav-cta{
+    flex: 0 0 auto !important;
+    max-width: 118px !important;
+    min-width: 96px !important;
+    padding: 10px 12px !important;
+    font-size: 0 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+  }
+
+  .sl-nav-cta::before{
+    content: "WhatsApp" !important;
+    font-size: .88rem !important;
+    line-height: 1 !important;
+    font-weight: 800 !important;
+  }
+}
+
+/* Em telas muito estreitas, compacta mais um pouco */
+@media (max-width: 380px){
+  .sl-brand img{
+    max-width: 150px !important;
+  }
+
+  .sl-header-social{
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    flex-basis: 34px !important;
+  }
+
+  .sl-nav-cta{
+    min-width: 88px !important;
+    max-width: 104px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .sl-nav-cta::before{
+    font-size: .84rem !important;
+  }
+}
+</style>
+
 </head>
 <body> <!-- HEADER --> <header class="sl-header">
 <div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> <a href="/#agendamento" class="sl-nav-link">Agendamento</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
