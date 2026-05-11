@@ -2384,6 +2384,45 @@ body{
     padding-right: 10px !important;
   }
 }
+
+
+/* ===== Agendamento compacto (Etapa 1) ===== */
+.sl-booking-section{padding:30px 0}
+.sl-booking-card{background:#fff;border-radius:22px;box-shadow:var(--sl-shadow-soft);padding:18px;border:1px solid rgba(11,34,57,.06)}
+.sl-booking-head{margin-bottom:14px}
+.sl-booking-title{margin:0 0 6px;font-size:1.5rem;color:var(--sl-text-dark)}
+.sl-booking-sub{margin:0;color:var(--sl-text-soft);font-size:.95rem}
+.sl-booking-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
+.sl-booking-controls{display:grid;gap:12px}
+.sl-booking-field label{display:block;font-size:.82rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--sl-primary-dark);margin-bottom:6px}
+.sl-booking-field select,.sl-booking-field input{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(11,34,57,.16);background:#fff;color:var(--sl-text-dark);font-size:.95rem}
+.sl-booking-slots-title{font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--sl-primary-dark);margin:2px 0 6px}
+.sl-booking-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.sl-slot-btn{border-radius:12px;border:1px solid rgba(30,181,171,.28);background:rgba(30,181,171,.08);color:var(--sl-primary-dark);padding:9px 8px;font-size:.88rem;font-weight:600;cursor:pointer;transition:transform .12s,filter .12s}
+.sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98)}
+.sl-slot-btn[disabled]{background:#edf2f5;color:#9aa8b2;border-color:#d8e0e5;cursor:not-allowed;transform:none}
+.sl-booking-note{margin:6px 0 0;font-size:.82rem;color:var(--sl-text-soft)}
+.sl-units-placeholder{background:linear-gradient(160deg,var(--sl-bg-soft),#fff);border:1px solid rgba(11,34,57,.08);border-radius:16px;padding:14px}
+.sl-units-placeholder h3{margin:0 0 8px;font-size:1.02rem}
+.sl-units-placeholder p{margin:0 0 10px;color:var(--sl-text-soft);font-size:.92rem}
+.sl-unit-list{list-style:none;padding:0;margin:0 0 12px;display:grid;gap:8px}
+.sl-unit-list li{background:#fff;border:1px solid rgba(11,34,57,.08);border-radius:10px;padding:8px 10px;font-size:.9rem;color:var(--sl-text-dark)}
+.sl-unit-list span{display:block;font-size:.8rem;color:var(--sl-text-soft);margin-top:2px}
+.sl-btn-disabled{display:inline-flex;align-items:center;justify-content:center;pointer-events:none;opacity:.75}
+@media (max-width:960px){
+  .sl-booking-grid{grid-template-columns:minmax(0,1fr)}
+  .sl-units-placeholder{order:2}
+}
+@media (max-width:720px){
+  .sl-booking-card{padding:14px}
+  .sl-booking-title{font-size:1.32rem}
+  .sl-booking-slots{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:430px){
+  .sl-booking-slots{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sl-slot-btn{padding:10px 8px}
+}
+
 </style>
 
 </head>
@@ -2519,6 +2558,61 @@ body{
             <strong>Quem pede o exame?</strong>
             <p>Pneumologistas, clínicos, cardiologistas, médicos do trabalho e cirurgiões, entre outros.</p>
             <p>Na Sopro Life, o laudo é objetivo e útil ao médico solicitante, com recomendações quando necessário.</p>
+          </div>
+        </div>
+      </section>
+
+
+      <section class="sl-booking-section" id="agendamento">
+        <div class="sl-container">
+          <div class="sl-booking-card">
+          <div class="sl-booking-head">
+            <h2 class="sl-booking-title">Agende sua espirometria</h2>
+            <p class="sl-booking-sub">Escolha serviço, unidade e horário. O WhatsApp abre com a mensagem pronta.</p>
+          </div>
+
+          <div class="sl-booking-grid">
+            <div class="sl-booking-controls">
+              <div class="sl-booking-field">
+                <label for="sl-booking-service">Serviço</label>
+                <select id="sl-booking-service" name="servico">
+                  <option value="Espirometria simples">Espirometria simples</option>
+                  <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
+                  <option value="Atendimento domiciliar sob avaliação">Atendimento domiciliar sob avaliação</option>
+                  <option value="Empresas / PCMSO">Empresas / PCMSO</option>
+                </select>
+              </div>
+
+              <div class="sl-booking-field">
+                <label for="sl-booking-unit">Unidade</label>
+                <select id="sl-booking-unit" name="unidade">
+                  <option value="Unidade Barra">Unidade Barra</option>
+                  <option value="Unidade Botafogo">Unidade Botafogo</option>
+                  <option value="Domiciliar sob avaliação">Domiciliar sob avaliação</option>
+                </select>
+              </div>
+
+              <div class="sl-booking-field">
+                <label for="sl-booking-date">Data</label>
+                <input id="sl-booking-date" name="data" type="date" />
+              </div>
+
+              <div>
+                <div class="sl-booking-slots-title">Horários disponíveis</div>
+                <div class="sl-booking-slots" id="sl-booking-slots"></div>
+                <p class="sl-booking-note">Horários em cinza estão indisponíveis para a seleção atual.<br>Confirmação sujeita à disponibilidade no atendimento.</p>
+              </div>
+            </div>
+
+            <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
+              <h3>Unidades de atendimento</h3>
+              <p>Em breve você poderá visualizar o mapa interativo das unidades direto nesta seção.</p>
+              <ul class="sl-unit-list">
+                <li><strong>Unidade Barra</strong><span>Atendimento ambulatorial mediante agendamento.</span></li>
+                <li><strong>Unidade Botafogo</strong><span>Atendimento ambulatorial mediante agendamento.</span></li>
+              </ul>
+              <button class="sl-btn sl-btn-outline sl-btn-disabled" type="button" aria-disabled="true">Mapa das unidades em breve</button>
+            </aside>
           </div>
         </div>
       </section>
@@ -2797,7 +2891,7 @@ body{
 
 <!-- SOPRO:REMOVIDO_DUP_TIPOS_PREPARO -->
 
-<!-- CTA --> <section class="sl-cta-section" id="agendamento"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua espirometria</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div class="sl-useful-links-block"> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list"> <li> <a href="https://www.instagram.com/soprolife/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--ig">IG</span> <span>Instagram da Sopro Life</span> </a> </li> <li> <a href="https://linkedin.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--li">in</span> <span>LinkedIn da Sopro Life</span> </a> </li> <li> <a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--yt">▶</span> <span>Canal da Sopro Life no YouTube</span> </a> </li> </ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script>
+<!-- CTA --> <section class="sl-cta-section" id="contato"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua espirometria</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div class="sl-useful-links-block"> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list"> <li> <a href="https://www.instagram.com/soprolife/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--ig">IG</span> <span>Instagram da Sopro Life</span> </a> </li> <li> <a href="https://linkedin.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--li">in</span> <span>LinkedIn da Sopro Life</span> </a> </li> <li> <a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--yt">▶</span> <span>Canal da Sopro Life no YouTube</span> </a> </li> </ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script>
 /* SOPRO:TABS_V2 (robusto) */
 (function(){
   function initTabs(){
@@ -2835,6 +2929,75 @@ body{
   }
 })();
 </script>
+
+<script>
+/* SOPRO:BOOKING_COMPACT_V1 */
+(function(){
+  var slotsWrap = document.getElementById('sl-booking-slots');
+  var serviceEl = document.getElementById('sl-booking-service');
+  var unitEl = document.getElementById('sl-booking-unit');
+  var dateEl = document.getElementById('sl-booking-date');
+  if(!slotsWrap || !serviceEl || !unitEl || !dateEl) return;
+
+  var phone = '5521998901775';
+  var slotState = [
+    {time:'08:00', available:true},
+    {time:'09:00', available:true},
+    {time:'10:00', available:false},
+    {time:'11:00', available:true},
+    {time:'13:00', available:true},
+    {time:'14:00', available:false},
+    {time:'15:00', available:true},
+    {time:'16:00', available:false}
+  ];
+
+  var now = new Date();
+  var local = new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().split('T')[0];
+  dateEl.value = local;
+  dateEl.min = local;
+
+  function formatDate(iso){
+    if(!iso) return '';
+    var parts = iso.split('-');
+    return parts.length === 3 ? [parts[2], parts[1], parts[0]].join('/') : iso;
+  }
+
+  function openWhatsApp(time){
+    var service = serviceEl.value;
+    var unit = unitEl.value;
+    var date = formatDate(dateEl.value);
+    var text = 'Olá, gostaria de agendar espirometria na Sopro Life.\n'
+      + 'Serviço: ' + service + '\n'
+      + 'Unidade: ' + unit + '\n'
+      + 'Data: ' + date + '\n'
+      + 'Horário: ' + time;
+    var url = 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(text);
+    window.open(url, '_blank', 'noopener');
+  }
+
+  function renderSlots(){
+    slotsWrap.innerHTML = '';
+    slotState.forEach(function(slot){
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sl-slot-btn';
+      btn.textContent = slot.time;
+      if(!slot.available){
+        btn.disabled = true;
+      } else {
+        btn.addEventListener('click', function(){ openWhatsApp(slot.time); });
+      }
+      slotsWrap.appendChild(btn);
+    });
+  }
+
+  serviceEl.addEventListener('change', renderSlots);
+  unitEl.addEventListener('change', renderSlots);
+  dateEl.addEventListener('change', renderSlots);
+  renderSlots();
+})();
+</script>
+
 <!-- SOPRO:TESTIMONIALS_JS_START -->
 <script>
 // Rotação feita 100% via CSS (25s = 5 páginas x 5s). JS não é necessário aqui.
