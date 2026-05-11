@@ -2387,34 +2387,92 @@ body{
 
 
 /* ===== Agendamento compacto (Etapa 1) ===== */
-.sl-booking-section{padding:30px 0}
-.sl-booking-card{background:#fff;border-radius:22px;box-shadow:var(--sl-shadow-soft);padding:18px;border:1px solid rgba(11,34,57,.06)}
-.sl-booking-head{margin-bottom:14px}
-.sl-booking-title{margin:0 0 6px;font-size:1.5rem;color:var(--sl-text-dark)}
-.sl-booking-sub{margin:0;color:var(--sl-text-soft);font-size:.95rem}
-.sl-booking-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
-.sl-booking-controls{display:grid;gap:12px}
-.sl-booking-field label{display:block;font-size:.82rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--sl-primary-dark);margin-bottom:6px}
-.sl-booking-field select,.sl-booking-field input{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(11,34,57,.16);background:#fff;color:var(--sl-text-dark);font-size:.95rem}
-.sl-booking-slots-title{font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--sl-primary-dark);margin:2px 0 6px}
+.sl-booking-section{padding:34px 0}
+.sl-booking-card{
+  background:linear-gradient(180deg,#ffffff 0%, #f9fefe 100%);
+  border-radius:24px;
+  box-shadow:0 14px 32px rgba(8,24,41,.08);
+  padding:22px;
+  border:1px solid rgba(11,34,57,.09);
+}
+.sl-booking-head{margin-bottom:16px}
+.sl-booking-title{
+  margin:0 0 6px;
+  font-size:1.56rem;
+  color:var(--sl-primary-dark) !important;
+  line-height:1.18;
+  font-weight:700;
+}
+.sl-booking-sub{margin:0;color:#516a7a;font-size:.96rem}
+.sl-booking-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:18px;align-items:start}
+.sl-booking-controls{
+  display:grid;
+  gap:13px;
+  background:#fff;
+  border:1px solid rgba(11,34,57,.08);
+  border-radius:18px;
+  padding:14px;
+}
+.sl-booking-field label{
+  display:block;
+  font-size:.78rem;
+  font-weight:600;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:#587084;
+  margin-bottom:7px
+}
+.sl-booking-field select,.sl-booking-field input{
+  width:100%;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(11,34,57,.15);
+  background:#fff;
+  color:var(--sl-text-dark);
+  font-size:.95rem;
+}
+.sl-booking-slots-title{font-size:.8rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#557082;margin:3px 0 7px}
 .sl-booking-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.sl-slot-btn{border-radius:12px;border:1px solid rgba(30,181,171,.28);background:rgba(30,181,171,.08);color:var(--sl-primary-dark);padding:9px 8px;font-size:.88rem;font-weight:600;cursor:pointer;transition:transform .12s,filter .12s}
-.sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98)}
-.sl-slot-btn[disabled]{background:#edf2f5;color:#9aa8b2;border-color:#d8e0e5;cursor:not-allowed;transform:none}
-.sl-booking-note{margin:6px 0 0;font-size:.82rem;color:var(--sl-text-soft)}
-.sl-units-placeholder{background:linear-gradient(160deg,var(--sl-bg-soft),#fff);border:1px solid rgba(11,34,57,.08);border-radius:16px;padding:14px}
-.sl-units-placeholder h3{margin:0 0 8px;font-size:1.02rem}
-.sl-units-placeholder p{margin:0 0 10px;color:var(--sl-text-soft);font-size:.92rem}
+.sl-slot-btn{
+  border-radius:12px;
+  border:1px solid rgba(30,181,171,.32);
+  background:rgba(30,181,171,.1);
+  color:var(--sl-primary-dark);
+  padding:9px 8px;
+  font-size:.88rem;
+  font-weight:600;
+  cursor:pointer;
+  transition:transform .12s,filter .12s,box-shadow .12s;
+}
+.sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98);box-shadow:0 6px 14px rgba(11,34,57,.1)}
+.sl-slot-btn[disabled]{background:#edf2f5;color:#97a6b1;border-color:#d4dee4;cursor:not-allowed;transform:none;box-shadow:none}
+.sl-booking-note{margin:7px 0 0;font-size:.82rem;color:#617888}
+.sl-units-placeholder{
+  background:linear-gradient(155deg,#f4fbfb 0%, #ebf7f7 100%);
+  border:1px solid rgba(11,34,57,.12);
+  border-radius:18px;
+  padding:15px;
+}
+.sl-units-placeholder h3{margin:0 0 8px;font-size:1.03rem;color:var(--sl-primary-dark)}
+.sl-units-placeholder p{margin:0 0 10px;color:#4e6879;font-size:.92rem}
 .sl-unit-list{list-style:none;padding:0;margin:0 0 12px;display:grid;gap:8px}
-.sl-unit-list li{background:#fff;border:1px solid rgba(11,34,57,.08);border-radius:10px;padding:8px 10px;font-size:.9rem;color:var(--sl-text-dark)}
-.sl-unit-list span{display:block;font-size:.8rem;color:var(--sl-text-soft);margin-top:2px}
-.sl-btn-disabled{display:inline-flex;align-items:center;justify-content:center;pointer-events:none;opacity:.75}
+.sl-unit-list li{
+  background:#fff;
+  border:1px solid rgba(11,34,57,.12);
+  border-radius:11px;
+  padding:8px 10px;
+  font-size:.9rem;
+  color:var(--sl-text-dark);
+  box-shadow:0 4px 10px rgba(8,24,41,.04);
+}
+.sl-unit-list span{display:block;font-size:.8rem;color:#698193;margin-top:2px}
+.sl-btn-disabled{display:inline-flex;align-items:center;justify-content:center;pointer-events:none;opacity:.85}
 @media (max-width:960px){
   .sl-booking-grid{grid-template-columns:minmax(0,1fr)}
   .sl-units-placeholder{order:2}
 }
 @media (max-width:720px){
-  .sl-booking-card{padding:14px}
+  .sl-booking-card{padding:15px}
   .sl-booking-title{font-size:1.32rem}
   .sl-booking-slots{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
@@ -2564,7 +2622,6 @@ body{
 
 
       <section class="sl-booking-section" id="agendamento">
-        <div class="sl-container">
           <div class="sl-booking-card">
           <div class="sl-booking-head">
             <h2 class="sl-booking-title">Agende sua espirometria</h2>
