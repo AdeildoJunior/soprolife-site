@@ -2404,87 +2404,90 @@ body{
 .sl-booking-head{margin-bottom:12px;padding:0 0 2px}
 .sl-booking-kicker{
   display:inline-block;
-  margin-bottom:8px;
-  padding:5px 10px;
+  margin-bottom:6px;
+  padding:4px 10px;
   border-radius:999px;
-  font-size:.74rem;
-  letter-spacing:.14em;
+  font-size:.72rem;
+  letter-spacing:.12em;
   text-transform:uppercase;
   font-weight:700;
-  color:#0f7e77;
+  color:#0e706a;
   background:rgba(30,181,171,.12);
 }
 .sl-booking-title{
-  margin:0 0 6px;
-  font-size:1.56rem;
+  margin:0 0 4px;
+  font-size:1.42rem;
   color:var(--sl-primary-dark) !important;
-  line-height:1.18;
+  line-height:1.2;
   font-weight:700;
 }
-.sl-booking-sub{margin:0;color:#4f697a;font-size:.96rem;max-width:66ch}
+.sl-booking-sub{margin:0;color:#32536a;font-size:.94rem;max-width:62ch;line-height:1.45}
 .sl-booking-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
 .sl-booking-controls{
   display:grid;
-  gap:13px;
+  gap:12px;
   background:#fff;
-  border:1px solid rgba(11,34,57,.1);
-  border-radius:18px;
+  border:1px solid rgba(11,34,57,.12);
+  border-radius:16px;
   padding:16px;
-  box-shadow:0 8px 18px rgba(8,24,41,.05);
+  box-shadow:0 7px 16px rgba(8,24,41,.045);
 }
 .sl-booking-field label{
   display:block;
-  font-size:.78rem;
+  font-size:.75rem;
   font-weight:600;
-  letter-spacing:.12em;
+  letter-spacing:.1em;
   text-transform:uppercase;
-  color:#587084;
-  margin-bottom:7px
+  color:#27455d;
+  margin-bottom:6px
 }
 .sl-booking-field select,.sl-booking-field input{
   width:100%;
+  min-height:42px;
   padding:10px 12px;
-  border-radius:12px;
+  border-radius:11px;
   border:1px solid rgba(11,34,57,.15);
   background:#fff;
-  color:var(--sl-text-dark);
-  font-size:.95rem;
+  color:#0f2f45;
+  font-size:.94rem;
+  font-family:inherit;
 }
-.sl-booking-slots-title{font-size:.8rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#557082;margin:3px 0 7px}
+.sl-booking-slots-title{font-size:.76rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#284e65;margin:2px 0 7px}
 .sl-booking-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .sl-slot-btn{
-  border-radius:12px;
-  border:1px solid rgba(30,181,171,.32);
-  background:rgba(30,181,171,.1);
-  color:var(--sl-primary-dark);
+  min-height:40px;
+  border-radius:11px;
+  border:1px solid rgba(30,181,171,.35);
+  background:rgba(30,181,171,.12);
+  color:#103349;
   padding:9px 8px;
-  font-size:.88rem;
+  font-size:.87rem;
   font-weight:600;
   cursor:pointer;
   transition:transform .12s,filter .12s,box-shadow .12s;
 }
 .sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98);box-shadow:0 6px 14px rgba(11,34,57,.1)}
-.sl-slot-btn[disabled]{background:#edf2f5;color:#97a6b1;border-color:#d4dee4;cursor:not-allowed;transform:none;box-shadow:none}
-.sl-booking-note{margin:7px 0 0;font-size:.82rem;color:#617888}
+.sl-slot-btn[disabled]{background:#eef3f6;color:#8a9bab;border-color:#d6e0e7;cursor:not-allowed;transform:none;box-shadow:none}
+.sl-booking-note{margin:6px 0 0;font-size:.8rem;color:#4f6a7d;line-height:1.4}
 .sl-units-placeholder{
-  background:linear-gradient(155deg,#f4fbfb 0%, #ebf7f7 100%);
-  border:1px solid rgba(11,34,57,.12);
-  border-radius:18px;
-  padding:15px;
+  background:linear-gradient(155deg,#f3fbfb 0%, #e9f7f6 100%);
+  border:1px solid rgba(11,34,57,.14);
+  border-radius:16px;
+  padding:13px;
 }
-.sl-units-placeholder h3{margin:0 0 8px;font-size:1.03rem;color:var(--sl-primary-dark)}
-.sl-units-placeholder p{margin:0 0 10px;color:#4e6879;font-size:.92rem}
-.sl-unit-list{list-style:none;padding:0;margin:0 0 12px;display:grid;gap:8px}
+.sl-units-placeholder h3{margin:0 0 6px;font-size:1rem;color:var(--sl-primary-dark)}
+.sl-units-placeholder p{margin:0 0 8px;color:#2f5973;font-size:.9rem;line-height:1.4}
+.sl-unit-list{list-style:none;padding:0;margin:0 0 10px;display:grid;gap:7px}
 .sl-unit-list li{
   background:#fff;
   border:1px solid rgba(11,34,57,.12);
-  border-radius:11px;
-  padding:8px 10px;
-  font-size:.9rem;
-  color:var(--sl-text-dark);
+  border-radius:10px;
+  padding:7px 10px;
+  font-size:.88rem;
+  color:#123247;
   box-shadow:0 4px 10px rgba(8,24,41,.04);
 }
-.sl-unit-list span{display:block;font-size:.8rem;color:#698193;margin-top:2px}
+.sl-unit-list span{display:block;font-size:.79rem;color:#456479;margin-top:2px;line-height:1.35}
 .sl-btn-disabled{display:inline-flex;align-items:center;justify-content:center;pointer-events:none;opacity:.85}
 .sl-booking-section .sl-booking-card,
 .sl-booking-section .sl-units-placeholder,
@@ -2653,7 +2656,7 @@ body{
           <div class="sl-booking-head">
             <span class="sl-booking-kicker">Agendamento rápido</span>
             <h2 class="sl-booking-title">Agende sua espirometria</h2>
-            <p class="sl-booking-sub">Escolha serviço, unidade e horário. O WhatsApp abre com a mensagem pronta.</p>
+            <p class="sl-booking-sub">Escolha o melhor horário e confirme pelo WhatsApp.</p>
           </div>
 
           <div class="sl-booking-grid">
@@ -2685,16 +2688,16 @@ body{
               <div>
                 <div class="sl-booking-slots-title">Horários disponíveis</div>
                 <div class="sl-booking-slots" id="sl-booking-slots"></div>
-                <p class="sl-booking-note">Horários em cinza estão indisponíveis para a seleção atual.<br>Confirmação sujeita à disponibilidade no atendimento.</p>
+                <p class="sl-booking-note">Horários em cinza estão indisponíveis para a seleção atual. Confirmação sujeita à disponibilidade.</p>
               </div>
             </div>
 
             <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
               <h3>Unidades de atendimento</h3>
-              <p>Em breve você poderá visualizar o mapa interativo das unidades direto nesta seção.</p>
+              <p>Atendimento mediante agendamento.</p>
               <ul class="sl-unit-list">
-                <li><strong>Unidade Barra</strong><span>Atendimento ambulatorial mediante agendamento.</span></li>
-                <li><strong>Unidade Zona Norte</strong><span>Atendimento ambulatorial mediante agendamento.</span></li>
+                <li><strong>Unidade Barra</strong><span>Atendimento mediante agendamento.</span></li>
+                <li><strong>Unidade Zona Norte</strong><span>Atendimento mediante agendamento.</span></li>
               </ul>
               <button class="sl-btn sl-btn-outline sl-btn-disabled" type="button" aria-disabled="true">Mapa das unidades em breve</button>
             </aside>
