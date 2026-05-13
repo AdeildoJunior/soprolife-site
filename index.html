@@ -2386,13 +2386,16 @@ body{
 
 /* ===== Agendamento compacto (Etapa 1) ===== */
 .sl-booking-section{padding:28px 0 24px}
+.sl-booking-align{
+  max-width: 980px;
+  margin: 0;
+}
 .sl-booking-card{
   background:#fff;
   border-radius:20px;
   box-shadow:0 8px 20px rgba(8,24,41,.06);
-  padding:22px;
+  padding:18px 18px 20px;
   border:1px solid rgba(11,34,57,.09);
-  border-left:4px solid rgba(30,181,171,.45);
 }
 .sl-booking-head{margin-bottom:16px}
 .sl-booking-kicker{
@@ -2638,6 +2641,7 @@ body{
 
 
       <section class="sl-booking-section" id="agendamento">
+        <div class="sl-booking-align">
           <div class="sl-booking-card">
           <div class="sl-booking-head">
             <span class="sl-booking-kicker">Agendamento rápido</span>
@@ -2688,6 +2692,7 @@ body{
               <button class="sl-btn sl-btn-outline sl-btn-disabled" type="button" aria-disabled="true">Mapa das unidades em breve</button>
             </aside>
           </div>
+        </div>
         </div>
       </section>
 
