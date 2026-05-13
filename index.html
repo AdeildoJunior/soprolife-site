@@ -2495,6 +2495,71 @@ body{
 .sl-booking-section .sl-booking-controls{
   backdrop-filter: blur(1.5px);
 }
+
+/* ===== Modal de mapa (Etapa 2) ===== */
+.sl-map-open-btn{
+  width:100%;
+}
+.sl-map-modal{
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:1200;
+}
+.sl-map-modal.is-open{display:flex}
+.sl-map-modal__backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(8,24,41,.54);
+}
+.sl-map-modal__dialog{
+  position:relative;
+  z-index:1;
+  width:min(920px,calc(100vw - 28px));
+  max-height:min(90dvh,780px);
+  background:#fff;
+  border-radius:16px;
+  box-shadow:0 18px 44px rgba(0,0,0,.22);
+  border:1px solid rgba(11,34,57,.12);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.sl-map-modal__header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:12px 14px;
+  border-bottom:1px solid rgba(11,34,57,.08);
+}
+.sl-map-modal__title{
+  margin:0;
+  font-size:1.04rem;
+  color:var(--sl-primary-dark);
+}
+.sl-map-modal__body{
+  padding:12px;
+  overflow:auto;
+}
+#sl-units-map{
+  width:100%;
+  height:460px;
+  border-radius:12px;
+  border:1px solid rgba(11,34,57,.12);
+}
+@media (max-width:720px){
+  .sl-map-modal__dialog{
+    width:calc(100vw - 14px);
+    max-height:92dvh;
+    border-radius:12px;
+  }
+  .sl-map-modal__header{padding:10px 12px}
+  .sl-map-modal__body{padding:10px}
+  #sl-units-map{height:56dvh;min-height:300px}
+}
 @media (max-width:960px){
   .sl-booking-grid{grid-template-columns:minmax(0,1fr)}
   .sl-units-placeholder{order:2}
@@ -2700,12 +2765,25 @@ body{
                 <li><strong>Unidade Barra</strong><span>Atendimento mediante agendamento.</span></li>
                 <li><strong>Unidade Zona Norte</strong><span>Atendimento mediante agendamento.</span></li>
               </ul>
-              <button class="sl-btn sl-btn-outline sl-btn-disabled" type="button" aria-disabled="true">Mapa das unidades em breve</button>
+              <button class="sl-btn sl-btn-outline sl-map-open-btn" type="button" id="sl-open-map-modal">Ver mapa</button>
             </aside>
           </div>
         </div>
         </div>
       </section>
+
+      <div class="sl-map-modal" id="sl-map-modal" aria-hidden="true">
+        <div class="sl-map-modal__backdrop" data-map-close="backdrop"></div>
+        <div class="sl-map-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sl-map-modal-title">
+          <div class="sl-map-modal__header">
+            <h3 class="sl-map-modal__title" id="sl-map-modal-title">Unidades de atendimento</h3>
+            <button class="sl-btn sl-btn-outline" type="button" id="sl-close-map-modal">Fechar</button>
+          </div>
+          <div class="sl-map-modal__body">
+            <div id="sl-units-map" aria-label="Mapa das unidades"></div>
+          </div>
+        </div>
+      </div>
 
       <!-- TIPOS -->
       <section class="sl-section">
@@ -3086,6 +3164,92 @@ body{
   unitEl.addEventListener('change', renderSlots);
   dateEl.addEventListener('change', renderSlots);
   renderSlots();
+})();
+</script>
+
+<script>
+/* SOPRO:BOOKING_MAP_MODAL_V1 */
+(function(){
+  var openBtn = document.getElementById('sl-open-map-modal');
+  var closeBtn = document.getElementById('sl-close-map-modal');
+  var modal = document.getElementById('sl-map-modal');
+  var mapNode = document.getElementById('sl-units-map');
+  if(!openBtn || !closeBtn || !modal || !mapNode) return;
+
+  var leafletReady = false;
+  var mapReady = false;
+  var mapInstance = null;
+
+  var units = [
+    // TODO: substituir coordenadas pelos pontos exatos das unidades
+    { name: 'Unidade Barra', lat: -23.0000, lng: -43.3650 },
+    { name: 'Unidade Zona Norte', lat: -22.8800, lng: -43.2700 }
+  ];
+
+  function loadLeafletAssets(){
+    if(window.L && window.L.map) return Promise.resolve();
+    if(window.__slLeafletLoadingPromise) return window.__slLeafletLoadingPromise;
+
+    window.__slLeafletLoadingPromise = new Promise(function(resolve, reject){
+      var css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      css.crossOrigin = '';
+      document.head.appendChild(css);
+
+      var script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.crossOrigin = '';
+      script.onload = function(){ leafletReady = true; resolve(); };
+      script.onerror = reject;
+      document.body.appendChild(script);
+    });
+
+    return window.__slLeafletLoadingPromise;
+  }
+
+  function initMapIfNeeded(){
+    if(mapReady || !leafletReady || !window.L) return;
+    mapInstance = window.L.map(mapNode, { scrollWheelZoom: true });
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(mapInstance);
+
+    var bounds = [];
+    units.forEach(function(unit){
+      var marker = window.L.marker([unit.lat, unit.lng]).addTo(mapInstance);
+      marker.bindPopup(unit.name);
+      bounds.push([unit.lat, unit.lng]);
+    });
+    mapInstance.fitBounds(bounds, { padding: [36, 36] });
+    mapReady = true;
+  }
+
+  function openModal(){
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    loadLeafletAssets().then(function(){
+      initMapIfNeeded();
+      setTimeout(function(){ if(mapInstance){ mapInstance.invalidateSize(); } }, 80);
+    });
+  }
+
+  function closeModal(){
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  openBtn.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', function(e){
+    if(e.target && e.target.getAttribute('data-map-close') === 'backdrop'){ closeModal(); }
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
+  });
 })();
 </script>
 
