@@ -2497,9 +2497,15 @@ body{
 }
 
 /* ===== Modal de mapa (Etapa 2) ===== */
-.sl-map-open-btn{
-  width:100%;
+.sl-map-mini{
+  margin:8px 0 10px;
+  height:170px;
+  border-radius:12px;
+  border:1px solid rgba(11,34,57,.12);
+  overflow:hidden;
+  cursor:pointer;
 }
+.sl-map-open-btn{width:100%}
 .sl-map-modal{
   position:fixed;
   inset:0;
@@ -2517,11 +2523,11 @@ body{
 .sl-map-modal__dialog{
   position:relative;
   z-index:1;
-  width:min(920px,calc(100vw - 28px));
-  max-height:min(90dvh,780px);
+  width:min(1100px,92vw);
+  height:min(680px,82vh);
   background:#fff;
   border-radius:16px;
-  box-shadow:0 18px 44px rgba(0,0,0,.22);
+  box-shadow:0 14px 34px rgba(8,24,41,.2);
   border:1px solid rgba(11,34,57,.12);
   display:flex;
   flex-direction:column;
@@ -2542,23 +2548,54 @@ body{
 }
 .sl-map-modal__body{
   padding:12px;
-  overflow:auto;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns:minmax(240px,.9fr) minmax(0,1.6fr);
+  gap:12px;
 }
 #sl-units-map{
   width:100%;
-  height:460px;
+  height:100%;
   border-radius:12px;
   border:1px solid rgba(11,34,57,.12);
 }
+.sl-map-panel-info{
+  border:1px solid rgba(11,34,57,.1);
+  border-radius:12px;
+  background:#fafdff;
+  padding:12px;
+  color:#2e536b;
+  font-size:.92rem;
+}
+.sl-map-panel-info h4{
+  margin:0 0 6px;
+  font-size:1rem;
+  color:var(--sl-primary-dark);
+}
+.sl-map-panel-info ul{
+  margin:0 0 8px 18px;
+  padding:0;
+}
+.sl-map-panel-note{
+  font-size:.82rem;
+  color:#567188;
+  margin:0;
+}
 @media (max-width:720px){
   .sl-map-modal__dialog{
-    width:calc(100vw - 14px);
-    max-height:92dvh;
+    width:calc(100vw - 12px);
+    height:min(92dvh,760px);
     border-radius:12px;
   }
   .sl-map-modal__header{padding:10px 12px}
-  .sl-map-modal__body{padding:10px}
-  #sl-units-map{height:56dvh;min-height:300px}
+  .sl-map-modal__body{
+    padding:10px;
+    grid-template-columns:1fr;
+    grid-auto-rows:auto 1fr;
+    overflow:auto;
+  }
+  #sl-units-map{height:52dvh;min-height:280px}
+  .sl-map-mini{height:160px}
 }
 @media (max-width:960px){
   .sl-booking-grid{grid-template-columns:minmax(0,1fr)}
@@ -2760,12 +2797,13 @@ body{
 
             <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
               <h3>Unidades de atendimento</h3>
-              <p>Atendimento mediante agendamento.</p>
+              <p>Veja no mapa as unidades de atendimento.</p>
+              <div class="sl-map-mini" id="sl-units-map-mini" aria-label="Mini mapa das unidades"></div>
               <ul class="sl-unit-list">
                 <li><strong>Unidade Barra</strong><span>Atendimento mediante agendamento.</span></li>
                 <li><strong>Unidade Zona Norte</strong><span>Atendimento mediante agendamento.</span></li>
               </ul>
-              <button class="sl-btn sl-btn-outline sl-map-open-btn" type="button" id="sl-open-map-modal">Ver mapa</button>
+              <button class="sl-btn sl-btn-outline sl-map-open-btn" type="button" id="sl-open-map-modal">Ampliar mapa</button>
             </aside>
           </div>
         </div>
@@ -2780,7 +2818,16 @@ body{
             <button class="sl-btn sl-btn-outline" type="button" id="sl-close-map-modal">Fechar</button>
           </div>
           <div class="sl-map-modal__body">
-            <div id="sl-units-map" aria-label="Mapa das unidades"></div>
+            <div class="sl-map-panel-info">
+              <h4>Unidades de atendimento</h4>
+              <p>Escolha a unidade mais conveniente para você.</p>
+              <ul>
+                <li>Unidade Barra</li>
+                <li>Unidade Zona Norte</li>
+              </ul>
+              <p class="sl-map-panel-note">Localização aproximada. O endereço será confirmado no WhatsApp no momento do agendamento.</p>
+            </div>
+            <div id="sl-units-map" aria-label="Mapa ampliado das unidades"></div>
           </div>
         </div>
       </div>
@@ -3173,12 +3220,15 @@ body{
   var openBtn = document.getElementById('sl-open-map-modal');
   var closeBtn = document.getElementById('sl-close-map-modal');
   var modal = document.getElementById('sl-map-modal');
+  var miniNode = document.getElementById('sl-units-map-mini');
   var mapNode = document.getElementById('sl-units-map');
-  if(!openBtn || !closeBtn || !modal || !mapNode) return;
+  if(!openBtn || !closeBtn || !modal || !mapNode || !miniNode) return;
 
   var leafletReady = false;
-  var mapReady = false;
-  var mapInstance = null;
+  var miniReady = false;
+  var largeReady = false;
+  var miniMap = null;
+  var largeMap = null;
 
   var units = [
     // TODO: substituir coordenadas pelos pontos exatos das unidades
@@ -3208,22 +3258,46 @@ body{
     return window.__slLeafletLoadingPromise;
   }
 
-  function initMapIfNeeded(){
-    if(mapReady || !leafletReady || !window.L) return;
-    mapInstance = window.L.map(mapNode, { scrollWheelZoom: true });
-    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  function createTileLayer(target){
+    return window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap'
-    }).addTo(mapInstance);
+    }).addTo(target);
+  }
 
+  function fitUnits(target, padding){
     var bounds = [];
     units.forEach(function(unit){
-      var marker = window.L.marker([unit.lat, unit.lng]).addTo(mapInstance);
+      var marker = window.L.marker([unit.lat, unit.lng]).addTo(target);
       marker.bindPopup(unit.name);
       bounds.push([unit.lat, unit.lng]);
     });
-    mapInstance.fitBounds(bounds, { padding: [36, 36] });
-    mapReady = true;
+    target.fitBounds(bounds, { padding: padding });
+  }
+
+  function initMiniMapIfNeeded(){
+    if(miniReady || !leafletReady || !window.L) return;
+    miniMap = window.L.map(miniNode, {
+      zoomControl: false,
+      dragging: false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      boxZoom: false,
+      keyboard: false,
+      tap: false,
+      touchZoom: false
+    });
+    createTileLayer(miniMap);
+    fitUnits(miniMap, [16, 16]);
+    miniReady = true;
+  }
+
+  function initLargeMapIfNeeded(){
+    if(largeReady || !leafletReady || !window.L) return;
+    largeMap = window.L.map(mapNode, { scrollWheelZoom: true });
+    createTileLayer(largeMap);
+    fitUnits(largeMap, [36, 36]);
+    largeReady = true;
   }
 
   function openModal(){
@@ -3231,8 +3305,11 @@ body{
     modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
     loadLeafletAssets().then(function(){
-      initMapIfNeeded();
-      setTimeout(function(){ if(mapInstance){ mapInstance.invalidateSize(); } }, 80);
+      initMiniMapIfNeeded();
+      initLargeMapIfNeeded();
+      setTimeout(function(){
+        if(largeMap){ largeMap.invalidateSize(); }
+      }, 90);
     });
   }
 
@@ -3243,6 +3320,7 @@ body{
   }
 
   openBtn.addEventListener('click', openModal);
+  miniNode.addEventListener('click', openModal);
   closeBtn.addEventListener('click', closeModal);
   modal.addEventListener('click', function(e){
     if(e.target && e.target.getAttribute('data-map-close') === 'backdrop'){ closeModal(); }
@@ -3250,6 +3328,20 @@ body{
   document.addEventListener('keydown', function(e){
     if(e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
   });
+
+  if('IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){
+          loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
+          io.disconnect();
+        }
+      });
+    }, { rootMargin: '120px' });
+    io.observe(miniNode);
+  } else {
+    loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
+  }
 })();
 </script>
 
