@@ -2483,7 +2483,7 @@ body{
   background:#ffffff;
   border:1px solid rgba(11,34,57,.11);
   border-radius:10px;
-  padding:7px 10px;
+  padding:6px 9px;
   font-size:.88rem;
   color:#123247;
   box-shadow:0 4px 10px rgba(8,24,41,.04);
@@ -2499,7 +2499,7 @@ body{
 /* ===== Modal de mapa (Etapa 2) ===== */
 .sl-map-mini{
   margin:8px 0 10px;
-  height:250px;
+  height:clamp(260px,34vh,340px);
   border-radius:12px;
   border:1px solid rgba(11,34,57,.12);
   overflow:hidden;
@@ -2523,8 +2523,8 @@ body{
 .sl-map-modal__dialog{
   position:relative;
   z-index:1;
-  width:min(1120px,92vw);
-  height:min(700px,84vh);
+  width:min(1240px,94vw);
+  height:min(720px,84vh);
   background:#fff;
   border-radius:16px;
   box-shadow:0 14px 34px rgba(8,24,41,.2);
@@ -2548,11 +2548,12 @@ body{
 }
 .sl-map-modal__body{
   flex:1;
+  height:100%;
   min-height:0;
   padding:10px;
   overflow:hidden;
   display:grid;
-  grid-template-columns:minmax(320px,38%) minmax(0,62%);
+  grid-template-columns:minmax(250px,30%) minmax(0,1fr);
   gap:10px;
 }
 #sl-units-map{
@@ -2566,9 +2567,9 @@ body{
   border:1px solid rgba(11,34,57,.1);
   border-radius:12px;
   background:#fafdff;
-  padding:12px;
+  padding:10px;
   color:#2e536b;
-  font-size:.92rem;
+  font-size:.88rem;
   height:100%;
   display:flex;
   flex-direction:column;
@@ -2579,17 +2580,17 @@ body{
   color:var(--sl-primary-dark);
 }
 .sl-map-panel-info ul{
-  margin:0 0 8px 18px;
+  margin:0 0 6px 18px;
   padding:0;
 }
 .sl-map-panel-note{
-  font-size:.82rem;
+  font-size:.78rem;
   color:#567188;
   margin-top:auto;
 }
 @media (max-width:720px){
   .sl-map-modal__dialog{
-    width:calc(100vw - 12px);
+    width:calc(100vw - 14px);
     height:min(92dvh,760px);
     border-radius:12px;
   }
@@ -2601,7 +2602,7 @@ body{
     overflow:auto;
   }
   #sl-units-map{height:58dvh;min-height:300px}
-  .sl-map-mini{height:210px}
+  .sl-map-mini{height:260px}
 }
 @media (max-width:960px){
   .sl-booking-grid{grid-template-columns:minmax(0,1fr)}
