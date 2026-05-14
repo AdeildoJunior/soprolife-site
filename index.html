@@ -2497,15 +2497,22 @@ body{
 }
 
 /* ===== Modal de mapa (Etapa 2) ===== */
-.sl-map-mini{
+.sl-map-mini,
+.sl-mini-map{
   margin:8px 0 10px;
-  height:clamp(260px,34vh,340px);
+  width:100%;
+  height:470px;
+  min-height:470px;
   border-radius:12px;
   border:1px solid rgba(11,34,57,.12);
   overflow:hidden;
   cursor:pointer;
 }
 .sl-map-open-btn{width:100%}
+.sl-units-placeholder{
+  width:210px;
+  max-width:210px;
+}
 .sl-map-modal{
   position:fixed;
   inset:0;
@@ -2523,8 +2530,9 @@ body{
 .sl-map-modal__dialog{
   position:relative;
   z-index:1;
-  width:min(1240px,94vw);
-  height:min(720px,84vh);
+  width:min(1350px, calc(100vw - 96px));
+  height:min(625px, calc(100vh - 110px));
+  max-height:none;
   background:#fff;
   border-radius:16px;
   box-shadow:0 14px 34px rgba(8,24,41,.2);
@@ -2553,7 +2561,7 @@ body{
   padding:10px;
   overflow:hidden;
   display:grid;
-  grid-template-columns:minmax(250px,30%) minmax(0,1fr);
+  grid-template-columns:450px minmax(0,1fr);
   gap:10px;
 }
 #sl-units-map{
@@ -2574,6 +2582,14 @@ body{
   display:flex;
   flex-direction:column;
 }
+.sl-map-modal__info{
+  height:100%;
+  overflow:auto;
+}
+.sl-map-modal__map-wrap{
+  height:100%;
+  min-height:0;
+}
 .sl-map-panel-info h4{
   margin:0 0 6px;
   font-size:1rem;
@@ -2589,9 +2605,13 @@ body{
   margin-top:auto;
 }
 @media (max-width:720px){
+  .sl-units-placeholder{
+    width:100%;
+    max-width:none;
+  }
   .sl-map-modal__dialog{
     width:calc(100vw - 14px);
-    height:min(92dvh,760px);
+    height:92dvh;
     border-radius:12px;
   }
   .sl-map-modal__header{padding:10px 12px}
@@ -2602,7 +2622,8 @@ body{
     overflow:auto;
   }
   #sl-units-map{height:58dvh;min-height:300px}
-  .sl-map-mini{height:260px}
+  .sl-map-mini,
+  .sl-mini-map{height:260px;min-height:260px}
 }
 @media (max-width:960px){
   .sl-booking-grid{grid-template-columns:minmax(0,1fr)}
@@ -2805,7 +2826,7 @@ body{
             <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
               <h3>Unidades de atendimento</h3>
               <p>Veja no mapa as unidades de atendimento.</p>
-              <div class="sl-map-mini" id="sl-units-map-mini" aria-label="Mini mapa das unidades"></div>
+              <div class="sl-map-mini sl-mini-map" id="sl-units-map-mini" aria-label="Mini mapa das unidades"></div>
               <ul class="sl-unit-list">
                 <li><strong>Unidade Barra</strong><span>Atendimento mediante agendamento.</span></li>
                 <li><strong>Unidade Zona Norte</strong><span>Atendimento mediante agendamento.</span></li>
@@ -2825,7 +2846,7 @@ body{
             <button class="sl-btn sl-btn-outline" type="button" id="sl-close-map-modal">Fechar</button>
           </div>
           <div class="sl-map-modal__body">
-            <div class="sl-map-panel-info">
+            <div class="sl-map-panel-info sl-map-modal__info">
               <h4>Unidades de atendimento</h4>
               <p>Escolha a unidade mais conveniente para você.</p>
               <ul>
@@ -2834,7 +2855,9 @@ body{
               </ul>
               <p class="sl-map-panel-note">Localização aproximada. O endereço será confirmado no WhatsApp no momento do agendamento.</p>
             </div>
-            <div id="sl-units-map" aria-label="Mapa ampliado das unidades"></div>
+            <div class="sl-map-modal__map-wrap">
+              <div id="sl-units-map" aria-label="Mapa ampliado das unidades"></div>
+            </div>
           </div>
         </div>
       </div>
