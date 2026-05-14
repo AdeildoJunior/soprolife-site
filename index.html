@@ -2499,7 +2499,7 @@ body{
 /* ===== Modal de mapa (Etapa 2) ===== */
 .sl-map-mini,
 .sl-mini-map{
-  margin:8px 0 10px;
+  margin:0;
   width:100%;
   height:470px;
   min-height:470px;
@@ -2507,11 +2507,28 @@ body{
   border:1px solid rgba(11,34,57,.12);
   overflow:hidden;
   cursor:pointer;
+  position:relative;
 }
-.sl-map-open-btn{width:100%}
+.sl-map-open-btn{
+  position:absolute;
+  top:10px;
+  right:10px;
+  z-index:401;
+  border-radius:999px;
+  padding:6px 10px;
+  font-size:.78rem;
+  background:rgba(11,34,57,.84);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.35);
+}
+.sl-map-mini:hover .sl-map-open-btn{background:rgba(11,34,57,.92)}
 .sl-units-placeholder{
-  width:210px;
-  max-width:210px;
+  width:260px;
+  max-width:260px;
+  padding:0;
+  border:0;
+  box-shadow:none;
+  background:transparent;
 }
 .sl-map-modal{
   position:fixed;
@@ -2604,6 +2621,15 @@ body{
   color:#567188;
   margin-top:auto;
 }
+
+.sl-map-pin{
+  width:18px;
+  height:18px;
+  border-radius:999px;
+  background:#1eb5ab;
+  border:3px solid #0b2239;
+  box-shadow:0 0 0 2px #fff;
+}
 @media (max-width:720px){
   .sl-units-placeholder{
     width:100%;
@@ -2624,6 +2650,12 @@ body{
   #sl-units-map{height:58dvh;min-height:300px}
   .sl-map-mini,
   .sl-mini-map{height:260px;min-height:260px}
+  .sl-map-open-btn{
+    top:8px;
+    right:8px;
+    font-size:.76rem;
+    padding:5px 9px;
+  }
 }
 @media (max-width:960px){
   .sl-booking-grid{grid-template-columns:minmax(0,1fr)}
@@ -2824,14 +2856,9 @@ body{
             </div>
 
             <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
-              <h3>Unidades de atendimento</h3>
-              <p>Veja no mapa as unidades de atendimento.</p>
-              <div class="sl-map-mini sl-mini-map" id="sl-units-map-mini" aria-label="Mini mapa das unidades"></div>
-              <ul class="sl-unit-list">
-                <li><strong>Unidade Barra</strong><span>Atendimento mediante agendamento.</span></li>
-                <li><strong>Unidade Zona Norte</strong><span>Atendimento mediante agendamento.</span></li>
-              </ul>
-              <button class="sl-btn sl-btn-outline sl-map-open-btn" type="button" id="sl-open-map-modal">Ampliar mapa</button>
+              <div class="sl-map-mini sl-mini-map" id="sl-units-map-mini" aria-label="Mini mapa das unidades" role="button" tabindex="0">
+                <button class="sl-btn sl-map-open-btn" type="button" id="sl-open-map-modal" aria-label="Ampliar mapa das unidades">Ampliar mapa</button>
+              </div>
             </aside>
           </div>
         </div>
@@ -3289,16 +3316,23 @@ body{
   }
 
   function createTileLayer(target){
-    return window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    return window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap'
+      attribution: '&copy; OpenStreetMap &copy; CARTO'
     }).addTo(target);
   }
 
   function fitUnits(target, padding){
     var bounds = [];
     units.forEach(function(unit){
-      var marker = window.L.marker([unit.lat, unit.lng]).addTo(target);
+      var marker = window.L.marker([unit.lat, unit.lng], {
+        icon: window.L.divIcon({
+          className: 'sl-map-pin-wrap',
+          html: '<span class=\"sl-map-pin\" aria-hidden=\"true\"></span>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9]
+        })
+      }).addTo(target);
       marker.bindPopup(unit.name);
       bounds.push([unit.lat, unit.lng]);
     });
@@ -3351,6 +3385,12 @@ body{
 
   openBtn.addEventListener('click', openModal);
   miniNode.addEventListener('click', openModal);
+  miniNode.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' || e.key === ' '){
+      e.preventDefault();
+      openModal();
+    }
+  });
   closeBtn.addEventListener('click', closeModal);
   modal.addEventListener('click', function(e){
     if(e.target && e.target.getAttribute('data-map-close') === 'backdrop'){ closeModal(); }
