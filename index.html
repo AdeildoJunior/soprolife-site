@@ -2623,12 +2623,25 @@ body{
 }
 
 .sl-map-pin{
-  width:18px;
-  height:18px;
+  width:20px;
+  height:20px;
+  display:block;
+  border-radius:50% 50% 50% 0;
+  background:linear-gradient(150deg,#1eb5ab 0%, #13958d 100%);
+  border:2px solid #0b2239;
+  transform:rotate(-45deg);
+  box-shadow:0 2px 8px rgba(11,34,57,.28);
+  position:relative;
+}
+.sl-map-pin::after{
+  content:"";
+  position:absolute;
+  width:7px;
+  height:7px;
   border-radius:999px;
-  background:#1eb5ab;
-  border:3px solid #0b2239;
-  box-shadow:0 0 0 2px #fff;
+  background:#fff;
+  top:5px;
+  left:5px;
 }
 @media (max-width:720px){
   .sl-units-placeholder{
@@ -3316,7 +3329,7 @@ body{
   }
 
   function createTileLayer(target){
-    return window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+    return window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap &copy; CARTO'
     }).addTo(target);
@@ -3329,8 +3342,8 @@ body{
         icon: window.L.divIcon({
           className: 'sl-map-pin-wrap',
           html: '<span class=\"sl-map-pin\" aria-hidden=\"true\"></span>',
-          iconSize: [18, 18],
-          iconAnchor: [9, 9]
+          iconSize: [20, 20],
+          iconAnchor: [10, 20]
         })
       }).addTo(target);
       marker.bindPopup(unit.name);
