@@ -2533,22 +2533,12 @@ body{
   box-shadow:none;
   background:transparent;
 }
-.sl-map-mini::after,
-#sl-units-map::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  background:linear-gradient(165deg,rgba(30,181,171,.08),rgba(11,34,57,.04));
-  z-index:350;
-}
-
 #sl-units-map{position:relative}
 
 #agendamento .sl-map-mini .leaflet-tile-pane,
 #agendamento .sl-mini-map .leaflet-tile-pane,
 #sl-map-modal .leaflet-tile-pane{
-  filter:hue-rotate(145deg) saturate(.72) brightness(1.07) contrast(.92) sepia(.04);
+  filter:saturate(1.03) contrast(1.01);
 }
 .sl-map-modal{
   position:fixed;
