@@ -2501,8 +2501,8 @@ body{
 .sl-mini-map{
   margin:0;
   width:100%;
-  height:470px;
-  min-height:470px;
+  height:570px;
+  min-height:570px;
   border-radius:12px;
   border:1px solid rgba(11,34,57,.12);
   overflow:hidden;
@@ -2523,12 +2523,32 @@ body{
 }
 .sl-map-mini:hover .sl-map-open-btn{background:rgba(11,34,57,.92)}
 .sl-units-placeholder{
+  --sl-map-lift:126px;
+  --sl-map-extra-height:102px;
   width:260px;
   max-width:260px;
+  margin-top:calc(var(--sl-map-lift) * -1);
   padding:0;
   border:0;
   box-shadow:none;
   background:transparent;
+}
+.sl-map-mini::after,
+#sl-units-map::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(165deg,rgba(30,181,171,.08),rgba(11,34,57,.04));
+  z-index:350;
+}
+
+#sl-units-map{position:relative}
+
+#agendamento .sl-map-mini .leaflet-tile-pane,
+#agendamento .sl-mini-map .leaflet-tile-pane,
+#sl-map-modal .leaflet-tile-pane{
+  filter:hue-rotate(145deg) saturate(.72) brightness(1.07) contrast(.92) sepia(.04);
 }
 .sl-map-modal{
   position:fixed;
@@ -2645,8 +2665,10 @@ body{
 }
 @media (max-width:720px){
   .sl-units-placeholder{
+    --sl-map-lift:0px;
     width:100%;
     max-width:none;
+    margin-top:0;
   }
   .sl-map-modal__dialog{
     width:calc(100vw - 14px);
