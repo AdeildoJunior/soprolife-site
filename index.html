@@ -3312,11 +3312,11 @@ body{
   var mapNode = document.getElementById('sl-units-map');
   if(!openBtn || !closeBtn || !modal || !mapNode || !miniNode) return;
 
-  var leafletReady = false;
-  var miniReady = false;
-  var largeReady = false;
   var miniMap = null;
   var largeMap = null;
+  var mapsReady = false;
+  var mapsLoadingPromise = null;
+  var markersReady = false;
 
   var units = [
     // TODO: substituir coordenadas pelos pontos exatos das unidades
@@ -3324,85 +3324,100 @@ body{
     { name: 'Unidade Zona Norte', lat: -22.8800, lng: -43.2700 }
   ];
 
-  function loadLeafletAssets(){
-    if(window.L && window.L.map) return Promise.resolve();
-    if(window.__slLeafletLoadingPromise) return window.__slLeafletLoadingPromise;
+  var mapStyles = [
+    { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+    { featureType: 'poi.attraction', stylers: [{ visibility: 'off' }] },
+    { featureType: 'transit.station', stylers: [{ visibility: 'off' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#9ed7ff' }] },
+    { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#cfeec6' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#f6f8fb' }] },
+    { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#eef2f7' }] },
+    { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#5f7284' }] }
+  ];
 
-    window.__slLeafletLoadingPromise = new Promise(function(resolve, reject){
-      var css = document.createElement('link');
-      css.rel = 'stylesheet';
-      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      css.crossOrigin = '';
-      document.head.appendChild(css);
+  function loadGoogleMapsApi(){
+    if(window.google && window.google.maps) return Promise.resolve();
+    if(mapsLoadingPromise) return mapsLoadingPromise;
 
+    mapsLoadingPromise = new Promise(function(resolve, reject){
+      window.__slMapsReady = function(){ mapsReady = true; resolve(); };
       var script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.crossOrigin = '';
-      script.onload = function(){ leafletReady = true; resolve(); };
+      script.src = 'https://maps.googleapis.com/maps/api/js?key=GOOGLE_MAPS_API_KEY_AQUI&callback=__slMapsReady';
+      script.async = true;
+      script.defer = true;
       script.onerror = reject;
       document.body.appendChild(script);
     });
 
-    return window.__slLeafletLoadingPromise;
+    return mapsLoadingPromise;
   }
 
-  function createTileLayer(target){
-    return window.L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
-      attribution: '&copy; Esri, HERE, Garmin, FAO, NOAA, USGS, OpenStreetMap contributors'
-    }).addTo(target);
+  function markerIcon(){
+    return {
+      path: window.google.maps.SymbolPath.CIRCLE,
+      scale: 8,
+      fillColor: '#1eb5ab',
+      fillOpacity: 1,
+      strokeColor: '#0b2239',
+      strokeWeight: 3
+    };
   }
 
-  function fitUnits(target, padding){
-    var bounds = [];
-    units.forEach(function(unit){
-      var marker = window.L.marker([unit.lat, unit.lng], {
-        icon: window.L.divIcon({
-          className: 'sl-map-pin-wrap',
-          html: '<span class="sl-map-pin" aria-hidden="true"></span>',
-          iconSize: [20, 20],
-          iconAnchor: [10, 20]
-        })
-      }).addTo(target);
-      marker.bindPopup(unit.name);
-      bounds.push([unit.lat, unit.lng]);
-    });
-    target.fitBounds(bounds, { padding: padding });
-  }
+  function initMapsIfNeeded(){
+    if(!mapsReady || !(window.google && window.google.maps)) return;
+    if(!miniMap){
+      miniMap = new window.google.maps.Map(miniNode, {
+        disableDefaultUI: true,
+        clickableIcons: false,
+        gestureHandling: 'none',
+        keyboardShortcuts: false,
+        draggableCursor: 'pointer',
+        mapTypeId: 'roadmap',
+        styles: mapStyles
+      });
+    }
+    if(!largeMap){
+      largeMap = new window.google.maps.Map(mapNode, {
+        disableDefaultUI: true,
+        clickableIcons: false,
+        keyboardShortcuts: false,
+        gestureHandling: 'greedy',
+        zoomControl: true,
+        mapTypeId: 'roadmap',
+        styles: mapStyles
+      });
+    }
 
-  function initMiniMapIfNeeded(){
-    if(miniReady || !leafletReady || !window.L) return;
-    miniMap = window.L.map(miniNode, {
-      zoomControl: false,
-      dragging: false,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
-      boxZoom: false,
-      keyboard: false,
-      tap: false,
-      touchZoom: false
-    });
-    createTileLayer(miniMap);
-    fitUnits(miniMap, [16, 16]);
-    miniReady = true;
-  }
-
-  function initLargeMapIfNeeded(){
-    if(largeReady || !leafletReady || !window.L) return;
-    largeMap = window.L.map(mapNode, { scrollWheelZoom: true });
-    createTileLayer(largeMap);
-    fitUnits(largeMap, [36, 36]);
-    largeReady = true;
+    if(!markersReady){
+      var boundsMini = new window.google.maps.LatLngBounds();
+      var boundsLarge = new window.google.maps.LatLngBounds();
+      units.forEach(function(unit){
+        var pos = { lat: unit.lat, lng: unit.lng };
+        new window.google.maps.Marker({ position: pos, map: miniMap, title: unit.name, icon: markerIcon() });
+        new window.google.maps.Marker({ position: pos, map: largeMap, title: unit.name, icon: markerIcon() });
+        boundsMini.extend(pos);
+        boundsLarge.extend(pos);
+      });
+      miniMap.fitBounds(boundsMini, 24);
+      largeMap.fitBounds(boundsLarge, 44);
+      markersReady = true;
+    }
   }
 
   function openModal(){
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
-    loadLeafletAssets().then(function(){
-      initMiniMapIfNeeded();
-      initLargeMapIfNeeded();
-      setTimeout(function(){ if(largeMap){ largeMap.invalidateSize(); } }, 90);
+    loadGoogleMapsApi().then(function(){
+      initMapsIfNeeded();
+      if(largeMap){
+        setTimeout(function(){
+          window.google.maps.event.trigger(largeMap, 'resize');
+          var bounds = new window.google.maps.LatLngBounds();
+          units.forEach(function(u){ bounds.extend({lat:u.lat,lng:u.lng}); });
+          largeMap.fitBounds(bounds, 44);
+        }, 90);
+      }
     });
   }
 
@@ -3432,14 +3447,12 @@ body{
     var io = new IntersectionObserver(function(entries){
       entries.forEach(function(entry){
         if(entry.isIntersecting){
-          loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
+          loadGoogleMapsApi().then(initMapsIfNeeded);
           io.disconnect();
         }
       });
     }, { rootMargin: '120px' });
     io.observe(miniNode);
-  } else {
-    loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
   }
 })();
 </script>
