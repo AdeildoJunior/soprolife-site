@@ -2533,13 +2533,8 @@ body{
   box-shadow:none;
   background:transparent;
 }
-#sl-units-map{position:relative}
 
-#agendamento .sl-map-mini .leaflet-tile-pane,
-#agendamento .sl-mini-map .leaflet-tile-pane,
-#sl-map-modal .leaflet-tile-pane{
-  filter:saturate(1.03) contrast(1.01);
-}
+
 .sl-map-modal{
   position:fixed;
   inset:0;
@@ -2591,9 +2586,14 @@ body{
   grid-template-columns:450px minmax(0,1fr);
   gap:10px;
 }
-#sl-units-map{
+#sl-units-map-frame,
+#sl-units-map-mini-frame{
   width:100%;
   height:100%;
+  border:0;
+  display:block;
+}
+#sl-units-map-frame{
   min-height:0;
   border-radius:12px;
   border:1px solid rgba(11,34,57,.12);
@@ -2672,7 +2672,7 @@ body{
     grid-auto-rows:auto 1fr;
     overflow:auto;
   }
-  #sl-units-map{height:58dvh;min-height:300px}
+  #sl-units-map-frame{height:58dvh;min-height:300px}
   .sl-map-mini,
   .sl-mini-map{height:260px;min-height:260px}
   .sl-map-open-btn{
@@ -2882,6 +2882,7 @@ body{
 
             <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
               <div class="sl-map-mini sl-mini-map" id="sl-units-map-mini" aria-label="Mini mapa das unidades" role="button" tabindex="0">
+                <iframe id="sl-units-map-mini-frame" title="Mini mapa das unidades" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
                 <button class="sl-btn sl-map-open-btn" type="button" id="sl-open-map-modal" aria-label="Ampliar mapa das unidades">Ampliar mapa</button>
               </div>
             </aside>
@@ -2908,7 +2909,7 @@ body{
               <p class="sl-map-panel-note">Localização aproximada. O endereço será confirmado no WhatsApp no momento do agendamento.</p>
             </div>
             <div class="sl-map-modal__map-wrap">
-              <div id="sl-units-map" aria-label="Mapa ampliado das unidades"></div>
+              <iframe id="sl-units-map-frame" title="Mapa ampliado das unidades" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
             </div>
           </div>
         </div>
@@ -3303,103 +3304,32 @@ body{
   var closeBtn = document.getElementById('sl-close-map-modal');
   var modal = document.getElementById('sl-map-modal');
   var miniNode = document.getElementById('sl-units-map-mini');
-  var mapNode = document.getElementById('sl-units-map');
-  if(!openBtn || !closeBtn || !modal || !mapNode || !miniNode) return;
+  var miniFrame = document.getElementById('sl-units-map-mini-frame');
+  var largeFrame = document.getElementById('sl-units-map-frame');
+  if(!openBtn || !closeBtn || !modal || !miniNode || !miniFrame || !largeFrame) return;
 
-  var leafletReady = false;
-  var miniReady = false;
-  var largeReady = false;
-  var miniMap = null;
-  var largeMap = null;
+  var embedUrl = 'https://www.google.com/maps?output=embed&saddr=Barra+da+Tijuca+Rio+de+Janeiro+RJ&daddr=Zona+Norte+Rio+de+Janeiro+RJ';
+  var miniLoaded = false;
+  var largeLoaded = false;
 
-  var units = [
-    // TODO: substituir coordenadas pelos pontos exatos das unidades
-    { name: 'Unidade Barra', lat: -23.0000, lng: -43.3650 },
-    { name: 'Unidade Zona Norte', lat: -22.8800, lng: -43.2700 }
-  ];
-
-  function loadLeafletAssets(){
-    if(window.L && window.L.map) return Promise.resolve();
-    if(window.__slLeafletLoadingPromise) return window.__slLeafletLoadingPromise;
-
-    window.__slLeafletLoadingPromise = new Promise(function(resolve, reject){
-      var css = document.createElement('link');
-      css.rel = 'stylesheet';
-      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      css.crossOrigin = '';
-      document.head.appendChild(css);
-
-      var script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.crossOrigin = '';
-      script.onload = function(){ leafletReady = true; resolve(); };
-      script.onerror = reject;
-      document.body.appendChild(script);
-    });
-
-    return window.__slLeafletLoadingPromise;
+  function ensureMiniMap(){
+    if(miniLoaded) return;
+    miniFrame.src = embedUrl;
+    miniLoaded = true;
   }
 
-  function createTileLayer(target){
-    return window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap &copy; CARTO'
-    }).addTo(target);
-  }
-
-  function fitUnits(target, padding){
-    var bounds = [];
-    units.forEach(function(unit){
-      var marker = window.L.marker([unit.lat, unit.lng], {
-        icon: window.L.divIcon({
-          className: 'sl-map-pin-wrap',
-          html: '<span class=\"sl-map-pin\" aria-hidden=\"true\"></span>',
-          iconSize: [20, 20],
-          iconAnchor: [10, 20]
-        })
-      }).addTo(target);
-      marker.bindPopup(unit.name);
-      bounds.push([unit.lat, unit.lng]);
-    });
-    target.fitBounds(bounds, { padding: padding });
-  }
-
-  function initMiniMapIfNeeded(){
-    if(miniReady || !leafletReady || !window.L) return;
-    miniMap = window.L.map(miniNode, {
-      zoomControl: false,
-      dragging: false,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
-      boxZoom: false,
-      keyboard: false,
-      tap: false,
-      touchZoom: false
-    });
-    createTileLayer(miniMap);
-    fitUnits(miniMap, [16, 16]);
-    miniReady = true;
-  }
-
-  function initLargeMapIfNeeded(){
-    if(largeReady || !leafletReady || !window.L) return;
-    largeMap = window.L.map(mapNode, { scrollWheelZoom: true });
-    createTileLayer(largeMap);
-    fitUnits(largeMap, [36, 36]);
-    largeReady = true;
+  function ensureLargeMap(){
+    if(largeLoaded) return;
+    largeFrame.src = embedUrl;
+    largeLoaded = true;
   }
 
   function openModal(){
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
-    loadLeafletAssets().then(function(){
-      initMiniMapIfNeeded();
-      initLargeMapIfNeeded();
-      setTimeout(function(){
-        if(largeMap){ largeMap.invalidateSize(); }
-      }, 90);
-    });
+    ensureMiniMap();
+    ensureLargeMap();
   }
 
   function closeModal(){
@@ -3428,14 +3358,14 @@ body{
     var io = new IntersectionObserver(function(entries){
       entries.forEach(function(entry){
         if(entry.isIntersecting){
-          loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
+          ensureMiniMap();
           io.disconnect();
         }
       });
     }, { rootMargin: '120px' });
     io.observe(miniNode);
   } else {
-    loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
+    ensureMiniMap();
   }
 })();
 </script>
