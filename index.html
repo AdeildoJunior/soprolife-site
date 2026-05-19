@@ -2421,41 +2421,49 @@ body{
   line-height:1.2;
   font-weight:700;
 }
-.sl-booking-sub{margin:0;color:#35556b;font-size:.94rem;max-width:62ch;line-height:1.45}
+.sl-booking-sub{margin:0;color:#3f6076;font-size:.93rem;max-width:54ch;line-height:1.45}
 .sl-booking-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
 .sl-booking-controls{
   display:grid;
-  gap:12px;
+  gap:13px;
   background:#ffffff;
-  border:1px solid rgba(11,34,57,.12);
-  border-radius:16px;
-  padding:17px;
-  box-shadow:0 8px 18px rgba(8,24,41,.05);
+  border:1px solid rgba(11,34,57,.11);
+  border-radius:18px;
+  padding:18px;
+  box-shadow:0 10px 22px rgba(8,24,41,.06);
 }
 .sl-booking-field label{
   display:block;
-  font-size:.75rem;
-  font-weight:600;
-  letter-spacing:.1em;
+  font-size:.73rem;
+  font-weight:700;
+  letter-spacing:.09em;
   text-transform:uppercase;
-  color:#27455d;
+  color:#2f556d;
   margin-bottom:6px
 }
 .sl-booking-field select,.sl-booking-field input{
   width:100%;
-  min-height:42px;
+  min-height:44px;
   padding:10px 12px;
-  border-radius:11px;
+  border-radius:12px;
   border:1px solid rgba(11,34,57,.18);
-  background:#fdfefe;
-  color:#0f2f45;
-  font-size:.94rem;
+  background:#fcfeff;
+  color:#12354d;
+  font-size:.93rem;
   font-family:inherit;
+  transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.sl-booking-field select:focus,.sl-booking-field input:focus{
+  outline:none;
+  border-color:rgba(30,181,171,.72);
+  box-shadow:0 0 0 3px rgba(30,181,171,.16);
+  background:#fff;
 }
 .sl-booking-slots-title{font-size:.76rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#284e65;margin:2px 0 7px}
-.sl-booking-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.sl-booking-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
 .sl-slot-btn{
-  min-height:40px;
+  min-height:42px;
   border-radius:11px;
   border:1px solid rgba(30,181,171,.35);
   background:rgba(30,181,171,.1);
@@ -2467,8 +2475,8 @@ body{
   transition:transform .12s,filter .12s,box-shadow .12s;
 }
 .sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98);box-shadow:0 6px 14px rgba(11,34,57,.1)}
-.sl-slot-btn[disabled]{background:#eef3f6;color:#8a9bab;border-color:#d6e0e7;cursor:not-allowed;transform:none;box-shadow:none}
-.sl-booking-note{margin:6px 0 0;font-size:.8rem;color:#4f6a7d;line-height:1.4}
+.sl-slot-btn[disabled]{background:#edf2f6;color:#8496a7;border-color:#d5dfe7;cursor:not-allowed;transform:none;box-shadow:none}
+.sl-booking-note{margin:6px 0 0;font-size:.79rem;color:#587086;line-height:1.35}
 .sl-units-placeholder{
   background:#fbfdff;
   border:1px solid rgba(11,34,57,.13);
@@ -2577,7 +2585,7 @@ body{
 .sl-map-open-btn{
   position:absolute;
   top:10px;
-  right:10px;
+  left:10px;
   z-index:401;
   border-radius:999px;
   padding:6px 10px;
@@ -2590,8 +2598,8 @@ body{
 .sl-units-placeholder{
   --sl-map-lift:126px;
   --sl-map-extra-height:102px;
-  width:260px;
-  max-width:260px;
+  width:264px;
+  max-width:264px;
   margin-top:calc(var(--sl-map-lift) * -1);
   padding:0;
   border:0;
@@ -2617,8 +2625,8 @@ body{
 .sl-map-modal__dialog{
   position:relative;
   z-index:1;
-  width:min(1350px, calc(100vw - 96px));
-  height:min(625px, calc(100vh - 110px));
+  width:min(1280px, calc(100vw - 84px));
+  height:min(640px, calc(100vh - 104px));
   max-height:none;
   background:#fff;
   border-radius:16px;
@@ -2648,7 +2656,7 @@ body{
   padding:10px;
   overflow:hidden;
   display:grid;
-  grid-template-columns:450px minmax(0,1fr);
+  grid-template-columns:330px minmax(0,1fr);
   gap:10px;
 }
 #sl-units-map,
@@ -2666,13 +2674,14 @@ body{
 .sl-map-panel-info{
   border:1px solid rgba(11,34,57,.1);
   border-radius:12px;
-  background:#fafdff;
-  padding:10px;
-  color:#2e536b;
+  background:#f9fcff;
+  padding:12px;
+  color:#2d526a;
   font-size:.88rem;
   height:100%;
   display:flex;
   flex-direction:column;
+  gap:8px;
 }
 .sl-map-modal__info{
   height:100%;
@@ -2681,6 +2690,18 @@ body{
 .sl-map-modal__map-wrap{
   height:100%;
   min-height:0;
+}
+
+.sl-map-panel-sub{margin:0;color:#46687f;font-size:.85rem;line-height:1.4}
+.sl-map-unit-cards{display:grid;gap:8px}
+.sl-map-unit-card{
+  background:#fff;
+  border:1px solid rgba(11,34,57,.12);
+  border-radius:10px;
+  padding:8px 10px;
+  font-size:.86rem;
+  font-weight:600;
+  color:#143950;
 }
 .sl-map-panel-info h4{
   margin:0 0 6px;
@@ -2948,7 +2969,7 @@ body{
               <div>
                 <div class="sl-booking-slots-title">Horários disponíveis</div>
                 <div class="sl-booking-slots" id="sl-booking-slots"></div>
-                <p class="sl-booking-note">Horários em cinza estão indisponíveis para a seleção atual. Confirmação sujeita à disponibilidade.</p>
+                <p class="sl-booking-note">Horários em cinza estão indisponíveis. Confirmação pelo WhatsApp.</p>
               </div>
             </div>
 
@@ -2975,12 +2996,12 @@ body{
           <div class="sl-map-modal__body">
             <div class="sl-map-panel-info sl-map-modal__info">
               <h4>Unidades de atendimento</h4>
-              <p>Escolha a unidade mais conveniente para você.</p>
-              <ul>
-                <li>Unidade Barra</li>
-                <li>Unidade Zona Norte</li>
-              </ul>
-              <p class="sl-map-panel-note">Localização aproximada. O endereço será confirmado no WhatsApp no momento do agendamento.</p>
+              <p class="sl-map-panel-sub">Escolha a unidade e finalize pelo WhatsApp.</p>
+              <div class="sl-map-unit-cards">
+                <div class="sl-map-unit-card">Unidade Barra</div>
+                <div class="sl-map-unit-card">Unidade Zona Norte</div>
+              </div>
+              <p class="sl-map-panel-note">Endereço confirmado pelo WhatsApp no momento do agendamento.</p>
             </div>
             <div class="sl-map-modal__map-wrap">
               <div id="sl-units-map" aria-label="Mapa ampliado das unidades"></div>
