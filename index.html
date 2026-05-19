@@ -2509,6 +2509,69 @@ body{
   cursor:pointer;
   position:relative;
 }
+.sl-mini-map-trigger{
+  outline:none;
+}
+.sl-mini-map-trigger::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:rgba(7,45,61,.22);
+  backdrop-filter:blur(1px);
+  opacity:0;
+  transition:opacity .22s ease;
+  pointer-events:none;
+  z-index:350;
+}
+.sl-mini-map-target{
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:34px;
+  height:34px;
+  transform:translate(-50%,-50%) scale(.92);
+  opacity:0;
+  border:2px solid #1eb5ab;
+  border-radius:8px;
+  box-shadow:0 0 0 1px rgba(11,34,57,.35) inset,0 6px 14px rgba(11,34,57,.22);
+  transition:opacity .22s ease,transform .22s ease;
+  pointer-events:none;
+  z-index:402;
+}
+.sl-mini-map-target::before,
+.sl-mini-map-target::after{
+  content:"";
+  position:absolute;
+  background:#1eb5ab;
+  opacity:.95;
+}
+.sl-mini-map-target::before{
+  left:50%;
+  top:6px;
+  width:2px;
+  height:22px;
+  transform:translateX(-50%);
+}
+.sl-mini-map-target::after{
+  top:50%;
+  left:6px;
+  height:2px;
+  width:22px;
+  transform:translateY(-50%);
+}
+.sl-mini-map-trigger:hover::before,
+.sl-mini-map-trigger:focus-visible::before{
+  opacity:1;
+}
+.sl-mini-map-trigger:hover .sl-mini-map-target,
+.sl-mini-map-trigger:focus-visible .sl-mini-map-target{
+  opacity:1;
+  transform:translate(-50%,-50%) scale(1);
+}
+.sl-mini-map-trigger:focus-visible{
+  outline:2px solid #1eb5ab;
+  outline-offset:3px;
+}
 .sl-map-open-btn{
   position:absolute;
   top:10px;
@@ -2675,6 +2738,7 @@ body{
   #sl-units-map{height:58dvh;min-height:300px}
   .sl-map-mini,
   .sl-mini-map{height:260px;min-height:260px}
+   .sl-mini-map-target{opacity:.45;transform:translate(-50%,-50%) scale(1);}
   .sl-map-open-btn{
     top:8px;
     right:8px;
@@ -2887,7 +2951,8 @@ body{
             </div>
 
             <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
-              <div class="sl-map-mini sl-mini-map" id="sl-units-map-mini" aria-label="Mini mapa das unidades" role="button" tabindex="0">
+              <div class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" aria-label="Ampliar mapa das unidades" role="button" tabindex="0">
+                <span class="sl-mini-map-target" aria-hidden="true"></span>
                 <button class="sl-btn sl-map-open-btn" type="button" id="sl-open-map-modal" aria-label="Ampliar mapa das unidades">Ampliar mapa</button>
               </div>
             </aside>
