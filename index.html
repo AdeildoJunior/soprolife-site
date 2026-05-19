@@ -2516,48 +2516,50 @@ body{
   content:"";
   position:absolute;
   inset:0;
-  background:rgba(7,45,61,.22);
-  backdrop-filter:blur(1px);
+  z-index:2;
+  background:rgba(224,248,245,.58);
   opacity:0;
-  transition:opacity .22s ease;
+  transition:opacity .18s ease;
   pointer-events:none;
-  z-index:350;
 }
 .sl-mini-map-target{
   position:absolute;
   left:50%;
   top:50%;
-  width:34px;
-  height:34px;
-  transform:translate(-50%,-50%) scale(.92);
+  width:36px;
+  height:36px;
+  transform:translate(-50%,-50%) scale(.94);
   opacity:0;
-  border:2px solid #1eb5ab;
-  border-radius:8px;
-  box-shadow:0 0 0 1px rgba(11,34,57,.35) inset,0 6px 14px rgba(11,34,57,.22);
-  transition:opacity .22s ease,transform .22s ease;
+  z-index:403;
   pointer-events:none;
-  z-index:402;
+  transition:opacity .18s ease,transform .18s ease;
 }
-.sl-mini-map-target::before,
-.sl-mini-map-target::after{
-  content:"";
+.sl-mini-map-target span{
   position:absolute;
-  background:#1eb5ab;
-  opacity:.95;
+  width:10px;
+  height:10px;
+  border-color:#0b8f86;
+  border-style:solid;
 }
-.sl-mini-map-target::before{
-  left:50%;
-  top:6px;
-  width:2px;
-  height:22px;
-  transform:translateX(-50%);
+.sl-mini-map-target span:nth-child(1){
+  top:0;
+  left:0;
+  border-width:2px 0 0 2px;
 }
-.sl-mini-map-target::after{
-  top:50%;
-  left:6px;
-  height:2px;
-  width:22px;
-  transform:translateY(-50%);
+.sl-mini-map-target span:nth-child(2){
+  top:0;
+  right:0;
+  border-width:2px 2px 0 0;
+}
+.sl-mini-map-target span:nth-child(3){
+  bottom:0;
+  left:0;
+  border-width:0 0 2px 2px;
+}
+.sl-mini-map-target span:nth-child(4){
+  bottom:0;
+  right:0;
+  border-width:0 2px 2px 0;
 }
 .sl-mini-map-trigger:hover::before,
 .sl-mini-map-trigger:focus-visible::before{
@@ -2738,7 +2740,7 @@ body{
   #sl-units-map{height:58dvh;min-height:300px}
   .sl-map-mini,
   .sl-mini-map{height:260px;min-height:260px}
-   .sl-mini-map-target{opacity:.45;transform:translate(-50%,-50%) scale(1);}
+   .sl-mini-map-target{opacity:.28;transform:translate(-50%,-50%) scale(1);}
   .sl-map-open-btn{
     top:8px;
     right:8px;
@@ -2952,7 +2954,9 @@ body{
 
             <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
               <div class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" aria-label="Ampliar mapa das unidades" role="button" tabindex="0">
-                <span class="sl-mini-map-target" aria-hidden="true"></span>
+                <span class="sl-mini-map-target" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span>
+                </span>
                 <button class="sl-btn sl-map-open-btn" type="button" id="sl-open-map-modal" aria-label="Ampliar mapa das unidades">Ampliar mapa</button>
               </div>
             </aside>
