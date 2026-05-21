@@ -3353,39 +3353,24 @@ body{
     return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
   }
 
-  function weekBounds(refDate){
-    var d = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate());
-    var day = d.getDay();
-    var diffToMonday = day === 0 ? -6 : 1 - day;
-    var monday = new Date(d);
-    monday.setDate(d.getDate() + diffToMonday);
-    monday.setHours(0,0,0,0);
-    var sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23,59,59,999);
-    return {monday:monday, sunday:sunday};
-  }
 
   function isInRange(target, start, end){
     return target >= start && target <= end;
   }
 
-  function isSlotAvailable(unit, isoDate){
+  function isSlotAvailable(unit, isoDate, time){
     var selectedDate = parseLocalDate(isoDate);
-    if(!selectedDate) return false;
-
     var today = parseLocalDate(todayIso);
     var max = parseLocalDate(maxIso);
 
     if(unit === 'Domiciliar sob avaliação'){
+      if(!selectedDate){
+        return true;
+      }
       return isInRange(selectedDate, today, max);
     }
 
     if(unit === 'Unidade Barra' || unit === 'Unidade Zona Norte'){
-      var bounds = weekBounds(today);
-      if(isInRange(selectedDate, bounds.monday, bounds.sunday)){
-        return false;
-      }
       return false;
     }
 
@@ -3424,7 +3409,7 @@ body{
       btn.type = 'button';
       btn.className = 'sl-slot-btn';
       btn.textContent = time;
-      var available = isSlotAvailable(unit, isoDate);
+      var available = isSlotAvailable(unit, isoDate, time);
       if(!available){
         btn.disabled = true;
       } else {
