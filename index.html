@@ -2794,7 +2794,127 @@ body{
   .sl-slot-btn{padding:10px 8px}
 }
 
+/* SOPRO:MAP_MODAL_SIDE_POLISH_V1 */
+/* Lapidação visual do painel esquerdo do modal do mapa */
+.sl-map-modal-side,
+.sl-map-modal-panel,
+.sl-map-modal-info,
+.sl-map-modal-copy {
+  background:
+    linear-gradient(180deg, rgba(30,181,171,.12), rgba(255,255,255,.96) 42%),
+    #f7fcfd !important;
+  border: 1px solid rgba(30,181,171,.24) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 14px 28px rgba(8,24,41,.08) !important;
+}
+
+.sl-map-modal-side h3,
+.sl-map-modal-panel h3,
+.sl-map-modal-info h3,
+.sl-map-modal-copy h3 {
+  color: #0b2239 !important;
+  font-weight: 800 !important;
+  letter-spacing: -.01em !important;
+  margin-bottom: 10px !important;
+}
+
+.sl-map-modal-side p,
+.sl-map-modal-panel p,
+.sl-map-modal-info p,
+.sl-map-modal-copy p {
+  color: #34596f !important;
+  line-height: 1.45 !important;
+  font-weight: 500 !important;
+}
+
+.sl-map-modal-side button,
+.sl-map-modal-panel button,
+.sl-map-modal-info button,
+.sl-map-modal-copy button,
+.sl-map-unit-btn,
+.sl-map-modal-unit,
+.sl-map-location-card {
+  width: 100% !important;
+  display: block !important;
+  background: linear-gradient(180deg, rgba(224,252,250,.98), rgba(210,248,245,.92)) !important;
+  border: 1px solid rgba(30,181,171,.42) !important;
+  border-radius: 12px !important;
+  color: #0b3348 !important;
+  font-weight: 800 !important;
+  text-align: left !important;
+  padding: 11px 13px !important;
+  margin: 8px 0 !important;
+  box-shadow: 0 7px 14px rgba(8,24,41,.055) !important;
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease !important;
+}
+
+.sl-map-modal-side button:hover,
+.sl-map-modal-panel button:hover,
+.sl-map-modal-info button:hover,
+.sl-map-modal-copy button:hover,
+.sl-map-unit-btn:hover,
+.sl-map-modal-unit:hover,
+.sl-map-location-card:hover {
+  transform: translateY(-1px) !important;
+  border-color: rgba(30,181,171,.74) !important;
+  background: linear-gradient(180deg, rgba(202,248,245,1), rgba(182,241,238,.95)) !important;
+  box-shadow: 0 10px 20px rgba(8,24,41,.09) !important;
+}
+
+.sl-map-modal-side button::before,
+.sl-map-modal-panel button::before,
+.sl-map-modal-info button::before,
+.sl-map-modal-copy button::before,
+.sl-map-unit-btn::before,
+.sl-map-modal-unit::before,
+.sl-map-location-card::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: #1eb5ab;
+  box-shadow: 0 0 0 4px rgba(30,181,171,.15);
+  vertical-align: 1px;
+}
+
+.sl-map-modal-side button strong,
+.sl-map-modal-panel button strong,
+.sl-map-modal-info button strong,
+.sl-map-modal-copy button strong,
+.sl-map-unit-btn strong,
+.sl-map-modal-unit strong,
+.sl-map-location-card strong {
+  color: #0b2239 !important;
+  font-weight: 800 !important;
+}
+
+.sl-map-modal-side p:last-child,
+.sl-map-modal-panel p:last-child,
+.sl-map-modal-info p:last-child,
+.sl-map-modal-copy p:last-child {
+  margin-top: 12px !important;
+  padding: 12px 13px !important;
+  border-radius: 12px !important;
+  background: rgba(255,255,255,.72) !important;
+  border-left: 4px solid rgba(30,181,171,.68) !important;
+  color: #34596f !important;
+}
+
+/* Evita que o painel fique com aparência vazia demais */
+.sl-map-modal-side,
+.sl-map-modal-panel,
+.sl-map-modal-info,
+.sl-map-modal-copy {
+  padding: 18px !important;
+}
 </style>
+
+
+<!-- SOPRO:FLATPICKR_PTBR_START -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<!-- SOPRO:FLATPICKR_PTBR_END -->
 
 </head>
 <body class="sl-typo-clean">
@@ -2967,7 +3087,7 @@ body{
 
               <div class="sl-booking-field">
                 <label for="sl-booking-date">Data</label>
-                <input id="sl-booking-date" name="data" type="date" />
+                <input id="sl-booking-date" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa" />
               </div>
 
               <div>
@@ -3002,8 +3122,9 @@ body{
               <h4>Unidades de atendimento</h4>
               <p class="sl-map-panel-sub">Escolha a unidade e finalize pelo WhatsApp.</p>
               <div class="sl-map-unit-cards">
-                <div class="sl-map-unit-card">Unidade Barra</div>
-                <div class="sl-map-unit-card">Unidade Zona Norte</div>
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Domiciliar sob avaliação">Domiciliar sob avaliação</div>
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Barra">Unidade Barra</div>
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Zona Norte">Unidade Zona Norte</div>
               </div>
               <p class="sl-map-panel-note">Endereço confirmado pelo WhatsApp no momento do agendamento.</p>
             </div>
@@ -3656,6 +3777,322 @@ body{
 })();
 </script>
 <!-- SOPRO:ARROWS_SCRIPT_END -->
+
+
+<style id="sopro-modal-side-hotfix-v2">
+/* SOPRO:MAP_MODAL_SIDE_HOTFIX_V2 */
+/* Ajuste visual forte e específico do painel esquerdo do modal do mapa */
+
+.sl-map-modal-side{
+  background:
+    radial-gradient(circle at top left, rgba(30,181,171,.22), transparent 44%),
+    linear-gradient(180deg, #effdfc 0%, #f8ffff 48%, #ffffff 100%) !important;
+  border: 1px solid rgba(30,181,171,.38) !important;
+  border-radius: 18px !important;
+  padding: 18px !important;
+  box-shadow: 0 16px 34px rgba(8,24,41,.10) !important;
+}
+
+.sl-map-modal-side h3{
+  color: #0b2239 !important;
+  font-size: 1.02rem !important;
+  font-weight: 850 !important;
+  letter-spacing: -.01em !important;
+  margin: 0 0 12px !important;
+}
+
+.sl-map-modal-side p{
+  color: #315a70 !important;
+  font-size: .94rem !important;
+  line-height: 1.45 !important;
+  font-weight: 550 !important;
+  margin: 0 0 13px !important;
+}
+
+.sl-map-unit-card{
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-height: 46px !important;
+  margin: 9px 0 !important;
+  padding: 11px 13px 11px 34px !important;
+  border-radius: 13px !important;
+  border: 1px solid rgba(30,181,171,.48) !important;
+  border-left: 5px solid #1eb5ab !important;
+  background: linear-gradient(180deg, #dffcf9 0%, #c9f5f1 100%) !important;
+  color: #0b3348 !important;
+  font-weight: 850 !important;
+  box-shadow: 0 8px 18px rgba(8,24,41,.075) !important;
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease !important;
+}
+
+.sl-map-unit-card::before{
+  content: "" !important;
+  position: absolute !important;
+  left: 14px !important;
+  top: 50% !important;
+  width: 8px !important;
+  height: 8px !important;
+  transform: translateY(-50%) !important;
+  border-radius: 999px !important;
+  background: #0f8f86 !important;
+  box-shadow: 0 0 0 5px rgba(30,181,171,.18) !important;
+}
+
+.sl-map-unit-card:hover{
+  transform: translateY(-1px) !important;
+  border-color: rgba(15,143,134,.82) !important;
+  background: linear-gradient(180deg, #c9f8f4 0%, #b3eee9 100%) !important;
+  box-shadow: 0 12px 24px rgba(8,24,41,.12) !important;
+}
+
+.sl-map-modal-side p:last-child{
+  margin-top: 14px !important;
+  padding: 12px 13px !important;
+  border-radius: 13px !important;
+  color: #244e64 !important;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.96), rgba(235,252,250,.96)) !important;
+  border: 1px solid rgba(30,181,171,.28) !important;
+  border-left: 5px solid #1eb5ab !important;
+  box-shadow: 0 6px 14px rgba(8,24,41,.055) !important;
+}
+
+.sl-map-modal-title,
+.sl-map-modal h2,
+.sl-map-modal h3{
+  color: #0b2239 !important;
+}
+</style>
+
+
+<style id="sopro-map-unit-whatsapp-style">
+/* SOPRO:MAP_UNIT_WHATSAPP_STYLE */
+.sl-map-unit-card{
+  cursor:pointer !important;
+  justify-content:space-between !important;
+  gap:10px !important;
+}
+
+.sl-map-unit-card::after{
+  content:"WhatsApp";
+  margin-left:auto;
+  padding:3px 8px;
+  border-radius:999px;
+  background:#25D366;
+  color:#ffffff;
+  font-size:.68rem;
+  font-weight:800;
+  letter-spacing:.02em;
+  box-shadow:0 4px 10px rgba(37,211,102,.22);
+}
+
+.sl-map-unit-card:focus-visible{
+  outline:3px solid rgba(30,181,171,.32) !important;
+  outline-offset:3px !important;
+}
+</style>
+
+
+<script id="sopro-map-unit-whatsapp-hotfix">
+/* SOPRO:MAP_UNIT_WHATSAPP_HOTFIX_V1 */
+(function(){
+  var phone = '5521998901775';
+
+  function formatDate(iso){
+    if(!iso) return '';
+    var parts = iso.split('-');
+    return parts.length === 3 ? [parts[2], parts[1], parts[0]].join('/') : iso;
+  }
+
+  function openMapUnitWhatsApp(unit){
+    var serviceEl = document.getElementById('sl-booking-service');
+    var dateEl = document.getElementById('sl-booking-date');
+
+    var service = serviceEl && serviceEl.value ? serviceEl.value : 'Atendimento domiciliar sob avaliação';
+    var date = dateEl && dateEl.value ? formatDate(dateEl.value) : '';
+
+    var text = 'Olá, gostaria de agendar pela Sopro Life.\n'
+      + 'Serviço: ' + service + '\n'
+      + 'Unidade: ' + unit + '\n';
+
+    if(date){
+      text += 'Data de interesse: ' + date + '\n';
+    }
+
+    text += 'Gostaria de confirmar disponibilidade pelo WhatsApp.';
+
+    var url = 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(text);
+    window.open(url, '_blank', 'noopener');
+  }
+
+  function getCard(target){
+    return target && target.closest ? target.closest('.sl-map-unit-card') : null;
+  }
+
+  document.addEventListener('click', function(event){
+    var card = getCard(event.target);
+    if(!card) return;
+
+    var unit = card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim();
+    if(!unit) return;
+
+    openMapUnitWhatsApp(unit);
+  });
+
+  document.addEventListener('keydown', function(event){
+    if(event.key !== 'Enter' && event.key !== ' ') return;
+
+    var card = getCard(event.target);
+    if(!card) return;
+
+    event.preventDefault();
+
+    var unit = card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim();
+    if(!unit) return;
+
+    openMapUnitWhatsApp(unit);
+  });
+
+  document.querySelectorAll('.sl-map-unit-card').forEach(function(card){
+    if(!card.getAttribute('role')) card.setAttribute('role','button');
+    if(!card.getAttribute('tabindex')) card.setAttribute('tabindex','0');
+    var unit = card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim();
+    card.setAttribute('aria-label', 'Abrir WhatsApp para ' + unit);
+    card.setAttribute('title', 'Abrir WhatsApp para ' + unit);
+  });
+})();
+</script>
+
+
+<style id="sopro-flatpickr-ptbr-style">
+/* SOPRO:FLATPICKR_PTBR_STYLE */
+.flatpickr-calendar{
+  border-radius:18px !important;
+  border:1px solid rgba(30,181,171,.26) !important;
+  box-shadow:0 18px 42px rgba(8,24,41,.16) !important;
+  font-family:inherit !important;
+  overflow:hidden !important;
+}
+.flatpickr-months{
+  background:#ffffff !important;
+}
+.flatpickr-current-month,
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year{
+  color:#0b2239 !important;
+  font-weight:800 !important;
+}
+.flatpickr-weekday{
+  color:#0b8f86 !important;
+  font-weight:800 !important;
+}
+.flatpickr-day{
+  border-radius:10px !important;
+  color:#16384f !important;
+}
+.flatpickr-day.today{
+  border-color:#1eb5ab !important;
+}
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange{
+  background:#1eb5ab !important;
+  border-color:#1eb5ab !important;
+  color:white !important;
+}
+.flatpickr-day:hover{
+  background:rgba(30,181,171,.13) !important;
+  border-color:rgba(30,181,171,.28) !important;
+}
+.flatpickr-day.disabled,
+.flatpickr-day.disabled:hover{
+  color:#b6c4ce !important;
+  background:#f1f5f7 !important;
+}
+.flatpickr-calendar .flatpickr-prev-month,
+.flatpickr-calendar .flatpickr-next-month{
+  color:#0b2239 !important;
+  fill:#0b2239 !important;
+}
+</style>
+
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
+
+<script id="sopro-flatpickr-ptbr-init">
+/* SOPRO:FLATPICKR_PTBR_INIT */
+(function(){
+  function initSoproDatePicker(){
+    var dateEl = document.getElementById('sl-booking-date');
+    if(!dateEl || !window.flatpickr) return;
+    if(dateEl._flatpickr) return;
+
+    var today = new Date();
+    var maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 30);
+
+    var currentValue = dateEl.value || null;
+
+    flatpickr(dateEl, {
+      locale: {
+        ...flatpickr.l10ns.pt,
+        firstDayOfWeek: 0
+      },
+      dateFormat: "Y-m-d",
+      altInput: true,
+      altFormat: "d/m/Y",
+      defaultDate: currentValue || today,
+      minDate: dateEl.min || today,
+      maxDate: dateEl.max || maxDate,
+      disableMobile: true,
+      allowInput: false,
+      monthSelectorType: "dropdown",
+      onChange: function(){
+        dateEl.dispatchEvent(new Event('change', { bubbles:true }));
+      },
+      onReady: function(selectedDates, dateStr, instance){
+        if(instance.altInput){
+          instance.altInput.setAttribute('placeholder', 'dd/mm/aaaa');
+          instance.altInput.setAttribute('aria-label', 'Data no formato dia, mês e ano');
+        }
+      }
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initSoproDatePicker);
+  } else {
+    initSoproDatePicker();
+  }
+})();
+</script>
+
+
+<style id="sopro-map-tile-filter">
+/* SOPRO:MAP_TILE_FILTER_V1 */
+/* Mantém o mapa limpo, mas puxa discretamente para a paleta SoproLife */
+.sl-mini-map .leaflet-tile,
+.sl-map-modal-map .leaflet-tile,
+#sl-mini-map .leaflet-tile,
+#sl-map-modal-map .leaflet-tile{
+  filter: saturate(1.08) contrast(.98) brightness(1.03) hue-rotate(-4deg);
+}
+
+/* Mantém pins e controles sem filtro */
+.sl-mini-map .leaflet-marker-icon,
+.sl-map-modal-map .leaflet-marker-icon,
+#sl-mini-map .leaflet-marker-icon,
+#sl-map-modal-map .leaflet-marker-icon,
+.sl-mini-map .leaflet-control,
+.sl-map-modal-map .leaflet-control,
+#sl-mini-map .leaflet-control,
+#sl-map-modal-map .leaflet-control{
+  filter:none !important;
+}
+</style>
 
 </body>
 </html>
