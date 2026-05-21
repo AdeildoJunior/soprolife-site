@@ -3344,14 +3344,12 @@ body{
 
     var today = new Date();
     var todayIso = toLocalIso(today);
-
     var maxDate = new Date(today);
     maxDate.setDate(maxDate.getDate() + 30);
     var maxIso = toLocalIso(maxDate);
 
     dateEl.min = todayIso;
     dateEl.max = maxIso;
-
     if(!dateEl.value){
       dateEl.value = todayIso;
     }
@@ -3380,11 +3378,9 @@ body{
       if(unit === 'Domiciliar sob avaliação'){
         return isInDateWindow(isoDate);
       }
-
       if(unit === 'Unidade Barra' || unit === 'Unidade Zona Norte'){
         return false;
       }
-
       return false;
     }
 
@@ -3393,27 +3389,19 @@ body{
       var unit = unitEl.value;
       var isoDate = dateEl.value || todayIso;
       var date = formatDate(isoDate);
-
-      var text = 'Olá, gostaria de agendar espirometria na Sopro Life.
-'
-        + 'Serviço: ' + service + '
-'
-        + 'Unidade: ' + unit + '
-'
-        + 'Data: ' + date + '
-'
+      var text = 'Olá, gostaria de agendar espirometria na Sopro Life.\n'
+        + 'Serviço: ' + service + '\n'
+        + 'Unidade: ' + unit + '\n'
+        + 'Data: ' + date + '\n'
         + 'Horário: ' + time;
-
       var url = 'https://api.whatsapp.com/send?phone=5521998901775&text=' + encodeURIComponent(text);
       window.open(url, '_blank', 'noopener');
     }
 
     function renderSlots(){
       slotsWrap.innerHTML = '';
-
       var unit = unitEl.value;
       var isoDate = dateEl.value || todayIso;
-
       var frag = document.createDocumentFragment();
 
       slots.forEach(function(time){
@@ -3423,7 +3411,6 @@ body{
         btn.textContent = time;
 
         var available = isSlotAvailable(unit, isoDate, time);
-
         if(!available){
           btn.disabled = true;
           btn.setAttribute('aria-disabled', 'true');
