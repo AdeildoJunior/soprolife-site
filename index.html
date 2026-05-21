@@ -3069,7 +3069,7 @@ body{
               <div class="sl-booking-field">
                 <label for="sl-booking-service">Serviço</label>
                 <select id="sl-booking-service" name="servico">
-                  <option value="Atendimento domiciliar sob avaliação" selected>Atendimento domiciliar sob avaliação</option>
+                  <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
                   <option value="Espirometria simples">Espirometria simples</option>
                   <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
                   <option value="Empresas / PCMSO">Empresas / PCMSO</option>
@@ -3079,7 +3079,7 @@ body{
               <div class="sl-booking-field">
                 <label for="sl-booking-unit">Unidade</label>
                 <select id="sl-booking-unit" name="unidade">
-                  <option value="Domiciliar sob avaliação" selected>Domiciliar sob avaliação</option>
+                  <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
                   <option value="Unidade Barra">Unidade Barra</option>
                   <option value="Unidade Zona Norte">Unidade Zona Norte</option>
                 </select>
@@ -3122,7 +3122,7 @@ body{
               <h4>Unidades de atendimento</h4>
               <p class="sl-map-panel-sub">Escolha a unidade e finalize pelo WhatsApp.</p>
               <div class="sl-map-unit-cards">
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Domiciliar sob avaliação">Domiciliar sob avaliação</div>
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Atendimento domiciliar">Atendimento domiciliar</div>
                 <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Barra">Unidade Barra</div>
                 <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Zona Norte">Unidade Zona Norte</div>
               </div>
@@ -3500,7 +3500,7 @@ body{
     }
 
     function isSlotAvailable(unit, isoDate, time){
-      if(unit === 'Domiciliar sob avaliação'){
+      if(unit === 'Atendimento domiciliar'){
         return isInDateWindow(isoDate);
       }
       if(unit === 'Unidade Barra' || unit === 'Unidade Zona Norte'){
@@ -3910,7 +3910,7 @@ body{
     var serviceEl = document.getElementById('sl-booking-service');
     var dateEl = document.getElementById('sl-booking-date');
 
-    var service = serviceEl && serviceEl.value ? serviceEl.value : 'Atendimento domiciliar sob avaliação';
+    var service = serviceEl && serviceEl.value ? serviceEl.value : 'Atendimento domiciliar';
     var date = dateEl && dateEl.value ? formatDate(dateEl.value) : '';
 
     var text = 'Olá, gostaria de agendar pela Sopro Life.\n'
