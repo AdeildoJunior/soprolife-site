@@ -2945,9 +2945,9 @@ body{
               <div class="sl-booking-field">
                 <label for="sl-booking-service">Serviço</label>
                 <select id="sl-booking-service" name="servico">
+                  <option value="Atendimento domiciliar sob avaliação" selected>Atendimento domiciliar sob avaliação</option>
                   <option value="Espirometria simples">Espirometria simples</option>
                   <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
-                  <option value="Atendimento domiciliar sob avaliação">Atendimento domiciliar sob avaliação</option>
                   <option value="Empresas / PCMSO">Empresas / PCMSO</option>
                 </select>
               </div>
@@ -2955,9 +2955,9 @@ body{
               <div class="sl-booking-field">
                 <label for="sl-booking-unit">Unidade</label>
                 <select id="sl-booking-unit" name="unidade">
+                  <option value="Domiciliar sob avaliação" selected>Domiciliar sob avaliação</option>
                   <option value="Unidade Barra">Unidade Barra</option>
                   <option value="Unidade Zona Norte">Unidade Zona Norte</option>
-                  <option value="Domiciliar sob avaliação">Domiciliar sob avaliação</option>
                 </select>
               </div>
 
@@ -2969,7 +2969,7 @@ body{
               <div>
                 <div class="sl-booking-slots-title">Horários disponíveis</div>
                 <div class="sl-booking-slots" id="sl-booking-slots"></div>
-                <p class="sl-booking-note">Horários em cinza estão indisponíveis. Confirmação pelo WhatsApp.</p>
+                <p class="sl-booking-note">Horários em cinza estão ocupados. Confirmação pelo WhatsApp.</p>
               </div>
             </div>
 
@@ -3334,21 +3334,63 @@ body{
   if(!slotsWrap || !serviceEl || !unitEl || !dateEl) return;
 
   var phone = '5521998901775';
-  var slotState = [
-    {time:'08:00', available:true},
-    {time:'09:00', available:true},
-    {time:'10:00', available:false},
-    {time:'11:00', available:true},
-    {time:'13:00', available:true},
-    {time:'14:00', available:false},
-    {time:'15:00', available:true},
-    {time:'16:00', available:false}
-  ];
+  var slots = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];
 
   var now = new Date();
-  var local = new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().split('T')[0];
-  dateEl.value = local;
-  dateEl.min = local;
+  var todayIso = new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().split('T')[0];
+  var maxDate = new Date(now);
+  maxDate.setDate(maxDate.getDate() + 30);
+  var maxIso = new Date(maxDate.getTime() - maxDate.getTimezoneOffset()*60000).toISOString().split('T')[0];
+
+  dateEl.value = todayIso;
+  dateEl.min = todayIso;
+  dateEl.max = maxIso;
+
+  function parseLocalDate(iso){
+    if(!iso) return null;
+    var p = iso.split('-');
+    if(p.length !== 3) return null;
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  }
+
+  function weekBounds(refDate){
+    var d = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate());
+    var day = d.getDay();
+    var diffToMonday = day === 0 ? -6 : 1 - day;
+    var monday = new Date(d);
+    monday.setDate(d.getDate() + diffToMonday);
+    monday.setHours(0,0,0,0);
+    var sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23,59,59,999);
+    return {monday:monday, sunday:sunday};
+  }
+
+  function isInRange(target, start, end){
+    return target >= start && target <= end;
+  }
+
+  function isSlotAvailable(unit, isoDate){
+    var selectedDate = parseLocalDate(isoDate);
+    if(!selectedDate) return false;
+
+    var today = parseLocalDate(todayIso);
+    var max = parseLocalDate(maxIso);
+
+    if(unit === 'Domiciliar sob avaliação'){
+      return isInRange(selectedDate, today, max);
+    }
+
+    if(unit === 'Unidade Barra' || unit === 'Unidade Zona Norte'){
+      var bounds = weekBounds(today);
+      if(isInRange(selectedDate, bounds.monday, bounds.sunday)){
+        return false;
+      }
+      return false;
+    }
+
+    return false;
+  }
 
   function formatDate(iso){
     if(!iso) return '';
@@ -3360,10 +3402,14 @@ body{
     var service = serviceEl.value;
     var unit = unitEl.value;
     var date = formatDate(dateEl.value);
-    var text = 'Olá, gostaria de agendar espirometria na Sopro Life.\n'
-      + 'Serviço: ' + service + '\n'
-      + 'Unidade: ' + unit + '\n'
-      + 'Data: ' + date + '\n'
+    var text = 'Olá, gostaria de agendar espirometria na Sopro Life.
+'
+      + 'Serviço: ' + service + '
+'
+      + 'Unidade: ' + unit + '
+'
+      + 'Data: ' + date + '
+'
       + 'Horário: ' + time;
     var url = 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(text);
     window.open(url, '_blank', 'noopener');
@@ -3371,15 +3417,18 @@ body{
 
   function renderSlots(){
     slotsWrap.innerHTML = '';
-    slotState.forEach(function(slot){
+    var unit = unitEl.value;
+    var isoDate = dateEl.value;
+    slots.forEach(function(time){
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'sl-slot-btn';
-      btn.textContent = slot.time;
-      if(!slot.available){
+      btn.textContent = time;
+      var available = isSlotAvailable(unit, isoDate);
+      if(!available){
         btn.disabled = true;
       } else {
-        btn.addEventListener('click', function(){ openWhatsApp(slot.time); });
+        btn.addEventListener('click', function(){ openWhatsApp(time); });
       }
       slotsWrap.appendChild(btn);
     });
