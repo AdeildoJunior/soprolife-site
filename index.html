@@ -3327,102 +3327,130 @@ body{
 <script>
 /* SOPRO:BOOKING_COMPACT_V1 */
 (function(){
-  var slotsWrap = document.getElementById('sl-booking-slots');
-  var serviceEl = document.getElementById('sl-booking-service');
-  var unitEl = document.getElementById('sl-booking-unit');
-  var dateEl = document.getElementById('sl-booking-date');
-  if(!slotsWrap || !serviceEl || !unitEl || !dateEl) return;
-
-  var phone = '5521998901775';
-  var slots = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];
-
-  var now = new Date();
-  var todayIso = new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().split('T')[0];
-  var maxDate = new Date(now);
-  maxDate.setDate(maxDate.getDate() + 30);
-  var maxIso = new Date(maxDate.getTime() - maxDate.getTimezoneOffset()*60000).toISOString().split('T')[0];
-
-  dateEl.value = todayIso;
-  dateEl.min = todayIso;
-  dateEl.max = maxIso;
-
-  function parseLocalDate(iso){
-    if(!iso) return null;
-    var p = iso.split('-');
-    if(p.length !== 3) return null;
-    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  function toLocalIso(date){
+    var d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
+    return d.toISOString().split('T')[0];
   }
 
+  function initBookingCompact(){
+    var slotsWrap = document.getElementById('sl-booking-slots');
+    var serviceEl = document.getElementById('sl-booking-service');
+    var unitEl = document.getElementById('sl-booking-unit');
+    var dateEl = document.getElementById('sl-booking-date');
 
-  function isInRange(target, start, end){
-    return target >= start && target <= end;
-  }
+    if(!slotsWrap || !serviceEl || !unitEl || !dateEl) return;
 
-  function isSlotAvailable(unit, isoDate, time){
-    var selectedDate = parseLocalDate(isoDate);
-    var today = parseLocalDate(todayIso);
-    var max = parseLocalDate(maxIso);
+    var slots = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];
 
-    if(unit === 'Domiciliar sob avaliação'){
-      if(!selectedDate){
-        return true;
-      }
-      return isInRange(selectedDate, today, max);
+    var today = new Date();
+    var todayIso = toLocalIso(today);
+
+    var maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 30);
+    var maxIso = toLocalIso(maxDate);
+
+    dateEl.min = todayIso;
+    dateEl.max = maxIso;
+
+    if(!dateEl.value){
+      dateEl.value = todayIso;
     }
 
-    if(unit === 'Unidade Barra' || unit === 'Unidade Zona Norte'){
+    function parseLocalDate(iso){
+      if(!iso) return null;
+      var parts = iso.split('-').map(Number);
+      if(parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+
+    function formatDate(iso){
+      var parts = iso ? iso.split('-') : [];
+      return parts.length === 3 ? [parts[2], parts[1], parts[0]].join('/') : iso;
+    }
+
+    function isInDateWindow(isoDate){
+      var selected = parseLocalDate(isoDate || dateEl.value || todayIso);
+      var start = parseLocalDate(todayIso);
+      var end = parseLocalDate(maxIso);
+      if(!selected || !start || !end) return false;
+      return selected >= start && selected <= end;
+    }
+
+    function isSlotAvailable(unit, isoDate, time){
+      if(unit === 'Domiciliar sob avaliação'){
+        return isInDateWindow(isoDate);
+      }
+
+      if(unit === 'Unidade Barra' || unit === 'Unidade Zona Norte'){
+        return false;
+      }
+
       return false;
     }
 
-    return false;
+    function openWhatsApp(time){
+      var service = serviceEl.value;
+      var unit = unitEl.value;
+      var isoDate = dateEl.value || todayIso;
+      var date = formatDate(isoDate);
+
+      var text = 'Olá, gostaria de agendar espirometria na Sopro Life.
+'
+        + 'Serviço: ' + service + '
+'
+        + 'Unidade: ' + unit + '
+'
+        + 'Data: ' + date + '
+'
+        + 'Horário: ' + time;
+
+      var url = 'https://api.whatsapp.com/send?phone=5521998901775&text=' + encodeURIComponent(text);
+      window.open(url, '_blank', 'noopener');
+    }
+
+    function renderSlots(){
+      slotsWrap.innerHTML = '';
+
+      var unit = unitEl.value;
+      var isoDate = dateEl.value || todayIso;
+
+      var frag = document.createDocumentFragment();
+
+      slots.forEach(function(time){
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'sl-slot-btn';
+        btn.textContent = time;
+
+        var available = isSlotAvailable(unit, isoDate, time);
+
+        if(!available){
+          btn.disabled = true;
+          btn.setAttribute('aria-disabled', 'true');
+        } else {
+          btn.addEventListener('click', function(){
+            openWhatsApp(time);
+          });
+        }
+
+        frag.appendChild(btn);
+      });
+
+      slotsWrap.appendChild(frag);
+    }
+
+    serviceEl.addEventListener('change', renderSlots);
+    unitEl.addEventListener('change', renderSlots);
+    dateEl.addEventListener('change', renderSlots);
+
+    renderSlots();
   }
 
-  function formatDate(iso){
-    if(!iso) return '';
-    var parts = iso.split('-');
-    return parts.length === 3 ? [parts[2], parts[1], parts[0]].join('/') : iso;
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initBookingCompact);
+  } else {
+    initBookingCompact();
   }
-
-  function openWhatsApp(time){
-    var service = serviceEl.value;
-    var unit = unitEl.value;
-    var date = formatDate(dateEl.value);
-    var text = 'Olá, gostaria de agendar espirometria na Sopro Life.
-'
-      + 'Serviço: ' + service + '
-'
-      + 'Unidade: ' + unit + '
-'
-      + 'Data: ' + date + '
-'
-      + 'Horário: ' + time;
-    var url = 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(text);
-    window.open(url, '_blank', 'noopener');
-  }
-
-  function renderSlots(){
-    slotsWrap.innerHTML = '';
-    var unit = unitEl.value;
-    var isoDate = dateEl.value;
-    slots.forEach(function(time){
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'sl-slot-btn';
-      btn.textContent = time;
-      var available = isSlotAvailable(unit, isoDate, time);
-      if(!available){
-        btn.disabled = true;
-      } else {
-        btn.addEventListener('click', function(){ openWhatsApp(time); });
-      }
-      slotsWrap.appendChild(btn);
-    });
-  }
-
-  serviceEl.addEventListener('change', renderSlots);
-  unitEl.addEventListener('change', renderSlots);
-  dateEl.addEventListener('change', renderSlots);
-  renderSlots();
 })();
 </script>
 
