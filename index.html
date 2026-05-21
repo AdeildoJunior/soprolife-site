@@ -2395,13 +2395,13 @@ body{
   margin: 0;
 }
 .sl-booking-card{
-  background:transparent;
-  border-radius:0;
-  box-shadow:none;
-  padding:0;
-  border:0;
+  background:linear-gradient(180deg,#ffffff 0%, #fbfeff 100%);
+  border-radius:20px;
+  box-shadow:0 14px 28px rgba(8,24,41,.07);
+  padding:20px;
+  border:1px solid rgba(11,34,57,.08);
 }
-.sl-booking-head{margin-bottom:12px;padding:0 0 2px}
+.sl-booking-head{margin-bottom:14px;padding:0 0 4px}
 .sl-booking-kicker{
   display:inline-block;
   margin-bottom:6px;
@@ -2415,68 +2415,72 @@ body{
   background:rgba(30,181,171,.1);
 }
 .sl-booking-title{
-  margin:0 0 4px;
-  font-size:1.42rem;
+  margin:0 0 6px;
+  font-size:1.48rem;
   color:var(--sl-primary-dark) !important;
-  line-height:1.2;
+  line-height:1.18;
   font-weight:700;
+  letter-spacing:-.01em;
 }
-.sl-booking-sub{margin:0;color:#3f6076;font-size:.93rem;max-width:54ch;line-height:1.45}
+.sl-booking-sub{margin:0;color:#355a73;font-size:.93rem;max-width:52ch;line-height:1.5}
 .sl-booking-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
 .sl-booking-controls{
   display:grid;
-  gap:13px;
-  background:#ffffff;
-  border:1px solid rgba(11,34,57,.11);
-  border-radius:18px;
-  padding:18px;
-  box-shadow:0 10px 22px rgba(8,24,41,.06);
+  gap:14px;
+  background:linear-gradient(180deg,#ffffff 0%, #fcfeff 100%);
+  border:1px solid rgba(11,34,57,.1);
+  border-radius:16px;
+  padding:16px;
+  box-shadow:0 8px 18px rgba(8,24,41,.05);
 }
 .sl-booking-field label{
   display:block;
-  font-size:.73rem;
+  font-size:.72rem;
   font-weight:700;
-  letter-spacing:.09em;
+  letter-spacing:.11em;
   text-transform:uppercase;
-  color:#2f556d;
-  margin-bottom:6px
+  color:#2b526a;
+  margin-bottom:7px
 }
 .sl-booking-field select,.sl-booking-field input{
   width:100%;
   min-height:44px;
   padding:10px 12px;
   border-radius:12px;
-  border:1px solid rgba(11,34,57,.18);
-  background:#fcfeff;
+  border:1px solid rgba(11,34,57,.16);
+  background:#f9fdff;
   color:#12354d;
   font-size:.93rem;
   font-family:inherit;
-  transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+  transition:border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
 }
 
+.sl-booking-field select:hover,.sl-booking-field input:hover{
+  border-color:rgba(11,34,57,.24);
+}
 .sl-booking-field select:focus,.sl-booking-field input:focus{
   outline:none;
   border-color:rgba(30,181,171,.72);
   box-shadow:0 0 0 3px rgba(30,181,171,.16);
   background:#fff;
 }
-.sl-booking-slots-title{font-size:.76rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#284e65;margin:2px 0 7px}
-.sl-booking-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.sl-booking-slots-title{font-size:.75rem;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#2d586f;margin:4px 0 8px}
+.sl-booking-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .sl-slot-btn{
   min-height:42px;
   border-radius:11px;
-  border:1px solid rgba(30,181,171,.35);
-  background:rgba(30,181,171,.1);
-  color:#103349;
+  border:1px solid rgba(30,181,171,.44);
+  background:linear-gradient(180deg,rgba(30,181,171,.18) 0%, rgba(30,181,171,.1) 100%);
+  color:#0f334a;
   padding:9px 8px;
   font-size:.87rem;
-  font-weight:600;
+  font-weight:700;
   cursor:pointer;
-  transition:transform .12s,filter .12s,box-shadow .12s;
+  transition:transform .12s,filter .12s,box-shadow .12s,border-color .12s;
 }
-.sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98);box-shadow:0 6px 14px rgba(11,34,57,.1)}
-.sl-slot-btn[disabled]{background:#edf2f6;color:#8496a7;border-color:#d5dfe7;cursor:not-allowed;transform:none;box-shadow:none}
-.sl-booking-note{margin:6px 0 0;font-size:.79rem;color:#587086;line-height:1.35}
+.sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98);border-color:rgba(30,181,171,.65);box-shadow:0 8px 16px rgba(11,34,57,.12)}
+.sl-slot-btn[disabled]{background:#edf2f6;color:#8395a6;border-color:#d3dee6;cursor:not-allowed;transform:none;box-shadow:none;opacity:.96}
+.sl-booking-note{margin:4px 0 0;font-size:.78rem;color:#587086;line-height:1.35}
 .sl-units-placeholder{
   background:#fbfdff;
   border:1px solid rgba(11,34,57,.13);
@@ -2780,7 +2784,7 @@ body{
   .sl-units-placeholder{order:2}
 }
 @media (max-width:720px){
-  .sl-booking-card{padding:0}
+  .sl-booking-card{padding:14px}
   .sl-booking-title{font-size:1.32rem}
   .sl-booking-slots{grid-template-columns:repeat(3,minmax(0,1fr))}
   .sl-booking-head{margin-bottom:10px}
