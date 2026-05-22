@@ -3073,17 +3073,16 @@ body{
           <div class="sl-booking-grid">
             <div class="sl-booking-controls">
               <div class="sl-booking-field">
-                <label for="sl-booking-service">Serviço</label>
+                <label for="sl-booking-service">Tipo de Espirometria</label>
                 <select id="sl-booking-service" name="servico">
-                  <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
-                  <option value="Espirometria simples">Espirometria simples</option>
+                  <option value="Espirometria simples" selected>Espirometria simples</option>
                   <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
                   <option value="Empresas / PCMSO">Empresas / PCMSO</option>
                 </select>
               </div>
 
               <div class="sl-booking-field">
-                <label for="sl-booking-unit">Unidade</label>
+                <label for="sl-booking-unit">Localidade</label>
                 <select id="sl-booking-unit" name="unidade">
                   <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
                   <option value="Unidade Barra">Unidade Barra</option>
@@ -3521,8 +3520,8 @@ body{
       var isoDate = dateEl.value || todayIso;
       var date = formatDate(isoDate);
       var text = 'Olá, gostaria de agendar espirometria na Sopro Life.\n'
-        + 'Serviço: ' + service + '\n'
-        + 'Unidade: ' + unit + '\n'
+        + 'Tipo de espirometria: ' + service + '\n'
+        + 'Localidade: ' + unit + '\n'
         + 'Data: ' + date + '\n'
         + 'Horário: ' + time;
       var url = 'https://api.whatsapp.com/send?phone=5521998901775&text=' + encodeURIComponent(text);
@@ -3920,8 +3919,8 @@ body{
     var date = dateEl && dateEl.value ? formatDate(dateEl.value) : '';
 
     var text = 'Olá, gostaria de agendar pela Sopro Life.\n'
-      + 'Serviço: ' + service + '\n'
-      + 'Unidade: ' + unit + '\n';
+      + 'Tipo de espirometria: ' + service + '\n'
+      + 'Localidade: ' + unit + '\n';
 
     if(date){
       text += 'Data de interesse: ' + date + '\n';
