@@ -964,6 +964,922 @@ body{
 
 
 
+
+<!-- SOPRO:RJ_HOME_BOOKING_DEPS_START -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style id="soprolife-agendamento-fix-v1">
+/* Corrige leitura e posicionamento da seção Agendamento */
+
+/* Quando clicar no menu, a seção não fica escondida atrás do header */
+.sl-booking-section#agendamento{
+  scroll-margin-top: 150px !important;
+}
+
+/* Mantém ajustes do CTA antigo agora em #contato */
+.sl-cta-section#contato{
+  padding-top: 72px !important;
+  padding-bottom: 72px !important;
+}
+
+/* Corrige contraste do CTA escuro */
+#contato .sl-cta-box,
+.sl-cta-section#contato .sl-cta-box{
+  color: #fff !important;
+}
+
+#contato .sl-cta-title,
+#contato h2,
+.sl-cta-section#contato h2{
+  color: #fff !important;
+  opacity: 1 !important;
+}
+
+#contato .sl-cta-sub,
+#contato .sl-cta-contacts,
+#contato .sl-cta-small{
+  color: rgba(255,255,255,.92) !important;
+}
+
+#contato .sl-cta-contacts strong{
+  color: #fff !important;
+}
+
+/* Botão dentro do CTA */
+#contato .sl-btn-primary{
+  background: #25D366 !important;
+  color: #fff !important;
+  box-shadow: 0 12px 24px rgba(37,211,102,.20) !important;
+}
+
+/* Android/mobile: evita encavalamento e melhora leitura */
+@media (max-width: 720px){
+  .sl-booking-section#agendamento{
+    scroll-margin-top: 120px !important;
+  }
+
+  .sl-cta-section#contato{
+    padding-top: 56px !important;
+    padding-bottom: 96px !important;
+  }
+
+  #contato .sl-cta-box{
+    grid-template-columns: 1fr !important;
+    gap: 18px !important;
+    padding: 24px 20px !important;
+  }
+
+  #contato .sl-cta-actions{
+    justify-content: flex-start !important;
+  }
+
+  #contato .sl-btn-primary{
+    width: 100% !important;
+    text-align: center !important;
+  }
+}
+</style>
+<style id="soprolife-instagram-mobile-android-fix-v1">
+/* Sopro Life: no mobile, Instagram fica junto do WhatsApp, não colado na logo */
+@media (max-width: 960px) {
+  .sl-header-in {
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .sl-main-nav {
+    display: none !important;
+  }
+
+  .sl-header-instagram {
+    margin-left: auto !important;
+    margin-right: 8px !important;
+    flex: 0 0 42px !important;
+    width: 42px !important;
+    height: 42px !important;
+  }
+
+  .sl-nav-cta {
+    margin-left: 0 !important;
+    flex: 0 0 auto !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .sl-header-instagram {
+    flex-basis: 38px !important;
+    width: 38px !important;
+    height: 38px !important;
+    margin-right: 6px !important;
+  }
+
+  .sl-nav-cta {
+    min-width: 88px !important;
+    max-width: 104px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+
+
+/* ===== Agendamento compacto (Etapa 1) ===== */
+.sl-booking-section{padding:28px 0 24px}
+.sl-booking-section > .sl-container{
+  padding-left:0 !important;
+  padding-right:0 !important;
+}
+.sl-booking-align{
+  max-width: 760px;
+  margin: 0;
+}
+.sl-booking-card{
+  background:linear-gradient(180deg,#ffffff 0%, #fbfeff 100%);
+  border-radius:20px;
+  box-shadow:0 14px 28px rgba(8,24,41,.07);
+  padding:20px;
+  border:1px solid rgba(11,34,57,.08);
+}
+.sl-booking-head{margin-bottom:14px;padding:0 0 4px}
+.sl-booking-kicker{
+  display:inline-block;
+  margin-bottom:6px;
+  padding:4px 10px;
+  border-radius:999px;
+  font-size:.72rem;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  font-weight:700;
+  color:#106f68;
+  background:rgba(30,181,171,.1);
+}
+.sl-booking-title{
+  margin:0 0 6px;
+  font-size:1.48rem;
+  color:var(--sl-primary-dark) !important;
+  line-height:1.18;
+  font-weight:700;
+  letter-spacing:-.01em;
+}
+.sl-booking-sub{margin:0;color:#355a73;font-size:.93rem;max-width:52ch;line-height:1.5}
+.sl-booking-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
+.sl-booking-controls{
+  display:grid;
+  gap:14px;
+  background:linear-gradient(180deg,#ffffff 0%, #fcfeff 100%);
+  border:1px solid rgba(11,34,57,.1);
+  border-radius:16px;
+  padding:16px;
+  box-shadow:0 8px 18px rgba(8,24,41,.05);
+}
+.sl-booking-field label{
+  display:block;
+  font-size:.72rem;
+  font-weight:700;
+  letter-spacing:.11em;
+  text-transform:uppercase;
+  color:#2b526a;
+  margin-bottom:7px
+}
+.sl-booking-field select,.sl-booking-field input{
+  width:100%;
+  min-height:44px;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid rgba(11,34,57,.16);
+  background:#f9fdff;
+  color:#12354d;
+  font-size:.93rem;
+  font-family:inherit;
+  transition:border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+
+.sl-booking-field select:hover,.sl-booking-field input:hover{
+  border-color:rgba(11,34,57,.24);
+}
+.sl-booking-field select:focus,.sl-booking-field input:focus{
+  outline:none;
+  border-color:rgba(30,181,171,.72);
+  box-shadow:0 0 0 3px rgba(30,181,171,.16);
+  background:#fff;
+}
+.sl-booking-slots-title{font-size:.75rem;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#2d586f;margin:4px 0 8px}
+.sl-booking-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.sl-slot-btn{
+  min-height:42px;
+  border-radius:11px;
+  border:1px solid rgba(30,181,171,.44);
+  background:linear-gradient(180deg,rgba(30,181,171,.18) 0%, rgba(30,181,171,.1) 100%);
+  color:#0f334a;
+  padding:9px 8px;
+  font-size:.87rem;
+  font-weight:700;
+  cursor:pointer;
+  transition:transform .12s,filter .12s,box-shadow .12s,border-color .12s;
+}
+.sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98);border-color:rgba(30,181,171,.65);box-shadow:0 8px 16px rgba(11,34,57,.12)}
+.sl-slot-btn[disabled]{background:#edf2f6;color:#8395a6;border-color:#d3dee6;cursor:not-allowed;transform:none;box-shadow:none;opacity:.96}
+.sl-booking-note{margin:4px 0 0;font-size:.78rem;color:#587086;line-height:1.35}
+.sl-units-placeholder{
+  background:#fbfdff;
+  border:1px solid rgba(11,34,57,.13);
+  border-radius:16px;
+  padding:13px;
+  box-shadow:0 8px 18px rgba(8,24,41,.045);
+}
+.sl-units-placeholder h3{margin:0 0 6px;font-size:1rem;color:var(--sl-primary-dark)}
+.sl-units-placeholder p{margin:0 0 8px;color:#34596f;font-size:.9rem;line-height:1.4}
+.sl-unit-list{list-style:none;padding:0;margin:0 0 10px;display:grid;gap:7px}
+.sl-unit-list li{
+  background:#ffffff;
+  border:1px solid rgba(11,34,57,.11);
+  border-radius:10px;
+  padding:6px 9px;
+  font-size:.88rem;
+  color:#123247;
+  box-shadow:0 4px 10px rgba(8,24,41,.04);
+}
+.sl-unit-list span{display:block;font-size:.79rem;color:#456479;margin-top:2px;line-height:1.35}
+.sl-btn-disabled{display:inline-flex;align-items:center;justify-content:center;pointer-events:none;opacity:.85}
+.sl-booking-section .sl-booking-card,
+.sl-booking-section .sl-units-placeholder,
+.sl-booking-section .sl-booking-controls{
+  backdrop-filter: blur(1.5px);
+}
+
+/* ===== Modal de mapa (Etapa 2) ===== */
+.sl-map-mini,
+.sl-mini-map{
+  margin:0;
+  width:100%;
+  height:570px;
+  min-height:570px;
+  border-radius:12px;
+  border:1px solid rgba(11,34,57,.12);
+  overflow:hidden;
+  cursor:pointer;
+  position:relative;
+}
+.sl-mini-map-trigger{
+  outline:none;
+}
+.sl-mini-map-trigger::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:2;
+  background:rgba(224,248,245,.58);
+  opacity:0;
+  transition:opacity .18s ease;
+  pointer-events:none;
+}
+.sl-mini-map-target{
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:36px;
+  height:36px;
+  transform:translate(-50%,-50%) scale(.94);
+  opacity:0;
+  z-index:403;
+  pointer-events:none;
+  transition:opacity .18s ease,transform .18s ease;
+}
+.sl-mini-map-target span{
+  position:absolute;
+  width:10px;
+  height:10px;
+  border-color:#0b8f86;
+  border-style:solid;
+}
+.sl-mini-map-target span:nth-child(1){
+  top:0;
+  left:0;
+  border-width:2px 0 0 2px;
+}
+.sl-mini-map-target span:nth-child(2){
+  top:0;
+  right:0;
+  border-width:2px 2px 0 0;
+}
+.sl-mini-map-target span:nth-child(3){
+  bottom:0;
+  left:0;
+  border-width:0 0 2px 2px;
+}
+.sl-mini-map-target span:nth-child(4){
+  bottom:0;
+  right:0;
+  border-width:0 2px 2px 0;
+}
+.sl-mini-map-trigger:hover::before,
+.sl-mini-map-trigger:focus-visible::before{
+  opacity:1;
+}
+.sl-mini-map-trigger:hover .sl-mini-map-target,
+.sl-mini-map-trigger:focus-visible .sl-mini-map-target{
+  opacity:1;
+  transform:translate(-50%,-50%) scale(1);
+}
+.sl-mini-map-trigger:focus-visible{
+  outline:2px solid #1eb5ab;
+  outline-offset:3px;
+}
+.sl-map-open-btn{
+  position:absolute;
+  top:10px;
+  left:10px;
+  z-index:401;
+  border-radius:999px;
+  padding:6px 10px;
+  font-size:.78rem;
+  background:rgba(11,34,57,.84);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.35);
+}
+.sl-map-mini:hover .sl-map-open-btn{background:rgba(11,34,57,.92)}
+.sl-units-placeholder{
+  --sl-map-lift:126px;
+  --sl-map-extra-height:102px;
+  width:264px;
+  max-width:264px;
+  margin-top:calc(var(--sl-map-lift) * -1);
+  padding:0;
+  border:0;
+  box-shadow:none;
+  background:transparent;
+}
+
+
+.sl-map-modal{
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:1200;
+}
+.sl-map-modal.is-open{display:flex}
+.sl-map-modal__backdrop{
+  position:absolute;
+  inset:0;
+  background:rgba(8,24,41,.54);
+}
+.sl-map-modal__dialog{
+  position:relative;
+  z-index:1;
+  width:min(1280px, calc(100vw - 84px));
+  height:min(640px, calc(100vh - 104px));
+  max-height:none;
+  background:#fff;
+  border-radius:16px;
+  box-shadow:0 14px 34px rgba(8,24,41,.2);
+  border:1px solid rgba(11,34,57,.12);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+.sl-map-modal__header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:12px 14px;
+  border-bottom:1px solid rgba(11,34,57,.08);
+}
+.sl-map-modal__title{
+  margin:0;
+  font-size:1.04rem;
+  color:var(--sl-primary-dark);
+}
+.sl-map-modal__body{
+  flex:1;
+  height:100%;
+  min-height:0;
+  padding:10px;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns:330px minmax(0,1fr);
+  gap:10px;
+}
+#sl-units-map,
+#sl-units-map-mini{
+  width:100%;
+  height:100%;
+  border:0;
+  display:block;
+}
+#sl-units-map{
+  min-height:0;
+  border-radius:12px;
+  border:1px solid rgba(11,34,57,.12);
+}
+.sl-map-panel-info{
+  border:1px solid rgba(11,34,57,.1);
+  border-radius:12px;
+  background:#f9fcff;
+  padding:12px;
+  color:#2d526a;
+  font-size:.88rem;
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.sl-map-modal__info{
+  height:100%;
+  overflow:auto;
+}
+.sl-map-modal__map-wrap{
+  height:100%;
+  min-height:0;
+}
+
+.sl-map-panel-sub{margin:0;color:#46687f;font-size:.85rem;line-height:1.4}
+.sl-map-unit-cards{display:grid;gap:8px}
+.sl-map-unit-card{
+  background:#fff;
+  border:1px solid rgba(11,34,57,.12);
+  border-radius:10px;
+  padding:8px 10px;
+  font-size:.86rem;
+  font-weight:600;
+  color:#143950;
+}
+.sl-map-panel-info h4{
+  margin:0 0 6px;
+  font-size:1rem;
+  color:var(--sl-primary-dark);
+}
+.sl-map-panel-info ul{
+  margin:0 0 6px 18px;
+  padding:0;
+}
+.sl-map-panel-note{
+  font-size:.78rem;
+  color:#567188;
+  margin-top:auto;
+}
+
+.sl-map-pin{
+  width:20px;
+  height:20px;
+  display:block;
+  border-radius:50% 50% 50% 0;
+  background:linear-gradient(150deg,#1eb5ab 0%, #13958d 100%);
+  border:2px solid #0b2239;
+  transform:rotate(-45deg);
+  box-shadow:0 2px 8px rgba(11,34,57,.28);
+  position:relative;
+}
+.sl-map-pin::after{
+  content:"";
+  position:absolute;
+  width:7px;
+  height:7px;
+  border-radius:999px;
+  background:#fff;
+  top:5px;
+  left:5px;
+}
+@media (max-width:720px){
+  .sl-units-placeholder{
+    --sl-map-lift:0px;
+    width:100%;
+    max-width:none;
+    margin-top:0;
+  }
+  .sl-map-modal__dialog{
+    width:calc(100vw - 14px);
+    height:92dvh;
+    border-radius:12px;
+  }
+  .sl-map-modal__header{padding:10px 12px}
+  .sl-map-modal__body{
+    padding:10px;
+    grid-template-columns:1fr;
+    grid-auto-rows:auto 1fr;
+    overflow:auto;
+  }
+  #sl-units-map{height:58dvh;min-height:300px}
+  .sl-map-mini,
+  .sl-mini-map{height:260px;min-height:260px}
+   .sl-mini-map-target{opacity:.28;transform:translate(-50%,-50%) scale(1);}
+  .sl-map-open-btn{
+    top:8px;
+    right:8px;
+    font-size:.76rem;
+    padding:5px 9px;
+  }
+}
+
+#agendamento .sl-map-mini .leaflet-tile-pane,
+#agendamento .sl-mini-map .leaflet-tile-pane,
+#sl-map-modal .leaflet-tile-pane{
+  filter:saturate(1.18) contrast(1.04) brightness(1.02);
+}
+@media (max-width:960px){
+  .sl-booking-grid{grid-template-columns:minmax(0,1fr)}
+  .sl-units-placeholder{order:2}
+}
+@media (max-width:720px){
+  .sl-booking-card{padding:14px}
+  .sl-booking-title{font-size:1.32rem}
+  .sl-booking-slots{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .sl-booking-head{margin-bottom:10px}
+}
+@media (max-width:430px){
+  .sl-booking-slots{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sl-slot-btn{padding:10px 8px}
+}
+
+/* SOPRO:MAP_MODAL_SIDE_POLISH_V1 */
+/* Lapidação visual do painel esquerdo do modal do mapa */
+.sl-map-modal-side,
+.sl-map-modal-panel,
+.sl-map-modal-info,
+.sl-map-modal-copy {
+  background:
+    linear-gradient(180deg, rgba(30,181,171,.12), rgba(255,255,255,.96) 42%),
+    #f7fcfd !important;
+  border: 1px solid rgba(30,181,171,.24) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 14px 28px rgba(8,24,41,.08) !important;
+}
+
+.sl-map-modal-side h3,
+.sl-map-modal-panel h3,
+.sl-map-modal-info h3,
+.sl-map-modal-copy h3 {
+  color: #0b2239 !important;
+  font-weight: 800 !important;
+  letter-spacing: -.01em !important;
+  margin-bottom: 10px !important;
+}
+
+.sl-map-modal-side p,
+.sl-map-modal-panel p,
+.sl-map-modal-info p,
+.sl-map-modal-copy p {
+  color: #34596f !important;
+  line-height: 1.45 !important;
+  font-weight: 500 !important;
+}
+
+.sl-map-modal-side button,
+.sl-map-modal-panel button,
+.sl-map-modal-info button,
+.sl-map-modal-copy button,
+.sl-map-unit-btn,
+.sl-map-modal-unit,
+.sl-map-location-card {
+  width: 100% !important;
+  display: block !important;
+  background: linear-gradient(180deg, rgba(224,252,250,.98), rgba(210,248,245,.92)) !important;
+  border: 1px solid rgba(30,181,171,.42) !important;
+  border-radius: 12px !important;
+  color: #0b3348 !important;
+  font-weight: 800 !important;
+  text-align: left !important;
+  padding: 11px 13px !important;
+  margin: 8px 0 !important;
+  box-shadow: 0 7px 14px rgba(8,24,41,.055) !important;
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease !important;
+}
+
+.sl-map-modal-side button:hover,
+.sl-map-modal-panel button:hover,
+.sl-map-modal-info button:hover,
+.sl-map-modal-copy button:hover,
+.sl-map-unit-btn:hover,
+.sl-map-modal-unit:hover,
+.sl-map-location-card:hover {
+  transform: translateY(-1px) !important;
+  border-color: rgba(30,181,171,.74) !important;
+  background: linear-gradient(180deg, rgba(202,248,245,1), rgba(182,241,238,.95)) !important;
+  box-shadow: 0 10px 20px rgba(8,24,41,.09) !important;
+}
+
+.sl-map-modal-side button::before,
+.sl-map-modal-panel button::before,
+.sl-map-modal-info button::before,
+.sl-map-modal-copy button::before,
+.sl-map-unit-btn::before,
+.sl-map-modal-unit::before,
+.sl-map-location-card::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: #1eb5ab;
+  box-shadow: 0 0 0 4px rgba(30,181,171,.15);
+  vertical-align: 1px;
+}
+
+.sl-map-modal-side button strong,
+.sl-map-modal-panel button strong,
+.sl-map-modal-info button strong,
+.sl-map-modal-copy button strong,
+.sl-map-unit-btn strong,
+.sl-map-modal-unit strong,
+.sl-map-location-card strong {
+  color: #0b2239 !important;
+  font-weight: 800 !important;
+}
+
+.sl-map-modal-side p:last-child,
+.sl-map-modal-panel p:last-child,
+.sl-map-modal-info p:last-child,
+.sl-map-modal-copy p:last-child {
+  margin-top: 12px !important;
+  padding: 12px 13px !important;
+  border-radius: 12px !important;
+  background: rgba(255,255,255,.72) !important;
+  border-left: 4px solid rgba(30,181,171,.68) !important;
+  color: #34596f !important;
+}
+
+/* Evita que o painel fique com aparência vazia demais */
+.sl-map-modal-side,
+.sl-map-modal-panel,
+.sl-map-modal-info,
+.sl-map-modal-copy {
+  padding: 18px !important;
+}
+</style>
+<style id="sopro-modal-side-hotfix-v2">
+/* SOPRO:MAP_MODAL_SIDE_HOTFIX_V2 */
+/* Ajuste visual forte e específico do painel esquerdo do modal do mapa */
+
+.sl-map-modal-side{
+  background:
+    radial-gradient(circle at top left, rgba(30,181,171,.22), transparent 44%),
+    linear-gradient(180deg, #effdfc 0%, #f8ffff 48%, #ffffff 100%) !important;
+  border: 1px solid rgba(30,181,171,.38) !important;
+  border-radius: 18px !important;
+  padding: 18px !important;
+  box-shadow: 0 16px 34px rgba(8,24,41,.10) !important;
+}
+
+.sl-map-modal-side h3{
+  color: #0b2239 !important;
+  font-size: 1.02rem !important;
+  font-weight: 850 !important;
+  letter-spacing: -.01em !important;
+  margin: 0 0 12px !important;
+}
+
+.sl-map-modal-side p{
+  color: #315a70 !important;
+  font-size: .94rem !important;
+  line-height: 1.45 !important;
+  font-weight: 550 !important;
+  margin: 0 0 13px !important;
+}
+
+.sl-map-unit-card{
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-height: 46px !important;
+  margin: 9px 0 !important;
+  padding: 11px 13px 11px 34px !important;
+  border-radius: 13px !important;
+  border: 1px solid rgba(30,181,171,.48) !important;
+  border-left: 5px solid #1eb5ab !important;
+  background: linear-gradient(180deg, #dffcf9 0%, #c9f5f1 100%) !important;
+  color: #0b3348 !important;
+  font-weight: 850 !important;
+  box-shadow: 0 8px 18px rgba(8,24,41,.075) !important;
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease !important;
+}
+
+.sl-map-unit-card::before{
+  content: "" !important;
+  position: absolute !important;
+  left: 14px !important;
+  top: 50% !important;
+  width: 8px !important;
+  height: 8px !important;
+  transform: translateY(-50%) !important;
+  border-radius: 999px !important;
+  background: #0f8f86 !important;
+  box-shadow: 0 0 0 5px rgba(30,181,171,.18) !important;
+}
+
+.sl-map-unit-card:hover{
+  transform: translateY(-1px) !important;
+  border-color: rgba(15,143,134,.82) !important;
+  background: linear-gradient(180deg, #c9f8f4 0%, #b3eee9 100%) !important;
+  box-shadow: 0 12px 24px rgba(8,24,41,.12) !important;
+}
+
+.sl-map-modal-side p:last-child{
+  margin-top: 14px !important;
+  padding: 12px 13px !important;
+  border-radius: 13px !important;
+  color: #244e64 !important;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.96), rgba(235,252,250,.96)) !important;
+  border: 1px solid rgba(30,181,171,.28) !important;
+  border-left: 5px solid #1eb5ab !important;
+  box-shadow: 0 6px 14px rgba(8,24,41,.055) !important;
+}
+
+.sl-map-modal-title,
+.sl-map-modal h2,
+.sl-map-modal h3{
+  color: #0b2239 !important;
+}
+</style>
+<style id="sopro-map-unit-whatsapp-style">
+/* SOPRO:MAP_UNIT_WHATSAPP_STYLE */
+.sl-map-unit-card{
+  cursor:pointer !important;
+  justify-content:space-between !important;
+  gap:10px !important;
+}
+
+.sl-map-unit-card::after{
+  content:"WhatsApp";
+  margin-left:auto;
+  padding:3px 8px;
+  border-radius:999px;
+  background:#25D366;
+  color:#ffffff;
+  font-size:.68rem;
+  font-weight:800;
+  letter-spacing:.02em;
+  box-shadow:0 4px 10px rgba(37,211,102,.22);
+}
+
+.sl-map-unit-card:focus-visible{
+  outline:3px solid rgba(30,181,171,.32) !important;
+  outline-offset:3px !important;
+}
+</style>
+<style id="sopro-flatpickr-ptbr-style">
+/* SOPRO:FLATPICKR_PTBR_STYLE */
+.flatpickr-calendar{
+  border-radius:18px !important;
+  border:1px solid rgba(30,181,171,.26) !important;
+  box-shadow:0 18px 42px rgba(8,24,41,.16) !important;
+  font-family:inherit !important;
+  overflow:hidden !important;
+}
+.flatpickr-months{
+  background:#ffffff !important;
+}
+.flatpickr-current-month,
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year{
+  color:#0b2239 !important;
+  font-weight:800 !important;
+}
+.flatpickr-weekday{
+  color:#0b8f86 !important;
+  font-weight:800 !important;
+}
+.flatpickr-day{
+  border-radius:10px !important;
+  color:#16384f !important;
+}
+.flatpickr-day.today{
+  border-color:#1eb5ab !important;
+}
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange{
+  background:#1eb5ab !important;
+  border-color:#1eb5ab !important;
+  color:white !important;
+}
+.flatpickr-day:hover{
+  background:rgba(30,181,171,.13) !important;
+  border-color:rgba(30,181,171,.28) !important;
+}
+.flatpickr-day.disabled,
+.flatpickr-day.disabled:hover{
+  color:#b6c4ce !important;
+  background:#f1f5f7 !important;
+}
+.flatpickr-calendar .flatpickr-prev-month,
+.flatpickr-calendar .flatpickr-next-month{
+  color:#0b2239 !important;
+  fill:#0b2239 !important;
+}
+</style>
+<style id="sopro-map-tile-filter">
+/* SOPRO:MAP_TILE_FILTER_V1 */
+/* Mantém o mapa limpo, mas puxa discretamente para a paleta SoproLife */
+.sl-mini-map .leaflet-tile,
+.sl-map-modal-map .leaflet-tile,
+#sl-mini-map .leaflet-tile,
+#sl-map-modal-map .leaflet-tile{
+  filter: saturate(1.08) contrast(.98) brightness(1.03) hue-rotate(-4deg);
+}
+
+/* Mantém pins e controles sem filtro */
+.sl-mini-map .leaflet-marker-icon,
+.sl-map-modal-map .leaflet-marker-icon,
+#sl-mini-map .leaflet-marker-icon,
+#sl-map-modal-map .leaflet-marker-icon,
+.sl-mini-map .leaflet-control,
+.sl-map-modal-map .leaflet-control,
+#sl-mini-map .leaflet-control,
+#sl-map-modal-map .leaflet-control{
+  filter:none !important;
+}
+</style>
+<style id="sopro-booking-mobile-relocate-style">
+/* SOPRO:BOOKING_MOBILE_RELOCATE_STYLE */
+#sl-booking-desktop-anchor{
+  display:none;
+}
+
+.sl-booking-mobile-anchor:empty{
+  display:none;
+}
+
+@media (max-width: 820px){
+  .sl-booking-mobile-anchor{
+    display:block;
+    margin:18px 0 16px;
+  }
+
+  .sl-booking-mobile-anchor .sl-booking-section{
+    padding:16px 0 18px !important;
+  }
+
+  .sl-booking-mobile-anchor .sl-booking-section > .sl-container{
+    max-width:100% !important;
+    padding-left:0 !important;
+    padding-right:0 !important;
+  }
+
+  .sl-booking-mobile-anchor .sl-booking-align{
+    max-width:100% !important;
+    margin:0 !important;
+  }
+
+  .sl-booking-mobile-anchor .sl-booking-card{
+    width:100% !important;
+  }
+
+  .sl-booking-mobile-anchor .sl-booking-grid{
+    grid-template-columns:1fr !important;
+    gap:14px !important;
+  }
+
+  .sl-booking-mobile-anchor .sl-booking-head{
+    margin-bottom:12px !important;
+  }
+}
+</style>
+
+<style id="sopro-rj-home-parity-fix">
+/* SOPRO:RJ_HOME_PARITY_FIX_V1 */
+
+/* Mini-mapa da página RJ deve abrir o modal, não ser manipulado como mapa pequeno */
+#sl-mini-map,
+.sl-mini-map{
+  cursor:pointer !important;
+}
+
+/* Esconde + e - apenas no mini-mapa para não cobrir "Ampliar mapa" */
+#sl-mini-map .leaflet-control-zoom,
+.sl-mini-map .leaflet-control-zoom{
+  display:none !important;
+}
+
+/* Evita o Leaflet capturar clique no mini-mapa. O clique abre o modal. */
+#sl-mini-map .leaflet-pane,
+#sl-mini-map .leaflet-control-container,
+#sl-mini-map .leaflet-marker-pane,
+#sl-mini-map .leaflet-tile-pane,
+.sl-mini-map .leaflet-pane,
+.sl-mini-map .leaflet-control-container,
+.sl-mini-map .leaflet-marker-pane,
+.sl-mini-map .leaflet-tile-pane{
+  pointer-events:none !important;
+}
+
+/* No mapa ampliado, os controles continuam funcionando */
+#sl-map-modal-map .leaflet-pane,
+#sl-map-modal-map .leaflet-control-container,
+#sl-map-modal-map .leaflet-marker-pane,
+#sl-map-modal-map .leaflet-tile-pane,
+.sl-map-modal-map .leaflet-pane,
+.sl-map-modal-map .leaflet-control-container,
+.sl-map-modal-map .leaflet-marker-pane,
+.sl-map-modal-map .leaflet-tile-pane{
+  pointer-events:auto !important;
+}
+</style>
+
+<!-- SOPRO:RJ_HOME_BOOKING_DEPS_END -->
+
 </head>
 <body> <!-- Header com logo encostada à esquerda --> <header class="sl-header">
 <div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> <a href="#agendamento" class="sl-nav-link">Agendamento</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
@@ -981,332 +1897,66 @@ body{
 
 
 
-<!-- SOPRO:RJ_BOOKING_FULL_START -->
-<section class="sl-booking-section sl-rj-booking-section" id="agendamento">
-  <div class="sl-container">
-    <div class="sl-booking-align">
-      <div class="sl-booking-card">
-        <div class="sl-booking-main">
+
+
+
+
+<!-- SOPRO:RJ_HOME_BOOKING_SECTION_START -->
+<section class="sl-booking-section" id="agendamento">
+        <div class="sl-container">
+          <div class="sl-booking-align">
+            <div class="sl-booking-card">
           <div class="sl-booking-head">
             <span class="sl-booking-kicker">Agendamento rápido</span>
             <h2 class="sl-booking-title">Agende sua espirometria</h2>
             <p class="sl-booking-sub">Escolha o melhor horário e confirme pelo WhatsApp.</p>
           </div>
 
-          <div class="sl-booking-controls">
-            <div class="sl-booking-field">
-              <label for="sl-booking-service">Tipo de Espirometria</label>
-              <select id="sl-booking-service" name="servico">
-                <option value="Espirometria simples" selected>Espirometria simples</option>
-                <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
-                <option value="Empresas / PCMSO">Empresas / PCMSO</option>
-              </select>
+          <div class="sl-booking-grid">
+            <div class="sl-booking-controls">
+              <div class="sl-booking-field">
+                <label for="sl-booking-service">Tipo de Espirometria</label>
+                <select id="sl-booking-service" name="servico">
+                  <option value="Espirometria simples" selected>Espirometria simples</option>
+                  <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
+                  <option value="Empresas / PCMSO">Empresas / PCMSO</option>
+                </select>
+              </div>
+
+              <div class="sl-booking-field">
+                <label for="sl-booking-unit">Localidade</label>
+                <select id="sl-booking-unit" name="unidade">
+                  <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
+                  <option value="Unidade Barra">Unidade Barra</option>
+                  <option value="Unidade Zona Norte">Unidade Zona Norte</option>
+                </select>
+              </div>
+
+              <div class="sl-booking-field">
+                <label for="sl-booking-date">Data</label>
+                <input id="sl-booking-date" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa" />
+              </div>
+
+              <div>
+                <div class="sl-booking-slots-title">Horários disponíveis</div>
+                <div class="sl-booking-slots" id="sl-booking-slots"></div>
+                <p class="sl-booking-note">Horários em cinza estão ocupados. Confirmação pelo WhatsApp.</p>
+              </div>
             </div>
 
-            <div class="sl-booking-field">
-              <label for="sl-booking-unit">Localidade</label>
-              <select id="sl-booking-unit" name="localidade">
-                <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
-                <option value="Unidade Barra">Unidade Barra</option>
-                <option value="Unidade Zona Norte">Unidade Zona Norte</option>
-              </select>
-            </div>
-
-            <div class="sl-booking-field">
-              <label for="sl-booking-date">Data</label>
-              <input id="sl-booking-date" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa">
-            </div>
-
-            <div class="sl-booking-field">
-              <label>Horários disponíveis</label>
-              <div class="sl-booking-slots" id="sl-booking-slots"></div>
-              <p class="sl-booking-note">Horários em cinza estão ocupados. Confirmação pelo WhatsApp.</p>
-            </div>
+            <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
+              <div class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" aria-label="Ampliar mapa das unidades" role="button" tabindex="0">
+                <span class="sl-mini-map-target" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span>
+                </span>
+                <button class="sl-btn sl-map-open-btn" type="button" id="sl-open-map-modal" aria-label="Ampliar mapa das unidades">Ampliar mapa</button>
+              </div>
+            </aside>
           </div>
         </div>
-
-        <div class="sl-booking-mapcol">
-          <button class="sl-mini-map" id="sl-mini-map" type="button" aria-label="Ampliar mapa das unidades">
-            <span class="sl-mini-map-label">Ampliar mapa</span>
-            <span class="sl-mini-map-target" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
-          </button>
         </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<div class="sl-map-modal" id="sl-map-modal" hidden aria-hidden="true">
-  <div class="sl-map-modal-backdrop" data-map-close></div>
-  <div class="sl-map-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="sl-map-modal-title">
-    <div class="sl-map-modal-head">
-      <h2 id="sl-map-modal-title">Unidades de atendimento</h2>
-      <button class="sl-map-modal-close" type="button" data-map-close>Fechar</button>
-    </div>
-    <div class="sl-map-modal-body">
-      <aside class="sl-map-modal-side">
-        <h3>Unidades de atendimento</h3>
-        <p>Escolha a unidade e finalize pelo WhatsApp.</p>
-        <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Atendimento domiciliar">Atendimento domiciliar</div>
-        <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Barra">Unidade Barra</div>
-        <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Zona Norte">Unidade Zona Norte</div>
-        <p>Endereço confirmado pelo WhatsApp no momento do agendamento.</p>
-      </aside>
-      <div class="sl-map-modal-map" id="sl-map-modal-map"></div>
-    </div>
-  </div>
-</div>
-
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-
-<style id="sopro-rj-booking-full-style">
-.sl-rj-booking-section{padding:34px 0 30px}
-.sl-booking-align{max-width:980px;margin:0 auto}
-.sl-booking-card{display:grid;grid-template-columns:minmax(0,1.05fr) 300px;gap:22px;background:#fff;border:1px solid rgba(11,34,57,.1);border-radius:22px;padding:24px;box-shadow:0 18px 42px rgba(8,24,41,.08)}
-.sl-booking-kicker{display:inline-flex;align-items:center;padding:6px 12px;border-radius:999px;background:rgba(30,181,171,.12);color:#0b8f86;font-weight:800;text-transform:uppercase;letter-spacing:.12em;font-size:.78rem}
-.sl-booking-title{margin:10px 0 6px;color:#0b2239;font-size:1.65rem;line-height:1.12;font-weight:850}
-.sl-booking-sub{margin:0;color:#355b72;font-size:1rem;line-height:1.42}
-.sl-booking-controls{margin-top:18px;background:#fff;border:1px solid rgba(11,34,57,.12);border-radius:18px;padding:18px;box-shadow:0 10px 24px rgba(8,24,41,.055)}
-.sl-booking-field{margin-bottom:14px}
-.sl-booking-field:last-child{margin-bottom:0}
-.sl-booking-field label{display:block;margin-bottom:7px;color:#244b64;text-transform:uppercase;letter-spacing:.12em;font-size:.74rem;font-weight:850}
-.sl-booking-field select,.sl-booking-field input{width:100%;min-height:44px;border:1px solid rgba(11,34,57,.18);border-radius:12px;background:#fbfdfe;color:#0b3348;padding:10px 12px;font:inherit;font-size:.96rem}
-.sl-booking-field select:focus,.sl-booking-field input:focus{outline:none;border-color:#1eb5ab;box-shadow:0 0 0 3px rgba(30,181,171,.16)}
-.sl-booking-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.sl-slot-btn{min-height:42px;border-radius:12px;border:1px solid rgba(30,181,171,.48);background:linear-gradient(180deg,#e1fcfa,#cff7f4);color:#0b3348;font-weight:850;font-size:.95rem;cursor:pointer;box-shadow:0 5px 12px rgba(8,24,41,.045)}
-.sl-slot-btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(8,24,41,.08)}
-.sl-slot-btn:disabled{cursor:not-allowed;background:#eef4f7;border-color:rgba(127,151,166,.22);color:#8aa0ae;box-shadow:none}
-.sl-booking-note{margin:9px 0 0;color:#4a6b80;font-size:.92rem;line-height:1.42}
-.sl-booking-mapcol{min-height:420px}
-.sl-mini-map{position:relative;width:100%;height:100%;min-height:420px;border:0;border-radius:16px;overflow:hidden;background:#e7f7f6;box-shadow:none;cursor:pointer;padding:0}
-.sl-mini-map-label{position:absolute;z-index:500;top:12px;left:12px;background:#0b3348;color:#fff;border-radius:999px;padding:7px 12px;font-weight:850;font-size:.88rem;box-shadow:0 8px 16px rgba(8,24,41,.2)}
-.sl-mini-map-target{position:absolute;z-index:501;left:50%;top:50%;width:34px;height:34px;transform:translate(-50%,-50%);opacity:0;transition:.18s}
-.sl-mini-map:hover::after{content:"";position:absolute;inset:0;background:rgba(225,250,248,.55);z-index:499}
-.sl-mini-map:hover .sl-mini-map-target{opacity:1}
-.sl-mini-map-target span{position:absolute;width:12px;height:12px;border-color:#0b8f86}
-.sl-mini-map-target span:nth-child(1){left:0;top:0;border-left:3px solid;border-top:3px solid}
-.sl-mini-map-target span:nth-child(2){right:0;top:0;border-right:3px solid;border-top:3px solid}
-.sl-mini-map-target span:nth-child(3){left:0;bottom:0;border-left:3px solid;border-bottom:3px solid}
-.sl-mini-map-target span:nth-child(4){right:0;bottom:0;border-right:3px solid;border-bottom:3px solid}
-.sl-rj-map-pin{width:24px;height:24px;border-radius:50% 50% 50% 0;background:#1eb5ab;border:3px solid #0b3348;transform:rotate(-45deg);box-shadow:0 8px 18px rgba(8,24,41,.22)}
-.sl-rj-map-pin::after{content:"";position:absolute;width:8px;height:8px;left:5px;top:5px;border-radius:50%;background:#fff}
-.sl-map-modal[hidden]{display:none!important}
-.sl-map-modal{position:fixed;inset:0;z-index:9999}
-.sl-map-modal-backdrop{position:absolute;inset:0;background:rgba(8,24,41,.52)}
-.sl-map-modal-dialog{position:relative;margin:6vh auto 0;width:min(980px,calc(100vw - 28px));height:min(620px,88vh);background:#fff;border-radius:18px;box-shadow:0 26px 70px rgba(8,24,41,.28);overflow:hidden;display:flex;flex-direction:column}
-.sl-map-modal-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid rgba(11,34,57,.1)}
-.sl-map-modal-head h2{margin:0;color:#0b2239;font-size:1.1rem}
-.sl-map-modal-close{border:1px solid rgba(30,181,171,.3);border-radius:999px;background:#fff;color:#0b3348;padding:7px 14px;font-weight:800;cursor:pointer}
-.sl-map-modal-body{display:grid;grid-template-columns:270px 1fr;gap:10px;padding:10px;min-height:0;flex:1}
-.sl-map-modal-side{background:linear-gradient(180deg,#effdfc,#f8ffff 48%,#fff);border:1px solid rgba(30,181,171,.38);border-radius:14px;padding:16px;box-shadow:0 12px 24px rgba(8,24,41,.08)}
-.sl-map-modal-side h3{margin:0 0 12px;color:#0b2239;font-size:1rem}
-.sl-map-modal-side p{color:#315a70;line-height:1.45;font-weight:550}
-.sl-map-unit-card{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;margin:9px 0;padding:10px 11px 10px 30px;border-radius:12px;border:1px solid rgba(30,181,171,.48);border-left:5px solid #1eb5ab;background:linear-gradient(180deg,#dffcf9,#c9f5f1);color:#0b3348;font-weight:850;cursor:pointer}
-.sl-map-unit-card::before{content:"";position:absolute;left:12px;top:50%;width:8px;height:8px;transform:translateY(-50%);border-radius:999px;background:#0f8f86;box-shadow:0 0 0 5px rgba(30,181,171,.18)}
-.sl-map-unit-card::after{content:"WhatsApp";padding:3px 8px;border-radius:999px;background:#25D366;color:#fff;font-size:.68rem;font-weight:850}
-.sl-map-modal-map{border-radius:12px;overflow:hidden;min-height:100%;background:#e7f7f6}
-.flatpickr-calendar{border-radius:18px!important;border:1px solid rgba(30,181,171,.26)!important;box-shadow:0 18px 42px rgba(8,24,41,.16)!important;font-family:inherit!important;overflow:hidden!important}
-.flatpickr-weekday{color:#0b8f86!important;font-weight:800!important}
-.flatpickr-day.selected{background:#1eb5ab!important;border-color:#1eb5ab!important;color:#fff!important}
-.flatpickr-day.today{border-color:#1eb5ab!important}
-@media(max-width:820px){
-  .sl-rj-booking-section{padding:22px 0}
-  .sl-booking-card{grid-template-columns:1fr;gap:16px;padding:20px;border-radius:20px}
-  .sl-booking-slots{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .sl-booking-mapcol{min-height:260px}
-  .sl-mini-map{min-height:260px}
-  .sl-map-modal-dialog{width:calc(100vw - 14px);height:92dvh;margin:4vh auto 0}
-  .sl-map-modal-body{grid-template-columns:1fr;grid-template-rows:auto 1fr}
-  .sl-map-modal-map{min-height:54dvh}
-}
-</style>
-
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<script id="sopro-rj-booking-full-script">
-(function(){
-  var phone = '5521998901775';
-  var slots = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];
-  var units = [
-    {name:'Unidade Barra', lat:-22.999051350996826, lng:-43.35229531126693},
-    {name:'Unidade Zona Norte', lat:-22.88608548571967, lng:-43.28447232933152}
-  ];
-
-  function toIso(date){
-    var d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
-    return d.toISOString().split('T')[0];
-  }
-
-  function formatDate(iso){
-    if(!iso) return '';
-    var p = iso.split('-');
-    return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso;
-  }
-
-  function initBooking(){
-    var serviceEl = document.getElementById('sl-booking-service');
-    var unitEl = document.getElementById('sl-booking-unit');
-    var dateEl = document.getElementById('sl-booking-date');
-    var slotsWrap = document.getElementById('sl-booking-slots');
-    if(!serviceEl || !unitEl || !dateEl || !slotsWrap) return;
-
-    var today = new Date();
-    var maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate()+30);
-    var todayIso = toIso(today);
-    var maxIso = toIso(maxDate);
-
-    dateEl.min = todayIso;
-    dateEl.max = maxIso;
-    dateEl.value = todayIso;
-
-    function available(){
-      return unitEl.value === 'Atendimento domiciliar';
-    }
-
-    function openWhatsApp(time){
-      var text = 'Olá, gostaria de agendar espirometria na Sopro Life.\n'
-        + 'Tipo de espirometria: ' + serviceEl.value + '\n'
-        + 'Localidade: ' + unitEl.value + '\n'
-        + 'Data: ' + formatDate(dateEl.value || todayIso) + '\n'
-        + 'Horário: ' + time;
-
-      window.open('https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(text), '_blank', 'noopener');
-    }
-
-    function renderSlots(){
-      slotsWrap.innerHTML = '';
-      slots.forEach(function(time){
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'sl-slot-btn';
-        btn.textContent = time;
-        if(available()){
-          btn.addEventListener('click', function(){ openWhatsApp(time); });
-        }else{
-          btn.disabled = true;
-          btn.setAttribute('aria-disabled','true');
-        }
-        slotsWrap.appendChild(btn);
-      });
-    }
-
-    unitEl.addEventListener('change', renderSlots);
-    serviceEl.addEventListener('change', renderSlots);
-    dateEl.addEventListener('change', renderSlots);
-
-    renderSlots();
-
-    if(window.flatpickr){
-      flatpickr(dateEl,{
-        locale: window.flatpickr.l10ns.pt,
-        dateFormat:'Y-m-d',
-        altInput:true,
-        altFormat:'d/m/Y',
-        defaultDate:todayIso,
-        minDate:todayIso,
-        maxDate:maxIso,
-        disableMobile:true,
-        allowInput:false,
-        monthSelectorType:'dropdown',
-        onChange:function(){ dateEl.dispatchEvent(new Event('change',{bubbles:true})); }
-      });
-    }
-  }
-
-  function pinIcon(){
-    return L.divIcon({
-      className:'sl-rj-map-pin-wrap',
-      html:'<div class="sl-rj-map-pin"></div>',
-      iconSize:[28,28],
-      iconAnchor:[14,28],
-      popupAnchor:[0,-28]
-    });
-  }
-
-  function makeMap(el){
-    if(!el || !window.L) return;
-    if(el._soproMap){ setTimeout(function(){el._soproMap.invalidateSize();},120); return el._soproMap; }
-
-    var map = L.map(el,{scrollWheelZoom:false});
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
-      maxZoom:19,
-      attribution:'&copy; OpenStreetMap contributors &copy; CARTO'
-    }).addTo(map);
-
-    var bounds = [];
-    units.forEach(function(unit){
-      L.marker([unit.lat,unit.lng],{icon:pinIcon()}).addTo(map).bindPopup(unit.name);
-      bounds.push([unit.lat,unit.lng]);
-    });
-    map.fitBounds(bounds,{padding:[30,30],maxZoom:12});
-    el._soproMap = map;
-    setTimeout(function(){map.invalidateSize();},180);
-    setTimeout(function(){map.invalidateSize();},600);
-    return map;
-  }
-
-  function openMapUnitWhatsApp(unit){
-    var serviceEl = document.getElementById('sl-booking-service');
-    var dateEl = document.getElementById('sl-booking-date');
-    var text = 'Olá, gostaria de agendar pela Sopro Life.\n'
-      + 'Tipo de espirometria: ' + (serviceEl ? serviceEl.value : 'Espirometria simples') + '\n'
-      + 'Localidade: ' + unit + '\n';
-    if(dateEl && dateEl.value){ text += 'Data de interesse: ' + formatDate(dateEl.value) + '\n'; }
-    text += 'Gostaria de confirmar disponibilidade pelo WhatsApp.';
-    window.open('https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(text), '_blank', 'noopener');
-  }
-
-  function initMap(){
-    var mini = document.getElementById('sl-mini-map');
-    var modal = document.getElementById('sl-map-modal');
-    var modalMap = document.getElementById('sl-map-modal-map');
-
-    makeMap(mini);
-
-    if(mini && modal){
-      mini.addEventListener('click',function(){
-        modal.hidden = false;
-        modal.setAttribute('aria-hidden','false');
-        setTimeout(function(){ makeMap(modalMap); },160);
-      });
-    }
-
-    document.addEventListener('click',function(e){
-      if(e.target && e.target.matches('[data-map-close]')){
-        modal.hidden = true;
-        modal.setAttribute('aria-hidden','true');
-      }
-      var card = e.target.closest ? e.target.closest('.sl-map-unit-card') : null;
-      if(card){
-        openMapUnitWhatsApp(card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim());
-      }
-    });
-
-    document.addEventListener('keydown',function(e){
-      if(e.key === 'Escape' && modal && !modal.hidden){
-        modal.hidden = true;
-        modal.setAttribute('aria-hidden','true');
-      }
-    });
-  }
-
-  function boot(){
-    initBooking();
-    initMap();
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded',boot);
-  }else{
-    boot();
-  }
-})();
-</script>
-<!-- SOPRO:RJ_BOOKING_FULL_END -->
+      </section>
+<!-- SOPRO:RJ_HOME_BOOKING_SECTION_END -->
 
 <section id="depoimentos" class="sl-testimonials" aria-label="Opiniões de pacientes">
   <div class="sl-container sl-container--wide">
@@ -1604,265 +2254,432 @@ body{
 
 
 
-<style id="sopro-rj-map-expand-fix-style">
-/* SOPRO:RJ_MAP_EXPAND_FIX_STYLE_V1 */
-/* Faz o mini-mapa da página RJ se comportar como botão de expansão, igual à home */
-
-#sl-mini-map,
-.sl-mini-map{
-  cursor:pointer !important;
-}
-
-/* O mapa pequeno não deve capturar clique/zoom. O clique deve abrir o modal. */
-#sl-mini-map .leaflet-container,
-#sl-mini-map .leaflet-pane,
-#sl-mini-map .leaflet-control-container,
-#sl-mini-map .leaflet-tile-pane,
-#sl-mini-map .leaflet-marker-pane,
-.sl-mini-map .leaflet-container,
-.sl-mini-map .leaflet-pane,
-.sl-mini-map .leaflet-control-container,
-.sl-mini-map .leaflet-tile-pane,
-.sl-mini-map .leaflet-marker-pane{
-  pointer-events:none !important;
-}
-
-/* Esconde controles de zoom no mini-mapa; eles só fazem sentido no mapa ampliado. */
-#sl-mini-map .leaflet-control-zoom,
-.sl-mini-map .leaflet-control-zoom{
-  display:none !important;
-}
-
-/* Modal grande no mesmo padrão da home */
-#sl-map-modal,
-.sl-map-modal{
-  position:fixed !important;
-  inset:0 !important;
-  z-index:9999 !important;
-}
-
-#sl-map-modal[hidden],
-.sl-map-modal[hidden]{
-  display:none !important;
-}
-
-.sl-map-modal-backdrop{
-  position:absolute !important;
-  inset:0 !important;
-  background:rgba(8,24,41,.52) !important;
-  backdrop-filter:blur(1px) !important;
-}
-
-.sl-map-modal-dialog{
-  position:relative !important;
-  width:min(1120px,calc(100vw - 32px)) !important;
-  height:min(640px,88vh) !important;
-  margin:5vh auto 0 !important;
-  background:#fff !important;
-  border-radius:18px !important;
-  box-shadow:0 26px 70px rgba(8,24,41,.30) !important;
-  overflow:hidden !important;
-  display:flex !important;
-  flex-direction:column !important;
-}
-
-.sl-map-modal-head{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:space-between !important;
-  padding:14px 18px !important;
-  border-bottom:1px solid rgba(11,34,57,.10) !important;
-  background:#fff !important;
-}
-
-.sl-map-modal-head h2{
-  margin:0 !important;
-  color:#0b2239 !important;
-  font-size:1.15rem !important;
-  font-weight:850 !important;
-}
-
-.sl-map-modal-body{
-  flex:1 !important;
-  min-height:0 !important;
-  display:grid !important;
-  grid-template-columns:300px minmax(0,1fr) !important;
-  gap:10px !important;
-  padding:10px !important;
-}
-
-.sl-map-modal-side{
-  min-height:0 !important;
-}
-
-#sl-map-modal-map,
-.sl-map-modal-map{
-  width:100% !important;
-  height:100% !important;
-  min-height:480px !important;
-  border-radius:12px !important;
-  overflow:hidden !important;
-  background:#e7f7f6 !important;
-}
-
-/* No mapa ampliado, os controles do Leaflet devem funcionar normalmente */
-#sl-map-modal-map .leaflet-container,
-#sl-map-modal-map .leaflet-pane,
-#sl-map-modal-map .leaflet-control-container,
-#sl-map-modal-map .leaflet-tile-pane,
-#sl-map-modal-map .leaflet-marker-pane,
-.sl-map-modal-map .leaflet-container,
-.sl-map-modal-map .leaflet-pane,
-.sl-map-modal-map .leaflet-control-container,
-.sl-map-modal-map .leaflet-tile-pane,
-.sl-map-modal-map .leaflet-marker-pane{
-  pointer-events:auto !important;
-}
-
-@media(max-width:820px){
-  .sl-map-modal-dialog{
-    width:calc(100vw - 14px) !important;
-    height:92dvh !important;
-    margin:4vh auto 0 !important;
-  }
-
-  .sl-map-modal-body{
-    grid-template-columns:1fr !important;
-    grid-template-rows:auto 1fr !important;
-  }
-
-  #sl-map-modal-map,
-  .sl-map-modal-map{
-    min-height:55dvh !important;
-  }
-}
-</style>
 
 
-<script id="sopro-rj-map-expand-fix">
-/* SOPRO:RJ_MAP_EXPAND_FIX_V1 */
+
+
+<!-- SOPRO:RJ_HOME_BOOKING_SCRIPTS_START -->
+<script>
+/* SOPRO:BOOKING_COMPACT_V1 */
 (function(){
-  function getModal(){
-    return document.getElementById('sl-map-modal') || document.querySelector('.sl-map-modal');
+  function toLocalIso(date){
+    var d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
+    return d.toISOString().split('T')[0];
   }
 
-  function getModalMap(){
-    return document.getElementById('sl-map-modal-map') || document.querySelector('.sl-map-modal-map');
-  }
+  function initBookingCompact(){
+    var slotsWrap = document.getElementById('sl-booking-slots');
+    var serviceEl = document.getElementById('sl-booking-service');
+    var unitEl = document.getElementById('sl-booking-unit');
+    var dateEl = document.getElementById('sl-booking-date');
 
-  function getMiniMap(){
-    return document.getElementById('sl-mini-map') || document.querySelector('.sl-mini-map');
-  }
+    if(!slotsWrap || !serviceEl || !unitEl || !dateEl) return;
 
-  function invalidateModalMap(){
-    var mapEl = getModalMap();
-    if(!mapEl) return;
+    var slots = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];
 
-    if(mapEl._soproMap && typeof mapEl._soproMap.invalidateSize === 'function'){
-      setTimeout(function(){ mapEl._soproMap.invalidateSize(); }, 80);
-      setTimeout(function(){ mapEl._soproMap.invalidateSize(); }, 250);
-      setTimeout(function(){ mapEl._soproMap.invalidateSize(); }, 600);
+    var today = new Date();
+    var todayIso = toLocalIso(today);
+    var maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 30);
+    var maxIso = toLocalIso(maxDate);
+
+    dateEl.min = todayIso;
+    dateEl.max = maxIso;
+    if(!dateEl.value){
+      dateEl.value = todayIso;
     }
 
-    if(mapEl._soproLeafletMap && typeof mapEl._soproLeafletMap.invalidateSize === 'function'){
-      setTimeout(function(){ mapEl._soproLeafletMap.invalidateSize(); }, 80);
-      setTimeout(function(){ mapEl._soproLeafletMap.invalidateSize(); }, 250);
-      setTimeout(function(){ mapEl._soproLeafletMap.invalidateSize(); }, 600);
-    }
-  }
-
-  function openModal(event){
-    if(event){
-      event.preventDefault();
-      event.stopPropagation();
+    function parseLocalDate(iso){
+      if(!iso) return null;
+      var parts = iso.split('-').map(Number);
+      if(parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+      return new Date(parts[0], parts[1] - 1, parts[2]);
     }
 
-    var modal = getModal();
-    if(!modal) return;
-
-    modal.hidden = false;
-    modal.removeAttribute('hidden');
-    modal.setAttribute('aria-hidden','false');
-    modal.classList.add('is-open');
-    modal.style.display = 'block';
-
-    // Se o script principal já tiver função/instância do mapa, só força resize.
-    invalidateModalMap();
-
-    // Dispara clique customizado para scripts existentes que escutem abertura de mapa.
-    document.dispatchEvent(new CustomEvent('sopro:open-map-modal'));
-  }
-
-  function closeModal(event){
-    if(event){
-      event.preventDefault();
-      event.stopPropagation();
+    function formatDate(iso){
+      var parts = iso ? iso.split('-') : [];
+      return parts.length === 3 ? [parts[2], parts[1], parts[0]].join('/') : iso;
     }
 
-    var modal = getModal();
-    if(!modal) return;
+    function isInDateWindow(isoDate){
+      var selected = parseLocalDate(isoDate || dateEl.value || todayIso);
+      var start = parseLocalDate(todayIso);
+      var end = parseLocalDate(maxIso);
+      if(!selected || !start || !end) return false;
+      return selected >= start && selected <= end;
+    }
 
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden','true');
-    modal.hidden = true;
-    modal.style.display = 'none';
-  }
+    function isSlotAvailable(unit, isoDate, time){
+      if(unit === 'Atendimento domiciliar'){
+        return isInDateWindow(isoDate);
+      }
+      if(unit === 'Unidade Barra' || unit === 'Unidade Zona Norte'){
+        return false;
+      }
+      return false;
+    }
 
-  function bind(){
-    var mini = getMiniMap();
-    var modal = getModal();
+    function openWhatsApp(time){
+      var service = serviceEl.value;
+      var unit = unitEl.value;
+      var isoDate = dateEl.value || todayIso;
+      var date = formatDate(isoDate);
+      var text = 'Olá, gostaria de agendar espirometria na Sopro Life.\n'
+        + 'Tipo de espirometria: ' + service + '\n'
+        + 'Localidade: ' + unit + '\n'
+        + 'Data: ' + date + '\n'
+        + 'Horário: ' + time;
+      var url = 'https://api.whatsapp.com/send?phone=5521998901775&text=' + encodeURIComponent(text);
+      window.open(url, '_blank', 'noopener');
+    }
 
-    if(mini && !mini.dataset.soproExpandBound){
-      mini.dataset.soproExpandBound = '1';
-      mini.setAttribute('role','button');
-      mini.setAttribute('tabindex','0');
-      mini.setAttribute('aria-label','Ampliar mapa das unidades');
+    function renderSlots(){
+      slotsWrap.innerHTML = '';
+      var unit = unitEl.value;
+      var isoDate = dateEl.value || todayIso;
+      var frag = document.createDocumentFragment();
 
-      mini.addEventListener('click', openModal, true);
+      slots.forEach(function(time){
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'sl-slot-btn';
+        btn.textContent = time;
 
-      mini.addEventListener('keydown', function(event){
-        if(event.key === 'Enter' || event.key === ' '){
-          openModal(event);
+        var available = isSlotAvailable(unit, isoDate, time);
+        if(!available){
+          btn.disabled = true;
+          btn.setAttribute('aria-disabled', 'true');
+        } else {
+          btn.addEventListener('click', function(){
+            openWhatsApp(time);
+          });
         }
-      }, true);
+
+        frag.appendChild(btn);
+      });
+
+      slotsWrap.appendChild(frag);
     }
 
-    document.querySelectorAll('[data-map-close], .sl-map-modal-close').forEach(function(btn){
-      if(btn.dataset.soproCloseBound) return;
-      btn.dataset.soproCloseBound = '1';
-      btn.addEventListener('click', closeModal, true);
+    serviceEl.addEventListener('change', renderSlots);
+    unitEl.addEventListener('change', renderSlots);
+    dateEl.addEventListener('change', renderSlots);
+
+    renderSlots();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initBookingCompact);
+  } else {
+    initBookingCompact();
+  }
+})();
+</script>
+<script>
+/* SOPRO:BOOKING_MAP_MODAL_V1 */
+(function(){
+  var openBtn = document.getElementById('sl-open-map-modal');
+  var closeBtn = document.getElementById('sl-close-map-modal');
+  var modal = document.getElementById('sl-map-modal');
+  var miniNode = document.getElementById('sl-units-map-mini');
+  var mapNode = document.getElementById('sl-units-map');
+  if(!openBtn || !closeBtn || !modal || !mapNode || !miniNode) return;
+
+  var leafletReady = false;
+  var miniReady = false;
+  var largeReady = false;
+  var miniMap = null;
+  var largeMap = null;
+
+  var units = [
+    { name: 'Unidade Barra', lat: -22.999051350996826, lng: -43.35229531126693 },
+    { name: 'Unidade Zona Norte', lat: -22.88608548571967, lng: -43.28447232933152 }
+  ];
+
+  function loadLeafletAssets(){
+    if(window.L && window.L.map) return Promise.resolve();
+    if(window.__slLeafletLoadingPromise) return window.__slLeafletLoadingPromise;
+
+    window.__slLeafletLoadingPromise = new Promise(function(resolve, reject){
+      var css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      css.crossOrigin = '';
+      document.head.appendChild(css);
+
+      var script = document.createElement('script');
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.crossOrigin = '';
+      script.onload = function(){ leafletReady = true; resolve(); };
+      script.onerror = reject;
+      document.body.appendChild(script);
     });
 
-    if(modal && !modal.dataset.soproBackdropBound){
-      modal.dataset.soproBackdropBound = '1';
-      modal.addEventListener('click', function(event){
-        if(event.target && event.target.matches('.sl-map-modal-backdrop')){
-          closeModal(event);
+    return window.__slLeafletLoadingPromise;
+  }
+
+  function createTileLayer(target){
+    return window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap &copy; CARTO'
+    }).addTo(target);
+  }
+
+  function markerIcon(){
+    return window.L.divIcon({
+      className: 'sl-map-pin-wrap',
+      html: '<span class="sl-map-pin" aria-hidden="true"></span>',
+      iconSize: [20, 20],
+      iconAnchor: [10, 20],
+      popupAnchor: [0, -18]
+    });
+  }
+
+  function fitUnits(target, padding){
+    var bounds = [];
+    units.forEach(function(unit){
+      var marker = window.L.marker([unit.lat, unit.lng], { icon: markerIcon() }).addTo(target);
+      marker.bindPopup(unit.name);
+      bounds.push([unit.lat, unit.lng]);
+    });
+    target.fitBounds(bounds, { padding: padding });
+  }
+
+  function initMiniMapIfNeeded(){
+    if(miniReady || !leafletReady || !window.L) return;
+    miniMap = window.L.map(miniNode, {
+      zoomControl: false,
+      attributionControl: false,
+      dragging: false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      boxZoom: false,
+      keyboard: false,
+      tap: false,
+      touchZoom: false
+    });
+    createTileLayer(miniMap);
+    fitUnits(miniMap, [16, 16]);
+    miniReady = true;
+  }
+
+  function initLargeMapIfNeeded(){
+    if(largeReady || !leafletReady || !window.L) return;
+    largeMap = window.L.map(mapNode, {
+      scrollWheelZoom: true,
+      zoomControl: true,
+      attributionControl: true
+    });
+    createTileLayer(largeMap);
+    fitUnits(largeMap, [36, 36]);
+    largeReady = true;
+  }
+
+  function openModal(){
+    modal.classList.add('is-open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    loadLeafletAssets().then(function(){
+      initMiniMapIfNeeded();
+      initLargeMapIfNeeded();
+      setTimeout(function(){ if(largeMap){ largeMap.invalidateSize(); } }, 90);
+    });
+  }
+
+  function closeModal(){
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+
+  openBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    openModal();
+  });
+  miniNode.addEventListener('click', openModal);
+  miniNode.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' || e.key === ' '){
+      e.preventDefault();
+      openModal();
+    }
+  });
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', function(e){
+    if(e.target && e.target.getAttribute('data-map-close') === 'backdrop'){ closeModal(); }
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
+  });
+
+  if('IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){
+          loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
+          io.disconnect();
         }
-      }, true);
+      });
+    }, { rootMargin: '120px' });
+    io.observe(miniNode);
+  } else {
+    loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
+  }
+})();
+</script>
+<script id="sopro-map-unit-whatsapp-hotfix">
+/* SOPRO:MAP_UNIT_WHATSAPP_HOTFIX_V1 */
+(function(){
+  var phone = '5521998901775';
+
+  function formatDate(iso){
+    if(!iso) return '';
+    var parts = iso.split('-');
+    return parts.length === 3 ? [parts[2], parts[1], parts[0]].join('/') : iso;
+  }
+
+  function openMapUnitWhatsApp(unit){
+    var serviceEl = document.getElementById('sl-booking-service');
+    var dateEl = document.getElementById('sl-booking-date');
+
+    var service = serviceEl && serviceEl.value ? serviceEl.value : 'Atendimento domiciliar';
+    var date = dateEl && dateEl.value ? formatDate(dateEl.value) : '';
+
+    var text = 'Olá, gostaria de agendar pela Sopro Life.\n'
+      + 'Tipo de espirometria: ' + service + '\n'
+      + 'Localidade: ' + unit + '\n';
+
+    if(date){
+      text += 'Data de interesse: ' + date + '\n';
     }
 
-    document.addEventListener('keydown', function(event){
-      if(event.key === 'Escape'){
-        var modal = getModal();
-        if(modal && !modal.hidden){
-          closeModal(event);
+    text += 'Gostaria de confirmar disponibilidade pelo WhatsApp.';
+
+    var url = 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(text);
+    window.open(url, '_blank', 'noopener');
+  }
+
+  function getCard(target){
+    return target && target.closest ? target.closest('.sl-map-unit-card') : null;
+  }
+
+  document.addEventListener('click', function(event){
+    var card = getCard(event.target);
+    if(!card) return;
+
+    var unit = card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim();
+    if(!unit) return;
+
+    openMapUnitWhatsApp(unit);
+  });
+
+  document.addEventListener('keydown', function(event){
+    if(event.key !== 'Enter' && event.key !== ' ') return;
+
+    var card = getCard(event.target);
+    if(!card) return;
+
+    event.preventDefault();
+
+    var unit = card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim();
+    if(!unit) return;
+
+    openMapUnitWhatsApp(unit);
+  });
+
+  document.querySelectorAll('.sl-map-unit-card').forEach(function(card){
+    if(!card.getAttribute('role')) card.setAttribute('role','button');
+    if(!card.getAttribute('tabindex')) card.setAttribute('tabindex','0');
+    var unit = card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim();
+    card.setAttribute('aria-label', 'Abrir WhatsApp para ' + unit);
+    card.setAttribute('title', 'Abrir WhatsApp para ' + unit);
+  });
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
+<script id="sopro-flatpickr-ptbr-init">
+/* SOPRO:FLATPICKR_PTBR_INIT */
+(function(){
+  function initSoproDatePicker(){
+    var dateEl = document.getElementById('sl-booking-date');
+    if(!dateEl || !window.flatpickr) return;
+    if(dateEl._flatpickr) return;
+
+    var today = new Date();
+    var maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 30);
+
+    var currentValue = dateEl.value || null;
+
+    flatpickr(dateEl, {
+      locale: {
+        ...flatpickr.l10ns.pt,
+        firstDayOfWeek: 0
+      },
+      dateFormat: "Y-m-d",
+      altInput: true,
+      altFormat: "d/m/Y",
+      defaultDate: currentValue || today,
+      minDate: dateEl.min || today,
+      maxDate: dateEl.max || maxDate,
+      disableMobile: true,
+      allowInput: false,
+      monthSelectorType: "dropdown",
+      onChange: function(){
+        dateEl.dispatchEvent(new Event('change', { bubbles:true }));
+      },
+      onReady: function(selectedDates, dateStr, instance){
+        if(instance.altInput){
+          instance.altInput.setAttribute('placeholder', 'dd/mm/aaaa');
+          instance.altInput.setAttribute('aria-label', 'Data no formato dia, mês e ano');
         }
       }
     });
   }
 
   if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', bind);
-  }else{
-    bind();
+    document.addEventListener('DOMContentLoaded', initSoproDatePicker);
+  } else {
+    initSoproDatePicker();
   }
-
-  // Reforça depois que Leaflet/scripts externos terminarem
-  window.setTimeout(bind, 500);
-  window.setTimeout(bind, 1200);
 })();
 </script>
+<script id="sopro-booking-mobile-relocate">
+/* SOPRO:BOOKING_MOBILE_RELOCATE_V1 */
+(function(){
+  function relocateBookingForMobile(){
+    var booking = document.getElementById('agendamento');
+    var mobileAnchor = document.getElementById('sl-booking-mobile-anchor');
+    var desktopAnchor = document.getElementById('sl-booking-desktop-anchor');
+
+    if(!booking || !mobileAnchor || !desktopAnchor || !desktopAnchor.parentNode) return;
+
+    var isMobile = window.matchMedia('(max-width: 820px)').matches;
+
+    if(isMobile){
+      if(booking.parentNode !== mobileAnchor){
+        mobileAnchor.appendChild(booking);
+      }
+    } else {
+      if(booking.previousElementSibling !== desktopAnchor){
+        desktopAnchor.parentNode.insertBefore(booking, desktopAnchor.nextSibling);
+      }
+    }
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', relocateBookingForMobile);
+  } else {
+    relocateBookingForMobile();
+  }
+
+  window.addEventListener('resize', function(){
+    window.clearTimeout(window.__soproBookingMobileTimer);
+    window.__soproBookingMobileTimer = window.setTimeout(relocateBookingForMobile, 120);
+  });
+})();
+</script>
+<!-- SOPRO:RJ_HOME_BOOKING_SCRIPTS_END -->
 
 </body>
 </html>
