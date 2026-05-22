@@ -2606,5 +2606,323 @@ body{
 </script>
 <!-- SOPRO:RJ_BOOKING_DEPENDENCIES_END -->
 
+
+<style id="sopro-rj-booking-map-force-style">
+/* SOPRO:RJ_BOOKING_MAP_FORCE_STYLE_V1 */
+.sl-rj-map-pin{
+  width:24px;
+  height:24px;
+  border-radius:50% 50% 50% 0;
+  background:#1eb5ab;
+  border:3px solid #0b3348;
+  transform:rotate(-45deg);
+  box-shadow:0 8px 18px rgba(8,24,41,.22);
+}
+.sl-rj-map-pin::after{
+  content:"";
+  position:absolute;
+  width:8px;
+  height:8px;
+  left:5px;
+  top:5px;
+  border-radius:50%;
+  background:#ffffff;
+}
+.flatpickr-calendar{
+  border-radius:18px !important;
+  border:1px solid rgba(30,181,171,.26) !important;
+  box-shadow:0 18px 42px rgba(8,24,41,.16) !important;
+  font-family:inherit !important;
+  overflow:hidden !important;
+}
+.flatpickr-weekday{
+  color:#0b8f86 !important;
+  font-weight:800 !important;
+}
+.flatpickr-day.selected{
+  background:#1eb5ab !important;
+  border-color:#1eb5ab !important;
+  color:#fff !important;
+}
+.flatpickr-day.today{
+  border-color:#1eb5ab !important;
+}
+</style>
+
+
+<script id="sopro-rj-booking-map-force">
+/* SOPRO:RJ_BOOKING_MAP_FORCE_V1 */
+(function(){
+  var UNITS = [
+    {name:'Atendimento domiciliar', lat:-22.999051350996826, lng:-43.35229531126693},
+    {name:'Unidade Barra', lat:-22.999051350996826, lng:-43.35229531126693},
+    {name:'Unidade Zona Norte', lat:-22.88608548571967, lng:-43.28447232933152}
+  ];
+
+  var SLOT_TIMES = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];
+
+  function loadCss(id, href){
+    if(document.getElementById(id)) return;
+    var link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
+  function loadScript(src){
+    return new Promise(function(resolve, reject){
+      var existing = document.querySelector('script[src="' + src + '"]');
+      if(existing){
+        if(existing.dataset.loaded === '1') return resolve();
+        existing.addEventListener('load', resolve, {once:true});
+        existing.addEventListener('error', reject, {once:true});
+        return;
+      }
+
+      var script = document.createElement('script');
+      script.src = src;
+      script.async = false;
+      script.onload = function(){
+        script.dataset.loaded = '1';
+        resolve();
+      };
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  function toIso(date){
+    var d = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return d.toISOString().split('T')[0];
+  }
+
+  function formatDate(iso){
+    if(!iso) return '';
+    var p = iso.split('-');
+    return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso;
+  }
+
+  function getPhone(){
+    var html = document.documentElement.innerHTML;
+    var m = html.match(/phone=(55\d{10,13})/);
+    return m ? m[1] : '5521998901775';
+  }
+
+  function setSelectValue(select, desired){
+    if(!select) return;
+    Array.prototype.forEach.call(select.options, function(opt){
+      opt.selected = opt.value === desired || opt.textContent.trim() === desired;
+    });
+  }
+
+  function initBooking(){
+    var serviceEl = document.getElementById('sl-booking-service');
+    var unitEl = document.getElementById('sl-booking-unit');
+    var dateEl = document.getElementById('sl-booking-date');
+    var slotsWrap = document.getElementById('sl-booking-slots');
+
+    if(!serviceEl || !unitEl || !dateEl || !slotsWrap) return;
+
+    setSelectValue(serviceEl, 'Espirometria simples');
+    setSelectValue(unitEl, 'Atendimento domiciliar');
+
+    var today = new Date();
+    var max = new Date(today);
+    max.setDate(max.getDate() + 30);
+
+    var todayIso = toIso(today);
+    var maxIso = toIso(max);
+
+    dateEl.min = todayIso;
+    dateEl.max = maxIso;
+    if(!dateEl.value || !/^\d{4}-\d{2}-\d{2}$/.test(dateEl.value)){
+      dateEl.value = todayIso;
+    }
+
+    function isAvailable(){
+      return unitEl.value === 'Atendimento domiciliar';
+    }
+
+    function openWhatsApp(time){
+      var text = 'Olá, gostaria de agendar espirometria na Sopro Life.\n'
+        + 'Tipo de espirometria: ' + serviceEl.value + '\n'
+        + 'Localidade: ' + unitEl.value + '\n'
+        + 'Data: ' + formatDate(dateEl.value || todayIso) + '\n'
+        + 'Horário: ' + time;
+
+      window.open(
+        'https://api.whatsapp.com/send?phone=' + getPhone() + '&text=' + encodeURIComponent(text),
+        '_blank',
+        'noopener'
+      );
+    }
+
+    function renderSlots(){
+      slotsWrap.innerHTML = '';
+      var frag = document.createDocumentFragment();
+
+      SLOT_TIMES.forEach(function(time){
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'sl-slot-btn';
+        btn.textContent = time;
+
+        if(isAvailable()){
+          btn.addEventListener('click', function(){ openWhatsApp(time); });
+        } else {
+          btn.disabled = true;
+          btn.setAttribute('aria-disabled', 'true');
+        }
+
+        frag.appendChild(btn);
+      });
+
+      slotsWrap.appendChild(frag);
+    }
+
+    serviceEl.addEventListener('change', renderSlots);
+    unitEl.addEventListener('change', renderSlots);
+    dateEl.addEventListener('change', renderSlots);
+
+    renderSlots();
+
+    if(window.flatpickr){
+      if(dateEl._flatpickr) dateEl._flatpickr.destroy();
+
+      flatpickr(dateEl, {
+        locale: window.flatpickr.l10ns && window.flatpickr.l10ns.pt ? window.flatpickr.l10ns.pt : 'pt',
+        dateFormat: 'Y-m-d',
+        altInput: true,
+        altFormat: 'd/m/Y',
+        defaultDate: dateEl.value || todayIso,
+        minDate: todayIso,
+        maxDate: maxIso,
+        disableMobile: true,
+        allowInput: false,
+        monthSelectorType: 'dropdown',
+        onChange: function(){
+          dateEl.dispatchEvent(new Event('change', {bubbles:true}));
+        }
+      });
+    }
+  }
+
+  function pinIcon(){
+    return L.divIcon({
+      className:'sl-rj-map-pin-wrap',
+      html:'<div class="sl-rj-map-pin"></div>',
+      iconSize:[28,28],
+      iconAnchor:[14,28],
+      popupAnchor:[0,-28]
+    });
+  }
+
+  function createLeafletMap(el){
+    if(!el || !window.L) return null;
+    if(el._soproLeafletMap){
+      setTimeout(function(){ el._soproLeafletMap.invalidateSize(); }, 120);
+      return el._soproLeafletMap;
+    }
+
+    var map = L.map(el, {
+      scrollWheelZoom:false,
+      attributionControl:true
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom:19,
+      attribution:'&copy; OpenStreetMap contributors &copy; CARTO'
+    }).addTo(map);
+
+    var bounds = [];
+
+    UNITS.slice(1).forEach(function(unit){
+      var marker = L.marker([unit.lat, unit.lng], {icon:pinIcon()}).addTo(map);
+      marker.bindPopup(unit.name);
+      bounds.push([unit.lat, unit.lng]);
+    });
+
+    map.fitBounds(bounds, {padding:[28,28], maxZoom:12});
+
+    el._soproLeafletMap = map;
+
+    setTimeout(function(){ map.invalidateSize(); }, 150);
+    setTimeout(function(){ map.invalidateSize(); }, 500);
+
+    return map;
+  }
+
+  function initMaps(){
+    var mini = document.getElementById('sl-mini-map') || document.querySelector('.sl-mini-map');
+    var modalMap = document.getElementById('sl-map-modal-map') || document.querySelector('.sl-map-modal-map');
+
+    createLeafletMap(mini);
+
+    var openers = document.querySelectorAll('.sl-mini-map, #sl-mini-map, .sl-map-open, [data-map-open]');
+    openers.forEach(function(opener){
+      opener.addEventListener('click', function(event){
+        var modal = document.querySelector('.sl-map-modal');
+        if(modal){
+          modal.removeAttribute('hidden');
+          modal.setAttribute('aria-hidden','false');
+          modal.classList.add('is-open');
+          modal.style.display = 'block';
+        }
+
+        setTimeout(function(){
+          createLeafletMap(modalMap);
+        }, 180);
+      });
+    });
+
+    document.querySelectorAll('.sl-map-modal-close, .sl-map-modal [aria-label="Fechar"], .sl-map-modal button').forEach(function(btn){
+      if((btn.textContent || '').trim().toLowerCase() === 'fechar' || btn.classList.contains('sl-map-modal-close')){
+        btn.addEventListener('click', function(){
+          var modal = document.querySelector('.sl-map-modal');
+          if(modal){
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden','true');
+            modal.style.display = 'none';
+          }
+        });
+      }
+    });
+  }
+
+  function boot(){
+    loadCss('leaflet-css-rj-force', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+    loadCss('flatpickr-css-rj-force', 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css');
+
+    Promise.resolve()
+      .then(function(){
+        if(window.flatpickr) return;
+        return loadScript('https://cdn.jsdelivr.net/npm/flatpickr');
+      })
+      .then(function(){
+        return loadScript('https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js').catch(function(){});
+      })
+      .then(function(){
+        initBooking();
+      });
+
+    Promise.resolve()
+      .then(function(){
+        if(window.L) return;
+        return loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+      })
+      .then(function(){
+        initMaps();
+      });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+
 </body>
 </html>
