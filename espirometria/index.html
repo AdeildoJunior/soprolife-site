@@ -869,7 +869,15 @@ main.sl-container,
   }
 }
 </style>
-
+  <!-- SOPRO:FAVICON_START -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260522b">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=20260522b">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260522b">
+  <link rel="shortcut icon" href="/favicon.ico?v=20260522b">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260522b">
+  <link rel="manifest" href="/site.webmanifest?v=20260522b">
+  <meta name="theme-color" content="#0b3348">
+  <!-- SOPRO:FAVICON_END -->
 </head>
 <body> <header class="sl-header">
 <div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> <a href="/#agendamento" class="sl-nav-link">Agendamento</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
@@ -1199,6 +1207,78 @@ document.addEventListener('DOMContentLoaded', function () { try { var walker = d
 })();
 </script>
 <!-- SOPRO:ARROWS_SCRIPT_END -->
+
+
+<!-- SOPRO:INSTAGRAM_HEADER_FINAL_START -->
+<style>
+/* Instagram header final: miolo branco, borda rosa e câmera colorida */
+.sl-header-instagram,
+a.sl-header-instagram,
+header .sl-header-instagram,
+.sl-header a.sl-header-instagram {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+
+  /* Aqui é o ponto principal */
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+
+  border: 1.5px solid #f2a8c4 !important;
+  box-shadow: none !important;
+  color: #c13584 !important;
+  transform: none !important;
+}
+
+.sl-header-instagram::before,
+.sl-header-instagram::after,
+a.sl-header-instagram::before,
+a.sl-header-instagram::after {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.sl-header-instagram svg,
+a.sl-header-instagram svg {
+  width: 20px !important;
+  height: 20px !important;
+  background: transparent !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  color: #c13584 !important;
+}
+
+.sl-header-instagram svg *,
+a.sl-header-instagram svg * {
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2.1 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
+
+/* Hover simples, sem gradiente estranho */
+.sl-header-instagram:hover,
+a.sl-header-instagram:hover,
+header .sl-header-instagram:hover,
+.sl-header a.sl-header-instagram:hover {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-color: #c13584 !important;
+  color: #c13584 !important;
+  box-shadow: 0 0 0 4px rgba(193, 53, 132, .10) !important;
+  transform: translateY(-1px) !important;
+}
+</style>
+<!-- SOPRO:INSTAGRAM_HEADER_FINAL_END -->
 
 </body>
 </html>

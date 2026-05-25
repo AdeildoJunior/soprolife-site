@@ -5,9 +5,7 @@
   <title>Espirometria | Sopro Life</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Espirometria com e sem broncodilatador na Sopro Life. Atendimento humanizado, laudos ágeis e opção de parceria com clínicas, empresas e PCMSO." />
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-
-  <style>
+<style>
     :root{
       /* Paleta baseada na sua logo (navy + teal) */
       --sl-primary: #0b2239;         /* navy */
@@ -398,7 +396,6 @@
   .sl-typo-clean h1{ font-size: 1.8rem; }
   .sl-typo-clean h2{ font-size: 1.35rem; }
 }
-
 </style>
 <style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
 <style id="sl-wa-override">
@@ -2915,7 +2912,15 @@ body{
 <!-- SOPRO:FLATPICKR_PTBR_START -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <!-- SOPRO:FLATPICKR_PTBR_END -->
-
+  <!-- SOPRO:FAVICON_START -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260522b">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=20260522b">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260522b">
+  <link rel="shortcut icon" href="/favicon.ico?v=20260522b">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260522b">
+  <link rel="manifest" href="/site.webmanifest?v=20260522b">
+  <meta name="theme-color" content="#0b3348">
+  <!-- SOPRO:FAVICON_END -->
 </head>
 <body class="sl-typo-clean">
 
@@ -4188,60 +4193,80 @@ body{
 /* SOPRO:INSTAGRAM_HOVER_STYLE_V1 */
 /* Ícone do Instagram no header com paleta do Instagram, sem hover verde */
 
-header a[href*="instagram.com"],
-.sl-header a[href*="instagram.com"],
-.site-header a[href*="instagram.com"],
-nav a[href*="instagram.com"]{
-  color:#833AB4 !important;
-  border-color:rgba(225,48,108,.26) !important;
-  background:
-    radial-gradient(circle at 30% 107%, rgba(253,244,151,.16) 0%, rgba(253,244,151,.16) 18%, transparent 34%),
-    linear-gradient(135deg, rgba(131,58,180,.10), rgba(225,48,108,.10), rgba(253,29,29,.08), rgba(252,175,69,.10)) !important;
-  box-shadow:0 8px 20px rgba(225,48,108,.10) !important;
-  transition:
-    transform .16s ease,
-    box-shadow .16s ease,
-    background .16s ease,
-    color .16s ease,
-    border-color .16s ease !important;
+
+</style>
+
+
+<!-- SOPRO:INSTAGRAM_HEADER_FINAL_START -->
+<style>
+/* Instagram header final: miolo branco, borda rosa e câmera colorida */
+.sl-header-instagram,
+a.sl-header-instagram,
+header .sl-header-instagram,
+.sl-header a.sl-header-instagram {
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 999px !important;
+
+  /* Aqui é o ponto principal */
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+
+  border: 1.5px solid #f2a8c4 !important;
+  box-shadow: none !important;
+  color: #c13584 !important;
+  transform: none !important;
 }
 
-header a[href*="instagram.com"] svg,
-.sl-header a[href*="instagram.com"] svg,
-.site-header a[href*="instagram.com"] svg,
-nav a[href*="instagram.com"] svg{
-  color:currentColor !important;
-  stroke:currentColor !important;
+.sl-header-instagram::before,
+.sl-header-instagram::after,
+a.sl-header-instagram::before,
+a.sl-header-instagram::after {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }
 
-header a[href*="instagram.com"]:hover,
-header a[href*="instagram.com"]:focus-visible,
-.sl-header a[href*="instagram.com"]:hover,
-.sl-header a[href*="instagram.com"]:focus-visible,
-.site-header a[href*="instagram.com"]:hover,
-.site-header a[href*="instagram.com"]:focus-visible,
-nav a[href*="instagram.com"]:hover,
-nav a[href*="instagram.com"]:focus-visible{
-  color:#ffffff !important;
-  border-color:transparent !important;
-  background:
-    radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%) !important;
-  box-shadow:0 12px 26px rgba(225,48,108,.28) !important;
-  transform:translateY(-1px) !important;
+.sl-header-instagram svg,
+a.sl-header-instagram svg {
+  width: 20px !important;
+  height: 20px !important;
+  background: transparent !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  color: #c13584 !important;
 }
 
-header a[href*="instagram.com"]:hover svg,
-header a[href*="instagram.com"]:focus-visible svg,
-.sl-header a[href*="instagram.com"]:hover svg,
-.sl-header a[href*="instagram.com"]:focus-visible svg,
-.site-header a[href*="instagram.com"]:hover svg,
-.site-header a[href*="instagram.com"]:focus-visible svg,
-nav a[href*="instagram.com"]:hover svg,
-nav a[href*="instagram.com"]:focus-visible svg{
-  color:#ffffff !important;
-  stroke:#ffffff !important;
+.sl-header-instagram svg *,
+a.sl-header-instagram svg * {
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2.1 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
+
+/* Hover simples, sem gradiente estranho */
+.sl-header-instagram:hover,
+a.sl-header-instagram:hover,
+header .sl-header-instagram:hover,
+.sl-header a.sl-header-instagram:hover {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border-color: #c13584 !important;
+  color: #c13584 !important;
+  box-shadow: 0 0 0 4px rgba(193, 53, 132, .10) !important;
+  transform: translateY(-1px) !important;
 }
 </style>
+<!-- SOPRO:INSTAGRAM_HEADER_FINAL_END -->
 
 </body>
 </html>
