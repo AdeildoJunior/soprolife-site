@@ -772,7 +772,55 @@
         grid-template-columns:1fr;
       }
     }
-  </style>
+
+/* === SOPRO:CLINICAL_PHOTO_AND_SECOND_DOCTOR_FIX === */
+.sl-photo {
+  width:96px;
+  height:96px;
+  min-width:96px;
+  border-radius:50%;
+  overflow:hidden;
+  border:1px solid rgba(30,181,171,.24);
+  background:linear-gradient(135deg,rgba(30,181,171,.16),rgba(11,34,57,.08));
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.sl-photo img {
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+
+.sl-doctor-card + .sl-doctor-card {
+  margin-top:18px;
+}
+
+.sl-request-btn.is-disabled,
+.sl-request-btn:disabled {
+  cursor:not-allowed;
+  background:#f7fafb;
+  color:#60788a;
+  border-color:rgba(11,34,57,.12);
+}
+
+.sl-request-btn.is-disabled:hover,
+.sl-request-btn:disabled:hover {
+  background:#f7fafb;
+  color:#60788a;
+}
+
+@media(max-width:760px) {
+  .sl-photo {
+    width:72px;
+    height:72px;
+    min-width:72px;
+  }
+}
+
+</style>
 </head>
 
 <body>
@@ -832,7 +880,7 @@
           <div class="sl-filter-grid">
             <div class="sl-field">
               <label>Nome do profissional</label>
-              <input class="sl-input" value="Dra. Carla Ferreira" aria-label="Nome do profissional">
+              <input class="sl-input" value="Dra. Carla Ferreira e Dra. Ana Cristina" aria-label="Nome do profissional">
             </div>
             <div class="sl-field">
               <label>Especialidade</label>
@@ -845,11 +893,13 @@
           </div>
         </div>
 
-        <h2 class="sl-list-title">Profissional disponível</h2>
+        <h2 class="sl-list-title">Profissionais disponíveis</h2>
 
         <article class="sl-doctor-card">
           <div class="sl-doctor-main">
-            <div class="sl-avatar" aria-hidden="true">CF</div>
+            <div class="sl-photo">
+                <img src="/img/dra-carla-ferreira.jpg?v=20260528" alt="Dra. Carla Ferreira">
+              </div>
             <div>
               <h3 class="sl-doctor-name">Dra. Carla Ferreira</h3>
               <div class="sl-doctor-meta">
@@ -882,6 +932,41 @@
             </div>
           </div>
         </article>
+
+
+        <article class="sl-doctor-card">
+          <div class="sl-doctor-main">
+            <div class="sl-avatar" aria-hidden="true">AC</div>
+            <div>
+              <h3 class="sl-doctor-name">Dra. Ana Cristina do Nascimento Cunha</h3>
+              <div class="sl-doctor-meta">
+                Médica pneumologista
+              </div>
+              <div class="sl-badges">
+                <span class="sl-badge">Telemedicina</span>
+                <span class="sl-badge">Pneumologia</span>
+                <span class="sl-badge">Avaliação respiratória</span>
+              </div>
+              <p class="sl-doctor-note">
+                Consulta médica online para avaliação de sintomas respiratórios, orientação clínica e solicitação de exames quando houver indicação.
+              </p>
+            </div>
+          </div>
+
+          <div class="sl-schedule-panel">
+            <div class="sl-hours-box">
+              <strong>Agenda online</strong>
+              Sem horários disponíveis no momento.
+            </div>
+            <button class="sl-request-btn is-disabled" type="button" disabled>
+              Sem horários disponíveis
+            </button>
+            <div class="sl-small-note">
+              A agenda online da Dra. Ana ainda não está liberada.
+            </div>
+          </div>
+        </article>
+
 
         <div class="sl-info-strip">
           <strong>Importante:</strong> a teleconsulta não substitui atendimento de urgência. Em falta de ar intensa, dor no peito, lábios arroxeados, confusão mental ou piora rápida, procure emergência.
