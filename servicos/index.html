@@ -1267,6 +1267,60 @@ body{
 </style>
 <!-- SOPRO:MENU_UNIFORME_FIX_END -->
 
+
+<!-- SOPRO:TELEMED_MOBILE_STRIP_START -->
+<style>
+  .sl-telemed-mobile-strip {
+    display:none;
+  }
+
+  @media (max-width:760px) {
+    .sl-telemed-mobile-strip {
+      display:block;
+      background:linear-gradient(90deg,#effdfb,#ffffff);
+      border-bottom:1px solid rgba(30,181,171,.18);
+      padding:10px 14px;
+    }
+
+    .sl-telemed-mobile-strip a {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      width:100%;
+      border:1px solid rgba(30,181,171,.25);
+      background:#ffffff;
+      border-radius:16px;
+      padding:12px 14px;
+      color:#0b3348 !important;
+      text-decoration:none !important;
+      font-weight:900;
+      box-shadow:0 12px 24px rgba(8,24,41,.05);
+    }
+
+    .sl-telemed-mobile-strip span {
+      display:block;
+      color:#07857d;
+      font-size:.78rem;
+      font-weight:850;
+      margin-top:2px;
+    }
+
+    .sl-telemed-mobile-strip b {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:34px;
+      height:34px;
+      border-radius:999px;
+      background:#eafffd;
+      color:#07857d;
+      border:1px solid rgba(30,181,171,.25);
+    }
+  }
+</style>
+<!-- SOPRO:TELEMED_MOBILE_STRIP_END -->
+
 </head>
 <body> <!-- HEADER --> <header class="sl-header">
 <div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a>
@@ -1280,7 +1334,19 @@ body{
   </svg>
 </a>
 <a class="sl-nav-cta" target="_blank" rel="noopener" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life."> Agendar pelo WhatsApp </a> </div>
-</header> <!-- HERO PADRÃO PÁGINA INTERNA -->
+</header>
+<!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_START -->
+<div class="sl-telemed-mobile-strip">
+  <a href="/telemedicina/">
+    <div>
+      Telemedicina médica
+      <span>Consulta online respiratória</span>
+    </div>
+    <b>→</b>
+  </a>
+</div>
+<!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_END -->
+ <!-- HERO PADRÃO PÁGINA INTERNA -->
 <section class="sl-page-hero">
   <div class="sl-container">
     <div class="sl-page-hero-inner">

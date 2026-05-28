@@ -2955,6 +2955,60 @@ body{
 </style>
 <!-- SOPRO:MENU_UNIFORME_FIX_END -->
 
+
+<!-- SOPRO:TELEMED_MOBILE_STRIP_START -->
+<style>
+  .sl-telemed-mobile-strip {
+    display:none;
+  }
+
+  @media (max-width:760px) {
+    .sl-telemed-mobile-strip {
+      display:block;
+      background:linear-gradient(90deg,#effdfb,#ffffff);
+      border-bottom:1px solid rgba(30,181,171,.18);
+      padding:10px 14px;
+    }
+
+    .sl-telemed-mobile-strip a {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      width:100%;
+      border:1px solid rgba(30,181,171,.25);
+      background:#ffffff;
+      border-radius:16px;
+      padding:12px 14px;
+      color:#0b3348 !important;
+      text-decoration:none !important;
+      font-weight:900;
+      box-shadow:0 12px 24px rgba(8,24,41,.05);
+    }
+
+    .sl-telemed-mobile-strip span {
+      display:block;
+      color:#07857d;
+      font-size:.78rem;
+      font-weight:850;
+      margin-top:2px;
+    }
+
+    .sl-telemed-mobile-strip b {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:34px;
+      height:34px;
+      border-radius:999px;
+      background:#eafffd;
+      color:#07857d;
+      border:1px solid rgba(30,181,171,.25);
+    }
+  }
+</style>
+<!-- SOPRO:TELEMED_MOBILE_STRIP_END -->
+
 </head>
 <body class="sl-typo-clean">
 
@@ -2990,6 +3044,18 @@ body{
       </a>
     </div>
 </header>
+<!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_START -->
+<div class="sl-telemed-mobile-strip">
+  <a href="/telemedicina/">
+    <div>
+      Telemedicina médica
+      <span>Consulta online respiratória</span>
+    </div>
+    <b>→</b>
+  </a>
+</div>
+<!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_END -->
+
 
   <div class="sl-page">
     <div class="sl-container">
