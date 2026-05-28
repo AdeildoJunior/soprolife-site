@@ -1233,9 +1233,43 @@ body{
   <link rel="manifest" href="/site.webmanifest?v=20260522b">
   <meta name="theme-color" content="#0b3348">
   <!-- SOPRO:FAVICON_END -->
+
+<!-- SOPRO:MENU_UNIFORME_FIX_START -->
+<style>
+  header nav a,
+  header nav a:visited,
+  .sl-nav a,
+  .sl-nav a:visited,
+  .sl-nav-link,
+  .sl-nav-link:visited {
+    color:#536a7d !important;
+    text-decoration:none !important;
+    font-weight:800 !important;
+  }
+
+  header nav a:hover,
+  .sl-nav a:hover,
+  .sl-nav-link:hover {
+    color:#07857d !important;
+  }
+
+  header nav a[href="/telemedicina/"],
+  header nav a[href="/telemedicina/"]:visited,
+  .sl-nav a[href="/telemedicina/"],
+  .sl-nav a[href="/telemedicina/"]:visited {
+    color:#536a7d !important;
+  }
+
+  header nav a[href="/telemedicina/"]:hover,
+  .sl-nav a[href="/telemedicina/"]:hover {
+    color:#07857d !important;
+  }
+</style>
+<!-- SOPRO:MENU_UNIFORME_FIX_END -->
+
 </head>
 <body> <!-- HEADER --> <header class="sl-header">
-<div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> 
+<div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a>
         <a href="/telemedicina/">Telemedicina</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
 </div> </nav>
 <a class="sl-header-social sl-header-instagram" href="https://www.instagram.com/soprolife/" target="_blank" rel="noopener" aria-label="Instagram da Sopro Life">
