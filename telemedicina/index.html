@@ -534,6 +534,258 @@
 </style>
 <!-- SOPRO:MENU_UNIFORME_FIX_END -->
 
+
+<!-- SOPRO:TELEMED_MOBILE_FIX_START -->
+<style>
+/* Ajuste mobile específico da página de Telemedicina */
+@media (max-width: 760px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
+  .sl-container {
+    width: calc(100% - 24px);
+  }
+
+  .sl-header-inner {
+    min-height: auto;
+    padding: 10px 0 8px;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .sl-logo img {
+    height: 46px;
+  }
+
+  .sl-whatsapp {
+    min-height: 36px;
+    padding: 0 14px;
+    font-size: .82rem;
+  }
+
+  .sl-nav {
+    order: 3;
+    width: 100%;
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 6px 2px 2px;
+    scrollbar-width: none;
+    font-size: .88rem;
+  }
+
+  .sl-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sl-hero {
+    padding: 28px 0 12px;
+  }
+
+  .sl-hero-grid {
+    grid-template-columns: 1fr !important;
+    gap: 18px;
+  }
+
+  .sl-kicker {
+    font-size: .68rem;
+    letter-spacing: .10em;
+    padding: 6px 10px;
+  }
+
+  h1 {
+    font-size: clamp(2.25rem, 12vw, 3.15rem);
+    line-height: .98;
+    letter-spacing: -.045em;
+    margin: 14px 0 12px;
+  }
+
+  .sl-lead {
+    font-size: .98rem;
+    line-height: 1.52;
+  }
+
+  .sl-side-card {
+    padding: 18px;
+    border-radius: 22px;
+    box-shadow: 0 16px 36px rgba(8,24,41,.07);
+  }
+
+  .sl-side-card h2 {
+    font-size: 1.18rem;
+  }
+
+  .sl-side-card p {
+    font-size: .94rem;
+  }
+
+  .sl-mode-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .sl-mode {
+    min-height: 70px;
+    padding: 10px 8px;
+    border-radius: 15px;
+    font-size: .82rem;
+    line-height: 1.1;
+  }
+
+  .sl-dot {
+    width: 12px;
+    height: 12px;
+    box-shadow: 0 0 0 4px rgba(30,181,171,.12);
+  }
+
+  .sl-search-section {
+    padding: 12px 0 44px;
+  }
+
+  .sl-search-box {
+    padding: 16px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+  }
+
+  .sl-filter-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  .sl-search-btn {
+    width: 100%;
+  }
+
+  .sl-list-title {
+    margin: 18px 0 10px;
+  }
+
+  .sl-doctor-card {
+    grid-template-columns: 1fr !important;
+    gap: 18px;
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .sl-doctor-main {
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .sl-avatar {
+    width: 68px;
+    height: 68px;
+    min-width: 68px;
+    font-size: 1.2rem;
+  }
+
+  .sl-doctor-name {
+    font-size: 1.12rem;
+    line-height: 1.18;
+  }
+
+  .sl-doctor-meta {
+    font-size: .9rem;
+    line-height: 1.35;
+  }
+
+  .sl-badges {
+    gap: 6px;
+  }
+
+  .sl-badge {
+    font-size: .76rem;
+    padding: 5px 8px;
+  }
+
+  .sl-doctor-note {
+    font-size: .92rem;
+  }
+
+  .sl-request-btn {
+    height: 46px;
+  }
+
+  .sl-info-strip {
+    margin-top: 16px;
+    padding: 14px 16px;
+    font-size: .92rem;
+  }
+
+  .sl-modal-backdrop {
+    align-items: flex-end;
+    padding: 10px;
+  }
+
+  .sl-modal {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 22px 22px 18px 18px;
+    overflow-y: auto;
+  }
+
+  .sl-modal-head {
+    padding: 14px 16px;
+  }
+
+  .sl-modal-head h2 {
+    font-size: 1.02rem;
+  }
+
+  .sl-modal-body {
+    padding: 16px;
+  }
+
+  .sl-slots {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 9px;
+  }
+
+  .sl-slot {
+    height: 42px;
+    border-radius: 11px;
+    font-size: .92rem;
+  }
+
+  footer {
+    padding: 24px 0;
+    font-size: .84rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .sl-container {
+    width: calc(100% - 20px);
+  }
+
+  .sl-logo img {
+    height: 42px;
+  }
+
+  .sl-whatsapp {
+    padding: 0 12px;
+    font-size: .78rem;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 12vw, 2.7rem);
+  }
+
+  .sl-mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sl-doctor-main {
+    flex-direction: row;
+  }
+}
+</style>
+<!-- SOPRO:TELEMED_MOBILE_FIX_END -->
+
 </head>
 
 <body>
