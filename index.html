@@ -3023,6 +3023,42 @@ body{
 
   <link rel="stylesheet" href="/assets/sopro-visual-system-v3.css?v=visual-v3">
   <link rel="stylesheet" href="/assets/sl-v3.css?v=1">
+<style>
+
+/* === SOPRO: alinhamento da seção Preparo na home === */
+.sl-align-preparo-home {
+  width: min(980px, calc(100% - 48px)) !important;
+  max-width: 980px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.sl-align-preparo-home > .sl-container,
+.sl-align-preparo-home .sl-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.sl-align-preparo-home .sl-card,
+.sl-align-preparo-home article,
+.sl-align-preparo-home .card {
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 760px) {
+  .sl-align-preparo-home {
+    width: min(100% - 32px, 980px) !important;
+  }
+}
+
+</style>
 </head>
 <body class="sl-typo-clean">
 
@@ -3303,7 +3339,7 @@ body{
       </section>
 
       <!-- PREPARO -->
-      <section class="sl-section">
+      <section class="sl-section sl-align-preparo-home">
         <div class="sl-section-header">
           <span class="sl-section-kicker">Preparo</span>
           <h2 class="sl-section-title">Como se preparar</h2>
