@@ -3009,6 +3009,283 @@ body{
 </style>
 <!-- SOPRO:TELEMED_MOBILE_STRIP_END -->
 
+
+<!-- SOPRO:HOME_TELEMED_FINAL_CSS_START -->
+<style>
+  .sl-home-service-grid{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:14px;
+    max-width:720px;
+    margin-top:26px;
+  }
+
+  .sl-home-service-card{
+    min-height:94px;
+    display:grid;
+    grid-template-columns:auto 1fr;
+    column-gap:12px;
+    row-gap:5px;
+    align-items:start;
+    padding:16px 18px;
+    border-radius:24px;
+    background:#fff;
+    border:1px solid rgba(30,181,171,.18);
+    color:#0b2239;
+    text-decoration:none;
+    box-shadow:0 14px 30px rgba(8,24,41,.045);
+  }
+
+  .sl-home-service-card:hover{
+    border-color:rgba(30,181,171,.42);
+    transform:translateY(-1px);
+  }
+
+  .sl-home-service-card strong{
+    display:block;
+    font-weight:900;
+    font-size:1rem;
+    line-height:1.15;
+  }
+
+  .sl-home-service-card small{
+    grid-column:2;
+    display:block;
+    color:#5c7688;
+    font-size:.9rem;
+    line-height:1.35;
+    font-weight:650;
+  }
+
+  .sl-home-service-dot{
+    width:10px;
+    height:10px;
+    margin-top:4px;
+    border-radius:999px;
+    background:#1eb5ab;
+    box-shadow:0 0 0 5px rgba(30,181,171,.12);
+  }
+
+  .sl-home-tele-card{
+    padding:26px !important;
+    border-radius:28px !important;
+    overflow:hidden;
+    background:linear-gradient(180deg,#ffffff 0%,#f6fcfd 100%) !important;
+    border:1px solid rgba(30,181,171,.16) !important;
+    box-shadow:0 24px 54px rgba(8,24,41,.08) !important;
+  }
+
+  .sl-home-tele-card-head span{
+    display:inline-flex;
+    padding:7px 12px;
+    border-radius:999px;
+    background:rgba(30,181,171,.12);
+    color:#087c76;
+    font-size:.74rem;
+    font-weight:950;
+    letter-spacing:.10em;
+    text-transform:uppercase;
+  }
+
+  .sl-home-tele-card-head h2{
+    margin:12px 0 8px;
+    color:#0b2239;
+    font-size:1.65rem;
+    line-height:1.05;
+  }
+
+  .sl-home-tele-card-head p{
+    margin:0;
+    color:#5d7788;
+    line-height:1.55;
+  }
+
+  .sl-home-tele-illustration{
+    position:relative;
+    margin-top:18px;
+    min-height:230px;
+    border-radius:24px;
+    background:
+      radial-gradient(circle at 18% 18%, rgba(30,181,171,.18), transparent 35%),
+      radial-gradient(circle at 88% 22%, rgba(11,34,57,.10), transparent 34%),
+      linear-gradient(135deg,#eaf8f8 0%,#dff4f3 54%,#f5fbfc 100%);
+    border:1px solid rgba(30,181,171,.16);
+    overflow:hidden;
+  }
+
+  .sl-home-tele-window{
+    position:absolute;
+    inset:22px;
+    border-radius:22px;
+    background:#fff;
+    border:1px solid rgba(11,34,57,.08);
+    box-shadow:0 18px 40px rgba(8,24,41,.09);
+    overflow:hidden;
+  }
+
+  .sl-home-tele-window-bar{
+    height:34px;
+    display:flex;
+    align-items:center;
+    gap:7px;
+    padding:0 14px;
+    background:#f8fbfc;
+    border-bottom:1px solid rgba(11,34,57,.06);
+  }
+
+  .sl-home-tele-window-bar i{
+    width:9px;
+    height:9px;
+    border-radius:50%;
+    background:#c7d6df;
+  }
+
+  .sl-home-tele-window-body{
+    height:calc(100% - 34px);
+    display:grid;
+    grid-template-columns:118px 1fr;
+    gap:18px;
+    align-items:center;
+    padding:18px;
+  }
+
+  .sl-home-doctor-art{
+    position:relative;
+    height:126px;
+  }
+
+  .sl-home-doctor-head{
+    position:absolute;
+    left:50%;
+    top:6px;
+    width:48px;
+    height:48px;
+    transform:translateX(-50%);
+    border-radius:50%;
+    background:linear-gradient(180deg,#ffd7bf,#f1c1a8);
+    border:2px solid rgba(11,34,57,.06);
+  }
+
+  .sl-home-doctor-coat{
+    position:absolute;
+    left:50%;
+    bottom:8px;
+    width:96px;
+    height:82px;
+    transform:translateX(-50%);
+    border-radius:28px 28px 18px 18px;
+    background:linear-gradient(180deg,#fff,#f3f7f9);
+    border:2px solid rgba(11,34,57,.06);
+  }
+
+  .sl-home-doctor-steth{
+    position:absolute;
+    left:50%;
+    bottom:48px;
+    width:22px;
+    height:22px;
+    transform:translateX(-50%);
+    border-radius:50%;
+    background:#1eb5ab;
+    box-shadow:0 0 0 7px rgba(30,181,171,.12);
+  }
+
+  .sl-home-tele-lines strong{
+    display:block;
+    margin-bottom:10px;
+    color:#0b2239;
+    font-size:1.08rem;
+    line-height:1.15;
+  }
+
+  .sl-home-tele-lines span{
+    display:block;
+    margin:7px 0;
+    padding:8px 10px;
+    border-radius:999px;
+    background:#f2fbfb;
+    color:#58748a;
+    font-weight:750;
+    font-size:.9rem;
+  }
+
+  .sl-home-tele-medics{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    margin-top:16px;
+  }
+
+  .sl-home-tele-medics div{
+    padding:13px 14px;
+    border-radius:18px;
+    background:#fff;
+    border:1px solid rgba(30,181,171,.16);
+  }
+
+  .sl-home-tele-medics strong{
+    display:block;
+    color:#0b2239;
+    font-size:.95rem;
+    line-height:1.2;
+    margin-bottom:4px;
+  }
+
+  .sl-home-tele-medics span{
+    display:block;
+    color:#5d7788;
+    font-size:.84rem;
+    line-height:1.35;
+  }
+
+  .sl-home-tele-main-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:44px;
+    margin-top:16px;
+    border-radius:999px;
+    background:#1eb5ab;
+    color:#fff !important;
+    font-weight:900;
+    text-decoration:none;
+    box-shadow:0 12px 24px rgba(30,181,171,.20);
+  }
+
+  .sl-home-tele-main-btn:hover{
+    background:#149d95;
+  }
+
+  @media(max-width:760px){
+    .sl-home-service-grid{
+      grid-template-columns:1fr;
+      margin-top:20px;
+    }
+
+    .sl-home-service-card{
+      min-height:auto;
+    }
+
+    .sl-home-tele-medics{
+      grid-template-columns:1fr;
+    }
+
+    .sl-home-tele-window-body{
+      grid-template-columns:1fr;
+      text-align:center;
+    }
+
+    .sl-home-doctor-art{
+      height:105px;
+    }
+
+    .sl-home-tele-illustration{
+      min-height:310px;
+    }
+  }
+</style>
+<!-- SOPRO:HOME_TELEMED_FINAL_CSS_END -->
+
 </head>
 <body class="sl-typo-clean">
 
@@ -3068,16 +3345,33 @@ body{
           <div>
             <div class="sl-hero-kicker">Respiração é vida</div>
             <h1 class="sl-hero-title">Faça sua <span>Espirometria</span> com quem vive Pneumologia.</h1>
-            <p class="sl-hero-subtitle">
-              Exames bem feitos, interpretados por pneumologistas e com orientação clara para você e para o médico assistente.
-            </p>
+            <p class="sl-hero-subtitle">Espirometria com e sem broncodilatador, laudos padronizados e apoio médico por teleconsulta quando houver indicação clínica.</p>
 
-            <ul class="sl-hero-list">
-              <li>Espirometria simples e com broncodilatador</li>
-              <li>Protocolos alinhados às diretrizes nacionais</li>
-              <li>Parcerias com clínicas, empresas e médicos</li>
-              <li>Laudo padronizado, com gráficos e conclusões objetivas</li>
-            </ul>
+            <div class="sl-home-service-grid">
+  <a class="sl-home-service-card" href="/#agendamento">
+    <span class="sl-home-service-dot"></span>
+    <strong>Espirometria</strong>
+    <small>Simples e com broncodilatador, com laudo padronizado.</small>
+  </a>
+
+  <a class="sl-home-service-card" href="/telemedicina/">
+    <span class="sl-home-service-dot"></span>
+    <strong>Teleconsulta médica</strong>
+    <small>Avaliação online e solicitação de exame quando houver indicação.</small>
+  </a>
+
+  <a class="sl-home-service-card" href="/servicos/">
+    <span class="sl-home-service-dot"></span>
+    <strong>Parcerias clínicas</strong>
+    <small>Apoio para clínicas, médicos, empresas e PCMSO.</small>
+  </a>
+
+  <a class="sl-home-service-card" href="/espirometria-rio-de-janeiro/">
+    <span class="sl-home-service-dot"></span>
+    <strong>Protocolos e qualidade</strong>
+    <small>Rotina técnica, gráficos e conclusões objetivas.</small>
+  </a>
+</div>
 
             <div class="sl-hero-actions">
 
@@ -3105,31 +3399,52 @@ body{
 
           </div>
 
-          <aside class="sl-hero-card">
-            <div class="sl-hero-card-header">
-              <div>
-                <div class="sl-hero-card-title">Modos de atendimento</div>
-                <div class="sl-hero-card-badge">Escolha o formato que encaixa melhor na sua rotina.</div>
-              </div>
-            </div>
+          <aside class="sl-hero-card sl-home-tele-card">
+  <div class="sl-home-tele-card-head">
+    <span>Telemedicina respiratória</span>
+    <h2>Consulta médica online</h2>
+    <p>
+      Médicas parceiras para avaliação respiratória, orientação clínica e pedido de
+      espirometria quando houver indicação.
+    </p>
+  </div>
 
-            <div class="sl-modes">
-              <a class="sl-mode-pill" href="/servicos/#ambulatorial">Ambulatorial</a>
-              <a class="sl-mode-pill" href="/servicos/#domiciliar">Domiciliar</a>
-              <a class="sl-mode-pill" href="/servicos/#empresas">Empresas / PCMSO</a>
-            </div>
+  <div class="sl-home-tele-illustration" aria-hidden="true">
+    <div class="sl-home-tele-window">
+      <div class="sl-home-tele-window-bar">
+        <i></i><i></i><i></i>
+      </div>
 
-            <div class="sl-card-divider"></div>
+      <div class="sl-home-tele-window-body">
+        <div class="sl-home-doctor-art">
+          <div class="sl-home-doctor-head"></div>
+          <div class="sl-home-doctor-coat"></div>
+          <div class="sl-home-doctor-steth"></div>
+        </div>
 
-            <div class="sl-hero-mini-grid">
-              <div><strong>Laudo médico</strong><br>Emitido por pneumologista com experiência em função pulmonar.</div>
-              <div><strong>Equipamento portátil</strong><br>Calibração diária e filtros descartáveis individuais.</div>
-            </div>
+        <div class="sl-home-tele-lines">
+          <strong>Teleconsulta</strong>
+          <span>Avaliação respiratória</span>
+          <span>Orientação médica</span>
+          <span>Exame quando indicado</span>
+        </div>
+      </div>
+    </div>
+  </div>
 
-            <div class="sl-hero-card-footer">
-              Para clínicas, hospitais e empresas, montamos pacotes sob medida com volume de exames e treinamento da equipe.
-            </div>
-          </aside>
+  <div class="sl-home-tele-medics">
+    <div>
+      <strong>Dra. Carla Ferreira</strong>
+      <span>Clínica médica / Pneumologia</span>
+    </div>
+    <div>
+      <strong>Dra. Ana Cristina</strong>
+      <span>Pneumologia</span>
+    </div>
+  </div>
+
+  <a class="sl-home-tele-main-btn" href="/telemedicina/">Ver telemedicina</a>
+</aside>
         </div>
       </section>
 
