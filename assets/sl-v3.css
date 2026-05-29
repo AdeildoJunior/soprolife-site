@@ -594,3 +594,55 @@ main.sl-container > .sl-section{
     padding-right: 16px !important;
   }
 }
+
+/* ============================================================
+   REFINAMENTO TELECONSULTA MOBILE STRIP — v3.4.0 (29-mai-2026)
+   Hierarquia título/subtítulo + respiro + tipografia
+   ============================================================ */
+.sl-telemed-mobile-strip a{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  text-decoration: none;
+}
+.sl-telemed-mobile-strip .sl-tms__text{
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.25;
+  flex: 1;
+  min-width: 0;
+}
+.sl-telemed-mobile-strip .sl-tms__title{
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  display: block;
+}
+.sl-telemed-mobile-strip .sl-tms__subtitle{
+  font-size: 12.5px;
+  font-weight: 400;
+  color: rgba(255,255,255,.78);
+  letter-spacing: 0;
+  text-transform: none;
+  display: block;
+  line-height: 1.3;
+}
+.sl-telemed-mobile-strip .sl-tms__arrow{
+  font-size: 20px;
+  font-weight: 600;
+  opacity: .92;
+  flex-shrink: 0;
+  transition: transform .2s ease;
+}
+.sl-telemed-mobile-strip a:hover .sl-tms__arrow,
+.sl-telemed-mobile-strip a:active .sl-tms__arrow{
+  transform: translateX(3px);
+}
+@media (max-width: 360px){
+  .sl-telemed-mobile-strip .sl-tms__title{ font-size: 14px; }
+  .sl-telemed-mobile-strip .sl-tms__subtitle{ font-size: 12px; }
+}
