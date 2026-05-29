@@ -562,3 +562,35 @@ html body .sl-tele-banner a[href*="telemedicina"]:hover{
 .sl-card{
   transition: transform .2s, box-shadow .2s !important;
 }
+
+/* ============================================================
+   FIX ALINHAMENTO ESPIROMETRIA — v3.3.3
+   Unifica largura do <main.sl-container> com o hero (1120px)
+   Data: ajuste pontual pedido pelo Adeildo
+   ============================================================ */
+main.sl-container,
+.sl-espiro-hero > .sl-container,
+.sl-espiro-hero-wrap{
+  max-width: 1120px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+  box-sizing: border-box !important;
+}
+
+/* Garante que a section PREPARO e suas irmãs respeitem o wrap */
+main.sl-container > .sl-section{
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+@media (max-width: 720px){
+  main.sl-container{
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+}
