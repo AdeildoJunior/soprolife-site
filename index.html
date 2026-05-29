@@ -48,21 +48,21 @@
     .sl-hero-list li::before{content:"•";color:var(--sl-accent);font-weight:700;margin-right:6px}
     .sl-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:999px;cursor:pointer;font-weight:600;letter-spacing:.02em;transition:transform .15s,box-shadow .15s;background:#f5f9f9}
     .sl-btn-primary{padding:11px 22px;background:linear-gradient(135deg,var(--sl-accent),#18a197);color:#fff;box-shadow:var(--sl-shadow-soft)}
-    .sl-btn-primary:hover{transform:translateY(-1px);box-shadow:0 18px 40px rgba(0,0,0,.16)}
-    .sl-btn-outline{padding:9px 18px;border:1px solid rgba(30,181,171,.28);color:var(--sl-primary-dark);background:rgba(255,255,255,.8);backdrop-filter:blur(8px)}
+    .sl-btn-primary:hover{transform:translateY(-1px);box-shadow:0 18px 40px rgba(0,0,0.16)}
+    .sl-btn-outline{padding:9px 18px;border:1px solid rgba(30,181,171.28);color:var(--sl-primary-dark);background:rgba(255,255,255.8);backdrop-filter:blur(8px)}
     .sl-btn-outline:hover{background:#fff;box-shadow:var(--sl-shadow-light)}
     .sl-hero-note{font-size:.82rem;color:var(--sl-text-soft);margin-top:6px}
-    .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border-radius:999px;background:rgba(30,181,171,.08);font-size:.8rem;margin-top:10px;color:var(--sl-text-soft)}
+    .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border-radius:999px;background:rgba(30,181,171.08);font-size:.8rem;margin-top:10px;color:var(--sl-text-soft)}
     .sl-dot{width:8px;height:8px;border-radius:999px;background:#23c552}
 
     /* Card lateral */
-    .sl-hero-card{background:#fff;border-radius:24px;box-shadow:var(--sl-shadow-soft);padding:22px 20px 18px;border:1px solid rgba(0,0,0,.02)}
+    .sl-hero-card{background:#fff;border-radius:24px;box-shadow:var(--sl-shadow-soft);padding:22px 20px 18px;border:1px solid rgba(0,0,0.02)}
     .sl-hero-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px}
     .sl-hero-card-title{font-size:1.05rem;font-weight:600}
     .sl-tag{font-size:.75rem;padding:4px 10px;border-radius:999px;background:var(--sl-bg-strong);color:var(--sl-primary-dark);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
     .sl-hero-card-badge{font-size:.83rem;color:var(--sl-text-soft);margin-bottom:10px}
     .sl-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}
-    .sl-mode-pill{border-radius:999px;border:1px dashed rgba(30,181,171,.35);padding:6px 8px;font-size:.77rem;text-align:center;color:var(--sl-text-soft)}
+    .sl-mode-pill{border-radius:999px;border:1px dashed rgba(30,181,171.35);padding:6px 8px;font-size:.77rem;text-align:center;color:var(--sl-text-soft)}
     .sl-card-divider{margin:12px 0;height:1px;background:linear-gradient(90deg,transparent,#e1f1f4,transparent)}
     .sl-hero-mini-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;font-size:.78rem;color:var(--sl-text-soft)}
     .sl-hero-mini-grid strong{font-size:.86rem;color:var(--sl-text-dark)}
@@ -109,13 +109,13 @@
     .sl-cta-small{font-size:.8rem;opacity:.88}
 
     /* Barra fixa WhatsApp */
-    .sl-whatsapp-bar{position:fixed;left:0;right:0;bottom:0;background:var(--sl-green);color:#fff;font-size:.94rem;z-index:999;box-shadow:0 -4px 16px rgba(0,0,0,.16)}
+    .sl-whatsapp-bar{position:fixed;left:0;right:0;bottom:0;background:var(--sl-green);color:#fff;font-size:.94rem;z-index:999;box-shadow:0 -4px 16px rgba(0,0,0.16)}
     .sl-whatsapp-bar a{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px}
     .sl-whatsapp-bar strong{font-weight:600}
 
     /* Responsivo */
     @media (max-width:900px){
-      .sl-hero-grid,.sl-two-column,.sl-card-grid,.sl-cta-box{grid-template-columns:minmax(0,1fr)}
+      .sl-hero-grid.sl-two-column.sl-card-grid.sl-cta-box{grid-template-columns:minmax(0,1fr)}
       .sl-cta-actions{justify-content:flex-start}
     }
     @media (max-width:720px){
@@ -148,15 +148,13 @@
   color: var(--sl-text-dark);
 }
 
-.sl-links-list,
-.sl-social-list{
+.sl-links-list.sl-social-list{
   list-style: none;
   padding-left: 0;
   margin: 4px 0 0;
 }
 
-.sl-links-list li + li,
-.sl-social-list li + li{
+.sl-links-list li + li.sl-social-list li + li{
   margin-top: 3px;
 }
 
@@ -281,18 +279,17 @@
   left:0;
   min-width:260px;
   background:#fff;
-  border:1px solid rgba(0,0,0,.06);
+  border:1px solid rgba(0,0,0.06);
   border-radius:12px;
   padding:8px;
-  box-shadow:0 12px 30px rgba(0,0,0,.08);
+  box-shadow:0 12px 30px rgba(0,0,0.08);
   opacity:0;
   transform:translateY(6px);
   pointer-events:none;
   transition:opacity .16s ease,transform .16s ease;
   z-index:40;
 }
-.sl-has-sub:hover .sl-submenu,
-.sl-has-sub:focus-within .sl-submenu{
+.sl-has-sub:hover .sl-submenu.sl-has-sub:focus-within .sl-submenu{
   opacity:1;
   transform:translateY(0);
   pointer-events:auto;
@@ -307,7 +304,7 @@
   color:var(--sl-text-dark);
 }
 .sl-submenu a:hover{
-  background:rgba(2,179,154,.08);
+  background:rgba(2,179,154.08);
   color:var(--sl-primary);
 }
 @media (max-width:960px){
@@ -358,14 +355,12 @@
 .sl-typo-clean h2{ font-size: 1.55rem; line-height: 1.18; margin: 0 0 10px; }
 .sl-typo-clean h3{ font-size: 1.18rem; line-height: 1.22; margin: 0 0 8px; }
 
-.sl-typo-clean p,
-.sl-typo-clean li{
+.sl-typo-clean p.sl-typo-clean li{
   font-size: 1rem;
   line-height: 1.55;
 }
 
-.sl-typo-clean small,
-.sl-typo-clean .muted{
+.sl-typo-clean small.sl-typo-clean .muted{
   font-size: 0.95rem;
 }
 
@@ -376,18 +371,12 @@
 .sl-typo-clean ul{ margin: 10px 0 0 18px; }
 
 /* Evita “texto miúdo demais” em kicker/subtitle */
-.sl-typo-clean [class*="kicker"],
-.sl-typo-clean [class*="subtitle"],
-.sl-typo-clean [class*="sub"]{
+.sl-typo-clean [class*="kicker"].sl-typo-clean [class*="subtitle"].sl-typo-clean [class*="sub"]{
   font-size: 0.98rem;
 }
 
 /* Mantém tudo alinhado no mesmo eixo de leitura */
-.sl-typo-clean h1,
-.sl-typo-clean h2,
-.sl-typo-clean h3,
-.sl-typo-clean p,
-.sl-typo-clean ul{
+.sl-typo-clean h1.sl-typo-clean h2.sl-typo-clean h3.sl-typo-clean p.sl-typo-clean ul{
   max-width: 72ch;
 }
 
@@ -397,7 +386,7 @@
   .sl-typo-clean h2{ font-size: 1.35rem; }
 }
 </style>
-<style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
+<style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
 <style id="sl-wa-override">
 /* WhatsApp brand */
 :root{ --wa-green:#25D366; --wa-dark:#075E54; }
@@ -424,10 +413,10 @@
 <style>
   .sl-testimonials{padding:48px 0}
   .sl-tframe{
-    border:2px solid rgba(0,128,128,.35);
+    border:2px solid rgba(0,128,128.35);
     border-radius:18px;
     background:#fff;
-    box-shadow:0 14px 34px rgba(0,0,0,.10);
+    box-shadow:0 14px 34px rgba(0,0,0.10);
     padding:18px 16px 16px;
   }
   .sl-thead{text-align:center;margin:6px 0 14px}
@@ -467,24 +456,24 @@
   }
 
   .sl-tcard{
-    border:1px solid rgba(0,128,128,.25);
+    border:1px solid rgba(0,128,128.25);
     border-radius:14px;
     padding:12px 12px 10px;
     background:#fff;
-    box-shadow:0 10px 22px rgba(0,0,0,.06);
+    box-shadow:0 10px 22px rgba(0,0,0.06);
   }
   .sl-tcard__head{display:flex;gap:10px;align-items:center;margin-bottom:10px}
   .sl-tcard__avatar{
     width:34px;height:34px;border-radius:10px;
     display:grid;place-items:center;
-    background:rgba(0,0,0,.06);font-size:16px
+    background:rgba(0,0,0.06);font-size:16px
   }
   .sl-tcard__name{font-weight:700;line-height:1.1}
   .sl-tcard__stars{font-size:.95rem;letter-spacing:.08em;opacity:.9}
   .sl-tcard__text{margin:0;opacity:.9}
 
   .sl-tdots{display:flex;justify-content:center;gap:8px;margin-top:12px}
-  .sl-tdot{width:7px;height:7px;border-radius:999px;background:rgba(0,0,0,.20);opacity:.35}
+  .sl-tdot{width:7px;height:7px;border-radius:999px;background:rgba(0,0,0.20);opacity:.35}
   .sl-tdot--1{animation: slDot 25s infinite; animation-delay:0s}
   .sl-tdot--2{animation: slDot 25s infinite; animation-delay:5s}
   .sl-tdot--3{animation: slDot 25s infinite; animation-delay:10s}
@@ -492,10 +481,10 @@
   .sl-tdot--5{animation: slDot 25s infinite; animation-delay:20s}
 
   @keyframes slDot{
-    0%{opacity:1;background:rgba(0,0,0,.55)}
-    18%{opacity:1;background:rgba(0,0,0,.55)}
-    20%{opacity:.35;background:rgba(0,0,0,.20)}
-    100%{opacity:.35;background:rgba(0,0,0,.20)}
+    0%{opacity:1;background:rgba(0,0,0.55)}
+    18%{opacity:1;background:rgba(0,0,0.55)}
+    20%{opacity:.35;background:rgba(0,0,0.20)}
+    100%{opacity:.35;background:rgba(0,0,0.20)}
   }
 
   @media (max-width:980px){
@@ -578,7 +567,7 @@
   --sl-clean-max: 1120px;
   --sl-clean-text: #102a43;
   --sl-clean-muted: #5f7485;
-  --sl-clean-line: rgba(11,34,57,.08);
+  --sl-clean-line: rgba(11,34,57.08);
   --sl-clean-soft: #f7fbfc;
 }
 
@@ -592,9 +581,7 @@ body{
 }
 
 /* Containers menos largos para leitura melhor */
-.sl-wrap,
-.sl-container,
-.sl-container--wide{
+.sl-wrap.sl-container.sl-container--wide{
   max-width: var(--sl-clean-max) !important;
   padding-left: 24px !important;
   padding-right: 24px !important;
@@ -602,9 +589,9 @@ body{
 
 /* Header mais leve */
 .sl-header{
-  background: rgba(255,255,255,.94) !important;
+  background: rgba(255,255,255.94) !important;
   border-bottom: 1px solid var(--sl-clean-line) !important;
-  box-shadow: 0 8px 24px rgba(15,35,52,.035) !important;
+  box-shadow: 0 8px 24px rgba(15,35,52.035) !important;
 }
 
 .sl-header-in{
@@ -628,7 +615,7 @@ body{
 }
 
 .sl-nav-cta{
-  box-shadow: 0 8px 18px rgba(37,211,102,.18) !important;
+  box-shadow: 0 8px 18px rgba(37,211,102.18) !important;
   font-weight: 700 !important;
   padding: 9px 18px !important;
 }
@@ -636,7 +623,7 @@ body{
 /* Hero mais premium e com menos cara de bloco cheio */
 .sl-page{
   background:
-    radial-gradient(circle at 12% 0%, rgba(30,181,171,.10), transparent 34%),
+    radial-gradient(circle at 12% 0%, rgba(30,181,171.10), transparent 34%),
     linear-gradient(180deg,#ffffff 0%,#f8fcfd 42%,#ffffff 100%) !important;
 }
 
@@ -650,11 +637,7 @@ body{
   align-items: center !important;
 }
 
-.sl-hero-kicker,
-.sl-section-kicker,
-.sl-tagline,
-.sl-pill-label,
-.sl-tkicker{
+.sl-hero-kicker.sl-section-kicker.sl-tagline.sl-pill-label.sl-tkicker{
   letter-spacing: .14em !important;
   font-size: .74rem !important;
   color: #0f8f86 !important;
@@ -686,21 +669,16 @@ body{
 }
 
 .sl-hero-list li{
-  background: rgba(255,255,255,.72) !important;
-  border: 1px solid rgba(30,181,171,.10) !important;
+  background: rgba(255,255,255.72) !important;
+  border: 1px solid rgba(30,181,171.10) !important;
   border-radius: 999px !important;
   padding: 7px 12px !important;
 }
 
 /* Cards mais elegantes */
-.sl-hero-card,
-.sl-card,
-.sl-highlight-box,
-.sl-tabs,
-.sl-cta-box,
-.sl-tcard{
-  border: 1px solid rgba(11,34,57,.07) !important;
-  box-shadow: 0 18px 45px rgba(15,35,52,.07) !important;
+.sl-hero-card.sl-card.sl-highlight-box.sl-tabs.sl-cta-box.sl-tcard{
+  border: 1px solid rgba(11,34,57.07) !important;
+  box-shadow: 0 18px 45px rgba(15,35,52.07) !important;
 }
 
 .sl-hero-card{
@@ -708,14 +686,12 @@ body{
   padding: 28px !important;
 }
 
-.sl-card,
-.sl-highlight-box{
+.sl-card.sl-highlight-box{
   border-radius: 22px !important;
   padding: 22px !important;
 }
 
-.sl-card h3,
-.sl-hero-card-title{
+.sl-card h3.sl-hero-card-title{
   letter-spacing: -.015em !important;
 }
 
@@ -730,29 +706,19 @@ body{
   margin-bottom: 28px !important;
 }
 
-.sl-section-title,
-.sl-ttitle{
+.sl-section-title.sl-ttitle{
   font-size: clamp(1.65rem, 2.4vw, 2.35rem) !important;
   line-height: 1.12 !important;
   letter-spacing: -.035em !important;
 }
 
-.sl-section-subtitle,
-.sl-tsub,
-.sl-text-block p,
-.sl-card,
-.sl-bullet-list,
-.sl-tab-panel,
-.sl-hero-card-badge,
-.sl-hero-card-footer{
+.sl-section-subtitle.sl-tsub.sl-text-block p.sl-card.sl-bullet-list.sl-tab-panel.sl-hero-card-badge.sl-hero-card-footer{
   color: var(--sl-clean-muted) !important;
   line-height: 1.65 !important;
 }
 
 /* Grades mais limpas */
-.sl-card-grid,
-.sl-grid,
-.sl-two-column{
+.sl-card-grid.sl-grid.sl-two-column{
   gap: 24px !important;
 }
 
@@ -791,7 +757,7 @@ body{
 
 /* Barra fixa mais discreta */
 .sl-whatsapp-bar{
-  box-shadow: 0 -8px 24px rgba(0,0,0,.12) !important;
+  box-shadow: 0 -8px 24px rgba(0,0,0.12) !important;
 }
 
 .sl-whatsapp-bar a{
@@ -800,9 +766,7 @@ body{
 
 /* Responsivo */
 @media (max-width: 900px){
-  .sl-wrap,
-  .sl-container,
-  .sl-container--wide{
+  .sl-wrap.sl-container.sl-container--wide{
     padding-left: 18px !important;
     padding-right: 18px !important;
   }
@@ -825,9 +789,7 @@ body{
     padding: 22px !important;
   }
 
-  .sl-card,
-  .sl-highlight-box,
-  .sl-tabs{
+  .sl-card.sl-highlight-box.sl-tabs{
     padding: 18px !important;
   }
 }
@@ -853,14 +815,13 @@ body{
 /* SoproLife Clean Visual v2 — ajustes finos */
 
 /* Corrige header/menu também nas páginas que não tinham CSS completo do topo */
-header,
-.sl-header{
+header.sl-header{
   position: sticky !important;
   top: 0 !important;
   z-index: 40 !important;
-  background: rgba(255,255,255,.96) !important;
-  border-bottom: 1px solid rgba(11,34,57,.08) !important;
-  box-shadow: 0 8px 24px rgba(15,35,52,.035) !important;
+  background: rgba(255,255,255.96) !important;
+  border-bottom: 1px solid rgba(11,34,57.08) !important;
+  box-shadow: 0 8px 24px rgba(15,35,52.035) !important;
 }
 
 .sl-header-in{
@@ -936,7 +897,7 @@ header,
   font-size: .92rem !important;
   font-weight: 800 !important;
   text-decoration: none !important;
-  box-shadow: 0 8px 18px rgba(37,211,102,.18) !important;
+  box-shadow: 0 8px 18px rgba(37,211,102.18) !important;
   white-space: nowrap !important;
 }
 
@@ -951,25 +912,23 @@ header,
   left: 0 !important;
   min-width: 260px !important;
   background: #fff !important;
-  border: 1px solid rgba(11,34,57,.08) !important;
+  border: 1px solid rgba(11,34,57.08) !important;
   border-radius: 14px !important;
   padding: 8px !important;
-  box-shadow: 0 16px 34px rgba(15,35,52,.10) !important;
+  box-shadow: 0 16px 34px rgba(15,35,52.10) !important;
   opacity: 0 !important;
   transform: translateY(8px) !important;
   pointer-events: none !important;
   transition: opacity .16s ease, transform .16s ease !important;
 }
 
-.sl-has-sub:hover .sl-submenu,
-.sl-has-sub:focus-within .sl-submenu{
+.sl-has-sub:hover .sl-submenu.sl-has-sub:focus-within .sl-submenu{
   opacity: 1 !important;
   transform: translateY(0) !important;
   pointer-events: auto !important;
 }
 
-.sl-submenu-link,
-.sl-submenu a{
+.sl-submenu-link.sl-submenu a{
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
@@ -995,14 +954,14 @@ header,
   background: #17a99f !important;
   color: #fff !important;
   border: 0 !important;
-  box-shadow: 0 8px 18px rgba(30,181,171,.12) !important;
+  box-shadow: 0 8px 18px rgba(30,181,171.12) !important;
 }
 
 /* Barra inferior: menos gritante e mais premium */
 .sl-whatsapp-bar{
-  background: rgba(37,211,102,.94) !important;
+  background: rgba(37,211,102.94) !important;
   font-size: .88rem !important;
-  box-shadow: 0 -8px 22px rgba(0,0,0,.10) !important;
+  box-shadow: 0 -8px 22px rgba(0,0,0.10) !important;
 }
 
 .sl-whatsapp-bar a{
@@ -1010,8 +969,7 @@ header,
 }
 
 /* Evita excesso de largura visual nas páginas internas */
-main.sl-container,
-.sl-container{
+main.sl-container.sl-container{
   max-width: 1120px !important;
 }
 
@@ -1042,32 +1000,19 @@ main.sl-container,
 /* SoproLife Clean Visual v4 — padronização de listas, cards e alinhamento */
 
 /* Mantém eixo visual igual nas páginas internas */
-main.sl-container,
-.sl-container,
-.sl-wrap,
-.sl-container--wide{
+main.sl-container.sl-container.sl-wrap.sl-container--wide{
   max-width: 1120px !important;
 }
 
 /* Padroniza cards e caixas informativas */
-.sl-card,
-.sl-highlight,
-.sl-highlight-box,
-.sl-tabs,
-.sl-cta,
-.sl-cta-box{
+.sl-card.sl-highlight.sl-highlight-box.sl-tabs.sl-cta.sl-cta-box{
   border-radius: 24px !important;
-  border: 1px solid rgba(11,34,57,.07) !important;
-  box-shadow: 0 18px 45px rgba(15,35,52,.065) !important;
+  border: 1px solid rgba(11,34,57.07) !important;
+  box-shadow: 0 18px 45px rgba(15,35,52.065) !important;
 }
 
 /* Padroniza listas internas sem mexer nas pílulas da home */
-.sl-bullets,
-.sl-bullet-list,
-.sl-card ul,
-.sl-highlight ul,
-.sl-highlight-box ul,
-.sl-tab-panel ul{
+.sl-bullets.sl-bullet-list.sl-card ul.sl-highlight ul.sl-highlight-box ul.sl-tab-panel ul{
   list-style: none !important;
   padding-left: 0 !important;
   margin: 12px 0 0 !important;
@@ -1076,12 +1021,7 @@ main.sl-container,
 }
 
 /* Marcador teal único para listas técnicas */
-.sl-bullets li,
-.sl-bullet-list li,
-.sl-card ul li,
-.sl-highlight ul li,
-.sl-highlight-box ul li,
-.sl-tab-panel ul li{
+.sl-bullets li.sl-bullet-list li.sl-card ul li.sl-highlight ul li.sl-highlight-box ul li.sl-tab-panel ul li{
   position: relative !important;
   padding-left: 22px !important;
   margin: 0 !important;
@@ -1090,12 +1030,7 @@ main.sl-container,
 }
 
 /* Bolinha discreta e padronizada */
-.sl-bullets li::before,
-.sl-bullet-list li::before,
-.sl-card ul li::before,
-.sl-highlight ul li::before,
-.sl-highlight-box ul li::before,
-.sl-tab-panel ul li::before{
+.sl-bullets li::before.sl-bullet-list li::before.sl-card ul li::before.sl-highlight ul li::before.sl-highlight-box ul li::before.sl-tab-panel ul li::before{
   content: "" !important;
   position: absolute !important;
   left: 0 !important;
@@ -1104,7 +1039,7 @@ main.sl-container,
   height: 7px !important;
   border-radius: 999px !important;
   background: #1eb5ab !important;
-  box-shadow: 0 0 0 4px rgba(30,181,171,.10) !important;
+  box-shadow: 0 0 0 4px rgba(30,181,171.10) !important;
 }
 
 /* A home mantém pílulas no hero, mas com marcador mais limpo */
@@ -1124,17 +1059,12 @@ main.sl-container,
 }
 
 /* Alinha melhor grids internos entre páginas */
-.sl-two-col,
-.sl-two-column,
-.sl-card-grid,
-.sl-grid{
+.sl-two-col.sl-two-column.sl-card-grid.sl-grid{
   gap: 26px !important;
 }
 
 /* Títulos internos mais consistentes */
-.sl-section-title,
-.sl-ttitle,
-.sl-cta-title{
+.sl-section-title.sl-ttitle.sl-cta-title{
   letter-spacing: -.03em !important;
 }
 
@@ -1143,43 +1073,28 @@ main.sl-container,
 }
 
 /* Cards de serviços com CTA alinhado no fim */
-.sl-grid .sl-card,
-.sl-card-grid .sl-card{
+.sl-grid .sl-card.sl-card-grid .sl-card{
   display: flex !important;
   flex-direction: column !important;
 }
 
-.sl-grid .sl-card .sl-actions,
-.sl-card-grid .sl-card .sl-actions{
+.sl-grid .sl-card .sl-actions.sl-card-grid .sl-card .sl-actions{
   margin-top: auto !important;
   padding-top: 16px !important;
 }
 
 /* Evita que listas fiquem visualmente coladas em parágrafos */
-.sl-text-block p + .sl-bullet-list,
-.sl-card p + ul,
-.sl-highlight p + ul,
-.sl-highlight-box p + ul{
+.sl-text-block p + .sl-bullet-list.sl-card p + ul.sl-highlight p + ul.sl-highlight-box p + ul{
   margin-top: 14px !important;
 }
 
 /* Mobile */
 @media (max-width: 720px){
-  .sl-bullets,
-  .sl-bullet-list,
-  .sl-card ul,
-  .sl-highlight ul,
-  .sl-highlight-box ul,
-  .sl-tab-panel ul{
+  .sl-bullets.sl-bullet-list.sl-card ul.sl-highlight ul.sl-highlight-box ul.sl-tab-panel ul{
     gap: 8px !important;
   }
 
-  .sl-bullets li,
-  .sl-bullet-list li,
-  .sl-card ul li,
-  .sl-highlight ul li,
-  .sl-highlight-box ul li,
-  .sl-tab-panel ul li{
+  .sl-bullets li.sl-bullet-list li.sl-card ul li.sl-highlight ul li.sl-highlight-box ul li.sl-tab-panel ul li{
     padding-left: 20px !important;
   }
 }
@@ -1208,8 +1123,7 @@ body{
 }
 
 /* Menu */
-.sl-main-nav,
-.sl-nav-link{
+.sl-main-nav.sl-nav-link{
   font-size: .95rem !important;
   line-height: 1.2 !important;
   font-weight: 650 !important;
@@ -1223,14 +1137,7 @@ body{
 }
 
 /* Kicker / chapéu das seções */
-.sl-hero-kicker,
-.sl-page-hero-kicker,
-.sl-section-kicker,
-.sl-kicker,
-.sl-tagline,
-.sl-pill-label,
-.sl-tkicker,
-.sl-espiro-kicker{
+.sl-hero-kicker.sl-page-hero-kicker.sl-section-kicker.sl-kicker.sl-tagline.sl-pill-label.sl-tkicker.sl-espiro-kicker{
   font-size: .74rem !important;
   line-height: 1.2 !important;
   letter-spacing: .14em !important;
@@ -1240,9 +1147,7 @@ body{
 }
 
 /* Títulos principais de páginas */
-.sl-hero-title,
-.sl-page-hero-title,
-.sl-espiro-title{
+.sl-hero-title.sl-page-hero-title.sl-espiro-title{
   font-size: clamp(2.1rem, 4vw, 3.45rem) !important;
   line-height: 1.04 !important;
   letter-spacing: -.045em !important;
@@ -1250,17 +1155,12 @@ body{
   color: var(--sl-type-title) !important;
 }
 
-.sl-hero-title span,
-.sl-page-hero-title span,
-.sl-espiro-title span{
+.sl-hero-title span.sl-page-hero-title span.sl-espiro-title span{
   color: #1eb5ab !important;
 }
 
 /* Subtítulos principais */
-.sl-hero-subtitle,
-.sl-page-hero-lead,
-.sl-espiro-subtitle,
-.sl-hero .lead{
+.sl-hero-subtitle.sl-page-hero-lead.sl-espiro-subtitle.sl-hero .lead{
   font-size: clamp(1rem, 1.2vw, 1.12rem) !important;
   line-height: 1.62 !important;
   font-weight: 450 !important;
@@ -1269,10 +1169,7 @@ body{
 }
 
 /* Observações/pílulas abaixo do hero */
-.sl-page-hero-note,
-.sl-espiro-note,
-.sl-hero-note,
-.sl-whatsapp-pill{
+.sl-page-hero-note.sl-espiro-note.sl-hero-note.sl-whatsapp-pill{
   font-size: .88rem !important;
   line-height: 1.35 !important;
   font-weight: 500 !important;
@@ -1280,10 +1177,7 @@ body{
 }
 
 /* Títulos de seção */
-.sl-section-title,
-.sl-ttitle,
-.sl-cta-title,
-.sl-section h2{
+.sl-section-title.sl-ttitle.sl-cta-title.sl-section h2{
   font-size: clamp(1.55rem, 2.15vw, 2.15rem) !important;
   line-height: 1.12 !important;
   letter-spacing: -.035em !important;
@@ -1292,8 +1186,7 @@ body{
 }
 
 /* Subtítulos de seção */
-.sl-section-subtitle,
-.sl-tsub{
+.sl-section-subtitle.sl-tsub{
   font-size: .98rem !important;
   line-height: 1.6 !important;
   font-weight: 450 !important;
@@ -1301,14 +1194,7 @@ body{
 }
 
 /* Títulos de cards */
-.sl-card h3,
-.sl-highlight strong,
-.sl-highlight-box strong,
-.sl-hero-card-title,
-.sl-espiro-card-title,
-.sl-tcard__name,
-.sl-tabs h3,
-.sl-tab-panel h3{
+.sl-card h3.sl-highlight strong.sl-highlight-box strong.sl-hero-card-title.sl-espiro-card-title.sl-tcard__name.sl-tabs h3.sl-tab-panel h3{
   font-size: 1.03rem !important;
   line-height: 1.22 !important;
   letter-spacing: -.015em !important;
@@ -1317,18 +1203,7 @@ body{
 }
 
 /* Texto comum em cards e blocos */
-.sl-card,
-.sl-card p,
-.sl-highlight,
-.sl-highlight p,
-.sl-highlight-box,
-.sl-highlight-box p,
-.sl-text-block p,
-.sl-tab-panel,
-.sl-tab-panel p,
-.sl-hero-card-badge,
-.sl-hero-card-footer,
-.sl-tcard__text{
+.sl-card.sl-card p.sl-highlight.sl-highlight p.sl-highlight-box.sl-highlight-box p.sl-text-block p.sl-tab-panel.sl-tab-panel p.sl-hero-card-badge.sl-hero-card-footer.sl-tcard__text{
   font-size: .95rem !important;
   line-height: 1.62 !important;
   font-weight: 450 !important;
@@ -1336,14 +1211,7 @@ body{
 }
 
 /* Listas */
-.sl-bullets li,
-.sl-bullet-list li,
-.sl-card ul li,
-.sl-highlight ul li,
-.sl-highlight-box ul li,
-.sl-tab-panel ul li,
-.sl-hero-list li,
-.sl-espiro-card-list li{
+.sl-bullets li.sl-bullet-list li.sl-card ul li.sl-highlight ul li.sl-highlight-box ul li.sl-tab-panel ul li.sl-hero-list li.sl-espiro-card-list li{
   font-size: .94rem !important;
   line-height: 1.52 !important;
   font-weight: 500 !important;
@@ -1351,14 +1219,7 @@ body{
 }
 
 /* Botões */
-.sl-btn,
-.sl-btn-primary,
-.sl-btn-outline,
-.sl-btn.primary,
-.sl-btn.outline,
-.sl-espiro-btn,
-.sl-mode-pill,
-.sl-tab-button{
+.sl-btn.sl-btn-primary.sl-btn-outline.sl-btn.primary.sl-btn.outline.sl-espiro-btn.sl-mode-pill.sl-tab-button{
   font-size: .9rem !important;
   line-height: 1.1 !important;
   font-weight: 800 !important;
@@ -1366,13 +1227,11 @@ body{
 }
 
 /* CTA final */
-.sl-cta,
-.sl-cta-box{
+.sl-cta.sl-cta-box{
   font-size: .96rem !important;
 }
 
-.sl-cta h2,
-.sl-cta-box h2{
+.sl-cta h2.sl-cta-box h2{
   font-size: clamp(1.45rem, 2vw, 2rem) !important;
   line-height: 1.14 !important;
   letter-spacing: -.03em !important;
@@ -1386,9 +1245,7 @@ body{
   font-weight: 800 !important;
 }
 
-.sl-links-footer a,
-.sl-social-list a,
-.sl-links-list a{
+.sl-links-footer a.sl-social-list a.sl-links-list a{
   font-size: .94rem !important;
   line-height: 1.45 !important;
   font-weight: 500 !important;
@@ -1412,20 +1269,15 @@ body{
     font-size: 15.5px !important;
   }
 
-  .sl-hero-title,
-  .sl-page-hero-title,
-  .sl-espiro-title{
+  .sl-hero-title.sl-page-hero-title.sl-espiro-title{
     font-size: clamp(2rem, 8vw, 2.75rem) !important;
   }
 
-  .sl-section-title,
-  .sl-ttitle,
-  .sl-section h2{
+  .sl-section-title.sl-ttitle.sl-section h2{
     font-size: clamp(1.4rem, 6vw, 1.85rem) !important;
   }
 
-  .sl-main-nav,
-  .sl-nav-link{
+  .sl-main-nav.sl-nav-link{
     font-size: .92rem !important;
   }
 }
@@ -1436,94 +1288,44 @@ body{
 /* SoproLife Typography Soften v2 — reduz peso excessivo da fonte */
 
 /* Títulos principais: fortes, mas mais elegantes */
-.sl-hero-title,
-.sl-page-hero-title,
-.sl-espiro-title{
+.sl-hero-title.sl-page-hero-title.sl-espiro-title{
   font-weight: 760 !important;
   letter-spacing: -.04em !important;
 }
 
 /* Kicker/chapeuzinho: continua marcante, mas menos duro */
-.sl-hero-kicker,
-.sl-page-hero-kicker,
-.sl-section-kicker,
-.sl-kicker,
-.sl-tagline,
-.sl-pill-label,
-.sl-tkicker,
-.sl-espiro-kicker{
+.sl-hero-kicker.sl-page-hero-kicker.sl-section-kicker.sl-kicker.sl-tagline.sl-pill-label.sl-tkicker.sl-espiro-kicker{
   font-weight: 760 !important;
   letter-spacing: .13em !important;
 }
 
 /* Títulos de seção */
-.sl-section-title,
-.sl-ttitle,
-.sl-cta-title,
-.sl-section h2{
+.sl-section-title.sl-ttitle.sl-cta-title.sl-section h2{
   font-weight: 720 !important;
   letter-spacing: -.03em !important;
 }
 
 /* Títulos de cards */
-.sl-card h3,
-.sl-highlight strong,
-.sl-highlight-box strong,
-.sl-hero-card-title,
-.sl-espiro-card-title,
-.sl-tcard__name,
-.sl-tabs h3,
-.sl-tab-panel h3{
+.sl-card h3.sl-highlight strong.sl-highlight-box strong.sl-hero-card-title.sl-espiro-card-title.sl-tcard__name.sl-tabs h3.sl-tab-panel h3{
   font-weight: 700 !important;
 }
 
 /* Menu e CTA: menos “negrito de propaganda” */
-.sl-main-nav,
-.sl-nav-link{
+.sl-main-nav.sl-nav-link{
   font-weight: 560 !important;
 }
 
-.sl-nav-cta,
-.sl-btn,
-.sl-btn-primary,
-.sl-btn-outline,
-.sl-btn.primary,
-.sl-btn.outline,
-.sl-espiro-btn,
-.sl-mode-pill,
-.sl-tab-button{
+.sl-nav-cta.sl-btn.sl-btn-primary.sl-btn-outline.sl-btn.primary.sl-btn.outline.sl-espiro-btn.sl-mode-pill.sl-tab-button{
   font-weight: 700 !important;
 }
 
 /* Textos comuns com leitura mais leve */
-.sl-card,
-.sl-card p,
-.sl-highlight,
-.sl-highlight p,
-.sl-highlight-box,
-.sl-highlight-box p,
-.sl-text-block p,
-.sl-tab-panel,
-.sl-tab-panel p,
-.sl-hero-card-badge,
-.sl-hero-card-footer,
-.sl-tcard__text,
-.sl-section-subtitle,
-.sl-tsub,
-.sl-hero-subtitle,
-.sl-page-hero-lead{
+.sl-card.sl-card p.sl-highlight.sl-highlight p.sl-highlight-box.sl-highlight-box p.sl-text-block p.sl-tab-panel.sl-tab-panel p.sl-hero-card-badge.sl-hero-card-footer.sl-tcard__text.sl-section-subtitle.sl-tsub.sl-hero-subtitle.sl-page-hero-lead{
   font-weight: 400 !important;
 }
 
 /* Listas: reduz peso, mantém legibilidade */
-.sl-bullets li,
-.sl-bullet-list li,
-.sl-card ul li,
-.sl-highlight ul li,
-.sl-highlight-box ul li,
-.sl-tab-panel ul li,
-.sl-hero-list li,
-.sl-espiro-card-list li{
+.sl-bullets li.sl-bullet-list li.sl-card ul li.sl-highlight ul li.sl-highlight-box ul li.sl-tab-panel ul li.sl-hero-list li.sl-espiro-card-list li{
   font-weight: 430 !important;
 }
 
@@ -1582,9 +1384,9 @@ body{
   text-align: left !important;
   border-radius: 16px !important;
   padding: 12px 14px !important;
-  background: rgba(30,181,171,.08) !important;
+  background: rgba(30,181,171.08) !important;
   color: #0b2239 !important;
-  border: 1px solid rgba(30,181,171,.14) !important;
+  border: 1px solid rgba(30,181,171.14) !important;
   box-shadow: none !important;
   font-weight: 650 !important;
 }
@@ -1595,13 +1397,13 @@ body{
   height: 8px !important;
   border-radius: 999px !important;
   background: #1eb5ab !important;
-  box-shadow: 0 0 0 4px rgba(30,181,171,.10) !important;
+  box-shadow: 0 0 0 4px rgba(30,181,171.10) !important;
   margin-right: 10px !important;
   flex: 0 0 auto !important;
 }
 
 .sl-hero-card .sl-mode-pill:hover{
-  background: rgba(30,181,171,.12) !important;
+  background: rgba(30,181,171.12) !important;
   transform: none !important;
 }
 
@@ -1634,7 +1436,7 @@ body{
 .sl-hero-card-footer{
   margin-top: 18px !important;
   padding-top: 16px !important;
-  border-top: 1px solid rgba(11,34,57,.07) !important;
+  border-top: 1px solid rgba(11,34,57.07) !important;
   font-size: .92rem !important;
   line-height: 1.55 !important;
   color: #5f7485 !important;
@@ -1657,9 +1459,9 @@ body{
   padding: 30px !important;
   border-radius: 32px !important;
   background:
-    linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.94)) !important;
-  border: 1px solid rgba(11,34,57,.07) !important;
-  box-shadow: 0 22px 55px rgba(15,35,52,.08) !important;
+    linear-gradient(180deg, rgba(255,255,255.98), rgba(255,255,255.94)) !important;
+  border: 1px solid rgba(11,34,57.07) !important;
+  box-shadow: 0 22px 55px rgba(15,35,52.08) !important;
 }
 
 /* Remove selo interno */
@@ -1708,7 +1510,7 @@ body{
   padding: 14px 12px !important;
   background: #f7fcfc !important;
   color: #0b2239 !important;
-  border: 1px solid rgba(30,181,171,.14) !important;
+  border: 1px solid rgba(30,181,171.14) !important;
   box-shadow: none !important;
   font-size: .86rem !important;
   line-height: 1.12 !important;
@@ -1724,21 +1526,21 @@ body{
   margin: 0 !important;
   background:
     radial-gradient(circle at center, #1eb5ab 0 34%, transparent 36%),
-    rgba(30,181,171,.12) !important;
+    rgba(30,181,171.12) !important;
   box-shadow: none !important;
   flex: 0 0 auto !important;
 }
 
 .sl-hero-card .sl-mode-pill:hover{
   background: #effafa !important;
-  border-color: rgba(30,181,171,.28) !important;
+  border-color: rgba(30,181,171.28) !important;
 }
 
 /* Linha divisória mais discreta */
 .sl-hero-card .sl-card-divider{
   margin: 20px 0 !important;
   height: 1px !important;
-  background: linear-gradient(90deg, transparent, rgba(11,34,57,.10), transparent) !important;
+  background: linear-gradient(90deg, transparent, rgba(11,34,57.10), transparent) !important;
 }
 
 /* Dois blocos técnicos mais bonitos */
@@ -1751,8 +1553,8 @@ body{
 
 .sl-hero-mini-grid > div{
   border-radius: 18px !important;
-  background: rgba(248,252,253,.9) !important;
-  border: 1px solid rgba(11,34,57,.06) !important;
+  background: rgba(248,252,253.9) !important;
+  border: 1px solid rgba(11,34,57.06) !important;
   padding: 14px !important;
   color: #5f7485 !important;
   font-size: .88rem !important;
@@ -1773,8 +1575,8 @@ body{
   margin-top: 18px !important;
   padding: 14px 16px !important;
   border-radius: 18px !important;
-  border: 1px solid rgba(30,181,171,.12) !important;
-  background: rgba(30,181,171,.055) !important;
+  border: 1px solid rgba(30,181,171.12) !important;
+  background: rgba(30,181,171.055) !important;
   color: #5f7485 !important;
   font-size: .92rem !important;
   line-height: 1.55 !important;
@@ -1808,9 +1610,7 @@ body{
 
 <style id="soprolife-force-hide-home-tag">
 /* Remove definitivamente selo SOPRO LIFE do card da home */
-.sl-hero-card .sl-tag,
-.sl-hero-card-header .sl-tag,
-.sl-tag{
+.sl-hero-card .sl-tag.sl-hero-card-header .sl-tag.sl-tag{
   display:none !important;
   visibility:hidden !important;
   opacity:0 !important;
@@ -1837,14 +1637,12 @@ body{
 }
 
 /* Corrige contraste do CTA escuro */
-#contato .sl-cta-box,
-.sl-cta-section#contato .sl-cta-box{
+#contato .sl-cta-box.sl-cta-section#contato .sl-cta-box{
   color: #fff !important;
 }
 
 #contato .sl-cta-title,
-#contato h2,
-.sl-cta-section#contato h2{
+#contato h2.sl-cta-section#contato h2{
   color: #fff !important;
   opacity: 1 !important;
 }
@@ -1852,7 +1650,7 @@ body{
 #contato .sl-cta-sub,
 #contato .sl-cta-contacts,
 #contato .sl-cta-small{
-  color: rgba(255,255,255,.92) !important;
+  color: rgba(255,255,255.92) !important;
 }
 
 #contato .sl-cta-contacts strong{
@@ -1863,7 +1661,7 @@ body{
 #contato .sl-btn-primary{
   background: #25D366 !important;
   color: #fff !important;
-  box-shadow: 0 12px 24px rgba(37,211,102,.20) !important;
+  box-shadow: 0 12px 24px rgba(37,211,102.20) !important;
 }
 
 /* Android/mobile: evita encavalamento e melhora leitura */
@@ -1977,9 +1775,7 @@ body{
 }
 
 /* bloco esquerdo do hero */
-.sl-hero-copy,
-.sl-hero-content,
-.sl-hero-left{
+.sl-hero-copy.sl-hero-content.sl-hero-left{
   display: flex !important;
   flex-direction: column !important;
   align-items: flex-start !important;
@@ -2017,8 +1813,7 @@ body{
   margin: 0 0 10px 0 !important;
 }
 
-.sl-hero-actions .sl-btn,
-.sl-hero-actions .sl-btn-primary{
+.sl-hero-actions .sl-btn.sl-hero-actions .sl-btn-primary{
   min-height: 40px !important;
   padding: 10px 22px !important;
   font-size: 0.98rem !important;
@@ -2050,17 +1845,14 @@ body{
 }
 
 /* padroniza textos menores do card lateral */
-.sl-hero-card-badge,
-.sl-hero-mini-grid div,
-.sl-hero-card-footer{
+.sl-hero-card-badge.sl-hero-mini-grid div.sl-hero-card-footer{
   font-size: var(--sl-small-size) !important;
   line-height: var(--sl-small-line) !important;
   letter-spacing: -0.01em !important;
   color: var(--sl-small-text) !important;
 }
 
-.sl-hero-mini-grid strong,
-.sl-hero-card-title{
+.sl-hero-mini-grid strong.sl-hero-card-title{
   line-height: 1.28 !important;
 }
 
@@ -2139,10 +1931,7 @@ body{
 }
 
 /* Se existir span/icone antigo de bullet, esconda */
-.sl-hero-list li .sl-bullet,
-.sl-hero-list li .bullet,
-.sl-hero-list li i,
-.sl-hero-list li svg:first-child{
+.sl-hero-list li .sl-bullet.sl-hero-list li .bullet.sl-hero-list li i.sl-hero-list li svg:first-child{
   display: none !important;
 }
 
@@ -2227,8 +2016,8 @@ body{
   height: 38px !important;
   border-radius: 999px !important;
   color: #0b2239 !important;
-  background: rgba(255,255,255,.72) !important;
-  border: 1px solid rgba(11,34,57,.08) !important;
+  background: rgba(255,255,255.72) !important;
+  border: 1px solid rgba(11,34,57.08) !important;
   text-decoration: none !important;
   transition: background .16s ease, color .16s ease, border-color .16s ease, transform .16s ease;
   margin-left: 4px !important;
@@ -2237,8 +2026,8 @@ body{
 
 .sl-header-social:hover{
   color: #1eb5ab !important;
-  background: rgba(30,181,171,.08) !important;
-  border-color: rgba(30,181,171,.22) !important;
+  background: rgba(30,181,171.08) !important;
+  border-color: rgba(30,181,171.22) !important;
   transform: translateY(-1px);
 }
 
@@ -2394,9 +2183,9 @@ body{
 .sl-booking-card{
   background:linear-gradient(180deg,#ffffff 0%, #fbfeff 100%);
   border-radius:20px;
-  box-shadow:0 14px 28px rgba(8,24,41,.07);
+  box-shadow:0 14px 28px rgba(8,24,41.07);
   padding:20px;
-  border:1px solid rgba(11,34,57,.08);
+  border:1px solid rgba(11,34,57.08);
 }
 .sl-booking-head{margin-bottom:14px;padding:0 0 4px}
 .sl-booking-kicker{
@@ -2409,7 +2198,7 @@ body{
   text-transform:uppercase;
   font-weight:700;
   color:#106f68;
-  background:rgba(30,181,171,.1);
+  background:rgba(30,181,171.1);
 }
 .sl-booking-title{
   margin:0 0 6px;
@@ -2425,10 +2214,10 @@ body{
   display:grid;
   gap:14px;
   background:linear-gradient(180deg,#ffffff 0%, #fcfeff 100%);
-  border:1px solid rgba(11,34,57,.1);
+  border:1px solid rgba(11,34,57.1);
   border-radius:16px;
   padding:16px;
-  box-shadow:0 8px 18px rgba(8,24,41,.05);
+  box-shadow:0 8px 18px rgba(8,24,41.05);
 }
 .sl-booking-field label{
   display:block;
@@ -2439,12 +2228,12 @@ body{
   color:#2b526a;
   margin-bottom:7px
 }
-.sl-booking-field select,.sl-booking-field input{
+.sl-booking-field select.sl-booking-field input{
   width:100%;
   min-height:44px;
   padding:10px 12px;
   border-radius:12px;
-  border:1px solid rgba(11,34,57,.16);
+  border:1px solid rgba(11,34,57.16);
   background:#f9fdff;
   color:#12354d;
   font-size:.93rem;
@@ -2452,13 +2241,13 @@ body{
   transition:border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
 }
 
-.sl-booking-field select:hover,.sl-booking-field input:hover{
-  border-color:rgba(11,34,57,.24);
+.sl-booking-field select:hover.sl-booking-field input:hover{
+  border-color:rgba(11,34,57.24);
 }
-.sl-booking-field select:focus,.sl-booking-field input:focus{
+.sl-booking-field select:focus.sl-booking-field input:focus{
   outline:none;
-  border-color:rgba(30,181,171,.72);
-  box-shadow:0 0 0 3px rgba(30,181,171,.16);
+  border-color:rgba(30,181,171.72);
+  box-shadow:0 0 0 3px rgba(30,181,171.16);
   background:#fff;
 }
 .sl-booking-slots-title{font-size:.75rem;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#2d586f;margin:4px 0 8px}
@@ -2466,8 +2255,8 @@ body{
 .sl-slot-btn{
   min-height:42px;
   border-radius:11px;
-  border:1px solid rgba(30,181,171,.44);
-  background:linear-gradient(180deg,rgba(30,181,171,.18) 0%, rgba(30,181,171,.1) 100%);
+  border:1px solid rgba(30,181,171.44);
+  background:linear-gradient(180deg,rgba(30,181,171.18) 0%, rgba(30,181,171.1) 100%);
   color:#0f334a;
   padding:9px 8px;
   font-size:.87rem;
@@ -2475,45 +2264,42 @@ body{
   cursor:pointer;
   transition:transform .12s,filter .12s,box-shadow .12s,border-color .12s;
 }
-.sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98);border-color:rgba(30,181,171,.65);box-shadow:0 8px 16px rgba(11,34,57,.12)}
+.sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98);border-color:rgba(30,181,171.65);box-shadow:0 8px 16px rgba(11,34,57.12)}
 .sl-slot-btn[disabled]{background:#edf2f6;color:#8395a6;border-color:#d3dee6;cursor:not-allowed;transform:none;box-shadow:none;opacity:.96}
 .sl-booking-note{margin:4px 0 0;font-size:.78rem;color:#587086;line-height:1.35}
 .sl-units-placeholder{
   background:#fbfdff;
-  border:1px solid rgba(11,34,57,.13);
+  border:1px solid rgba(11,34,57.13);
   border-radius:16px;
   padding:13px;
-  box-shadow:0 8px 18px rgba(8,24,41,.045);
+  box-shadow:0 8px 18px rgba(8,24,41.045);
 }
 .sl-units-placeholder h3{margin:0 0 6px;font-size:1rem;color:var(--sl-primary-dark)}
 .sl-units-placeholder p{margin:0 0 8px;color:#34596f;font-size:.9rem;line-height:1.4}
 .sl-unit-list{list-style:none;padding:0;margin:0 0 10px;display:grid;gap:7px}
 .sl-unit-list li{
   background:#ffffff;
-  border:1px solid rgba(11,34,57,.11);
+  border:1px solid rgba(11,34,57.11);
   border-radius:10px;
   padding:6px 9px;
   font-size:.88rem;
   color:#123247;
-  box-shadow:0 4px 10px rgba(8,24,41,.04);
+  box-shadow:0 4px 10px rgba(8,24,41.04);
 }
 .sl-unit-list span{display:block;font-size:.79rem;color:#456479;margin-top:2px;line-height:1.35}
 .sl-btn-disabled{display:inline-flex;align-items:center;justify-content:center;pointer-events:none;opacity:.85}
-.sl-booking-section .sl-booking-card,
-.sl-booking-section .sl-units-placeholder,
-.sl-booking-section .sl-booking-controls{
+.sl-booking-section .sl-booking-card.sl-booking-section .sl-units-placeholder.sl-booking-section .sl-booking-controls{
   backdrop-filter: blur(1.5px);
 }
 
 /* ===== Modal de mapa (Etapa 2) ===== */
-.sl-map-mini,
-.sl-mini-map{
+.sl-map-mini.sl-mini-map{
   margin:0;
   width:100%;
   height:570px;
   min-height:570px;
   border-radius:12px;
-  border:1px solid rgba(11,34,57,.12);
+  border:1px solid rgba(11,34,57.12);
   overflow:hidden;
   cursor:pointer;
   position:relative;
@@ -2526,7 +2312,7 @@ body{
   position:absolute;
   inset:0;
   z-index:2;
-  background:rgba(224,248,245,.58);
+  background:rgba(224,248,245.58);
   opacity:0;
   transition:opacity .18s ease;
   pointer-events:none;
@@ -2570,12 +2356,10 @@ body{
   right:0;
   border-width:0 2px 2px 0;
 }
-.sl-mini-map-trigger:hover::before,
-.sl-mini-map-trigger:focus-visible::before{
+.sl-mini-map-trigger:hover::before.sl-mini-map-trigger:focus-visible::before{
   opacity:1;
 }
-.sl-mini-map-trigger:hover .sl-mini-map-target,
-.sl-mini-map-trigger:focus-visible .sl-mini-map-target{
+.sl-mini-map-trigger:hover .sl-mini-map-target.sl-mini-map-trigger:focus-visible .sl-mini-map-target{
   opacity:1;
   transform:translate(-50%,-50%) scale(1);
 }
@@ -2591,11 +2375,11 @@ body{
   border-radius:999px;
   padding:6px 10px;
   font-size:.78rem;
-  background:rgba(11,34,57,.84);
+  background:rgba(11,34,57.84);
   color:#fff;
-  border:1px solid rgba(255,255,255,.35);
+  border:1px solid rgba(255,255,255.35);
 }
-.sl-map-mini:hover .sl-map-open-btn{background:rgba(11,34,57,.92)}
+.sl-map-mini:hover .sl-map-open-btn{background:rgba(11,34,57.92)}
 .sl-units-placeholder{
   --sl-map-lift:126px;
   --sl-map-extra-height:102px;
@@ -2621,7 +2405,7 @@ body{
 .sl-map-modal__backdrop{
   position:absolute;
   inset:0;
-  background:rgba(8,24,41,.54);
+  background:rgba(8,24,41.54);
 }
 .sl-map-modal__dialog{
   position:relative;
@@ -2631,8 +2415,8 @@ body{
   max-height:none;
   background:#fff;
   border-radius:16px;
-  box-shadow:0 14px 34px rgba(8,24,41,.2);
-  border:1px solid rgba(11,34,57,.12);
+  box-shadow:0 14px 34px rgba(8,24,41.2);
+  border:1px solid rgba(11,34,57.12);
   display:flex;
   flex-direction:column;
   overflow:hidden;
@@ -2643,7 +2427,7 @@ body{
   justify-content:space-between;
   gap:10px;
   padding:12px 14px;
-  border-bottom:1px solid rgba(11,34,57,.08);
+  border-bottom:1px solid rgba(11,34,57.08);
 }
 .sl-map-modal__title{
   margin:0;
@@ -2670,10 +2454,10 @@ body{
 #sl-units-map{
   min-height:0;
   border-radius:12px;
-  border:1px solid rgba(11,34,57,.12);
+  border:1px solid rgba(11,34,57.12);
 }
 .sl-map-panel-info{
-  border:1px solid rgba(11,34,57,.1);
+  border:1px solid rgba(11,34,57.1);
   border-radius:12px;
   background:#f9fcff;
   padding:12px;
@@ -2697,7 +2481,7 @@ body{
 .sl-map-unit-cards{display:grid;gap:8px}
 .sl-map-unit-card{
   background:#fff;
-  border:1px solid rgba(11,34,57,.12);
+  border:1px solid rgba(11,34,57.12);
   border-radius:10px;
   padding:8px 10px;
   font-size:.86rem;
@@ -2727,7 +2511,7 @@ body{
   background:linear-gradient(150deg,#1eb5ab 0%, #13958d 100%);
   border:2px solid #0b2239;
   transform:rotate(-45deg);
-  box-shadow:0 2px 8px rgba(11,34,57,.28);
+  box-shadow:0 2px 8px rgba(11,34,57.28);
   position:relative;
 }
 .sl-map-pin::after{
@@ -2760,8 +2544,7 @@ body{
     overflow:auto;
   }
   #sl-units-map{height:58dvh;min-height:300px}
-  .sl-map-mini,
-  .sl-mini-map{height:260px;min-height:260px}
+  .sl-map-mini.sl-mini-map{height:260px;min-height:260px}
    .sl-mini-map-target{opacity:.28;transform:translate(-50%,-50%) scale(1);}
   .sl-map-open-btn{
     top:8px;
@@ -2793,78 +2576,51 @@ body{
 
 /* SOPRO:MAP_MODAL_SIDE_POLISH_V1 */
 /* Lapidação visual do painel esquerdo do modal do mapa */
-.sl-map-modal-side,
-.sl-map-modal-panel,
-.sl-map-modal-info,
-.sl-map-modal-copy {
+.sl-map-modal-side.sl-map-modal-panel.sl-map-modal-info.sl-map-modal-copy {
   background:
-    linear-gradient(180deg, rgba(30,181,171,.12), rgba(255,255,255,.96) 42%),
+    linear-gradient(180deg, rgba(30,181,171.12), rgba(255,255,255.96) 42%),
     #f7fcfd !important;
-  border: 1px solid rgba(30,181,171,.24) !important;
+  border: 1px solid rgba(30,181,171.24) !important;
   border-radius: 16px !important;
-  box-shadow: 0 14px 28px rgba(8,24,41,.08) !important;
+  box-shadow: 0 14px 28px rgba(8,24,41.08) !important;
 }
 
-.sl-map-modal-side h3,
-.sl-map-modal-panel h3,
-.sl-map-modal-info h3,
-.sl-map-modal-copy h3 {
+.sl-map-modal-side h3.sl-map-modal-panel h3.sl-map-modal-info h3.sl-map-modal-copy h3 {
   color: #0b2239 !important;
   font-weight: 800 !important;
   letter-spacing: -.01em !important;
   margin-bottom: 10px !important;
 }
 
-.sl-map-modal-side p,
-.sl-map-modal-panel p,
-.sl-map-modal-info p,
-.sl-map-modal-copy p {
+.sl-map-modal-side p.sl-map-modal-panel p.sl-map-modal-info p.sl-map-modal-copy p {
   color: #34596f !important;
   line-height: 1.45 !important;
   font-weight: 500 !important;
 }
 
-.sl-map-modal-side button,
-.sl-map-modal-panel button,
-.sl-map-modal-info button,
-.sl-map-modal-copy button,
-.sl-map-unit-btn,
-.sl-map-modal-unit,
-.sl-map-location-card {
+.sl-map-modal-side button.sl-map-modal-panel button.sl-map-modal-info button.sl-map-modal-copy button.sl-map-unit-btn.sl-map-modal-unit.sl-map-location-card {
   width: 100% !important;
   display: block !important;
-  background: linear-gradient(180deg, rgba(224,252,250,.98), rgba(210,248,245,.92)) !important;
-  border: 1px solid rgba(30,181,171,.42) !important;
+  background: linear-gradient(180deg, rgba(224,252,250.98), rgba(210,248,245.92)) !important;
+  border: 1px solid rgba(30,181,171.42) !important;
   border-radius: 12px !important;
   color: #0b3348 !important;
   font-weight: 800 !important;
   text-align: left !important;
   padding: 11px 13px !important;
   margin: 8px 0 !important;
-  box-shadow: 0 7px 14px rgba(8,24,41,.055) !important;
+  box-shadow: 0 7px 14px rgba(8,24,41.055) !important;
   transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease !important;
 }
 
-.sl-map-modal-side button:hover,
-.sl-map-modal-panel button:hover,
-.sl-map-modal-info button:hover,
-.sl-map-modal-copy button:hover,
-.sl-map-unit-btn:hover,
-.sl-map-modal-unit:hover,
-.sl-map-location-card:hover {
+.sl-map-modal-side button:hover.sl-map-modal-panel button:hover.sl-map-modal-info button:hover.sl-map-modal-copy button:hover.sl-map-unit-btn:hover.sl-map-modal-unit:hover.sl-map-location-card:hover {
   transform: translateY(-1px) !important;
-  border-color: rgba(30,181,171,.74) !important;
-  background: linear-gradient(180deg, rgba(202,248,245,1), rgba(182,241,238,.95)) !important;
-  box-shadow: 0 10px 20px rgba(8,24,41,.09) !important;
+  border-color: rgba(30,181,171.74) !important;
+  background: linear-gradient(180deg, rgba(202,248,245,1), rgba(182,241,238.95)) !important;
+  box-shadow: 0 10px 20px rgba(8,24,41.09) !important;
 }
 
-.sl-map-modal-side button::before,
-.sl-map-modal-panel button::before,
-.sl-map-modal-info button::before,
-.sl-map-modal-copy button::before,
-.sl-map-unit-btn::before,
-.sl-map-modal-unit::before,
-.sl-map-location-card::before {
+.sl-map-modal-side button::before.sl-map-modal-panel button::before.sl-map-modal-info button::before.sl-map-modal-copy button::before.sl-map-unit-btn::before.sl-map-modal-unit::before.sl-map-location-card::before {
   content: "";
   display: inline-block;
   width: 8px;
@@ -2872,38 +2628,26 @@ body{
   margin-right: 8px;
   border-radius: 999px;
   background: #1eb5ab;
-  box-shadow: 0 0 0 4px rgba(30,181,171,.15);
+  box-shadow: 0 0 0 4px rgba(30,181,171.15);
   vertical-align: 1px;
 }
 
-.sl-map-modal-side button strong,
-.sl-map-modal-panel button strong,
-.sl-map-modal-info button strong,
-.sl-map-modal-copy button strong,
-.sl-map-unit-btn strong,
-.sl-map-modal-unit strong,
-.sl-map-location-card strong {
+.sl-map-modal-side button strong.sl-map-modal-panel button strong.sl-map-modal-info button strong.sl-map-modal-copy button strong.sl-map-unit-btn strong.sl-map-modal-unit strong.sl-map-location-card strong {
   color: #0b2239 !important;
   font-weight: 800 !important;
 }
 
-.sl-map-modal-side p:last-child,
-.sl-map-modal-panel p:last-child,
-.sl-map-modal-info p:last-child,
-.sl-map-modal-copy p:last-child {
+.sl-map-modal-side p:last-child.sl-map-modal-panel p:last-child.sl-map-modal-info p:last-child.sl-map-modal-copy p:last-child {
   margin-top: 12px !important;
   padding: 12px 13px !important;
   border-radius: 12px !important;
-  background: rgba(255,255,255,.72) !important;
-  border-left: 4px solid rgba(30,181,171,.68) !important;
+  background: rgba(255,255,255.72) !important;
+  border-left: 4px solid rgba(30,181,171.68) !important;
   color: #34596f !important;
 }
 
 /* Evita que o painel fique com aparência vazia demais */
-.sl-map-modal-side,
-.sl-map-modal-panel,
-.sl-map-modal-info,
-.sl-map-modal-copy {
+.sl-map-modal-side.sl-map-modal-panel.sl-map-modal-info.sl-map-modal-copy {
   padding: 18px !important;
 }
 </style>
@@ -2925,31 +2669,22 @@ body{
 <!-- SOPRO:MENU_UNIFORME_FIX_START -->
 <style>
   header nav a,
-  header nav a:visited,
-  .sl-nav a,
-  .sl-nav a:visited,
-  .sl-nav-link,
-  .sl-nav-link:visited {
+  header nav a:visited.sl-nav a.sl-nav a:visited.sl-nav-link.sl-nav-link:visited {
     color:#536a7d !important;
     text-decoration:none !important;
     font-weight:800 !important;
   }
 
-  header nav a:hover,
-  .sl-nav a:hover,
-  .sl-nav-link:hover {
+  header nav a:hover.sl-nav a:hover.sl-nav-link:hover {
     color:#07857d !important;
   }
 
   header nav a[href="/telemedicina/"],
-  header nav a[href="/telemedicina/"]:visited,
-  .sl-nav a[href="/telemedicina/"],
-  .sl-nav a[href="/telemedicina/"]:visited {
+  header nav a[href="/telemedicina/"]:visited.sl-nav a[href="/telemedicina/"].sl-nav a[href="/telemedicina/"]:visited {
     color:#536a7d !important;
   }
 
-  header nav a[href="/telemedicina/"]:hover,
-  .sl-nav a[href="/telemedicina/"]:hover {
+  header nav a[href="/telemedicina/"]:hover.sl-nav a[href="/telemedicina/"]:hover {
     color:#07857d !important;
   }
 </style>
@@ -2966,7 +2701,7 @@ body{
     .sl-telemed-mobile-strip {
       display:block;
       background:linear-gradient(90deg,#effdfb,#ffffff);
-      border-bottom:1px solid rgba(30,181,171,.18);
+      border-bottom:1px solid rgba(30,181,171.18);
       padding:10px 14px;
     }
 
@@ -2976,14 +2711,14 @@ body{
       justify-content:space-between;
       gap:10px;
       width:100%;
-      border:1px solid rgba(30,181,171,.25);
+      border:1px solid rgba(30,181,171.25);
       background:#ffffff;
       border-radius:16px;
       padding:12px 14px;
       color:#0b3348 !important;
       text-decoration:none !important;
       font-weight:900;
-      box-shadow:0 12px 24px rgba(8,24,41,.05);
+      box-shadow:0 12px 24px rgba(8,24,41.05);
     }
 
     .sl-telemed-mobile-strip span {
@@ -3003,7 +2738,7 @@ body{
       border-radius:999px;
       background:#eafffd;
       color:#07857d;
-      border:1px solid rgba(30,181,171,.25);
+      border:1px solid rgba(30,181,171.25);
     }
   }
 </style>
@@ -3030,14 +2765,14 @@ body{
     padding:16px 18px;
     border-radius:24px;
     background:#fff;
-    border:1px solid rgba(30,181,171,.18);
+    border:1px solid rgba(30,181,171.18);
     color:#0b2239;
     text-decoration:none;
-    box-shadow:0 14px 30px rgba(8,24,41,.045);
+    box-shadow:0 14px 30px rgba(8,24,41.045);
   }
 
   .sl-home-service-card:hover{
-    border-color:rgba(30,181,171,.42);
+    border-color:rgba(30,181,171.42);
     transform:translateY(-1px);
   }
 
@@ -3063,7 +2798,7 @@ body{
     margin-top:4px;
     border-radius:999px;
     background:#1eb5ab;
-    box-shadow:0 0 0 5px rgba(30,181,171,.12);
+    box-shadow:0 0 0 5px rgba(30,181,171.12);
   }
 
   .sl-home-tele-card{
@@ -3071,15 +2806,15 @@ body{
     border-radius:28px !important;
     overflow:hidden;
     background:linear-gradient(180deg,#ffffff 0%,#f6fcfd 100%) !important;
-    border:1px solid rgba(30,181,171,.16) !important;
-    box-shadow:0 24px 54px rgba(8,24,41,.08) !important;
+    border:1px solid rgba(30,181,171.16) !important;
+    box-shadow:0 24px 54px rgba(8,24,41.08) !important;
   }
 
   .sl-home-tele-card-head span{
     display:inline-flex;
     padding:7px 12px;
     border-radius:999px;
-    background:rgba(30,181,171,.12);
+    background:rgba(30,181,171.12);
     color:#087c76;
     font-size:.74rem;
     font-weight:950;
@@ -3106,10 +2841,10 @@ body{
     min-height:230px;
     border-radius:24px;
     background:
-      radial-gradient(circle at 18% 18%, rgba(30,181,171,.18), transparent 35%),
-      radial-gradient(circle at 88% 22%, rgba(11,34,57,.10), transparent 34%),
+      radial-gradient(circle at 18% 18%, rgba(30,181,171.18), transparent 35%),
+      radial-gradient(circle at 88% 22%, rgba(11,34,57.10), transparent 34%),
       linear-gradient(135deg,#eaf8f8 0%,#dff4f3 54%,#f5fbfc 100%);
-    border:1px solid rgba(30,181,171,.16);
+    border:1px solid rgba(30,181,171.16);
     overflow:hidden;
   }
 
@@ -3118,8 +2853,8 @@ body{
     inset:22px;
     border-radius:22px;
     background:#fff;
-    border:1px solid rgba(11,34,57,.08);
-    box-shadow:0 18px 40px rgba(8,24,41,.09);
+    border:1px solid rgba(11,34,57.08);
+    box-shadow:0 18px 40px rgba(8,24,41.09);
     overflow:hidden;
   }
 
@@ -3130,7 +2865,7 @@ body{
     gap:7px;
     padding:0 14px;
     background:#f8fbfc;
-    border-bottom:1px solid rgba(11,34,57,.06);
+    border-bottom:1px solid rgba(11,34,57.06);
   }
 
   .sl-home-tele-window-bar i{
@@ -3163,7 +2898,7 @@ body{
     transform:translateX(-50%);
     border-radius:50%;
     background:linear-gradient(180deg,#ffd7bf,#f1c1a8);
-    border:2px solid rgba(11,34,57,.06);
+    border:2px solid rgba(11,34,57.06);
   }
 
   .sl-home-doctor-coat{
@@ -3175,7 +2910,7 @@ body{
     transform:translateX(-50%);
     border-radius:28px 28px 18px 18px;
     background:linear-gradient(180deg,#fff,#f3f7f9);
-    border:2px solid rgba(11,34,57,.06);
+    border:2px solid rgba(11,34,57.06);
   }
 
   .sl-home-doctor-steth{
@@ -3187,7 +2922,7 @@ body{
     transform:translateX(-50%);
     border-radius:50%;
     background:#1eb5ab;
-    box-shadow:0 0 0 7px rgba(30,181,171,.12);
+    box-shadow:0 0 0 7px rgba(30,181,171.12);
   }
 
   .sl-home-tele-lines strong{
@@ -3220,7 +2955,7 @@ body{
     padding:13px 14px;
     border-radius:18px;
     background:#fff;
-    border:1px solid rgba(30,181,171,.16);
+    border:1px solid rgba(30,181,171.16);
   }
 
   .sl-home-tele-medics strong{
@@ -3249,7 +2984,7 @@ body{
     color:#fff !important;
     font-weight:900;
     text-decoration:none;
-    box-shadow:0 12px 24px rgba(30,181,171,.20);
+    box-shadow:0 12px 24px rgba(30,181,171.20);
   }
 
   .sl-home-tele-main-btn:hover{
@@ -3300,7 +3035,7 @@ body{
         <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a>
         <a href="/servicos/" class="sl-nav-link">Serviços</a>
 
-        <a href="/telemedicina/">Telemedicina</a>
+        <a href="#agendamento">Agendamento</a><a href="/telemedicina/">Telemedicina</a>
         <div class="sl-has-sub">
   <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a>
   <div class="sl-submenu" role="menu" aria-label="Contato">
@@ -3319,7 +3054,7 @@ body{
 </a>
 <a class="sl-nav-cta" target="_blank" rel="noopener"
          href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life.">
-        Agendar pelo WhatsApp
+        Falar no WhatsApp
       </a>
     </div>
 </header>
@@ -3327,7 +3062,7 @@ body{
 <div class="sl-telemed-mobile-strip">
   <a href="/telemedicina/">
     <div>
-      Telemedicina médica
+      Teleconsulta respiratória
       <span>Consulta online respiratória</span>
     </div>
     <b>→</b>
@@ -3344,15 +3079,14 @@ body{
 <section class="sl-hero-v3">
   <div class="sl-hero-v3__wrap">
     <div>
-      <span class="sl-hero-v3__kicker">Saúde respiratória no Rio de Janeiro</span>
-      <h1 class="sl-hero-v3__title">Cuidando da sua <span>respiração</span> com tecnologia e acolhimento</h1>
-      <p class="sl-hero-v3__lead">Espirometria com laudo por pneumologista e teleconsulta respiratória. Atendimento domiciliar, em parceria com clínicas e online — você escolhe.</p>
+      <h1 class="sl-hero-v3__title">Espirometria <span>ambulatorial ou domiciliar</span> e teleconsulta com médicos especialistas.</h1>
+      <p class="sl-hero-v3__lead">Exame respiratório com laudo por pneumologista e consulta online quando você precisar.</p>
       <div class="sl-cta-row">
         <a class="sl-cta-btn sl-cta-btn--wa" href="https://wa.me/5521999417192?text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20um%20atendimento%20na%20Sopro%20Life." target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M17.6 6.3A7.85 7.85 0 0 0 12 4a7.94 7.94 0 0 0-6.8 12L4 20l4.1-1.1A7.94 7.94 0 0 0 20 12a7.85 7.85 0 0 0-2.4-5.7zM12 18.5a6.6 6.6 0 0 1-3.4-.9l-.2-.1-2.4.6.6-2.3-.2-.3a6.5 6.5 0 0 1 10.1-8 6.5 6.5 0 0 1-4.5 11zm3.6-4.9c-.2-.1-1.2-.6-1.4-.6s-.3 0-.5.2-.5.6-.6.8-.2.1-.4 0a5.4 5.4 0 0 1-1.6-1 6 6 0 0 1-1.1-1.4c-.1-.2 0-.3.1-.4l.3-.4.2-.3v-.3l-.6-1.4c-.2-.3-.3-.3-.4-.3h-.4a.7.7 0 0 0-.5.3 2.2 2.2 0 0 0-.7 1.7 3.9 3.9 0 0 0 .8 2 8.7 8.7 0 0 0 3.5 3.1c1.2.5 1.7.5 2.3.4a2 2 0 0 0 1.3-.9 1.6 1.6 0 0 0 .1-.9c-.1-.1-.2-.2-.4-.3z"/></svg>
-          Agendar pelo WhatsApp
+          Falar no WhatsApp
         </a>
-        <a class="sl-cta-btn sl-cta-btn--ghost" href="#agendamento">Ver agenda</a>
+        <a class="sl-cta-btn sl-cta-btn--ghost" href="#agendamento">Ver agendamento</a>
       </div>
       <div class="sl-trust-row">
         <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Laudo por pneumologista</span>
@@ -3363,12 +3097,12 @@ body{
     <div class="sl-offer-stack" aria-label="Serviços principais">
       <a class="sl-offer sl-offer--primary" href="#agendamento">
         <div class="sl-offer__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v8"/><path d="M8 8c-3 0-5 3-5 7 0 3 2 5 4 5 1.5 0 2-1 2-3v-9"/><path d="M16 8c3 0 5 3 5 7 0 3-2 5-4 5-1.5 0-2-1-2-3v-9"/></svg></div>
-        <div class="sl-offer__body"><h3>Espirometria</h3><p>Simples, com broncodilatador ou prova de função pulmonar — agenda rápida e domiciliar.</p></div>
+        <div class="sl-offer__body"><h3>Agendar espirometria</h3><p>Simples, com broncodilatador ou prova de função pulmonar — domiciliar ou em clínica parceira.</p></div>
         <span class="sl-offer__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
       </a>
       <a class="sl-offer" href="telemedicina/">
         <div class="sl-offer__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg></div>
-        <div class="sl-offer__body"><h3>Telemedicina respiratória</h3><p>Consulta online com avaliação clínica e solicitação de exames quando houver indicação.</p></div>
+        <div class="sl-offer__body"><h3>Teleconsulta respiratória</h3><p>Consulta online para avaliação respiratória e solicitação de espirometria quando indicada.</p></div>
         <span class="sl-offer__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
       </a>
     </div>
@@ -3379,11 +3113,11 @@ body{
   <div>
     <span class="sl-tele-banner__kicker">Novidade</span>
     <h3>Consulta médica respiratória sem sair de casa</h3>
-    <p>Avaliação online com médicas parceiras. Indicado para sintomas respiratórios, orientação clínica e solicitação de espirometria quando houver indicação.</p>
-    <a class="sl-cta-btn sl-cta-btn--wa" href="telemedicina/" style="background:#1eb5ab;box-shadow:0 12px 24px rgba(30,181,171,.30);">Ver telemedicina <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    <p>Consulta online para avaliação respiratória e solicitação de espirometria quando indicada.</p>
+    <a class="sl-cta-btn sl-cta-btn--wa" href="telemedicina/" style="background:#1eb5ab;box-shadow:0 12px 24px rgba(30,181,171.30);">Ver médicos <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
   </div>
   <div class="sl-tele-banner__visual" aria-hidden="true">
-    <svg viewBox="0 0 200 200" fill="none"><circle cx="100" cy="100" r="80" stroke="rgba(110,224,214,.30)" stroke-width="1.5"/><circle cx="100" cy="100" r="55" stroke="rgba(110,224,214,.50)" stroke-width="1.5"/><rect x="65" y="78" width="70" height="44" rx="6" stroke="#6ee0d6" stroke-width="2"/><path d="M135 92l18-8v32l-18-8z" stroke="#6ee0d6" stroke-width="2" fill="rgba(110,224,214,.15)"/><circle cx="100" cy="100" r="4" fill="#6ee0d6"/></svg>
+    <svg viewBox="0 0 200 200" fill="none"><circle cx="100" cy="100" r="80" stroke="rgba(110,224,214.30)" stroke-width="1.5"/><circle cx="100" cy="100" r="55" stroke="rgba(110,224,214.50)" stroke-width="1.5"/><rect x="65" y="78" width="70" height="44" rx="6" stroke="#6ee0d6" stroke-width="2"/><path d="M135 92l18-8v32l-18-8z" stroke="#6ee0d6" stroke-width="2" fill="rgba(110,224,214.15)"/><circle cx="100" cy="100" r="4" fill="#6ee0d6"/></svg>
   </div>
 </aside>
 <!-- ============== DIFERENCIAIS ============== -->
@@ -3410,7 +3144,7 @@ body{
           <div class="sl-section-kicker">Sobre o exame</div>
           <h2 class="sl-section-title">O que é a espirometria?</h2>
           <p class="sl-section-subtitle">
-            A espirometria (prova de função respiratória ou prova de função pulmonar) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório. Para quem procura <a href="/espirometria-rio-de-janeiro/" style="color:#0f8f86;text-decoration:underline;font-weight:700;">onde fazer espirometria no Rio de Janeiro</a>, a Sopro Life oferece uma página específica com orientações e agendamento.
+            A espirometria (prova de função respiratória ou prova de função pulmonar) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório. Para quem procura , a Sopro Life oferece uma página específica com orientações e agendamento.
           </p>
         </div>
 
@@ -4167,12 +3901,12 @@ body{
 
 .sl-map-modal-side{
   background:
-    radial-gradient(circle at top left, rgba(30,181,171,.22), transparent 44%),
+    radial-gradient(circle at top left, rgba(30,181,171.22), transparent 44%),
     linear-gradient(180deg, #effdfc 0%, #f8ffff 48%, #ffffff 100%) !important;
-  border: 1px solid rgba(30,181,171,.38) !important;
+  border: 1px solid rgba(30,181,171.38) !important;
   border-radius: 18px !important;
   padding: 18px !important;
-  box-shadow: 0 16px 34px rgba(8,24,41,.10) !important;
+  box-shadow: 0 16px 34px rgba(8,24,41.10) !important;
 }
 
 .sl-map-modal-side h3{
@@ -4200,12 +3934,12 @@ body{
   margin: 9px 0 !important;
   padding: 11px 13px 11px 34px !important;
   border-radius: 13px !important;
-  border: 1px solid rgba(30,181,171,.48) !important;
+  border: 1px solid rgba(30,181,171.48) !important;
   border-left: 5px solid #1eb5ab !important;
   background: linear-gradient(180deg, #dffcf9 0%, #c9f5f1 100%) !important;
   color: #0b3348 !important;
   font-weight: 850 !important;
-  box-shadow: 0 8px 18px rgba(8,24,41,.075) !important;
+  box-shadow: 0 8px 18px rgba(8,24,41.075) !important;
   transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease !important;
 }
 
@@ -4219,14 +3953,14 @@ body{
   transform: translateY(-50%) !important;
   border-radius: 999px !important;
   background: #0f8f86 !important;
-  box-shadow: 0 0 0 5px rgba(30,181,171,.18) !important;
+  box-shadow: 0 0 0 5px rgba(30,181,171.18) !important;
 }
 
 .sl-map-unit-card:hover{
   transform: translateY(-1px) !important;
-  border-color: rgba(15,143,134,.82) !important;
+  border-color: rgba(15,143,134.82) !important;
   background: linear-gradient(180deg, #c9f8f4 0%, #b3eee9 100%) !important;
-  box-shadow: 0 12px 24px rgba(8,24,41,.12) !important;
+  box-shadow: 0 12px 24px rgba(8,24,41.12) !important;
 }
 
 .sl-map-modal-side p:last-child{
@@ -4235,15 +3969,13 @@ body{
   border-radius: 13px !important;
   color: #244e64 !important;
   background:
-    linear-gradient(180deg, rgba(255,255,255,.96), rgba(235,252,250,.96)) !important;
-  border: 1px solid rgba(30,181,171,.28) !important;
+    linear-gradient(180deg, rgba(255,255,255.96), rgba(235,252,250.96)) !important;
+  border: 1px solid rgba(30,181,171.28) !important;
   border-left: 5px solid #1eb5ab !important;
-  box-shadow: 0 6px 14px rgba(8,24,41,.055) !important;
+  box-shadow: 0 6px 14px rgba(8,24,41.055) !important;
 }
 
-.sl-map-modal-title,
-.sl-map-modal h2,
-.sl-map-modal h3{
+.sl-map-modal-title.sl-map-modal h2.sl-map-modal h3{
   color: #0b2239 !important;
 }
 </style>
@@ -4267,11 +3999,11 @@ body{
   font-size:.68rem;
   font-weight:800;
   letter-spacing:.02em;
-  box-shadow:0 4px 10px rgba(37,211,102,.22);
+  box-shadow:0 4px 10px rgba(37,211,102.22);
 }
 
 .sl-map-unit-card:focus-visible{
-  outline:3px solid rgba(30,181,171,.32) !important;
+  outline:3px solid rgba(30,181,171.32) !important;
   outline-offset:3px !important;
 }
 </style>
@@ -4352,17 +4084,15 @@ body{
 /* SOPRO:FLATPICKR_PTBR_STYLE */
 .flatpickr-calendar{
   border-radius:18px !important;
-  border:1px solid rgba(30,181,171,.26) !important;
-  box-shadow:0 18px 42px rgba(8,24,41,.16) !important;
+  border:1px solid rgba(30,181,171.26) !important;
+  box-shadow:0 18px 42px rgba(8,24,41.16) !important;
   font-family:inherit !important;
   overflow:hidden !important;
 }
 .flatpickr-months{
   background:#ffffff !important;
 }
-.flatpickr-current-month,
-.flatpickr-current-month .flatpickr-monthDropdown-months,
-.flatpickr-current-month input.cur-year{
+.flatpickr-current-month.flatpickr-current-month .flatpickr-monthDropdown-months.flatpickr-current-month input.cur-year{
   color:#0b2239 !important;
   font-weight:800 !important;
 }
@@ -4377,24 +4107,20 @@ body{
 .flatpickr-day.today{
   border-color:#1eb5ab !important;
 }
-.flatpickr-day.selected,
-.flatpickr-day.startRange,
-.flatpickr-day.endRange{
+.flatpickr-day.selected.flatpickr-day.startRange.flatpickr-day.endRange{
   background:#1eb5ab !important;
   border-color:#1eb5ab !important;
   color:white !important;
 }
 .flatpickr-day:hover{
-  background:rgba(30,181,171,.13) !important;
-  border-color:rgba(30,181,171,.28) !important;
+  background:rgba(30,181,171.13) !important;
+  border-color:rgba(30,181,171.28) !important;
 }
-.flatpickr-day.disabled,
-.flatpickr-day.disabled:hover{
+.flatpickr-day.disabled.flatpickr-day.disabled:hover{
   color:#b6c4ce !important;
   background:#f1f5f7 !important;
 }
-.flatpickr-calendar .flatpickr-prev-month,
-.flatpickr-calendar .flatpickr-next-month{
+.flatpickr-calendar .flatpickr-prev-month.flatpickr-calendar .flatpickr-next-month{
   color:#0b2239 !important;
   fill:#0b2239 !important;
 }
@@ -4420,7 +4146,7 @@ body{
 
     flatpickr(dateEl, {
       locale: {
-        ...flatpickr.l10ns.pt,
+        ..flatpickr.l10ns.pt,
         firstDayOfWeek: 0
       },
       dateFormat: "Y-m-d",
@@ -4456,20 +4182,16 @@ body{
 <style id="sopro-map-tile-filter">
 /* SOPRO:MAP_TILE_FILTER_V1 */
 /* Mantém o mapa limpo, mas puxa discretamente para a paleta SoproLife */
-.sl-mini-map .leaflet-tile,
-.sl-map-modal-map .leaflet-tile,
+.sl-mini-map .leaflet-tile.sl-map-modal-map .leaflet-tile,
 #sl-mini-map .leaflet-tile,
 #sl-map-modal-map .leaflet-tile{
   filter: saturate(1.08) contrast(.98) brightness(1.03) hue-rotate(-4deg);
 }
 
 /* Mantém pins e controles sem filtro */
-.sl-mini-map .leaflet-marker-icon,
-.sl-map-modal-map .leaflet-marker-icon,
+.sl-mini-map .leaflet-marker-icon.sl-map-modal-map .leaflet-marker-icon,
 #sl-mini-map .leaflet-marker-icon,
-#sl-map-modal-map .leaflet-marker-icon,
-.sl-mini-map .leaflet-control,
-.sl-map-modal-map .leaflet-control,
+#sl-map-modal-map .leaflet-marker-icon.sl-mini-map .leaflet-control.sl-map-modal-map .leaflet-control,
 #sl-mini-map .leaflet-control,
 #sl-map-modal-map .leaflet-control{
   filter:none !important;
@@ -4574,8 +4296,7 @@ body{
 /* Instagram header final: miolo branco, borda rosa e câmera colorida */
 .sl-header-instagram,
 a.sl-header-instagram,
-header .sl-header-instagram,
-.sl-header a.sl-header-instagram {
+header .sl-header-instagram.sl-header a.sl-header-instagram {
   width: 42px !important;
   height: 42px !important;
   min-width: 42px !important;
@@ -4596,8 +4317,7 @@ header .sl-header-instagram,
   transform: none !important;
 }
 
-.sl-header-instagram::before,
-.sl-header-instagram::after,
+.sl-header-instagram::before.sl-header-instagram::after,
 a.sl-header-instagram::before,
 a.sl-header-instagram::after {
   background: transparent !important;
@@ -4627,14 +4347,13 @@ a.sl-header-instagram svg * {
 /* Hover simples, sem gradiente estranho */
 .sl-header-instagram:hover,
 a.sl-header-instagram:hover,
-header .sl-header-instagram:hover,
-.sl-header a.sl-header-instagram:hover {
+header .sl-header-instagram:hover.sl-header a.sl-header-instagram:hover {
   background: #ffffff !important;
   background-color: #ffffff !important;
   background-image: none !important;
   border-color: #c13584 !important;
   color: #c13584 !important;
-  box-shadow: 0 0 0 4px rgba(193, 53, 132, .10) !important;
+  box-shadow: 0 0 0 4px rgba(193, 53, 132.10) !important;
   transform: translateY(-1px) !important;
 }
 </style>

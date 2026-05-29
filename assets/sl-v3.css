@@ -75,3 +75,54 @@
   .sl-cta-btn{width:100%}
   .sl-trust-row{font-size:.85rem}
 }
+
+/* ============================================================
+   sl-v3-1-patch — Ajustes finos (mobile + barra WhatsApp)
+=========================================================== */
+
+/* Espaço extra no rodapé do <body> em mobile para a barra fixa do WhatsApp não cobrir conteúdo */
+@media (max-width: 760px){
+  body{
+    padding-bottom: 88px !important;
+  }
+  /* Se houver footer fixo, garantir que ele também respeite */
+  footer{
+    margin-bottom: 0;
+  }
+}
+
+/* Hero mais enxuto no mobile (sem a pílula e com título menor) */
+@media (max-width: 760px){
+  .sl-hero-v3{
+    padding: 24px 0 16px;
+  }
+  .sl-hero-v3__title{
+    font-size: clamp(1.7rem, 7vw, 2.3rem);
+    margin: 4px 0 12px;
+    line-height: 1.1;
+  }
+  .sl-hero-v3__lead{
+    font-size: .95rem;
+    margin-bottom: 18px;
+  }
+  .sl-cta-row{
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sl-cta-btn{
+    width: 100%;
+  }
+  .sl-trust-row{
+    margin-top: 16px;
+    font-size: .85rem;
+  }
+}
+
+/* Garantir que a barra fixa do WhatsApp tenha z-index correto mas não cubra cliques */
+.sl-whatsapp-float,
+.whatsapp-float,
+.wa-float,
+a[href*="wa.me"][class*="float"]{
+  bottom: 16px !important;
+  z-index: 50;
+}
