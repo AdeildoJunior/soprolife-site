@@ -1,0 +1,390 @@
+/* ============================================================
+   SOPRO LIFE — Visual System v3 (Consolidado)
+   Mantém compatibilidade com classes existentes.
+   Cole APÓS todos os <style> antigos no <head>.
+   ============================================================ */
+
+:root{
+  --sl-navy:        #0b2239;
+  --sl-navy-2:      #143852;
+  --sl-teal:        #1eb5ab;
+  --sl-teal-dark:   #07857d;
+  --sl-teal-soft:   #e8faf8;
+  --sl-bg:          #f7fbfc;
+  --sl-line:        rgba(11,34,57,.09);
+  --sl-muted:       #5f7485;
+  --sl-wa:          #25D366;
+
+  --sl-radius-sm:   12px;
+  --sl-radius-md:   18px;
+  --sl-radius-lg:   24px;
+  --sl-radius-xl:   32px;
+
+  --sl-shadow-1:    0 2px 8px rgba(11,34,57,.04);
+  --sl-shadow-2:    0 10px 28px rgba(11,34,57,.07);
+  --sl-shadow-3:    0 22px 55px rgba(11,34,57,.10);
+}
+
+/* ---------- HERO V3 — duas ofertas principais ---------- */
+.sl-hero-v3{
+  position: relative;
+  padding: 56px 0 36px;
+  background:
+    radial-gradient(900px 420px at 8% -10%, rgba(30,181,171,.10), transparent 60%),
+    radial-gradient(700px 380px at 100% 0%, rgba(11,34,57,.05), transparent 60%),
+    linear-gradient(180deg, #ffffff 0%, var(--sl-bg) 100%);
+  overflow: hidden;
+}
+
+.sl-hero-v3__wrap{
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: 1.05fr .95fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.sl-hero-v3__kicker{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(30,181,171,.12);
+  color: var(--sl-teal-dark);
+  font-size: .76rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.sl-hero-v3__kicker::before{
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 999px;
+  background: var(--sl-teal);
+  box-shadow: 0 0 0 4px rgba(30,181,171,.18);
+}
+
+.sl-hero-v3__title{
+  margin: 18px 0 14px;
+  font-size: clamp(2.2rem, 4.8vw, 3.6rem);
+  line-height: 1.04;
+  letter-spacing: -.035em;
+  color: var(--sl-navy);
+  font-weight: 750;
+}
+.sl-hero-v3__title span{ color: var(--sl-teal); }
+
+.sl-hero-v3__lead{
+  max-width: 560px;
+  color: var(--sl-muted);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin: 0 0 28px;
+}
+
+/* Trust row (selos rápidos) */
+.sl-trust-row{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 22px;
+  color: var(--sl-muted);
+  font-size: .9rem;
+}
+.sl-trust-row span{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sl-trust-row svg{
+  width: 18px; height: 18px;
+  color: var(--sl-teal);
+  flex: 0 0 18px;
+}
+
+/* ---------- DUAS OFERTAS PRINCIPAIS (cards do hero) ---------- */
+.sl-offer-stack{
+  display: grid;
+  gap: 16px;
+}
+
+.sl-offer{
+  position: relative;
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 22px 22px;
+  border-radius: var(--sl-radius-lg);
+  background: #fff;
+  border: 1px solid var(--sl-line);
+  box-shadow: var(--sl-shadow-2);
+  text-decoration: none;
+  color: var(--sl-navy);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.sl-offer:hover{
+  transform: translateY(-2px);
+  box-shadow: var(--sl-shadow-3);
+  border-color: rgba(30,181,171,.30);
+}
+
+.sl-offer__icon{
+  width: 56px; height: 56px;
+  border-radius: 16px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--sl-teal-soft), #ffffff);
+  border: 1px solid rgba(30,181,171,.22);
+  color: var(--sl-teal-dark);
+}
+.sl-offer__icon svg{ width: 28px; height: 28px; }
+
+.sl-offer__body h3{
+  margin: 0 0 4px;
+  font-size: 1.12rem;
+  font-weight: 750;
+  letter-spacing: -.015em;
+  color: var(--sl-navy);
+}
+.sl-offer__body p{
+  margin: 0;
+  font-size: .92rem;
+  line-height: 1.45;
+  color: var(--sl-muted);
+}
+
+.sl-offer__arrow{
+  width: 38px; height: 38px;
+  border-radius: 999px;
+  display: grid; place-items: center;
+  background: var(--sl-teal-soft);
+  color: var(--sl-teal-dark);
+  transition: background .18s, transform .18s;
+}
+.sl-offer:hover .sl-offer__arrow{
+  background: var(--sl-teal);
+  color: #fff;
+  transform: translateX(2px);
+}
+.sl-offer__arrow svg{ width: 18px; height: 18px; }
+
+/* Variante destacada (primária) */
+.sl-offer--primary{
+  background: linear-gradient(135deg, #0b2239 0%, #143852 100%);
+  color: #fff;
+  border-color: transparent;
+}
+.sl-offer--primary .sl-offer__body h3{ color: #fff; }
+.sl-offer--primary .sl-offer__body p{ color: rgba(255,255,255,.78); }
+.sl-offer--primary .sl-offer__icon{
+  background: rgba(30,181,171,.18);
+  border-color: rgba(30,181,171,.35);
+  color: #6ee0d6;
+}
+.sl-offer--primary .sl-offer__arrow{
+  background: var(--sl-teal);
+  color: #fff;
+}
+
+/* ---------- CTA principal (botões do hero) ---------- */
+.sl-cta-row{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.sl-cta-btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 24px;
+  border-radius: 999px;
+  font-weight: 750;
+  font-size: .98rem;
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition: transform .15s, box-shadow .15s, background .15s;
+  cursor: pointer;
+}
+
+.sl-cta-btn--wa{
+  background: var(--sl-wa);
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(37,211,102,.22);
+}
+.sl-cta-btn--wa:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 16px 30px rgba(37,211,102,.30);
+}
+
+.sl-cta-btn--ghost{
+  background: #fff;
+  color: var(--sl-navy);
+  border-color: var(--sl-line);
+}
+.sl-cta-btn--ghost:hover{
+  border-color: rgba(30,181,171,.40);
+  background: var(--sl-teal-soft);
+}
+
+/* ---------- SEÇÃO: Por que a Sopro (diferenciais) ---------- */
+.sl-features{
+  padding: 64px 0;
+  background: #fff;
+}
+.sl-features__wrap{
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.sl-features__head{
+  max-width: 640px;
+  margin: 0 auto 36px;
+  text-align: center;
+}
+.sl-features__head h2{
+  margin: 12px 0 10px;
+  font-size: clamp(1.7rem, 2.6vw, 2.3rem);
+  letter-spacing: -.03em;
+  color: var(--sl-navy);
+  font-weight: 720;
+}
+.sl-features__head p{
+  color: var(--sl-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.sl-features__grid{
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+.sl-feature{
+  padding: 24px 22px;
+  border-radius: var(--sl-radius-md);
+  background: var(--sl-bg);
+  border: 1px solid var(--sl-line);
+  transition: transform .2s, box-shadow .2s;
+}
+.sl-feature:hover{
+  transform: translateY(-3px);
+  box-shadow: var(--sl-shadow-2);
+}
+.sl-feature__icon{
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  display: grid; place-items: center;
+  background: #fff;
+  border: 1px solid rgba(30,181,171,.20);
+  color: var(--sl-teal-dark);
+  margin-bottom: 14px;
+}
+.sl-feature__icon svg{ width: 22px; height: 22px; }
+.sl-feature h4{
+  margin: 0 0 6px;
+  font-size: 1.02rem;
+  color: var(--sl-navy);
+  font-weight: 720;
+  letter-spacing: -.015em;
+}
+.sl-feature p{
+  margin: 0;
+  font-size: .92rem;
+  line-height: 1.5;
+  color: var(--sl-muted);
+}
+
+/* ---------- Banner Telemedicina ---------- */
+.sl-tele-banner{
+  margin: 24px 0;
+  padding: 36px;
+  border-radius: var(--sl-radius-xl);
+  background:
+    radial-gradient(600px 280px at 90% 50%, rgba(30,181,171,.20), transparent 70%),
+    linear-gradient(135deg, #0b2239 0%, #143852 100%);
+  color: #fff;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 32px;
+  align-items: center;
+  overflow: hidden;
+  position: relative;
+}
+.sl-tele-banner__kicker{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(30,181,171,.18);
+  color: #6ee0d6;
+  font-size: .74rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.sl-tele-banner h3{
+  margin: 14px 0 10px;
+  font-size: clamp(1.6rem, 2.6vw, 2.2rem);
+  line-height: 1.1;
+  letter-spacing: -.03em;
+  font-weight: 750;
+}
+.sl-tele-banner p{
+  margin: 0 0 22px;
+  color: rgba(255,255,255,.82);
+  line-height: 1.6;
+  max-width: 520px;
+}
+.sl-tele-banner__visual{
+  display: grid; place-items: center;
+}
+.sl-tele-banner__visual svg{
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  opacity: .92;
+}
+
+/* ---------- Mobile (priorizar CTAs) ---------- */
+@media (max-width: 900px){
+  .sl-hero-v3{ padding: 32px 0 20px; }
+  .sl-hero-v3__wrap{
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .sl-features__grid{
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .sl-tele-banner{
+    grid-template-columns: 1fr;
+    padding: 28px 22px;
+    border-radius: var(--sl-radius-lg);
+  }
+  .sl-tele-banner__visual{ display: none; }
+}
+
+@media (max-width: 560px){
+  .sl-features__grid{ grid-template-columns: 1fr; }
+  .sl-offer{
+    grid-template-columns: 48px 1fr;
+    padding: 18px;
+  }
+  .sl-offer__icon{ width: 48px; height: 48px; }
+  .sl-offer__arrow{ display: none; }
+  .sl-cta-btn{ width: 100%; }
+  .sl-trust-row{ font-size: .85rem; }
+}
+
+/* sl-v3-2-2-header-fix */
+.sl-header .sl-nav-cta,
+.sl-header .sl-cta-btn--wa{ box-shadow: none !important; }

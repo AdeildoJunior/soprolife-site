@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Telemedicina médica respiratória | Sopro Life</title>
-  <meta name="description" content="Telemedicina médica respiratória com a Sopro Life. Consulta online para avaliação respiratória, orientação médica e solicitação de espirometria quando houver indicação clínica.">
+  <meta name="description" content="Telemedicina médica respiratória na Sopro Life. Consulta online para avaliação respiratória e orientação sobre espirometria quando houver indicação clínica.">
   <link rel="canonical" href="https://soprolife.com.br/telemedicina/">
 
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260522b">
@@ -16,14 +16,12 @@
   <style>
     :root{
       --navy:#0b2239;
-      --navy-soft:#143852;
       --teal:#1eb5ab;
       --teal-dark:#07857d;
       --green:#25D366;
       --muted:#58748a;
       --line:rgba(11,34,57,.11);
       --soft:#effdfb;
-      --bg:#f7fcfd;
     }
 
     *{box-sizing:border-box}
@@ -84,7 +82,9 @@
       white-space:nowrap;
     }
 
-    .sl-nav a:hover{
+    .sl-nav a:hover,
+    .sl-nav a.is-active,
+    .sl-nav a.is-active:visited{
       color:var(--teal-dark);
     }
 
@@ -104,7 +104,7 @@
     }
 
     .sl-hero{
-      padding:58px 0 24px;
+      padding:64px 0 26px;
     }
 
     .sl-hero-grid{
@@ -144,37 +144,6 @@
       color:#506f84;
       font-size:1.08rem;
       line-height:1.62;
-    }
-
-    .sl-hero-actions{
-      display:flex;
-      flex-wrap:wrap;
-      gap:12px;
-      margin-top:24px;
-    }
-
-    .sl-primary-btn,
-    .sl-secondary-btn{
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      min-height:46px;
-      border-radius:999px;
-      padding:0 20px;
-      font-weight:950;
-      text-decoration:none;
-    }
-
-    .sl-primary-btn{
-      background:var(--teal);
-      color:#fff !important;
-      box-shadow:0 14px 28px rgba(30,181,171,.18);
-    }
-
-    .sl-secondary-btn{
-      background:#fff;
-      color:#0b3348 !important;
-      border:1px solid rgba(30,181,171,.22);
     }
 
     .sl-side-card{
@@ -287,7 +256,7 @@
 
     .sl-doctor-card{
       display:grid;
-      grid-template-columns:1fr 320px;
+      grid-template-columns:1fr 300px;
       gap:24px;
       align-items:center;
       background:#fff;
@@ -328,7 +297,6 @@
       color:#6b7f90;
       font-weight:750;
       margin-bottom:8px;
-      line-height:1.45;
     }
 
     .sl-badges{
@@ -357,22 +325,6 @@
     .sl-schedule-panel{
       display:grid;
       gap:12px;
-    }
-
-    .sl-hours-box{
-      background:linear-gradient(180deg,#f4fffe,#fff);
-      border:1px solid rgba(30,181,171,.20);
-      border-radius:16px;
-      padding:14px;
-      color:#42657c;
-      line-height:1.55;
-      font-size:.94rem;
-    }
-
-    .sl-hours-box strong{
-      color:#0b3348;
-      display:block;
-      margin-bottom:4px;
     }
 
     .sl-request-btn{
@@ -493,26 +445,12 @@
     .sl-slot{
       height:44px;
       border-radius:12px;
-      border:1px solid rgba(30,181,171,.38);
-      background:#eafffd;
-      color:#0b3348;
+      border:1px solid rgba(30,181,171,.25);
+      background:#eef8f8;
+      color:#6b8292;
       font-weight:950;
-      cursor:pointer;
-    }
-
-    .sl-slot:hover{
-      background:var(--teal);
-      color:#fff;
-    }
-
-    .sl-no-slots{
-      grid-column:1 / -1;
-      padding:15px;
-      border-radius:14px;
-      border:1px solid rgba(30,181,171,.22);
-      background:#f4fffe;
-      color:#42657c;
-      line-height:1.5;
+      cursor:not-allowed;
+      opacity:.82;
     }
 
     .sl-modal-foot{
@@ -530,312 +468,324 @@
       font-size:.92rem;
     }
 
-    @media(max-width:760px){
-      html,
-      body{
-        overflow-x:hidden;
-      }
-
-      .sl-container{
-        width:calc(100% - 24px);
-      }
-
+    @media(max-width:900px){
       .sl-header-inner{
-        min-height:auto;
-        padding:10px 0 8px;
-        gap:10px;
-      }
-
-      .sl-logo img{
-        height:44px;
-      }
-
-      .sl-whatsapp{
-        min-height:36px;
-        padding:0 13px;
-        font-size:.78rem;
+        flex-wrap:wrap;
+        padding:10px 0;
       }
 
       .sl-nav{
-        order:3;
         width:100%;
-        display:flex;
+        overflow:auto;
         gap:16px;
-        overflow-x:auto;
-        white-space:nowrap;
-        padding:6px 2px 2px;
-        scrollbar-width:none;
-        font-size:.88rem;
-      }
-
-      .sl-nav::-webkit-scrollbar{
-        display:none;
+        padding-bottom:6px;
       }
 
       .sl-hero{
-        padding:28px 0 12px;
+        padding-top:38px;
       }
 
-      .sl-hero-grid{
+      .sl-hero-grid,
+      .sl-doctor-card,
+      .sl-filter-grid{
         grid-template-columns:1fr;
-        gap:18px;
-      }
-
-      .sl-kicker{
-        font-size:.68rem;
-        letter-spacing:.10em;
-        padding:6px 10px;
-      }
-
-      h1{
-        font-size:clamp(2rem,11.4vw,2.95rem);
-        line-height:1;
-        letter-spacing:-.045em;
-        margin:14px 0 12px;
-      }
-
-      .sl-lead{
-        font-size:.98rem;
-        line-height:1.52;
-      }
-
-      .sl-hero-actions{
-        margin-top:18px;
-      }
-
-      .sl-primary-btn,
-      .sl-secondary-btn{
-        width:100%;
-        min-height:44px;
-      }
-
-      .sl-side-card{
-        padding:18px;
-        border-radius:22px;
-        box-shadow:0 16px 36px rgba(8,24,41,.07);
-      }
-
-      .sl-side-card h2{
-        font-size:1.18rem;
-      }
-
-      .sl-side-card p{
-        font-size:.94rem;
       }
 
       .sl-mode-grid{
-        grid-template-columns:1fr 1fr 1fr;
-        gap:8px;
-      }
-
-      .sl-mode{
-        min-height:70px;
-        padding:10px 8px;
-        border-radius:15px;
-        font-size:.82rem;
-        line-height:1.1;
-      }
-
-      .sl-dot{
-        width:12px;
-        height:12px;
-        box-shadow:0 0 0 4px rgba(30,181,171,.12);
-      }
-
-      .sl-search-section{
-        padding:12px 0 44px;
-      }
-
-      .sl-search-box{
-        padding:16px;
-        border-radius:20px;
-        margin-bottom:16px;
-      }
-
-      .sl-filter-grid{
         grid-template-columns:1fr;
-        gap:12px;
-      }
-
-      .sl-search-btn{
-        width:100%;
-      }
-
-      .sl-list-title{
-        margin:18px 0 10px;
-      }
-
-      .sl-doctor-card{
-        grid-template-columns:1fr;
-        gap:18px;
-        padding:18px;
-        border-radius:20px;
-      }
-
-      .sl-doctor-main{
-        align-items:flex-start;
-        gap:14px;
-      }
-
-      .sl-avatar{
-        width:68px;
-        height:68px;
-        min-width:68px;
-        font-size:1.2rem;
-      }
-
-      .sl-doctor-name{
-        font-size:1.12rem;
-        line-height:1.18;
-      }
-
-      .sl-doctor-meta{
-        font-size:.9rem;
-        line-height:1.35;
-      }
-
-      .sl-badge{
-        font-size:.76rem;
-        padding:5px 8px;
-      }
-
-      .sl-doctor-note{
-        font-size:.92rem;
-      }
-
-      .sl-request-btn{
-        height:46px;
-      }
-
-      .sl-info-strip{
-        margin-top:16px;
-        padding:14px 16px;
-        font-size:.92rem;
-      }
-
-      .sl-modal-backdrop{
-        align-items:flex-end;
-        padding:10px;
-      }
-
-      .sl-modal{
-        width:100%;
-        max-height:92vh;
-        border-radius:22px 22px 18px 18px;
-        overflow-y:auto;
-      }
-
-      .sl-modal-head{
-        padding:14px 16px;
-      }
-
-      .sl-modal-head h2{
-        font-size:1.02rem;
-      }
-
-      .sl-modal-body{
-        padding:16px;
       }
 
       .sl-slots{
         grid-template-columns:repeat(2,1fr);
-        gap:9px;
-      }
-
-      .sl-slot{
-        height:42px;
-        border-radius:11px;
-        font-size:.92rem;
-      }
-
-      footer{
-        padding:24px 0;
-        font-size:.84rem;
       }
     }
+  </style>
 
-    @media(max-width:420px){
-      .sl-container{
-        width:calc(100% - 20px);
-      }
+<!-- SOPRO:MENU_UNIFORME_FIX_START -->
+<style>
+  header nav a,
+  header nav a:visited,
+  .sl-nav a,
+  .sl-nav a:visited,
+  .sl-nav-link,
+  .sl-nav-link:visited {
+    color:#536a7d !important;
+    text-decoration:none !important;
+    font-weight:800 !important;
+  }
 
-      .sl-logo img{
-        height:40px;
-      }
+  header nav a:hover,
+  .sl-nav a:hover,
+  .sl-nav-link:hover {
+    color:#07857d !important;
+  }
 
-      .sl-whatsapp{
-        padding:0 11px;
-        font-size:.74rem;
-      }
+  header nav a[href="/telemedicina/"],
+  header nav a[href="/telemedicina/"]:visited,
+  .sl-nav a[href="/telemedicina/"],
+  .sl-nav a[href="/telemedicina/"]:visited {
+    color:#536a7d !important;
+  }
 
-      .sl-mode-grid{
-        grid-template-columns:1fr;
-      }
-    }
+  header nav a[href="/telemedicina/"]:hover,
+  .sl-nav a[href="/telemedicina/"]:hover {
+    color:#07857d !important;
+  }
+</style>
+<!-- SOPRO:MENU_UNIFORME_FIX_END -->
 
-/* === SOPRO:CLINICAL_PHOTO_AND_SECOND_DOCTOR_FIX === */
-.sl-photo {
-  width:96px;
-  height:96px;
-  min-width:96px;
-  border-radius:50%;
-  overflow:hidden;
-  border:1px solid rgba(30,181,171,.24);
-  background:linear-gradient(135deg,rgba(30,181,171,.16),rgba(11,34,57,.08));
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
 
-.sl-photo img {
-  width:100%;
-  height:100%;
-  object-fit:cover;
-  display:block;
-}
+<!-- SOPRO:TELEMED_MOBILE_FIX_START -->
+<style>
+/* Ajuste mobile específico da página de Telemedicina */
+@media (max-width: 760px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
 
-.sl-doctor-card + .sl-doctor-card {
-  margin-top:18px;
-}
+  .sl-container {
+    width: calc(100% - 24px);
+  }
 
-.sl-request-btn.is-disabled,
-.sl-request-btn:disabled {
-  cursor:not-allowed;
-  background:#f7fafb;
-  color:#60788a;
-  border-color:rgba(11,34,57,.12);
-}
+  .sl-header-inner {
+    min-height: auto;
+    padding: 10px 0 8px;
+    gap: 10px;
+    align-items: center;
+  }
 
-.sl-request-btn.is-disabled:hover,
-.sl-request-btn:disabled:hover {
-  background:#f7fafb;
-  color:#60788a;
-}
+  .sl-logo img {
+    height: 46px;
+  }
 
-@media(max-width:760px) {
-  .sl-photo {
-    width:72px;
-    height:72px;
-    min-width:72px;
+  .sl-whatsapp {
+    min-height: 36px;
+    padding: 0 14px;
+    font-size: .82rem;
+  }
+
+  .sl-nav {
+    order: 3;
+    width: 100%;
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding: 6px 2px 2px;
+    scrollbar-width: none;
+    font-size: .88rem;
+  }
+
+  .sl-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sl-hero {
+    padding: 28px 0 12px;
+  }
+
+  .sl-hero-grid {
+    grid-template-columns: 1fr !important;
+    gap: 18px;
+  }
+
+  .sl-kicker {
+    font-size: .68rem;
+    letter-spacing: .10em;
+    padding: 6px 10px;
+  }
+
+  h1 {
+    font-size: clamp(2.25rem, 12vw, 3.15rem);
+    line-height: .98;
+    letter-spacing: -.045em;
+    margin: 14px 0 12px;
+  }
+
+  .sl-lead {
+    font-size: .98rem;
+    line-height: 1.52;
+  }
+
+  .sl-side-card {
+    padding: 18px;
+    border-radius: 22px;
+    box-shadow: 0 16px 36px rgba(8,24,41,.07);
+  }
+
+  .sl-side-card h2 {
+    font-size: 1.18rem;
+  }
+
+  .sl-side-card p {
+    font-size: .94rem;
+  }
+
+  .sl-mode-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .sl-mode {
+    min-height: 70px;
+    padding: 10px 8px;
+    border-radius: 15px;
+    font-size: .82rem;
+    line-height: 1.1;
+  }
+
+  .sl-dot {
+    width: 12px;
+    height: 12px;
+    box-shadow: 0 0 0 4px rgba(30,181,171,.12);
+  }
+
+  .sl-search-section {
+    padding: 12px 0 44px;
+  }
+
+  .sl-search-box {
+    padding: 16px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+  }
+
+  .sl-filter-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  .sl-search-btn {
+    width: 100%;
+  }
+
+  .sl-list-title {
+    margin: 18px 0 10px;
+  }
+
+  .sl-doctor-card {
+    grid-template-columns: 1fr !important;
+    gap: 18px;
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .sl-doctor-main {
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .sl-avatar {
+    width: 68px;
+    height: 68px;
+    min-width: 68px;
+    font-size: 1.2rem;
+  }
+
+  .sl-doctor-name {
+    font-size: 1.12rem;
+    line-height: 1.18;
+  }
+
+  .sl-doctor-meta {
+    font-size: .9rem;
+    line-height: 1.35;
+  }
+
+  .sl-badges {
+    gap: 6px;
+  }
+
+  .sl-badge {
+    font-size: .76rem;
+    padding: 5px 8px;
+  }
+
+  .sl-doctor-note {
+    font-size: .92rem;
+  }
+
+  .sl-request-btn {
+    height: 46px;
+  }
+
+  .sl-info-strip {
+    margin-top: 16px;
+    padding: 14px 16px;
+    font-size: .92rem;
+  }
+
+  .sl-modal-backdrop {
+    align-items: flex-end;
+    padding: 10px;
+  }
+
+  .sl-modal {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 22px 22px 18px 18px;
+    overflow-y: auto;
+  }
+
+  .sl-modal-head {
+    padding: 14px 16px;
+  }
+
+  .sl-modal-head h2 {
+    font-size: 1.02rem;
+  }
+
+  .sl-modal-body {
+    padding: 16px;
+  }
+
+  .sl-slots {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 9px;
+  }
+
+  .sl-slot {
+    height: 42px;
+    border-radius: 11px;
+    font-size: .92rem;
+  }
+
+  footer {
+    padding: 24px 0;
+    font-size: .84rem;
   }
 }
 
+@media (max-width: 420px) {
+  .sl-container {
+    width: calc(100% - 20px);
+  }
 
-/* === SOPRO:TELEMED_NO_SEARCH_FIX === */
-.telemedicina-no-search-marker {
-  display:none;
+  .sl-logo img {
+    height: 42px;
+  }
+
+  .sl-whatsapp {
+    padding: 0 12px;
+    font-size: .78rem;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 12vw, 2.7rem);
+  }
+
+  .sl-mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sl-doctor-main {
+    flex-direction: row;
+  }
 }
-
-.sl-search-section {
-  padding-top: 6px;
-}
-
-.sl-list-title {
-  margin-top: 0;
-}
-
 </style>
-  <link rel="stylesheet" href="/assets/sopro-visual-system-v3.css?v=visual-v3">
+<!-- SOPRO:TELEMED_MOBILE_FIX_END -->
+
 </head>
 
 <body>
@@ -869,10 +819,6 @@
           <p class="sl-lead">
             Atendimento por telemedicina para orientação médica, avaliação de sintomas respiratórios e solicitação de espirometria quando houver indicação clínica.
           </p>
-          <div class="sl-hero-actions">
-            <a class="sl-primary-btn" href="#profissional">Ver profissional</a>
-            <button class="sl-secondary-btn" type="button" data-open-telemed>Solicitar horário</button>
-          </div>
         </div>
 
         <aside class="sl-side-card">
@@ -889,83 +835,53 @@
       </div>
     </section>
 
-    <section class="sl-search-section" id="profissional">
+    <section class="sl-search-section">
       <div class="sl-container">
-        <h2 class="sl-list-title">Profissionais disponíveis</h2>
-
-        <article class="sl-doctor-card">
-          <div class="sl-doctor-main">
-            <div class="sl-photo">
-                <img src="/img/dra-carla-ferreira.jpg?v=20260528" alt="Dra. Carla Ferreira">
-              </div>
-            <div>
-              <h3 class="sl-doctor-name">Dra. Carla Ferreira</h3>
-              <div class="sl-doctor-meta">
-                Médica especialista em Clínica Médica — RQE 59839<br>
-                Residente de Pneumologia • CRM-RJ 126883-0
-              </div>
-              <div class="sl-badges">
-                <span class="sl-badge">Telemedicina</span>
-                <span class="sl-badge">Clínica médica</span>
-                <span class="sl-badge">Avaliação respiratória</span>
-              </div>
-              <p class="sl-doctor-note">
-                Consulta online para avaliação de sintomas respiratórios, orientação clínica e solicitação de espirometria quando houver indicação.
-              </p>
+        <div class="sl-search-box">
+          <div class="sl-filter-grid">
+            <div class="sl-field">
+              <label>Nome do profissional</label>
+              <input class="sl-input" value="Dra. Ana Cristina do Nascimento Cunha" aria-label="Nome do profissional">
             </div>
+            <div class="sl-field">
+              <label>Especialidade</label>
+              <select class="sl-select" aria-label="Especialidade">
+                <option selected>Pneumologia</option>
+                <option>Clínica médica</option>
+              </select>
+            </div>
+            <button class="sl-search-btn" type="button">Procurar</button>
           </div>
+        </div>
 
-          <div class="sl-schedule-panel">
-            <div class="sl-hours-box">
-              <strong>Horários de atendimento</strong>
-              Segunda a quinta: 16:00 às 20:00<br>
-              Sábado: 09:00 às 18:00<br>
-              Sexta e domingo: fechado
-            </div>
-            <button class="sl-request-btn" type="button" data-open-telemed>
-              Solicitar horário
-            </button>
-            <div class="sl-small-note">
-              A confirmação do horário é feita pelo WhatsApp da Sopro Life.
-            </div>
-          </div>
-        </article>
-
+        <h2 class="sl-list-title">Profissional disponível</h2>
 
         <article class="sl-doctor-card">
           <div class="sl-doctor-main">
             <div class="sl-avatar" aria-hidden="true">AC</div>
             <div>
               <h3 class="sl-doctor-name">Dra. Ana Cristina do Nascimento Cunha</h3>
-              <div class="sl-doctor-meta">
-                Pneumologia - RQE: 58224<br>
-                Médica - CRM 623075-RJ
-              </div>
+              <div class="sl-doctor-meta">Médica pneumologista • Responsável técnica da Sopro Life</div>
               <div class="sl-badges">
                 <span class="sl-badge">Telemedicina</span>
                 <span class="sl-badge">Pneumologia</span>
                 <span class="sl-badge">Avaliação respiratória</span>
               </div>
               <p class="sl-doctor-note">
-                Consulta online para avaliação de sintomas respiratórios, orientação clínica e solicitação de espirometria quando houver indicação.
+                Consulta médica online para avaliação de sintomas respiratórios, orientação clínica e solicitação de exames quando houver indicação.
               </p>
             </div>
           </div>
 
           <div class="sl-schedule-panel">
-            <div class="sl-hours-box">
-              <strong>Agenda online</strong>
-              Sem horários disponíveis no momento.
-            </div>
-            <button class="sl-request-btn is-disabled" type="button" disabled>
-              Sem horários disponíveis
+            <button class="sl-request-btn" type="button" data-open-telemed>
+              Solicitar horário
             </button>
             <div class="sl-small-note">
-              A agenda online da Dra. Ana ainda não está liberada.
+              Telemedicina em implantação. Horários exibidos apenas como referência.
             </div>
           </div>
         </article>
-
 
         <div class="sl-info-strip">
           <strong>Importante:</strong> a teleconsulta não substitui atendimento de urgência. Em falta de ar intensa, dor no peito, lábios arroxeados, confusão mental ou piora rápida, procure emergência.
@@ -986,11 +902,11 @@
           <input id="sl-tele-date" type="date">
         </div>
 
-        <strong>Horários disponíveis</strong>
+        <strong>Horários de referência</strong>
         <div class="sl-slots" id="sl-tele-slots"></div>
 
         <p class="sl-modal-foot">
-          Selecione uma data. Segunda a quinta há horários entre 16:00 e 20:00. Aos sábados, entre 09:00 e 18:00.
+          Telemedicina em implantação. Os horários abaixo são apenas referência e ainda não estão liberados para agendamento online.
         </p>
       </div>
     </div>
@@ -1004,7 +920,7 @@
 
   <script>
     (function(){
-      var phone = "5521999417192";
+      var slots = ["16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30"];
       var modal = document.getElementById("sl-tele-modal");
       var dateEl = document.getElementById("sl-tele-date");
       var slotsEl = document.getElementById("sl-tele-slots");
@@ -1015,62 +931,16 @@
         return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,10);
       }
 
-      function parseLocalDate(iso){
-        if(!iso) return null;
-        var parts = iso.split("-");
-        if(parts.length !== 3) return null;
-        return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-      }
-
-      function formatBR(iso){
-        if(!iso) return "";
-        var parts = iso.split("-");
-        if(parts.length !== 3) return iso;
-        return parts[2] + "/" + parts[1] + "/" + parts[0];
-      }
-
-      function slotsForDate(iso){
-        var d = parseLocalDate(iso);
-        if(!d) return [];
-
-        var day = d.getDay();
-
-        if(day >= 1 && day <= 4){
-          return ["16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-        }
-
-        if(day === 6){
-          return ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
-        }
-
-        return [];
-      }
-
       function renderSlots(){
-        var slots = slotsForDate(dateEl.value);
         slotsEl.innerHTML = "";
-
-        if(!slots.length){
-          var box = document.createElement("div");
-          box.className = "sl-no-slots";
-          box.innerHTML = "<strong>Sem horários disponíveis nesta data.</strong><br>Escolha segunda a quinta ou sábado.";
-          slotsEl.appendChild(box);
-          return;
-        }
-
         slots.forEach(function(time){
           var btn = document.createElement("button");
           btn.type = "button";
           btn.className = "sl-slot";
           btn.textContent = time;
-          btn.addEventListener("click", function(){
-            var msg = "Olá, gostaria de solicitar horário para telemedicina médica na Sopro Life.\\n\\n" +
-              "Profissional: Dra. Carla Ferreira\\n" +
-              "Data: " + formatBR(dateEl.value) + "\\n" +
-              "Horário: " + time + "\\n\\n" +
-              "Objetivo: avaliação respiratória e orientação sobre necessidade de espirometria, se houver indicação clínica.";
-            window.open("https://wa.me/" + phone + "?text=" + encodeURIComponent(msg), "_blank", "noopener");
-          });
+          btn.disabled = true;
+          btn.setAttribute("aria-disabled", "true");
+          btn.title = "Telemedicina em implantação. Horário ainda não liberado.";
           slotsEl.appendChild(btn);
         });
       }
@@ -1078,7 +948,7 @@
       function openModal(){
         dateEl.value = dateEl.value || isoToday(0);
         dateEl.min = isoToday(0);
-        dateEl.max = isoToday(45);
+        dateEl.max = isoToday(30);
         renderSlots();
         modal.classList.add("is-open");
         modal.setAttribute("aria-hidden", "false");
@@ -1096,8 +966,6 @@
       document.querySelectorAll("[data-close-telemed]").forEach(function(btn){
         btn.addEventListener("click", closeModal);
       });
-
-      dateEl.addEventListener("change", renderSlots);
 
       modal.addEventListener("click", function(e){
         if(e.target === modal) closeModal();
