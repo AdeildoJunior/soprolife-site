@@ -388,3 +388,18 @@
 /* sl-v3-2-2-header-fix */
 .sl-header .sl-nav-cta,
 .sl-header .sl-cta-btn--wa{ box-shadow: none !important; }
+
+/* sl-v3-3-2-final — última palavra em cascade */
+html body header.sl-header,
+html body .sl-header{
+  box-shadow: 0 1px 0 rgba(11,34,57,.06), 0 1px 4px rgba(11,34,57,.04) !important;
+}
+html body .sl-tele-banner{
+  background:
+    radial-gradient(600px 280px at 90% 50%, rgba(30,181,171,.10), transparent 70%),
+    linear-gradient(135deg, #0b2239 0%, #143852 100%) !important;
+}
+html body .sl-tele-banner a.sl-cta-btn,
+html body .sl-tele-banner a[href*="telemedicina"]{
+  box-shadow: 0 2px 8px rgba(30,181,171,.18) !important;
+}

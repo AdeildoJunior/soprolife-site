@@ -403,3 +403,162 @@ div.sl-wrap:empty{
     margin-bottom: 14px !important;
   }
 }
+
+/* ============================================================
+   sl-v3-3-2-polish — Sopro Life
+   Foco: alinhamento, header suave, botão Ver médicos, padronização
+=========================================================== */
+
+/* -------- Variáveis -------- */
+:root{
+  --sl-container-max: 1120px;
+  --sl-container-pad: 20px;
+}
+@media (max-width: 760px){
+  :root{ --sl-container-pad: 16px; }
+}
+
+/* -------- 1) Containers padronizados em 1120px -------- */
+.sl-wrap,
+.sl-section > .container,
+.sl-section .container,
+.sl-cta-box,
+.sl-links-footer-grid,
+.sl-booking-wrap{
+  max-width: var(--sl-container-max) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: var(--sl-container-pad) !important;
+  padding-right: var(--sl-container-pad) !important;
+}
+
+/* -------- 2) HEADER: sombra suave (sobrescreve tudo) -------- */
+html body header.sl-header,
+html body .sl-header{
+  box-shadow: 0 1px 0 rgba(11,34,57,.06), 0 1px 4px rgba(11,34,57,.04) !important;
+  border-bottom: 1px solid rgba(11,34,57,.05) !important;
+}
+
+/* -------- 3) HEADER MOBILE: compactar -------- */
+@media (max-width: 880px){
+  .sl-header{
+    padding: 6px 12px !important;
+  }
+  .sl-header .sl-header-in{
+    gap: 6px !important;
+  }
+  .sl-header .sl-brand img{
+    max-height: 34px !important;
+  }
+  .sl-header .sl-main-nav{
+    gap: 2px !important;
+    padding: 4px 0 0 !important;
+    margin-top: 2px !important;
+  }
+  .sl-header .sl-nav-link,
+  .sl-header .sl-main-nav > a{
+    padding: 5px 9px !important;
+    font-size: .84rem !important;
+  }
+  .sl-header .sl-header-instagram{
+    width: 34px !important;
+    height: 34px !important;
+  }
+}
+
+/* -------- 4) Botão WhatsApp do HEADER -------- */
+.sl-header .sl-nav-cta{
+  box-shadow: none !important;
+  padding: 8px 16px !important;
+  font-size: .92rem !important;
+  white-space: nowrap !important;
+  background: #25D366 !important;
+  color: #fff !important;
+  border-radius: 999px !important;
+}
+.sl-header .sl-nav-cta:hover{
+  filter: brightness(.95);
+  box-shadow: 0 3px 10px rgba(37,211,102,.22) !important;
+}
+@media (max-width: 880px){
+  .sl-header .sl-nav-cta[data-mobile-text]{
+    font-size: 0 !important;
+    padding: 7px 13px !important;
+    line-height: 1 !important;
+  }
+  .sl-header .sl-nav-cta[data-mobile-text]::before{
+    content: attr(data-mobile-text);
+    font-size: .82rem !important;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 380px){
+  .sl-header .sl-nav-cta[data-mobile-text]::before{
+    font-size: .78rem !important;
+  }
+  .sl-header .sl-nav-cta[data-mobile-text]{
+    padding: 7px 10px !important;
+  }
+}
+
+/* -------- 5) Barra fixa WA inferior: -20% no mobile -------- */
+@media (max-width: 760px){
+  .sl-whatsapp-bar{
+    box-shadow: 0 -4px 16px rgba(11,34,57,.10) !important;
+  }
+  .sl-whatsapp-bar a{
+    padding: 9px 12px !important;
+    font-size: .82rem !important;
+    line-height: 1.25 !important;
+    gap: 8px !important;
+  }
+  .sl-whatsapp-bar a > span:first-child{
+    font-size: 1rem !important;
+  }
+  body{
+    padding-bottom: 72px !important;
+  }
+}
+
+/* -------- 6) Banner Telemedicina: gradient mais discreto -------- */
+.sl-tele-banner{
+  background:
+    radial-gradient(600px 280px at 90% 50%, rgba(30,181,171,.10), transparent 70%),
+    linear-gradient(135deg, #0b2239 0%, #143852 100%) !important;
+}
+
+/* -------- 7) Botão "Ver médicos" — sombra LEVE (override total) -------- */
+html body .sl-tele-banner a.sl-cta-btn,
+html body .sl-tele-banner a[href*="telemedicina"],
+html body a.sl-cta-btn[href*="telemedicina/"]{
+  box-shadow: 0 2px 8px rgba(30,181,171,.18) !important;
+  background: #1eb5ab !important;
+  transition: box-shadow .2s, transform .2s, filter .2s !important;
+}
+html body .sl-tele-banner a.sl-cta-btn:hover,
+html body .sl-tele-banner a[href*="telemedicina"]:hover{
+  box-shadow: 0 4px 14px rgba(30,181,171,.28) !important;
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+/* -------- 8) Espaçamentos consistentes entre seções -------- */
+.sl-section{
+  padding-top: clamp(40px, 6vw, 72px) !important;
+  padding-bottom: clamp(40px, 6vw, 72px) !important;
+}
+@media (max-width: 760px){
+  .sl-section{
+    padding-top: 36px !important;
+    padding-bottom: 36px !important;
+  }
+}
+
+/* -------- 9) Cards: suavização extra sem quebrar variáveis existentes -------- */
+.sl-offer,
+.sl-feature,
+.sl-card{
+  transition: transform .2s, box-shadow .2s !important;
+}
