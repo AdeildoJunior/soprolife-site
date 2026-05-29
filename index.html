@@ -3162,95 +3162,103 @@ body{
 }
 
 </style>
+<style></style>
 <style>
 
-/* === SOPRO:FOOTER_LINKS_MARKERS_FIX === */
+/* === SOPRO:FOOTER_FINAL_MARKERS_AND_SOCIAL_ICONS === */
 
-/* Remove bolinhas nativas duplicadas no rodapé */
-footer ul,
-.sl-footer ul,
-[class*="footer"] ul {
+/* Listas do rodapé sem marcador nativo */
+.sl-footer-useful-links,
+.sl-footer-social-links {
   list-style: none !important;
   padding-left: 0 !important;
   margin-left: 0 !important;
 }
 
-/* Padroniza cada item do rodapé */
-footer li,
-.sl-footer li,
-[class*="footer"] li {
+.sl-footer-useful-links li,
+.sl-footer-social-links li {
   list-style: none !important;
-  position: relative !important;
-  padding-left: 14px !important;
-  margin: 8px 0 !important;
 }
 
-/* Um único marcador teal nos links úteis */
-footer li::before,
-.sl-footer li::before,
-[class*="footer"] li::before {
+.sl-footer-useful-links li::marker,
+.sl-footer-social-links li::marker {
   content: "" !important;
+  font-size: 0 !important;
+}
+
+/* Links úteis: exatamente 1 marcador teal */
+.sl-footer-useful-links li {
+  position: relative !important;
+  padding-left: 18px !important;
+  margin: 9px 0 !important;
+}
+
+.sl-footer-useful-links li::before {
+  content: "" !important;
+  display: block !important;
   position: absolute !important;
   left: 0 !important;
-  top: .72em !important;
-  width: 5px !important;
-  height: 5px !important;
+  top: .78em !important;
+  width: 6px !important;
+  height: 6px !important;
   border-radius: 999px !important;
   background: #1eb5ab !important;
   transform: translateY(-50%) !important;
 }
 
-/* Nas redes sociais, não usar bolinha extra: o ícone já funciona como marcador */
-footer a[href*="instagram.com"],
-footer a[href*="linkedin.com"],
-footer a[href*="youtube.com"],
-.sl-footer a[href*="instagram.com"],
-.sl-footer a[href*="linkedin.com"],
-.sl-footer a[href*="youtube.com"],
-[class*="footer"] a[href*="instagram.com"],
-[class*="footer"] a[href*="linkedin.com"],
-[class*="footer"] a[href*="youtube.com"] {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  text-decoration: none !important;
+/* Redes sociais: sem bolinha teal; o ícone é o marcador visual */
+.sl-footer-social-links li {
+  position: relative !important;
+  padding-left: 0 !important;
+  margin: 10px 0 !important;
 }
 
-/* Remove marcador antes dos itens de redes sociais */
-footer li:has(a[href*="instagram.com"])::before,
-footer li:has(a[href*="linkedin.com"])::before,
-footer li:has(a[href*="youtube.com"])::before,
-.sl-footer li:has(a[href*="instagram.com"])::before,
-.sl-footer li:has(a[href*="linkedin.com"])::before,
-.sl-footer li:has(a[href*="youtube.com"])::before,
-[class*="footer"] li:has(a[href*="instagram.com"])::before,
-[class*="footer"] li:has(a[href*="linkedin.com"])::before,
-[class*="footer"] li:has(a[href*="youtube.com"])::before {
+.sl-footer-social-links li::before {
+  content: none !important;
   display: none !important;
 }
 
-footer li:has(a[href*="instagram.com"]),
-footer li:has(a[href*="linkedin.com"]),
-footer li:has(a[href*="youtube.com"]),
-.sl-footer li:has(a[href*="instagram.com"]),
-.sl-footer li:has(a[href*="linkedin.com"]),
-.sl-footer li:has(a[href*="youtube.com"]),
-[class*="footer"] li:has(a[href*="instagram.com"]),
-[class*="footer"] li:has(a[href*="linkedin.com"]),
-[class*="footer"] li:has(a[href*="youtube.com"]) {
-  padding-left: 0 !important;
+.sl-footer-social-links a {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  text-decoration: none !important;
 }
 
-/* Garante cor limpa dos links do rodapé */
-footer a,
-.sl-footer a,
-[class*="footer"] a {
+/* Ícone de câmera do Instagram no rodapé */
+.sl-footer-insta-camera {
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+  border-radius: 999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #ffffff !important;
+  border: 1.5px solid #f4b3c7 !important;
+}
+
+.sl-footer-insta-camera svg {
+  width: 16px !important;
+  height: 16px !important;
+  display: block !important;
+}
+
+.sl-footer-insta-camera svg rect,
+.sl-footer-insta-camera svg circle {
+  fill: none !important;
+  stroke: #c13584 !important;
+  stroke-width: 1.9 !important;
+}
+
+/* Links do rodapé */
+.sl-footer-useful-links a,
+.sl-footer-social-links a {
   color: #526d81 !important;
 }
 
-footer a:hover,
-.sl-footer a:hover,
-[class*="footer"] a:hover {
+.sl-footer-useful-links a:hover,
+.sl-footer-social-links a:hover {
   color: #0f8f87 !important;
 }
 
@@ -3384,13 +3392,7 @@ footer a:hover,
           <div class="sl-text-block">
             <p>Durante o exame, o paciente respira por um bocal conectado ao espirômetro. Fazemos manobras guiadas como inspirações profundas e sopros prolongados.</p>
             <p>As curvas e índices apontam se há obstrução/restrição e se existe resposta a broncodilatadores.</p>
-            <ul class="sl-bullet-list">
-              <li>Diagnóstico e controle de asma e DPOC;</li>
-              <li>Avaliação de tabagistas e ex-tabagistas;</li>
-              <li>Ocupacional: poeiras/gases (PCMSO);</li>
-              <li>Pré-operatório;</li>
-              <li>Seguimento de doenças pulmonares.</li>
-            </ul>
+            <ul class="sl-bullet-list sl-footer-useful-links"><li>Diagnóstico e controle de asma e DPOC;</li><li>Avaliação de tabagistas e ex-tabagistas;</li><li>Ocupacional: poeiras/gases (PCMSO);</li><li>Pré-operatório;</li><li>Seguimento de doenças pulmonares.</li></ul>
           </div>
 
           <div class="sl-highlight-box">
@@ -3758,7 +3760,7 @@ footer a:hover,
 
 <!-- SOPRO:REMOVIDO_DUP_TIPOS_PREPARO -->
 
-<!-- CTA --> <section class="sl-cta-section" id="contato"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua espirometria</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div class="sl-useful-links-block"> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude/pt-br" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list"> <li> <a href="https://www.instagram.com/soprolife" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--ig">IG</span> <span>Instagram da Sopro Life</span> </a> </li> <li> <a href="https://linkedin.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--li">in</span> <span>LinkedIn da Sopro Life</span> </a> </li> <li> <a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--yt">▶</span> <span>Canal da Sopro Life no YouTube</span> </a> </li> </ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script>
+<!-- CTA --> <section class="sl-cta-section" id="contato"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua espirometria</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div class="sl-useful-links-block"> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude/pt-br" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list sl-footer-social-links"><li><a href="https://www.instagram.com/soprolife" target="_blank" rel="noopener"><span class="sl-social-icon sl-social-icon--ig">IG</span><span>Instagram da Sopro Life</span></a></li><li><a href="https://linkedin.com/" target="_blank" rel="noopener"><span class="sl-social-icon sl-social-icon--li">in</span><span>LinkedIn da Sopro Life</span></a></li><li><a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"><span class="sl-social-icon sl-social-icon--yt">▶</span><span>Canal da Sopro Life no YouTube</span></a></li></ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script>
 /* SOPRO:TABS_V2 (robusto) */
 (function(){
   function initTabs(){
