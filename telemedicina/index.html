@@ -1532,8 +1532,7 @@
   }
 })();
 </script>
-<style id="soprolife-telemed-whatsapp-msg-final">
-/* === SOPRO: mensagem limpa e horário selecionado na telemedicina === */
+<style id="soprolife-telemed-whatsapp-newline-final-v2">
 .sl-slot.is-selected,
 .sl-tele-slot.is-selected,
 button.sopro-telemed-time-selected {
@@ -1542,18 +1541,11 @@ button.sopro-telemed-time-selected {
   border-color: #1eb5ab !important;
   box-shadow: 0 10px 22px rgba(30,181,171,.24) !important;
 }
-
-.sl-slot.is-selected::after,
-.sl-tele-slot.is-selected::after,
-button.sopro-telemed-time-selected::after {
-  content: " ✓";
-  font-weight: 900;
-}
 </style>
-<script id="soprolife-telemed-whatsapp-msg-final">
+<script id="soprolife-telemed-whatsapp-newline-final-v2">
 (function(){
   const SOPRO_PHONE = "5521999417192";
-  let currentDoctor = "";
+  const NL = String.fromCharCode(10);
 
   function norm(txt){
     return (txt || "")
@@ -1564,8 +1556,21 @@ button.sopro-telemed-time-selected::after {
       .trim();
   }
 
+  function formatDateBR(value){
+    if (!value) return "";
+    value = String(value).trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const parts = value.split("-");
+      return parts[2] + "/" + parts[1] + "/" + parts[0];
+    }
+
+    return value;
+  }
+
   function findDoctorName(el){
     const card = el.closest("article, .sl-doctor-card, .doctor-card, .sl-provider-card, .card, section, div");
+
     if (card) {
       const nameEl = card.querySelector(".sl-doctor-name, [data-doctor-name], h3, h2");
       if (nameEl && norm(nameEl.textContent).includes("dra")) {
@@ -1574,57 +1579,64 @@ button.sopro-telemed-time-selected::after {
     }
 
     const pageName = document.querySelector(".sl-doctor-name, [data-doctor-name]");
-    if (pageName) return pageName.textContent.trim().replace(/\s+/g, " ");
+    if (pageName) {
+      return pageName.textContent.trim().replace(/\s+/g, " ");
+    }
 
     return "Profissional da Sopro Life";
   }
 
-  function formatDateBR(value){
-    if (!value) return "";
-    value = value.trim();
-
-    // yyyy-mm-dd
-    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      const [y,m,d] = value.split("-");
-      return `${d}/${m}/${y}`;
-    }
-
-    // já em dd/mm/yyyy ou texto do navegador
-    return value.replace(/\s+/g, "");
-  }
-
   function getSelectedDate(btn){
-    const modal = btn.closest("[role='dialog'], .sl-modal, .modal, section, body") || document;
-    const input =
-      modal.querySelector("input[type='date']") ||
-      document.querySelector("input[type='date']");
-
-    if (input && input.value) return formatDateBR(input.value);
-
-    return "";
+    const scope = btn.closest("[role='dialog'], .sl-modal, .modal, section") || document;
+    const input = scope.querySelector("input[type='date']") || document.querySelector("input[type='date']");
+    return input && input.value ? formatDateBR(input.value) : "a combinar";
   }
 
   function buildMessage(doctor, date, time){
-    const lines = [
+    return [
       "Olá! Gostaria de agendar uma teleconsulta médica pela Sopro Life.",
       "",
-      `Profissional: ${doctor}`,
-      date ? `Data: ${date}` : "Data: a combinar",
-      `Horário: ${time}`,
+      "Profissional: " + doctor,
+      "Data: " + date,
+      "Horário: " + time,
       "",
       "Motivo: avaliação respiratória e orientação médica."
-    ];
-
-    return lines.join("\n");
+    ].join(NL);
   }
 
-  function openWhatsapp(doctor, date, time){
-    const msg = buildMessage(doctor, date, time);
-    const url = "https://api.whatsapp.com/send?phone=" + SOPRO_PHONE + "&text=" + encodeURIComponent(msg);
-    window.open(url, "_blank", "noopener");
+  function fixWhatsappUrl(url){
+    try {
+      const u = new URL(url, window.location.href);
+      const isWhats =
+        u.hostname.includes("whatsapp.com") ||
+        u.hostname.includes("wa.me");
+
+      if (!isWhats) return url;
+
+      const txt = u.searchParams.get("text");
+      if (txt) {
+        const clean = txt.replace(/\\n/g, NL);
+        u.searchParams.set("text", clean);
+      }
+
+      return u.toString()
+        .replace(/%5Cn/gi, "%0A")
+        .replace(/%5C%6E/gi, "%0A");
+    } catch(e) {
+      return String(url)
+        .replace(/%5Cn/gi, "%0A")
+        .replace(/%5C%6E/gi, "%0A")
+        .replace(/\\n/g, "%0A");
+    }
   }
 
-  // Guarda qual médico foi escolhido quando clicar em "Solicitar horário"
+  const originalOpen = window.open;
+  window.open = function(url, target, features){
+    return originalOpen.call(window, fixWhatsappUrl(url), target, features);
+  };
+
+  let currentDoctor = "";
+
   document.addEventListener("click", function(e){
     const trigger = e.target.closest("button, a");
     if (!trigger) return;
@@ -1639,21 +1651,16 @@ button.sopro-telemed-time-selected::after {
     }
   }, true);
 
-  function isTimeButton(btn){
-    if (!btn || btn.dataset.soproTelemedFixed === "1") return false;
-    const txt = (btn.textContent || "").trim();
-    return /^\d{1,2}:\d{2}$/.test(txt);
-  }
-
   function prepareTimeButtons(root){
-    const buttons = root.querySelectorAll("button");
+    root.querySelectorAll("button").forEach(function(btn){
+      const txt = (btn.textContent || "").replace("✓", "").trim();
 
-    buttons.forEach(function(btn){
-      if (!isTimeButton(btn)) return;
+      if (!/^\d{1,2}:\d{2}$/.test(txt)) return;
+      if (btn.dataset.soproNewlineFixed === "1") return;
 
       const clean = btn.cloneNode(true);
-      clean.dataset.soproTelemedFixed = "1";
-      clean.setAttribute("type", "button");
+      clean.dataset.soproNewlineFixed = "1";
+      clean.type = "button";
 
       clean.addEventListener("click", function(e){
         e.preventDefault();
@@ -1671,12 +1678,27 @@ button.sopro-telemed-time-selected::after {
 
         clean.classList.add("is-selected", "sopro-telemed-time-selected");
 
-        openWhatsapp(doctor, date, time);
-      });
+        const msg = buildMessage(doctor, date, time);
+        const url = "https://api.whatsapp.com/send?phone=" + SOPRO_PHONE + "&text=" + encodeURIComponent(msg);
+
+        window.open(url, "_blank", "noopener");
+      }, true);
 
       btn.replaceWith(clean);
     });
   }
+
+  document.addEventListener("click", function(e){
+    const a = e.target.closest("a[href]");
+    if (!a) return;
+
+    if (
+      a.href.includes("whatsapp.com") ||
+      a.href.includes("wa.me")
+    ) {
+      a.href = fixWhatsappUrl(a.href);
+    }
+  }, true);
 
   function run(){
     prepareTimeButtons(document);
