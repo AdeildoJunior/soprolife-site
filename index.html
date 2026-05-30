@@ -1,3 +1,90 @@
+
+<style id="sl-offer-divider-style">
+  .sl-offer-divider{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    margin:14px 0 14px;
+    position:relative;
+  }
+
+  .sl-offer-divider::before,
+  .sl-offer-divider::after{
+    content:"";
+    display:block;
+    height:1px;
+    flex:1;
+    max-width:120px;
+    background:linear-gradient(90deg, rgba(34,184,176,0), rgba(34,184,176,.55), rgba(34,184,176,0));
+  }
+
+  .sl-offer-divider span{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:62px;
+    height:38px;
+    padding:0 18px;
+    border-radius:999px;
+    font-weight:800;
+    font-size:.95rem;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:#ffffff;
+    background:linear-gradient(135deg, #0b2942 0%, #138b97 52%, #22b8b0 100%);
+    box-shadow:0 10px 24px rgba(10, 50, 78, .18);
+    animation:slOfferDividerPulse 2.8s ease-in-out infinite;
+  }
+
+  @keyframes slOfferDividerPulse{
+    0%,100%{
+      transform:scale(1);
+      box-shadow:0 10px 24px rgba(10, 50, 78, .18);
+      filter:saturate(1);
+    }
+    50%{
+      transform:scale(1.06);
+      box-shadow:0 12px 28px rgba(34,184,176,.28);
+      filter:saturate(1.12);
+    }
+  }
+
+  /* sobe os cards após remoção dos itens */
+  .sl-offer-stack,
+  .sl-home-offer-stack{
+    margin-top:8px !important;
+    row-gap:18px !important;
+  }
+
+  /* remove espaços mortos de wrappers vazios comuns */
+  .sl-hero-checks:empty,
+  .sl-hero-benefits:empty,
+  .sl-hero-points:empty,
+  .sl-hero-bullets:empty,
+  .sl-home-highlights:empty{
+    display:none !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  @media (max-width: 768px){
+    .sl-offer-divider{
+      margin:10px 0 10px;
+    }
+    .sl-offer-divider::before,
+    .sl-offer-divider::after{
+      max-width:72px;
+    }
+    .sl-offer-divider span{
+      min-width:56px;
+      height:34px;
+      font-size:.88rem;
+      padding:0 16px;
+    }
+  }
+</style>
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -202,7 +289,6 @@
   }
 }
 
-
 /* ===== Navegação principal no topo ===== */
 /* Ajustes extras nav Sopro Life */
 .sl-main-nav{ font-size:1rem; }        /* ~16px */
@@ -269,7 +355,6 @@
   .sl-nav-cta{ margin-left:auto; }
 }
 
-
 /* ===== Menu: submenu em "Contato" ===== */
 .sl-has-sub{position:relative}
 .sl-has-sub>.sl-nav-link{display:inline-flex;align-items:center;gap:6px}
@@ -318,7 +403,6 @@
   }
 }
 
-
 /* sl-nav-size */
 .sl-main-nav{font-size:1rem}
 .sl-mode-pill{cursor:pointer}
@@ -342,7 +426,6 @@
 .sl-hero-card .sl-mode-pill:hover{
   filter:brightness(0.97);
 }
-
 
 /* ===== Sopro Life: Typography cleanup (page-scoped) ===== */
 .sl-typo-clean{
@@ -532,7 +615,6 @@
 }
 </style>
 
-
 <style>
 /* SOPRO:FIX_DEPOIMENTOS_CARD_BORDER_MOBILE
    Mobile: evita cortar a borda dos cards dentro do carrossel (overflow/edge clipping).
@@ -559,7 +641,6 @@
   }
 }
 </style>
-
 
 <style id="soprolife-clean-visual-v1">
 /* SoproLife Clean Visual v1 — camada visual não destrutiva */
@@ -810,7 +891,6 @@ body{
 }
 </style>
 
-
 <style id="soprolife-clean-visual-v2">
 /* SoproLife Clean Visual v2 — ajustes finos */
 
@@ -995,7 +1075,6 @@ main.sl-container.sl-container{
 }
 </style>
 
-
 <style id="soprolife-clean-visual-v4">
 /* SoproLife Clean Visual v4 — padronização de listas, cards e alinhamento */
 
@@ -1099,7 +1178,6 @@ main.sl-container.sl-container.sl-wrap.sl-container--wide{
   }
 }
 </style>
-
 
 <style id="soprolife-typography-standard-v1">
 /* SoproLife Typography Standard v1 — padronização final de fontes e hierarquia */
@@ -1283,7 +1361,6 @@ body{
 }
 </style>
 
-
 <style id="soprolife-typography-soften-v2">
 /* SoproLife Typography Soften v2 — reduz peso excessivo da fonte */
 
@@ -1334,7 +1411,6 @@ body{
   font-weight: 700 !important;
 }
 </style>
-
 
 <style id="soprolife-home-card-clean-v1">
 /* SoproLife Home Card Clean v1 — limpa o card "Modos de atendimento" */
@@ -1449,7 +1525,6 @@ body{
   }
 }
 </style>
-
 
 <style id="soprolife-home-card-premium-v2">
 /* SoproLife Home Card Premium v2 — card lateral mais elegante */
@@ -1607,7 +1682,6 @@ body{
 }
 </style>
 
-
 <style id="soprolife-force-hide-home-tag">
 /* Remove definitivamente selo SOPRO LIFE do card da home */
 .sl-hero-card .sl-tag.sl-hero-card-header .sl-tag.sl-tag{
@@ -1620,7 +1694,6 @@ body{
   pointer-events:none !important;
 }
 </style>
-
 
 <style id="soprolife-agendamento-fix-v1">
 /* Corrige leitura e posicionamento da seção Agendamento */
@@ -1692,9 +1765,6 @@ body{
 }
 </style>
 
-
-
-
 <style id="soprolife-fix-whatsapp-icon-v1">
 /* Corrige ícone do botão/pílula de WhatsApp da home */
 .sl-whatsapp-pill{
@@ -1735,7 +1805,6 @@ body{
 }
 </style>
 
-
 <style id="soprolife-whatsapp-single-icon-v2">
 /* Deixa apenas o ícone correto do WhatsApp na pílula rápida */
 .sl-whatsapp-pill::after{
@@ -1763,7 +1832,6 @@ body{
   display: none !important;
 }
 </style>
-
 
 <style id="soprolife-home-microtype-v1">
 /* Ajuste fino de espaçamento, entrelinha e textos menores da home */
@@ -1889,7 +1957,6 @@ body{
 }
 </style>
 
-
 <style id="soprolife-fix-pills-bullets-v1">
 /* Corrige bolinhas cortadas e padroniza pílulas da home */
 
@@ -1954,7 +2021,6 @@ body{
 }
 </style>
 
-
 <style id="soprolife-footer-links-refine-v1">
 /* Refina o bloco Links úteis da home */
 
@@ -2004,7 +2070,6 @@ body{
 }
 </style>
 
-
 <style id="soprolife-instagram-header-v1">
 /* Ícone discreto do Instagram no header */
 
@@ -2047,7 +2112,6 @@ body{
   }
 }
 </style>
-
 
 <style id="soprolife-mobile-header-cta-fix-v1">
 /* Corrige header no mobile: logo + Instagram + CTA sem cortar */
@@ -2126,7 +2190,6 @@ body{
 }
 </style>
 
-
 <style id="soprolife-instagram-mobile-android-fix-v1">
 /* Sopro Life: no mobile, Instagram fica junto do WhatsApp, não colado na logo */
 @media (max-width: 960px) {
@@ -2168,7 +2231,6 @@ body{
     padding-right: 10px !important;
   }
 }
-
 
 /* ===== Agendamento compacto (Etapa 1) ===== */
 .sl-booking-section{padding:28px 0 24px}
@@ -2391,7 +2453,6 @@ body{
   box-shadow:none;
   background:transparent;
 }
-
 
 .sl-map-modal{
   position:fixed;
@@ -2652,1456 +2713,8 @@ body{
 }
 </style>
 
-
 <!-- SOPRO:FLATPICKR_PTBR_START -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<!-- SOPRO:FLATPICKR_PTBR_END -->
-  <!-- SOPRO:FAVICON_START -->
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260522b">
-  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=20260522b">
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260522b">
-  <link rel="shortcut icon" href="/favicon.ico?v=20260522b">
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260522b">
-  <link rel="manifest" href="/site.webmanifest?v=20260522b">
-  <meta name="theme-color" content="#0b3348">
-  <!-- SOPRO:FAVICON_END -->
-
-<!-- SOPRO:MENU_UNIFORME_FIX_START -->
-<style>
-  header nav a,
-  header nav a:visited.sl-nav a.sl-nav a:visited.sl-nav-link.sl-nav-link:visited {
-    color:#536a7d !important;
-    text-decoration:none !important;
-    font-weight:800 !important;
-  }
-
-  header nav a:hover.sl-nav a:hover.sl-nav-link:hover {
-    color:#07857d !important;
-  }
-
-  header nav a[href="/telemedicina/"],
-  header nav a[href="/telemedicina/"]:visited.sl-nav a[href="/telemedicina/"].sl-nav a[href="/telemedicina/"]:visited {
-    color:#536a7d !important;
-  }
-
-  header nav a[href="/telemedicina/"]:hover.sl-nav a[href="/telemedicina/"]:hover {
-    color:#07857d !important;
-  }
-</style>
-<!-- SOPRO:MENU_UNIFORME_FIX_END -->
-
-
-<!-- SOPRO:TELEMED_MOBILE_STRIP_START -->
-<style>
-  .sl-telemed-mobile-strip {
-    display:none;
-  }
-
-  @media (max-width:760px) {
-    .sl-telemed-mobile-strip {
-      display:block;
-      background:linear-gradient(90deg,#effdfb,#ffffff);
-      border-bottom:1px solid rgba(30,181,171,.18);
-      padding:10px 14px;
-    }
-
-    .sl-telemed-mobile-strip a {
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      width:100%;
-      border:1px solid rgba(30,181,171,.25);
-      background:#ffffff;
-      border-radius:16px;
-      padding:12px 14px;
-      color:#0b3348 !important;
-      text-decoration:none !important;
-      font-weight:900;
-      box-shadow:0 12px 24px rgba(8,24,41,.05);
-    }
-
-    .sl-telemed-mobile-strip span {
-      display:block;
-      color:#07857d;
-      font-size:.78rem;
-      font-weight:850;
-      margin-top:2px;
-    }
-
-    .sl-telemed-mobile-strip b {
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      min-width:34px;
-      height:34px;
-      border-radius:999px;
-      background:#eafffd;
-      color:#07857d;
-      border:1px solid rgba(30,181,171,.25);
-    }
-  }
-</style>
-<!-- SOPRO:TELEMED_MOBILE_STRIP_END -->
-
-
-<!-- SOPRO:HOME_TELEMED_FINAL_CSS_START -->
-<style>
-  .sl-home-service-grid{
-    display:grid;
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    gap:14px;
-    max-width:720px;
-    margin-top:26px;
-  }
-
-  .sl-home-service-card{
-    min-height:94px;
-    display:grid;
-    grid-template-columns:auto 1fr;
-    column-gap:12px;
-    row-gap:5px;
-    align-items:start;
-    padding:16px 18px;
-    border-radius:24px;
-    background:#fff;
-    border:1px solid rgba(30,181,171,.18);
-    color:#0b2239;
-    text-decoration:none;
-    box-shadow:0 14px 30px rgba(8,24,41,.045);
-  }
-
-  .sl-home-service-card:hover{
-    border-color:rgba(30,181,171,.42);
-    transform:translateY(-1px);
-  }
-
-  .sl-home-service-card strong{
-    display:block;
-    font-weight:900;
-    font-size:1rem;
-    line-height:1.15;
-  }
-
-  .sl-home-service-card small{
-    grid-column:2;
-    display:block;
-    color:#5c7688;
-    font-size:.9rem;
-    line-height:1.35;
-    font-weight:650;
-  }
-
-  .sl-home-service-dot{
-    width:10px;
-    height:10px;
-    margin-top:4px;
-    border-radius:999px;
-    background:#1eb5ab;
-    box-shadow:0 0 0 5px rgba(30,181,171,.12);
-  }
-
-  .sl-home-tele-card{
-    padding:26px !important;
-    border-radius:28px !important;
-    overflow:hidden;
-    background:linear-gradient(180deg,#ffffff 0%,#f6fcfd 100%) !important;
-    border:1px solid rgba(30,181,171,.16) !important;
-    box-shadow:0 24px 54px rgba(8,24,41,.08) !important;
-  }
-
-  .sl-home-tele-card-head span{
-    display:inline-flex;
-    padding:7px 12px;
-    border-radius:999px;
-    background:rgba(30,181,171,.12);
-    color:#087c76;
-    font-size:.74rem;
-    font-weight:950;
-    letter-spacing:.10em;
-    text-transform:uppercase;
-  }
-
-  .sl-home-tele-card-head h2{
-    margin:12px 0 8px;
-    color:#0b2239;
-    font-size:1.65rem;
-    line-height:1.05;
-  }
-
-  .sl-home-tele-card-head p{
-    margin:0;
-    color:#5d7788;
-    line-height:1.55;
-  }
-
-  .sl-home-tele-illustration{
-    position:relative;
-    margin-top:18px;
-    min-height:230px;
-    border-radius:24px;
-    background:
-      radial-gradient(circle at 18% 18%, rgba(30,181,171,.18), transparent 35%),
-      radial-gradient(circle at 88% 22%, rgba(11,34,57,.10), transparent 34%),
-      linear-gradient(135deg,#eaf8f8 0%,#dff4f3 54%,#f5fbfc 100%);
-    border:1px solid rgba(30,181,171,.16);
-    overflow:hidden;
-  }
-
-  .sl-home-tele-window{
-    position:absolute;
-    inset:22px;
-    border-radius:22px;
-    background:#fff;
-    border:1px solid rgba(11,34,57,.08);
-    box-shadow:0 18px 40px rgba(8,24,41,.09);
-    overflow:hidden;
-  }
-
-  .sl-home-tele-window-bar{
-    height:34px;
-    display:flex;
-    align-items:center;
-    gap:7px;
-    padding:0 14px;
-    background:#f8fbfc;
-    border-bottom:1px solid rgba(11,34,57,.06);
-  }
-
-  .sl-home-tele-window-bar i{
-    width:9px;
-    height:9px;
-    border-radius:50%;
-    background:#c7d6df;
-  }
-
-  .sl-home-tele-window-body{
-    height:calc(100% - 34px);
-    display:grid;
-    grid-template-columns:118px 1fr;
-    gap:18px;
-    align-items:center;
-    padding:18px;
-  }
-
-  .sl-home-doctor-art{
-    position:relative;
-    height:126px;
-  }
-
-  .sl-home-doctor-head{
-    position:absolute;
-    left:50%;
-    top:6px;
-    width:48px;
-    height:48px;
-    transform:translateX(-50%);
-    border-radius:50%;
-    background:linear-gradient(180deg,#ffd7bf,#f1c1a8);
-    border:2px solid rgba(11,34,57,.06);
-  }
-
-  .sl-home-doctor-coat{
-    position:absolute;
-    left:50%;
-    bottom:8px;
-    width:96px;
-    height:82px;
-    transform:translateX(-50%);
-    border-radius:28px 28px 18px 18px;
-    background:linear-gradient(180deg,#fff,#f3f7f9);
-    border:2px solid rgba(11,34,57,.06);
-  }
-
-  .sl-home-doctor-steth{
-    position:absolute;
-    left:50%;
-    bottom:48px;
-    width:22px;
-    height:22px;
-    transform:translateX(-50%);
-    border-radius:50%;
-    background:#1eb5ab;
-    box-shadow:0 0 0 7px rgba(30,181,171,.12);
-  }
-
-  .sl-home-tele-lines strong{
-    display:block;
-    margin-bottom:10px;
-    color:#0b2239;
-    font-size:1.08rem;
-    line-height:1.15;
-  }
-
-  .sl-home-tele-lines span{
-    display:block;
-    margin:7px 0;
-    padding:8px 10px;
-    border-radius:999px;
-    background:#f2fbfb;
-    color:#58748a;
-    font-weight:750;
-    font-size:.9rem;
-  }
-
-  .sl-home-tele-medics{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:12px;
-    margin-top:16px;
-  }
-
-  .sl-home-tele-medics div{
-    padding:13px 14px;
-    border-radius:18px;
-    background:#fff;
-    border:1px solid rgba(30,181,171,.16);
-  }
-
-  .sl-home-tele-medics strong{
-    display:block;
-    color:#0b2239;
-    font-size:.95rem;
-    line-height:1.2;
-    margin-bottom:4px;
-  }
-
-  .sl-home-tele-medics span{
-    display:block;
-    color:#5d7788;
-    font-size:.84rem;
-    line-height:1.35;
-  }
-
-  .sl-home-tele-main-btn{
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    min-height:44px;
-    margin-top:16px;
-    border-radius:999px;
-    background:#1eb5ab;
-    color:#fff !important;
-    font-weight:900;
-    text-decoration:none;
-    box-shadow:0 12px 24px rgba(30,181,171,.20);
-  }
-
-  .sl-home-tele-main-btn:hover{
-    background:#149d95;
-  }
-
-  @media(max-width:760px){
-    .sl-home-service-grid{
-      grid-template-columns:1fr;
-      margin-top:20px;
-    }
-
-    .sl-home-service-card{
-      min-height:auto;
-    }
-
-    .sl-home-tele-medics{
-      grid-template-columns:1fr;
-    }
-
-    .sl-home-tele-window-body{
-      grid-template-columns:1fr;
-      text-align:center;
-    }
-
-    .sl-home-doctor-art{
-      height:105px;
-    }
-
-    .sl-home-tele-illustration{
-      min-height:310px;
-    }
-  }
-</style>
-<!-- SOPRO:HOME_TELEMED_FINAL_CSS_END -->
-
-  <link rel="stylesheet" href="/assets/sopro-visual-system-v3.css?v=visual-v3">
-  <link rel="stylesheet" href="/assets/sl-v3.css?v=1">
-<style>
-
-/* === SOPRO: alinhamento da seção Preparo na home === */
-.sl-align-preparo-home {
-  width: min(980px, calc(100% - 48px)) !important;
-  max-width: 980px !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  box-sizing: border-box !important;
-}
-
-.sl-align-preparo-home > .sl-container,
-.sl-align-preparo-home .sl-container {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-}
-
-.sl-align-preparo-home .sl-card,
-.sl-align-preparo-home article,
-.sl-align-preparo-home .card {
-  box-sizing: border-box !important;
-}
-
-@media (max-width: 760px) {
-  .sl-align-preparo-home {
-    width: min(100% - 32px, 980px) !important;
-  }
-}
-
-</style>
-<style>
-
-/* === SOPRO:PREPARO_ALINHADO_MODALIDADES_V2 === */
-
-/* A seção Preparo passa a usar o mesmo eixo visual/largura das Modalidades */
-.sl-preparo-modalidades-align,
-.sl-align-preparo-home.sl-preparo-modalidades-align {
-  width: min(1180px, calc(100% - 48px)) !important;
-  max-width: 1180px !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  box-sizing: border-box !important;
-}
-
-/* Remove a largura menor que tinha sido aplicada antes */
-.sl-preparo-modalidades-align > .sl-container,
-.sl-preparo-modalidades-align .sl-container,
-.sl-align-preparo-home.sl-preparo-modalidades-align > .sl-container,
-.sl-align-preparo-home.sl-preparo-modalidades-align .sl-container {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-}
-
-/* Diminui em cerca de 50% o espaço entre Modalidades e Preparo no desktop */
-@media (min-width: 900px) {
-  .sl-preparo-modalidades-align {
-    margin-top: -42px !important;
-  }
-}
-
-/* Padronização visual dos textos do Preparo */
-.sl-preparo-modalidades-align .sl-section-kicker,
-.sl-preparo-modalidades-align .sl-section-eyebrow,
-.sl-preparo-modalidades-align .sl-kicker,
-.sl-preparo-modalidades-align [class*="kicker"],
-.sl-preparo-modalidades-align [class*="eyebrow"] {
-  color: #31516a !important;
-  font-size: .78rem !important;
-  line-height: 1.1 !important;
-  font-weight: 900 !important;
-  letter-spacing: .14em !important;
-  text-transform: uppercase !important;
-}
-
-.sl-preparo-modalidades-align h2 {
-  color: #0b2239 !important;
-  font-size: clamp(1.45rem, 2vw, 1.9rem) !important;
-  line-height: 1.12 !important;
-  font-weight: 900 !important;
-  letter-spacing: -0.025em !important;
-  margin-top: 6px !important;
-  margin-bottom: 10px !important;
-}
-
-.sl-preparo-modalidades-align p {
-  color: #526d81 !important;
-  font-size: 1rem !important;
-  line-height: 1.55 !important;
-  font-weight: 500 !important;
-}
-
-/* Títulos internos dos cards, como “Cuidados gerais” e “Quando suspender/manter” */
-.sl-preparo-modalidades-align h3,
-.sl-preparo-modalidades-align .sl-card-title,
-.sl-preparo-modalidades-align article strong:first-child {
-  color: #234b63 !important;
-  font-size: 1.08rem !important;
-  line-height: 1.18 !important;
-  font-weight: 900 !important;
-  letter-spacing: -0.01em !important;
-}
-
-.sl-preparo-modalidades-align li {
-  color: #526d81 !important;
-  font-size: .94rem !important;
-  line-height: 1.55 !important;
-}
-
-/* Cards do Preparo com aparência mais próxima dos cards de cima */
-.sl-preparo-modalidades-align article,
-.sl-preparo-modalidades-align .sl-card,
-.sl-preparo-modalidades-align [class*="card"] {
-  border-radius: 24px !important;
-  border: 1px solid rgba(11, 34, 57, .08) !important;
-  box-shadow: 0 14px 30px rgba(8, 24, 41, .045) !important;
-}
-
-/* Mobile: mantém margem segura e evita puxar demais para cima */
-@media (max-width: 899px) {
-  .sl-preparo-modalidades-align,
-  .sl-align-preparo-home.sl-preparo-modalidades-align {
-    width: min(100% - 32px, 1180px) !important;
-    margin-top: 34px !important;
-  }
-}
-
-</style>
-<style></style>
-<style>
-
-/* === SOPRO:FOOTER_FINAL_MARKERS_AND_SOCIAL_ICONS === */
-
-/* Listas do rodapé sem marcador nativo */
-.sl-footer-useful-links,
-.sl-footer-social-links {
-  list-style: none !important;
-  padding-left: 0 !important;
-  margin-left: 0 !important;
-}
-
-.sl-footer-useful-links li,
-.sl-footer-social-links li {
-  list-style: none !important;
-}
-
-.sl-footer-useful-links li::marker,
-.sl-footer-social-links li::marker {
-  content: "" !important;
-  font-size: 0 !important;
-}
-
-/* Links úteis: exatamente 1 marcador teal */
-.sl-footer-useful-links li {
-  position: relative !important;
-  padding-left: 18px !important;
-  margin: 9px 0 !important;
-}
-
-.sl-footer-useful-links li::before {
-  content: "" !important;
-  display: block !important;
-  position: absolute !important;
-  left: 0 !important;
-  top: .78em !important;
-  width: 6px !important;
-  height: 6px !important;
-  border-radius: 999px !important;
-  background: #1eb5ab !important;
-  transform: translateY(-50%) !important;
-}
-
-/* Redes sociais: sem bolinha teal; o ícone é o marcador visual */
-.sl-footer-social-links li {
-  position: relative !important;
-  padding-left: 0 !important;
-  margin: 10px 0 !important;
-}
-
-.sl-footer-social-links li::before {
-  content: none !important;
-  display: none !important;
-}
-
-.sl-footer-social-links a {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  text-decoration: none !important;
-}
-
-/* Ícone de câmera do Instagram no rodapé */
-.sl-footer-insta-camera {
-  width: 26px !important;
-  height: 26px !important;
-  min-width: 26px !important;
-  border-radius: 999px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  background: #ffffff !important;
-  border: 1.5px solid #f4b3c7 !important;
-}
-
-.sl-footer-insta-camera svg {
-  width: 16px !important;
-  height: 16px !important;
-  display: block !important;
-}
-
-.sl-footer-insta-camera svg rect,
-.sl-footer-insta-camera svg circle {
-  fill: none !important;
-  stroke: #c13584 !important;
-  stroke-width: 1.9 !important;
-}
-
-/* Links do rodapé */
-.sl-footer-useful-links a,
-.sl-footer-social-links a {
-  color: #526d81 !important;
-}
-
-.sl-footer-useful-links a:hover,
-.sl-footer-social-links a:hover {
-  color: #0f8f87 !important;
-}
-
-</style>
-
-
-<style>
-/* === SOPRO:TELE_BANNER_MEET_DIRECT === */
-.sl-tele-banner--meet {
-  position: relative !important;
-  overflow: hidden !important;
-}
-
-.sl-tele-banner--meet .sl-tele-banner__content {
-  position: relative !important;
-  z-index: 2 !important;
-}
-
-.sl-tele-banner--meet .sl-tele-banner__meet-note {
-  display: block !important;
-  margin-top: 8px !important;
-  color: rgba(255,255,255,.78) !important;
-  font-size: .92rem !important;
-  line-height: 1.35 !important;
-  font-weight: 600 !important;
-}
-
-.sl-tele-banner__visual--meet {
-  position: relative !important;
-}
-
-.sl-tele-banner__meet-link {
-  position: absolute !important;
-  left: 50% !important;
-  top: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  padding: 11px 15px !important;
-  border-radius: 999px !important;
-  background: rgba(255,255,255,.96) !important;
-  border: 1px solid rgba(110,224,214,.45) !important;
-  color: #0b2239 !important;
-  text-decoration: none !important;
-  font-weight: 900 !important;
-  box-shadow: 0 14px 28px rgba(0,0,0,.16) !important;
-  z-index: 5 !important;
-  white-space: nowrap !important;
-}
-
-.sl-tele-banner__meet-link svg {
-  width: 24px !important;
-  height: 24px !important;
-  display: block !important;
-  flex: 0 0 24px !important;
-}
-
-.sl-tele-banner__meet-link:hover {
-  border-color: rgba(110,224,214,.78) !important;
-  transform: translate(-50%, -51%) !important;
-}
-
-@media (max-width: 760px) {
-  .sl-tele-banner--meet .sl-tele-banner__meet-note {
-    font-size: .84rem !important;
-  }
-
-  .sl-tele-banner__meet-link {
-    position: static !important;
-    transform: none !important;
-    margin: 14px auto 0 !important;
-    width: max-content !important;
-    max-width: 100% !important;
-  }
-
-  .sl-tele-banner__meet-link:hover {
-    transform: none !important;
-  }
-}
-</style>
-
-<style>
-/* === SOPRO: TELECONSULTA STEPS V1 === */
-
-/* --- Banner grande: Google Meet ao lado da câmera --- */
-.sl-tele-banner--meet .sl-tele-banner__visual--meet{
-  display:flex !important;
-  align-items:center !important;
-  justify-content:center !important;
-  gap:18px !important;
-}
-
-.sl-tele-banner--meet .sl-tele-banner__visual--meet > svg{
-  flex:0 0 auto !important;
-}
-
-.sl-tele-banner--meet .sl-tele-banner__meet-link{
-  position:static !important;
-  left:auto !important;
-  top:auto !important;
-  right:auto !important;
-  bottom:auto !important;
-  transform:none !important;
-  margin:0 !important;
-  display:inline-flex !important;
-  align-items:center !important;
-  gap:10px !important;
-  padding:11px 15px !important;
-  border-radius:999px !important;
-  background:rgba(255,255,255,.98) !important;
-  border:1px solid rgba(110,224,214,.45) !important;
-  color:#0b2239 !important;
-  text-decoration:none !important;
-  font-weight:900 !important;
-  box-shadow:0 10px 24px rgba(0,0,0,.14) !important;
-  white-space:nowrap !important;
-}
-
-.sl-tele-banner--meet .sl-tele-banner__meet-link:hover{
-  border-color:rgba(110,224,214,.85) !important;
-}
-
-.sl-tele-banner--meet .sl-tele-banner__meet-link svg{
-  width:24px !important;
-  height:24px !important;
-  display:block !important;
-  flex:0 0 24px !important;
-}
-
-.sl-tele-banner--meet .sl-tele-banner__meet-note{
-  display:block !important;
-  margin-top:8px !important;
-  color:rgba(255,255,255,.80) !important;
-  font-size:.92rem !important;
-  line-height:1.4 !important;
-  font-weight:600 !important;
-}
-
-/* --- Seção nova: etapas da teleconsulta --- */
-.sl-tele-steps{
-  padding:26px 0 10px;
-}
-
-.sl-tele-steps .sl-container{
-  max-width:1180px;
-  margin:0 auto;
-  padding:0 24px;
-}
-
-.sl-tele-steps__head{
-  text-align:center;
-  margin:0 0 24px;
-}
-
-.sl-tele-steps__eyebrow{
-  display:inline-block;
-  margin-bottom:10px;
-  padding:7px 14px;
-  border-radius:999px;
-  background:#e8f7f5;
-  color:#16867f;
-  font-size:.78rem;
-  font-weight:900;
-  letter-spacing:.16em;
-  text-transform:uppercase;
-}
-
-.sl-tele-steps__head h2{
-  margin:0 0 8px;
-  color:#0b2239;
-  font-size:2rem;
-  line-height:1.1;
-  font-weight:900;
-}
-
-.sl-tele-steps__head p{
-  margin:0;
-  color:#5f7287;
-  font-size:1rem;
-  line-height:1.6;
-}
-
-.sl-tele-steps__grid{
-  display:grid;
-  grid-template-columns:repeat(4, minmax(0, 1fr));
-  gap:18px;
-  align-items:stretch;
-}
-
-.sl-tele-step{
-  background:#fff;
-  border:1px solid #d8ecea;
-  border-radius:24px;
-  padding:22px 18px 20px;
-  text-align:center;
-  box-shadow:0 10px 28px rgba(13,40,64,.06);
-}
-
-.sl-tele-step__num{
-  width:54px;
-  height:54px;
-  margin:0 auto 14px;
-  border-radius:50%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:linear-gradient(135deg,#ffffff 0%,#eefaf9 100%);
-  border:1px solid #d7efec;
-  color:#16867f;
-  font-size:1.15rem;
-  font-weight:900;
-  box-shadow:0 6px 16px rgba(11,34,57,.08);
-}
-
-.sl-tele-step h3{
-  margin:0 0 10px;
-  color:#0b2239;
-  font-size:1.08rem;
-  line-height:1.25;
-  font-weight:900;
-}
-
-.sl-tele-step p{
-  margin:0;
-  color:#607487;
-  font-size:.95rem;
-  line-height:1.55;
-}
-
-.sl-tele-steps__foot{
-  margin-top:18px;
-  text-align:center;
-  color:#607487;
-  font-size:.95rem;
-  line-height:1.6;
-}
-
-.sl-tele-steps__foot a{
-  color:#16867f;
-  font-weight:800;
-  text-decoration:none;
-}
-
-.sl-tele-steps__foot a:hover{
-  text-decoration:underline;
-}
-
-/* --- Troca visual do ícone do card "Agendar espirometria" --- */
-[class*="sl-offer-stack"] [class*="sl-offer"]:first-child [class*="icon"],
-[class*="sl-home-offer-stack"] [class*="sl-home-offer"]:first-child [class*="icon"]{
-  position:relative;
-  overflow:hidden;
-  background-image:url("favicon-32x32.png?v=20260522b");
-  background-repeat:no-repeat;
-  background-position:center;
-  background-size:28px 28px;
-}
-
-[class*="sl-offer-stack"] [class*="sl-offer"]:first-child [class*="icon"] svg,
-[class*="sl-home-offer-stack"] [class*="sl-home-offer"]:first-child [class*="icon"] svg{
-  opacity:0 !important;
-}
-
-/* Mobile */
-@media (max-width: 980px){
-  .sl-tele-steps__grid{
-    grid-template-columns:repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 760px){
-  .sl-tele-banner--meet .sl-tele-banner__visual--meet{
-    flex-direction:column !important;
-    gap:12px !important;
-  }
-
-  .sl-tele-banner--meet .sl-tele-banner__meet-link{
-    width:max-content !important;
-    max-width:100% !important;
-  }
-
-  .sl-tele-steps{
-    padding:22px 0 6px;
-  }
-
-  .sl-tele-steps .sl-container{
-    padding:0 18px;
-  }
-
-  .sl-tele-steps__head h2{
-    font-size:1.55rem;
-  }
-
-  .sl-tele-steps__grid{
-    grid-template-columns:1fr;
-    gap:14px;
-  }
-
-  .sl-tele-step{
-    text-align:left;
-    padding:18px 16px;
-  }
-
-  .sl-tele-step__num{
-    margin:0 0 12px;
-  }
-}
-</style>
-<style>
-/* === SOPRO: TELECONSULTA STEPS PREMIUM V2 === */
-
-.sl-tele-steps--premium {
-  padding: 34px 0 18px !important;
-}
-
-.sl-tele-steps--premium .sl-container {
-  width: min(1180px, calc(100% - 48px)) !important;
-  max-width: 1180px !important;
-  margin: 0 auto !important;
-  padding: 0 !important;
-}
-
-.sl-tele-steps--premium .sl-tele-steps__head {
-  text-align: center !important;
-  max-width: 760px !important;
-  margin: 0 auto 28px !important;
-}
-
-.sl-tele-steps--premium .sl-tele-steps__eyebrow {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  margin-bottom: 12px !important;
-  padding: 8px 16px !important;
-  border-radius: 999px !important;
-  background: linear-gradient(135deg, rgba(30,181,171,.14), rgba(30,181,171,.08)) !important;
-  color: #087c76 !important;
-  font-size: .76rem !important;
-  font-weight: 950 !important;
-  letter-spacing: .16em !important;
-  text-transform: uppercase !important;
-}
-
-.sl-tele-steps--premium .sl-tele-steps__eyebrow::before {
-  content: "" !important;
-  width: 7px !important;
-  height: 7px !important;
-  border-radius: 999px !important;
-  background: #1eb5ab !important;
-  box-shadow: 0 0 0 5px rgba(30,181,171,.12) !important;
-}
-
-.sl-tele-steps--premium h2 {
-  margin: 0 0 10px !important;
-  color: #0b2239 !important;
-  font-size: clamp(1.7rem, 2.6vw, 2.55rem) !important;
-  line-height: 1.05 !important;
-  font-weight: 950 !important;
-  letter-spacing: -.04em !important;
-}
-
-.sl-tele-steps--premium .sl-tele-steps__head p {
-  margin: 0 !important;
-  color: #58748a !important;
-  font-size: 1.02rem !important;
-  line-height: 1.6 !important;
-  font-weight: 500 !important;
-}
-
-.sl-tele-steps--premium .sl-tele-steps__grid {
-  display: grid !important;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-  gap: 18px !important;
-  align-items: stretch !important;
-}
-
-.sl-tele-steps--premium .sl-tele-step {
-  position: relative !important;
-  overflow: hidden !important;
-  min-height: 245px !important;
-  padding: 24px 20px 22px !important;
-  border-radius: 28px !important;
-  background:
-    radial-gradient(circle at 20% 0%, rgba(30,181,171,.13), transparent 36%),
-    linear-gradient(180deg, #ffffff 0%, #f8fefe 100%) !important;
-  border: 1px solid rgba(30,181,171,.20) !important;
-  box-shadow: 0 18px 42px rgba(8,24,41,.07) !important;
-  text-align: left !important;
-}
-
-.sl-tele-steps--premium .sl-tele-step::after {
-  content: "" !important;
-  position: absolute !important;
-  right: -34px !important;
-  bottom: -34px !important;
-  width: 96px !important;
-  height: 96px !important;
-  border-radius: 999px !important;
-  border: 1px solid rgba(30,181,171,.16) !important;
-  background: rgba(30,181,171,.045) !important;
-}
-
-.sl-tele-steps--premium .sl-tele-step__icon {
-  width: 54px !important;
-  height: 54px !important;
-  border-radius: 18px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  margin: 0 0 18px !important;
-  background: #0b3348 !important;
-  color: #ffffff !important;
-  font-size: 1.1rem !important;
-  font-weight: 950 !important;
-  box-shadow: 0 12px 24px rgba(11,51,72,.16) !important;
-}
-
-.sl-tele-steps--premium .sl-tele-step h3 {
-  margin: 0 0 10px !important;
-  color: #0b2239 !important;
-  font-size: 1.13rem !important;
-  line-height: 1.22 !important;
-  font-weight: 950 !important;
-  letter-spacing: -.02em !important;
-}
-
-.sl-tele-steps--premium .sl-tele-step p {
-  margin: 0 !important;
-  color: #58748a !important;
-  font-size: .95rem !important;
-  line-height: 1.55 !important;
-  font-weight: 500 !important;
-}
-
-.sl-tele-steps--premium .sl-tele-steps__cta {
-  margin: 24px auto 0 !important;
-  padding: 14px 18px !important;
-  max-width: 760px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 14px !important;
-  flex-wrap: wrap !important;
-  border-radius: 999px !important;
-  background: #ffffff !important;
-  border: 1px solid rgba(30,181,171,.18) !important;
-  box-shadow: 0 14px 30px rgba(8,24,41,.045) !important;
-  color: #58748a !important;
-  font-size: .95rem !important;
-}
-
-.sl-tele-steps--premium .sl-tele-steps__cta a {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  min-height: 38px !important;
-  padding: 0 16px !important;
-  border-radius: 999px !important;
-  background: #1eb5ab !important;
-  color: #ffffff !important;
-  font-weight: 900 !important;
-  text-decoration: none !important;
-  box-shadow: none !important;
-}
-
-.sl-tele-steps--premium .sl-tele-steps__cta span {
-  color: #58748a !important;
-  font-weight: 600 !important;
-}
-
-@media (max-width: 980px) {
-  .sl-tele-steps--premium .sl-tele-steps__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  }
-}
-
-@media (max-width: 760px) {
-  .sl-tele-steps--premium {
-    padding: 28px 0 14px !important;
-  }
-
-  .sl-tele-steps--premium .sl-container {
-    width: min(100% - 32px, 1180px) !important;
-  }
-
-  .sl-tele-steps--premium .sl-tele-steps__head {
-    text-align: left !important;
-    margin-bottom: 20px !important;
-  }
-
-  .sl-tele-steps--premium h2 {
-    font-size: 1.75rem !important;
-  }
-
-  .sl-tele-steps--premium .sl-tele-steps__grid {
-    grid-template-columns: 1fr !important;
-    gap: 14px !important;
-  }
-
-  .sl-tele-steps--premium .sl-tele-step {
-    min-height: auto !important;
-    padding: 20px 18px !important;
-    border-radius: 24px !important;
-  }
-
-  .sl-tele-steps--premium .sl-tele-step__icon {
-    width: 48px !important;
-    height: 48px !important;
-    border-radius: 16px !important;
-    margin-bottom: 14px !important;
-  }
-
-  .sl-tele-steps--premium .sl-tele-steps__cta {
-    border-radius: 24px !important;
-    align-items: flex-start !important;
-    justify-content: flex-start !important;
-    text-align: left !important;
-  }
-}
-</style>
-
-</head>
-<body class="sl-typo-clean">
-
-  <!-- Header com logo encostada à esquerda -->
-  <header class="sl-header">
-<div class="sl-wrap sl-header-in">
-      <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a>
-      <nav class="sl-main-nav" aria-label="Navegação principal">
-        <a href="/" class="sl-nav-link">Início</a>
-        <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a>
-        <a href="/servicos/" class="sl-nav-link">Serviços</a>
-
-        <a href="#agendamento">Agendamento</a><a href="/telemedicina/">Telemedicina</a>
-        <div class="sl-has-sub">
-  <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a>
-  <div class="sl-submenu" role="menu" aria-label="Contato">
-    <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem">
-      ✉ contato@soprolife.com.br
-    </a>
-  </div>
-</div>
-      </nav>
-<a class="sl-header-social sl-header-instagram" href="https://www.instagram.com/soprolife" target="_blank" rel="noopener" aria-label="Instagram da Sopro Life">
-  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none">
-    <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/>
-    <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/>
-    <circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/>
-  </svg>
-</a>
-<a class="sl-nav-cta" target="_blank" rel="noopener"
-         href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20uma%20Espirometria%2FProva%20de%20Fun%C3%A7%C3%A3o%20Respirat%C3%B3ria%20na%20Sopro%20Life." data-mobile-text="WhatsApp">
-        Falar no WhatsApp
-      </a>
-    </div>
-</header>
-<!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_START -->
-<div class="sl-telemed-mobile-strip">
-  <a href="/telemedicina/" aria-label="Acessar Teleconsulta Médica Respiratória">
-    <span class="sl-tms__icon" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>
-    </span>
-    <span class="sl-tms__text">
-      <strong class="sl-tms__title">Teleconsulta Médica Respiratória</strong>
-      <span class="sl-tms__subtitle">Atendimento online com especialista — avaliação e orientação respiratória.</span>
-    </span>
-    <b class="sl-tms__arrow" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-    </b>
-  </a>
-</div>
-<!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_END -->
-
-
-  <div class="sl-page">
-    <div class="sl-container">
-
-      <!-- HERO -->
-      <!-- ============== HERO V3 — Espirometria + Telemedicina ============== -->
-<section class="sl-hero-v3">
-  <div class="sl-hero-v3__wrap">
-    <div>
-      <h1 class="sl-hero-v3__title"><span style="color:#22b8b0;">Espirometria</span> ambulatorial e domiciliar ou <span style="color:#22b8b0;">Teleconsulta</span> com Médicos Especialistas.</h1>
-      <p class="sl-hero-v3__lead">Exame respiratório com laudo por pneumologista e consulta online quando você precisar.</p>
-      <div class="sl-cta-row">
-        <a class="sl-cta-btn sl-cta-btn--wa" href="https://wa.me/5521998901775?text=Ol%C3%A1%2C%20gostaria%20de%20agendar%20um%20atendimento%20na%20Sopro%20Life." target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M17.6 6.3A7.85 7.85 0 0 0 12 4a7.94 7.94 0 0 0-6.8 12L4 20l4.1-1.1A7.94 7.94 0 0 0 20 12a7.85 7.85 0 0 0-2.4-5.7zM12 18.5a6.6 6.6 0 0 1-3.4-.9l-.2-.1-2.4.6.6-2.3-.2-.3a6.5 6.5 0 0 1 10.1-8 6.5 6.5 0 0 1-4.5 11zm3.6-4.9c-.2-.1-1.2-.6-1.4-.6s-.3 0-.5.2-.5.6-.6.8-.2.1-.4 0a5.4 5.4 0 0 1-1.6-1 6 6 0 0 1-1.1-1.4c-.1-.2 0-.3.1-.4l.3-.4.2-.3v-.3l-.6-1.4c-.2-.3-.3-.3-.4-.3h-.4a.7.7 0 0 0-.5.3 2.2 2.2 0 0 0-.7 1.7 3.9 3.9 0 0 0 .8 2 8.7 8.7 0 0 0 3.5 3.1c1.2.5 1.7.5 2.3.4a2 2 0 0 0 1.3-.9 1.6 1.6 0 0 0 .1-.9c-.1-.1-.2-.2-.4-.3z"/></svg>
-          Falar no WhatsApp
-        </a>
-        <a class="sl-cta-btn sl-cta-btn--ghost" href="#agendamento">Ver agendamento</a>
-      </div>
-      <div class="sl-trust-row">
-        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Laudo por pneumologista</span>
-        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Atendimento domiciliar</span>
-        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Resultados ágeis</span>
-      </div>
-    </div>
-    <div class="sl-offer-stack" aria-label="Serviços principais">
-      <a class="sl-offer sl-offer--primary" href="#agendamento">
-        <div class="sl-offer__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v8"/><path d="M8 8c-3 0-5 3-5 7 0 3 2 5 4 5 1.5 0 2-1 2-3v-9"/><path d="M16 8c3 0 5 3 5 7 0 3-2 5-4 5-1.5 0-2-1-2-3v-9"/></svg></div>
-        <div class="sl-offer__body"><h3>Agendar espirometria</h3><p>Espirometria simples, com broncodilatador (completa) — domiciliar ou ambulatorial.</p></div>
-        <span class="sl-offer__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
-      </a>
-      <a class="sl-offer" href="telemedicina/">
-        <div class="sl-offer__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg></div>
-        <div class="sl-offer__body"><h3>Teleconsulta Médica Respiratória</h3><p>Atendimento online com especialista — avaliação e orientação respiratória.</p></div>
-        <span class="sl-offer__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
-      </a>
-    </div>
-  </div>
-</section>
-<!-- ============== BANNER TELEMEDICINA ============== -->
-<aside class="sl-tele-banner sl-tele-banner--meet">
-  <div class="sl-tele-banner__content">
-    <h3>Teleconsulta Médica Respiratória</h3>
-    <p>
-      Atendimento online com especialista — avaliação e orientação respiratória.
-      <span class="sl-tele-banner__meet-note">Para a consulta, tenha o Google Meet instalado.</span>
-    </p>
-    <a class="sl-cta-btn sl-cta-btn--wa sl-tele-banner__doctors" href="telemedicina/" style="background:#1eb5ab;">
-      Ver médicos
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-        <path d="M5 12h14M13 6l6 6-6 6"></path>
-      </svg>
-    </a>
-  </div>
-
-  <div class="sl-tele-banner__visual sl-tele-banner__visual--meet" aria-hidden="false">
-    <svg viewBox="0 0 200 200" fill="none" aria-hidden="true">
-      <circle cx="100" cy="100" r="80" stroke="rgba(110,224,214,.30)" stroke-width="1.5"></circle>
-      <circle cx="100" cy="100" r="55" stroke="rgba(110,224,214,.50)" stroke-width="1.5"></circle>
-      <rect x="65" y="78" width="70" height="44" rx="6" stroke="#6ee0d6" stroke-width="2"></rect>
-      <path d="M135 92l18-8v32l-18-8z" stroke="#6ee0d6" stroke-width="2" fill="rgba(110,224,214,.15)"></path>
-      <circle cx="100" cy="100" r="4" fill="#6ee0d6"></circle>
-    </svg>
-
-    <a class="sl-tele-banner__meet-link" href="https://support.google.com/meet/answer/12387350?hl=pt-BR" target="_blank" rel="noopener noreferrer" aria-label="Baixar Google Meet para a consulta online">
-      <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-  <rect x="10" y="16" width="32" height="32" rx="8" fill="#ffffff"></rect>
-  <path d="M18 16h16a8 8 0 0 1 8 8v8H18z" fill="#00AC47"></path>
-  <path d="M18 32h24v8a8 8 0 0 1-8 8H18z" fill="#00832D"></path>
-  <path d="M10 24a8 8 0 0 1 8-8v32a8 8 0 0 1-8-8z" fill="#FFBA00"></path>
-  <path d="M42 26l12-7c2-1.2 4 .2 4 2.5v21c0 2.3-2 3.7-4 2.5l-12-7z" fill="#00AC47"></path>
-  <path d="M18 16h16a8 8 0 0 1 8 8v4H18z" fill="#EA4335"></path>
-  <path d="M18 36h24v4a8 8 0 0 1-8 8H18z" fill="#4285F4"></path>
-</svg>
-      <span>Google Meet</span>
-    </a>
-  </div>
-</aside>
-
-<!-- ============== ETAPAS TELECONSULTA ============== -->
-<section class="sl-tele-steps sl-tele-steps--premium" aria-labelledby="sl-tele-steps-title">
-  <div class="sl-container">
-    <div class="sl-tele-steps__head">
-      <span class="sl-tele-steps__eyebrow">Como funciona?</span>
-      <h2 id="sl-tele-steps-title">As etapas da teleconsulta</h2>
-      <p>Um fluxo simples para a consulta médica respiratória online, com orientação clara antes do atendimento.</p>
-    </div>
-
-    <div class="sl-tele-steps__grid">
-      <article class="sl-tele-step">
-        <div class="sl-tele-step__icon">1</div>
-        <h3>Agende sua consulta</h3>
-        <p>Fale com a Sopro Life pelo WhatsApp e confirme o melhor dia e horário para o atendimento online.</p>
-      </article>
-
-      <article class="sl-tele-step">
-        <div class="sl-tele-step__icon">2</div>
-        <h3>Confirme os dados</h3>
-        <p>A equipe orienta as informações necessárias, forma de atendimento e preparo básico para a consulta.</p>
-      </article>
-
-      <article class="sl-tele-step">
-        <div class="sl-tele-step__icon">3</div>
-        <h3>Envie exames prévios</h3>
-        <p>Se tiver laudos, exames ou espirometria anterior, envie antes para apoiar a avaliação médica.</p>
-      </article>
-
-      <article class="sl-tele-step">
-        <div class="sl-tele-step__icon">4</div>
-        <h3>Acesse pelo Google Meet</h3>
-        <p>Você recebe o link da consulta e entra no horário combinado. Recomendamos instalar o Meet antes.</p>
-      </article>
-    </div>
-
-    <div class="sl-tele-steps__cta">
-      <a href="https://support.google.com/meet/answer/12387350?hl=pt-BR" target="_blank" rel="noopener noreferrer">
-        Baixar Google Meet
-      </a>
-      <span>Instale antes da consulta para evitar atrasos no acesso.</span>
-    </div>
-  </div>
-</section>
-<!-- ============== /ETAPAS TELECONSULTA ============== -->
-<!-- ============== DIFERENCIAIS ============== -->
-<section class="sl-features">
-  <div class="sl-features__wrap">
-    <div class="sl-features__head">
-      <span class="sl-hero-v3__kicker">Por que a Sopro Life</span>
-      <h2>Cuidado respiratório do começo ao fim</h2>
-      <p>Da avaliação clínica ao laudo, tudo em um só lugar — com agilidade e atendimento humanizado.</p>
-    </div>
-    <div class="sl-features__grid">
-      <div class="sl-feature"><div class="sl-feature__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg></div><h4>Espirometria completa</h4><p>Simples, com broncodilatador ou prova de função pulmonar.</p></div>
-      <div class="sl-feature"><div class="sl-feature__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10l9-7 9 7v10a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2z"/></svg></div><h4>Atendimento domiciliar</h4><p>Nossa equipe vai até você, com todo o conforto e privacidade.</p></div>
-      <div class="sl-feature"><div class="sl-feature__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg></div><h4>Teleconsulta</h4><p>Consulta online com médicos parceiros para avaliação clínica.</p></div>
-      <div class="sl-feature"><div class="sl-feature__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg></div><h4>Laudo ágil</h4><p>Laudo emitido por pneumologista, entregue rapidamente.</p></div>
-    </div>
-  </div>
-</section>
-
-
-      <!-- SOBRE -->
-      <section class="sl-section">
-        <div class="sl-section-header">
-          <div class="sl-section-kicker">Sobre o exame</div>
-          <h2 class="sl-section-title">O que é a espirometria?</h2>
-          <p class="sl-section-subtitle">
-            A espirometria (prova de função respiratória ou prova de função pulmonar) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório. Para quem procura , a Sopro Life oferece uma página específica com orientações e agendamento.
-          </p>
-        </div>
-
-        <div class="sl-two-column">
-          <div class="sl-text-block">
-            <p>Durante o exame, o paciente respira por um bocal conectado ao espirômetro. Fazemos manobras guiadas como inspirações profundas e sopros prolongados.</p>
-            <p>As curvas e índices apontam se há obstrução/restrição e se existe resposta a broncodilatadores.</p>
-            <ul class="sl-bullet-list sl-footer-useful-links"><li>Diagnóstico e controle de asma e DPOC;</li><li>Avaliação de tabagistas e ex-tabagistas;</li><li>Ocupacional: poeiras/gases (PCMSO);</li><li>Pré-operatório;</li><li>Seguimento de doenças pulmonares.</li></ul>
-          </div>
-
-          <div class="sl-highlight-box">
-            <strong>Quem pede o exame?</strong>
-            <p>Pneumologistas, clínicos, cardiologistas, médicos do trabalho e cirurgiões, entre outros.</p>
-            <p>Na Sopro Life, o laudo é objetivo e útil ao médico solicitante, com recomendações quando necessário.</p>
-          </div>
-        </div>
-      </section>
-
-
-      <div id="sl-booking-desktop-anchor" aria-hidden="true"></div>
-<section class="sl-booking-section" id="agendamento">
-        <div class="sl-container">
-          <div class="sl-booking-align">
-            <div class="sl-booking-card">
-          <div class="sl-booking-head">
-            <span class="sl-booking-kicker">Agendamento rápido</span>
-            <h2 class="sl-booking-title">Agende sua espirometria</h2>
-            <p class="sl-booking-sub">Escolha o melhor horário e confirme pelo WhatsApp.</p>
-          </div>
-
-          <div class="sl-booking-grid">
-            <div class="sl-booking-controls">
-              <div class="sl-booking-field">
-                <label for="sl-booking-service">Tipo de Espirometria</label>
-                <select id="sl-booking-service" name="servico">
-                  <option value="Espirometria simples" selected>Espirometria simples</option>
-                  <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
-                  <option value="Empresas / PCMSO">Empresas / PCMSO</option>
-                </select>
-              </div>
-
-              <div class="sl-booking-field">
-                <label for="sl-booking-unit">Localidade</label>
-                <select id="sl-booking-unit" name="unidade">
-                  <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
-                  <option value="Unidade Barra">Unidade Barra</option>
-                  <option value="Unidade Zona Norte">Unidade Zona Norte</option>
-                </select>
-              </div>
-
-              <div class="sl-booking-field">
-                <label for="sl-booking-date">Data</label>
-                <input id="sl-booking-date" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa" />
-              </div>
-
-              <div>
-                <div class="sl-booking-slots-title">Horários disponíveis</div>
-                <div class="sl-booking-slots" id="sl-booking-slots"></div>
-                <p class="sl-booking-note">Horários em cinza estão ocupados. Confirmação pelo WhatsApp.</p>
-              </div>
-            </div>
-
-            <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
-              <div class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" aria-label="Ampliar mapa das unidades" role="button" tabindex="0">
-                <span class="sl-mini-map-target" aria-hidden="true">
-                  <span></span><span></span><span></span><span></span>
-                </span>
-                <button class="sl-btn sl-map-open-btn" type="button" id="sl-open-map-modal" aria-label="Ampliar mapa das unidades">Ampliar mapa</button>
-              </div>
-            </aside>
-          </div>
-        </div>
-        </div>
-      </section>
-
-      <div class="sl-map-modal" id="sl-map-modal" aria-hidden="true">
-        <div class="sl-map-modal__backdrop" data-map-close="backdrop"></div>
-        <div class="sl-map-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sl-map-modal-title">
-          <div class="sl-map-modal__header">
-            <h3 class="sl-map-modal__title" id="sl-map-modal-title">Unidades de atendimento</h3>
-            <button class="sl-btn sl-btn-outline" type="button" id="sl-close-map-modal">Fechar</button>
-          </div>
-          <div class="sl-map-modal__body">
-            <div class="sl-map-panel-info sl-map-modal__info">
-              <h4>Unidades de atendimento</h4>
-              <p class="sl-map-panel-sub">Escolha a unidade e finalize pelo WhatsApp.</p>
-              <div class="sl-map-unit-cards">
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Atendimento domiciliar">Atendimento domiciliar</div>
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Barra">Unidade Barra</div>
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Zona Norte">Unidade Zona Norte</div>
-              </div>
-              <p class="sl-map-panel-note">Endereço confirmado pelo WhatsApp no momento do agendamento.</p>
-            </div>
-            <div class="sl-map-modal__map-wrap">
-              <div id="sl-units-map" aria-label="Mapa ampliado das unidades"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- TIPOS -->
-      <section class="sl-section">
-        <div class="sl-section-header">
-          <span class="sl-section-kicker">Modalidades</span>
-          <h2 class="sl-section-title">Tipos de espirometria que realizamos</h2>
-          <p class="sl-section-subtitle">Estrutura inspirada na concorrência, mas adaptada à Sopro Life.</p>
-        </div>
-
-        <div class="sl-tabs" id="tipos-espirometria">
-          <div class="sl-tab-list" role="tablist">
-            <button class="sl-tab-button" role="tab" aria-selected="true" data-tab="simples">Espirometria simples</button>
-            <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="bd">Espirometria com broncodilatador</button>
-            <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="ocupacional">Espirometria ocupacional / PCMSO</button>
-          </div>
-
-          <div class="sl-tab-panel is-active" data-panel="simples" role="tabpanel">
-            <div class="sl-tagline">Avaliação basal</div>
-            <h3>Espirometria simples</h3>
-            <p>Sem medicação durante o exame. Ótima para investigação inicial e acompanhamento periódico.</p>
-            <ul class="sl-bullet-list">
-              <li>Mede CVF, VEF1, entre outros;</li>
-              <li>Identifica padrões obstrutivos/restritivos;</li>
+<li>Identifica padrões obstrutivos/restritivos;</li>
               <li>Permite comparação em seguimentos.</li>
             </ul>
           </div>
@@ -4723,7 +3336,6 @@ body{
 </script>
 <!-- SOPRO:ARROWS_SCRIPT_END -->
 
-
 <style id="sopro-modal-side-hotfix-v2">
 /* SOPRO:MAP_MODAL_SIDE_HOTFIX_V2 */
 /* Ajuste visual forte e específico do painel esquerdo do modal do mapa */
@@ -4809,7 +3421,6 @@ body{
 }
 </style>
 
-
 <style id="sopro-map-unit-whatsapp-style">
 /* SOPRO:MAP_UNIT_WHATSAPP_STYLE */
 .sl-map-unit-card{
@@ -4836,7 +3447,6 @@ body{
   outline-offset:3px !important;
 }
 </style>
-
 
 <script id="sopro-map-unit-whatsapp-hotfix">
 /* SOPRO:MAP_UNIT_WHATSAPP_HOTFIX_V1 */
@@ -4908,7 +3518,6 @@ body{
 })();
 </script>
 
-
 <style id="sopro-flatpickr-ptbr-style">
 /* SOPRO:FLATPICKR_PTBR_STYLE */
 .flatpickr-calendar{
@@ -4954,7 +3563,6 @@ body{
   fill:#0b2239 !important;
 }
 </style>
-
 
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
@@ -5007,7 +3615,6 @@ body{
 })();
 </script>
 
-
 <style id="sopro-map-tile-filter">
 /* SOPRO:MAP_TILE_FILTER_V1 */
 /* Mantém o mapa limpo, mas puxa discretamente para a paleta SoproLife */
@@ -5026,7 +3633,6 @@ body{
   filter:none !important;
 }
 </style>
-
 
 <style id="sopro-booking-mobile-relocate-style">
 /* SOPRO:BOOKING_MOBILE_RELOCATE_STYLE */
@@ -5074,7 +3680,6 @@ body{
 }
 </style>
 
-
 <script id="sopro-booking-mobile-relocate">
 /* SOPRO:BOOKING_MOBILE_RELOCATE_V1 */
 (function(){
@@ -5111,14 +3716,11 @@ body{
 })();
 </script>
 
-
 <style id="sopro-instagram-hover-style">
 /* SOPRO:INSTAGRAM_HOVER_STYLE_V1 */
 /* Ícone do Instagram no header com paleta do Instagram, sem hover verde */
 
-
 </style>
-
 
 <!-- SOPRO:INSTAGRAM_HEADER_FINAL_START -->
 <style>
@@ -5187,7 +3789,6 @@ header .sl-header-instagram:hover.sl-header a.sl-header-instagram:hover {
 }
 </style>
 <!-- SOPRO:INSTAGRAM_HEADER_FINAL_END -->
-
 
 <style id="soprolife-mobile-header-final-v5">
 /* === SOPRO:MOBILE_HEADER_FINAL_V5 === */
@@ -5473,7 +4074,6 @@ header .sl-header-instagram:hover.sl-header a.sl-header-instagram:hover {
   }
 }
 </style>
-
 
 <script id="soprolife-contact-submenu-final-v5">
 (function(){
