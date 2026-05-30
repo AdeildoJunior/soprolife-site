@@ -836,6 +836,80 @@
 
 </style>
   <link rel="stylesheet" href="/assets/sopro-visual-system-v3.css?v=visual-v3">
+<style>
+
+/* === SOPRO:GOOGLE_MEET_DOWNLOAD_LINK === */
+.sl-google-meet-download {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-height: 46px !important;
+  max-width: 330px !important;
+  padding: 8px 14px !important;
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(30,181,171,.24) !important;
+  color: #0b2239 !important;
+  text-decoration: none !important;
+  box-shadow: 0 8px 20px rgba(8,24,41,.055) !important;
+}
+
+.sl-google-meet-download:hover {
+  border-color: rgba(30,181,171,.48) !important;
+  transform: translateY(-1px) !important;
+}
+
+.sl-google-meet-icon {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 12px !important;
+  background: #f6fbfc !important;
+}
+
+.sl-google-meet-icon svg {
+  width: 27px !important;
+  height: 27px !important;
+  display: block !important;
+}
+
+.sl-google-meet-text {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1px !important;
+  min-width: 0 !important;
+}
+
+.sl-google-meet-text strong {
+  font-size: .96rem !important;
+  line-height: 1.1 !important;
+  font-weight: 900 !important;
+  color: #0b2239 !important;
+}
+
+.sl-google-meet-text small {
+  font-size: .78rem !important;
+  line-height: 1.2 !important;
+  font-weight: 650 !important;
+  color: #58748a !important;
+}
+
+@media (max-width: 760px) {
+  .sl-google-meet-download {
+    width: 100% !important;
+    max-width: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  .sl-google-meet-text small {
+    font-size: .76rem !important;
+  }
+}
+
+</style>
 </head>
 
 <body>
@@ -871,7 +945,23 @@
           </p>
           <div class="sl-hero-actions">
             <a class="sl-primary-btn" href="#profissional">Ver profissional</a>
-            <button class="sl-secondary-btn" type="button" data-open-telemed>Solicitar horário</button>
+            <a class="sl-google-meet-download" href="https://support.google.com/meet/answer/12387350?hl=pt-BR" target="_blank" rel="noopener noreferrer" aria-label="Baixar Google Meet para a consulta online">
+  <span class="sl-google-meet-icon" aria-hidden="true">
+    <svg viewBox="0 0 64 64" focusable="false">
+      <rect x="10" y="16" width="32" height="32" rx="8" fill="#ffffff"/>
+      <path d="M18 16h16a8 8 0 0 1 8 8v8H18z" fill="#00AC47"/>
+      <path d="M18 32h24v8a8 8 0 0 1-8 8H18z" fill="#00832D"/>
+      <path d="M10 24a8 8 0 0 1 8-8v32a8 8 0 0 1-8-8z" fill="#FFBA00"/>
+      <path d="M42 26l12-7c2-1.2 4 .2 4 2.5v21c0 2.3-2 3.7-4 2.5l-12-7z" fill="#00AC47"/>
+      <path d="M18 16h16a8 8 0 0 1 8 8v4H18z" fill="#EA4335"/>
+      <path d="M18 36h24v4a8 8 0 0 1-8 8H18z" fill="#4285F4"/>
+    </svg>
+  </span>
+  <span class="sl-google-meet-text">
+    <strong>Google Meet</strong>
+    <small>Baixe o app para a consulta online.</small>
+  </span>
+</a>
           </div>
         </div>
 
