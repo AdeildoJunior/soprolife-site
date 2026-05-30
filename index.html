@@ -5514,5 +5514,175 @@ header .sl-header-instagram:hover.sl-header a.sl-header-instagram:hover {
 })();
 </script>
 
+
+<!-- SOPRO_SAFE_OU_PATCH_START -->
+<style id="sopro-safe-ou-style">
+  .sopro-safe-hidden {
+    display: none !important;
+  }
+
+  .sopro-safe-ou-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin: 16px 0;
+  }
+
+  .sopro-safe-ou-divider::before,
+  .sopro-safe-ou-divider::after {
+    content: "";
+    height: 1px;
+    flex: 1;
+    max-width: 120px;
+    background: linear-gradient(
+      90deg,
+      rgba(34,184,176,0),
+      rgba(34,184,176,.55),
+      rgba(34,184,176,0)
+    );
+  }
+
+  .sopro-safe-ou-divider span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 58px;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 999px;
+    font-weight: 900;
+    font-size: .88rem;
+    letter-spacing: .12em;
+    color: #ffffff;
+    background: linear-gradient(135deg, #0b2239 0%, #138b97 55%, #22b8b0 100%);
+    box-shadow: 0 10px 24px rgba(11,34,57,.18);
+    animation: soproSafeOuPulse 2.8s ease-in-out infinite;
+  }
+
+  @keyframes soproSafeOuPulse {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow: 0 10px 24px rgba(11,34,57,.18);
+    }
+    50% {
+      transform: scale(1.05);
+      box-shadow: 0 12px 28px rgba(34,184,176,.28);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .sopro-safe-ou-divider {
+      margin: 12px 0;
+    }
+
+    .sopro-safe-ou-divider::before,
+    .sopro-safe-ou-divider::after {
+      max-width: 80px;
+    }
+
+    .sopro-safe-ou-divider span {
+      min-width: 54px;
+      height: 34px;
+      font-size: .82rem;
+    }
+  }
+</style>
+
+<script id="sopro-safe-ou-script">
+(function () {
+  function norm(txt) {
+    return (txt || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function textOf(el) {
+    return norm(el.textContent || "");
+  }
+
+  function hideHeroExtras() {
+    const targets = [
+      "ver agendamento",
+      "laudo por pneumologista",
+      "atendimento domiciliar",
+      "resultados ageis"
+    ];
+
+    const candidates = Array.from(document.querySelectorAll("a, button, li, span, div"));
+
+    candidates.forEach(function (el) {
+      const t = textOf(el);
+
+      if (!targets.includes(t)) return;
+
+      // Evita mexer em menu, rodapé, links úteis e áreas fora da primeira dobra.
+      if (el.closest("header, footer, .sl-tele-banner, .sl-tele-steps")) return;
+
+      // Só aplica em elementos da home antes do bloco de cards principais.
+      const rect = el.getBoundingClientRect();
+      if (rect.top > 1100) return;
+
+      el.classList.add("sopro-safe-hidden");
+    });
+  }
+
+  function findCardByTitle(titleText) {
+    const titleNorm = norm(titleText);
+    const headings = Array.from(document.querySelectorAll("h2, h3, strong, .sl-offer__title, .sl-home-offer-title"));
+
+    for (const h of headings) {
+      if (!textOf(h).includes(titleNorm)) continue;
+
+      const card =
+        h.closest("article") ||
+        h.closest(".sl-offer") ||
+        h.closest(".sl-home-offer") ||
+        h.closest("[class*='offer']") ||
+        h.closest("[class*='card']") ||
+        h.parentElement;
+
+      if (card) return card;
+    }
+
+    return null;
+  }
+
+  function insertDivider() {
+    if (document.querySelector(".sopro-safe-ou-divider")) return;
+
+    const spirometryCard = findCardByTitle("Agendar espirometria");
+    const teleCard = findCardByTitle("Teleconsulta Medica Respiratoria");
+
+    if (!spirometryCard || !teleCard) return;
+    if (spirometryCard.compareDocumentPosition(teleCard) & Node.DOCUMENT_POSITION_PRECEDING) return;
+
+    const divider = document.createElement("div");
+    divider.className = "sopro-safe-ou-divider";
+    divider.setAttribute("aria-label", "ou");
+    divider.innerHTML = "<span>OU</span>";
+
+    spirometryCard.insertAdjacentElement("afterend", divider);
+  }
+
+  function run() {
+    hideHeroExtras();
+    insertDivider();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", run);
+  } else {
+    run();
+  }
+
+  window.addEventListener("load", run);
+})();
+</script>
+<!-- SOPRO_SAFE_OU_PATCH_END -->
+
 </body>
 </html>
