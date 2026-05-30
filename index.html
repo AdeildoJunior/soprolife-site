@@ -4148,6 +4148,221 @@ body{
 }
 </style>
 
+
+<style id="soprolife-mobile-header-logo-insta-v2">
+/* === SOPRO:MOBILE_HEADER_LOGO_INSTAGRAM_V2 === */
+/* Mobile: logo maior + Instagram + WhatsApp. Menu textual fica escondido. */
+@media (max-width: 960px) {
+
+  header.sl-header nav,
+  .sl-header nav,
+  .sl-header .sl-main-nav,
+  .sl-header .sl-nav,
+  nav[aria-label="Menu principal"] {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  header,
+  .sl-header,
+  header.sl-header {
+    min-height: 98px !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+
+  header .sl-container,
+  .sl-header .sl-container,
+  .sl-header-in,
+  .sl-header-inner {
+    width: 100% !important;
+    max-width: none !important;
+    min-height: 98px !important;
+    height: 98px !important;
+    padding: 8px 14px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+
+  .sl-brand,
+  .sl-logo,
+  header a[aria-label*="Sopro"],
+  header a[href="/"] {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+  }
+
+  .sl-brand img,
+  .sl-logo img,
+  header img[src*="logo"] {
+    height: clamp(64px, 18vw, 78px) !important;
+    max-height: 78px !important;
+    width: auto !important;
+    max-width: min(48vw, 205px) !important;
+    object-fit: contain !important;
+    display: block !important;
+  }
+
+  /* Instagram continua visível no mobile */
+  header a[href*="instagram.com"],
+  .sl-header a[href*="instagram.com"],
+  .sl-header-instagram,
+  .sl-header-social,
+  .sl-social-instagram,
+  .sl-social-link--instagram {
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    flex: 0 0 44px !important;
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    max-height: 44px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 999px !important;
+    background: #ffffff !important;
+    border: 1.5px solid #f4b3c7 !important;
+    box-shadow: 0 8px 18px rgba(11, 34, 57, .06) !important;
+    overflow: hidden !important;
+  }
+
+  header a[href*="instagram.com"] svg,
+  .sl-header a[href*="instagram.com"] svg,
+  .sl-header-instagram svg,
+  .sl-header-social svg,
+  .sl-social-instagram svg,
+  .sl-social-link--instagram svg {
+    width: 21px !important;
+    height: 21px !important;
+    display: block !important;
+  }
+
+  header a[href*="instagram.com"] svg *,
+  .sl-header a[href*="instagram.com"] svg * {
+    stroke: #c13584 !important;
+    fill: none !important;
+  }
+
+  /* WhatsApp compacto para caber junto com logo e Instagram */
+  .sl-whatsapp,
+  .sl-nav-cta,
+  header a[href*="whatsapp"],
+  header a[href*="wa.me"],
+  header a[href*="api.whatsapp.com"] {
+    flex: 0 0 auto !important;
+    min-width: 116px !important;
+    max-width: 136px !important;
+    height: 46px !important;
+    padding: 0 15px !important;
+    border-radius: 999px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    font-size: 0 !important;
+  }
+
+  .sl-whatsapp svg,
+  .sl-nav-cta svg,
+  header a[href*="whatsapp"] svg,
+  header a[href*="wa.me"] svg,
+  header a[href*="api.whatsapp.com"] svg {
+    display: none !important;
+  }
+
+  .sl-whatsapp::before,
+  .sl-nav-cta::before,
+  header a[href*="whatsapp"]::before,
+  header a[href*="wa.me"]::before,
+  header a[href*="api.whatsapp.com"]::before {
+    content: "WhatsApp" !important;
+    font-size: 1rem !important;
+    line-height: 1 !important;
+    font-weight: 900 !important;
+    color: #ffffff !important;
+  }
+}
+
+@media (max-width: 390px) {
+  header,
+  .sl-header,
+  header.sl-header {
+    min-height: 92px !important;
+  }
+
+  header .sl-container,
+  .sl-header .sl-container,
+  .sl-header-in,
+  .sl-header-inner {
+    min-height: 92px !important;
+    height: 92px !important;
+    padding: 7px 11px !important;
+    gap: 7px !important;
+  }
+
+  .sl-brand img,
+  .sl-logo img,
+  header img[src*="logo"] {
+    height: clamp(58px, 18vw, 70px) !important;
+    max-height: 70px !important;
+    max-width: min(46vw, 178px) !important;
+  }
+
+  header a[href*="instagram.com"],
+  .sl-header a[href*="instagram.com"],
+  .sl-header-instagram,
+  .sl-header-social,
+  .sl-social-instagram,
+  .sl-social-link--instagram {
+    flex-basis: 40px !important;
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+  }
+
+  .sl-whatsapp,
+  .sl-nav-cta,
+  header a[href*="whatsapp"],
+  header a[href*="wa.me"],
+  header a[href*="api.whatsapp.com"] {
+    min-width: 108px !important;
+    max-width: 124px !important;
+    height: 42px !important;
+    padding: 0 12px !important;
+  }
+
+  .sl-whatsapp::before,
+  .sl-nav-cta::before,
+  header a[href*="whatsapp"]::before,
+  header a[href*="wa.me"]::before,
+  header a[href*="api.whatsapp.com"]::before {
+    font-size: .92rem !important;
+  }
+}
+</style>
+
 </head>
 <body class="sl-typo-clean">
 
