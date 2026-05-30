@@ -5639,5 +5639,105 @@ header .sl-header-instagram:hover.sl-header a.sl-header-instagram:hover {
 </script>
 <!-- SOPRO_OU_INDEPENDENT_END -->
 
+
+<!-- SOPRO_HIDE_HERO_EXTRAS_START -->
+<style id="sopro-hide-hero-extras-style">
+  .sopro-force-hide-hero-extra {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .sopro-hero-extras-empty {
+    display: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 0 !important;
+  }
+
+  /* sobe o bloco dos cards após tirar os itens */
+  .sl-offer-stack,
+  .sl-home-offer-stack,
+  [class*="offer-stack"] {
+    margin-top: 18px !important;
+  }
+
+  @media (max-width: 768px) {
+    .sl-offer-stack,
+    .sl-home-offer-stack,
+    [class*="offer-stack"] {
+      margin-top: 14px !important;
+    }
+  }
+</style>
+
+<script id="sopro-hide-hero-extras-script">
+(function () {
+  function norm(txt) {
+    return (txt || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function hideExactTextItems() {
+    var targets = [
+      "ver agendamento",
+      "laudo por pneumologista",
+      "atendimento domiciliar",
+      "resultados ageis"
+    ];
+
+    var selectors = "a, button, li, span, p, div";
+
+    document.querySelectorAll(selectors).forEach(function (el) {
+      var text = norm(el.textContent);
+
+      if (!targets.includes(text)) return;
+
+      // Não mexe em header, footer, cards principais ou seções mais baixas
+      if (el.closest("header, footer")) return;
+      if (el.closest(".sl-offer, .sl-home-offer, [class*='offer-card']")) return;
+
+      var rect = el.getBoundingClientRect();
+
+      // Só mexe nessa área inicial da home
+      if (rect.top < 0 || rect.top > 1200) return;
+
+      el.classList.add("sopro-force-hide-hero-extra");
+    });
+
+    // Se o container dos checks ficar vazio, some também
+    document.querySelectorAll("ul, .sl-hero-checks, .sl-hero-benefits, .sl-hero-points, .sl-home-highlights").forEach(function (box) {
+      var visibleText = Array.from(box.children || []).filter(function (child) {
+        return !child.classList.contains("sopro-force-hide-hero-extra");
+      }).map(function (child) {
+        return norm(child.textContent);
+      }).join("");
+
+      if (!visibleText) {
+        box.classList.add("sopro-hero-extras-empty");
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", hideExactTextItems);
+  } else {
+    hideExactTextItems();
+  }
+
+  window.addEventListener("load", hideExactTextItems);
+  setTimeout(hideExactTextItems, 300);
+})();
+</script>
+<!-- SOPRO_HIDE_HERO_EXTRAS_END -->
+
 </body>
 </html>
