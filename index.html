@@ -3568,6 +3568,218 @@ body{
   }
 }
 </style>
+<style>
+/* === SOPRO: TELECONSULTA STEPS PREMIUM V2 === */
+
+.sl-tele-steps--premium {
+  padding: 34px 0 18px !important;
+}
+
+.sl-tele-steps--premium .sl-container {
+  width: min(1180px, calc(100% - 48px)) !important;
+  max-width: 1180px !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+}
+
+.sl-tele-steps--premium .sl-tele-steps__head {
+  text-align: center !important;
+  max-width: 760px !important;
+  margin: 0 auto 28px !important;
+}
+
+.sl-tele-steps--premium .sl-tele-steps__eyebrow {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-bottom: 12px !important;
+  padding: 8px 16px !important;
+  border-radius: 999px !important;
+  background: linear-gradient(135deg, rgba(30,181,171,.14), rgba(30,181,171,.08)) !important;
+  color: #087c76 !important;
+  font-size: .76rem !important;
+  font-weight: 950 !important;
+  letter-spacing: .16em !important;
+  text-transform: uppercase !important;
+}
+
+.sl-tele-steps--premium .sl-tele-steps__eyebrow::before {
+  content: "" !important;
+  width: 7px !important;
+  height: 7px !important;
+  border-radius: 999px !important;
+  background: #1eb5ab !important;
+  box-shadow: 0 0 0 5px rgba(30,181,171,.12) !important;
+}
+
+.sl-tele-steps--premium h2 {
+  margin: 0 0 10px !important;
+  color: #0b2239 !important;
+  font-size: clamp(1.7rem, 2.6vw, 2.55rem) !important;
+  line-height: 1.05 !important;
+  font-weight: 950 !important;
+  letter-spacing: -.04em !important;
+}
+
+.sl-tele-steps--premium .sl-tele-steps__head p {
+  margin: 0 !important;
+  color: #58748a !important;
+  font-size: 1.02rem !important;
+  line-height: 1.6 !important;
+  font-weight: 500 !important;
+}
+
+.sl-tele-steps--premium .sl-tele-steps__grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 18px !important;
+  align-items: stretch !important;
+}
+
+.sl-tele-steps--premium .sl-tele-step {
+  position: relative !important;
+  overflow: hidden !important;
+  min-height: 245px !important;
+  padding: 24px 20px 22px !important;
+  border-radius: 28px !important;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(30,181,171,.13), transparent 36%),
+    linear-gradient(180deg, #ffffff 0%, #f8fefe 100%) !important;
+  border: 1px solid rgba(30,181,171,.20) !important;
+  box-shadow: 0 18px 42px rgba(8,24,41,.07) !important;
+  text-align: left !important;
+}
+
+.sl-tele-steps--premium .sl-tele-step::after {
+  content: "" !important;
+  position: absolute !important;
+  right: -34px !important;
+  bottom: -34px !important;
+  width: 96px !important;
+  height: 96px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(30,181,171,.16) !important;
+  background: rgba(30,181,171,.045) !important;
+}
+
+.sl-tele-steps--premium .sl-tele-step__icon {
+  width: 54px !important;
+  height: 54px !important;
+  border-radius: 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 0 18px !important;
+  background: #0b3348 !important;
+  color: #ffffff !important;
+  font-size: 1.1rem !important;
+  font-weight: 950 !important;
+  box-shadow: 0 12px 24px rgba(11,51,72,.16) !important;
+}
+
+.sl-tele-steps--premium .sl-tele-step h3 {
+  margin: 0 0 10px !important;
+  color: #0b2239 !important;
+  font-size: 1.13rem !important;
+  line-height: 1.22 !important;
+  font-weight: 950 !important;
+  letter-spacing: -.02em !important;
+}
+
+.sl-tele-steps--premium .sl-tele-step p {
+  margin: 0 !important;
+  color: #58748a !important;
+  font-size: .95rem !important;
+  line-height: 1.55 !important;
+  font-weight: 500 !important;
+}
+
+.sl-tele-steps--premium .sl-tele-steps__cta {
+  margin: 24px auto 0 !important;
+  padding: 14px 18px !important;
+  max-width: 760px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 14px !important;
+  flex-wrap: wrap !important;
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(30,181,171,.18) !important;
+  box-shadow: 0 14px 30px rgba(8,24,41,.045) !important;
+  color: #58748a !important;
+  font-size: .95rem !important;
+}
+
+.sl-tele-steps--premium .sl-tele-steps__cta a {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 38px !important;
+  padding: 0 16px !important;
+  border-radius: 999px !important;
+  background: #1eb5ab !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+}
+
+.sl-tele-steps--premium .sl-tele-steps__cta span {
+  color: #58748a !important;
+  font-weight: 600 !important;
+}
+
+@media (max-width: 980px) {
+  .sl-tele-steps--premium .sl-tele-steps__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .sl-tele-steps--premium {
+    padding: 28px 0 14px !important;
+  }
+
+  .sl-tele-steps--premium .sl-container {
+    width: min(100% - 32px, 1180px) !important;
+  }
+
+  .sl-tele-steps--premium .sl-tele-steps__head {
+    text-align: left !important;
+    margin-bottom: 20px !important;
+  }
+
+  .sl-tele-steps--premium h2 {
+    font-size: 1.75rem !important;
+  }
+
+  .sl-tele-steps--premium .sl-tele-steps__grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+
+  .sl-tele-steps--premium .sl-tele-step {
+    min-height: auto !important;
+    padding: 20px 18px !important;
+    border-radius: 24px !important;
+  }
+
+  .sl-tele-steps--premium .sl-tele-step__icon {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 16px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .sl-tele-steps--premium .sl-tele-steps__cta {
+    border-radius: 24px !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+  }
+}
+</style>
 </head>
 <body class="sl-typo-clean">
 
@@ -3605,12 +3817,13 @@ body{
 </header>
 <!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_START -->
 <div class="sl-telemed-mobile-strip">
-  <a href="/telemedicina/" aria-label="Acessar Consulta Online com Médico">
+  <a href="/telemedicina/" aria-label="Acessar Teleconsulta Médica Respiratória">
     <span class="sl-tms__icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg>
     </span>
     <span class="sl-tms__text">
-      <strong class="sl-tms__title">Consulta Online com Médico</strong>
+      <strong class="sl-tms__title">Teleconsulta Médica Respiratória</strong>
+      <span class="sl-tms__subtitle">Atendimento online com especialista — avaliação e orientação respiratória.</span>
     </span>
     <b class="sl-tms__arrow" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -3646,7 +3859,7 @@ body{
     <div class="sl-offer-stack" aria-label="Serviços principais">
       <a class="sl-offer sl-offer--primary" href="#agendamento">
         <div class="sl-offer__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v8"/><path d="M8 8c-3 0-5 3-5 7 0 3 2 5 4 5 1.5 0 2-1 2-3v-9"/><path d="M16 8c3 0 5 3 5 7 0 3-2 5-4 5-1.5 0-2-1-2-3v-9"/></svg></div>
-        <div class="sl-offer__body"><h3>Agendar espirometria</h3><p>Simples, com broncodilatador ou prova de função pulmonar — domiciliar ou em clínica parceira.</p></div>
+        <div class="sl-offer__body"><h3>Agendar espirometria</h3><p>Espirometria simples, com broncodilatador (completa) — domiciliar ou ambulatorial.</p></div>
         <span class="sl-offer__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
       </a>
       <a class="sl-offer" href="telemedicina/">
@@ -3698,44 +3911,46 @@ body{
 </aside>
 
 <!-- ============== ETAPAS TELECONSULTA ============== -->
-<section class="sl-tele-steps" aria-labelledby="sl-tele-steps-title">
+<section class="sl-tele-steps sl-tele-steps--premium" aria-labelledby="sl-tele-steps-title">
   <div class="sl-container">
     <div class="sl-tele-steps__head">
       <span class="sl-tele-steps__eyebrow">Como funciona?</span>
       <h2 id="sl-tele-steps-title">As etapas da teleconsulta</h2>
-      <p>Fluxo simples para a consulta médica respiratória online, com organização prévia e acesso fácil.</p>
+      <p>Um fluxo simples para a consulta médica respiratória online, com orientação clara antes do atendimento.</p>
     </div>
 
     <div class="sl-tele-steps__grid">
       <article class="sl-tele-step">
-        <div class="sl-tele-step__num">1</div>
+        <div class="sl-tele-step__icon">1</div>
         <h3>Agende sua consulta</h3>
-        <p>Fale com a equipe da Sopro Life pelo WhatsApp e confirme o melhor dia e horário para o atendimento.</p>
+        <p>Fale com a Sopro Life pelo WhatsApp e confirme o melhor dia e horário para o atendimento online.</p>
       </article>
 
       <article class="sl-tele-step">
-        <div class="sl-tele-step__num">2</div>
-        <h3>Organize pagamento e dados</h3>
-        <p>Se necessário, orientamos a confirmação do atendimento, dados básicos e informações iniciais antes da consulta.</p>
+        <div class="sl-tele-step__icon">2</div>
+        <h3>Confirme os dados</h3>
+        <p>A equipe orienta as informações necessárias, forma de atendimento e preparo básico para a consulta.</p>
       </article>
 
       <article class="sl-tele-step">
-        <div class="sl-tele-step__num">3</div>
-        <h3>Envie seus exames</h3>
-        <p>Quando houver exames prévios, laudos ou espirometria, envie com antecedência para apoiar a avaliação médica.</p>
+        <div class="sl-tele-step__icon">3</div>
+        <h3>Envie exames prévios</h3>
+        <p>Se tiver laudos, exames ou espirometria anterior, envie antes para apoiar a avaliação médica.</p>
       </article>
 
       <article class="sl-tele-step">
-        <div class="sl-tele-step__num">4</div>
-        <h3>Receba o acesso à consulta</h3>
-        <p>Você recebe o link do Google Meet para entrar no horário combinado. Se precisar, ajudamos na instalação antes.</p>
+        <div class="sl-tele-step__icon">4</div>
+        <h3>Acesse pelo Google Meet</h3>
+        <p>Você recebe o link da consulta e entra no horário combinado. Recomendamos instalar o Meet antes.</p>
       </article>
     </div>
 
-    <p class="sl-tele-steps__foot">
-      Dica: instale o Google Meet antes da consulta para facilitar o acesso.
-      <a href="https://support.google.com/meet/answer/12387350?hl=pt-BR" target="_blank" rel="noopener noreferrer">Baixar Google Meet</a>
-    </p>
+    <div class="sl-tele-steps__cta">
+      <a href="https://support.google.com/meet/answer/12387350?hl=pt-BR" target="_blank" rel="noopener noreferrer">
+        Baixar Google Meet
+      </a>
+      <span>Instale antes da consulta para evitar atrasos no acesso.</span>
+    </div>
   </div>
 </section>
 <!-- ============== /ETAPAS TELECONSULTA ============== -->
