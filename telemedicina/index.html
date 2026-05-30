@@ -911,6 +911,61 @@
 
 </style>
 
+
+<style id="sopro-desktop-menu-standard-v1">
+/* === SOPRO: menu superior desktop padronizado === */
+@media (min-width: 961px) {
+  header nav a,
+  .sl-header nav a,
+  .sl-nav a,
+  .sl-main-nav a,
+  .sl-nav-link {
+    color: #536a7d !important;
+    font-weight: 600 !important;
+    font-size: 0.95rem !important;
+    letter-spacing: 0 !important;
+    text-decoration: none !important;
+  }
+
+  header nav a:hover,
+  .sl-header nav a:hover,
+  .sl-nav a:hover,
+  .sl-main-nav a:hover,
+  .sl-nav-link:hover {
+    color: #0f8f87 !important;
+    font-weight: 600 !important;
+  }
+
+  header nav a[aria-current="page"],
+  header nav a.active,
+  .sl-header nav a[aria-current="page"],
+  .sl-header nav a.active,
+  .sl-nav a[aria-current="page"],
+  .sl-nav a.active,
+  .sl-main-nav a[aria-current="page"],
+  .sl-main-nav a.active {
+    color: #536a7d !important;
+    font-weight: 600 !important;
+  }
+
+  /* Mantém o botão verde do WhatsApp destacado, sem ser afetado pelo menu */
+  header a[href*="whatsapp"],
+  header a[href*="wa.me"],
+  header a[href*="api.whatsapp.com"],
+  .sl-whatsapp,
+  .sl-nav-cta {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+  }
+
+  /* Mantém Instagram como ícone, sem herdar texto do menu */
+  header a[href*="instagram.com"] {
+    color: #c13584 !important;
+    font-weight: 600 !important;
+  }
+}
+</style>
+
 </head>
 
 <body>
