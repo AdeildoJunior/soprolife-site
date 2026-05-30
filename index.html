@@ -3341,6 +3341,233 @@ body{
 }
 </style>
 
+<style>
+/* === SOPRO: TELECONSULTA STEPS V1 === */
+
+/* --- Banner grande: Google Meet ao lado da câmera --- */
+.sl-tele-banner--meet .sl-tele-banner__visual--meet{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:18px !important;
+}
+
+.sl-tele-banner--meet .sl-tele-banner__visual--meet > svg{
+  flex:0 0 auto !important;
+}
+
+.sl-tele-banner--meet .sl-tele-banner__meet-link{
+  position:static !important;
+  left:auto !important;
+  top:auto !important;
+  right:auto !important;
+  bottom:auto !important;
+  transform:none !important;
+  margin:0 !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  gap:10px !important;
+  padding:11px 15px !important;
+  border-radius:999px !important;
+  background:rgba(255,255,255,.98) !important;
+  border:1px solid rgba(110,224,214,.45) !important;
+  color:#0b2239 !important;
+  text-decoration:none !important;
+  font-weight:900 !important;
+  box-shadow:0 10px 24px rgba(0,0,0,.14) !important;
+  white-space:nowrap !important;
+}
+
+.sl-tele-banner--meet .sl-tele-banner__meet-link:hover{
+  border-color:rgba(110,224,214,.85) !important;
+}
+
+.sl-tele-banner--meet .sl-tele-banner__meet-link svg{
+  width:24px !important;
+  height:24px !important;
+  display:block !important;
+  flex:0 0 24px !important;
+}
+
+.sl-tele-banner--meet .sl-tele-banner__meet-note{
+  display:block !important;
+  margin-top:8px !important;
+  color:rgba(255,255,255,.80) !important;
+  font-size:.92rem !important;
+  line-height:1.4 !important;
+  font-weight:600 !important;
+}
+
+/* --- Seção nova: etapas da teleconsulta --- */
+.sl-tele-steps{
+  padding:26px 0 10px;
+}
+
+.sl-tele-steps .sl-container{
+  max-width:1180px;
+  margin:0 auto;
+  padding:0 24px;
+}
+
+.sl-tele-steps__head{
+  text-align:center;
+  margin:0 0 24px;
+}
+
+.sl-tele-steps__eyebrow{
+  display:inline-block;
+  margin-bottom:10px;
+  padding:7px 14px;
+  border-radius:999px;
+  background:#e8f7f5;
+  color:#16867f;
+  font-size:.78rem;
+  font-weight:900;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+}
+
+.sl-tele-steps__head h2{
+  margin:0 0 8px;
+  color:#0b2239;
+  font-size:2rem;
+  line-height:1.1;
+  font-weight:900;
+}
+
+.sl-tele-steps__head p{
+  margin:0;
+  color:#5f7287;
+  font-size:1rem;
+  line-height:1.6;
+}
+
+.sl-tele-steps__grid{
+  display:grid;
+  grid-template-columns:repeat(4, minmax(0, 1fr));
+  gap:18px;
+  align-items:stretch;
+}
+
+.sl-tele-step{
+  background:#fff;
+  border:1px solid #d8ecea;
+  border-radius:24px;
+  padding:22px 18px 20px;
+  text-align:center;
+  box-shadow:0 10px 28px rgba(13,40,64,.06);
+}
+
+.sl-tele-step__num{
+  width:54px;
+  height:54px;
+  margin:0 auto 14px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(135deg,#ffffff 0%,#eefaf9 100%);
+  border:1px solid #d7efec;
+  color:#16867f;
+  font-size:1.15rem;
+  font-weight:900;
+  box-shadow:0 6px 16px rgba(11,34,57,.08);
+}
+
+.sl-tele-step h3{
+  margin:0 0 10px;
+  color:#0b2239;
+  font-size:1.08rem;
+  line-height:1.25;
+  font-weight:900;
+}
+
+.sl-tele-step p{
+  margin:0;
+  color:#607487;
+  font-size:.95rem;
+  line-height:1.55;
+}
+
+.sl-tele-steps__foot{
+  margin-top:18px;
+  text-align:center;
+  color:#607487;
+  font-size:.95rem;
+  line-height:1.6;
+}
+
+.sl-tele-steps__foot a{
+  color:#16867f;
+  font-weight:800;
+  text-decoration:none;
+}
+
+.sl-tele-steps__foot a:hover{
+  text-decoration:underline;
+}
+
+/* --- Troca visual do ícone do card "Agendar espirometria" --- */
+[class*="sl-offer-stack"] [class*="sl-offer"]:first-child [class*="icon"],
+[class*="sl-home-offer-stack"] [class*="sl-home-offer"]:first-child [class*="icon"]{
+  position:relative;
+  overflow:hidden;
+  background-image:url("favicon-32x32.png?v=20260522b");
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:28px 28px;
+}
+
+[class*="sl-offer-stack"] [class*="sl-offer"]:first-child [class*="icon"] svg,
+[class*="sl-home-offer-stack"] [class*="sl-home-offer"]:first-child [class*="icon"] svg{
+  opacity:0 !important;
+}
+
+/* Mobile */
+@media (max-width: 980px){
+  .sl-tele-steps__grid{
+    grid-template-columns:repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px){
+  .sl-tele-banner--meet .sl-tele-banner__visual--meet{
+    flex-direction:column !important;
+    gap:12px !important;
+  }
+
+  .sl-tele-banner--meet .sl-tele-banner__meet-link{
+    width:max-content !important;
+    max-width:100% !important;
+  }
+
+  .sl-tele-steps{
+    padding:22px 0 6px;
+  }
+
+  .sl-tele-steps .sl-container{
+    padding:0 18px;
+  }
+
+  .sl-tele-steps__head h2{
+    font-size:1.55rem;
+  }
+
+  .sl-tele-steps__grid{
+    grid-template-columns:1fr;
+    gap:14px;
+  }
+
+  .sl-tele-step{
+    text-align:left;
+    padding:18px 16px;
+  }
+
+  .sl-tele-step__num{
+    margin:0 0 12px;
+  }
+}
+</style>
 </head>
 <body class="sl-typo-clean">
 
@@ -3469,6 +3696,49 @@ body{
     </a>
   </div>
 </aside>
+
+<!-- ============== ETAPAS TELECONSULTA ============== -->
+<section class="sl-tele-steps" aria-labelledby="sl-tele-steps-title">
+  <div class="sl-container">
+    <div class="sl-tele-steps__head">
+      <span class="sl-tele-steps__eyebrow">Como funciona?</span>
+      <h2 id="sl-tele-steps-title">As etapas da teleconsulta</h2>
+      <p>Fluxo simples para a consulta médica respiratória online, com organização prévia e acesso fácil.</p>
+    </div>
+
+    <div class="sl-tele-steps__grid">
+      <article class="sl-tele-step">
+        <div class="sl-tele-step__num">1</div>
+        <h3>Agende sua consulta</h3>
+        <p>Fale com a equipe da Sopro Life pelo WhatsApp e confirme o melhor dia e horário para o atendimento.</p>
+      </article>
+
+      <article class="sl-tele-step">
+        <div class="sl-tele-step__num">2</div>
+        <h3>Organize pagamento e dados</h3>
+        <p>Se necessário, orientamos a confirmação do atendimento, dados básicos e informações iniciais antes da consulta.</p>
+      </article>
+
+      <article class="sl-tele-step">
+        <div class="sl-tele-step__num">3</div>
+        <h3>Envie seus exames</h3>
+        <p>Quando houver exames prévios, laudos ou espirometria, envie com antecedência para apoiar a avaliação médica.</p>
+      </article>
+
+      <article class="sl-tele-step">
+        <div class="sl-tele-step__num">4</div>
+        <h3>Receba o acesso à consulta</h3>
+        <p>Você recebe o link do Google Meet para entrar no horário combinado. Se precisar, ajudamos na instalação antes.</p>
+      </article>
+    </div>
+
+    <p class="sl-tele-steps__foot">
+      Dica: instale o Google Meet antes da consulta para facilitar o acesso.
+      <a href="https://support.google.com/meet/answer/12387350?hl=pt-BR" target="_blank" rel="noopener noreferrer">Baixar Google Meet</a>
+    </p>
+  </div>
+</section>
+<!-- ============== /ETAPAS TELECONSULTA ============== -->
 <!-- ============== DIFERENCIAIS ============== -->
 <section class="sl-features">
   <div class="sl-features__wrap">
