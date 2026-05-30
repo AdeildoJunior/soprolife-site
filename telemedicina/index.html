@@ -1157,7 +1157,7 @@
 
   <script>
     (function(){
-      m21998901775";
+      var phone = "5521998901775";
       var modal = document.getElementById("sl-tele-modal");
       var dateEl = document.getElementById("sl-tele-date");
       var slotsEl = document.getElementById("sl-tele-slots");
@@ -1217,18 +1217,12 @@
           btn.className = "sl-slot";
           btn.textContent = time;
           btn.addEventListener("click", function(){
-            var msg = "Olá! Gostaria de agendar uma teleconsulta médica respiratória pela Sopro Life.
-
-" +
-              "Profissional: Dra. Carla Ferreira
-" +
-              "Data: " + data + "
-" +
-              "Horário: " + time + "
-
-" +
-              "Motivo: avaliação respiratória e orientação médica.";
-            window.open("https://wa.me/" + phone + "?text=" + encodeURIComponent(msg), "_blank", "noopener");
+            var msg = "Olá! Gostaria de agendar uma teleconsulta médica respiratória pela Sopro Life.\n\n"
+              + "Profissional: Dra. Carla Ferreira\n"
+              + "Data: " + formatBR(dateEl.value) + "\n"
+              + "Horário: " + time + "\n\n"
+              + "Motivo: avaliação respiratória e orientação médica.";
+            window.open("https://api.whatsapp.com/send?phone=" + phone + "&text=" + encodeURIComponent(msg), "_blank", "noopener");
           });
           slotsEl.appendChild(btn);
         });
@@ -1605,7 +1599,7 @@ button.sopro-telemed-time-selected {
 </style>
 <script id="soprolife-telemed-whatsapp-newline-final-v2">
 (function(){
-  m21998901775";
+  const SOPRO_PHONE = "5521998901775";
   const NL = String.fromCharCode(10);
 
   function norm(txt){
