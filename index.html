@@ -3780,7 +3780,6 @@ body{
   }
 }
 </style>
-
 </head>
 <body class="sl-typo-clean">
 
@@ -3815,6 +3814,7 @@ body{
         Falar no WhatsApp
       </a>
     </div>
+
 </header>
 <!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_START -->
 <div class="sl-telemed-mobile-strip">
@@ -5515,81 +5515,70 @@ header .sl-header-instagram:hover.sl-header a.sl-header-instagram:hover {
 </script>
 
 
-<!-- SOPRO_SAFE_OU_PATCH_START -->
-<style id="sopro-safe-ou-style">
-  .sopro-safe-hidden {
-    display: none !important;
-  }
-
-  .sopro-safe-ou-divider {
-    display: flex;
+<!-- SOPRO_OU_INDEPENDENT_START -->
+<style id="sopro-ou-independent-style">
+  .sopro-ou-independent {
+    width: 100%;
+    display: flex !important;
     align-items: center;
     justify-content: center;
-    gap: 14px;
-    margin: 16px 0;
+    gap: 12px;
+    margin: 10px 0 10px;
+    pointer-events: none;
   }
 
-  .sopro-safe-ou-divider::before,
-  .sopro-safe-ou-divider::after {
+  .sopro-ou-independent::before,
+  .sopro-ou-independent::after {
     content: "";
     height: 1px;
     flex: 1;
-    max-width: 120px;
+    max-width: 92px;
     background: linear-gradient(
       90deg,
-      rgba(34,184,176,0),
-      rgba(34,184,176,.55),
-      rgba(34,184,176,0)
+      rgba(30,181,171,0),
+      rgba(30,181,171,.42),
+      rgba(30,181,171,0)
     );
   }
 
-  .sopro-safe-ou-divider span {
+  .sopro-ou-independent span {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 58px;
-    height: 36px;
-    padding: 0 16px;
+    min-width: 42px;
+    height: 26px;
+    padding: 0 12px;
     border-radius: 999px;
-    font-weight: 900;
-    font-size: .88rem;
-    letter-spacing: .12em;
-    color: #ffffff;
-    background: linear-gradient(135deg, #0b2239 0%, #138b97 55%, #22b8b0 100%);
-    box-shadow: 0 10px 24px rgba(11,34,57,.18);
-    animation: soproSafeOuPulse 2.8s ease-in-out infinite;
-  }
-
-  @keyframes soproSafeOuPulse {
-    0%, 100% {
-      transform: scale(1);
-      box-shadow: 0 10px 24px rgba(11,34,57,.18);
-    }
-    50% {
-      transform: scale(1.05);
-      box-shadow: 0 12px 28px rgba(34,184,176,.28);
-    }
+    background: #ffffff;
+    border: 1px solid rgba(30,181,171,.30);
+    color: #0f8f87;
+    font-size: .72rem;
+    font-weight: 950;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    box-shadow: 0 8px 18px rgba(11,34,57,.055);
   }
 
   @media (max-width: 768px) {
-    .sopro-safe-ou-divider {
+    .sopro-ou-independent {
       margin: 12px 0;
+      gap: 10px;
     }
 
-    .sopro-safe-ou-divider::before,
-    .sopro-safe-ou-divider::after {
-      max-width: 80px;
+    .sopro-ou-independent::before,
+    .sopro-ou-independent::after {
+      max-width: 76px;
     }
 
-    .sopro-safe-ou-divider span {
-      min-width: 54px;
-      height: 34px;
-      font-size: .82rem;
+    .sopro-ou-independent span {
+      height: 28px;
+      min-width: 44px;
+      font-size: .72rem;
     }
   }
 </style>
 
-<script id="sopro-safe-ou-script">
+<script id="sopro-ou-independent-script">
 (function () {
   function norm(txt) {
     return (txt || "")
@@ -5600,89 +5589,55 @@ header .sl-header-instagram:hover.sl-header a.sl-header-instagram:hover {
       .trim();
   }
 
-  function textOf(el) {
-    return norm(el.textContent || "");
+  function hasText(el, text) {
+    return norm(el.textContent).includes(norm(text));
   }
 
-  function hideHeroExtras() {
-    const targets = [
-      "ver agendamento",
-      "laudo por pneumologista",
-      "atendimento domiciliar",
-      "resultados ageis"
-    ];
+  function insertOu() {
+    if (document.querySelector(".sopro-ou-independent")) return;
 
-    const candidates = Array.from(document.querySelectorAll("a, button, li, span, div"));
+    var stacks = Array.from(document.querySelectorAll(
+      ".sl-offer-stack, .sl-home-offer-stack, [class*='offer-stack']"
+    ));
 
-    candidates.forEach(function (el) {
-      const t = textOf(el);
+    for (var i = 0; i < stacks.length; i++) {
+      var stack = stacks[i];
 
-      if (!targets.includes(t)) return;
+      var directChildren = Array.from(stack.children);
+      var agendarCard = null;
+      var teleCard = null;
 
-      // Evita mexer em menu, rodapé, links úteis e áreas fora da primeira dobra.
-      if (el.closest("header, footer, .sl-tele-banner, .sl-tele-steps")) return;
+      directChildren.forEach(function (child) {
+        if (!agendarCard && hasText(child, "Agendar espirometria")) {
+          agendarCard = child;
+        }
+        if (!teleCard && hasText(child, "Teleconsulta Médica Respiratória")) {
+          teleCard = child;
+        }
+      });
 
-      // Só aplica em elementos da home antes do bloco de cards principais.
-      const rect = el.getBoundingClientRect();
-      if (rect.top > 1100) return;
+      if (agendarCard && teleCard && agendarCard !== teleCard) {
+        var divider = document.createElement("div");
+        divider.className = "sopro-ou-independent";
+        divider.setAttribute("aria-label", "ou");
+        divider.innerHTML = "<span>OU</span>";
 
-      el.classList.add("sopro-safe-hidden");
-    });
-  }
-
-  function findCardByTitle(titleText) {
-    const titleNorm = norm(titleText);
-    const headings = Array.from(document.querySelectorAll("h2, h3, strong, .sl-offer__title, .sl-home-offer-title"));
-
-    for (const h of headings) {
-      if (!textOf(h).includes(titleNorm)) continue;
-
-      const card =
-        h.closest("article") ||
-        h.closest(".sl-offer") ||
-        h.closest(".sl-home-offer") ||
-        h.closest("[class*='offer']") ||
-        h.closest("[class*='card']") ||
-        h.parentElement;
-
-      if (card) return card;
+        stack.insertBefore(divider, teleCard);
+        return;
+      }
     }
-
-    return null;
-  }
-
-  function insertDivider() {
-    if (document.querySelector(".sopro-safe-ou-divider")) return;
-
-    const spirometryCard = findCardByTitle("Agendar espirometria");
-    const teleCard = findCardByTitle("Teleconsulta Medica Respiratoria");
-
-    if (!spirometryCard || !teleCard) return;
-    if (spirometryCard.compareDocumentPosition(teleCard) & Node.DOCUMENT_POSITION_PRECEDING) return;
-
-    const divider = document.createElement("div");
-    divider.className = "sopro-safe-ou-divider";
-    divider.setAttribute("aria-label", "ou");
-    divider.innerHTML = "<span>OU</span>";
-
-    spirometryCard.insertAdjacentElement("afterend", divider);
-  }
-
-  function run() {
-    hideHeroExtras();
-    insertDivider();
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", run);
+    document.addEventListener("DOMContentLoaded", insertOu);
   } else {
-    run();
+    insertOu();
   }
 
-  window.addEventListener("load", run);
+  window.addEventListener("load", insertOu);
 })();
 </script>
-<!-- SOPRO_SAFE_OU_PATCH_END -->
+<!-- SOPRO_OU_INDEPENDENT_END -->
 
 </body>
 </html>
