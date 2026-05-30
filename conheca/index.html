@@ -1503,6 +1503,190 @@ body{
 }
 </style>
 
+
+<style id="soprolife-mobile-no-menu-contact-hover-v1">
+/* === MOBILE: remove menu textual e preserva logo + Instagram + WhatsApp === */
+@media (max-width: 960px){
+  header.sl-header nav,
+  .sl-header nav,
+  .sl-header .sl-main-nav,
+  .sl-header .sl-nav,
+  .sl-header nav[aria-label="Menu principal"]{
+    display:none !important;
+    visibility:hidden !important;
+    height:0 !important;
+    max-height:0 !important;
+    overflow:hidden !important;
+    margin:0 !important;
+    padding:0 !important;
+  }
+
+  .sl-header,
+  header.sl-header{
+    padding:0 !important;
+  }
+
+  .sl-header-in,
+  .sl-header-inner{
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    align-items:center !important;
+    justify-content:space-between !important;
+    gap:10px !important;
+    min-height:88px !important;
+    padding:10px 16px !important;
+  }
+
+  .sl-brand,
+  .sl-logo{
+    flex:0 1 auto !important;
+    min-width:0 !important;
+    margin:0 !important;
+  }
+
+  .sl-brand img,
+  .sl-logo img{
+    height:64px !important;
+    max-height:64px !important;
+    max-width:190px !important;
+    width:auto !important;
+    object-fit:contain !important;
+    display:block !important;
+  }
+
+  .sl-header-instagram,
+  .sl-header-social{
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    flex:0 0 46px !important;
+    width:46px !important;
+    height:46px !important;
+    margin-left:auto !important;
+  }
+
+  .sl-nav-cta,
+  .sl-whatsapp{
+    display:inline-flex !important;
+    align-items:center !important;
+    justify-content:center !important;
+    flex:0 0 auto !important;
+    min-width:118px !important;
+    max-width:150px !important;
+    height:46px !important;
+    padding:0 18px !important;
+    border-radius:999px !important;
+    white-space:nowrap !important;
+    overflow:hidden !important;
+    font-size:0 !important;
+  }
+
+  .sl-nav-cta::before,
+  .sl-whatsapp::before{
+    content:"WhatsApp" !important;
+    font-size:1rem !important;
+    line-height:1 !important;
+    font-weight:850 !important;
+    color:#fff !important;
+  }
+}
+
+@media (max-width: 380px){
+  .sl-header-in,
+  .sl-header-inner{
+    gap:8px !important;
+    padding-left:12px !important;
+    padding-right:12px !important;
+  }
+
+  .sl-brand img,
+  .sl-logo img{
+    height:58px !important;
+    max-height:58px !important;
+    max-width:165px !important;
+  }
+
+  .sl-header-instagram,
+  .sl-header-social{
+    flex-basis:42px !important;
+    width:42px !important;
+    height:42px !important;
+  }
+
+  .sl-nav-cta,
+  .sl-whatsapp{
+    min-width:104px !important;
+    max-width:126px !important;
+    height:42px !important;
+    padding-left:14px !important;
+    padding-right:14px !important;
+  }
+
+  .sl-nav-cta::before,
+  .sl-whatsapp::before{
+    font-size:.92rem !important;
+  }
+}
+
+/* === DESKTOP: submenu de Contato com e-mail no hover === */
+@media (min-width: 961px){
+  .sl-has-sub,
+  .sl-contact-wrap{
+    position:relative !important;
+    display:inline-flex !important;
+    align-items:center !important;
+  }
+
+  .sl-submenu{
+    display:none !important;
+    position:absolute !important;
+    top:calc(100% + 14px) !important;
+    right:0 !important;
+    min-width:245px !important;
+    padding:10px !important;
+    border-radius:14px !important;
+    background:#ffffff !important;
+    border:1px solid rgba(11,34,57,.10) !important;
+    box-shadow:0 18px 38px rgba(11,34,57,.12) !important;
+    z-index:9999 !important;
+  }
+
+  .sl-submenu::before{
+    content:"" !important;
+    position:absolute !important;
+    top:-14px !important;
+    left:0 !important;
+    right:0 !important;
+    height:14px !important;
+  }
+
+  .sl-has-sub:hover .sl-submenu,
+  .sl-has-sub:focus-within .sl-submenu,
+  .sl-contact-wrap:hover .sl-submenu,
+  .sl-contact-wrap:focus-within .sl-submenu{
+    display:block !important;
+  }
+
+  .sl-submenu a{
+    display:flex !important;
+    align-items:center !important;
+    gap:8px !important;
+    padding:10px 12px !important;
+    border-radius:10px !important;
+    text-decoration:none !important;
+    color:#0b3348 !important;
+    font-weight:750 !important;
+    font-size:.9rem !important;
+    white-space:nowrap !important;
+  }
+
+  .sl-submenu a:hover{
+    background:rgba(30,181,171,.10) !important;
+    color:#07857d !important;
+  }
+}
+</style>
+
 </head>
 <body> <!-- HEADER --> <header class="sl-header">
 <div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a>
@@ -1611,6 +1795,46 @@ header .sl-header-instagram:hover,
 }
 </style>
 <!-- SOPRO:INSTAGRAM_HEADER_FINAL_END -->
+
+
+<script id="soprolife-contact-submenu-js-v1">
+(function(){
+  function ensureContactSubmenu(){
+    var links = document.querySelectorAll('header nav a, .sl-main-nav a, .sl-nav a');
+    links.forEach(function(a){
+      var text = (a.textContent || '').trim().toLowerCase();
+      if(text !== 'contato') return;
+
+      var parent = a.parentElement;
+      if(parent && (parent.classList.contains('sl-has-sub') || parent.classList.contains('sl-contact-wrap'))) return;
+      if(parent && parent.querySelector && parent.querySelector('.sl-submenu')) return;
+
+      var wrap = document.createElement('div');
+      wrap.className = 'sl-contact-wrap sl-has-sub';
+
+      a.classList.add('sl-nav-link');
+      a.setAttribute('href', '/#contato');
+      a.setAttribute('aria-haspopup', 'true');
+
+      var submenu = document.createElement('div');
+      submenu.className = 'sl-submenu';
+      submenu.setAttribute('role', 'menu');
+      submenu.setAttribute('aria-label', 'Contato');
+      submenu.innerHTML = '<a href="mailto:contato@soprolife.com.br" role="menuitem">✉ contato@soprolife.com.br</a>';
+
+      parent.insertBefore(wrap, a);
+      wrap.appendChild(a);
+      wrap.appendChild(submenu);
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', ensureContactSubmenu);
+  } else {
+    ensureContactSubmenu();
+  }
+})();
+</script>
 
 
 <script id="soprolife-contact-submenu-js-v1">
