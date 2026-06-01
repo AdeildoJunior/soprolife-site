@@ -16,3 +16,15 @@ soprolife-site-snapshot.tgz
 
 # backups locais (scripts)
 *.bak.fixjs.*
+
+# pastas/arquivos internos — nunca publicar
+_claude_export/
+_claude_upload_sem_zip/
+patches/
+backup-pre-v3/
+.backups-sopro/
+SOPROLOG.md
+aplicar-*.sh
+index.backup.*.html
+index.html.bak
+index.html.bak-*
