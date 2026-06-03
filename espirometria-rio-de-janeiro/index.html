@@ -2145,6 +2145,30 @@ body{
                 <button class="sl-btn sl-map-open-btn" type="button" id="sl-open-map-modal" aria-label="Ampliar mapa das unidades">Ampliar mapa</button>
               </div>
             </aside>
+            <div class="sl-map-modal" id="sl-map-modal" aria-hidden="true">
+        <div class="sl-map-modal__backdrop" data-map-close="backdrop"></div>
+        <div class="sl-map-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sl-map-modal-title">
+          <div class="sl-map-modal__header">
+            <h3 class="sl-map-modal__title" id="sl-map-modal-title">Unidades de atendimento</h3>
+            <button class="sl-btn sl-btn-outline" type="button" id="sl-close-map-modal">Fechar</button>
+          </div>
+          <div class="sl-map-modal__body">
+            <div class="sl-map-panel-info sl-map-modal__info">
+              <h4>Unidades de atendimento</h4>
+              <p class="sl-map-panel-sub">Escolha a unidade e finalize pelo WhatsApp.</p>
+              <div class="sl-map-unit-cards">
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Atendimento domiciliar">Atendimento domiciliar</div>
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Barra">Unidade Barra</div>
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Zona Norte">Unidade Zona Norte</div>
+              </div>
+              <p class="sl-map-panel-note">Endereço confirmado pelo WhatsApp no momento do agendamento.</p>
+            </div>
+            <div class="sl-map-modal__map-wrap">
+              <div id="sl-units-map" aria-label="Mapa ampliado das unidades"></div>
+            </div>
+          </div>
+        </div>
+      </div>
           </div>
         </div>
         </div>
@@ -2882,6 +2906,8 @@ header .sl-header-instagram:hover,
 })();
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" integrity="sha384-5JqMv4L/Xa0hfvtF06qboNdhvuYXUku9ZrhZh3bSk8VXF0A/RuSLHpLsSV9Zqhl6" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/pt.js" integrity="sha384-agbVpcY312cNMSL1b3CUo060bj9FmbwUX8HUCNSE17+jOU/en4yz3w9ro9IWVusF" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script id="sopro-flatpickr-ptbr-init">
 /* SOPRO:FLATPICKR_PTBR_INIT */
 (function(){
