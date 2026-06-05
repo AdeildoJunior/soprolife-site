@@ -3868,6 +3868,84 @@ body{
 }
 </style>
 
+
+<style id="sopro-home-faq-style">
+  #faq-home .sl-faq-list{
+    display:grid;
+    gap:10px;
+    max-width:980px;
+  }
+  #faq-home details{
+    background:#fff;
+    border:1px solid rgba(11,34,57,.08);
+    border-radius:14px;
+    padding:14px 16px;
+    box-shadow:0 8px 20px rgba(0,0,0,.035);
+  }
+  #faq-home summary{
+    cursor:pointer;
+    font-weight:800;
+    color:var(--sl-primary-dark,#081829);
+    font-size:1rem;
+  }
+  #faq-home details p{
+    margin:10px 0 0;
+    color:var(--sl-text-soft,#476172);
+    font-size:.95rem;
+    line-height:1.55;
+  }
+  #faq-home a{
+    color:#0f8f86;
+    text-decoration:underline;
+    font-weight:800;
+  }
+</style>
+
+
+<style id="sopro-home-faq-center-fix">
+  #faq-home{
+    width:min(980px, calc(100% - 48px));
+    max-width:980px;
+    margin:72px auto 72px !important;
+    padding:0 !important;
+  }
+
+  #faq-home .sl-section-header{
+    max-width:760px;
+    margin:0 auto 26px !important;
+    text-align:center;
+  }
+
+  #faq-home .sl-section-kicker,
+  #faq-home .sl-section-title,
+  #faq-home .sl-section-subtitle{
+    text-align:center;
+  }
+
+  #faq-home .sl-faq-list{
+    width:100%;
+    max-width:980px;
+    margin:0 auto;
+  }
+
+  @media (max-width: 768px){
+    #faq-home{
+      width:calc(100% - 28px);
+      margin:48px auto 56px !important;
+    }
+
+    #faq-home .sl-section-header{
+      text-align:left;
+    }
+
+    #faq-home .sl-section-kicker,
+    #faq-home .sl-section-title,
+    #faq-home .sl-section-subtitle{
+      text-align:left;
+    }
+  }
+</style>
+
 </head>
 <body class="sl-typo-clean">
 
@@ -4442,7 +4520,49 @@ body{
 
 <!-- SOPRO:REMOVIDO_DUP_TIPOS_PREPARO -->
 
-<!-- CTA --> <section class="sl-cta-section" id="contato"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua Espirometria</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Gostaria%20de%20agendar%20uma%20espirometria%20na%20Sopro%20Life."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div class="sl-useful-links-block"> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude/pt-br" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list sl-footer-social-links"><li><a href="https://www.instagram.com/soprolife" target="_blank" rel="noopener"><span class="sl-social-icon sl-social-icon--ig">IG</span><span>Instagram da Sopro Life</span></a></li><li><a href="https://linkedin.com/" target="_blank" rel="noopener"><span class="sl-social-icon sl-social-icon--li">in</span><span>LinkedIn da Sopro Life</span></a></li><li><a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"><span class="sl-social-icon sl-social-icon--yt">▶</span><span>Canal da Sopro Life no YouTube</span></a></li></ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Gostaria%20de%20falar%20com%20a%20Sopro%20Life." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script>
+<!-- CTA --> 
+<section class="sl-section" id="faq-home">
+  <div class="sl-section-header">
+    <span class="sl-section-kicker">Dúvidas frequentes</span>
+    <h2 class="sl-section-title">Perguntas frequentes sobre a Sopro Life</h2>
+    <p class="sl-section-subtitle">Respostas rápidas para quem procura espirometria, teleconsulta, atendimento domiciliar ou parceria com clínicas e empresas.</p>
+  </div>
+
+  <div class="sl-faq-list">
+    <details>
+      <summary>A Sopro Life realiza espirometria no Rio de Janeiro?</summary>
+      <p>Sim. A Sopro Life realiza espirometria no Rio de Janeiro, com atendimento por agendamento, possibilidade de atendimento domiciliar sob avaliação e laudo por pneumologista. Veja a página específica de <a href="/espirometria-rio-de-janeiro/">espirometria no Rio de Janeiro</a>.</p>
+    </details>
+
+    <details>
+      <summary>A espirometria precisa de pedido médico?</summary>
+      <p>Sim. Para realizar a espirometria, com ou sem broncodilatador, é necessário apresentar pedido médico. Caso o paciente ainda não tenha solicitação, é possível agendar uma avaliação médica prévia. <a href="/telemedicina/#profissionais">Agende sua teleconsulta médica aqui</a>.</p>
+    </details>
+
+    <details>
+      <summary>A Sopro Life atende em domicílio?</summary>
+      <p>Sim, o atendimento domiciliar pode ser avaliado conforme localização, condição clínica do paciente, disponibilidade de agenda e indicação do exame. A confirmação é feita pelo WhatsApp no momento do agendamento.</p>
+    </details>
+
+    <details>
+      <summary>A Sopro Life atende clínicas, consultórios e empresas?</summary>
+      <p>Sim. A Sopro Life pode realizar parcerias com clínicas, consultórios, médicos e empresas, incluindo exames programados, ações ocupacionais e demandas relacionadas a PCMSO.</p>
+    </details>
+
+    <details>
+      <summary>Qual a diferença entre espirometria simples e com broncodilatador?</summary>
+      <p>A espirometria simples avalia a função pulmonar basal. Na espirometria com broncodilatador, o exame é repetido após medicação inalatória para comparar os resultados antes e depois, auxiliando a avaliação médica.</p>
+    </details>
+
+    <details>
+      <summary>Como agendar atendimento na Sopro Life?</summary>
+      <p>O agendamento pode ser feito pelo WhatsApp. Nossa equipe confirma o tipo de atendimento, localidade, disponibilidade de horário, preparo necessário e documentos para realização do exame.</p>
+    </details>
+  </div>
+</section>
+
+
+<section class="sl-cta-section" id="contato"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua Espirometria</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Gostaria%20de%20agendar%20uma%20espirometria%20na%20Sopro%20Life."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div class="sl-useful-links-block"> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude/pt-br" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list sl-footer-social-links"><li><a href="https://www.instagram.com/soprolife" target="_blank" rel="noopener"><span class="sl-social-icon sl-social-icon--ig">IG</span><span>Instagram da Sopro Life</span></a></li><li><a href="https://linkedin.com/" target="_blank" rel="noopener"><span class="sl-social-icon sl-social-icon--li">in</span><span>LinkedIn da Sopro Life</span></a></li><li><a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"><span class="sl-social-icon sl-social-icon--yt">▶</span><span>Canal da Sopro Life no YouTube</span></a></li></ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Gostaria%20de%20falar%20com%20a%20Sopro%20Life." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script>
 /* SOPRO:TABS_V2 (robusto) */
 (function(){
   function initTabs(){
@@ -5826,5 +5946,61 @@ header .sl-header-instagram:hover.sl-header a.sl-header-instagram:hover {
 </script>
 <!-- SOPRO_HIDE_HERO_EXTRAS_END -->
 
+<script type="application/ld+json" id="sopro-home-faq-schema">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "A Sopro Life realiza espirometria no Rio de Janeiro?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. A Sopro Life realiza espirometria no Rio de Janeiro, com atendimento por agendamento, possibilidade de atendimento domiciliar sob avaliação e laudo por pneumologista."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "A espirometria precisa de pedido médico?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. Para realizar a espirometria, com ou sem broncodilatador, é necessário apresentar pedido médico. Caso o paciente ainda não tenha solicitação, é possível agendar uma avaliação médica prévia por teleconsulta."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "A Sopro Life atende em domicílio?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. O atendimento domiciliar pode ser avaliado conforme localização, condição clínica do paciente, disponibilidade de agenda e indicação do exame."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "A Sopro Life atende clínicas, consultórios e empresas?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. A Sopro Life pode realizar parcerias com clínicas, consultórios, médicos e empresas, incluindo exames programados, ações ocupacionais e demandas relacionadas a PCMSO."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Qual a diferença entre espirometria simples e com broncodilatador?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A espirometria simples avalia a função pulmonar basal. Na espirometria com broncodilatador, o exame é repetido após medicação inalatória para comparar os resultados antes e depois."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como agendar atendimento na Sopro Life?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O agendamento pode ser feito pelo WhatsApp. A equipe confirma tipo de atendimento, localidade, disponibilidade de horário, preparo necessário e documentos."
+      }
+    }
+  ]
+}
+</script>
 </body>
 </html>
