@@ -473,7 +473,7 @@
       background:#fff;
       border-radius:24px;
       box-shadow:0 28px 80px rgba(0,0,0,.26);
-      overflow:hidden;
+      overflow:visible;
     }
 
     .sl-modal-head{
@@ -1293,6 +1293,8 @@
           disableMobile: true,
           allowInput: false,
           monthSelectorType: "dropdown",
+          static: true,
+          appendTo: modal.querySelector(".sl-modal-body") || modal,
           onChange: function(){ renderSlots(); },
           onReady: function(selectedDates, dateStr, instance){
             if(instance.altInput){
