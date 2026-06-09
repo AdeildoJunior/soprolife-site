@@ -1217,7 +1217,7 @@
       <div class="sl-modal-body">
         <div class="sl-date-row">
           <label for="sl-tele-date">Data</label>
-          <input id="sl-tele-date" type="date">
+          <input id="sl-tele-date" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa">
         </div>
 
         <strong>Horários disponíveis</strong>
@@ -1277,6 +1277,31 @@
       };
 
       var currentDoctor = DOCTORS.carla;
+
+      function ensureDatePicker(){
+        if(!window.flatpickr || dateEl._flatpickr) return;
+        flatpickr(dateEl, {
+          locale: {
+            ...flatpickr.l10ns.pt,
+            firstDayOfWeek: 0
+          },
+          dateFormat: "Y-m-d",
+          altInput: true,
+          altFormat: "d/m/Y",
+          minDate: isoToday(0),
+          maxDate: isoToday(45),
+          disableMobile: true,
+          allowInput: false,
+          monthSelectorType: "dropdown",
+          onChange: function(){ renderSlots(); },
+          onReady: function(selectedDates, dateStr, instance){
+            if(instance.altInput){
+              instance.altInput.setAttribute('placeholder', 'dd/mm/aaaa');
+              instance.altInput.setAttribute('aria-label', 'Data no formato dia, mês e ano');
+            }
+          }
+        });
+      }
 
       function isoToday(offsetDays){
         var d = new Date();
@@ -1338,12 +1363,15 @@
         currentDoctor = DOCTORS[key] || DOCTORS.carla;
         if(titleEl) titleEl.textContent = "Solicitar horário — " + currentDoctor.name;
         if(hintEl) hintEl.textContent = currentDoctor.hint;
-        if(!dateEl.value) dateEl.value = isoToday(0);
-        dateEl.min = isoToday(0);
-        dateEl.max = isoToday(45);
-        renderSlots();
         modal.classList.add("is-open");
         modal.setAttribute("aria-hidden", "false");
+        ensureDatePicker();
+        if(dateEl._flatpickr){
+          if(!dateEl.value) dateEl._flatpickr.setDate(isoToday(0), false);
+        } else if(!dateEl.value){
+          dateEl.value = isoToday(0);
+        }
+        renderSlots();
       }
 
       function closeModal(){
@@ -1421,55 +1449,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" integrity="sha384-5JqMv4L/Xa0hfvtF06qboNdhvuYXUku9ZrhZh3bSk8VXF0A/RuSLHpLsSV9Zqhl6" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/pt.js" integrity="sha384-agbVpcY312cNMSL1b3CUo060bj9FmbwUX8HUCNSE17+jOU/en4yz3w9ro9IWVusF" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-
-<script id="sopro-flatpickr-ptbr-init-telemed">
-/* SOPRO:FLATPICKR_PTBR_INIT (telemedicina) */
-(function(){
-  function initSoproDatePicker(){
-    var dateEl = document.getElementById('sl-tele-date');
-    if(!dateEl || !window.flatpickr) return;
-    if(dateEl._flatpickr) return;
-
-    var today = new Date();
-    var maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + 45);
-
-    var currentValue = dateEl.value || null;
-
-    flatpickr(dateEl, {
-      locale: {
-        ...flatpickr.l10ns.pt,
-        firstDayOfWeek: 0
-      },
-      dateFormat: "Y-m-d",
-      altInput: true,
-      altFormat: "d/m/Y",
-      defaultDate: currentValue || today,
-      minDate: dateEl.min || today,
-      maxDate: dateEl.max || maxDate,
-      disableMobile: true,
-      allowInput: false,
-      monthSelectorType: "dropdown",
-      onChange: function(){
-        dateEl.dispatchEvent(new Event('change', { bubbles:true }));
-      },
-      onReady: function(selectedDates, dateStr, instance){
-        if(instance.altInput){
-          instance.altInput.setAttribute('placeholder', 'dd/mm/aaaa');
-          instance.altInput.setAttribute('aria-label', 'Data no formato dia, mês e ano');
-        }
-      }
-    });
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', initSoproDatePicker);
-  } else {
-    initSoproDatePicker();
-  }
-})();
-</script>
-
 
 <style id="soprolife-mobile-header-final-v5">
 /* === SOPRO:MOBILE_HEADER_FINAL_V5 === */
