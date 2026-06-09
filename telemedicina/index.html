@@ -1120,7 +1120,7 @@
               Sábado: 09:00 às 18:00<br>
               Sexta e domingo: fechado
             </div>
-            <button class="sl-request-btn" type="button" data-open-telemed>
+            <button class="sl-request-btn" type="button" data-open-telemed data-doctor="carla">
               Solicitar horário
             </button>
             <div class="sl-small-note">
@@ -1156,7 +1156,7 @@
               Quinta-feira: 08:00 às 20:00<br>
               Demais dias: fechado
             </div>
-            <button class="sl-request-btn" type="button" data-open-telemed>
+            <button class="sl-request-btn" type="button" data-open-telemed data-doctor="vanessa">
               Solicitar horário
             </button>
             <div class="sl-small-note">
@@ -1223,7 +1223,7 @@
         <strong>Horários disponíveis</strong>
         <div class="sl-slots" id="sl-tele-slots"></div>
 
-        <p class="sl-modal-foot">
+        <p class="sl-modal-foot" id="sl-tele-hint">
           Selecione uma data. Segunda a quinta há horários entre 16:00 e 20:00. Aos sábados, entre 09:00 e 18:00.
         </p>
       </div>
@@ -1242,6 +1242,41 @@
       var modal = document.getElementById("sl-tele-modal");
       var dateEl = document.getElementById("sl-tele-date");
       var slotsEl = document.getElementById("sl-tele-slots");
+      var titleEl = document.getElementById("sl-tele-title");
+      var hintEl = document.getElementById("sl-tele-hint");
+
+      function halfHourSlots(startH, endH){
+        var out = [];
+        for(var h = startH; h <= endH; h++){
+          out.push((h < 10 ? "0" : "") + h + ":00");
+          if(h < endH) out.push((h < 10 ? "0" : "") + h + ":30");
+        }
+        return out;
+      }
+
+      var DOCTORS = {
+        carla: {
+          name: "Dra. Carla Ferreira",
+          hint: "Selecione uma data. Segunda a quinta há horários entre 16:00 e 20:00. Aos sábados, entre 09:00 e 18:00.",
+          noSlots: "Escolha segunda a quinta ou sábado.",
+          slots: function(day){
+            if(day >= 1 && day <= 4) return halfHourSlots(16, 20);
+            if(day === 6) return halfHourSlots(9, 18);
+            return [];
+          }
+        },
+        vanessa: {
+          name: "Dra. Vanessa Silva Vaz",
+          hint: "Selecione uma data. Às quintas-feiras há horários entre 08:00 e 20:00.",
+          noSlots: "Escolha uma quinta-feira.",
+          slots: function(day){
+            if(day === 4) return halfHourSlots(8, 20);
+            return [];
+          }
+        }
+      };
+
+      var currentDoctor = DOCTORS.carla;
 
       function isoToday(offsetDays){
         var d = new Date();
@@ -1266,18 +1301,7 @@
       function slotsForDate(iso){
         var d = parseLocalDate(iso);
         if(!d) return [];
-
-        var day = d.getDay();
-
-        if(day >= 1 && day <= 4){
-          return ["16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-        }
-
-        if(day === 6){
-          return ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
-        }
-
-        return [];
+        return currentDoctor.slots(d.getDay());
       }
 
       function renderSlots(){
@@ -1287,7 +1311,7 @@
         if(!slots.length){
           var box = document.createElement("div");
           box.className = "sl-no-slots";
-          box.innerHTML = "<strong>Sem horários disponíveis nesta data.</strong><br>Escolha segunda a quinta ou sábado.";
+          box.innerHTML = "<strong>Sem horários disponíveis nesta data.</strong><br>" + currentDoctor.noSlots;
           slotsEl.appendChild(box);
           return;
         }
@@ -1299,7 +1323,7 @@
           btn.textContent = time;
           btn.addEventListener("click", function(){
             var msg = "Olá! Gostaria de agendar uma teleconsulta médica respiratória pela Sopro Life.\n\n"
-              + "Profissional: Dra. Carla Ferreira\n"
+              + "Profissional: " + currentDoctor.name + "\n"
               + "Data: " + formatBR(dateEl.value) + "\n"
               + "Horário: " + time + "\n\n"
               + "Motivo: avaliação respiratória e orientação médica.";
@@ -1309,7 +1333,11 @@
         });
       }
 
-      function openModal(){
+      function openModal(e){
+        var key = e && e.currentTarget && e.currentTarget.getAttribute("data-doctor");
+        currentDoctor = DOCTORS[key] || DOCTORS.carla;
+        if(titleEl) titleEl.textContent = "Solicitar horário — " + currentDoctor.name;
+        if(hintEl) hintEl.textContent = currentDoctor.hint;
         if(!dateEl.value) dateEl.value = isoToday(0);
         dateEl.min = isoToday(0);
         dateEl.max = isoToday(45);
@@ -1823,7 +1851,9 @@ button.sopro-telemed-time-selected {
 
   function getSelectedDate(btn){
     const scope = btn.closest("[role='dialog'], .sl-modal, .modal, section") || document;
-    const input = scope.querySelector("input[type='date']") || document.querySelector("input[type='date']");
+    const input = scope.querySelector("#sl-tele-date, input[type='date']")
+      || document.getElementById("sl-tele-date")
+      || document.querySelector("input[type='date']");
     return input && input.value ? formatDateBR(input.value) : "a combinar";
   }
 
