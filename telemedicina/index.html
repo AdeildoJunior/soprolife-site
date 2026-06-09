@@ -1310,7 +1310,7 @@
       }
 
       function openModal(){
-        dateEl.value = dateEl.value || isoToday(0);
+        if(!dateEl.value) dateEl.value = isoToday(0);
         dateEl.min = isoToday(0);
         dateEl.max = isoToday(45);
         renderSlots();
@@ -1342,6 +1342,105 @@
       });
     })();
   </script>
+
+
+<style id="sopro-flatpickr-ptbr-style">
+/* SOPRO:FLATPICKR_PTBR_STYLE */
+.flatpickr-calendar{
+  border-radius:18px !important;
+  border:1px solid rgba(30,181,171,.26) !important;
+  box-shadow:0 18px 42px rgba(8,24,41,.16) !important;
+  font-family:inherit !important;
+  overflow:hidden !important;
+}
+.flatpickr-months{
+  background:#ffffff !important;
+}
+.flatpickr-current-month.flatpickr-current-month .flatpickr-monthDropdown-months.flatpickr-current-month input.cur-year{
+  color:#0b2239 !important;
+  font-weight:800 !important;
+}
+.flatpickr-weekday{
+  color:#0b8f86 !important;
+  font-weight:800 !important;
+}
+.flatpickr-day{
+  border-radius:10px !important;
+  color:#16384f !important;
+}
+.flatpickr-day.today{
+  border-color:#1eb5ab !important;
+}
+.flatpickr-day.selected.flatpickr-day.startRange.flatpickr-day.endRange{
+  background:#1eb5ab !important;
+  border-color:#1eb5ab !important;
+  color:white !important;
+}
+.flatpickr-day:hover{
+  background:rgba(30,181,171,.13) !important;
+  border-color:rgba(30,181,171,.28) !important;
+}
+.flatpickr-day.disabled.flatpickr-day.disabled:hover{
+  color:#b6c4ce !important;
+  background:#f1f5f7 !important;
+}
+.flatpickr-calendar .flatpickr-prev-month.flatpickr-calendar .flatpickr-next-month{
+  color:#0b2239 !important;
+  fill:#0b2239 !important;
+}
+</style>
+
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" integrity="sha384-5JqMv4L/Xa0hfvtF06qboNdhvuYXUku9ZrhZh3bSk8VXF0A/RuSLHpLsSV9Zqhl6" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/pt.js" integrity="sha384-agbVpcY312cNMSL1b3CUo060bj9FmbwUX8HUCNSE17+jOU/en4yz3w9ro9IWVusF" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<script id="sopro-flatpickr-ptbr-init-telemed">
+/* SOPRO:FLATPICKR_PTBR_INIT (telemedicina) */
+(function(){
+  function initSoproDatePicker(){
+    var dateEl = document.getElementById('sl-tele-date');
+    if(!dateEl || !window.flatpickr) return;
+    if(dateEl._flatpickr) return;
+
+    var today = new Date();
+    var maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 45);
+
+    var currentValue = dateEl.value || null;
+
+    flatpickr(dateEl, {
+      locale: {
+        ...flatpickr.l10ns.pt,
+        firstDayOfWeek: 0
+      },
+      dateFormat: "Y-m-d",
+      altInput: true,
+      altFormat: "d/m/Y",
+      defaultDate: currentValue || today,
+      minDate: dateEl.min || today,
+      maxDate: dateEl.max || maxDate,
+      disableMobile: true,
+      allowInput: false,
+      monthSelectorType: "dropdown",
+      onChange: function(){
+        dateEl.dispatchEvent(new Event('change', { bubbles:true }));
+      },
+      onReady: function(selectedDates, dateStr, instance){
+        if(instance.altInput){
+          instance.altInput.setAttribute('placeholder', 'dd/mm/aaaa');
+          instance.altInput.setAttribute('aria-label', 'Data no formato dia, mês e ano');
+        }
+      }
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initSoproDatePicker);
+  } else {
+    initSoproDatePicker();
+  }
+})();
+</script>
 
 
 <style id="soprolife-mobile-header-final-v5">
