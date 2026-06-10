@@ -42,17 +42,17 @@ body{
 
 .hero{width:min(720px,100%)}
 
-/* ---------- Marca (logo oficial) ---------- */
+/* ---------- Marca (logo oficial, discreto no topo) ---------- */
 .brand{
-  display:flex;
+  display:inline-flex;
   align-items:center;
-  margin:0 auto 16px;
+  margin:0 0 14px;
   text-decoration:none;
 }
 .brand img{
-  height:58px;
+  height:38px;
   width:auto;
-  max-width:100%;
+  max-width:220px;
   display:block;
 }
 
@@ -236,7 +236,7 @@ textarea{resize:vertical;min-height:82px}
 @media (max-width:560px){
   .page{padding:20px 12px}
   .card{padding:22px 18px;border-radius:22px}
-  .brand img{height:46px}
+  .brand img{height:32px}
   .actions{flex-direction:column}
   .btn{width:100%}
   .option{padding:13px 14px;gap:12px}
