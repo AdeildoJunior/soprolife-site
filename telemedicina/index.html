@@ -349,17 +349,18 @@
     }
 
     .sl-avatar{
-      width:96px;
-      height:96px;
-      min-width:96px;
-      border-radius:50%;
+      width:168px;
+      height:224px;
+      min-width:168px;
+      border-radius:20px;
       display:flex;
       align-items:center;
       justify-content:center;
       background:linear-gradient(135deg,rgba(30,181,171,.16),rgba(11,34,57,.08));
       border:1px solid rgba(30,181,171,.24);
+      box-shadow:0 16px 36px rgba(8,24,41,.12);
       color:#0b6f68;
-      font-size:1.6rem;
+      font-size:2.6rem;
       font-weight:950;
     }
 
@@ -820,13 +821,14 @@
 
 /* === SOPRO:CLINICAL_PHOTO_AND_SECOND_DOCTOR_FIX === */
 .sl-photo {
-  width:96px;
-  height:96px;
-  min-width:96px;
-  border-radius:50%;
+  width:168px;
+  height:224px;
+  min-width:168px;
+  border-radius:20px;
   overflow:hidden;
   border:1px solid rgba(30,181,171,.24);
   background:linear-gradient(135deg,rgba(30,181,171,.16),rgba(11,34,57,.08));
+  box-shadow:0 16px 36px rgba(8,24,41,.12);
   display:flex;
   align-items:center;
   justify-content:center;
@@ -836,6 +838,7 @@
   width:100%;
   height:100%;
   object-fit:cover;
+  object-position:center top;
   display:block;
 }
 
@@ -858,10 +861,15 @@
 }
 
 @media(max-width:760px) {
-  .sl-photo {
-    width:72px;
-    height:72px;
-    min-width:72px;
+  .sl-photo,
+  .sl-avatar {
+    width:120px;
+    height:160px;
+    min-width:120px;
+    border-radius:16px;
+  }
+  .sl-avatar {
+    font-size:2rem;
   }
 }
 
