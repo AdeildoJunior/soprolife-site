@@ -199,7 +199,6 @@
     if (restart) restart.addEventListener("click", function () {
       for (var k in state) if (state.hasOwnProperty(k)) delete state[k];
       historyStack.length = 0;
-      track("funnel_restart", { funnel: flowName });
       render(flow.steps[0].id);
     });
 
@@ -219,14 +218,14 @@
       if (err) err.hidden = true;
 
       saveLead();
-      track("funnel_lead", { funnel: flowName, interesse: state.objetivo || "" });
+      track("funnel_complete", { funnel: flowName });
       historyStack.push(current);
       render(step.next);
     });
 
     var whats = quiz.querySelector("#whatsLink");
     if (whats) whats.addEventListener("click", function () {
-      track("funnel_whatsapp_click", { funnel: flowName });
+      track("whatsapp_click", { funnel: flowName });
     });
   }
 
