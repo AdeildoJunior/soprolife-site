@@ -42,24 +42,19 @@ body{
 
 .hero{width:min(720px,100%)}
 
-/* ---------- Marca ---------- */
+/* ---------- Marca (logo oficial) ---------- */
 .brand{
   display:flex;
   align-items:center;
-  gap:14px;
   margin:0 auto 16px;
-  color:var(--navy);
+  text-decoration:none;
 }
-.brand-mark{
-  width:52px;height:52px;
-  border-radius:16px;
-  display:grid;place-items:center;
-  background:linear-gradient(135deg,var(--navy),var(--accent));
-  color:#fff;font-weight:900;letter-spacing:.5px;font-size:1.05rem;
-  box-shadow:0 14px 30px rgba(30,181,171,.30);
+.brand img{
+  height:58px;
+  width:auto;
+  max-width:100%;
+  display:block;
 }
-.brand strong{display:block;font-size:1.2rem;line-height:1.1}
-.brand span{display:block;font-size:.82rem;color:var(--muted);margin-top:2px}
 
 /* ---------- Badges de confiança ---------- */
 .trust{
@@ -241,6 +236,7 @@ textarea{resize:vertical;min-height:82px}
 @media (max-width:560px){
   .page{padding:20px 12px}
   .card{padding:22px 18px;border-radius:22px}
+  .brand img{height:46px}
   .actions{flex-direction:column}
   .btn{width:100%}
   .option{padding:13px 14px;gap:12px}
