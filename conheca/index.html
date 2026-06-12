@@ -618,6 +618,21 @@ main.sl-container,
 </style>
 
 
+<style id="soprolife-conheca-mobile-align-v1">
+/* Conheça — empilha as seções de 2 colunas no mobile para os textos
+   não ficarem espremidos/desalinhados em telas pequenas. */
+@media (max-width: 900px){
+  .sl-two-col,
+  .sl-cta{
+    grid-template-columns: minmax(0,1fr) !important;
+  }
+  .sl-actions{
+    justify-content: flex-start !important;
+  }
+}
+</style>
+
+
 <style id="soprolife-page-hero-standard-v1">
 /* Hero padrão para páginas internas — alinhado ao visual da home */
 .sl-page-hero{
@@ -1396,8 +1411,8 @@ body{
 <div class="sl-telemed-mobile-strip">
   <a href="/telemedicina/">
     <div>
-      Telemedicina médica
-      <span>Consulta online respiratória</span>
+      Telemedicina
+      <span>Consulta médica online</span>
     </div>
     <b>→</b>
   </a>
