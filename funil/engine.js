@@ -255,7 +255,7 @@
     lines.push("");
     lines.push("Gostaria de orientação para concluir o atendimento.");
     var msg = lines.join("\n");
-    return "https://wa.me/" + (cfg.whatsapp || "") + "?text=" + encodeURIComponent(msg);
+    return "https://api.whatsapp.com/send?phone=" + (cfg.whatsapp || "") + "&text=" + encodeURIComponent(msg);
   }
 
   /* ---------- Rodapé dinâmico ---------- */

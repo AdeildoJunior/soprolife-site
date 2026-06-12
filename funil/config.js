@@ -8,7 +8,7 @@
 
 window.FUNNEL_CONFIG = {
   /* WhatsApp da equipe (somente números, com DDI 55) */
-  whatsapp: "5521999417192",
+  whatsapp: "5521998901775",
 
   /* (Opcional) Salvar cada lead numa planilha do Google Sheets via Apps Script.
      Este endpoint é o SEU banco de leads — é onde nome/telefone devem ir.
@@ -17,5 +17,5 @@ window.FUNNEL_CONFIG = {
   leadEndpoint: "",
 
   /* Telefone exibido no rodapé (apenas visual) */
-  phoneDisplay: "(21) 99941-7192"
+  phoneDisplay: "(21) 99890-1775"
 };
