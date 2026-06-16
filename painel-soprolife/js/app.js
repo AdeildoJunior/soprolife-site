@@ -5,7 +5,8 @@ const state = {
   marketing: null,
   charts: {},
   tarefas: null,
-  documentos: []
+  documentos: [],
+  financeiro: null
 };
 
 const slug = (text) =>
@@ -25,13 +26,14 @@ async function loadJson(path) {
 
 async function init() {
   try {
-    const [resumo, crm, leads, marketing, tarefas, documentos] = await Promise.all([
+    const [resumo, crm, leads, marketing, tarefas, documentos, financeiro] = await Promise.all([
       loadJson("./data/resumo.json"),
       loadJson("./data/crm-clinicas.json"),
       loadJson("./data/leads.json"),
       loadJson("./data/marketing.json"),
       loadJson("./data/tarefas.json"),
-      loadJson("./data/documentos.json")
+      loadJson("./data/documentos.json"),
+      loadJson("./data/financeiro.json")
     ]);
 
     state.resumo = resumo;
@@ -40,6 +42,7 @@ async function init() {
     state.marketing = marketing;
     state.tarefas = tarefas;
     state.documentos = documentos;
+    state.financeiro = financeiro;
 
     renderCards();
     renderTasks();
@@ -55,6 +58,7 @@ async function init() {
     renderCharts();
     renderTaskBoard();
     renderDocuments();
+    renderFinance();
     bindEvents();
   } catch (error) {
     document.body.innerHTML = `
@@ -503,4 +507,77 @@ function renderDocuments() {
       </article>
     `;
   }).join("");
+}
+
+
+function renderFinance() {
+  const statsContainer = document.querySelector("#financeStats");
+  const table = document.querySelector("#financeTable");
+  const serviceCanvas = document.querySelector("#serviceRevenueChart");
+  const originCanvas = document.querySelector("#originRevenueChart");
+
+  if (!statsContainer || !table || !serviceCanvas || !originCanvas || !state.financeiro) return;
+
+  statsContainer.innerHTML = state.financeiro.resumo.map((item) => `
+    <article class="finance-stat-card">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+      <small>${item.hint}</small>
+    </article>
+  `).join("");
+
+  table.innerHTML = state.financeiro.lancamentos.map((item) => `
+    <tr>
+      <td><strong>${item.descricao}</strong></td>
+      <td>${item.servico}</td>
+      <td>${item.origem}</td>
+      <td>${item.valor}</td>
+      <td><span class="badge ${slug(item.status)}">${item.status}</span></td>
+      <td>${item.data}</td>
+    </tr>
+  `).join("");
+
+  state.charts.serviceRevenue = new Chart(serviceCanvas, {
+    type: "bar",
+    data: {
+      labels: state.financeiro.porServico.map((item) => item.servico),
+      datasets: [
+        {
+          label: "Receita por serviço",
+          data: state.financeiro.porServico.map((item) => item.valor),
+          borderWidth: 1,
+          borderRadius: 12
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.14)" } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  state.charts.originRevenue = new Chart(originCanvas, {
+    type: "doughnut",
+    data: {
+      labels: state.financeiro.porOrigem.map((item) => item.origem),
+      datasets: [
+        {
+          label: "Receita por origem",
+          data: state.financeiro.porOrigem.map((item) => item.valor),
+          borderWidth: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom" }
+      }
+    }
+  });
 }

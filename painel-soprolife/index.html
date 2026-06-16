@@ -27,7 +27,7 @@
         <button class="nav-item" data-section="leads">Leads e Agendamentos</button>
         <button class="nav-item" data-section="marketing">Marketing & SEO</button>
         <button class="nav-item disabled">Redes Sociais</button>
-        <button class="nav-item disabled">Financeiro</button>
+        <button class="nav-item" data-section="financeiro">Financeiro</button>
         <button class="nav-item" data-section="documentos">Documentos</button>
         <button class="nav-item" data-section="tarefas">Tarefas</button>
       </nav>
@@ -274,6 +274,59 @@
           <div>
             <h3>Regra de segurança</h3>
             <p>Esta área não deve armazenar CPF, documentos pessoais, dados clínicos, pedido médico, telefone de paciente ou qualquer informação sensível. Use apenas dados institucionais da empresa.</p>
+          </div>
+        </article>
+      </section>
+
+
+      <section id="financeiro" class="section">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Gestão simples</p>
+            <h2>Financeiro operacional</h2>
+          </div>
+          <span class="safe-label">Valores demonstrativos</span>
+        </div>
+
+        <div id="financeStats" class="finance-stats"></div>
+
+        <div class="grid-two finance-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Receita por serviço</h3>
+              <span>Espirometria, teleconsulta e domiciliar</span>
+            </div>
+            <canvas id="serviceRevenueChart"></canvas>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Receita por origem</h3>
+              <span>Canais que geram resultado</span>
+            </div>
+            <canvas id="originRevenueChart"></canvas>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h3>Lançamentos recentes</h3>
+            <span>Controle inicial, ainda sem contabilidade completa</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Descrição</th>
+                  <th>Serviço</th>
+                  <th>Origem</th>
+                  <th>Valor</th>
+                  <th>Status</th>
+                  <th>Data</th>
+                </tr>
+              </thead>
+              <tbody id="financeTable"></tbody>
+            </table>
           </div>
         </article>
       </section>
