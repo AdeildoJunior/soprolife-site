@@ -43,6 +43,8 @@ async function init() {
     renderLeadStats();
     renderLeadPipeline();
     renderLeadsTable();
+    renderMarketingStats();
+    renderSeoFocus();
     renderSeoList();
     renderCharts();
     bindEvents();
@@ -180,6 +182,67 @@ function renderLeadPipeline() {
       <strong>${stage.value}</strong>
       <span>${stage.hint}</span>
     </div>
+  `).join("");
+}
+
+
+function renderMarketingStats() {
+  const totalImpressions = state.marketing.seo.reduce((sum, item) => sum + item.impressoes, 0);
+  const totalClicks = state.marketing.seo.reduce((sum, item) => sum + item.cliques, 0);
+  const avgPosition = state.marketing.seo.reduce((sum, item) => sum + item.posicao, 0) / state.marketing.seo.length;
+  const topTerm = state.marketing.seo.reduce((best, item) => item.cliques > best.cliques ? item : best, state.marketing.seo[0]);
+
+  const stats = [
+    { label: "Impressões Google", value: totalImpressions },
+    { label: "Cliques estimados", value: totalClicks },
+    { label: "Posição média", value: avgPosition.toFixed(1) },
+    { label: "Melhor termo", value: topTerm.termo }
+  ];
+
+  const container = document.querySelector("#marketingStats");
+  if (!container) return;
+
+  container.innerHTML = stats.map((item) => `
+    <article class="marketing-stat-card">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+    </article>
+  `).join("");
+}
+
+function renderSeoFocus() {
+  const cards = [
+    {
+      label: "Alta intenção",
+      title: "espirometria RJ",
+      text: "Termo principal para captar pacientes que já procuram o exame."
+    },
+    {
+      label: "Busca local",
+      title: "espirometria Barra da Tijuca",
+      text: "Prioridade para fortalecer presença na região de atendimento."
+    },
+    {
+      label: "Termo médico",
+      title: "prova de função pulmonar",
+      text: "Importante para pacientes que pesquisam pelo nome técnico."
+    },
+    {
+      label: "Procedimento",
+      title: "espirometria com broncodilatador",
+      text: "Busca específica de quem já recebeu orientação médica."
+    }
+  ];
+
+  const container = document.querySelector("#seoFocus");
+  if (!container) return;
+
+  container.innerHTML = cards.map((card) => `
+    <article class="seo-focus-card">
+      <small>${card.label}</small>
+      <strong>${card.title}</strong>
+      <span>${card.text}</span>
+    </article>
   `).join("");
 }
 
