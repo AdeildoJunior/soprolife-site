@@ -4,7 +4,8 @@ const state = {
   leads: [],
   marketing: null,
   charts: {},
-  tarefas: null
+  tarefas: null,
+  documentos: []
 };
 
 const slug = (text) =>
@@ -24,12 +25,13 @@ async function loadJson(path) {
 
 async function init() {
   try {
-    const [resumo, crm, leads, marketing, tarefas] = await Promise.all([
+    const [resumo, crm, leads, marketing, tarefas, documentos] = await Promise.all([
       loadJson("./data/resumo.json"),
       loadJson("./data/crm-clinicas.json"),
       loadJson("./data/leads.json"),
       loadJson("./data/marketing.json"),
-      loadJson("./data/tarefas.json")
+      loadJson("./data/tarefas.json"),
+      loadJson("./data/documentos.json")
     ]);
 
     state.resumo = resumo;
@@ -37,6 +39,7 @@ async function init() {
     state.leads = leads;
     state.marketing = marketing;
     state.tarefas = tarefas;
+    state.documentos = documentos;
 
     renderCards();
     renderTasks();
@@ -51,6 +54,7 @@ async function init() {
     renderSeoList();
     renderCharts();
     renderTaskBoard();
+    renderDocuments();
     bindEvents();
   } catch (error) {
     document.body.innerHTML = `
@@ -442,4 +446,61 @@ function renderTaskBoard() {
   renderTaskGroup("#todayTasks", state.tarefas.hoje);
   renderTaskGroup("#weekTasks", state.tarefas.semana);
   renderTaskGroup("#criticalTasks", state.tarefas.criticas);
+}
+
+
+function renderDocuments() {
+  const statsContainer = document.querySelector("#documentStats");
+  const grid = document.querySelector("#documentGrid");
+  if (!statsContainer || !grid) return;
+
+  const ativos = state.documentos.filter((doc) =>
+    ["Ativo", "Ativa", "Regular", "Cadastrado", "Concedido", "Arquivado"].includes(doc.status)
+  ).length;
+
+  const comValidade = state.documentos.filter((doc) =>
+    doc.validade && !doc.validade.toLowerCase().includes("sem validade")
+  ).length;
+
+  const stats = [
+    { label: "Documentos mapeados", value: state.documentos.length },
+    { label: "Status positivo", value: ativos },
+    { label: "Com validade/monitoramento", value: comValidade },
+    { label: "Dados pessoais", value: "Não usar" }
+  ];
+
+  statsContainer.innerHTML = stats.map((item) => `
+    <article class="document-stat-card">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+    </article>
+  `).join("");
+
+  grid.innerHTML = state.documentos.map((doc) => {
+    const warning = doc.validade.includes("30/04") || doc.validade.includes("29/05") ? "warning" : "";
+
+    return `
+      <article class="document-card ${warning}">
+        <h3>${doc.nome}</h3>
+        <div class="document-category">${doc.categoria}</div>
+
+        <div class="document-meta">
+          <div>
+            <span>Status</span>
+            <strong>${doc.status}</strong>
+          </div>
+          <div>
+            <span>Validade</span>
+            <strong>${doc.validade}</strong>
+          </div>
+          <div>
+            <span>Referência</span>
+            <strong>${doc.referencia}</strong>
+          </div>
+        </div>
+
+        <p class="document-action">${doc.acao}</p>
+      </article>
+    `;
+  }).join("");
 }

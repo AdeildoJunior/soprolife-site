@@ -1,0 +1,50 @@
+[
+  {
+    "nome": "CNPJ",
+    "categoria": "Cadastro empresarial",
+    "status": "Ativo",
+    "validade": "Sem validade periódica",
+    "referencia": "63.544.026/0001-10",
+    "acao": "Manter dados cadastrais conferidos"
+  },
+  {
+    "nome": "Licença Sanitária",
+    "categoria": "Vigilância Sanitária",
+    "status": "Ativa",
+    "validade": "30/04/2027",
+    "referencia": "Complexidade mínima / risco baixo",
+    "acao": "Revalidar antes do prazo anual"
+  },
+  {
+    "nome": "CREMERJ PJ",
+    "categoria": "Regularidade médica",
+    "status": "Regular",
+    "validade": "29/05/2027",
+    "referencia": "Inscrição PJ ativa",
+    "acao": "Conferir renovação antes do vencimento"
+  },
+  {
+    "nome": "CNES",
+    "categoria": "Cadastro de estabelecimento de saúde",
+    "status": "Cadastrado",
+    "validade": "Monitoramento contínuo",
+    "referencia": "Estabelecimento de apoio diagnóstico",
+    "acao": "Verificar atualização cadastral periodicamente"
+  },
+  {
+    "nome": "Inscrição Municipal / Alvará",
+    "categoria": "Prefeitura do Rio de Janeiro",
+    "status": "Concedido",
+    "validade": "Conforme regras municipais",
+    "referencia": "Atividades com restrições no local",
+    "acao": "Observar restrições e manter documentos acessíveis"
+  },
+  {
+    "nome": "Contrato Social",
+    "categoria": "JUCERJA",
+    "status": "Arquivado",
+    "validade": "Sem validade periódica",
+    "referencia": "Sociedade empresária limitada / ME",
+    "acao": "Usar versão atualizada em credenciamentos"
+  }
+]
