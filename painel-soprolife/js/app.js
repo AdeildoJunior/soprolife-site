@@ -24,6 +24,26 @@ async function loadJson(path) {
   return response.json();
 }
 
+function destroyChart(key) {
+  if (state.charts[key]) {
+    state.charts[key].destroy();
+    delete state.charts[key];
+  }
+}
+
+function createChart(key, canvasSelector, config) {
+  const canvas = document.querySelector(canvasSelector);
+  if (!canvas) return null;
+
+  destroyChart(key);
+  state.charts[key] = new Chart(canvas, config);
+  return state.charts[key];
+}
+
+function resizeCharts() {
+  Object.values(state.charts).forEach((chart) => chart.resize());
+}
+
 async function init() {
   try {
     const [resumo, crm, leads, marketing, tarefas, documentos, financeiro] = await Promise.all([
@@ -322,7 +342,7 @@ function renderCharts() {
     }
   };
 
-  state.charts.weekly = new Chart(document.querySelector("#weeklyChart"), {
+  createChart("weekly", "#weeklyChart", {
     type: "line",
     data: {
       labels: state.resumo.evolucaoSemanal.labels,
@@ -345,7 +365,7 @@ function renderCharts() {
     options: defaultOptions
   });
 
-  state.charts.funnel = new Chart(document.querySelector("#funnelChart"), {
+  createChart("funnel", "#funnelChart", {
     type: "bar",
     data: {
       labels: state.resumo.funilClinicas.labels,
@@ -361,7 +381,7 @@ function renderCharts() {
     options: defaultOptions
   });
 
-  state.charts.channels = new Chart(document.querySelector("#channelsChart"), {
+  createChart("channels", "#channelsChart", {
     type: "doughnut",
     data: {
       labels: state.marketing.canais.labels,
@@ -391,6 +411,7 @@ function bindEvents() {
 
       button.classList.add("active");
       document.querySelector(`#${button.dataset.section}`).classList.add("active");
+      resizeCharts();
     });
   });
 
@@ -414,12 +435,6 @@ function bindEvents() {
 
 init();
 
-
-function taskPriorityClass(priority) {
-  if (priority === "Alta") return "high";
-  if (priority === "Média") return "medium";
-  return "";
-}
 
 function renderTaskGroup(selector, tasks) {
   const container = document.querySelector(selector);
@@ -537,7 +552,7 @@ function renderFinance() {
     </tr>
   `).join("");
 
-  state.charts.serviceRevenue = new Chart(serviceCanvas, {
+  createChart("serviceRevenue", "#serviceRevenueChart", {
     type: "bar",
     data: {
       labels: state.financeiro.porServico.map((item) => item.servico),
@@ -560,7 +575,7 @@ function renderFinance() {
     }
   });
 
-  state.charts.originRevenue = new Chart(originCanvas, {
+  createChart("originRevenue", "#originRevenueChart", {
     type: "doughnut",
     data: {
       labels: state.financeiro.porOrigem.map((item) => item.origem),
