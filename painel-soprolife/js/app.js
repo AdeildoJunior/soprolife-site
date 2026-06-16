@@ -37,6 +37,8 @@ async function init() {
 
     renderCards();
     renderTasks();
+    renderCrmStats();
+    renderCrmFunnelVisual();
     renderCrmTable();
     renderLeadsTable();
     renderSeoList();
@@ -77,6 +79,56 @@ function renderTasks() {
       <span class="badge ${slug(task.priority)}">${task.priority}</span>
     </div>
   `).join("");
+}
+
+
+function countCrmStatus(status) {
+  return state.crm.filter((item) => item.status === status).length;
+}
+
+function renderCrmStats() {
+  const stats = [
+    { label: "Total no CRM", value: state.crm.length },
+    { label: "Responderam", value: countCrmStatus("Respondeu") },
+    { label: "Reuniões", value: countCrmStatus("Reunião") },
+    { label: "Propostas", value: countCrmStatus("Proposta") },
+    { label: "Sem resposta", value: countCrmStatus("Não respondeu") }
+  ];
+
+  const container = document.querySelector("#crmStats");
+  if (!container) return;
+
+  container.innerHTML = stats.map((item) => `
+    <article class="crm-stat-card">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+    </article>
+  `).join("");
+}
+
+function renderCrmFunnelVisual() {
+  const steps = [
+    { label: "Abordadas", value: state.crm.length, hint: "base trabalhada" },
+    { label: "Responderam", value: countCrmStatus("Respondeu"), hint: "abriram conversa" },
+    { label: "Reunião", value: countCrmStatus("Reunião"), hint: "próximo contato" },
+    { label: "Proposta", value: countCrmStatus("Proposta"), hint: "em negociação" },
+    { label: "Piloto", value: 1, hint: "meta inicial" }
+  ];
+
+  const max = Math.max(...steps.map((step) => step.value), 1);
+  const container = document.querySelector("#crmFunnelVisual");
+  if (!container) return;
+
+  container.innerHTML = steps.map((step) => {
+    const fill = Math.max(10, Math.round((step.value / max) * 100));
+    return `
+      <div class="funnel-step" style="--fill: ${fill}%">
+        <small>${step.label}</small>
+        <strong>${step.value}</strong>
+        <span>${step.hint}</span>
+      </div>
+    `;
+  }).join("");
 }
 
 function renderCrmTable(filter = "Todos") {
