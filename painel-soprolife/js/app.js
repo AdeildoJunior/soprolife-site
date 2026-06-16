@@ -6,7 +6,8 @@ const state = {
   charts: {},
   tarefas: null,
   documentos: [],
-  financeiro: null
+  financeiro: null,
+  automacoes: null
 };
 
 const slug = (text) =>
@@ -46,14 +47,15 @@ function resizeCharts() {
 
 async function init() {
   try {
-    const [resumo, crm, leads, marketing, tarefas, documentos, financeiro] = await Promise.all([
+    const [resumo, crm, leads, marketing, tarefas, documentos, financeiro, automacoes] = await Promise.all([
       loadJson("./data/resumo.json"),
       loadJson("./data/crm-clinicas.json"),
       loadJson("./data/leads.json"),
       loadJson("./data/marketing.json"),
       loadJson("./data/tarefas.json"),
       loadJson("./data/documentos.json"),
-      loadJson("./data/financeiro.json")
+      loadJson("./data/financeiro.json"),
+      loadJson("./data/automacoes.json")
     ]);
 
     state.resumo = resumo;
@@ -63,6 +65,7 @@ async function init() {
     state.tarefas = tarefas;
     state.documentos = documentos;
     state.financeiro = financeiro;
+    state.automacoes = automacoes;
 
     renderCards();
     renderTasks();
@@ -79,6 +82,7 @@ async function init() {
     renderTaskBoard();
     renderDocuments();
     renderFinance();
+    renderAutomations();
     bindEvents();
   } catch (error) {
     document.body.innerHTML = `
@@ -595,4 +599,57 @@ function renderFinance() {
       }
     }
   });
+}
+
+
+function automationPriorityClass(priority) {
+  if (priority === "Alta") return "danger";
+  if (priority === "Média") return "medium";
+  return "";
+}
+
+function automationStatusClass(status) {
+  return slug(status);
+}
+
+function renderAutomations() {
+  if (!state.automacoes) return;
+
+  const statsContainer = document.querySelector("#automationStats");
+  const sourcesContainer = document.querySelector("#automationSources");
+  const phasesContainer = document.querySelector("#automationPhases");
+
+  if (!statsContainer || !sourcesContainer || !phasesContainer) return;
+
+  statsContainer.innerHTML = state.automacoes.resumo.map((item) => `
+    <article class="automation-stat-card">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+      <small>${item.hint}</small>
+    </article>
+  `).join("");
+
+  sourcesContainer.innerHTML = state.automacoes.fontes.map((item) => `
+    <article class="automation-source-card">
+      <div class="automation-source-top">
+        <strong>${item.nome}</strong>
+        <span class="badge ${automationStatusClass(item.status)}">${item.status}</span>
+      </div>
+      <p>${item.area}</p>
+      <div class="automation-source-footer">
+        <span class="priority ${automationPriorityClass(item.prioridade)}">Prioridade ${item.prioridade}</span>
+        <small>${item.seguranca}</small>
+      </div>
+    </article>
+  `).join("");
+
+  phasesContainer.innerHTML = state.automacoes.fases.map((item) => `
+    <article class="automation-phase">
+      <span>${item.fase}</span>
+      <div>
+        <strong>${item.titulo}</strong>
+        <p>${item.descricao}</p>
+      </div>
+    </article>
+  `).join("");
 }

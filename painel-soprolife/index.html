@@ -27,9 +27,14 @@
         <button class="nav-item" data-section="leads">Leads e Agendamentos</button>
         <button class="nav-item" data-section="marketing">Marketing & SEO</button>
         <button class="nav-item disabled">Redes Sociais</button>
-        <button class="nav-item" data-section="financeiro">Financeiro</button>
+<button class="nav-item" data-section="financeiro">Financeiro</button>
         <button class="nav-item" data-section="documentos">Documentos</button>
         <button class="nav-item" data-section="tarefas">Tarefas</button>
+<button class="nav-item" data-section="automacoes">
+        <span>⚙️</span>
+        Automações
+      </button>
+
       </nav>
 
       <div class="sidebar-note">
@@ -329,6 +334,49 @@
             </table>
           </div>
         </article>
+      </section>
+
+
+      <section class="section" id="automacoes">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Centro de comando</p>
+            <h2>Fontes de Dados e Automações</h2>
+            <span>Mapa das integrações futuras do painel privado da SoproLife.</span>
+          </div>
+          <div class="section-actions">
+            <span class="safe-badge">Dados reais fora do GitHub</span>
+          </div>
+        </div>
+
+        <div class="automation-alert">
+          <strong>Painel privado em planejamento.</strong>
+          <span>Esta aba usa dados demonstrativos e serve para orientar automações com Sheets, Gmail, Agenda, Search Console, GA4, Meta, WhatsApp Business, CRM e financeiro.</span>
+        </div>
+
+        <div class="automation-stats" id="automationStats"></div>
+
+        <div class="automation-layout">
+          <article class="panel automation-panel">
+            <div class="panel-header">
+              <div>
+                <h3>Integrações planejadas</h3>
+                <span>Status das fontes futuras do painel</span>
+              </div>
+            </div>
+            <div class="automation-grid" id="automationSources"></div>
+          </article>
+
+          <article class="panel automation-panel">
+            <div class="panel-header">
+              <div>
+                <h3>Fases de implantação</h3>
+                <span>Do protótipo seguro ao painel privado com login</span>
+              </div>
+            </div>
+            <div class="automation-timeline" id="automationPhases"></div>
+          </article>
+        </div>
       </section>
 
     </main>

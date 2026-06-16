@@ -1,0 +1,118 @@
+{
+  "resumo": [
+    {
+      "label": "Integrações planejadas",
+      "value": "10",
+      "hint": "Mapa inicial do centro de comando"
+    },
+    {
+      "label": "Fontes privadas",
+      "value": "6",
+      "hint": "Sheets, Gmail, Agenda, Meta, GA4 e CRM"
+    },
+    {
+      "label": "Status atual",
+      "value": "Protótipo",
+      "hint": "Sem dados reais no GitHub"
+    },
+    {
+      "label": "Prioridade",
+      "value": "Segurança",
+      "hint": "Dados sensíveis fora do repositório"
+    }
+  ],
+  "fontes": [
+    {
+      "nome": "Google Sheets privado",
+      "area": "Leads, clínicas, tarefas e financeiro",
+      "status": "Planejado",
+      "prioridade": "Alta",
+      "seguranca": "Não salvar planilhas reais no GitHub"
+    },
+    {
+      "nome": "Gmail / Workspace",
+      "area": "Propostas, respostas de clínicas e pendências",
+      "status": "Planejado",
+      "prioridade": "Alta",
+      "seguranca": "Evitar copiar conteúdo sensível para JSON"
+    },
+    {
+      "nome": "Google Agenda",
+      "area": "Consultas, exames, reuniões e visitas",
+      "status": "Planejado",
+      "prioridade": "Alta",
+      "seguranca": "Não expor nomes de pacientes em ambiente público"
+    },
+    {
+      "nome": "Google Search Console",
+      "area": "SEO, termos de busca e páginas",
+      "status": "Futuro",
+      "prioridade": "Média",
+      "seguranca": "Usar dados agregados"
+    },
+    {
+      "nome": "Google Analytics 4",
+      "area": "Tráfego, origem e conversões",
+      "status": "Futuro",
+      "prioridade": "Média",
+      "seguranca": "Usar métricas agregadas"
+    },
+    {
+      "nome": "Instagram / Meta",
+      "area": "Posts, alcance e calendário editorial",
+      "status": "Futuro",
+      "prioridade": "Média",
+      "seguranca": "Não misturar dados pessoais de pacientes"
+    },
+    {
+      "nome": "WhatsApp Business",
+      "area": "Origem dos contatos e status de atendimento",
+      "status": "Futuro",
+      "prioridade": "Alta",
+      "seguranca": "Não armazenar conversas ou telefones reais no GitHub"
+    },
+    {
+      "nome": "CRM privado",
+      "area": "Funil de clínicas e parcerias",
+      "status": "Planejado",
+      "prioridade": "Alta",
+      "seguranca": "Evitar dados pessoais desnecessários"
+    },
+    {
+      "nome": "Financeiro privado",
+      "area": "Receitas, pendências e previsões",
+      "status": "Planejado",
+      "prioridade": "Média",
+      "seguranca": "Não identificar pacientes por pagamento"
+    },
+    {
+      "nome": "Segurança / LGPD",
+      "area": "Regras, permissões e prevenção de vazamento",
+      "status": "Ativo",
+      "prioridade": "Alta",
+      "seguranca": "Dados reais somente em fonte privada"
+    }
+  ],
+  "fases": [
+    {
+      "fase": "Fase 1",
+      "titulo": "Protótipo seguro",
+      "descricao": "Painel visual com dados fictícios, documentação de segurança e mapa de automações."
+    },
+    {
+      "fase": "Fase 2",
+      "titulo": "Google Sheets privado",
+      "descricao": "Criar planilhas privadas para leads, clínicas, tarefas, marketing e financeiro."
+    },
+    {
+      "fase": "Fase 3",
+      "titulo": "Integrações automáticas",
+      "descricao": "Conectar fontes como Gmail, Agenda, Search Console, GA4, Meta e WhatsApp Business."
+    },
+    {
+      "fase": "Fase 4",
+      "titulo": "Painel privado com login",
+      "descricao": "Evoluir para autenticação, permissões, banco privado, logs e backup."
+    }
+  ]
+}
