@@ -1,0 +1,34 @@
+[
+  {
+    "lead": "Lead 001",
+    "servico": "Espirometria",
+    "origem": "Google",
+    "status": "Aguardando pedido médico",
+    "data": "15/06/2026",
+    "proximaAcao": "Orientar teleconsulta se não tiver pedido"
+  },
+  {
+    "lead": "Lead 002",
+    "servico": "Teleconsulta",
+    "origem": "Instagram",
+    "status": "Novo",
+    "data": "15/06/2026",
+    "proximaAcao": "Responder WhatsApp"
+  },
+  {
+    "lead": "Lead 003",
+    "servico": "Espirometria domiciliar",
+    "origem": "Indicação",
+    "status": "Agendado",
+    "data": "14/06/2026",
+    "proximaAcao": "Confirmar preparo"
+  },
+  {
+    "lead": "Lead 004",
+    "servico": "Parceria clínica",
+    "origem": "Prospecção B2B",
+    "status": "Em negociação",
+    "data": "13/06/2026",
+    "proximaAcao": "Enviar apresentação"
+  }
+]

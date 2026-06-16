@@ -1,0 +1,12 @@
+{
+  "seo": [
+    { "termo": "espirometria RJ", "impressoes": 420, "cliques": 18, "posicao": 8.7 },
+    { "termo": "espirometria barra da tijuca", "impressoes": 210, "cliques": 11, "posicao": 5.2 },
+    { "termo": "prova de função pulmonar", "impressoes": 160, "cliques": 5, "posicao": 12.4 },
+    { "termo": "espirometria com broncodilatador", "impressoes": 95, "cliques": 4, "posicao": 9.9 }
+  ],
+  "canais": {
+    "labels": ["Google", "Instagram", "Indicação", "WhatsApp direto", "Clínicas"],
+    "values": [42, 24, 16, 10, 8]
+  }
+}

@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Painel SoproLife</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="stylesheet" href="./css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo-wrap">
+          <img src="./assets/soprolife-logo.png" alt="SoproLife" class="brand-logo" />
+        </div>
+        <div>
+          <strong>SoproLife</strong>
+          <span>Command Center</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-section="overview">Painel Geral</button>
+        <button class="nav-item" data-section="crm">CRM Clínicas</button>
+        <button class="nav-item" data-section="leads">Leads e Agendamentos</button>
+        <button class="nav-item" data-section="marketing">Marketing & SEO</button>
+        <button class="nav-item disabled">Redes Sociais</button>
+        <button class="nav-item disabled">Financeiro</button>
+        <button class="nav-item disabled">Documentos</button>
+        <button class="nav-item disabled">Tarefas</button>
+      </nav>
+
+      <div class="sidebar-note">
+        <span>Versão 0.1</span>
+        <p>Dados fictícios/anônimos para protótipo.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Painel operacional</p>
+          <h1>Painel SoproLife</h1>
+        </div>
+
+        <div class="top-actions">
+          <input id="globalSearch" type="search" placeholder="Buscar no painel..." />
+          <button id="refreshBtn">Atualizar</button>
+        </div>
+      </header>
+
+      <section id="overview" class="section active">
+        <div class="hero">
+          <div>
+            <p class="eyebrow">Hoje na SoproLife</p>
+            <h2>Visão rápida de operação, comercial e marketing</h2>
+            <p>Este é o primeiro MVP visual. Depois conectaremos planilhas, CRM, Search Console, Instagram e automações.</p>
+          </div>
+          <div class="hero-badge">
+            <strong>Fase 0.1</strong>
+            <span>Protótipo seguro</span>
+          </div>
+        </div>
+
+        <div id="cardsGrid" class="cards-grid"></div>
+
+        <div class="grid-two">
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Evolução semanal</h3>
+              <span>Leads x agendamentos</span>
+            </div>
+            <canvas id="weeklyChart"></canvas>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Funil de clínicas</h3>
+              <span>Prospecção B2B</span>
+            </div>
+            <canvas id="funnelChart"></canvas>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h3>Próximas ações</h3>
+            <span>Rotina de acompanhamento</span>
+          </div>
+          <div id="tasksList" class="task-list"></div>
+        </article>
+      </section>
+
+      <section id="crm" class="section">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Comercial B2B</p>
+            <h2>CRM de clínicas e parceiros</h2>
+          </div>
+          <select id="crmFilter">
+            <option value="Todos">Todos os status</option>
+            <option value="Abordada">Abordada</option>
+            <option value="Respondeu">Respondeu</option>
+            <option value="Reunião">Reunião</option>
+            <option value="Proposta">Proposta</option>
+            <option value="Não respondeu">Não respondeu</option>
+          </select>
+        </div>
+
+        <article class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Clínica</th>
+                  <th>Bairro</th>
+                  <th>Canal</th>
+                  <th>Status</th>
+                  <th>Última ação</th>
+                  <th>Próxima ação</th>
+                </tr>
+              </thead>
+              <tbody id="crmTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section id="leads" class="section">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Operação</p>
+            <h2>Leads e agendamentos</h2>
+          </div>
+          <span class="safe-label">Sem dados reais de pacientes</span>
+        </div>
+
+        <article class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Lead</th>
+                  <th>Serviço</th>
+                  <th>Origem</th>
+                  <th>Status</th>
+                  <th>Data</th>
+                  <th>Próxima ação</th>
+                </tr>
+              </thead>
+              <tbody id="leadsTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section id="marketing" class="section">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Aquisição</p>
+            <h2>Marketing & SEO</h2>
+          </div>
+          <span class="safe-label">Dados demonstrativos</span>
+        </div>
+
+        <div class="grid-two">
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Origem dos contatos</h3>
+              <span>Canais de aquisição</span>
+            </div>
+            <canvas id="channelsChart"></canvas>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Termos de busca</h3>
+              <span>Modelo para Search Console</span>
+            </div>
+            <div id="seoList" class="seo-list"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./js/app.js"></script>
+</body>
+</html>

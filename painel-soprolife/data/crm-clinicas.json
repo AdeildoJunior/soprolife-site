@@ -1,0 +1,47 @@
+[
+  {
+    "clinica": "Clínica Exemplo Barra",
+    "bairro": "Barra da Tijuca",
+    "contato": "Coordenação",
+    "canal": "WhatsApp",
+    "status": "Respondeu",
+    "ultimaAcao": "15/06/2026",
+    "proximaAcao": "Enviar proposta de agenda-piloto"
+  },
+  {
+    "clinica": "Centro Médico Exemplo Recreio",
+    "bairro": "Recreio",
+    "contato": "Recepção",
+    "canal": "Instagram",
+    "status": "Abordada",
+    "ultimaAcao": "15/06/2026",
+    "proximaAcao": "Tentar telefone alternativo"
+  },
+  {
+    "clinica": "Clínica Exemplo Freguesia",
+    "bairro": "Jacarepaguá",
+    "contato": "Administrativo",
+    "canal": "Site",
+    "status": "Não respondeu",
+    "ultimaAcao": "14/06/2026",
+    "proximaAcao": "Não insistir sem novo gancho"
+  },
+  {
+    "clinica": "Consultório Exemplo Zona Norte",
+    "bairro": "Penha",
+    "contato": "Médico responsável",
+    "canal": "WhatsApp",
+    "status": "Reunião",
+    "ultimaAcao": "13/06/2026",
+    "proximaAcao": "Marcar conversa rápida"
+  },
+  {
+    "clinica": "Empresa Exemplo PCMSO",
+    "bairro": "Centro",
+    "contato": "RH",
+    "canal": "Indicação",
+    "status": "Proposta",
+    "ultimaAcao": "12/06/2026",
+    "proximaAcao": "Enviar modelo de campanha respiratória"
+  }
+]
