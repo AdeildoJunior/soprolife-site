@@ -3,7 +3,8 @@ const state = {
   crm: [],
   leads: [],
   marketing: null,
-  charts: {}
+  charts: {},
+  tarefas: null
 };
 
 const slug = (text) =>
@@ -23,17 +24,19 @@ async function loadJson(path) {
 
 async function init() {
   try {
-    const [resumo, crm, leads, marketing] = await Promise.all([
+    const [resumo, crm, leads, marketing, tarefas] = await Promise.all([
       loadJson("./data/resumo.json"),
       loadJson("./data/crm-clinicas.json"),
       loadJson("./data/leads.json"),
-      loadJson("./data/marketing.json")
+      loadJson("./data/marketing.json"),
+      loadJson("./data/tarefas.json")
     ]);
 
     state.resumo = resumo;
     state.crm = crm;
     state.leads = leads;
     state.marketing = marketing;
+    state.tarefas = tarefas;
 
     renderCards();
     renderTasks();
@@ -47,6 +50,7 @@ async function init() {
     renderSeoFocus();
     renderSeoList();
     renderCharts();
+    renderTaskBoard();
     bindEvents();
   } catch (error) {
     document.body.innerHTML = `
@@ -401,3 +405,41 @@ function bindEvents() {
 }
 
 init();
+
+
+function taskPriorityClass(priority) {
+  if (priority === "Alta") return "high";
+  if (priority === "Média") return "medium";
+  return "";
+}
+
+function renderTaskGroup(selector, tasks) {
+  const container = document.querySelector(selector);
+  if (!container) return;
+
+  container.innerHTML = tasks.map((task) => {
+    const priorityClass = task.prioridade === "Alta"
+      ? "danger"
+      : task.prioridade === "Média"
+        ? "medium"
+        : "";
+
+    return `
+      <article class="task-board-card">
+        <span class="task-dot ${priorityClass}"></span>
+        <div class="task-body">
+          <strong>${task.titulo}</strong>
+          <p><b>${task.area}</b> · ${task.status} · prioridade ${task.prioridade.toLowerCase()}</p>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function renderTaskBoard() {
+  if (!state.tarefas) return;
+
+  renderTaskGroup("#todayTasks", state.tarefas.hoje);
+  renderTaskGroup("#weekTasks", state.tarefas.semana);
+  renderTaskGroup("#criticalTasks", state.tarefas.criticas);
+}

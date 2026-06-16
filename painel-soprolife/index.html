@@ -29,7 +29,7 @@
         <button class="nav-item disabled">Redes Sociais</button>
         <button class="nav-item disabled">Financeiro</button>
         <button class="nav-item disabled">Documentos</button>
-        <button class="nav-item disabled">Tarefas</button>
+        <button class="nav-item" data-section="tarefas">Tarefas</button>
       </nav>
 
       <div class="sidebar-note">
@@ -213,6 +213,43 @@
           </article>
         </div>
       </section>
+
+      <section id="tarefas" class="section">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Rotina operacional</p>
+            <h2>Tarefas e pendências</h2>
+          </div>
+          <span class="safe-label">Centro diário da SoproLife</span>
+        </div>
+
+        <div class="task-dashboard">
+          <article class="panel task-column-panel">
+            <div class="panel-header">
+              <h3>Hoje</h3>
+              <span>Ações do dia</span>
+            </div>
+            <div id="todayTasks" class="task-board-list"></div>
+          </article>
+
+          <article class="panel task-column-panel">
+            <div class="panel-header">
+              <h3>Esta semana</h3>
+              <span>Planejamento curto</span>
+            </div>
+            <div id="weekTasks" class="task-board-list"></div>
+          </article>
+
+          <article class="panel task-column-panel critical">
+            <div class="panel-header">
+              <h3>Pendências críticas</h3>
+              <span>Não deixar esfriar</span>
+            </div>
+            <div id="criticalTasks" class="task-board-list"></div>
+          </article>
+        </div>
+      </section>
+
     </main>
   </div>
 

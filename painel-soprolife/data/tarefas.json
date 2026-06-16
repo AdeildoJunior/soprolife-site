@@ -1,0 +1,74 @@
+{
+  "hoje": [
+    {
+      "titulo": "Responder leads novos no WhatsApp",
+      "area": "Atendimento",
+      "prioridade": "Alta",
+      "status": "Pendente"
+    },
+    {
+      "titulo": "Retornar clínicas que responderam",
+      "area": "Comercial B2B",
+      "prioridade": "Alta",
+      "status": "Pendente"
+    },
+    {
+      "titulo": "Atualizar planilha B2B com respostas de hoje",
+      "area": "CRM",
+      "prioridade": "Alta",
+      "status": "Pendente"
+    },
+    {
+      "titulo": "Conferir mensagens do Instagram",
+      "area": "Redes sociais",
+      "prioridade": "Média",
+      "status": "Pendente"
+    }
+  ],
+  "semana": [
+    {
+      "titulo": "Separar clínicas com potencial para agenda-piloto",
+      "area": "Parcerias",
+      "prioridade": "Alta",
+      "status": "Planejado"
+    },
+    {
+      "titulo": "Revisar termos do Google Search Console",
+      "area": "SEO",
+      "prioridade": "Média",
+      "status": "Planejado"
+    },
+    {
+      "titulo": "Criar próximo post educativo do Instagram",
+      "area": "Conteúdo",
+      "prioridade": "Média",
+      "status": "Planejado"
+    },
+    {
+      "titulo": "Revisar funil de captação e mensagens padrão",
+      "area": "Operação",
+      "prioridade": "Média",
+      "status": "Planejado"
+    }
+  ],
+  "criticas": [
+    {
+      "titulo": "Lead aguardando pedido médico",
+      "area": "Atendimento",
+      "prioridade": "Alta",
+      "status": "Ação necessária"
+    },
+    {
+      "titulo": "Clínica abordada sem resposta",
+      "area": "Comercial B2B",
+      "prioridade": "Média",
+      "status": "Monitorar"
+    },
+    {
+      "titulo": "Proposta enviada sem retorno",
+      "area": "Parcerias",
+      "prioridade": "Alta",
+      "status": "Retornar"
+    }
+  ]
+}
