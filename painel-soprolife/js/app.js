@@ -40,6 +40,8 @@ async function init() {
     renderCrmStats();
     renderCrmFunnelVisual();
     renderCrmTable();
+    renderLeadStats();
+    renderLeadPipeline();
     renderLeadsTable();
     renderSeoList();
     renderCharts();
@@ -129,6 +131,56 @@ function renderCrmFunnelVisual() {
       </div>
     `;
   }).join("");
+}
+
+
+function countLeadStatus(status) {
+  return state.leads.filter((item) => item.status === status).length;
+}
+
+function countLeadService(term) {
+  return state.leads.filter((item) => item.servico.toLowerCase().includes(term.toLowerCase())).length;
+}
+
+function renderLeadStats() {
+  const stats = [
+    { label: "Total de leads", value: state.leads.length },
+    { label: "Espirometria", value: countLeadService("Espirometria") },
+    { label: "Teleconsulta", value: countLeadService("Teleconsulta") },
+    { label: "Agendados", value: countLeadStatus("Agendado") },
+    { label: "Pendências", value: countLeadStatus("Aguardando pedido médico") }
+  ];
+
+  const container = document.querySelector("#leadStats");
+  if (!container) return;
+
+  container.innerHTML = stats.map((item) => `
+    <article class="lead-stat-card">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+    </article>
+  `).join("");
+}
+
+function renderLeadPipeline() {
+  const stages = [
+    { label: "Novo", value: countLeadStatus("Novo"), hint: "precisa resposta", tone: "warning" },
+    { label: "Aguardando pedido", value: countLeadStatus("Aguardando pedido médico"), hint: "oferecer teleconsulta", tone: "danger" },
+    { label: "Agendado", value: countLeadStatus("Agendado"), hint: "confirmar preparo", tone: "success" },
+    { label: "Negociação", value: countLeadStatus("Em negociação"), hint: "parceria ou condição", tone: "" },
+    { label: "Realizado", value: countLeadStatus("Realizado"), hint: "laudo/retorno", tone: "success" }
+  ];
+
+  const container = document.querySelector("#leadPipeline");
+  if (!container) return;
+
+  container.innerHTML = stages.map((stage) => `
+    <div class="lead-stage ${stage.tone}">
+      <small>${stage.label}</small>
+      <strong>${stage.value}</strong>
+      <span>${stage.hint}</span>
+    </div>
+  `).join("");
 }
 
 function renderCrmTable(filter = "Todos") {
