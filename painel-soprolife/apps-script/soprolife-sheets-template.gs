@@ -205,3 +205,36 @@ function atualizarResumoDashboardSoproLife() {
   SpreadsheetApp.flush();
   Logger.log("Resumo Dashboard atualizado com valores calculados.");
 }
+
+/**
+ * Menu interno da planilha e atualização automática do Resumo Dashboard.
+ *
+ * onOpen cria o menu "SoproLife".
+ * onEdit atualiza o Resumo Dashboard quando uma aba operacional é editada.
+ */
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu("SoproLife")
+    .addItem("Atualizar Resumo Dashboard", "atualizarResumoDashboardSoproLife")
+    .addItem("Aplicar validações", "setupValidacoesSoproLife")
+    .addToUi();
+}
+
+function onEdit(e) {
+  if (!e || !e.range) return;
+
+  const sheetName = e.range.getSheet().getName();
+
+  const monitoredSheets = [
+    "Leads",
+    "CRM Clinicas",
+    "Tarefas",
+    "Financeiro",
+    "Marketing Conteudo",
+    "Agenda Operacional"
+  ];
+
+  if (!monitoredSheets.includes(sheetName)) return;
+
+  atualizarResumoDashboardSoproLife();
+}
