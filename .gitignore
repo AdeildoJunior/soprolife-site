@@ -28,3 +28,11 @@ aplicar-*.sh
 index.backup.*.html
 index.html.bak
 index.html.bak-*
+
+# SoproLife Painel - dados privados locais
+painel-soprolife/data-private/
+painel-soprolife/**/*.local.json
+painel-soprolife/**/*.private.json
+painel-soprolife/**/*.secret.json
+.env
+.env.*
