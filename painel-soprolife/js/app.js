@@ -7,7 +7,8 @@ const state = {
   tarefas: null,
   documentos: [],
   financeiro: null,
-  automacoes: null
+  automacoes: null,
+  runtimeStatus: null
 };
 
 const slug = (text) =>
@@ -23,6 +24,26 @@ async function loadJson(path) {
     throw new Error(`Erro ao carregar ${path}`);
   }
   return response.json();
+}
+
+async function loadOptionalJson(path) {
+  try {
+    const response = await fetch(path);
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      console.warn(`Status local indisponível: ${path}`);
+      return null;
+    }
+
+    return response.json();
+  } catch (error) {
+    console.warn("Status local indisponível", error);
+    return null;
+  }
 }
 
 function destroyChart(key) {
@@ -66,6 +87,8 @@ async function init() {
     state.documentos = documentos;
     state.financeiro = financeiro;
     state.automacoes = automacoes;
+
+    state.runtimeStatus = await loadOptionalJson("./data/runtime-status.local.json");
 
     renderCards();
     renderTasks();
@@ -614,6 +637,7 @@ function automationStatusClass(status) {
 
 function renderAutomations() {
   if (!state.automacoes) return;
+  renderRuntimeStatus();
 
   const statsContainer = document.querySelector("#automationStats");
   const sourcesContainer = document.querySelector("#automationSources");
@@ -652,4 +676,39 @@ function renderAutomations() {
       </div>
     </article>
   `).join("");
+}
+
+
+function renderRuntimeStatus() {
+  const container = document.querySelector("#runtimeStatus");
+  if (!container) return;
+
+  const googleSheets = state.runtimeStatus?.googleSheets;
+  const configured = Boolean(
+    googleSheets?.configured &&
+    googleSheets?.safeToDisplay &&
+    googleSheets?.configValid !== false
+  );
+
+  const statusLabel = configured
+    ? "Configurado localmente"
+    : "Não configurado neste ambiente";
+
+  const badgeClass = configured ? "success" : "neutral";
+
+  const description = configured
+    ? "Fonte privada externa detectada. Nenhuma URL, ID, token ou dado real é exibido no painel."
+    : "Gere o status local seguro para indicar a configuração privada sem expor segredos.";
+
+  container.innerHTML = `
+    <div>
+      <span class="runtime-kicker">Fonte privada</span>
+      <strong>Google Sheets</strong>
+      <p>${description}</p>
+    </div>
+    <div class="runtime-status-side">
+      <span class="runtime-badge ${badgeClass}">${statusLabel}</span>
+      <small>Segredos fora do GitHub</small>
+    </div>
+  `;
 }
