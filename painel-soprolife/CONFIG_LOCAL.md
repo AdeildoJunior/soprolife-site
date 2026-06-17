@@ -41,3 +41,23 @@ Por isso, dados privados devem ficar fora do repositório e fora da pasta servid
 - laudo;
 - resultado de exame;
 - dado clínico identificável.
+
+## Importação segura do Resumo Dashboard por CSV
+
+Para atualizar os indicadores locais do painel a partir da planilha privada:
+
+1. No Google Sheets, abra a aba **Resumo Dashboard**.
+2. Exporte somente essa aba como CSV.
+3. Salve o arquivo em:
+
+~/.config/soprolife/painel/resumo-dashboard.csv
+
+4. Rode:
+
+painel-soprolife/scripts/import-summary-csv.sh
+
+O script aceita somente indicadores agregados permitidos e bloqueia palavras associadas a dados sensíveis, como CPF, telefone, paciente, laudo e pedido médico.
+
+O arquivo final usado pelo painel continua sendo local e ignorado pelo Git:
+
+painel-soprolife/data/resumo-dashboard.local.json
