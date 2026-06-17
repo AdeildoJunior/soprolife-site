@@ -1,3 +1,4 @@
 # Status local gerado a partir de configuração privada externa.
 # Nunca commitar este arquivo.
 runtime-status.local.json
+resumo-dashboard.local.json

@@ -8,7 +8,8 @@ const state = {
   documentos: [],
   financeiro: null,
   automacoes: null,
-  runtimeStatus: null
+  runtimeStatus: null,
+  dashboardSummary: null
 };
 
 const slug = (text) =>
@@ -89,6 +90,7 @@ async function init() {
     state.automacoes = automacoes;
 
     state.runtimeStatus = await loadOptionalJson("./data/runtime-status.local.json");
+    state.dashboardSummary = await loadOptionalJson("./data/resumo-dashboard.local.json");
 
     renderCards();
     renderTasks();
@@ -120,7 +122,9 @@ async function init() {
 
 function renderCards() {
   const grid = document.querySelector("#cardsGrid");
-  grid.innerHTML = state.resumo.cards.map((card) => `
+  const cards = getDashboardCards();
+
+  grid.innerHTML = cards.map((card) => `
     <article class="metric-card">
       <div>
         <span>${card.label}</span>
@@ -129,6 +133,42 @@ function renderCards() {
       <div class="variation ${card.type === "neutral" ? "neutral" : ""}">${card.variation}</div>
     </article>
   `).join("");
+}
+
+function getDashboardCards() {
+  const localSummary = state.dashboardSummary;
+
+  const isSafeLocalSummary = Boolean(
+    localSummary?.source?.safeToDisplay &&
+    localSummary?.source?.containsPersonalData === false &&
+    localSummary?.source?.containsHealthData === false &&
+    Array.isArray(localSummary?.cards)
+  );
+
+  if (!isSafeLocalSummary) {
+    return state.resumo.cards;
+  }
+
+  return localSummary.cards.map((card) => ({
+    label: card.label,
+    value: formatDashboardValue(card.key, card.value),
+    variation: "Local seguro",
+    type: "neutral"
+  }));
+}
+
+function formatDashboardValue(key, value) {
+  const currencyKeys = new Set(["receitaPrevista", "receitaRecebida"]);
+
+  if (currencyKeys.has(key)) {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      maximumFractionDigits: 0
+    }).format(Number(value) || 0);
+  }
+
+  return value;
 }
 
 function renderTasks() {

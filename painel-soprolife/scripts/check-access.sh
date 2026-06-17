@@ -83,3 +83,92 @@ PY
 else
   echo "OK: runtime-status.local.json não existe; painel deve tratar como não configurado."
 fi
+
+echo
+echo "Verificando resumo local seguro..."
+
+if [ -f painel-soprolife/data/resumo-dashboard.local.json ]; then
+  python3 - <<'PY'
+from pathlib import Path
+import json
+import sys
+
+path = Path("painel-soprolife/data/resumo-dashboard.local.json")
+data = json.loads(path.read_text(encoding="utf-8"))
+
+source = data.get("source", {})
+cards = data.get("cards", [])
+
+if source.get("safeToDisplay") is not True:
+    print("ERRO: resumo-dashboard.local.json não está marcado como seguro.")
+    sys.exit(1)
+
+if source.get("containsPersonalData") is not False:
+    print("ERRO: resumo-dashboard.local.json pode conter dado pessoal.")
+    sys.exit(1)
+
+if source.get("containsHealthData") is not False:
+    print("ERRO: resumo-dashboard.local.json pode conter dado clínico.")
+    sys.exit(1)
+
+if not isinstance(cards, list):
+    print("ERRO: cards precisa ser lista.")
+    sys.exit(1)
+
+allowed_card_keys = {
+    "totalLeads",
+    "leadsNovos",
+    "leadsAgendados",
+    "leadsConcluidos",
+    "clinicasCadastradas",
+    "tarefasPendentes",
+    "receitaPrevista",
+    "receitaRecebida",
+    "conteudosPlanejados",
+    "eventosAgendados",
+}
+
+for card in cards:
+    if not isinstance(card, dict):
+        print("ERRO: card inválido no resumo local.")
+        sys.exit(1)
+
+    if set(card.keys()) - {"key", "label", "value"}:
+        print("ERRO: card do resumo local contém campos não permitidos.")
+        sys.exit(1)
+
+    if card.get("key") not in allowed_card_keys:
+        print("ERRO: card do resumo local contém chave não permitida.")
+        sys.exit(1)
+
+text = json.dumps(data, ensure_ascii=False).lower()
+for forbidden in [
+    "cpf",
+    "telefone",
+    "whatsapp",
+    "paciente",
+    "pedido médico",
+    "pedido medico",
+    "laudo",
+    "diagnóstico",
+    "diagnostico",
+    "endereço",
+    "endereco",
+    "https://docs.google.com",
+    "/spreadsheets/d/",
+    "spreadsheet_id",
+    "access_token",
+    "refresh_token",
+    "private_key",
+    "client_secret",
+    "client_email"
+]:
+    if forbidden in text:
+        print("ERRO: possível dado sensível encontrado em resumo-dashboard.local.json.")
+        sys.exit(1)
+
+print("OK: resumo-dashboard.local.json contém apenas indicadores agregados seguros.")
+PY
+else
+  echo "OK: resumo-dashboard.local.json não existe; painel usará resumo.json padrão."
+fi
