@@ -1,0 +1,5 @@
+{
+  "spreadsheet_id": "SEU_ID_DE_PLANILHA_AQUI",
+  "sheet_name": "Resumo Dashboard",
+  "service_account_file": "~/.config/soprolife/painel/service-account.json"
+}

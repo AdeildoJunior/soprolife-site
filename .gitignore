@@ -29,6 +29,10 @@ index.backup.*.html
 index.html.bak
 index.html.bak-*
 
+# artefatos Python
+**/__pycache__/
+*.pyc
+
 # SoproLife Painel - dados privados locais
 painel-soprolife/data-private/
 painel-soprolife/**/*.local.json
