@@ -1297,3 +1297,42 @@ td { font-size: .94rem; }
     min-width: 0;
   }
 }
+
+
+/* Indicação segura de atualização dos dados locais */
+.data-freshness {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 13px 16px;
+  border: 1px solid rgba(29, 183, 166, .18);
+  border-radius: 18px;
+  background: #f8fcfb;
+  color: var(--muted);
+  box-shadow: 0 10px 26px rgba(15, 48, 87, .06);
+}
+
+.data-freshness span {
+  font-size: .84rem;
+  font-weight: 800;
+  color: var(--teal);
+}
+
+.data-freshness strong {
+  color: var(--navy);
+  font-size: .92rem;
+}
+
+.data-freshness small {
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+@media (max-width: 820px) {
+  .data-freshness {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

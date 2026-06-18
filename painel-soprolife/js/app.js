@@ -93,6 +93,7 @@ async function init() {
     state.dashboardSummary = await loadOptionalJson("./data/resumo-dashboard.local.json");
 
     renderCards();
+    renderDataFreshness();
     renderTasks();
     renderCrmStats();
     renderCrmFunnelVisual();
@@ -751,4 +752,51 @@ function renderRuntimeStatus() {
       <small>Segredos fora do GitHub</small>
     </div>
   `;
+}
+
+
+function renderDataFreshness() {
+  const container = document.querySelector("#dataFreshness");
+  if (!container) return;
+
+  const localSummary = state.dashboardSummary;
+  const source = localSummary?.source;
+
+  const isSafeLocalSummary = Boolean(
+    source?.safeToDisplay &&
+    source?.containsPersonalData === false &&
+    source?.containsHealthData === false
+  );
+
+  if (!isSafeLocalSummary) {
+    container.innerHTML = `
+      <span>Dados padrão do painel</span>
+      <strong>Fonte local segura não carregada neste ambiente</strong>
+      <small>O painel continua funcionando com dados fictícios/versionados.</small>
+    `;
+    return;
+  }
+
+  const generatedAt = formatDateTime(source.generatedAt);
+
+  container.innerHTML = `
+    <span>Dados locais atualizados em: ${generatedAt}</span>
+    <strong>Fonte: resumo seguro local</strong>
+    <small>Sem dados pessoais, clínicos, CPF, telefone, pedido médico ou laudo.</small>
+  `;
+}
+
+function formatDateTime(value) {
+  if (!value) return "data não informada";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "data inválida";
+  }
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short"
+  }).format(date);
 }
