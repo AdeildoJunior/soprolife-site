@@ -1,34 +1,44 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Verificando portas relevantes abertas..."
-echo
+# ---------------------------------------------------------------------------
+# check-access.sh — Verifica segurança do Painel SoproLife antes de compartilhar
+# ---------------------------------------------------------------------------
 
-ss -tulpen | grep -E '(:22|:80|:443|:8765|python|tailscale|LISTEN)' || true
+check_ports() {
+  echo "Verificando portas relevantes abertas..."
+  echo
+  ss -tulpen | grep -E '(:22|:80|:443|:8765|python|tailscale|LISTEN)' || true
+  echo
+  echo "Interpretação rápida:"
+  echo "- :8765 com python3 = painel SoproLife"
+  echo "- :22 = SSH; se aparecer, atenção antes de compartilhar"
+  echo "- :80/:443 = servidor web comum; conferir antes de compartilhar"
+  echo "- tailscaled = serviço normal do Tailscale"
+}
 
-echo
-echo "Interpretação rápida:"
-echo "- :8765 com python3 = painel SoproLife"
-echo "- :22 = SSH; se aparecer, atenção antes de compartilhar"
-echo "- :80/:443 = servidor web comum; conferir antes de compartilhar"
-echo "- tailscaled = serviço normal do Tailscale"
+check_private_files() {
+  echo
+  echo "Verificando arquivos privados dentro da pasta servida..."
 
+  if find painel-soprolife/data-private -type f ! -name 'README.local.txt' 2>/dev/null | grep -q .; then
+    echo "ATENÇÃO: existem arquivos privados dentro de painel-soprolife/data-private/."
+    echo "Antes de compartilhar via Tailscale, mova segredos para ~/.config/soprolife/painel/."
+    find painel-soprolife/data-private -type f ! -name 'README.local.txt' 2>/dev/null
+  else
+    echo "OK: nenhum arquivo privado sensível encontrado em painel-soprolife/data-private/."
+  fi
+}
 
-echo
-echo "Verificando arquivos privados dentro da pasta servida..."
+validate_runtime_status() {
+  echo
+  echo "Verificando status local seguro..."
 
-if find painel-soprolife/data-private -type f ! -name 'README.local.txt' 2>/dev/null | grep -q .; then
-  echo "ATENÇÃO: existem arquivos privados dentro de painel-soprolife/data-private/."
-  echo "Antes de compartilhar via Tailscale, mova segredos para ~/.config/soprolife/painel/."
-  find painel-soprolife/data-private -type f ! -name 'README.local.txt' 2>/dev/null
-else
-  echo "OK: nenhum arquivo privado sensível encontrado em painel-soprolife/data-private/."
-fi
+  if [ ! -f painel-soprolife/data/runtime-status.local.json ]; then
+    echo "OK: runtime-status.local.json não existe; painel deve tratar como não configurado."
+    return
+  fi
 
-echo
-echo "Verificando status local seguro..."
-
-if [ -f painel-soprolife/data/runtime-status.local.json ]; then
   python3 - <<'PY'
 from pathlib import Path
 import json
@@ -80,14 +90,17 @@ for forbidden in [
 
 print("OK: runtime-status.local.json contém apenas metadados seguros.")
 PY
-else
-  echo "OK: runtime-status.local.json não existe; painel deve tratar como não configurado."
-fi
+}
 
-echo
-echo "Verificando resumo local seguro..."
+validate_dashboard_summary() {
+  echo
+  echo "Verificando resumo local seguro..."
 
-if [ -f painel-soprolife/data/resumo-dashboard.local.json ]; then
+  if [ ! -f painel-soprolife/data/resumo-dashboard.local.json ]; then
+    echo "OK: resumo-dashboard.local.json não existe; painel usará resumo.json padrão."
+    return
+  fi
+
   python3 - <<'PY'
 from pathlib import Path
 import json
@@ -169,6 +182,13 @@ for forbidden in [
 
 print("OK: resumo-dashboard.local.json contém apenas indicadores agregados seguros.")
 PY
-else
-  echo "OK: resumo-dashboard.local.json não existe; painel usará resumo.json padrão."
-fi
+}
+
+main() {
+  check_ports
+  check_private_files
+  validate_runtime_status
+  validate_dashboard_summary
+}
+
+main
