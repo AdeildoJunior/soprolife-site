@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "soprolife/painel/leads",
+  "title": "Leads — Painel SoproLife",
+  "description": "Contrato de dados seguros de leads. Proibido: telefone real, nome completo de paciente, CPF, pedido médico. Permitido: origem, serviço, etapa, responsável, observação anônima.",
+  "type": "object",
+  "required": ["source", "leads"],
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "type": "object",
+      "required": ["type", "safeToDisplay", "containsPersonalData", "containsHealthData", "generatedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "safeToDisplay": { "type": "boolean", "const": true },
+        "containsPersonalData": { "type": "boolean", "const": false },
+        "containsHealthData": { "type": "boolean", "const": false },
+        "generatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "leads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["lead_id", "etapa"],
+        "additionalProperties": false,
+        "properties": {
+          "lead_id": { "type": "string" },
+          "data_entrada": { "type": "string" },
+          "origem": { "type": "string" },
+          "canal": { "type": "string" },
+          "servico_interesse": { "type": "string" },
+          "etapa": { "type": "string" },
+          "responsavel": { "type": "string" },
+          "proxima_acao": { "type": "string" },
+          "data_proxima_acao": { "type": "string" },
+          "observacao_anonima": { "type": "string" }
+        }
+      }
+    }
+  }
+}

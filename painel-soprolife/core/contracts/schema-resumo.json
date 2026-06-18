@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "soprolife/painel/resumo",
+  "title": "Resumo do Painel SoproLife",
+  "description": "Contrato de dados seguros do resumo geral. Somente indicadores agregados permitidos. Nenhum dado identificável de paciente.",
+  "type": "object",
+  "required": ["source", "cards"],
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "type": "object",
+      "required": ["type", "safeToDisplay", "containsPersonalData", "containsHealthData", "generatedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "safeToDisplay": { "type": "boolean", "const": true },
+        "containsPersonalData": { "type": "boolean", "const": false },
+        "containsHealthData": { "type": "boolean", "const": false },
+        "generatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "label", "value"],
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string",
+            "enum": [
+              "totalLeads",
+              "leadsNovos",
+              "leadsAgendados",
+              "leadsConcluidos",
+              "clinicasCadastradas",
+              "tarefasPendentes",
+              "receitaPrevista",
+              "receitaRecebida",
+              "conteudosPlanejados",
+              "eventosAgendados"
+            ]
+          },
+          "label": { "type": "string" },
+          "value": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

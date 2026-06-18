@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "soprolife/painel/crm-clinicas",
+  "title": "CRM Clínicas — Painel SoproLife",
+  "description": "Contrato de dados seguros do CRM de clínicas. Dados comerciais de clínicas são permitidos. Dados pessoais de pacientes são proibidos.",
+  "type": "object",
+  "required": ["source", "clinicas"],
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "type": "object",
+      "required": ["type", "safeToDisplay", "containsPersonalData", "containsHealthData", "generatedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "safeToDisplay": { "type": "boolean", "const": true },
+        "containsPersonalData": { "type": "boolean", "const": false },
+        "containsHealthData": { "type": "boolean", "const": false },
+        "generatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "clinicas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["clinica_id", "nome_clinica", "etapa"],
+        "additionalProperties": false,
+        "properties": {
+          "clinica_id": { "type": "string" },
+          "nome_clinica": { "type": "string" },
+          "bairro": { "type": "string" },
+          "regiao": { "type": "string" },
+          "tipo_clinica": { "type": "string" },
+          "etapa": { "type": "string" },
+          "ultima_interacao": { "type": "string" },
+          "proxima_acao": { "type": "string" },
+          "responsavel": { "type": "string" },
+          "prioridade": { "type": "string" },
+          "observacao": { "type": "string" }
+        }
+      }
+    }
+  }
+}
