@@ -17,6 +17,40 @@ check_ports() {
   echo "- tailscaled = serviço normal do Tailscale"
 }
 
+check_extra_network_services() {
+  echo
+  echo "Verificando serviços extras visíveis na rede..."
+
+  local ss_output
+  ss_output=$(ss -tulpen 2>/dev/null) || true
+
+  local found=0
+
+  for pattern in "wsdd" "passim" ":3702" ":27500"; do
+    if echo "$ss_output" | grep -q "$pattern"; then
+      if [ "$found" -eq 0 ]; then
+        echo "ATENÇÃO: serviços extras detectados (não fazem parte do painel SoproLife):"
+        found=1
+      fi
+      echo "  - padrão encontrado: $pattern"
+    fi
+  done
+
+  if [ "$found" -eq 0 ]; then
+    echo "OK: nenhum serviço extra relevante detectado."
+  else
+    echo
+    echo "Esses serviços não são necessariamente um problema, mas merecem"
+    echo "revisão antes de compartilhar o painel via Tailscale."
+    echo
+    echo "Referência:"
+    echo "  wsdd    = Web Services Dynamic Discovery (descoberta de dispositivos Windows/Samba)"
+    echo "  passim  = cache de pacotes local do sistema (Fedora/systemd)"
+    echo "  :3702   = porta UDP do protocolo WS-Discovery"
+    echo "  :27500  = porta usada por alguns serviços de descoberta/multicast"
+  fi
+}
+
 check_private_files() {
   echo
   echo "Verificando arquivos privados dentro da pasta servida..."
@@ -186,6 +220,7 @@ PY
 
 main() {
   check_ports
+  check_extra_network_services
   check_private_files
   validate_runtime_status
   validate_dashboard_summary
