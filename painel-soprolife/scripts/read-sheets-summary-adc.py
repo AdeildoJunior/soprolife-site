@@ -31,20 +31,8 @@ _OUT_PATH = Path("~/.config/soprolife/painel/resumo-dashboard.json").expanduser(
 
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 
-ALLOWED_KEYS = {
-    "totalLeads",
-    "leadsNovos",
-    "leadsAgendados",
-    "leadsConcluidos",
-    "clinicasCadastradas",
-    "tarefasPendentes",
-    "receitaPrevista",
-    "receitaRecebida",
-    "conteudosPlanejados",
-    "eventosAgendados",
-}
-
-ORDERED_KEYS = [
+# Indicadores antigos — sempre incluídos no JSON (0 se ausentes na planilha)
+_OLD_KEYS = [
     "totalLeads",
     "leadsNovos",
     "leadsAgendados",
@@ -56,6 +44,20 @@ ORDERED_KEYS = [
     "conteudosPlanejados",
     "eventosAgendados",
 ]
+
+# Indicadores de atendimento/CRM — incluídos no JSON somente se presentes na planilha
+_NEW_KEYS = [
+    "pacientesEmAcompanhamento",
+    "examesEspirometriaRealizados",
+    "teleconsultasRealizadas",
+    "followupsPendentes",
+    "lembretesWhatsAppPendentes",
+    "recorrenciasAtivas",
+    "consultasPrevistas",
+]
+
+ALLOWED_KEYS = set(_OLD_KEYS) | set(_NEW_KEYS)
+ORDERED_KEYS = _OLD_KEYS + _NEW_KEYS
 
 FORBIDDEN_PATTERNS = [
     "cpf",
@@ -269,13 +271,15 @@ def _parse_indicators(rows: list) -> dict[str, float]:
         if key_raw.lower() in _HEADER_SYNONYMS:
             continue  # linha de cabeçalho — ignorar
 
-        forbidden = _check_forbidden(key_raw)
-        if forbidden:
-            print(f"ERRO: palavra proibida '{forbidden}' detectada na coluna A, linha {i + 1}.")
-            sys.exit(1)
-
         if key_raw not in ALLOWED_KEYS:
-            continue  # chave desconhecida — ignorar silenciosamente
+            # Chave desconhecida: verificar palavras proibidas antes de ignorar.
+            # Chaves em ALLOWED_KEYS são indicadores agregados pré-aprovados e
+            # bypassam essa verificação mesmo que contenham palavras como "paciente".
+            forbidden = _check_forbidden(key_raw)
+            if forbidden:
+                print(f"ERRO: palavra proibida '{forbidden}' detectada na coluna A, linha {i + 1}.")
+                sys.exit(1)
+            continue
 
         if len(row) < 3:
             print(f"AVISO: chave '{key_raw}' na linha {i + 1} não tem coluna de valor (C); ignorada.")
@@ -364,19 +368,25 @@ def main() -> int:
         print("Use --show-structure para inspecionar a estrutura atual da aba.")
         return 1
 
-    missing = ALLOWED_KEYS - set(summary.keys())
+    missing_old = set(_OLD_KEYS) - set(summary.keys())
+    missing_new = set(_NEW_KEYS) - set(summary.keys())
     print(f"valid_indicators: {len(summary)}")
 
-    if missing:
-        print(f"AVISO: indicadores ausentes na planilha: {', '.join(sorted(missing))}")
+    if missing_old:
+        print(f"AVISO: indicadores ausentes na planilha: {', '.join(sorted(missing_old))}")
         print("  Indicadores ausentes serão preenchidos com 0.")
-        for key in missing:
+        for key in missing_old:
             summary[key] = 0
+
+    if missing_new:
+        print(f"AVISO: indicadores de atendimento não encontrados: {', '.join(sorted(missing_new))}")
+        print("  Serão omitidos do JSON — adicione à aba Resumo Dashboard para ativá-los.")
 
     print()
     print("Indicadores lidos:")
     for key in ORDERED_KEYS:
-        print(f"  {key}: {_as_display(summary.get(key, 0))}")
+        if key in summary:
+            print(f"  {key}: {_as_display(summary[key])}")
 
     print()
     print("Validação concluída. Nenhum dado sensível detectado.")
@@ -386,8 +396,11 @@ def main() -> int:
         print("next_step: use --write para gravar em ~/.config/soprolife/painel/resumo-dashboard.json")
         return 0
 
-    # Modo write: grava JSON privado fora do repositório
-    output = {key: _as_display(summary.get(key, 0)) for key in ORDERED_KEYS}
+    # Modo write: indicadores antigos sempre presentes; novos somente se lidos da planilha
+    output = {key: _as_display(summary.get(key, 0)) for key in _OLD_KEYS}
+    for key in _NEW_KEYS:
+        if key in summary:
+            output[key] = _as_display(summary[key])
 
     _OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     _OUT_PATH.write_text(json.dumps(output, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

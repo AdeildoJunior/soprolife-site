@@ -34,7 +34,7 @@ pip install -r painel-soprolife/requirements-google.txt
 
 ```bash
 gcloud auth application-default login \
-    --scopes=https://www.googleapis.com/auth/spreadsheets.readonly
+    --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/spreadsheets.readonly
 ```
 
 Isso grava credenciais em `~/.config/gcloud/application_default_credentials.json`.
@@ -122,10 +122,28 @@ painel-soprolife/scripts/update-local-data.sh
 | receitaRecebida | Receita recebida | 9500 |
 | conteudosPlanejados | Conteúdos planejados | 6 |
 | eventosAgendados | Eventos agendados | 3 |
+| pacientesEmAcompanhamento | Pacientes em acompanhamento | 18 |
+| examesEspirometriaRealizados | Espirometrias realizadas | 34 |
+| teleconsultasRealizadas | Teleconsultas realizadas | 12 |
+| followupsPendentes | Follow-ups pendentes | 5 |
+| lembretesWhatsAppPendentes | Lembretes WhatsApp pendentes | 3 |
+| recorrenciasAtivas | Recorrências ativas | 7 |
+| consultasPrevistas | Consultas previstas | 9 |
 
 A linha de cabeçalho (`key`, `label`, `value`) é ignorada automaticamente.
 Chaves desconhecidas na coluna A são ignoradas sem erro.
 Se nenhuma chave conhecida for encontrada, o script falha com código 1.
+
+### Indicadores obrigatórios vs. opcionais
+
+Os 10 primeiros indicadores (de `totalLeads` a `eventosAgendados`) são **obrigatórios**:
+se ausentes na planilha, o JSON recebe valor `0` e o card sempre aparece no painel.
+
+Os 7 indicadores de atendimento/CRM (de `pacientesEmAcompanhamento` a `consultasPrevistas`)
+são **opcionais**: só aparecem no JSON e no painel se a aba `Resumo Dashboard` os contiver.
+São indicadores **agregados** — nunca contêm nomes, telefones, CPF ou dado clínico individual.
+Os valores são totalizados pelo Apps Script nas abas privadas (CRM Pacientes, CRM Espirometria,
+CRM Consultas, Follow-up WhatsApp) antes de chegarem à aba Resumo Dashboard.
 
 ## Segurança
 
