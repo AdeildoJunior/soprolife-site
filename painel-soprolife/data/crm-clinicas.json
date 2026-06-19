@@ -2,46 +2,46 @@
   {
     "clinica": "Clínica Exemplo Barra",
     "bairro": "Barra da Tijuca",
-    "contato": "Coordenação",
-    "canal": "WhatsApp",
-    "status": "Respondeu",
-    "ultimaAcao": "15/06/2026",
-    "proximaAcao": "Enviar proposta de agenda-piloto"
+    "tipo": "Clínica parceira",
+    "etapa": "Em conversa",
+    "prioridade": "Alta",
+    "proximaAcao": "Enviar proposta de agenda-piloto",
+    "responsavel": "Comercial"
   },
   {
     "clinica": "Centro Médico Exemplo Recreio",
     "bairro": "Recreio",
-    "contato": "Recepção",
-    "canal": "Instagram",
-    "status": "Abordada",
-    "ultimaAcao": "15/06/2026",
-    "proximaAcao": "Tentar telefone alternativo"
+    "tipo": "Clínica parceira",
+    "etapa": "Primeiro contato",
+    "prioridade": "Média",
+    "proximaAcao": "Fazer segundo contato",
+    "responsavel": "Comercial"
   },
   {
     "clinica": "Clínica Exemplo Freguesia",
     "bairro": "Jacarepaguá",
-    "contato": "Administrativo",
-    "canal": "Site",
-    "status": "Não respondeu",
-    "ultimaAcao": "14/06/2026",
-    "proximaAcao": "Não insistir sem novo gancho"
+    "tipo": "Clínica parceira",
+    "etapa": "Não abordado",
+    "prioridade": "Baixa",
+    "proximaAcao": "Mapear contato e abordar",
+    "responsavel": "Comercial"
   },
   {
     "clinica": "Consultório Exemplo Zona Norte",
     "bairro": "Penha",
-    "contato": "Médico responsável",
-    "canal": "WhatsApp",
-    "status": "Reunião",
-    "ultimaAcao": "13/06/2026",
-    "proximaAcao": "Marcar conversa rápida"
+    "tipo": "Consultório médico",
+    "etapa": "Em conversa",
+    "prioridade": "Alta",
+    "proximaAcao": "Agendar reunião de alinhamento",
+    "responsavel": "Comercial"
   },
   {
     "clinica": "Empresa Exemplo PCMSO",
     "bairro": "Centro",
-    "contato": "RH",
-    "canal": "Indicação",
-    "status": "Proposta",
-    "ultimaAcao": "12/06/2026",
-    "proximaAcao": "Enviar modelo de campanha respiratória"
+    "tipo": "PCMSO",
+    "etapa": "Proposta enviada",
+    "prioridade": "Alta",
+    "proximaAcao": "Follow-up após proposta enviada",
+    "responsavel": "Comercial"
   }
 ]

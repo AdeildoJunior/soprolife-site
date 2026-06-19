@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Painel SoproLife</title>
   <meta name="robots" content="noindex,nofollow" />
-  <link rel="stylesheet" href="./css/style.css?v=20260617213330" />
+  <link rel="stylesheet" href="./css/style.css?v=2026061904" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -23,7 +23,7 @@
 
       <nav class="nav">
         <button class="nav-item active" data-section="overview">Painel Geral</button>
-        <button class="nav-item" data-section="crm">CRM Clínicas</button>
+        <button class="nav-item" data-section="crm">CRM</button>
         <button class="nav-item" data-section="leads">Leads e Agendamentos</button>
         <button class="nav-item" data-section="marketing">Marketing & SEO</button>
         <button class="nav-item disabled">Redes Sociais</button>
@@ -105,48 +105,7 @@
       </section>
 
       <section id="crm" class="section">
-        <div class="section-title">
-          <div>
-            <p class="eyebrow">Comercial B2B</p>
-            <h2>CRM de clínicas e parceiros</h2>
-          </div>
-          <select id="crmFilter">
-            <option value="Todos">Todos os status</option>
-            <option value="Abordada">Abordada</option>
-            <option value="Respondeu">Respondeu</option>
-            <option value="Reunião">Reunião</option>
-            <option value="Proposta">Proposta</option>
-            <option value="Não respondeu">Não respondeu</option>
-          </select>
-        </div>
-
-        <div id="crmStats" class="crm-stats"></div>
-
-        <article class="panel crm-funnel-panel">
-          <div class="panel-header">
-            <h3>Funil comercial B2B</h3>
-            <span>Da abordagem ao piloto</span>
-          </div>
-          <div id="crmFunnelVisual" class="crm-funnel-visual"></div>
-        </article>
-
-        <article class="panel">
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Clínica</th>
-                  <th>Bairro</th>
-                  <th>Canal</th>
-                  <th>Status</th>
-                  <th>Última ação</th>
-                  <th>Próxima ação</th>
-                </tr>
-              </thead>
-              <tbody id="crmTable"></tbody>
-            </table>
-          </div>
-        </article>
+        <div id="crmView"></div>
       </section>
 
       <section id="leads" class="section">
@@ -399,6 +358,6 @@
     </main>
   </div>
 
-  <script src="./js/app.js?v=20260617213330"></script>
+  <script src="./js/app.js?v=2026061904"></script>
 </body>
 </html>

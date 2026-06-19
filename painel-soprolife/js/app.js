@@ -9,7 +9,8 @@ const state = {
   financeiro: null,
   automacoes: null,
   runtimeStatus: null,
-  dashboardSummary: null
+  dashboardSummary: null,
+  crmView: "hub"
 };
 
 const slug = (text) =>
@@ -95,9 +96,7 @@ async function init() {
     renderCards();
     renderDataFreshness();
     renderTasks();
-    renderCrmStats();
-    renderCrmFunnelVisual();
-    renderCrmTable();
+    renderCrmView();
     renderLeadStats();
     renderLeadPipeline();
     renderLeadsTable();
@@ -270,17 +269,24 @@ function renderTasks() {
 }
 
 
-function countCrmStatus(status) {
-  return state.crm.filter((item) => item.status === status).length;
+function countCrmEtapa(etapa) {
+  return state.crm.filter((item) => item.etapa === etapa).length;
+}
+
+function countCrmPrioridade(prioridade) {
+  return state.crm.filter((item) => item.prioridade === prioridade).length;
 }
 
 function renderCrmStats() {
+  const emProspeccao = state.crm.filter(
+    (item) => item.etapa !== "Parceiro ativo" && item.etapa !== "Não abordado"
+  ).length;
+
   const stats = [
-    { label: "Total no CRM", value: state.crm.length },
-    { label: "Responderam", value: countCrmStatus("Respondeu") },
-    { label: "Reuniões", value: countCrmStatus("Reunião") },
-    { label: "Propostas", value: countCrmStatus("Proposta") },
-    { label: "Sem resposta", value: countCrmStatus("Não respondeu") }
+    { label: "Clínicas cadastradas", value: state.crm.length, hint: "base total" },
+    { label: "Em prospecção", value: emProspeccao, hint: "ativas no funil" },
+    { label: "Prioridade alta", value: countCrmPrioridade("Alta"), hint: "foco imediato" },
+    { label: "Com ação definida", value: state.crm.filter((c) => c.proximaAcao).length, hint: "próximas ações" }
   ];
 
   const container = document.querySelector("#crmStats");
@@ -290,17 +296,18 @@ function renderCrmStats() {
     <article class="crm-stat-card">
       <span>${item.label}</span>
       <strong>${item.value}</strong>
+      ${item.hint ? `<small>${item.hint}</small>` : ""}
     </article>
   `).join("");
 }
 
 function renderCrmFunnelVisual() {
   const steps = [
-    { label: "Abordadas", value: state.crm.length, hint: "base trabalhada" },
-    { label: "Responderam", value: countCrmStatus("Respondeu"), hint: "abriram conversa" },
-    { label: "Reunião", value: countCrmStatus("Reunião"), hint: "próximo contato" },
-    { label: "Proposta", value: countCrmStatus("Proposta"), hint: "em negociação" },
-    { label: "Piloto", value: 1, hint: "meta inicial" }
+    { label: "Não abordado", value: countCrmEtapa("Não abordado"), hint: "sem contato" },
+    { label: "Primeiro contato", value: countCrmEtapa("Primeiro contato"), hint: "abordagem feita" },
+    { label: "Em conversa", value: countCrmEtapa("Em conversa"), hint: "diálogo ativo" },
+    { label: "Proposta enviada", value: countCrmEtapa("Proposta enviada"), hint: "aguardando retorno" },
+    { label: "Parceiro ativo", value: countCrmEtapa("Parceiro ativo"), hint: "meta alcançada" }
   ];
 
   const max = Math.max(...steps.map((step) => step.value), 1);
@@ -317,6 +324,289 @@ function renderCrmFunnelVisual() {
       </div>
     `;
   }).join("");
+}
+
+
+function getCrmCardValue(key) {
+  const cards = state.dashboardSummary?.cards;
+  if (!Array.isArray(cards)) return "—";
+  const card = cards.find((c) => c.key === key);
+  return card != null ? card.value : "—";
+}
+
+function crmModuleCard({ icon, title, subtitle, view, stats }) {
+  const statsHtml = stats.length > 0
+    ? `<div class="crm-module-stats">${stats.map((s) => `
+        <div class="crm-module-stat">
+          <strong>${s.value}</strong>
+          <span>${s.label}</span>
+        </div>
+      `).join("")}</div>`
+    : `<div class="crm-module-stats crm-module-stats-empty"><span>Em breve</span></div>`;
+
+  return `
+    <article class="crm-module-card" data-crm-view="${view}" tabindex="0" role="button">
+      <div class="crm-module-icon">${icon}</div>
+      <h3 class="crm-module-title">${title}</h3>
+      <p class="crm-module-subtitle">${subtitle}</p>
+      ${statsHtml}
+      <div class="crm-module-cta">Ver detalhes →</div>
+    </article>
+  `;
+}
+
+function renderCrmView() {
+  const container = document.querySelector("#crmView");
+  if (!container) return;
+
+  switch (state.crmView) {
+    case "clinicas": renderCrmClinicas(container); break;
+    case "pacientes": renderCrmPacientes(container); break;
+    case "relatorios": renderCrmPlaceholder(container, "relatorios"); break;
+    case "automacoes-crm": renderCrmPlaceholder(container, "automacoes-crm"); break;
+    default: renderCrmHub(container);
+  }
+}
+
+function renderCrmHub(container) {
+  const emProspeccao = state.crm.filter(
+    (item) => item.etapa !== "Parceiro ativo" && item.etapa !== "Não abordado"
+  ).length;
+
+  container.innerHTML = `
+    <div class="crm-hub-header">
+      <p class="eyebrow">Relacionamento</p>
+      <h2>CRM SoproLife</h2>
+      <p class="section-sub">Relacionamento, parcerias, pacientes e recorrência</p>
+    </div>
+    <div class="crm-hub-grid">
+      ${crmModuleCard({
+        icon: "🏥",
+        title: "Clínicas e Parceiros",
+        subtitle: "Prospecção B2B, parcerias e PCMSO",
+        view: "clinicas",
+        stats: [
+          { label: "Cadastradas", value: state.crm.length },
+          { label: "Em prospecção", value: emProspeccao },
+          { label: "Prio. alta", value: countCrmPrioridade("Alta") }
+        ]
+      })}
+      ${crmModuleCard({
+        icon: "🩺",
+        title: "Pacientes",
+        subtitle: "Consultas, espirometrias, recorrência e follow-up",
+        view: "pacientes",
+        stats: [
+          { label: "Acompanhamento", value: getCrmCardValue("pacientesEmAcompanhamento") },
+          { label: "Espirometrias", value: getCrmCardValue("examesEspirometriaRealizados") },
+          { label: "Follow-ups", value: getCrmCardValue("followupsPendentes") }
+        ]
+      })}
+      ${crmModuleCard({
+        icon: "📊",
+        title: "Relatórios CRM",
+        subtitle: "Indicadores consolidados de relacionamento",
+        view: "relatorios",
+        stats: []
+      })}
+      ${crmModuleCard({
+        icon: "⚡",
+        title: "Automações CRM",
+        subtitle: "Lembretes, reativação e tarefas automáticas",
+        view: "automacoes-crm",
+        stats: []
+      })}
+    </div>
+  `;
+
+  container.querySelectorAll("[data-crm-view]").forEach((card) => {
+    card.addEventListener("click", () => {
+      state.crmView = card.dataset.crmView;
+      renderCrmView();
+    });
+    card.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        state.crmView = card.dataset.crmView;
+        renderCrmView();
+      }
+    });
+  });
+}
+
+function renderCrmClinicas(container) {
+  container.innerHTML = `
+    <div class="crm-subview-header">
+      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
+      <div>
+        <p class="eyebrow">Comercial B2B · PCMSO</p>
+        <h2>Clínicas e Parceiros</h2>
+        <p class="section-sub">Prospecção B2B, parcerias e PCMSO</p>
+      </div>
+      <select id="crmFilter" class="crm-filter-select">
+        <option value="Todos">Todas as etapas</option>
+        <option value="Não abordado">Não abordado</option>
+        <option value="Primeiro contato">Primeiro contato</option>
+        <option value="Em conversa">Em conversa</option>
+        <option value="Proposta enviada">Proposta enviada</option>
+        <option value="Parceiro ativo">Parceiro ativo</option>
+      </select>
+    </div>
+
+    <div id="crmStats" class="crm-stats"></div>
+
+    <article class="panel crm-funnel-panel">
+      <div class="panel-header">
+        <h3>Pipeline B2B</h3>
+        <span>Da prospecção à parceria ativa</span>
+      </div>
+      <div id="crmFunnelVisual" class="crm-funnel-visual"></div>
+    </article>
+
+    <article class="panel">
+      <div class="panel-header">
+        <h3>Clínicas e parceiros</h3>
+        <span class="safe-label">Somente dados institucionais</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Clínica</th>
+              <th>Região / Bairro</th>
+              <th>Tipo</th>
+              <th>Etapa</th>
+              <th>Prioridade</th>
+              <th>Próxima ação</th>
+              <th>Responsável</th>
+            </tr>
+          </thead>
+          <tbody id="crmTable"></tbody>
+        </table>
+      </div>
+    </article>
+  `;
+
+  renderCrmStats();
+  renderCrmFunnelVisual();
+  renderCrmTable();
+
+  document.querySelector("#crmBackBtn").addEventListener("click", () => {
+    state.crmView = "hub";
+    renderCrmView();
+  });
+
+  document.querySelector("#crmFilter").addEventListener("change", (e) => {
+    renderCrmTable(e.target.value);
+  });
+}
+
+function renderCrmPacientes(container) {
+  const submodules = [
+    { icon: "📋", title: "Visão geral", subtitle: "Resumo do relacionamento com pacientes" },
+    { icon: "💊", title: "Consultas", subtitle: "Teleconsultas e atendimentos realizados" },
+    { icon: "🫁", title: "Espirometrias", subtitle: "Exames realizados e acompanhamentos" },
+    { icon: "📞", title: "Follow-up de consultas", subtitle: "Retornos e acompanhamentos pós-consulta" },
+    { icon: "📊", title: "Follow-up de espirometrias", subtitle: "Acompanhamento pós-exame" },
+    { icon: "🔄", title: "Recorrências / Reativação", subtitle: "Pacientes para reativar e agendamentos periódicos" }
+  ];
+
+  container.innerHTML = `
+    <div class="crm-subview-header">
+      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
+      <div>
+        <p class="eyebrow">B2C · Clínico</p>
+        <h2>Pacientes</h2>
+        <p class="section-sub">Consultas, espirometrias, recorrência e follow-up</p>
+      </div>
+    </div>
+
+    <div class="crm-stats">
+      <article class="crm-stat-card">
+        <span>Em acompanhamento</span>
+        <strong>${getCrmCardValue("pacientesEmAcompanhamento")}</strong>
+        <small>base ativa</small>
+      </article>
+      <article class="crm-stat-card">
+        <span>Espirometrias realizadas</span>
+        <strong>${getCrmCardValue("examesEspirometriaRealizados")}</strong>
+        <small>acumulado</small>
+      </article>
+      <article class="crm-stat-card">
+        <span>Follow-ups pendentes</span>
+        <strong>${getCrmCardValue("followupsPendentes")}</strong>
+        <small>precisam contato</small>
+      </article>
+      <article class="crm-stat-card">
+        <span>Recorrências ativas</span>
+        <strong>${getCrmCardValue("recorrenciasAtivas")}</strong>
+        <small>periódicos</small>
+      </article>
+    </div>
+
+    <div class="crm-submodule-grid">
+      ${submodules.map((m) => `
+        <article class="crm-submodule-card">
+          <div class="crm-submodule-icon">${m.icon}</div>
+          <div class="crm-submodule-body">
+            <strong>${m.title}</strong>
+            <p>${m.subtitle}</p>
+          </div>
+          <span class="crm-submodule-badge">Em breve</span>
+        </article>
+      `).join("")}
+    </div>
+
+    <div class="crm-safe-note">
+      <span>🔒</span>
+      <p>Esta área exibe somente dados agregados e anônimos. Nenhum nome, telefone, CPF, diagnóstico ou dado clínico identificável é armazenado neste painel.</p>
+    </div>
+  `;
+
+  document.querySelector("#crmBackBtn").addEventListener("click", () => {
+    state.crmView = "hub";
+    renderCrmView();
+  });
+}
+
+function renderCrmPlaceholder(container, area) {
+  const configs = {
+    relatorios: {
+      icon: "📊",
+      title: "Relatórios CRM",
+      subtitle: "Indicadores consolidados de relacionamento",
+      description: "Gráficos e indicadores de desempenho comercial e de relacionamento. Conectará com Google Sheets, CRM e histórico de atendimentos."
+    },
+    "automacoes-crm": {
+      icon: "⚡",
+      title: "Automações CRM",
+      subtitle: "Lembretes, reativação e tarefas automáticas",
+      description: "Configuração de lembretes automáticos, reativação de pacientes inativos e tarefas recorrentes de relacionamento."
+    }
+  };
+
+  const config = configs[area] ?? { icon: "📁", title: area, subtitle: "", description: "Em desenvolvimento." };
+
+  container.innerHTML = `
+    <div class="crm-subview-header">
+      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
+      <div>
+        <p class="eyebrow">CRM SoproLife</p>
+        <h2>${config.title}</h2>
+        <p class="section-sub">${config.subtitle}</p>
+      </div>
+    </div>
+    <div class="crm-placeholder">
+      <div class="crm-placeholder-icon">${config.icon}</div>
+      <h3>${config.title}</h3>
+      <p>${config.description}</p>
+      <span class="badge">Em breve</span>
+    </div>
+  `;
+
+  document.querySelector("#crmBackBtn").addEventListener("click", () => {
+    state.crmView = "hub";
+    renderCrmView();
+  });
 }
 
 
@@ -434,16 +724,26 @@ function renderCrmTable(filter = "Todos") {
   const tbody = document.querySelector("#crmTable");
   const rows = filter === "Todos"
     ? state.crm
-    : state.crm.filter((item) => item.status === filter);
+    : state.crm.filter((item) => item.etapa === filter);
+
+  if (rows.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="crm-empty">Nenhuma clínica cadastrada nesta etapa.</td>
+      </tr>
+    `;
+    return;
+  }
 
   tbody.innerHTML = rows.map((item) => `
     <tr>
-      <td><strong>${item.clinica}</strong><br><span>${item.contato}</span></td>
+      <td><strong>${item.clinica}</strong></td>
       <td>${item.bairro}</td>
-      <td>${item.canal}</td>
-      <td><span class="badge ${slug(item.status)}">${item.status}</span></td>
-      <td>${item.ultimaAcao}</td>
+      <td><span class="crm-tipo">${item.tipo}</span></td>
+      <td><span class="badge ${slug(item.etapa)}">${item.etapa}</span></td>
+      <td><span class="badge prio-${slug(item.prioridade)}">${item.prioridade}</span></td>
       <td>${item.proximaAcao}</td>
+      <td>${item.responsavel}</td>
     </tr>
   `).join("");
 }
@@ -564,11 +864,12 @@ function bindEvents() {
       button.classList.add("active");
       document.querySelector(`#${button.dataset.section}`).classList.add("active");
       resizeCharts();
-    });
-  });
 
-  document.querySelector("#crmFilter").addEventListener("change", (event) => {
-    renderCrmTable(event.target.value);
+      if (button.dataset.section === "crm") {
+        state.crmView = "hub";
+        renderCrmView();
+      }
+    });
   });
 
   document.querySelector("#refreshBtn").addEventListener("click", () => {
