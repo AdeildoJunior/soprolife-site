@@ -121,11 +121,49 @@ async function init() {
   }
 }
 
-function renderCards() {
-  const grid = document.querySelector("#cardsGrid");
-  const cards = getDashboardCards();
+const CARD_GROUPS = [
+  {
+    title: "Comercial",
+    subtitle: "Prospecção e pipeline",
+    icon: "📈",
+    keys: ["totalLeads", "leadsNovos", "leadsAgendados", "leadsConcluidos", "clinicasCadastradas"]
+  },
+  {
+    title: "Atendimentos / CRM",
+    subtitle: "Acompanhamento e recorrência",
+    icon: "🩺",
+    keys: [
+      "pacientesEmAcompanhamento",
+      "examesEspirometriaRealizados",
+      "teleconsultasRealizadas",
+      "followupsPendentes",
+      "lembretesWhatsAppPendentes",
+      "recorrenciasAtivas",
+      "consultasPrevistas"
+    ]
+  },
+  {
+    title: "Financeiro",
+    subtitle: "Receita prevista e realizada",
+    icon: "💰",
+    keys: ["receitaPrevista", "receitaRecebida"]
+  },
+  {
+    title: "Marketing",
+    subtitle: "Produção de conteúdo",
+    icon: "📣",
+    keys: ["conteudosPlanejados"]
+  },
+  {
+    title: "Operação",
+    subtitle: "Tarefas e agenda",
+    icon: "⚙️",
+    keys: ["tarefasPendentes", "eventosAgendados"]
+  }
+];
 
-  grid.innerHTML = cards.map((card) => `
+function renderMetricCard(card) {
+  return `
     <article class="metric-card">
       <div>
         <span>${card.label}</span>
@@ -133,7 +171,52 @@ function renderCards() {
       </div>
       <div class="variation ${card.type === "neutral" ? "neutral" : ""}">${card.variation}</div>
     </article>
-  `).join("");
+  `;
+}
+
+function renderCards() {
+  const container = document.querySelector("#cardsGrid");
+  const cards = getDashboardCards();
+
+  const byKey = new Map(cards.filter((c) => c.key).map((c) => [c.key, c]));
+  const usedKeys = new Set();
+  const sections = [];
+
+  for (const group of CARD_GROUPS) {
+    const groupCards = group.keys
+      .filter((key) => byKey.has(key))
+      .map((key) => {
+        usedKeys.add(key);
+        return byKey.get(key);
+      });
+
+    if (groupCards.length === 0) continue;
+
+    sections.push(`
+      <section class="cards-section">
+        <div class="cards-section-header">
+          ${group.icon ? `<span class="cards-section-icon">${group.icon}</span>` : ""}
+          <h3>${group.title}</h3>
+          ${group.subtitle ? `<span class="cards-section-sub">${group.subtitle}</span>` : ""}
+        </div>
+        <div class="cards-group">${groupCards.map(renderMetricCard).join("")}</div>
+      </section>
+    `);
+  }
+
+  const others = cards.filter((c) => !c.key || !usedKeys.has(c.key));
+  if (others.length > 0) {
+    sections.push(`
+      <section class="cards-section">
+        <div class="cards-section-header">
+          <h3>Outros indicadores</h3>
+        </div>
+        <div class="cards-group">${others.map(renderMetricCard).join("")}</div>
+      </section>
+    `);
+  }
+
+  container.innerHTML = sections.join("");
 }
 
 function getDashboardCards() {
@@ -151,6 +234,7 @@ function getDashboardCards() {
   }
 
   return localSummary.cards.map((card) => ({
+    key: card.key,
     label: card.label,
     value: formatDashboardValue(card.key, card.value),
     variation: "Local seguro",

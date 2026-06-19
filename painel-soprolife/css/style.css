@@ -1299,6 +1299,119 @@ td { font-size: .94rem; }
 }
 
 
+/* Painel Geral — cards agrupados por área */
+.cards-sections {
+  margin-bottom: 18px;
+}
+
+.cards-section {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 14px 16px 16px;
+  box-shadow: 0 4px 18px rgba(15, 34, 57, .05);
+  margin-bottom: 10px;
+}
+
+.cards-section:last-child {
+  margin-bottom: 0;
+}
+
+.cards-section-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 11px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cards-section-icon {
+  font-size: .95rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.cards-section-header h3 {
+  font-size: .72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .10em;
+  color: var(--navy);
+  margin: 0;
+}
+
+.cards-section-sub {
+  color: var(--muted);
+  font-size: .74rem;
+  font-weight: 400;
+  margin-left: 2px;
+}
+
+.cards-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 10px;
+}
+
+/* Cards compactos dentro das seções agrupadas */
+.cards-sections .metric-card {
+  padding: 13px 15px;
+  min-height: 0;
+  justify-content: flex-start;
+  gap: 0;
+  cursor: default;
+  border-radius: 14px;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+.cards-sections .metric-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(15, 34, 57, .14);
+  border-color: rgba(29, 183, 166, .40);
+}
+
+.cards-sections .metric-card > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cards-sections .metric-card span {
+  font-size: .76rem;
+}
+
+.cards-sections .metric-card strong {
+  font-size: 1.45rem;
+  margin-top: 3px;
+  letter-spacing: -.04em;
+}
+
+.cards-sections .metric-card .variation {
+  margin-top: 9px;
+  padding: 3px 8px;
+  font-size: .66rem;
+}
+
+@media (max-width: 960px) {
+  .cards-group {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .cards-group {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .cards-group {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 /* Indicação segura de atualização dos dados locais */
 .data-freshness {
   display: flex;
