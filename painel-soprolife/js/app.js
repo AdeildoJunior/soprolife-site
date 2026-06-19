@@ -759,30 +759,46 @@ function renderDataFreshness() {
   const container = document.querySelector("#dataFreshness");
   if (!container) return;
 
-  const localSummary = state.dashboardSummary;
-  const source = localSummary?.source;
+  const source = state.dashboardSummary?.source;
+  const runtimeGS = state.runtimeStatus?.googleSheets;
 
-  const isSafeLocalSummary = Boolean(
+  const isSafe = Boolean(
     source?.safeToDisplay &&
     source?.containsPersonalData === false &&
     source?.containsHealthData === false
   );
 
-  if (!isSafeLocalSummary) {
+  if (!isSafe) {
     container.innerHTML = `
-      <span>Dados padrão do painel</span>
-      <strong>Fonte local segura não carregada neste ambiente</strong>
-      <small>O painel continua funcionando com dados fictícios/versionados.</small>
+      <div class="freshness-meta">
+        <span>Fonte dos dados</span>
+        <strong>Local seguro</strong>
+        <small>Última atualização: não informada</small>
+      </div>
     `;
     return;
   }
 
-  const generatedAt = formatDateTime(source.generatedAt);
+  const isGoogleSheets = Boolean(
+    runtimeGS?.configured &&
+    runtimeGS?.safeToDisplay &&
+    runtimeGS?.configValid !== false
+  );
+
+  const sourceLabel = isGoogleSheets ? "Google Sheets via ADC" : "Local seguro";
+  const updatedAt = formatDateTime(source.generatedAt);
+
+  const securityBadge = (!source.containsPersonalData && !source.containsHealthData)
+    ? `<span class="freshness-badge">Dados agregados · sem dados pessoais ou clínicos</span>`
+    : "";
 
   container.innerHTML = `
-    <span>Dados locais atualizados em: ${generatedAt}</span>
-    <strong>Fonte: resumo seguro local</strong>
-    <small>Sem dados pessoais, clínicos, CPF, telefone, pedido médico ou laudo.</small>
+    <div class="freshness-meta">
+      <span>Fonte dos dados</span>
+      <strong>${sourceLabel}</strong>
+      <small>Atualizado em: ${updatedAt}</small>
+    </div>
+    ${securityBadge}
   `;
 }
 
