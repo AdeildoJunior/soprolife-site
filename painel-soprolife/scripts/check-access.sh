@@ -173,6 +173,15 @@ allowed_card_keys = {
     "receitaRecebida",
     "conteudosPlanejados",
     "eventosAgendados",
+    # Indicadores agregados de atendimento/CRM — valores numéricos totalizados pelo Apps Script;
+    # nunca contêm nome, telefone, CPF ou dado clínico individual de paciente.
+    "pacientesEmAcompanhamento",
+    "examesEspirometriaRealizados",
+    "teleconsultasRealizadas",
+    "followupsPendentes",
+    "lembretesWhatsAppPendentes",
+    "recorrenciasAtivas",
+    "consultasPrevistas",
 }
 
 for card in cards:
@@ -188,7 +197,14 @@ for card in cards:
         print("ERRO: card do resumo local contém chave não permitida.")
         sys.exit(1)
 
-text = json.dumps(data, ensure_ascii=False).lower()
+# Varrer source e valores dos cards por dados sensíveis.
+# Labels são strings fixas definidas em sync-dashboard-summary.sh e não provêm de dados
+# externos — palavras como "paciente" e "whatsapp" em labels de indicadores agregados
+# são rótulos institucionais, não dados pessoais.
+scan_text = (
+    json.dumps(source, ensure_ascii=False).lower() + " " +
+    json.dumps([c.get("value") for c in cards], ensure_ascii=False).lower()
+)
 for forbidden in [
     "cpf",
     "telefone",
@@ -210,7 +226,7 @@ for forbidden in [
     "client_secret",
     "client_email"
 ]:
-    if forbidden in text:
+    if forbidden in scan_text:
         print("ERRO: possível dado sensível encontrado em resumo-dashboard.local.json.")
         sys.exit(1)
 

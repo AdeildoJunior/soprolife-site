@@ -30,6 +30,13 @@ allowed_keys = {
     "receitaRecebida",
     "conteudosPlanejados",
     "eventosAgendados",
+    "pacientesEmAcompanhamento",
+    "examesEspirometriaRealizados",
+    "teleconsultasRealizadas",
+    "followupsPendentes",
+    "lembretesWhatsAppPendentes",
+    "recorrenciasAtivas",
+    "consultasPrevistas",
 }
 
 labels = {
@@ -43,6 +50,13 @@ labels = {
     "receitaRecebida": "Receita recebida",
     "conteudosPlanejados": "Conteúdos planejados",
     "eventosAgendados": "Eventos agendados",
+    "pacientesEmAcompanhamento": "Pacientes em acompanhamento",
+    "examesEspirometriaRealizados": "Espirometrias realizadas",
+    "teleconsultasRealizadas": "Teleconsultas realizadas",
+    "followupsPendentes": "Follow-ups pendentes",
+    "lembretesWhatsAppPendentes": "Lembretes WhatsApp pendentes",
+    "recorrenciasAtivas": "Recorrências ativas",
+    "consultasPrevistas": "Consultas previstas",
 }
 
 if not source_path.exists():
@@ -69,6 +83,28 @@ for key in allowed_keys:
         sys.exit(1)
     summary[key] = value
 
+_old_card_keys = [
+    "totalLeads",
+    "leadsNovos",
+    "leadsAgendados",
+    "leadsConcluidos",
+    "clinicasCadastradas",
+    "tarefasPendentes",
+    "receitaPrevista",
+    "receitaRecebida",
+    "conteudosPlanejados",
+    "eventosAgendados",
+]
+_new_card_keys = [
+    "pacientesEmAcompanhamento",
+    "examesEspirometriaRealizados",
+    "teleconsultasRealizadas",
+    "followupsPendentes",
+    "lembretesWhatsAppPendentes",
+    "recorrenciasAtivas",
+    "consultasPrevistas",
+]
+
 safe_payload = {
     "source": {
         "type": "local_safe_summary",
@@ -79,18 +115,11 @@ safe_payload = {
     },
     "cards": [
         {"key": key, "label": labels[key], "value": summary[key]}
-        for key in [
-            "totalLeads",
-            "leadsNovos",
-            "leadsAgendados",
-            "leadsConcluidos",
-            "clinicasCadastradas",
-            "tarefasPendentes",
-            "receitaPrevista",
-            "receitaRecebida",
-            "conteudosPlanejados",
-            "eventosAgendados",
-        ]
+        for key in _old_card_keys
+    ] + [
+        {"key": key, "label": labels[key], "value": summary[key]}
+        for key in _new_card_keys
+        if key in raw
     ]
 }
 

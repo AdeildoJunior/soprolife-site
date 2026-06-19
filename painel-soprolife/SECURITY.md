@@ -25,7 +25,16 @@ Apenas:
 - dados anônimos;
 - exemplos genéricos;
 - dados institucionais da empresa;
-- documentação operacional.
+- documentação operacional;
+- indicadores agregados numéricos gerados pelo fluxo seguro
+  (ex: `pacientesEmAcompanhamento`, `examesEspirometriaRealizados`,
+  `teleconsultasRealizadas`, `followupsPendentes`, `lembretesWhatsAppPendentes`,
+  `recorrenciasAtivas`, `consultasPrevistas`).
+
+Esses indicadores de CRM/atendimento são totais numéricos calculados pelo Apps Script
+a partir das abas privadas. Nunca contêm nome, telefone, CPF ou dado clínico individual.
+O script `check-access.sh` valida que os valores são números e que nenhum dado sensível
+chegou ao JSON público.
 
 ## Dados privados
 
