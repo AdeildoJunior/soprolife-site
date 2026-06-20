@@ -68,6 +68,21 @@ function resizeCharts() {
   Object.values(state.charts).forEach((chart) => chart.resize());
 }
 
+function normalizeCrmRecord(item) {
+  const bairro = item.bairro || "";
+  const regiao = item.regiao || "";
+  return {
+    clinica: item.nome_clinica || item.clinica || "",
+    bairro: regiao && regiao !== bairro ? `${regiao} · ${bairro}` : bairro,
+    tipo: item.tipo_clinica || item.tipo || "",
+    etapa: item.etapa || "",
+    prioridade: item.prioridade || "",
+    proximaAcao: item.proxima_acao || item.proximaAcao || "",
+    responsavel: item.responsavel || "",
+    ultimaInteracao: item.ultima_interacao || null,
+  };
+}
+
 async function init() {
   try {
     const [resumo, crm, leads, marketing, tarefas, documentos, financeiro, automacoes] = await Promise.all([
@@ -92,6 +107,11 @@ async function init() {
 
     state.runtimeStatus = await loadOptionalJson("./data/runtime-status.local.json");
     state.dashboardSummary = await loadOptionalJson("./data/resumo-dashboard.local.json");
+
+    const crmLocal = await loadOptionalJson("./data/crm-clinicas.local.json");
+    if (crmLocal && Array.isArray(crmLocal.clinicas)) {
+      state.crm = crmLocal.clinicas.map(normalizeCrmRecord);
+    }
 
     renderCards();
     renderDataFreshness();

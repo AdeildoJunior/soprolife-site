@@ -10,6 +10,7 @@ _VENV_PYTHON="$HOME/.local/share/soprolife/venvs/google-sheets/bin/python"
 _SHEETS_CONFIG="$HOME/.config/soprolife/painel/google-sheets.local.json"
 _ADC_CONFIG="$HOME/.config/gcloud/application_default_credentials.json"
 _SHEETS_SCRIPT="painel-soprolife/scripts/read-sheets-summary-adc.py"
+_CRM_SCRIPT="painel-soprolife/scripts/read-crm-clinicas-adc.py"
 _CSV_PATH="${SOPROLIFE_SUMMARY_CSV:-$HOME/.config/soprolife/painel/resumo-dashboard.csv}"
 
 # Verifica se todos os pré-requisitos do Google Sheets estão presentes
@@ -26,11 +27,11 @@ fi
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
-echo "1/4 - Atualizando status seguro da fonte Google Sheets..."
+echo "1/5 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
 
 echo
-echo "2/4 - Atualizando resumo seguro..."
+echo "2/5 - Atualizando resumo seguro..."
 
 if [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC"
@@ -67,11 +68,31 @@ else
 fi
 
 echo
-echo "3/4 - Verificando segurança..."
+echo "3/5 - Atualizando CRM Clínicas seguro..."
+
+if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
+  echo "Fonte: Google Sheets via ADC (aba CRM Clinicas)"
+  echo
+
+  if ! "$_VENV_PYTHON" "$_CRM_SCRIPT" --write; then
+    echo
+    echo "AVISO: falha ao ler aba CRM Clinicas. O painel usará os dados de exemplo."
+    echo "  Diagnóstico: $_VENV_PYTHON $_CRM_SCRIPT --show-structure"
+  else
+    echo
+    painel-soprolife/scripts/sync-crm-clinicas.sh
+  fi
+else
+  echo "Google Sheets ADC não disponível ou script ausente."
+  echo "CRM Clínicas usará dados de exemplo (crm-clinicas.json)."
+fi
+
+echo
+echo "4/5 - Verificando segurança..."
 painel-soprolife/scripts/check-access.sh
 
 echo
-echo "4/4 - Concluído."
+echo "5/5 - Concluído."
 echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"

@@ -1,4 +1,4 @@
-# Status local gerado a partir de configuração privada externa.
-# Nunca commitar este arquivo.
+# Arquivos gerados localmente a partir de dados reais. Nunca commitar.
 runtime-status.local.json
 resumo-dashboard.local.json
+crm-clinicas.local.json
