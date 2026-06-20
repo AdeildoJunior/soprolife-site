@@ -38,6 +38,7 @@ ALLOWED_COLUMNS = {
     "etapa",
     "ultima_interacao",
     "proxima_acao",
+    "data_proxima_acao",
     "responsavel",
     "prioridade",
 }
