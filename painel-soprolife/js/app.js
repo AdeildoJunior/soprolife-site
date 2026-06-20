@@ -78,9 +78,31 @@ function normalizeCrmRecord(item) {
     etapa: item.etapa || "",
     prioridade: item.prioridade || "",
     proximaAcao: item.proxima_acao || item.proximaAcao || "",
+    dataProximaAcao: item.data_proxima_acao || item.dataProximaAcao || "",
     responsavel: item.responsavel || "",
     ultimaInteracao: item.ultima_interacao || null,
   };
+}
+
+function todayIso() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function parseDateIso(dateStr) {
+  if (!dateStr) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+    const [d, m, y] = dateStr.split("/");
+    return `${y}-${m}-${d}`;
+  }
+  return "";
+}
+
+function formatDateBr(dateStr) {
+  const iso = parseDateIso(dateStr);
+  if (!iso) return "";
+  const [, m, d] = iso.split("-");
+  return `${d}/${m}`;
 }
 
 async function init() {
@@ -347,6 +369,70 @@ function renderCrmFunnelVisual() {
 }
 
 
+function renderFollowupB2B() {
+  const container = document.querySelector("#followupB2B");
+  if (!container) return;
+
+  const today = todayIso();
+
+  const hoje = state.crm
+    .filter((c) => { const iso = parseDateIso(c.dataProximaAcao); return iso && iso === today; })
+    .sort((a, b) => (a.prioridade === "Alta" ? -1 : 1));
+
+  const atrasados = state.crm
+    .filter((c) => { const iso = parseDateIso(c.dataProximaAcao); return iso && iso < today; })
+    .sort((a, b) => parseDateIso(a.dataProximaAcao).localeCompare(parseDateIso(b.dataProximaAcao)));
+
+  const altaPrio = state.crm
+    .filter((c) => c.prioridade === "Alta")
+    .sort((a, b) => a.clinica.localeCompare(b.clinica));
+
+  const emConversa = state.crm
+    .filter((c) => c.etapa === "Em conversa")
+    .sort((a, b) => a.clinica.localeCompare(b.clinica));
+
+  function itemHtml(item) {
+    const data = formatDateBr(item.dataProximaAcao);
+    return `<li class="followup-item">
+      <div class="followup-item-top">
+        <strong>${item.clinica}</strong>
+        ${data ? `<span class="followup-date">${data}</span>` : ""}
+      </div>
+      ${item.proximaAcao ? `<small>${item.proximaAcao}</small>` : ""}
+    </li>`;
+  }
+
+  function card({ cls, icon, title, items, empty }) {
+    const count = items.length;
+    const body = count > 0
+      ? `<ul class="followup-list">${items.map(itemHtml).join("")}</ul>`
+      : `<p class="followup-empty">${empty}</p>`;
+    return `<article class="followup-card ${cls}">
+      <div class="followup-card-header">
+        <span class="followup-icon" aria-hidden="true">${icon}</span>
+        <div>
+          <strong>${title}</strong>
+          <small>${count} ${count === 1 ? "item" : "itens"}</small>
+        </div>
+      </div>
+      ${body}
+    </article>`;
+  }
+
+  container.innerHTML = `
+    <div class="panel-header">
+      <h3>Follow-up B2B / PCMSO</h3>
+      <span>Ações prioritárias do CRM</span>
+    </div>
+    <div class="followup-grid">
+      ${card({ cls: "card-hoje",     icon: "⚡", title: "Hoje",            items: hoje,      empty: "Nenhuma ação agendada para hoje" })}
+      ${card({ cls: "card-atrasado", icon: "⚠",  title: "Atrasados",       items: atrasados, empty: "Nenhum follow-up em atraso" })}
+      ${card({ cls: "card-alta",     icon: "🔴", title: "Alta prioridade", items: altaPrio,  empty: "Nenhuma clínica de alta prioridade" })}
+      ${card({ cls: "card-conversa", icon: "💬", title: "Em conversa",     items: emConversa, empty: "Nenhuma clínica em conversa ativa" })}
+    </div>
+  `;
+}
+
 function getCrmCardValue(key) {
   const cards = state.dashboardSummary?.cards;
   if (!Array.isArray(cards)) return "—";
@@ -482,6 +568,10 @@ function renderCrmClinicas(container) {
       <div id="crmFunnelVisual" class="crm-funnel-visual"></div>
     </article>
 
+    <article class="panel followup-b2b-panel">
+      <div id="followupB2B"></div>
+    </article>
+
     <article class="panel">
       <div class="panel-header">
         <h3>Clínicas e parceiros</h3>
@@ -497,6 +587,7 @@ function renderCrmClinicas(container) {
               <th>Etapa</th>
               <th>Prioridade</th>
               <th>Próxima ação</th>
+              <th>Data</th>
               <th>Responsável</th>
             </tr>
           </thead>
@@ -508,6 +599,7 @@ function renderCrmClinicas(container) {
 
   renderCrmStats();
   renderCrmFunnelVisual();
+  renderFollowupB2B();
   renderCrmTable();
 
   document.querySelector("#crmBackBtn").addEventListener("click", () => {
@@ -746,16 +838,22 @@ function renderCrmTable(filter = "Todos") {
     ? state.crm
     : state.crm.filter((item) => item.etapa === filter);
 
+  const today = todayIso();
+
   if (rows.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="7" class="crm-empty">Nenhuma clínica cadastrada nesta etapa.</td>
+        <td colspan="8" class="crm-empty">Nenhuma clínica cadastrada nesta etapa.</td>
       </tr>
     `;
     return;
   }
 
-  tbody.innerHTML = rows.map((item) => `
+  tbody.innerHTML = rows.map((item) => {
+    const iso = parseDateIso(item.dataProximaAcao);
+    const dataCls = iso && iso < today ? "data-atrasada" : iso === today ? "data-hoje" : "";
+    const dataLabel = formatDateBr(item.dataProximaAcao);
+    return `
     <tr>
       <td><strong>${item.clinica}</strong></td>
       <td>${item.bairro}</td>
@@ -763,9 +861,10 @@ function renderCrmTable(filter = "Todos") {
       <td><span class="badge ${slug(item.etapa)}">${item.etapa}</span></td>
       <td><span class="badge prio-${slug(item.prioridade)}">${item.prioridade}</span></td>
       <td>${item.proximaAcao}</td>
+      <td>${dataLabel ? `<span class="crm-data ${dataCls}">${dataLabel}</span>` : ""}</td>
       <td>${item.responsavel}</td>
-    </tr>
-  `).join("");
+    </tr>`;
+  }).join("");
 }
 
 function renderLeadsTable() {

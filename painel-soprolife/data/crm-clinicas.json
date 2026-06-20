@@ -6,6 +6,7 @@
     "etapa": "Em conversa",
     "prioridade": "Alta",
     "proximaAcao": "Enviar proposta de agenda-piloto",
+    "dataProximaAcao": "2026-06-18",
     "responsavel": "Comercial"
   },
   {
@@ -15,6 +16,7 @@
     "etapa": "Primeiro contato",
     "prioridade": "Média",
     "proximaAcao": "Fazer segundo contato",
+    "dataProximaAcao": "2026-06-20",
     "responsavel": "Comercial"
   },
   {
@@ -24,6 +26,7 @@
     "etapa": "Não abordado",
     "prioridade": "Baixa",
     "proximaAcao": "Mapear contato e abordar",
+    "dataProximaAcao": "",
     "responsavel": "Comercial"
   },
   {
@@ -33,6 +36,7 @@
     "etapa": "Em conversa",
     "prioridade": "Alta",
     "proximaAcao": "Agendar reunião de alinhamento",
+    "dataProximaAcao": "2026-06-20",
     "responsavel": "Comercial"
   },
   {
@@ -42,6 +46,7 @@
     "etapa": "Proposta enviada",
     "prioridade": "Alta",
     "proximaAcao": "Follow-up após proposta enviada",
+    "dataProximaAcao": "2026-06-15",
     "responsavel": "Comercial"
   }
 ]

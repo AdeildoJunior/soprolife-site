@@ -273,7 +273,8 @@ if not isinstance(clinicas, list):
 
 ALLOWED_FIELDS = {
     "clinica_id", "nome_clinica", "bairro", "regiao", "tipo_clinica",
-    "etapa", "ultima_interacao", "proxima_acao", "responsavel", "prioridade",
+    "etapa", "ultima_interacao", "proxima_acao", "data_proxima_acao",
+    "responsavel", "prioridade",
 }
 BLOCKED_FIELDS = {
     "observacao", "observação", "cpf", "telefone", "celular", "email",
