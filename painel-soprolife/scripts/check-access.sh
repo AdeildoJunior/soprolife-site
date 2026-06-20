@@ -234,12 +234,106 @@ print("OK: resumo-dashboard.local.json contém apenas indicadores agregados segu
 PY
 }
 
+validate_crm_clinicas() {
+  echo
+  echo "Verificando CRM Clínicas local seguro..."
+
+  if [ ! -f painel-soprolife/data/crm-clinicas.local.json ]; then
+    echo "OK: crm-clinicas.local.json não existe; painel usará crm-clinicas.json de exemplo."
+    return
+  fi
+
+  python3 - <<'PY'
+from pathlib import Path
+import json
+import re
+import sys
+
+path = Path("painel-soprolife/data/crm-clinicas.local.json")
+data = json.loads(path.read_text(encoding="utf-8"))
+
+source = data.get("source", {})
+clinicas = data.get("clinicas", [])
+
+if source.get("safeToDisplay") is not True:
+    print("ERRO: crm-clinicas.local.json não está marcado como seguro.")
+    sys.exit(1)
+
+if source.get("containsPersonalData") is not False:
+    print("ERRO: crm-clinicas.local.json pode conter dado pessoal.")
+    sys.exit(1)
+
+if source.get("containsHealthData") is not False:
+    print("ERRO: crm-clinicas.local.json pode conter dado clínico.")
+    sys.exit(1)
+
+if not isinstance(clinicas, list):
+    print("ERRO: clinicas precisa ser lista.")
+    sys.exit(1)
+
+ALLOWED_FIELDS = {
+    "clinica_id", "nome_clinica", "bairro", "regiao", "tipo_clinica",
+    "etapa", "ultima_interacao", "proxima_acao", "responsavel", "prioridade",
+}
+BLOCKED_FIELDS = {
+    "observacao", "observação", "cpf", "telefone", "celular", "email",
+    "e-mail", "whatsapp", "nome_paciente", "paciente", "pedido_medico",
+    "laudo", "diagnostico", "diagnóstico", "endereco", "endereço",
+}
+FORBIDDEN_TERMS = [
+    "cpf", "telefone", "celular", "whatsapp",
+    "pedido médico", "pedido medico", "laudo",
+    "diagnóstico", "diagnostico", "endereço", "endereco",
+    "data de nascimento", "nome completo",
+    "https://docs.google.com", "/spreadsheets/d/",
+    "access_token", "refresh_token", "private_key",
+    "client_secret", "client_email",
+]
+_CPF_RE = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+_FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+
+for i, record in enumerate(clinicas, start=1):
+    if not isinstance(record, dict):
+        print(f"ERRO: registro {i} não é um objeto.")
+        sys.exit(1)
+
+    extra = set(record.keys()) - ALLOWED_FIELDS
+    if extra:
+        print(f"ERRO: campos não permitidos no registro {i}: {', '.join(sorted(extra))}")
+        sys.exit(1)
+
+    for field in record.keys():
+        if field.lower() in BLOCKED_FIELDS:
+            print(f"ERRO: campo proibido '{field}' no registro {i}.")
+            sys.exit(1)
+
+    record_text = json.dumps(record, ensure_ascii=False).lower()
+    for term in FORBIDDEN_TERMS:
+        if term in record_text:
+            print(f"ERRO: termo proibido '{term}' detectado no registro {i}.")
+            sys.exit(1)
+    if _CPF_RE.search(record_text):
+        print(f"ERRO: padrão de CPF detectado no registro {i}.")
+        sys.exit(1)
+    if _FONE_RE.search(record_text):
+        print(f"ERRO: padrão de telefone detectado no registro {i}.")
+        sys.exit(1)
+    if _EMAIL_RE.search(record_text):
+        print(f"ERRO: padrão de e-mail detectado no registro {i}.")
+        sys.exit(1)
+
+print(f"OK: crm-clinicas.local.json contém apenas dados institucionais seguros ({len(clinicas)} registros).")
+PY
+}
+
 main() {
   check_ports
   check_extra_network_services
   check_private_files
   validate_runtime_status
   validate_dashboard_summary
+  validate_crm_clinicas
 }
 
 main
