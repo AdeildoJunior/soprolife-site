@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Painel SoproLife</title>
   <meta name="robots" content="noindex,nofollow" />
-  <link rel="stylesheet" href="./css/style.css?v=2026062102" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/style.css?v=2026062202" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -190,70 +193,90 @@
       </section>
 
       <section id="marketing" class="section">
-        <div class="section-title">
+        <!-- Cabeçalho executivo -->
+        <div class="mkt-exec-header">
           <div>
-            <p class="eyebrow">Aquisição</p>
-            <h2>Marketing & SEO</h2>
+            <p class="eyebrow">Aquisição digital</p>
+            <h2>Marketing &amp; <span class="tt" data-tip="Search Engine Optimization — otimização para mecanismos de busca.">SEO</span></h2>
           </div>
-          <span id="marketingDataLabel" class="safe-label">Dados demonstrativos</span>
+          <div class="mkt-header-right">
+            <span id="marketingDataLabel" class="safe-label">Dados demonstrativos</span>
+            <div id="mktSourceBadges" hidden></div>
+            <span id="mktPeriod" class="mkt-period" hidden></span>
+          </div>
         </div>
 
-        <div id="marketingDataSource" class="marketing-data-source" hidden></div>
+        <!-- Faixa de KPIs unificada (SC + GA4) -->
+        <div id="mktKpiStrip" class="mkt-kpi-strip"></div>
 
-        <div id="marketingStats" class="marketing-stats"></div>
-        <div id="marketingGa4Stats" class="marketing-stats" hidden></div>
+        <!-- Insights automáticos compactos -->
+        <div id="mktInsights" class="mkt-insights" hidden></div>
 
-        <article class="panel seo-focus-panel">
+        <!-- Grid principal: gráfico de canais | listas compactas -->
+        <div class="mkt-main-grid">
+          <div class="mkt-chart-col">
+            <article class="panel">
+              <div class="panel-header">
+                <h3>Origem do tráfego</h3>
+                <span id="channelsSubtitle">Canais de aquisição</span>
+              </div>
+              <canvas id="channelsChart"></canvas>
+              <div id="trafficSourceList" class="mkt-traffic-list" hidden></div>
+            </article>
+            <article class="panel mkt-trend-panel" id="mktTrendPanel" hidden>
+              <div class="panel-header">
+                <h3>Impressões — tendência</h3>
+                <span>Search Console · 28 dias</span>
+              </div>
+              <canvas id="mktTrendChart"></canvas>
+            </article>
+          </div>
+
+          <div class="mkt-lists-col">
+            <article class="panel">
+              <div class="panel-header">
+                <h3>Termos de busca</h3>
+                <span id="seoListSubtitle">Modelo para Search Console</span>
+              </div>
+              <div id="seoList" class="mkt-mini-list"></div>
+              <button class="mkt-more-btn" id="seoMoreBtn" hidden>Ver mais ↓</button>
+            </article>
+            <article class="panel">
+              <div class="panel-header">
+                <h3>Páginas mais acessadas</h3>
+                <span><span class="tt" data-tip="Google Analytics 4 — ferramenta de análise de tráfego e comportamento do site.">GA4</span> · pageviews</span>
+              </div>
+              <div id="ga4TopPages" class="mkt-mini-list"></div>
+            </article>
+          </div>
+        </div>
+
+        <!-- Grid inferior: páginas SC + funil de eventos -->
+        <div class="mkt-bottom-grid">
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Páginas no Google</h3>
+              <span>Search Console · impressões</span>
+            </div>
+            <div id="scTopPages" class="mkt-mini-list"></div>
+          </article>
+          <article class="panel" id="marketingFunnelPanel" hidden>
+            <div class="panel-header">
+              <h3>Funil do site</h3>
+              <span>Eventos <span class="tt" data-tip="Google Analytics 4 — ferramenta de análise de tráfego e comportamento do site.">GA4</span></span>
+            </div>
+            <div id="marketingFunnel" class="mkt-mini-list"></div>
+          </article>
+        </div>
+
+        <!-- Painel de alertas e oportunidades SEO -->
+        <article class="panel mkt-alerts-panel" id="mktAlertsPanel">
           <div class="panel-header">
             <h3 id="seoFocusTitle">Prioridades de busca local</h3>
             <span id="seoFocusSubtitle">Termos que a SoproLife deve acompanhar</span>
           </div>
-          <div id="seoAlerts" class="seo-alerts" hidden></div>
+          <div id="seoAlerts" class="mkt-alerts-grid" hidden></div>
           <div id="seoFocus" class="seo-focus"></div>
-        </article>
-
-        <div class="grid-two">
-          <article class="panel">
-            <div class="panel-header">
-              <h3>Origem do tráfego</h3>
-              <span id="channelsSubtitle">Canais de aquisição</span>
-            </div>
-            <canvas id="channelsChart"></canvas>
-            <div id="trafficSourceList" class="seo-list" hidden></div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-header">
-              <h3>Termos de busca</h3>
-              <span id="seoListSubtitle">Modelo para Search Console</span>
-            </div>
-            <div id="seoList" class="seo-list"></div>
-          </article>
-        </div>
-
-        <div class="grid-two" id="marketingPagesGrid" hidden>
-          <article class="panel">
-            <div class="panel-header">
-              <h3>Páginas mais acessadas</h3>
-              <span>GA4 — pageviews por página</span>
-            </div>
-            <div id="ga4TopPages" class="seo-list"></div>
-          </article>
-          <article class="panel">
-            <div class="panel-header">
-              <h3>Páginas no Google</h3>
-              <span>Search Console — impressões</span>
-            </div>
-            <div id="scTopPages" class="seo-list"></div>
-          </article>
-        </div>
-
-        <article class="panel" id="marketingFunnelPanel" hidden>
-          <div class="panel-header">
-            <h3>Funil do site</h3>
-            <span>Eventos GA4</span>
-          </div>
-          <div id="marketingFunnel" class="seo-list"></div>
         </article>
       </section>
 
@@ -431,6 +454,6 @@
     </main>
   </div>
 
-  <script src="./js/app.js?v=2026062101"></script>
+  <script src="./js/app.js?v=2026062202"></script>
 </body>
 </html>
