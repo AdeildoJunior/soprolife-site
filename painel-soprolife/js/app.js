@@ -1579,115 +1579,352 @@ function isMarketingReal() {
 
 function renderMarketingSection() {
   if (isMarketingReal()) {
-    renderMarketingRealHeader();
-    renderMarketingRealStats();
-    renderMarketingRealGa4Stats();
-    renderMarketingRealSeoAlerts();
-    renderMarketingRealSeoList();
-    renderMarketingRealPages();
-    renderMarketingRealTrafficSources();
-    renderMarketingRealFunnel();
+    renderMktHeader();
+    renderMktKpiStrip();
+    renderMktInsights();
+    renderMktSeoList();
+    renderMktPages();
+    renderMktTrafficSources();
+    renderMktFunnel();
+    renderMktAlerts();
+    renderMktTrendChart();
   } else {
-    renderMarketingStats();
+    renderMktKpiStripDemo();
     renderSeoFocus();
     renderSeoList();
   }
 }
 
-function renderMarketingRealHeader() {
+/* ── Helpers de formatação para Marketing & SEO ─────────────────────────── */
+
+const MKT_SOURCE_NAMES = {
+  "(direct)": "Direto",
+  "google": "Google",
+  "bing": "Bing",
+  "ig": "Instagram",
+  "instagram": "Instagram",
+  "facebook": "Facebook",
+  "chatgpt.com": "ChatGPT",
+  "youtube": "YouTube",
+  "(not set)": "Não identificado",
+};
+
+const MKT_MEDIUM_NAMES = {
+  "(none)": "",
+  "organic": "Orgânico",
+  "social": "Social",
+  "ai-assistant": "AI",
+  "cpc": "Pago",
+  "email": "E-mail",
+  "referral": "Referência",
+  "newsletter": "E-mail",
+  "(not set)": "",
+};
+
+const MKT_SOURCE_TIPS = {
+  "(direct)/(none)": "Acesso direto. Sessões de pessoas que entraram no site digitando o endereço, usando favoritos ou por origem não identificada.",
+  "google/organic": "Tráfego orgânico do Google. Sessões vindas de resultados não pagos da busca.",
+  "(not set)/(not set)": "Origem não definida. O GA4 recebeu a sessão sem identificar corretamente a origem/mídia.",
+  "chatgpt.com/ai-assistant": "Sessões vindas de assistentes de IA, como o ChatGPT, quando o usuário clicou no link do site.",
+  "ig/social": "Tráfego social do Instagram.",
+  "instagram/social": "Tráfego social do Instagram.",
+  "facebook/social": "Tráfego social do Facebook.",
+};
+
+const MKT_INSIGHT_TIPS = {
+  "success": "Palavra-chave com melhor combinação de relevância e desempenho no período.",
+  "info":    "Termo com potencial de crescimento: bom volume de impressões, mas ainda com espaço para melhorar posição e cliques.",
+  "warning": "Página ou termo com impressões relevantes, mas baixa taxa de cliques. Pode precisar de título, descrição ou snippet melhores.",
+  "neutral": "Página com melhor desempenho orgânico no período, considerando impressões e/ou cliques.",
+};
+
+function mktCleanPath(rawPath) {
+  let p = rawPath.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+  p = p.replace(/^\/+|\/+$/g, "");
+  if (!p) return "Página inicial";
+  p = p.replace(/-/g, " ");
+  return p.charAt(0).toUpperCase() + p.slice(1);
+}
+
+function mktCleanSource(source, medium) {
+  const src = MKT_SOURCE_NAMES[source] || source;
+  const med = Object.prototype.hasOwnProperty.call(MKT_MEDIUM_NAMES, medium)
+    ? MKT_MEDIUM_NAMES[medium]
+    : medium;
+  if (!med) return src;
+  return `${src} · ${med}`;
+}
+
+function mktSourceTip(source, medium) {
+  return MKT_SOURCE_TIPS[`${source}/${medium}`] || null;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────── */
+
+function renderMktHeader() {
   const m = state.marketingSeo;
+
   const label = document.querySelector("#marketingDataLabel");
   if (label) {
     label.textContent = "Dados reais";
     label.classList.add("safe-label-real");
   }
 
-  const bar = document.querySelector("#marketingDataSource");
-  if (!bar) return;
-
-  const sources = m.meta.sources || {};
-  const srcList = [
-    sources.searchConsole && "Search Console",
-    sources.ga4 && "GA4",
-  ].filter(Boolean);
-
-  const period = m.meta.periodStart && m.meta.periodEnd
-    ? `${m.meta.periodStart} → ${m.meta.periodEnd} (${m.meta.lookbackDays} dias)`
-    : "";
-
-  const warningsHtml = (m.warnings || []).length > 0
-    ? `<span class="mds-warn" title="${escapeHtml((m.warnings || []).join("; "))}">⚠ ${m.warnings.length} aviso(s)</span>`
-    : "";
-
-  bar.innerHTML = `
-    <div class="mds-sources">
-      ${srcList.map((s) => `<span class="mds-badge">${s}</span>`).join("")}
-      ${warningsHtml}
-    </div>
-    ${period ? `<span class="mds-period">${period}</span>` : ""}
-  `;
-  bar.hidden = false;
-}
-
-function renderMarketingRealStats() {
-  const sc = state.marketingSeo?.searchConsole?.totals;
-  const container = document.querySelector("#marketingStats");
-  if (!container) return;
-
-  if (!sc) {
-    renderMarketingStats();
-    return;
+  const badgesEl = document.querySelector("#mktSourceBadges");
+  if (badgesEl) {
+    const sources = m.meta.sources || {};
+    const badges = [
+      sources.searchConsole ? '<span class="mkt-src-badge src-sc">Search Console</span>' : "",
+      sources.ga4 ? '<span class="mkt-src-badge src-ga4">GA4</span>' : "",
+    ].filter(Boolean);
+    if ((m.warnings || []).length > 0) {
+      badges.push(`<span class="mkt-src-warn" title="${escapeHtml((m.warnings || []).join("; "))}">⚠ ${m.warnings.length} aviso(s)</span>`);
+    }
+    badgesEl.innerHTML = badges.join("");
+    badgesEl.hidden = false;
   }
 
-  const stats = [
-    { label: "Impressões Google", value: sc.impressions.toLocaleString("pt-BR") },
-    { label: "Cliques orgânicos", value: sc.clicks.toLocaleString("pt-BR") },
-    { label: "CTR",               value: (sc.ctr * 100).toFixed(2) + "%" },
-    { label: "Posição média",     value: sc.avgPosition.toFixed(1) },
-  ];
-
-  container.innerHTML = stats.map((item) => `
-    <article class="marketing-stat-card">
-      <span>${item.label}</span>
-      <strong>${item.value}</strong>
-    </article>
-  `).join("");
+  const periodEl = document.querySelector("#mktPeriod");
+  if (periodEl && m.meta.periodStart && m.meta.periodEnd) {
+    periodEl.textContent = `${m.meta.periodStart} → ${m.meta.periodEnd} · ${m.meta.lookbackDays}d`;
+    periodEl.hidden = false;
+  }
 }
 
-function renderMarketingRealGa4Stats() {
+function renderMktKpiStrip() {
+  const sc  = state.marketingSeo?.searchConsole?.totals;
   const ga4 = state.marketingSeo?.ga4?.totals;
-  const container = document.querySelector("#marketingGa4Stats");
+  const container = document.querySelector("#mktKpiStrip");
   if (!container) return;
 
-  if (!ga4) {
-    container.hidden = true;
-    return;
+  if (!sc && !ga4) { renderMktKpiStripDemo(); return; }
+
+  const kpis = [];
+  if (sc) {
+    kpis.push(
+      { label: "Impressões", value: sc.impressions.toLocaleString("pt-BR"), src: "sc", tip: "Vezes que o site apareceu no Google Search." },
+      { label: "Cliques", value: sc.clicks.toLocaleString("pt-BR"), src: "sc", tip: "Cliques orgânicos vindos do Google." },
+      { label: "CTR", value: (sc.ctr * 100).toFixed(1) + "%", src: "sc", tip: "CTR = Click-Through Rate, ou taxa de cliques. Mostra a porcentagem de impressões que viraram cliques no Google Search." },
+      { label: "Pos. média", value: sc.avgPosition.toFixed(1), src: "sc", tip: "Posição média no ranking do Google Search." },
+    );
+  }
+  if (ga4) {
+    kpis.push(
+      { label: "Usuários", value: ga4.users.toLocaleString("pt-BR"), src: "ga4", tip: "Visitantes únicos no período (GA4)." },
+      { label: "Sessões", value: ga4.sessions.toLocaleString("pt-BR"), src: "ga4", tip: "Total de visitas ao site no período (GA4)." },
+      { label: "Visualizações", value: ga4.pageviews.toLocaleString("pt-BR"), src: "ga4", tip: "Total de páginas visualizadas no período (GA4)." },
+    );
   }
 
-  const stats = [
-    { label: "Usuários",       value: ga4.users.toLocaleString("pt-BR") },
-    { label: "Sessões",        value: ga4.sessions.toLocaleString("pt-BR") },
-    { label: "Visualizações",  value: ga4.pageviews.toLocaleString("pt-BR") },
-  ];
-
-  container.innerHTML = stats.map((item) => `
-    <article class="marketing-stat-card">
-      <span>${item.label}</span>
-      <strong>${item.value}</strong>
+  container.innerHTML = kpis.map((k) => `
+    <article class="mkt-kpi-card kpi-${k.src}${k.tip ? " mkt-tip" : ""}"${k.tip ? ` data-tip="${escapeHtml(k.tip)}"` : ""}>
+      <span class="mkt-kpi-label">${escapeHtml(k.label)}</span>
+      <strong class="mkt-kpi-value">${escapeHtml(k.value)}</strong>
+      <small class="mkt-kpi-src">${k.src === "sc" ? "Search Console" : "GA4"}</small>
     </article>
   `).join("");
+}
+
+function renderMktKpiStripDemo() {
+  const container = document.querySelector("#mktKpiStrip");
+  if (!container || !state.marketing?.seo) return;
+
+  const totalImp = state.marketing.seo.reduce((s, i) => s + i.impressoes, 0);
+  const totalClk = state.marketing.seo.reduce((s, i) => s + i.cliques, 0);
+  const avgPos   = state.marketing.seo.reduce((s, i) => s + i.posicao, 0) / state.marketing.seo.length;
+  const topTerm  = state.marketing.seo.reduce((b, i) => i.cliques > b.cliques ? i : b, state.marketing.seo[0]);
+
+  const kpis = [
+    { label: "Impressões", value: totalImp, src: "sc" },
+    { label: "Cliques estimados", value: totalClk, src: "sc" },
+    { label: "Posição média", value: avgPos.toFixed(1), src: "sc" },
+    { label: "Melhor termo", value: topTerm.termo, src: "sc" },
+  ];
+
+  container.innerHTML = kpis.map((k) => `
+    <article class="mkt-kpi-card kpi-${k.src}">
+      <span class="mkt-kpi-label">${k.label}</span>
+      <strong class="mkt-kpi-value">${k.value}</strong>
+      <small class="mkt-kpi-src">Demonstrativo</small>
+    </article>
+  `).join("");
+}
+
+function renderMktInsights() {
+  const sc = state.marketingSeo?.searchConsole;
+  const container = document.querySelector("#mktInsights");
+  if (!container) return;
+
+  const insights = [];
+
+  if (sc?.topQueries?.length) {
+    const best = sc.topQueries.reduce((b, q) => q.clicks > b.clicks ? q : b, sc.topQueries[0]);
+    if (best.clicks > 0) {
+      insights.push({ icon: "⭐", type: "success", label: "Termo estrela", title: best.query, meta: `${best.clicks} cliques · pos. ${best.avgPosition.toFixed(1)}` });
+    }
+    const opp = sc.topQueries.find((q) => q.avgPosition >= 5 && q.avgPosition <= 20 && q.impressions >= 8);
+    if (opp) {
+      insights.push({ icon: "🎯", type: "info", label: "Oportunidade", title: opp.query, meta: `pos. ${opp.avgPosition.toFixed(1)} · ${opp.impressions} impr.` });
+    }
+    const lowCtr = sc.topQueries.find((q) => q.impressions >= 5 && q.ctr < 0.02 && q !== opp);
+    if (lowCtr) {
+      insights.push({ icon: "⚠", type: "warning", label: "CTR baixo", title: lowCtr.query, meta: `${lowCtr.impressions} impr. · CTR ${(lowCtr.ctr * 100).toFixed(1)}%` });
+    }
+  }
+
+  if (sc?.topPages?.length) {
+    const top = sc.topPages[0];
+    const name = mktCleanPath(top.page);
+    insights.push({ icon: "📄", type: "neutral", label: "Melhor página", title: name, meta: `${top.impressions} impr. · ${top.clicks} cliques` });
+  }
+
+  if (insights.length === 0) { container.hidden = true; return; }
+
+  container.innerHTML = insights.slice(0, 4).map((ins) => {
+    const tip = MKT_INSIGHT_TIPS[ins.type] || null;
+    return `
+    <article class="mkt-insight ins-${ins.type}${tip ? " mkt-tip" : ""}"${tip ? ` data-tip="${escapeHtml(tip)}"` : ""}>
+      <span class="ins-icon">${ins.icon}</span>
+      <div class="ins-body">
+        <small>${escapeHtml(ins.label)}</small>
+        <strong>${escapeHtml(ins.title)}</strong>
+        <span>${escapeHtml(ins.meta)}</span>
+      </div>
+    </article>
+  `;
+  }).join("");
   container.hidden = false;
 }
 
-function renderMarketingRealSeoAlerts() {
-  const sc  = state.marketingSeo?.searchConsole;
+function mktMiniRow(labelHtml, chips, barVal, barMax, tip) {
+  const pct = Math.max(4, Math.round((barVal / barMax) * 100));
+  const extraCls = tip ? " mkt-tip" : "";
+  const tipAttr  = tip ? ` data-tip="${escapeHtml(tip)}"` : "";
+  return `<div class="mkt-mini-row${extraCls}"${tipAttr}>
+    <div class="mkt-mini-row-top">
+      <span class="mkt-mini-term">${labelHtml}</span>
+      <span class="mkt-mini-chips">${chips.map((c) => `<span>${c}</span>`).join("")}</span>
+    </div>
+    <div class="mkt-bar-wrap"><div class="mkt-bar" style="width:${pct}%"></div></div>
+  </div>`;
+}
+
+function renderMktSeoList() {
+  const queries = state.marketingSeo?.searchConsole?.topQueries;
+  const list    = document.querySelector("#seoList");
+  const sub     = document.querySelector("#seoListSubtitle");
+  const btn     = document.querySelector("#seoMoreBtn");
+  if (!list) return;
+
+  if (!queries?.length) { renderSeoList(); return; }
+
+  if (sub) sub.textContent = "Search Console · dados reais";
+
+  const maxImpr = Math.max(...queries.map((q) => q.impressions), 1);
+
+  function buildRows(items) {
+    return items.map((q) => mktMiniRow(
+      escapeHtml(q.query),
+      [
+        `${q.impressions.toLocaleString("pt-BR")} impr.`,
+        `${q.clicks} cliques`,
+        `<span class="tt" data-tip="Click Through Rate — percentual de cliques em relação às impressões.">CTR</span> ${(q.ctr * 100).toFixed(1)}%`,
+      ],
+      q.impressions, maxImpr
+    )).join("");
+  }
+
+  const top5 = queries.slice(0, 5);
+  const rest  = queries.slice(5);
+
+  list.innerHTML = buildRows(top5);
+
+  if (rest.length > 0 && btn) {
+    btn.hidden = false;
+    btn.textContent = `Ver mais ${rest.length} termos ↓`;
+    let expanded = false;
+    btn.onclick = () => {
+      expanded = !expanded;
+      list.innerHTML = expanded ? buildRows(top5) + buildRows(rest) : buildRows(top5);
+      btn.textContent = expanded ? "Recolher ↑" : `Ver mais ${rest.length} termos ↓`;
+    };
+  }
+}
+
+function renderMktPages() {
+  const ga4Pages = state.marketingSeo?.ga4?.topPages;
+  const scPages  = state.marketingSeo?.searchConsole?.topPages;
+
+  const ga4El = document.querySelector("#ga4TopPages");
+  if (ga4El) {
+    if (ga4Pages?.length) {
+      const maxPv = Math.max(...ga4Pages.map((p) => p.pageviews), 1);
+      ga4El.innerHTML = ga4Pages.slice(0, 5).map((p) => {
+        const name = mktCleanPath(p.page);
+        return mktMiniRow(escapeHtml(name), [`${p.pageviews.toLocaleString("pt-BR")} views`, `${p.users} usuários`], p.pageviews, maxPv);
+      }).join("");
+    } else {
+      ga4El.innerHTML = `<p class="mkt-empty">GA4 não configurado.</p>`;
+    }
+  }
+
+  const scEl = document.querySelector("#scTopPages");
+  if (scEl) {
+    if (scPages?.length) {
+      const maxImpr = Math.max(...scPages.map((p) => p.impressions), 1);
+      scEl.innerHTML = scPages.slice(0, 5).map((p) => {
+        const name = mktCleanPath(p.page);
+        return mktMiniRow(escapeHtml(name), [`${p.impressions.toLocaleString("pt-BR")} impr.`, `${p.clicks} cliques`, `CTR ${(p.ctr * 100).toFixed(1)}%`], p.impressions, maxImpr);
+      }).join("");
+    } else {
+      scEl.innerHTML = `<p class="mkt-empty">Search Console não configurado.</p>`;
+    }
+  }
+}
+
+function renderMktTrafficSources() {
+  const sources = state.marketingSeo?.ga4?.trafficSources;
+  const subEl   = document.querySelector("#channelsSubtitle");
+  const listEl  = document.querySelector("#trafficSourceList");
+  if (!sources?.length || !listEl) return;
+
+  if (subEl) subEl.textContent = "GA4 · dados reais";
+
+  const maxSess = Math.max(...sources.map((s) => s.sessions), 1);
+  listEl.innerHTML = sources.slice(0, 6).map((s) => {
+    const label = mktCleanSource(s.source, s.medium);
+    const tip   = mktSourceTip(s.source, s.medium);
+    return mktMiniRow(escapeHtml(label), [`${s.sessions.toLocaleString("pt-BR")} sessões`], s.sessions, maxSess, tip);
+  }).join("");
+  listEl.hidden = false;
+}
+
+function renderMktFunnel() {
+  const events = state.marketingSeo?.ga4?.events;
+  const panel  = document.querySelector("#marketingFunnelPanel");
+  if (!panel) return;
+
+  if (!events?.length) { panel.hidden = true; return; }
+
+  panel.hidden = false;
+  const el = document.querySelector("#marketingFunnel");
+  if (!el) return;
+
+  const maxCount = Math.max(...events.map((e) => e.count), 1);
+  el.innerHTML = events.slice(0, 5).map((e) =>
+    mktMiniRow(escapeHtml(e.event), [`${e.count.toLocaleString("pt-BR")} ocorr.`], e.count, maxCount)
+  ).join("");
+}
+
+function renderMktAlerts() {
+  const sc       = state.marketingSeo?.searchConsole;
   const titleEl  = document.querySelector("#seoFocusTitle");
   const subEl    = document.querySelector("#seoFocusSubtitle");
   const alertsEl = document.querySelector("#seoAlerts");
   const focusEl  = document.querySelector("#seoFocus");
 
-  if (titleEl) titleEl.textContent = "Alertas / Próximas ações de SEO";
-  if (subEl)   subEl.textContent   = "Insights gerados automaticamente dos dados reais";
+  if (titleEl) titleEl.textContent = "Alertas e oportunidades de SEO";
+  if (subEl)   subEl.textContent   = "Gerado automaticamente dos dados reais";
   if (focusEl) focusEl.innerHTML   = "";
   if (!alertsEl) return;
 
@@ -1695,23 +1932,20 @@ function renderMarketingRealSeoAlerts() {
 
   if (sc?.topQueries) {
     sc.topQueries.forEach((q) => {
-      if (q.impressions >= 100 && q.ctr < 0.02) {
+      if (q.impressions >= 5 && q.ctr < 0.02) {
         alerts.push({
-          type: "warning",
-          icon: "📉",
-          title: `Alta impressão, CTR baixo: "${q.query}"`,
-          text: `${q.impressions.toLocaleString("pt-BR")} impressões · CTR ${(q.ctr * 100).toFixed(1)}% · posição ${q.avgPosition.toFixed(1)}`,
+          type: "warning", icon: "📉",
+          title: `CTR baixo: "${q.query}"`,
+          text: `${q.impressions.toLocaleString("pt-BR")} impressões · CTR ${(q.ctr * 100).toFixed(1)}% · pos. ${q.avgPosition.toFixed(1)}`,
           action: "Melhorar título e meta description para aumentar cliques.",
         });
       }
     });
-
     sc.topQueries.forEach((q) => {
-      if (q.avgPosition >= 5 && q.avgPosition <= 20 && q.impressions >= 50) {
+      if (q.avgPosition >= 5 && q.avgPosition <= 20 && q.impressions >= 8) {
         alerts.push({
-          type: "info",
-          icon: "🎯",
-          title: `Oportunidade de subir: "${q.query}"`,
+          type: "info", icon: "🎯",
+          title: `Subir para top 5: "${q.query}"`,
           text: `Posição média ${q.avgPosition.toFixed(1)} · ${q.impressions.toLocaleString("pt-BR")} impressões`,
           action: "Reforçar conteúdo e backlinks para essa palavra-chave.",
         });
@@ -1721,11 +1955,10 @@ function renderMarketingRealSeoAlerts() {
 
   if (sc?.topPages) {
     sc.topPages.forEach((p) => {
-      if (p.impressions >= 200 && p.ctr < 0.03) {
+      if (p.impressions >= 100 && p.ctr < 0.03) {
         const name = p.page.replace(/^https?:\/\/[^/]+/, "").split("?")[0] || p.page;
         alerts.push({
-          type: "warning",
-          icon: "📄",
+          type: "warning", icon: "📄",
           title: `Página com CTR baixo: ${name}`,
           text: `${p.impressions.toLocaleString("pt-BR")} impressões · CTR ${(p.ctr * 100).toFixed(1)}%`,
           action: "Revisar snippet e adicionar structured data.",
@@ -1735,138 +1968,52 @@ function renderMarketingRealSeoAlerts() {
   }
 
   if (alerts.length === 0) {
-    alertsEl.innerHTML = `<p class="seo-alerts-empty">Nenhum alerta identificado — ótimo desempenho!</p>`;
+    alertsEl.innerHTML = `<p class="mkt-empty">Nenhum alerta identificado — bom desempenho!</p>`;
   } else {
     alertsEl.innerHTML = alerts.slice(0, 6).map((a) => `
-      <article class="seo-alert-card seo-alert-${a.type}">
-        <div class="seo-alert-header">
-          <span>${a.icon}</span>
-          <strong>${escapeHtml(a.title)}</strong>
-        </div>
-        <p class="seo-alert-text">${escapeHtml(a.text)}</p>
-        <p class="seo-alert-action">${escapeHtml(a.action)}</p>
+      <article class="mkt-alert alert-${a.type}">
+        <div class="mkt-alert-top"><span>${a.icon}</span><strong>${escapeHtml(a.title)}</strong></div>
+        <p>${escapeHtml(a.text)}</p>
+        <small>${escapeHtml(a.action)}</small>
       </article>
     `).join("");
   }
   alertsEl.hidden = false;
 }
 
-function renderMarketingRealSeoList() {
-  const queries = state.marketingSeo?.searchConsole?.topQueries;
-  const list  = document.querySelector("#seoList");
-  const subEl = document.querySelector("#seoListSubtitle");
-  if (!list) return;
-
-  if (!queries?.length) {
-    renderSeoList();
-    return;
-  }
-
-  if (subEl) subEl.textContent = "Search Console — dados reais";
-
-  list.innerHTML = queries.slice(0, 15).map((item) => `
-    <div class="seo-item">
-      <strong>${escapeHtml(item.query)}</strong>
-      <div class="seo-meta">
-        <span>${item.impressions.toLocaleString("pt-BR")} impr.</span>
-        <span>${item.clicks} cliques</span>
-        <span>CTR ${(item.ctr * 100).toFixed(1)}%</span>
-        <span>pos. ${item.avgPosition.toFixed(1)}</span>
-      </div>
-    </div>
-  `).join("");
-}
-
-function renderMarketingRealPages() {
-  const ga4Pages = state.marketingSeo?.ga4?.topPages;
-  const scPages  = state.marketingSeo?.searchConsole?.topPages;
-  const grid = document.querySelector("#marketingPagesGrid");
-  if (!grid) return;
-
-  if (!ga4Pages?.length && !scPages?.length) {
-    grid.hidden = true;
-    return;
-  }
-
-  grid.hidden = false;
-
-  const ga4El = document.querySelector("#ga4TopPages");
-  if (ga4El) {
-    ga4El.innerHTML = ga4Pages?.length
-      ? ga4Pages.slice(0, 10).map((p) => {
-          const name = p.page.replace(/^https?:\/\/[^/]+/, "").split("?")[0] || p.page;
-          return `
-            <div class="seo-item">
-              <strong>${escapeHtml(name)}</strong>
-              <div class="seo-meta">
-                <span>${p.pageviews.toLocaleString("pt-BR")} views</span>
-                <span>${p.users.toLocaleString("pt-BR")} usuários</span>
-              </div>
-            </div>`;
-        }).join("")
-      : `<p class="seo-alerts-empty">GA4 não configurado.</p>`;
-  }
-
-  const scEl = document.querySelector("#scTopPages");
-  if (scEl) {
-    scEl.innerHTML = scPages?.length
-      ? scPages.slice(0, 10).map((p) => {
-          const name = p.page.replace(/^https?:\/\/[^/]+/, "").split("?")[0] || p.page;
-          return `
-            <div class="seo-item">
-              <strong>${escapeHtml(name)}</strong>
-              <div class="seo-meta">
-                <span>${p.impressions.toLocaleString("pt-BR")} impr.</span>
-                <span>${p.clicks} cliques</span>
-                <span>CTR ${(p.ctr * 100).toFixed(1)}%</span>
-              </div>
-            </div>`;
-        }).join("")
-      : `<p class="seo-alerts-empty">Search Console não configurado.</p>`;
-  }
-}
-
-function renderMarketingRealTrafficSources() {
-  const sources    = state.marketingSeo?.ga4?.trafficSources;
-  const subEl      = document.querySelector("#channelsSubtitle");
-  const listEl     = document.querySelector("#trafficSourceList");
-  if (!sources?.length || !listEl) return;
-
-  if (subEl) subEl.textContent = "GA4 — dados reais";
-
-  listEl.innerHTML = sources.slice(0, 10).map((s) => `
-    <div class="seo-item">
-      <strong>${escapeHtml(s.source)}/${escapeHtml(s.medium)}</strong>
-      <div class="seo-meta">
-        <span>${s.sessions.toLocaleString("pt-BR")} sessões</span>
-      </div>
-    </div>
-  `).join("");
-  listEl.hidden = false;
-}
-
-function renderMarketingRealFunnel() {
-  const events = state.marketingSeo?.ga4?.events;
-  const panel  = document.querySelector("#marketingFunnelPanel");
-  if (!panel) return;
-
-  if (!events?.length) {
-    panel.hidden = true;
-    return;
-  }
+function renderMktTrendChart() {
+  const byDate = state.marketingSeo?.searchConsole?.byDate;
+  const panel  = document.querySelector("#mktTrendPanel");
+  if (!byDate?.length || !panel) return;
 
   panel.hidden = false;
-  const funnelEl = document.querySelector("#marketingFunnel");
-  if (!funnelEl) return;
 
-  funnelEl.innerHTML = events.slice(0, 15).map((e) => `
-    <div class="seo-item">
-      <strong>${escapeHtml(e.event)}</strong>
-      <div class="seo-meta">
-        <span>${e.count.toLocaleString("pt-BR")} ocorrências</span>
-      </div>
-    </div>
-  `).join("");
+  createChart("mktTrend", "#mktTrendChart", {
+    type: "line",
+    data: {
+      labels: byDate.map((d) => d.date.slice(5)),
+      datasets: [{
+        label: "Impressões",
+        data: byDate.map((d) => d.impressions),
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        backgroundColor: "rgba(29, 183, 166, .09)",
+        borderColor: "rgba(29, 183, 166, .85)",
+        pointRadius: 0,
+        pointHoverRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.08)" }, ticks: { font: { size: 10 }, maxTicksLimit: 4 } },
+        x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 7 } },
+      },
+    },
+  });
 }
 
 function renderCharts() {
