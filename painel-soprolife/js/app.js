@@ -13,6 +13,7 @@ const state = {
   crmView: "hub",
   followupPacientes: null,
   followupSummary: null,
+  followupClinicas: null,
 };
 
 const slug = (text) =>
@@ -145,6 +146,11 @@ async function init() {
     const followupSummary = await loadOptionalJson("./data/followup-pacientes-summary.local.json");
     if (followupSummary) {
       state.followupSummary = followupSummary;
+    }
+
+    const followupClinicasLocal = await loadOptionalJson("./data-private/followup-clinicas.local.json");
+    if (followupClinicasLocal) {
+      state.followupClinicas = followupClinicasLocal;
     }
 
     renderCards();
@@ -403,6 +409,18 @@ function renderFollowupB2B() {
     .filter((c) => c.etapa === "Em conversa")
     .sort((a, b) => a.clinica.localeCompare(b.clinica));
 
+  function waButton(item) {
+    if (!state.followupClinicas) return "";
+    const clinicas = state.followupClinicas.clinicas || [];
+    const slugNome = (s) => String(s).toLowerCase().normalize("NFD")
+      .replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+    const match = clinicas.find((c) =>
+      slugNome(c.nome_clinica) === slugNome(item.clinica)
+    );
+    if (!match || !match.whatsapp_url) return "";
+    return `<a class="fp-wa-btn followup-wa-btn" href="${match.whatsapp_url}" target="_blank" rel="noopener">WhatsApp</a>`;
+  }
+
   function itemHtml(item) {
     const data = formatDateBr(item.dataProximaAcao);
     return `<li class="followup-item">
@@ -411,6 +429,7 @@ function renderFollowupB2B() {
         ${data ? `<span class="followup-date">${data}</span>` : ""}
       </div>
       ${item.proximaAcao ? `<small>${item.proximaAcao}</small>` : ""}
+      ${waButton(item)}
     </li>`;
   }
 
