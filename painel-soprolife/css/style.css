@@ -2488,6 +2488,12 @@ td { font-size: .94rem; }
 .cc-result-ok  { background: #d4f5eb; color: #0b5e43; }
 .cc-result-err { background: #fde8e9; color: #8c1a21; }
 
+.cc-render-error {
+  color: var(--danger);
+  font-size: .85rem;
+  padding: .5rem 0;
+}
+
 @media (max-width: 700px) {
   .cc-form-grid { grid-template-columns: 1fr; }
   .cc-tabs { gap: .3rem; }

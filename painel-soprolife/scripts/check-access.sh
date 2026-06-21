@@ -608,6 +608,56 @@ PY
   fi
 }
 
+validate_command_center_proxy() {
+  echo
+  echo "Verificando servidor proxy do Command Center..."
+
+  local proxy_script="painel-soprolife/scripts/command-center-local-server.py"
+
+  if [ ! -f "$proxy_script" ]; then
+    echo "  ATENÇÃO: $proxy_script não encontrado."
+    echo "           Sem o proxy, o formulário de Entrada de Dados não funciona."
+    return
+  fi
+
+  echo "  OK: $proxy_script existe."
+
+  # Confirma que o servidor só escuta em 127.0.0.1
+  if grep -q '127\.0\.0\.1' "$proxy_script"; then
+    echo "  OK: proxy configurado para 127.0.0.1 (localhost only)."
+  else
+    echo "  ATENÇÃO: 127.0.0.1 não encontrado no proxy — verifique o HOST configurado."
+  fi
+
+  # Confirma que não há token ou URL hardcoded no script do proxy
+  if grep -qE '"[A-Za-z0-9_\-]{20,}"' "$proxy_script" 2>/dev/null; then
+    echo "  ATENÇÃO: possível token ou ID hardcoded detectado no proxy."
+  else
+    echo "  OK: nenhum segredo hardcoded no proxy."
+  fi
+
+  # Confirma que o proxy lê o token do arquivo local (nunca do código)
+  if grep -q 'apiToken' "$proxy_script" && grep -q '_CONFIG_PATH\|read_text\|json.loads' "$proxy_script"; then
+    echo "  OK: proxy lê o token do arquivo de configuração local (não hardcoded)."
+  else
+    echo "  ATENÇÃO: não foi possível confirmar que o token é lido do arquivo de configuração."
+  fi
+
+  # Garante que app.js não faz fetch direto para o Apps Script
+  if grep -q 'script\.google\.com' painel-soprolife/js/app.js 2>/dev/null; then
+    echo "  ATENÇÃO: app.js parece chamar script.google.com diretamente — verifique."
+  else
+    echo "  OK: app.js não contém URL do Apps Script (usa proxy local)."
+  fi
+
+  # Confirma que app.js não carrega o token no browser
+  if grep -q 'apiToken' painel-soprolife/js/app.js 2>/dev/null; then
+    echo "  ATENÇÃO: 'apiToken' encontrado em app.js — token pode estar exposto no browser."
+  else
+    echo "  OK: token não carregado no browser."
+  fi
+}
+
 main() {
   check_ports
   check_extra_network_services
@@ -618,6 +668,7 @@ main() {
   validate_followup_pacientes
   validate_followup_clinicas
   validate_command_center_config
+  validate_command_center_proxy
 }
 
 main
