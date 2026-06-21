@@ -80,13 +80,13 @@ def _load_google_libs():
 
 def _load_ga4_lib():
     try:
-        from google.analytics.data.v1beta import BetaAnalyticsDataClient
-        from google.analytics.data.v1beta.types import (
+        from google.analytics.data_v1beta import BetaAnalyticsDataClient
+        from google.analytics.data_v1beta.types import (
             RunReportRequest, Dimension, Metric, DateRange,
         )
-        return BetaAnalyticsDataClient, RunReportRequest, Dimension, Metric, DateRange
-    except ImportError:
-        return None, None, None, None, None
+        return BetaAnalyticsDataClient, RunReportRequest, Dimension, Metric, DateRange, None
+    except ImportError as exc:
+        return None, None, None, None, None, str(exc)
 
 
 def _fetch_search_console(build, credentials, site_url, start_date, end_date, top_limit):
@@ -188,12 +188,18 @@ def _fetch_ga4(credentials, property_id, start_date, end_date, top_limit):
     warnings = []
     result = {}
 
-    GA4Client, RunReportRequest, Dimension, Metric, DateRange = _load_ga4_lib()
+    GA4Client, RunReportRequest, Dimension, Metric, DateRange, import_err = _load_ga4_lib()
     if GA4Client is None:
-        warnings.append(
-            "GA4: biblioteca 'google-analytics-data' não instalada. "
-            "Execute: pip install google-analytics-data"
-        )
+        if import_err:
+            warnings.append(
+                f"GA4: falha ao importar biblioteca — {import_err}. "
+                "Execute: pip install google-analytics-data"
+            )
+        else:
+            warnings.append(
+                "GA4: biblioteca 'google-analytics-data' não instalada. "
+                "Execute: pip install google-analytics-data"
+            )
         return result, warnings
 
     try:
