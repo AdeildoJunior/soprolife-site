@@ -14,7 +14,7 @@ const state = {
   followupPacientes: null,
   followupSummary: null,
   followupClinicas: null,
-  commandCenter: null,
+  ccConfigured: false,
 };
 
 const slug = (text) =>
@@ -154,7 +154,7 @@ async function init() {
       state.followupClinicas = followupClinicasLocal;
     }
 
-    state.commandCenter = await loadOptionalJson("./data-private/command-center-config.local.json");
+    state.ccConfigured = await fetchCcStatus();
 
     renderCards();
     renderDataFreshness();
@@ -1087,16 +1087,26 @@ function renderCrmAutomacoes(container) {
   });
 }
 
-async function submitToCommandCenter(action, formData) {
-  const cfg = state.commandCenter;
-  if (!cfg || !cfg.webAppUrl || !cfg.apiToken) {
-    throw new Error("Configuração command-center-config.local.json não encontrada.");
+async function fetchCcStatus() {
+  try {
+    const r = await fetch("/painel-soprolife/api/command-center/status");
+    if (!r.ok) return false;
+    const j = await r.json();
+    return j.configured === true;
+  } catch {
+    return false;
   }
-  const response = await fetch(cfg.webAppUrl, {
+}
+
+async function submitToCommandCenter(action, formData) {
+  if (!state.ccConfigured) {
+    throw new Error("Escrita não configurada. Inicie o servidor proxy local.");
+  }
+  // Token adicionado pelo servidor proxy — nunca sai para o browser
+  const response = await fetch("/painel-soprolife/api/command-center", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: cfg.apiToken, action, data: formData }),
-    redirect: "follow",
+    body: JSON.stringify({ action, data: formData }),
   });
   if (!response.ok) throw new Error(`Erro HTTP ${response.status}`);
   const json = await response.json();
@@ -1105,75 +1115,24 @@ async function submitToCommandCenter(action, formData) {
 }
 
 function renderEntradaDados(container) {
-  const cfg = state.commandCenter;
+  const cfg = state.ccConfigured;
 
-  const warningHtml = !cfg
-    ? `<div class="cc-config-warning">
-        <span class="cc-warning-icon">⚠️</span>
-        <div>
-          <strong>Configuração de escrita não encontrada.</strong>
-          <p>Use o Google Sheets manualmente ou configure
-          <code>painel-soprolife/data-private/command-center-config.local.json</code>
-          com base no exemplo em
-          <code>painel-soprolife/apps-script/command-center-config.local.example.json</code>.</p>
-        </div>
-      </div>`
-    : "";
+  // ── Opções de select — declaradas ANTES de qualquer chamada que as use ────
+  // (const não é hoisted; declarar aqui evita TDZ quando showTab é chamado)
+  const consentOpts = ["Sim", "Não", "Não informado"];
+  const canalOpts   = ["Indicação", "WhatsApp", "Instagram", "Google", "Ligação", "Presencial", "Outro"];
+  const prioOpts    = ["Alta", "Normal", "Baixa"];
+  const etapaOpts   = ["Não abordado", "Abordado", "Em conversa", "Proposta enviada", "Parceiro ativo"];
 
-  container.innerHTML = `
-    <div class="crm-subview-header">
-      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
-      <div>
-        <p class="eyebrow">Centro de Comando · Fase 3</p>
-        <h2>Entrada de Dados</h2>
-        <p class="section-sub">Cadastrar diretamente no Google Sheets via Apps Script</p>
-      </div>
-    </div>
-
-    ${warningHtml}
-
-    <div class="cc-tabs" role="tablist">
-      <button class="cc-tab active" data-tab="paciente"   role="tab">Novo Paciente</button>
-      <button class="cc-tab"        data-tab="espi"       role="tab">Nova Espirometria</button>
-      <button class="cc-tab"        data-tab="consulta"   role="tab">Nova Consulta</button>
-      <button class="cc-tab"        data-tab="clinica"    role="tab">Nova Clínica B2B</button>
-      <button class="cc-tab"        data-tab="interacao"  role="tab">Contato com Clínica</button>
-    </div>
-
-    <div id="ccTabContent" class="cc-tab-content"></div>
-  `;
-
-  const tabs = {
-    paciente: buildFormPaciente,
-    espi:     buildFormEspi,
-    consulta: buildFormConsulta,
-    clinica:  buildFormClinica,
-    interacao: buildFormInteracao,
+  const ACTION_MAP = {
+    paciente:  "createPaciente",
+    espi:      "createEspirometria",
+    consulta:  "createConsulta",
+    clinica:   "createClinicaB2B",
+    interacao: "registrarInteracaoClinica",
   };
 
-  function showTab(name) {
-    container.querySelectorAll(".cc-tab").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.tab === name);
-    });
-    const panel = document.querySelector("#ccTabContent");
-    if (panel) {
-      panel.innerHTML = tabs[name]();
-      bindForm(panel, name);
-    }
-  }
-
-  container.querySelectorAll(".cc-tab").forEach((btn) => {
-    btn.addEventListener("click", () => showTab(btn.dataset.tab));
-  });
-
-  showTab("paciente");
-
-  document.querySelector("#crmBackBtn").addEventListener("click", () => {
-    state.crmView = "hub";
-    renderCrmView();
-  });
-
-  // ── Construtores de formulário ───────────────────────────────────────────
+  // ── Helpers de renderização ───────────────────────────────────────────────
 
   function field({ id, label, type = "text", options, required, placeholder, hint }) {
     const req = required ? " *" : "";
@@ -1182,7 +1141,7 @@ function renderEntradaDados(container) {
       const opts = options.map((o) => {
         const val = typeof o === "string" ? o : o.value;
         const lbl = typeof o === "string" ? o : o.label;
-        return `<option value="${val}">${lbl}</option>`;
+        return `<option value="${escapeHtml(val)}">${escapeHtml(lbl)}</option>`;
       }).join("");
       return `<div class="cc-field-group">
         <label class="cc-label" for="${id}">${label}${req}${hintHtml}</label>
@@ -1191,31 +1150,29 @@ function renderEntradaDados(container) {
     }
     return `<div class="cc-field-group">
       <label class="cc-label" for="${id}">${label}${req}${hintHtml}</label>
-      <input id="${id}" name="${id}" type="${type}" class="cc-input"${required ? " required" : ""}${placeholder ? ` placeholder="${placeholder}"` : ""}>
+      <input id="${id}" name="${id}" type="${type}" class="cc-input"${required ? " required" : ""}${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}>
     </div>`;
   }
 
-  const consentOpts = ["Sim", "Não", "Não informado"];
-  const canalOpts   = ["Indicação", "WhatsApp", "Instagram", "Google", "Ligação", "Presencial", "Outro"];
-  const prioOpts    = ["Alta", "Normal", "Baixa"];
-  const etapaOpts   = ["Não abordado", "Abordado", "Em conversa", "Proposta enviada", "Parceiro ativo"];
-
   function formWrapper(title, fields) {
+    const disabledAttr = !cfg ? " disabled title='Configure o arquivo de conexão primeiro.'" : "";
     return `<form class="cc-form" novalidate>
       <h4 class="cc-form-title">${title}</h4>
       <div class="cc-form-grid">${fields}</div>
       <div class="cc-submit-row">
-        <button type="submit" class="cc-btn-submit"${!cfg ? " disabled title='Configure o arquivo de conexão primeiro.'" : ""}>Salvar no Google Sheets</button>
+        <button type="submit" class="cc-btn-submit"${disabledAttr}>Salvar no Google Sheets</button>
       </div>
       <div class="cc-result" hidden></div>
     </form>`;
   }
 
+  // ── Construtores de formulário ────────────────────────────────────────────
+
   function buildFormPaciente() {
     return formWrapper("Novo Paciente", [
       field({ id: "primeiro_nome",          label: "Primeiro nome",            required: true }),
       field({ id: "responsavel",            label: "Responsável",              required: true }),
-      field({ id: "telefone",               label: "Telefone / WhatsApp",      type: "tel",  placeholder: "(11) 99999-9999" }),
+      field({ id: "telefone",               label: "Telefone / WhatsApp",      type: "tel", placeholder: "(11) 99999-9999" }),
       field({ id: "canal",                  label: "Canal",                    type: "select", options: canalOpts }),
       field({ id: "origem",                 label: "Origem / serviço",         placeholder: "Espirometria, Teleconsulta..." }),
       field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts }),
@@ -1255,53 +1212,69 @@ function renderEntradaDados(container) {
 
   function buildFormClinica() {
     return formWrapper("Nova Clínica B2B", [
-      field({ id: "nome_clinica",       label: "Nome da clínica / empresa",    required: true }),
-      field({ id: "status",             label: "Status",                       required: true, type: "select", options: etapaOpts }),
-      field({ id: "tipo_clinica",       label: "Tipo",                         type: "select", options: ["Clínica", "Consultório", "Hospital", "Empresa/PCMSO", "Laboratório", "Outro"] }),
+      field({ id: "nome_clinica",       label: "Nome da clínica / empresa",   required: true }),
+      field({ id: "status",             label: "Status",                      required: true, type: "select", options: etapaOpts }),
+      field({ id: "tipo_clinica",       label: "Tipo",                        type: "select", options: ["Clínica", "Consultório", "Hospital", "Empresa/PCMSO", "Laboratório", "Outro"] }),
       field({ id: "bairro",             label: "Bairro" }),
       field({ id: "regiao",             label: "Região" }),
-      field({ id: "telefone_whatsapp",  label: "Telefone / WhatsApp",          type: "tel" }),
+      field({ id: "telefone_whatsapp",  label: "Telefone / WhatsApp",         type: "tel" }),
       field({ id: "origem",             label: "Origem da lista" }),
       field({ id: "interesse",          label: "Interesse" }),
       field({ id: "proximo_passo",      label: "Próximo passo" }),
-      field({ id: "data_proximo_passo", label: "Data do próximo passo",        type: "date" }),
+      field({ id: "data_proximo_passo", label: "Data do próximo passo",       type: "date" }),
       field({ id: "responsavel",        label: "Responsável" }),
-      field({ id: "prioridade",         label: "Prioridade",                   type: "select", options: prioOpts }),
+      field({ id: "prioridade",         label: "Prioridade",                  type: "select", options: prioOpts }),
     ].join(""));
   }
 
   function buildFormInteracao() {
     return formWrapper("Registrar Contato com Clínica", [
-      field({ id: "nome_clinica",       label: "Nome da clínica",              required: true, hint: " — deve corresponder ao nome no CRM" }),
-      field({ id: "etapa",              label: "Nova etapa",                   required: true, type: "select", options: etapaOpts }),
-      field({ id: "proxima_acao",       label: "Próxima ação" }),
-      field({ id: "data_proxima_acao",  label: "Data da próxima ação",         type: "date" }),
-      field({ id: "prioridade",         label: "Prioridade",                   type: "select", options: prioOpts }),
-      field({ id: "responsavel",        label: "Responsável",                  required: true }),
+      field({ id: "nome_clinica",      label: "Nome da clínica",             required: true, hint: " — deve corresponder ao nome no CRM" }),
+      field({ id: "etapa",             label: "Nova etapa",                  required: true, type: "select", options: etapaOpts }),
+      field({ id: "proxima_acao",      label: "Próxima ação" }),
+      field({ id: "data_proxima_acao", label: "Data da próxima ação",        type: "date" }),
+      field({ id: "prioridade",        label: "Prioridade",                  type: "select", options: prioOpts }),
+      field({ id: "responsavel",       label: "Responsável",                 required: true }),
     ].join(""));
+  }
+
+  const tabs = {
+    paciente:  buildFormPaciente,
+    espi:      buildFormEspi,
+    consulta:  buildFormConsulta,
+    clinica:   buildFormClinica,
+    interacao: buildFormInteracao,
+  };
+
+  // ── Lógica de tab ─────────────────────────────────────────────────────────
+
+  function showTab(name) {
+    container.querySelectorAll(".cc-tab").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === name);
+    });
+    const panel = document.querySelector("#ccTabContent");
+    if (!panel) return;
+    try {
+      panel.innerHTML = tabs[name]();
+      bindForm(panel, name);
+    } catch (err) {
+      panel.innerHTML = `<p class="cc-render-error">Erro ao carregar formulário. Verifique o console ou atualize a página.</p>`;
+      console.error("[EntradaDados] Erro ao renderizar aba", name, err);
+    }
   }
 
   // ── Lógica de submit ─────────────────────────────────────────────────────
 
-  const ACTION_MAP = {
-    paciente:  "createPaciente",
-    espi:      "createEspirometria",
-    consulta:  "createConsulta",
-    clinica:   "createClinicaB2B",
-    interacao: "registrarInteracaoClinica",
-  };
-
   function bindForm(panel, tabName) {
-    const form    = panel.querySelector(".cc-form");
-    const result  = panel.querySelector(".cc-result");
-    const btn     = panel.querySelector(".cc-btn-submit");
+    const form   = panel.querySelector(".cc-form");
+    const result = panel.querySelector(".cc-result");
+    const btn    = panel.querySelector(".cc-btn-submit");
     if (!form) return;
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (!cfg) return;
 
-      // Coleta campos sem imprimir no console
       const formData = {};
       new FormData(form).forEach((val, key) => { formData[key] = val; });
 
@@ -1325,6 +1298,55 @@ function renderEntradaDados(container) {
       }
     });
   }
+
+  // ── Monta DOM e inicializa ────────────────────────────────────────────────
+
+  const warningHtml = !cfg
+    ? `<div class="cc-config-warning">
+        <span class="cc-warning-icon">⚠️</span>
+        <div>
+          <strong>Configuração de escrita não encontrada.</strong>
+          <p>Use o Google Sheets manualmente ou configure
+          <code>painel-soprolife/data-private/command-center-config.local.json</code>
+          com base no exemplo em
+          <code>painel-soprolife/apps-script/command-center-config.local.example.json</code>.</p>
+        </div>
+      </div>`
+    : "";
+
+  container.innerHTML = `
+    <div class="crm-subview-header">
+      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
+      <div>
+        <p class="eyebrow">Centro de Comando · Fase 3</p>
+        <h2>Entrada de Dados</h2>
+        <p class="section-sub">Cadastrar diretamente no Google Sheets via Apps Script</p>
+      </div>
+    </div>
+
+    ${warningHtml}
+
+    <div class="cc-tabs" role="tablist">
+      <button class="cc-tab active" data-tab="paciente"  role="tab">Novo Paciente</button>
+      <button class="cc-tab"        data-tab="espi"      role="tab">Nova Espirometria</button>
+      <button class="cc-tab"        data-tab="consulta"  role="tab">Nova Consulta</button>
+      <button class="cc-tab"        data-tab="clinica"   role="tab">Nova Clínica B2B</button>
+      <button class="cc-tab"        data-tab="interacao" role="tab">Contato com Clínica</button>
+    </div>
+
+    <div id="ccTabContent" class="cc-tab-content"></div>
+  `;
+
+  container.querySelectorAll(".cc-tab").forEach((btn) => {
+    btn.addEventListener("click", () => showTab(btn.dataset.tab));
+  });
+
+  document.querySelector("#crmBackBtn").addEventListener("click", () => {
+    state.crmView = "hub";
+    renderCrmView();
+  });
+
+  showTab("paciente");
 }
 
 function renderCrmPlaceholder(container, area) {
