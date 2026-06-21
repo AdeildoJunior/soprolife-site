@@ -3,6 +3,7 @@ const state = {
   crm: [],
   leads: [],
   marketing: null,
+  marketingSeo: null,
   charts: {},
   tarefas: null,
   documentos: [],
@@ -154,6 +155,8 @@ async function init() {
       state.followupClinicas = followupClinicasLocal;
     }
 
+    state.marketingSeo = await loadOptionalJson("./data/marketing-seo.local.json");
+
     state.ccConfigured = await fetchCcStatus();
 
     renderCards();
@@ -163,9 +166,7 @@ async function init() {
     renderLeadStats();
     renderLeadPipeline();
     renderLeadsTable();
-    renderMarketingStats();
-    renderSeoFocus();
-    renderSeoList();
+    renderMarketingSection();
     renderCharts();
     renderTaskBoard();
     renderDocuments();
@@ -1552,6 +1553,7 @@ function renderLeadsTable() {
 
 function renderSeoList() {
   const list = document.querySelector("#seoList");
+  if (!list) return;
   list.innerHTML = state.marketing.seo.map((item) => `
     <div class="seo-item">
       <strong>${item.termo}</strong>
@@ -1559,6 +1561,309 @@ function renderSeoList() {
         <span>${item.impressoes} impressões</span>
         <span>${item.cliques} cliques</span>
         <span>posição ${item.posicao}</span>
+      </div>
+    </div>
+  `).join("");
+}
+
+// ─── Marketing & SEO — dados reais vs demonstrativos ────────────────────────
+
+function isMarketingReal() {
+  const m = state.marketingSeo;
+  return Boolean(
+    m?.meta?.configured === true &&
+    m?.meta?.safeToDisplay === true &&
+    m?.meta?.containsPersonalData === false
+  );
+}
+
+function renderMarketingSection() {
+  if (isMarketingReal()) {
+    renderMarketingRealHeader();
+    renderMarketingRealStats();
+    renderMarketingRealGa4Stats();
+    renderMarketingRealSeoAlerts();
+    renderMarketingRealSeoList();
+    renderMarketingRealPages();
+    renderMarketingRealTrafficSources();
+    renderMarketingRealFunnel();
+  } else {
+    renderMarketingStats();
+    renderSeoFocus();
+    renderSeoList();
+  }
+}
+
+function renderMarketingRealHeader() {
+  const m = state.marketingSeo;
+  const label = document.querySelector("#marketingDataLabel");
+  if (label) {
+    label.textContent = "Dados reais";
+    label.classList.add("safe-label-real");
+  }
+
+  const bar = document.querySelector("#marketingDataSource");
+  if (!bar) return;
+
+  const sources = m.meta.sources || {};
+  const srcList = [
+    sources.searchConsole && "Search Console",
+    sources.ga4 && "GA4",
+  ].filter(Boolean);
+
+  const period = m.meta.periodStart && m.meta.periodEnd
+    ? `${m.meta.periodStart} → ${m.meta.periodEnd} (${m.meta.lookbackDays} dias)`
+    : "";
+
+  const warningsHtml = (m.warnings || []).length > 0
+    ? `<span class="mds-warn" title="${escapeHtml((m.warnings || []).join("; "))}">⚠ ${m.warnings.length} aviso(s)</span>`
+    : "";
+
+  bar.innerHTML = `
+    <div class="mds-sources">
+      ${srcList.map((s) => `<span class="mds-badge">${s}</span>`).join("")}
+      ${warningsHtml}
+    </div>
+    ${period ? `<span class="mds-period">${period}</span>` : ""}
+  `;
+  bar.hidden = false;
+}
+
+function renderMarketingRealStats() {
+  const sc = state.marketingSeo?.searchConsole?.totals;
+  const container = document.querySelector("#marketingStats");
+  if (!container) return;
+
+  if (!sc) {
+    renderMarketingStats();
+    return;
+  }
+
+  const stats = [
+    { label: "Impressões Google", value: sc.impressions.toLocaleString("pt-BR") },
+    { label: "Cliques orgânicos", value: sc.clicks.toLocaleString("pt-BR") },
+    { label: "CTR",               value: (sc.ctr * 100).toFixed(2) + "%" },
+    { label: "Posição média",     value: sc.avgPosition.toFixed(1) },
+  ];
+
+  container.innerHTML = stats.map((item) => `
+    <article class="marketing-stat-card">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+    </article>
+  `).join("");
+}
+
+function renderMarketingRealGa4Stats() {
+  const ga4 = state.marketingSeo?.ga4?.totals;
+  const container = document.querySelector("#marketingGa4Stats");
+  if (!container) return;
+
+  if (!ga4) {
+    container.hidden = true;
+    return;
+  }
+
+  const stats = [
+    { label: "Usuários",       value: ga4.users.toLocaleString("pt-BR") },
+    { label: "Sessões",        value: ga4.sessions.toLocaleString("pt-BR") },
+    { label: "Visualizações",  value: ga4.pageviews.toLocaleString("pt-BR") },
+  ];
+
+  container.innerHTML = stats.map((item) => `
+    <article class="marketing-stat-card">
+      <span>${item.label}</span>
+      <strong>${item.value}</strong>
+    </article>
+  `).join("");
+  container.hidden = false;
+}
+
+function renderMarketingRealSeoAlerts() {
+  const sc  = state.marketingSeo?.searchConsole;
+  const titleEl  = document.querySelector("#seoFocusTitle");
+  const subEl    = document.querySelector("#seoFocusSubtitle");
+  const alertsEl = document.querySelector("#seoAlerts");
+  const focusEl  = document.querySelector("#seoFocus");
+
+  if (titleEl) titleEl.textContent = "Alertas / Próximas ações de SEO";
+  if (subEl)   subEl.textContent   = "Insights gerados automaticamente dos dados reais";
+  if (focusEl) focusEl.innerHTML   = "";
+  if (!alertsEl) return;
+
+  const alerts = [];
+
+  if (sc?.topQueries) {
+    sc.topQueries.forEach((q) => {
+      if (q.impressions >= 100 && q.ctr < 0.02) {
+        alerts.push({
+          type: "warning",
+          icon: "📉",
+          title: `Alta impressão, CTR baixo: "${q.query}"`,
+          text: `${q.impressions.toLocaleString("pt-BR")} impressões · CTR ${(q.ctr * 100).toFixed(1)}% · posição ${q.avgPosition.toFixed(1)}`,
+          action: "Melhorar título e meta description para aumentar cliques.",
+        });
+      }
+    });
+
+    sc.topQueries.forEach((q) => {
+      if (q.avgPosition >= 5 && q.avgPosition <= 20 && q.impressions >= 50) {
+        alerts.push({
+          type: "info",
+          icon: "🎯",
+          title: `Oportunidade de subir: "${q.query}"`,
+          text: `Posição média ${q.avgPosition.toFixed(1)} · ${q.impressions.toLocaleString("pt-BR")} impressões`,
+          action: "Reforçar conteúdo e backlinks para essa palavra-chave.",
+        });
+      }
+    });
+  }
+
+  if (sc?.topPages) {
+    sc.topPages.forEach((p) => {
+      if (p.impressions >= 200 && p.ctr < 0.03) {
+        const name = p.page.replace(/^https?:\/\/[^/]+/, "").split("?")[0] || p.page;
+        alerts.push({
+          type: "warning",
+          icon: "📄",
+          title: `Página com CTR baixo: ${name}`,
+          text: `${p.impressions.toLocaleString("pt-BR")} impressões · CTR ${(p.ctr * 100).toFixed(1)}%`,
+          action: "Revisar snippet e adicionar structured data.",
+        });
+      }
+    });
+  }
+
+  if (alerts.length === 0) {
+    alertsEl.innerHTML = `<p class="seo-alerts-empty">Nenhum alerta identificado — ótimo desempenho!</p>`;
+  } else {
+    alertsEl.innerHTML = alerts.slice(0, 6).map((a) => `
+      <article class="seo-alert-card seo-alert-${a.type}">
+        <div class="seo-alert-header">
+          <span>${a.icon}</span>
+          <strong>${escapeHtml(a.title)}</strong>
+        </div>
+        <p class="seo-alert-text">${escapeHtml(a.text)}</p>
+        <p class="seo-alert-action">${escapeHtml(a.action)}</p>
+      </article>
+    `).join("");
+  }
+  alertsEl.hidden = false;
+}
+
+function renderMarketingRealSeoList() {
+  const queries = state.marketingSeo?.searchConsole?.topQueries;
+  const list  = document.querySelector("#seoList");
+  const subEl = document.querySelector("#seoListSubtitle");
+  if (!list) return;
+
+  if (!queries?.length) {
+    renderSeoList();
+    return;
+  }
+
+  if (subEl) subEl.textContent = "Search Console — dados reais";
+
+  list.innerHTML = queries.slice(0, 15).map((item) => `
+    <div class="seo-item">
+      <strong>${escapeHtml(item.query)}</strong>
+      <div class="seo-meta">
+        <span>${item.impressions.toLocaleString("pt-BR")} impr.</span>
+        <span>${item.clicks} cliques</span>
+        <span>CTR ${(item.ctr * 100).toFixed(1)}%</span>
+        <span>pos. ${item.avgPosition.toFixed(1)}</span>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderMarketingRealPages() {
+  const ga4Pages = state.marketingSeo?.ga4?.topPages;
+  const scPages  = state.marketingSeo?.searchConsole?.topPages;
+  const grid = document.querySelector("#marketingPagesGrid");
+  if (!grid) return;
+
+  if (!ga4Pages?.length && !scPages?.length) {
+    grid.hidden = true;
+    return;
+  }
+
+  grid.hidden = false;
+
+  const ga4El = document.querySelector("#ga4TopPages");
+  if (ga4El) {
+    ga4El.innerHTML = ga4Pages?.length
+      ? ga4Pages.slice(0, 10).map((p) => {
+          const name = p.page.replace(/^https?:\/\/[^/]+/, "").split("?")[0] || p.page;
+          return `
+            <div class="seo-item">
+              <strong>${escapeHtml(name)}</strong>
+              <div class="seo-meta">
+                <span>${p.pageviews.toLocaleString("pt-BR")} views</span>
+                <span>${p.users.toLocaleString("pt-BR")} usuários</span>
+              </div>
+            </div>`;
+        }).join("")
+      : `<p class="seo-alerts-empty">GA4 não configurado.</p>`;
+  }
+
+  const scEl = document.querySelector("#scTopPages");
+  if (scEl) {
+    scEl.innerHTML = scPages?.length
+      ? scPages.slice(0, 10).map((p) => {
+          const name = p.page.replace(/^https?:\/\/[^/]+/, "").split("?")[0] || p.page;
+          return `
+            <div class="seo-item">
+              <strong>${escapeHtml(name)}</strong>
+              <div class="seo-meta">
+                <span>${p.impressions.toLocaleString("pt-BR")} impr.</span>
+                <span>${p.clicks} cliques</span>
+                <span>CTR ${(p.ctr * 100).toFixed(1)}%</span>
+              </div>
+            </div>`;
+        }).join("")
+      : `<p class="seo-alerts-empty">Search Console não configurado.</p>`;
+  }
+}
+
+function renderMarketingRealTrafficSources() {
+  const sources    = state.marketingSeo?.ga4?.trafficSources;
+  const subEl      = document.querySelector("#channelsSubtitle");
+  const listEl     = document.querySelector("#trafficSourceList");
+  if (!sources?.length || !listEl) return;
+
+  if (subEl) subEl.textContent = "GA4 — dados reais";
+
+  listEl.innerHTML = sources.slice(0, 10).map((s) => `
+    <div class="seo-item">
+      <strong>${escapeHtml(s.source)}/${escapeHtml(s.medium)}</strong>
+      <div class="seo-meta">
+        <span>${s.sessions.toLocaleString("pt-BR")} sessões</span>
+      </div>
+    </div>
+  `).join("");
+  listEl.hidden = false;
+}
+
+function renderMarketingRealFunnel() {
+  const events = state.marketingSeo?.ga4?.events;
+  const panel  = document.querySelector("#marketingFunnelPanel");
+  if (!panel) return;
+
+  if (!events?.length) {
+    panel.hidden = true;
+    return;
+  }
+
+  panel.hidden = false;
+  const funnelEl = document.querySelector("#marketingFunnel");
+  if (!funnelEl) return;
+
+  funnelEl.innerHTML = events.slice(0, 15).map((e) => `
+    <div class="seo-item">
+      <strong>${escapeHtml(e.event)}</strong>
+      <div class="seo-meta">
+        <span>${e.count.toLocaleString("pt-BR")} ocorrências</span>
       </div>
     </div>
   `).join("");
@@ -1621,14 +1926,22 @@ function renderCharts() {
     options: defaultOptions
   });
 
+  const ga4Sources = state.marketingSeo?.ga4?.trafficSources;
+  const channelsData = ga4Sources?.length
+    ? {
+        labels: ga4Sources.slice(0, 8).map((s) => `${s.source}/${s.medium}`),
+        values: ga4Sources.slice(0, 8).map((s) => s.sessions),
+      }
+    : state.marketing.canais;
+
   createChart("channels", "#channelsChart", {
     type: "doughnut",
     data: {
-      labels: state.marketing.canais.labels,
+      labels: channelsData.labels,
       datasets: [
         {
-          label: "Origem dos contatos",
-          data: state.marketing.canais.values,
+          label: ga4Sources?.length ? "Sessões por origem (GA4)" : "Origem dos contatos",
+          data: channelsData.values,
           borderWidth: 2
         }
       ]

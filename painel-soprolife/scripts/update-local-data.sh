@@ -13,6 +13,17 @@ _SHEETS_SCRIPT="painel-soprolife/scripts/read-sheets-summary-adc.py"
 _CRM_SCRIPT="painel-soprolife/scripts/read-crm-clinicas-adc.py"
 _CSV_PATH="${SOPROLIFE_SUMMARY_CSV:-$HOME/.config/soprolife/painel/resumo-dashboard.csv}"
 
+# Pré-requisitos do conector Marketing & SEO
+_MARKETING_CONFIG="painel-soprolife/data-private/marketing-seo-config.local.json"
+_MARKETING_SCRIPT="painel-soprolife/scripts/read-marketing-seo-adc.py"
+
+# Python a usar para Marketing & SEO: venv se disponível, senão system python3
+if [ -f "$_VENV_PYTHON" ]; then
+  _MARKETING_PYTHON="$_VENV_PYTHON"
+else
+  _MARKETING_PYTHON="python3"
+fi
+
 # Verifica se todos os pré-requisitos do Google Sheets estão presentes
 _sheets_available=false
 if [ -f "$_SHEETS_CONFIG" ] && \
@@ -27,11 +38,11 @@ fi
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
-echo "1/5 - Atualizando status seguro da fonte Google Sheets..."
+echo "1/6 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
 
 echo
-echo "2/5 - Atualizando resumo seguro..."
+echo "2/6 - Atualizando resumo seguro..."
 
 if [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC"
@@ -68,7 +79,7 @@ else
 fi
 
 echo
-echo "3/5 - Atualizando CRM Clínicas seguro..."
+echo "3/6 - Atualizando CRM Clínicas seguro..."
 
 if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
   echo "Fonte: Google Sheets via ADC (aba CRM Clinicas)"
@@ -88,11 +99,35 @@ else
 fi
 
 echo
-echo "4/5 - Verificando segurança..."
+echo "4/6 - Atualizando Marketing & SEO..."
+
+if [ ! -f "$_MARKETING_CONFIG" ]; then
+  echo "Marketing & SEO não configurado — usando dados demonstrativos."
+  echo "(Crie $_MARKETING_CONFIG a partir de"
+  echo " painel-soprolife/config-examples/marketing-seo.local.example.json)"
+elif [ ! -f "$_MARKETING_SCRIPT" ]; then
+  echo "AVISO: script de Marketing & SEO não encontrado ($MARKETING_SCRIPT)."
+elif [ ! -f "$_ADC_CONFIG" ]; then
+  echo "AVISO: ADC não configurado (gcloud). Marketing & SEO pulado."
+  echo "  Execute: gcloud auth application-default login"
+else
+  echo "Fonte: Google Search Console + GA4 via ADC"
+  echo
+  if ! "$_MARKETING_PYTHON" "$_MARKETING_SCRIPT" --write 2>&1; then
+    echo
+    echo "AVISO: Marketing & SEO atualização falhou — usando dados demonstrativos."
+    echo "  Diagnóstico: $_MARKETING_PYTHON $_MARKETING_SCRIPT --dry-run"
+  else
+    echo "Marketing & SEO atualizado com dados reais/agregados."
+  fi
+fi
+
+echo
+echo "5/6 - Verificando segurança..."
 painel-soprolife/scripts/check-access.sh
 
 echo
-echo "5/5 - Concluído."
+echo "6/6 - Concluído."
 echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"

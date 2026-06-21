@@ -2793,3 +2793,108 @@ td { font-size: .94rem; }
 .runtime-status-card {
   border-radius: 18px;
 }
+
+/* ── Marketing & SEO — dados reais ──────────────────────────────────────── */
+.marketing-data-source {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: linear-gradient(135deg, #e8f4f8, #f0f9f9);
+  border: 1px solid rgba(6, 145, 160, .2);
+  border-radius: 16px;
+  padding: 12px 18px;
+  margin-bottom: 18px;
+  font-size: .86rem;
+}
+
+.mds-sources {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.mds-badge {
+  background: var(--teal-dark);
+  color: white;
+  border-radius: 20px;
+  padding: 3px 11px;
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+}
+
+.mds-warn {
+  color: #b85c00;
+  font-size: .8rem;
+  cursor: default;
+}
+
+.mds-period {
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.safe-label-real {
+  background: rgba(0, 140, 90, .1);
+  color: #006a44;
+  border-color: rgba(0, 140, 90, .25);
+}
+
+/* SEO Alerts */
+.seo-alerts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.seo-alert-card {
+  border-radius: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+}
+
+.seo-alert-warning {
+  background: rgba(255, 186, 8, .07);
+  border-color: rgba(255, 186, 8, .35);
+}
+
+.seo-alert-info {
+  background: rgba(6, 145, 160, .05);
+  border-color: rgba(6, 145, 160, .22);
+}
+
+.seo-alert-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.seo-alert-header strong {
+  font-size: .88rem;
+  line-height: 1.35;
+}
+
+.seo-alert-text {
+  color: var(--muted);
+  font-size: .81rem;
+  margin: 4px 0 6px;
+  line-height: 1.4;
+}
+
+.seo-alert-action {
+  font-size: .79rem;
+  color: var(--teal-dark);
+  font-style: italic;
+  margin: 0;
+}
+
+.seo-alerts-empty {
+  color: var(--muted);
+  font-size: .9rem;
+  padding: 10px 0;
+  text-align: center;
+}

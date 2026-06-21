@@ -195,36 +195,66 @@
             <p class="eyebrow">Aquisição</p>
             <h2>Marketing & SEO</h2>
           </div>
-          <span class="safe-label">Dados demonstrativos</span>
+          <span id="marketingDataLabel" class="safe-label">Dados demonstrativos</span>
         </div>
 
+        <div id="marketingDataSource" class="marketing-data-source" hidden></div>
+
         <div id="marketingStats" class="marketing-stats"></div>
+        <div id="marketingGa4Stats" class="marketing-stats" hidden></div>
 
         <article class="panel seo-focus-panel">
           <div class="panel-header">
-            <h3>Prioridades de busca local</h3>
-            <span>Termos que a SoproLife deve acompanhar</span>
+            <h3 id="seoFocusTitle">Prioridades de busca local</h3>
+            <span id="seoFocusSubtitle">Termos que a SoproLife deve acompanhar</span>
           </div>
+          <div id="seoAlerts" class="seo-alerts" hidden></div>
           <div id="seoFocus" class="seo-focus"></div>
         </article>
 
         <div class="grid-two">
           <article class="panel">
             <div class="panel-header">
-              <h3>Origem dos contatos</h3>
-              <span>Canais de aquisição</span>
+              <h3>Origem do tráfego</h3>
+              <span id="channelsSubtitle">Canais de aquisição</span>
             </div>
             <canvas id="channelsChart"></canvas>
+            <div id="trafficSourceList" class="seo-list" hidden></div>
           </article>
 
           <article class="panel">
             <div class="panel-header">
               <h3>Termos de busca</h3>
-              <span>Modelo para Search Console</span>
+              <span id="seoListSubtitle">Modelo para Search Console</span>
             </div>
             <div id="seoList" class="seo-list"></div>
           </article>
         </div>
+
+        <div class="grid-two" id="marketingPagesGrid" hidden>
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Páginas mais acessadas</h3>
+              <span>GA4 — pageviews por página</span>
+            </div>
+            <div id="ga4TopPages" class="seo-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Páginas no Google</h3>
+              <span>Search Console — impressões</span>
+            </div>
+            <div id="scTopPages" class="seo-list"></div>
+          </article>
+        </div>
+
+        <article class="panel" id="marketingFunnelPanel" hidden>
+          <div class="panel-header">
+            <h3>Funil do site</h3>
+            <span>Eventos GA4</span>
+          </div>
+          <div id="marketingFunnel" class="seo-list"></div>
+        </article>
       </section>
 
       <section id="tarefas" class="section">
