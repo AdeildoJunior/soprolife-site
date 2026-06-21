@@ -46,7 +46,7 @@ import json
 import re
 import sys
 import unicodedata
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 _CONFIG_PATH = Path("~/.config/soprolife/painel/google-sheets.local.json").expanduser()
@@ -63,6 +63,15 @@ _STATUS_MAP: dict[str, tuple[str, str]] = {
     "em conversa": ("Em conversa", "Alta"),
     "proposta enviada": ("Proposta enviada", "Alta"),
     "parceiro ativo": ("Parceiro ativo", "Alta"),
+}
+
+_STATUS_DATE_OFFSET: dict[str, int | None] = {
+    "pediu apresentacao": 2,
+    "pediu apresentação": 2,
+    "abordado": 3,
+    "em conversa": 1,
+    "proposta enviada": 2,
+    "parceiro ativo": None,
 }
 
 _STATUS_BLOCK = {
@@ -134,6 +143,25 @@ def _key(text: str) -> str:
     # colapsa letras consecutivas repetidas: "ss"→"s", "ll"→"l", etc.
     collapsed = re.sub(r"(.)\1+", r"\1", joined)
     return collapsed.strip()
+
+
+def _parse_date(raw: str) -> str:
+    """Converte para YYYY-MM-DD se válido, caso contrário retorna vazio."""
+    raw = raw.strip()
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", raw):
+        return raw
+    if re.match(r"^\d{2}/\d{2}/\d{4}$", raw):
+        d, m, y = raw.split("/")
+        return f"{y}-{m}-{d}"
+    return ""
+
+
+def _fallback_date(status_key: str) -> str:
+    """Retorna data de próxima ação por status (YYYY-MM-DD), ou vazio."""
+    offset = _STATUS_DATE_OFFSET.get(status_key)
+    if offset is None:
+        return ""
+    return (date.today() + timedelta(days=offset)).isoformat()
 
 
 def _matches(key_a: str, key_b: str) -> bool:
@@ -330,7 +358,9 @@ def _parse_pcmso(rows: list) -> list[dict]:
         bairro       = cell(row, bairro_idx)
         tipo         = cell(row, tipo_idx)
         proxima_acao = cell(row, prox_idx)
-        ultima       = cell(row, data_idx) or today_str
+        data_raw     = cell(row, data_idx)
+        data_proxima_acao = _parse_date(data_raw) or _fallback_date(status_key)
+        ultima       = today_str
 
         interesse = cell(row, interesse_idx)
         observacao = ""
@@ -345,16 +375,17 @@ def _parse_pcmso(rows: list) -> list[dict]:
 
         records.append({
             "_key": _key(nome),
-            "nome_clinica":    nome,
-            "bairro":          bairro,
-            "regiao":          "",
-            "tipo_clinica":    tipo,
-            "etapa":           etapa,
-            "ultima_interacao": ultima,
-            "proxima_acao":    proxima_acao,
-            "responsavel":     "Comercial",
-            "prioridade":      prioridade,
-            "observacao":      observacao,
+            "nome_clinica":      nome,
+            "bairro":            bairro,
+            "regiao":            "",
+            "tipo_clinica":      tipo,
+            "etapa":             etapa,
+            "ultima_interacao":  ultima,
+            "proxima_acao":      proxima_acao,
+            "data_proxima_acao": data_proxima_acao,
+            "responsavel":       "Comercial",
+            "prioridade":        prioridade,
+            "observacao":        observacao,
         })
 
     print(f"    qualificados: {len(records)}")
@@ -433,6 +464,10 @@ def run_promote(service, spreadsheet_id: str, pcmso_sheet: str, crm_sheet: str,
     print(f"    existentes no CRM: {len(crm_records)}")
     print()
 
+    crm_col_map: dict[str, int] = {}
+    if crm_rows:
+        crm_col_map = {_norm(str(c)): i for i, c in enumerate(crm_rows[0])}
+
     to_create: list[dict] = []
     to_update: list[tuple[dict, dict]] = []
 
@@ -458,12 +493,19 @@ def run_promote(service, spreadsheet_id: str, pcmso_sheet: str, crm_sheet: str,
         if to_create:
             print(f"\nSeriam criadas ({len(to_create)}):")
             for r in to_create:
-                print(f"  + [{r['etapa']:20s}] [{r['prioridade']:5s}]  {r['nome_clinica'][:50]}")
+                data_tag = f"  data={r['data_proxima_acao']}" if r.get("data_proxima_acao") else "  sem data"
+                print(f"  + [{r['etapa']:20s}] [{r['prioridade']:5s}]  {r['nome_clinica'][:40]}{data_tag}")
         if to_update:
             print(f"\nSeriam atualizadas ({len(to_update)}):")
             for crm_rec, rec in to_update:
-                print(f"  ~ [{rec['etapa']:20s}] [{rec['prioridade']:5s}]  {rec['nome_clinica'][:50]}")
+                data_tag = f"  data={rec['data_proxima_acao']}" if rec.get("data_proxima_acao") else "  sem data"
+                print(f"  ~ [{rec['etapa']:20s}] [{rec['prioridade']:5s}]  {rec['nome_clinica'][:40]}{data_tag}")
                 print(f"    ↳ CRM atual: {crm_rec['nome_clinica'][:50]}")
+        all_recs = list(to_create) + [rec for _, rec in to_update]
+        n_date = sum(1 for r in all_recs if r.get("data_proxima_acao"))
+        n_empty = len(all_recs) - n_date
+        print()
+        print(f"  data_proxima_acao preenchida: {n_date}  /  vazia (Parceiro ativo): {n_empty}")
         print()
         print("Para executar: --write")
         return 0
@@ -477,10 +519,11 @@ def run_promote(service, spreadsheet_id: str, pcmso_sheet: str, crm_sheet: str,
             row_num = crm_rec["sheet_row"]
             col_map = crm_rec["col_map"]
             for field, value in {
-                "etapa":           rec["etapa"],
-                "ultima_interacao": rec["ultima_interacao"],
-                "proxima_acao":    rec["proxima_acao"],
-                "prioridade":      rec["prioridade"],
+                "etapa":             rec["etapa"],
+                "ultima_interacao":  rec["ultima_interacao"],
+                "proxima_acao":      rec["proxima_acao"],
+                "data_proxima_acao": rec["data_proxima_acao"],
+                "prioridade":        rec["prioridade"],
             }.items():
                 col_idx = col_map.get(field)
                 if col_idx is None:
@@ -499,17 +542,36 @@ def run_promote(service, spreadsheet_id: str, pcmso_sheet: str, crm_sheet: str,
     if to_create:
         print(f"\nCriando {len(to_create)} novas clínicas...")
         new_rows = []
+        num_cols = len(crm_col_map) if crm_col_map else 12
         for i, rec in enumerate(to_create):
             cid = f"CL{next_id_num + i:03d}"
-            new_rows.append([
-                cid, rec["nome_clinica"], rec["bairro"], rec["regiao"],
-                rec["tipo_clinica"], rec["etapa"], rec["ultima_interacao"],
-                rec["proxima_acao"], rec["responsavel"], rec["prioridade"],
-                rec["observacao"],
-            ])
+            field_values = {
+                "clinica_id":        cid,
+                "nome_clinica":      rec["nome_clinica"],
+                "bairro":            rec["bairro"],
+                "regiao":            rec["regiao"],
+                "tipo_clinica":      rec["tipo_clinica"],
+                "etapa":             rec["etapa"],
+                "ultima_interacao":  rec["ultima_interacao"],
+                "proxima_acao":      rec["proxima_acao"],
+                "data_proxima_acao": rec["data_proxima_acao"],
+                "responsavel":       rec["responsavel"],
+                "prioridade":        rec["prioridade"],
+                "observacao":        rec["observacao"],
+            }
+            if crm_col_map:
+                row_data: list[str] = [""] * num_cols
+                for field, value in field_values.items():
+                    col_idx = crm_col_map.get(field)
+                    if col_idx is not None and col_idx < num_cols:
+                        row_data[col_idx] = value
+            else:
+                row_data = list(field_values.values())
+            new_rows.append(row_data)
+        last_col = _col_letter(num_cols - 1) if crm_col_map else "L"
         sheets_api.values().append(
             spreadsheetId=spreadsheet_id,
-            range=f"'{crm_sheet}'!A:K",
+            range=f"'{crm_sheet}'!A:{last_col}",
             valueInputOption="USER_ENTERED",
             insertDataOption="INSERT_ROWS",
             body={"values": new_rows},

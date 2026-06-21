@@ -428,6 +428,103 @@ print(f"OK: crm-clinicas.local.json contém apenas dados institucionais seguros 
 PY
 }
 
+validate_followup_clinicas() {
+  echo
+  echo "Verificando follow-up B2B de clínicas..."
+
+  local private_file="painel-soprolife/data-private/followup-clinicas.local.json"
+  local summary_file="painel-soprolife/data/followup-clinicas-summary.local.json"
+
+  if [ -f "$private_file" ]; then
+    if git check-ignore -q "$private_file" 2>/dev/null; then
+      echo "  OK (gitignored): $private_file"
+    else
+      echo "  ERRO CRÍTICO: $private_file NÃO está gitignored!"
+      echo "  Execute: git rm --cached \"$private_file\" antes de qualquer commit."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json
+import sys
+
+path = Path("painel-soprolife/data-private/followup-clinicas.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler JSON privado: {exc}")
+    sys.exit(1)
+
+clinicas = data.get("clinicas", [])
+
+# Campos permitidos: apenas dados comerciais/institucionais B2B
+ALLOWED_FIELDS = {
+    "nome_clinica", "etapa", "prioridade", "proxima_acao",
+    "data_proxima_acao", "status_followup", "tem_whatsapp",
+    "telefone_whatsapp", "whatsapp_url",
+}
+# Campos proibidos: dados pessoais / clínicos / pacientes
+BLOCKED_FIELDS = {
+    "cpf", "rg", "data_nascimento", "endereco", "endereço",
+    "observacao_privada", "pedido_medico", "laudo", "diagnostico",
+    "nome_paciente", "paciente", "senha", "token",
+    "nome_medico", "crm_medico",
+}
+
+errors = 0
+for i, rec in enumerate(clinicas, start=1):
+    if not isinstance(rec, dict):
+        print(f"  ERRO: registro {i} não é um objeto.")
+        errors += 1
+        continue
+    for k in rec.keys():
+        if k.lower() in BLOCKED_FIELDS:
+            print(f"  ERRO: campo proibido '{k}' no registro {i}.")
+            errors += 1
+        if k not in ALLOWED_FIELDS:
+            print(f"  AVISO: campo inesperado '{k}' no registro {i}.")
+
+if errors == 0:
+    print(f"  OK: {len(clinicas)} clínicas B2B. Nenhum campo proibido.")
+else:
+    print(f"  {errors} erros encontrados.")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $private_file não existe (ainda não gerado)."
+    echo "        Execute: python3 painel-soprolife/scripts/generate-followup-clinicas.py --write"
+  fi
+
+  if [ -f "$summary_file" ]; then
+    if git check-ignore -q "$summary_file" 2>/dev/null; then
+      echo "  OK (gitignored): $summary_file"
+    else
+      echo "  ATENÇÃO: $summary_file não está gitignored."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json
+import sys
+
+path = Path("painel-soprolife/data/followup-clinicas-summary.local.json")
+data = json.loads(path.read_text(encoding="utf-8"))
+
+if data.get("safeToDisplay") is not True:
+    print("  ERRO: followup-clinicas-summary não marcado como seguro.")
+    sys.exit(1)
+if data.get("containsPersonalData") is not False:
+    print("  ERRO: followup-clinicas-summary pode conter dado pessoal.")
+    sys.exit(1)
+
+c = data.get("clinicas", {})
+print(f"  OK: resumo seguro — total={c.get('total',0)}, comWhatsApp={c.get('comWhatsApp',0)}.")
+PY
+  else
+    echo "  INFO: $summary_file não existe."
+  fi
+}
+
 main() {
   check_ports
   check_extra_network_services
@@ -436,6 +533,7 @@ main() {
   validate_dashboard_summary
   validate_crm_clinicas
   validate_followup_pacientes
+  validate_followup_clinicas
 }
 
 main
