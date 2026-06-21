@@ -1,0 +1,5 @@
+{
+  "_instrucoes": "Copie este arquivo para painel-soprolife/data-private/command-center-config.local.json e preencha os valores reais.",
+  "webAppUrl": "https://script.google.com/macros/s/SEU_DEPLOYMENT_ID/exec",
+  "apiToken": "SEU_TOKEN_SECRETO_AQUI"
+}

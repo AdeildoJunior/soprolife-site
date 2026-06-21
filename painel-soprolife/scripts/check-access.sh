@@ -525,6 +525,89 @@ PY
   fi
 }
 
+validate_command_center_config() {
+  echo
+  echo "Verificando configuração do Command Center..."
+
+  local real_cfg="painel-soprolife/data-private/command-center-config.local.json"
+  local example_cfg="painel-soprolife/apps-script/command-center-config.local.example.json"
+
+  # Arquivo exemplo deve ser COMMITÁVEL (não gitignored)
+  if [ -f "$example_cfg" ]; then
+    if git check-ignore -q "$example_cfg" 2>/dev/null; then
+      echo "  ATENÇÃO: $example_cfg está gitignored — deveria ser commitado."
+    else
+      echo "  OK (commitável): $example_cfg"
+    fi
+  else
+    echo "  INFO: $example_cfg não encontrado."
+  fi
+
+  # Arquivo real deve estar GITIGNORED
+  if [ -f "$real_cfg" ]; then
+    if git check-ignore -q "$real_cfg" 2>/dev/null; then
+      echo "  OK (gitignored): $real_cfg"
+    else
+      echo "  ERRO CRÍTICO: $real_cfg NÃO está gitignored — token pode vazar para o GitHub!"
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data-private/command-center-config.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler config: {exc}")
+    sys.exit(1)
+
+url   = data.get("webAppUrl", "")
+token = data.get("apiToken",  "")
+
+# Valida estrutura
+if not url or not token:
+    print("  ATENÇÃO: webAppUrl ou apiToken vazios.")
+    sys.exit(0)
+
+# Detecta valores de exemplo (não reais)
+if "SEU_" in url or "SEU_" in token or "DEPLOYMENT_ID" in url:
+    print("  ATENÇÃO: config contém valores de exemplo — preencha com valores reais.")
+    sys.exit(0)
+
+# Garante que o token não é trivial
+if len(token) < 12:
+    print("  ATENÇÃO: apiToken muito curto (mínimo 12 caracteres recomendado).")
+    sys.exit(0)
+
+# Garante que a URL é Apps Script (não expõe spreadsheet_id)
+if "spreadsheets/d/" in url or "spreadsheet_id" in url:
+    print("  ERRO: webAppUrl parece conter ID de planilha — use apenas a URL /exec do Apps Script.")
+    sys.exit(1)
+
+print(f"  OK: configuração válida (URL Apps Script + token com {len(token)} chars).")
+PY
+  else
+    echo "  INFO: $real_cfg não existe ainda."
+    echo "        Copie $example_cfg, renomeie para .local.json e preencha os valores reais."
+  fi
+
+  # Garante que nenhum arquivo commitado contém token ou URL secreta
+  echo "  Verificando código-fonte por tokens ou URLs secretas commitadas..."
+  local found=0
+  if git grep -rq "apiToken\s*[=:]\s*\"[A-Za-z0-9_\-]\{12,\}\"" -- painel-soprolife/js/ painel-soprolife/css/ 2>/dev/null; then
+    echo "  ATENÇÃO: possível token hardcoded encontrado em JS/CSS."
+    found=1
+  fi
+  if git grep -rq "script\.google\.com/macros/s/[A-Za-z0-9_\-]\{20,\}" -- painel-soprolife/js/ painel-soprolife/css/ 2>/dev/null; then
+    echo "  ATENÇÃO: URL de Apps Script hardcoded encontrada em JS/CSS."
+    found=1
+  fi
+  if [ "$found" -eq 0 ]; then
+    echo "  OK: nenhum token ou URL secreta hardcoded detectado."
+  fi
+}
+
 main() {
   check_ports
   check_extra_network_services
@@ -534,6 +617,7 @@ main() {
   validate_crm_clinicas
   validate_followup_pacientes
   validate_followup_clinicas
+  validate_command_center_config
 }
 
 main
