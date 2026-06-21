@@ -10,7 +10,8 @@ const state = {
   automacoes: null,
   runtimeStatus: null,
   dashboardSummary: null,
-  crmView: "hub"
+  crmView: "hub",
+  followupPacientes: null,
 };
 
 const slug = (text) =>
@@ -133,6 +134,11 @@ async function init() {
     const crmLocal = await loadOptionalJson("./data/crm-clinicas.local.json");
     if (crmLocal && Array.isArray(crmLocal.clinicas)) {
       state.crm = crmLocal.clinicas.map(normalizeCrmRecord);
+    }
+
+    const followupLocal = await loadOptionalJson("./data-private/followup-pacientes.local.json");
+    if (followupLocal) {
+      state.followupPacientes = followupLocal;
     }
 
     renderCards();
@@ -613,14 +619,84 @@ function renderCrmClinicas(container) {
 }
 
 function renderCrmPacientes(container) {
-  const submodules = [
-    { icon: "📋", title: "Visão geral", subtitle: "Resumo do relacionamento com pacientes" },
-    { icon: "💊", title: "Consultas", subtitle: "Teleconsultas e atendimentos realizados" },
-    { icon: "🫁", title: "Espirometrias", subtitle: "Exames realizados e acompanhamentos" },
-    { icon: "📞", title: "Follow-up de consultas", subtitle: "Retornos e acompanhamentos pós-consulta" },
-    { icon: "📊", title: "Follow-up de espirometrias", subtitle: "Acompanhamento pós-exame" },
-    { icon: "🔄", title: "Recorrências / Reativação", subtitle: "Pacientes para reativar e agendamentos periódicos" }
-  ];
+  const fp = state.followupPacientes;
+  const espi  = fp ? fp.espirometria  : [];
+  const cons  = fp ? fp.consultas     : [];
+  const hoje  = todayIso();
+
+  function statusClass(r) {
+    if (r.status_followup === "atrasado") return "status-atrasado";
+    if (r.status_followup === "hoje")     return "status-hoje";
+    if (r.status_followup === "em_breve") return "status-breve";
+    if (r.status_followup === "futuro")   return "status-futuro";
+    return "status-sem-data";
+  }
+
+  function statusLabel(r) {
+    if (r.status_followup === "atrasado") return "Atrasado";
+    if (r.status_followup === "hoje")     return "Hoje";
+    if (r.status_followup === "em_breve") return formatDateBr(r.data_followup);
+    if (r.status_followup === "futuro")   return formatDateBr(r.data_followup) || "Agendado";
+    return "Sem data";
+  }
+
+  function patientItem(r) {
+    const tag = `<span class="fp-status ${statusClass(r)}">${statusLabel(r)}</span>`;
+    const waBtn = r.whatsapp_url
+      ? `<a class="fp-wa-btn" href="${r.whatsapp_url}" target="_blank" rel="noopener noreferrer" title="Abrir WhatsApp com mensagem pré-preenchida">WhatsApp</a>`
+      : `<span class="fp-wa-btn fp-wa-disabled">Sem tel.</span>`;
+    return `
+      <li class="fp-item">
+        <div class="fp-item-row">
+          <span class="fp-nome">${escapeHtml(r.nome)}</span>
+          ${tag}
+          ${waBtn}
+        </div>
+        ${r.motivo ? `<div class="fp-motivo">${escapeHtml(r.motivo)}</div>` : ""}
+      </li>`;
+  }
+
+  function followupBlock(title, icon, records) {
+    const atr    = records.filter(r => r.status_followup === "atrasado");
+    const hoje_  = records.filter(r => r.status_followup === "hoje");
+    const breve  = records.filter(r => r.status_followup === "em_breve");
+    const futuro = records.filter(r => r.status_followup === "futuro");
+    const semdat = records.filter(r => r.status_followup === "sem_data");
+
+    function card(cls, label, iconC, items) {
+      const body = items.length
+        ? `<ul class="fp-list">${items.map(patientItem).join("")}</ul>`
+        : `<p class="fp-empty">Nenhum registro</p>`;
+      return `
+        <article class="fp-card ${cls}">
+          <div class="fp-card-header">
+            <span class="fp-icon">${iconC}</span>
+            <div>
+              <strong>${label}</strong>
+              <span class="fp-count">${items.length}</span>
+            </div>
+          </div>
+          ${body}
+        </article>`;
+    }
+
+    return `
+      <section class="fp-section">
+        <h3 class="fp-section-title">${icon} ${title}</h3>
+        <div class="fp-grid">
+          ${card("fp-card-atrasado", "Atrasados",      "🔴", atr)}
+          ${card("fp-card-hoje",     "Hoje",            "🟡", hoje_)}
+          ${card("fp-card-breve",    "Próximos 7 dias", "🟢", breve)}
+          ${card("fp-card-futuro",   "Agendados",       "🔵", futuro)}
+        </div>
+        ${semdat.length ? `<div class="fp-semdata-note">Sem data agendada: ${semdat.length}</div>` : ""}
+      </section>`;
+  }
+
+  const hasData = fp !== null;
+  const privNote = hasData
+    ? `<div class="crm-private-note"><span>🔒</span><p>Dados carregados do arquivo privado local (<code>data-private/followup-pacientes.local.json</code>). Este arquivo é gitignored e não é enviado ao GitHub. O envio de WhatsApp é sempre assistido — nenhuma mensagem é disparada automaticamente.</p></div>`
+    : `<div class="crm-safe-note"><span>ℹ️</span><p>Arquivo privado não encontrado. Execute <code>python3 painel-soprolife/scripts/generate-followup-pacientes.py --write</code> para gerar os dados de follow-up.</p></div>`;
 
   container.innerHTML = `
     <div class="crm-subview-header">
@@ -628,7 +704,7 @@ function renderCrmPacientes(container) {
       <div>
         <p class="eyebrow">B2C · Clínico</p>
         <h2>Pacientes</h2>
-        <p class="section-sub">Consultas, espirometrias, recorrência e follow-up</p>
+        <p class="section-sub">Follow-up de espirometrias e consultas — envio assistido via WhatsApp</p>
       </div>
     </div>
 
@@ -639,14 +715,14 @@ function renderCrmPacientes(container) {
         <small>base ativa</small>
       </article>
       <article class="crm-stat-card">
-        <span>Espirometrias realizadas</span>
-        <strong>${getCrmCardValue("examesEspirometriaRealizados")}</strong>
-        <small>acumulado</small>
+        <span>Espirometrias</span>
+        <strong>${espi.length || getCrmCardValue("examesEspirometriaRealizados")}</strong>
+        <small>com follow-up</small>
       </article>
       <article class="crm-stat-card">
-        <span>Follow-ups pendentes</span>
-        <strong>${getCrmCardValue("followupsPendentes")}</strong>
-        <small>precisam contato</small>
+        <span>Consultas</span>
+        <strong>${cons.length || getCrmCardValue("teleconsultasRealizadas")}</strong>
+        <small>com follow-up</small>
       </article>
       <article class="crm-stat-card">
         <span>Recorrências ativas</span>
@@ -655,29 +731,26 @@ function renderCrmPacientes(container) {
       </article>
     </div>
 
-    <div class="crm-submodule-grid">
-      ${submodules.map((m) => `
-        <article class="crm-submodule-card">
-          <div class="crm-submodule-icon">${m.icon}</div>
-          <div class="crm-submodule-body">
-            <strong>${m.title}</strong>
-            <p>${m.subtitle}</p>
-          </div>
-          <span class="crm-submodule-badge">Em breve</span>
-        </article>
-      `).join("")}
-    </div>
+    ${hasData ? `
+      ${followupBlock("Follow-up Espirometria", "🫁", espi)}
+      ${followupBlock("Follow-up Consultas",    "💊", cons)}
+    ` : ""}
 
-    <div class="crm-safe-note">
-      <span>🔒</span>
-      <p>Esta área exibe somente dados agregados e anônimos. Nenhum nome, telefone, CPF, diagnóstico ou dado clínico identificável é armazenado neste painel.</p>
-    </div>
+    ${privNote}
   `;
 
   document.querySelector("#crmBackBtn").addEventListener("click", () => {
     state.crmView = "hub";
     renderCrmView();
   });
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function renderCrmPlaceholder(container, area) {
