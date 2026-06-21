@@ -12,6 +12,7 @@ const state = {
   dashboardSummary: null,
   crmView: "hub",
   followupPacientes: null,
+  followupSummary: null,
 };
 
 const slug = (text) =>
@@ -139,6 +140,11 @@ async function init() {
     const followupLocal = await loadOptionalJson("./data-private/followup-pacientes.local.json");
     if (followupLocal) {
       state.followupPacientes = followupLocal;
+    }
+
+    const followupSummary = await loadOptionalJson("./data/followup-pacientes-summary.local.json");
+    if (followupSummary) {
+      state.followupSummary = followupSummary;
     }
 
     renderCards();
@@ -475,7 +481,7 @@ function renderCrmView() {
     case "clinicas": renderCrmClinicas(container); break;
     case "pacientes": renderCrmPacientes(container); break;
     case "relatorios": renderCrmPlaceholder(container, "relatorios"); break;
-    case "automacoes-crm": renderCrmPlaceholder(container, "automacoes-crm"); break;
+    case "automacoes-crm": renderCrmAutomacoes(container); break;
     default: renderCrmHub(container);
   }
 }
@@ -751,6 +757,304 @@ function escapeHtml(str) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function renderCrmAutomacoes(container) {
+  // ── helpers internos ────────────────────────────────────────────────────────
+
+  function fmtDate(isoStr) {
+    if (!isoStr) return "—";
+    const d = new Date(isoStr);
+    if (isNaN(d)) return "—";
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function riskBadge(level) {
+    const map = {
+      baixo:  ["risco-baixo",  "Risco baixo"],
+      medio:  ["risco-medio",  "Risco médio"],
+      alto:   ["risco-alto",   "Risco alto"],
+    };
+    const [cls, label] = map[level] ?? ["risco-baixo", level];
+    return `<span class="auto-risco ${cls}">${label}</span>`;
+  }
+
+  function dataBadge(label) {
+    return `<span class="auto-dado">${label}</span>`;
+  }
+
+  function cmdBlock(cmd) {
+    const id = "cmd-" + Math.random().toString(36).slice(2, 8);
+    return `
+      <div class="auto-cmd-block">
+        <code id="${id}" class="auto-cmd-code">${escapeHtml(cmd)}</code>
+        <button class="auto-cmd-copy" data-target="${id}" title="Copiar comando">Copiar</button>
+      </div>`;
+  }
+
+  function autoSection({ id, icon, title, subtitle, risk, dados, objetivo, steps, aviso }) {
+    const dadosHtml = dados.map(dataBadge).join(" ");
+    const avisoHtml = aviso
+      ? `<div class="auto-aviso"><span>⚠️</span><span>${aviso}</span></div>`
+      : "";
+    const stepsHtml = steps.map(({ label, cmd, hint }) => `
+      <div class="auto-step">
+        <div class="auto-step-label">${label}</div>
+        ${hint ? `<div class="auto-step-hint">${hint}</div>` : ""}
+        ${cmdBlock(cmd)}
+      </div>`).join("");
+
+    return `
+      <section class="auto-section" id="${id}">
+        <div class="auto-section-header">
+          <span class="auto-section-icon">${icon}</span>
+          <div class="auto-section-meta">
+            <h3>${title}</h3>
+            <p class="auto-section-sub">${subtitle}</p>
+          </div>
+          <div class="auto-section-badges">
+            ${riskBadge(risk)}
+            ${dadosHtml}
+          </div>
+        </div>
+        <p class="auto-objetivo">${objetivo}</p>
+        ${avisoHtml}
+        <div class="auto-steps">${stepsHtml}</div>
+      </section>`;
+  }
+
+  // ── Status atual ───────────────────────────────────────────────────────────
+
+  const rs  = state.runtimeStatus;
+  const ds  = state.dashboardSummary;
+  const crm = state.crm;
+  const fp  = state.followupSummary;
+
+  const sheetsOk   = rs?.googleSheets?.configured === true;
+  const sheetsName = rs?.googleSheets?.name ?? "—";
+  const sheetsAt   = fmtDate(rs?.googleSheets?.lastCheckedAt);
+
+  const crmLocal   = state.crm.length;
+  const crmAt      = fmtDate(ds?.source?.generatedAt);
+  const dashAt     = fmtDate(ds?.source?.generatedAt);
+
+  const fpEspi  = fp?.espirometria?.total ?? "—";
+  const fpCons  = fp?.consultas?.total    ?? "—";
+  const fpAt    = fmtDate(fp?.geradoEm);
+
+  function statusRow(icon, label, value, sub) {
+    return `
+      <div class="auto-status-row">
+        <span class="auto-status-icon">${icon}</span>
+        <div class="auto-status-body">
+          <strong>${label}</strong>
+          <span>${value}</span>
+          ${sub ? `<small>${sub}</small>` : ""}
+        </div>
+      </div>`;
+  }
+
+  const statusBlock = `
+    <div class="auto-status-grid">
+      ${statusRow(
+        sheetsOk ? "✅" : "❌",
+        "Google Sheets",
+        sheetsOk ? sheetsName : "Não configurado",
+        sheetsOk ? `Verificado ${sheetsAt}` : "Execute gcloud auth application-default login"
+      )}
+      ${statusRow(
+        crmLocal > 0 ? "✅" : "ℹ️",
+        "CRM Clínicas local",
+        crmLocal > 0 ? `${crmLocal} clínicas` : "Arquivo local ausente",
+        crmLocal > 0 ? `Atualizado ${crmAt}` : "Execute update-local-data.sh"
+      )}
+      ${statusRow(
+        ds ? "✅" : "ℹ️",
+        "Resumo Dashboard",
+        ds ? "Carregado" : "Arquivo local ausente",
+        ds ? `Atualizado ${dashAt}` : "Execute update-local-data.sh"
+      )}
+      ${statusRow(
+        fp ? "✅" : "ℹ️",
+        "Follow-up de pacientes",
+        fp ? `${fpEspi} espirometrias · ${fpCons} consultas` : "Resumo não encontrado",
+        fp ? `Gerado ${fpAt}` : "Execute generate-followup-pacientes.py --write"
+      )}
+    </div>`;
+
+  // ── Definição das automações ───────────────────────────────────────────────
+
+  const VENV = "~/.local/share/soprolife/venvs/google-sheets/bin/python";
+  const SCRIPTS = "painel-soprolife/scripts";
+
+  const automacoes = [
+    {
+      id: "auto-sync",
+      icon: "🔄",
+      title: "Sincronização do painel",
+      subtitle: "Atualiza todos os dados locais a partir do Google Sheets",
+      risk: "baixo",
+      dados: ["Agrega dados", "CRM clínicas", "Sem dados pessoais"],
+      objetivo: "Executa os conectores de leitura (resumo + CRM clínicas), gera os arquivos .local.json e valida segurança. Nunca escreve na planilha.",
+      steps: [
+        {
+          label: "Executar sincronização completa",
+          hint: "Atualiza resumo-dashboard, CRM clínicas e valida segurança.",
+          cmd: `bash ${SCRIPTS}/update-local-data.sh`,
+        },
+        {
+          label: "Verificar segurança após sincronização",
+          hint: "Confirma que nenhum dado sensível foi exportado.",
+          cmd: `bash ${SCRIPTS}/check-access.sh`,
+        },
+      ],
+    },
+    {
+      id: "auto-pcmso",
+      icon: "🏢",
+      title: "Promoção PCMSO → CRM Clínicas",
+      subtitle: "Promove registros qualificados da Base PCMSO para o CRM",
+      risk: "medio",
+      dados: ["CRM clínicas", "Base PCMSO", "Sem dados pessoais"],
+      objetivo: "Lê a aba 'Base Prospecção B2B PCMSO' e atualiza/cria registros na aba 'CRM Clinicas'. Nunca copia telefone, Instagram, pessoa de contato, observações, CPF ou e-mail.",
+      steps: [
+        {
+          label: "1. Pré-visualização (dry-run) — obrigatório antes do write",
+          hint: "Mostra o que seria criado ou atualizado. Não altera a planilha.",
+          cmd: `${VENV} ${SCRIPTS}/promote-pcmso-to-crm.py --dry-run`,
+        },
+        {
+          label: "2. Executar promoção (somente após revisar o dry-run)",
+          hint: "Escreve na planilha. Risco médio — valide o dry-run antes.",
+          cmd: `${VENV} ${SCRIPTS}/promote-pcmso-to-crm.py --write`,
+        },
+        {
+          label: "3. Deduplicação (opcional, se houver duplicatas)",
+          hint: "Preview seguro — não altera nada.",
+          cmd: `${VENV} ${SCRIPTS}/promote-pcmso-to-crm.py --dedup`,
+        },
+        {
+          label: "4. Sincronizar painel após promoção",
+          cmd: `bash ${SCRIPTS}/update-local-data.sh`,
+        },
+      ],
+    },
+    {
+      id: "auto-followup",
+      icon: "💬",
+      title: "Follow-up de pacientes",
+      subtitle: "Gera lista privada local para follow-up assistido via WhatsApp",
+      risk: "baixo",
+      dados: ["Pacientes (privado)", "Espirometrias", "Consultas"],
+      objetivo: "Lê CRM Espirometria e CRM Consultas. Gera arquivo privado local com nome, telefone e URL de WhatsApp pré-preenchida. Não envia mensagens — o envio é sempre assistido e revisado pelo operador.",
+      aviso: "O arquivo gerado (followup-pacientes.local.json) é privado e gitignored. Nunca é enviado ao GitHub. Nenhuma mensagem é disparada automaticamente.",
+      steps: [
+        {
+          label: "1. Inspecionar estrutura das abas (seguro)",
+          hint: "Mostra apenas cabeçalhos e contagens. Não exibe nomes nem telefones.",
+          cmd: `${VENV} ${SCRIPTS}/inspect-crm-pacientes.py`,
+        },
+        {
+          label: "2. Pré-visualização (dry-run)",
+          hint: "Mostra apenas contagens por status. Não exibe dados de pacientes.",
+          cmd: `${VENV} ${SCRIPTS}/generate-followup-pacientes.py --dry-run`,
+        },
+        {
+          label: "3. Gerar arquivo privado local",
+          hint: "Cria data-private/followup-pacientes.local.json (chmod 600, gitignored).",
+          cmd: `${VENV} ${SCRIPTS}/generate-followup-pacientes.py --write`,
+        },
+        {
+          label: "4. Verificar segurança do arquivo gerado",
+          cmd: `bash ${SCRIPTS}/check-access.sh`,
+        },
+      ],
+    },
+    {
+      id: "auto-seguranca",
+      icon: "🔒",
+      title: "Verificação de segurança",
+      subtitle: "Valida que nenhum dado sensível está exposto no painel",
+      risk: "baixo",
+      dados: ["Somente metadados", "Sem dados pessoais"],
+      objetivo: "Verifica portas abertas, arquivos privados gitignored, ausência de tokens/segredos nos arquivos locais, validade dos JSON exportados e conformidade dos dados de pacientes.",
+      steps: [
+        {
+          label: "Executar verificação completa",
+          hint: "Deve terminar com todos os checks OK.",
+          cmd: `bash ${SCRIPTS}/check-access.sh`,
+        },
+      ],
+    },
+    {
+      id: "auto-resumo",
+      icon: "📊",
+      title: "Resumo Dashboard",
+      subtitle: "Atualiza os indicadores da visão geral a partir do Google Sheets",
+      risk: "baixo",
+      dados: ["Agrega indicadores", "Sem dados pessoais"],
+      objetivo: "Lê a aba 'Resumo Dashboard' do Google Sheets e gera o arquivo local de indicadores. Parte do update-local-data.sh mas pode ser executado isoladamente para diagnóstico.",
+      steps: [
+        {
+          label: "Atualizar somente o resumo (incluído no sync completo)",
+          hint: "Use update-local-data.sh para atualizar tudo de uma vez.",
+          cmd: `bash ${SCRIPTS}/update-local-data.sh`,
+        },
+      ],
+    },
+  ];
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  container.innerHTML = `
+    <div class="crm-subview-header">
+      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
+      <div>
+        <p class="eyebrow">CRM SoproLife</p>
+        <h2>Automações CRM</h2>
+        <p class="section-sub">Central de status, orientação e comandos seguros. Nenhuma ação é executada automaticamente por este painel.</p>
+      </div>
+    </div>
+
+    <section class="auto-status-card">
+      <h3 class="auto-status-title">Status atual dos dados locais</h3>
+      ${statusBlock}
+    </section>
+
+    <div class="auto-nav">
+      ${automacoes.map(a => `<a class="auto-nav-link" href="#${a.id}">${a.icon} ${a.title}</a>`).join("")}
+    </div>
+
+    <div class="auto-list">
+      ${automacoes.map(autoSection).join("")}
+    </div>
+
+    <div class="auto-footer-note">
+      <span>ℹ️</span>
+      <p>Todos os comandos devem ser executados no terminal, dentro da pasta <code>~/soprolife-site</code>. Nenhum script é executado por este painel. O envio de mensagens WhatsApp é sempre revisado e disparado manualmente pelo operador.</p>
+    </div>
+  `;
+
+  // Copy buttons
+  container.querySelectorAll(".auto-cmd-copy").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = document.getElementById(btn.dataset.target);
+      if (!target) return;
+      navigator.clipboard.writeText(target.textContent).then(() => {
+        btn.textContent = "Copiado!";
+        btn.classList.add("copied");
+        setTimeout(() => { btn.textContent = "Copiar"; btn.classList.remove("copied"); }, 1800);
+      }).catch(() => {
+        btn.textContent = "Erro";
+        setTimeout(() => { btn.textContent = "Copiar"; }, 1800);
+      });
+    });
+  });
+
+  document.querySelector("#crmBackBtn").addEventListener("click", () => {
+    state.crmView = "hub";
+    renderCrmView();
+  });
 }
 
 function renderCrmPlaceholder(container, area) {
