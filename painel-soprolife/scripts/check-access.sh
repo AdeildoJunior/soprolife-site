@@ -55,12 +55,112 @@ check_private_files() {
   echo
   echo "Verificando arquivos privados dentro da pasta servida..."
 
-  if find painel-soprolife/data-private -type f ! -name 'README.local.txt' 2>/dev/null | grep -q .; then
-    echo "ATENÇÃO: existem arquivos privados dentro de painel-soprolife/data-private/."
-    echo "Antes de compartilhar via Tailscale, mova segredos para ~/.config/soprolife/painel/."
-    find painel-soprolife/data-private -type f ! -name 'README.local.txt' 2>/dev/null
+  local private_files
+  private_files=$(find painel-soprolife/data-private -type f ! -name 'README.local.txt' 2>/dev/null)
+
+  if [ -z "$private_files" ]; then
+    echo "OK: nenhum arquivo privado encontrado em painel-soprolife/data-private/."
+    return
+  fi
+
+  echo "INFO: arquivos privados locais presentes (uso esperado para painel local/Tailscale):"
+  echo "$private_files" | while IFS= read -r f; do
+    # Verifica se o arquivo está gitignored
+    if git check-ignore -q "$f" 2>/dev/null; then
+      echo "  OK (gitignored): $f"
+    else
+      echo "  ATENÇÃO (NÃO gitignored): $f — RISCO DE COMMIT COM DADOS PESSOAIS"
+    fi
+  done
+
+  echo
+  echo "IMPORTANTE: esses arquivos contêm dados de pacientes e são para uso local APENAS."
+  echo "Eles estão gitignored e nunca devem ser enviados ao GitHub."
+}
+
+validate_followup_pacientes() {
+  echo
+  echo "Verificando follow-up de pacientes..."
+
+  local private_file="painel-soprolife/data-private/followup-pacientes.local.json"
+  local summary_file="painel-soprolife/data/followup-pacientes-summary.local.json"
+
+  # Verifica arquivo privado
+  if [ -f "$private_file" ]; then
+    if git check-ignore -q "$private_file" 2>/dev/null; then
+      echo "  OK (gitignored): $private_file"
+    else
+      echo "  ERRO CRÍTICO: $private_file NÃO está gitignored!"
+      echo "  Execute: git rm --cached \"$private_file\" antes de qualquer commit."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json
+import sys
+
+path = Path("painel-soprolife/data-private/followup-pacientes.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler JSON privado: {exc}")
+    sys.exit(1)
+
+# Não imprime nenhum dado pessoal — apenas valida estrutura e conta
+espi = data.get("espirometria", [])
+cons = data.get("consultas", [])
+
+blocked_keys = {"cpf", "rg", "data_nascimento", "endereco", "endereço",
+                "observacao_privada", "pedido_medico", "laudo", "diagnostico",
+                "senha", "token"}
+
+errors = 0
+for i, rec in enumerate(espi + cons):
+    for k in rec.keys():
+        if k.lower() in blocked_keys:
+            print(f"  ERRO: campo proibido '{k}' no registro {i+1}.")
+            errors += 1
+
+if errors == 0:
+    print(f"  OK: {len(espi)} espirometrias, {len(cons)} consultas. Nenhum campo proibido.")
+else:
+    print(f"  {errors} erros encontrados.")
+    sys.exit(1)
+PY
   else
-    echo "OK: nenhum arquivo privado sensível encontrado em painel-soprolife/data-private/."
+    echo "  INFO: $private_file não existe (ainda não gerado)."
+    echo "        Execute: python3 painel-soprolife/scripts/generate-followup-pacientes.py --write"
+  fi
+
+  # Verifica resumo público
+  if [ -f "$summary_file" ]; then
+    if git check-ignore -q "$summary_file" 2>/dev/null; then
+      echo "  OK (gitignored): $summary_file"
+    else
+      echo "  ATENÇÃO: $summary_file não está gitignored."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json
+import sys
+
+path = Path("painel-soprolife/data/followup-pacientes-summary.local.json")
+data = json.loads(path.read_text(encoding="utf-8"))
+
+if data.get("safeToDisplay") is not True:
+    print("  ERRO: followup-pacientes-summary não marcado como seguro.")
+    sys.exit(1)
+if data.get("containsPersonalData") is not False:
+    print("  ERRO: followup-pacientes-summary pode conter dado pessoal.")
+    sys.exit(1)
+
+espi = data.get("espirometria", {})
+cons = data.get("consultas", {})
+print(f"  OK: resumo seguro — espirometrias={espi.get('total',0)}, consultas={cons.get('total',0)}.")
+PY
+  else
+    echo "  INFO: $summary_file não existe."
   fi
 }
 
@@ -335,6 +435,7 @@ main() {
   validate_runtime_status
   validate_dashboard_summary
   validate_crm_clinicas
+  validate_followup_pacientes
 }
 
 main
