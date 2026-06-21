@@ -608,6 +608,132 @@ PY
   fi
 }
 
+validate_marketing_seo() {
+  echo
+  echo "Verificando Marketing & SEO..."
+
+  local real_cfg="painel-soprolife/data-private/marketing-seo-config.local.json"
+  local local_data="painel-soprolife/data/marketing-seo.local.json"
+
+  # Config real deve estar gitignored
+  if [ -f "$real_cfg" ]; then
+    if git check-ignore -q "$real_cfg" 2>/dev/null; then
+      echo "  OK (gitignored): $real_cfg"
+    else
+      echo "  ERRO CRÍTICO: $real_cfg NÃO está gitignored — credenciais podem vazar para o GitHub!"
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, sys
+
+path = Path("painel-soprolife/data-private/marketing-seo-config.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler config: {exc}")
+    sys.exit(1)
+
+forbidden = {"client_secret", "refresh_token", "access_token", "private_key", "api_key", "apikey"}
+text_lower = json.dumps(data, ensure_ascii=False).lower()
+for f in forbidden:
+    if f in text_lower:
+        print(f"  ERRO: padrão proibido '{f}' encontrado na config de Marketing & SEO.")
+        sys.exit(1)
+
+ga4 = str(data.get("ga4PropertyId", ""))
+sc  = str(data.get("searchConsoleSiteUrl", ""))
+if "SEU_" in ga4 or "SEU_" in sc or "DEPLOYMENT_ID" in ga4:
+    print("  AVISO: config contém valores de exemplo (SEU_...) — preencha com valores reais.")
+    sys.exit(0)
+
+print("  OK: marketing-seo-config.local.json existe e não contém segredos.")
+PY
+  else
+    echo "  INFO: $real_cfg não existe — Marketing & SEO ainda não configurado."
+    echo "        Copie painel-soprolife/config-examples/marketing-seo.local.example.json"
+    echo "        para esse caminho e preencha os valores reais."
+  fi
+
+  # Verifica dados exportados
+  if [ -f "$local_data" ]; then
+    if git check-ignore -q "$local_data" 2>/dev/null; then
+      echo "  OK (gitignored): $local_data"
+    else
+      echo "  ATENÇÃO: $local_data não está gitignored."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data/marketing-seo.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler dados: {exc}")
+    sys.exit(1)
+
+meta = data.get("meta", {})
+if meta.get("containsPersonalData") is not False:
+    print("  ERRO: marketing-seo.local.json não declara containsPersonalData=false.")
+    sys.exit(1)
+if meta.get("safeToDisplay") is not True:
+    print("  ERRO: marketing-seo.local.json não declara safeToDisplay=true.")
+    sys.exit(1)
+
+text = json.dumps(data, ensure_ascii=False).lower()
+
+forbidden_patterns = [
+    "cpf", "refresh_token", "access_token", "client_secret",
+    "private_key", "api_key", "apikey",
+]
+_CPF_RE   = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+_FONE_RE  = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+
+for p in forbidden_patterns:
+    if p in text:
+        print(f"  ERRO: padrão proibido '{p}' encontrado em marketing-seo.local.json.")
+        sys.exit(1)
+if _CPF_RE.search(text):
+    print("  ERRO: padrão de CPF detectado em marketing-seo.local.json.")
+    sys.exit(1)
+if _FONE_RE.search(text):
+    print("  ERRO: padrão de telefone detectado em marketing-seo.local.json.")
+    sys.exit(1)
+if _EMAIL_RE.search(text):
+    print("  ERRO: padrão de e-mail detectado em marketing-seo.local.json.")
+    sys.exit(1)
+
+configured = meta.get("configured", False)
+sc_ok  = data.get("searchConsole") is not None
+ga4_ok = data.get("ga4") is not None
+print(f"  OK: marketing-seo.local.json seguro — "
+      f"configured={configured}, SC={sc_ok}, GA4={ga4_ok}.")
+PY
+  else
+    echo "  INFO: $local_data não existe — painel usará dados demonstrativos."
+  fi
+
+  # Garante que nenhum código commitado contém property ID real de GA4
+  echo "  Verificando código-fonte por IDs sensíveis de Marketing & SEO..."
+  local found=0
+  if git grep -rqE '"ga4PropertyId"\s*:\s*"[0-9]{6,}"' \
+      -- painel-soprolife/js/ painel-soprolife/css/ 2>/dev/null; then
+    echo "  ATENÇÃO: possível property ID de GA4 hardcoded encontrado em JS/CSS."
+    found=1
+  fi
+  if git grep -rqE '"searchConsoleSiteUrl"\s*:\s*"https://' \
+      -- painel-soprolife/js/ painel-soprolife/css/ 2>/dev/null; then
+    echo "  ATENÇÃO: possível URL de Search Console hardcoded encontrada em JS/CSS."
+    found=1
+  fi
+  if [ "$found" -eq 0 ]; then
+    echo "  OK: nenhum ID ou URL sensível de Marketing & SEO hardcoded detectado."
+  fi
+}
+
 validate_command_center_proxy() {
   echo
   echo "Verificando servidor proxy do Command Center..."
@@ -669,6 +795,7 @@ main() {
   validate_followup_clinicas
   validate_command_center_config
   validate_command_center_proxy
+  validate_marketing_seo
 }
 
 main

@@ -1,0 +1,7 @@
+{
+  "ga4PropertyId": "SEU_GA4_PROPERTY_ID",
+  "searchConsoleSiteUrl": "https://www.seusite.com.br/",
+  "lookbackDays": 28,
+  "topLimit": 20,
+  "timezone": "America/Sao_Paulo"
+}
