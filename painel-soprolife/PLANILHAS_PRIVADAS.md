@@ -129,6 +129,93 @@ Campos:
 - status
 - observacao_anonima
 
+## CRM de pacientes — arquitetura de três abas
+
+A carteira de pacientes é dividida em três abas com papéis distintos:
+
+### CRM Pacientes (carteira-mãe)
+
+Uma linha por pessoa. Representa o relacionamento geral com o paciente, não um atendimento específico.
+
+Campos:
+- paciente_id (ex.: PAC-20250615-001)
+- data_cadastro
+- primeiro_nome
+- telefone
+- ultimo_servico (Espirometria / Consulta / Espirometria + Teleconsulta)
+- status_relacionamento
+- proximo_contato
+- motivo_proximo_contato
+- canal
+- responsavel
+- consentimento_whatsapp
+- observacao_privada_minima
+
+### CRM Espirometria (histórico de exames)
+
+Uma linha por exame realizado. Alimenta automaticamente o CRM Pacientes.
+
+Campos principais:
+- exame_id
+- data_entrada
+- primeiro_nome
+- telefone
+- servico
+- status_exame
+- data_exame
+- proximo_contato
+- motivo_proximo_contato
+- canal
+- responsavel
+- consentimento_whatsapp
+
+### CRM Consultas (histórico de consultas)
+
+Uma linha por consulta ou teleconsulta realizada. Alimenta automaticamente o CRM Pacientes.
+
+Campos principais:
+- consulta_id
+- data_entrada
+- primeiro_nome
+- telefone
+- tipo_consulta
+- status
+- medica
+- data_consulta
+- proximo_contato
+- motivo_proximo_contato
+- canal
+- responsavel
+- consentimento_whatsapp
+
+### Follow-up WhatsApp (fila de contatos)
+
+Fila de mensagens futuras a serem enviadas por WhatsApp. Gerenciada separadamente do CRM Pacientes.
+
+Campos principais:
+- followup_id
+- data_criacao
+- primeiro_nome
+- telefone
+- tipo_mensagem
+- data_prevista
+- status
+- canal
+- responsavel
+- template_usado
+- consentimento
+
+## Automação: sincronizarCRMPacientesSoproLife
+
+O arquivo `painel-soprolife/apps-script/sync-crm-pacientes.gs` contém a função
+`sincronizarCRMPacientesSoproLife()`, que consolida CRM Espirometria e CRM Consultas
+em CRM Pacientes de forma segura.
+
+Regras de deduplicação:
+1. Telefone normalizado tem prioridade como chave.
+2. Se não houver telefone, o nome normalizado é usado.
+3. Pacientes existentes são preservados; nenhuma informação é perdida.
+
 ## Integração futura
 
 A ordem recomendada de automação é:
