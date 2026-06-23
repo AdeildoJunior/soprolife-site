@@ -16,22 +16,43 @@ Não colocar aqui:
 - laudo;
 - resultado de exame.
 
-## Funções usadas na planilha privada
+## Funções disponíveis
 
-- setupSoproLifeSheetsLite
-- setupValidacoesSoproLife
-- inserirDadosFicticiosSoproLife
-- atualizarResumoDashboardSoproLife
-- sincronizarCRMPacientesSoproLife
+### soprolife-sheets-template.gs
+- `setupSoproLifeSheetsLite` — cria a estrutura de abas e cabeçalhos
+- `setupValidacoesSoproLife` — aplica dropdowns e formatações de data/moeda
+- `atualizarResumoDashboardSoproLife` — recalcula indicadores na aba Resumo Dashboard
+- `onOpen` / `onEdit` — menu e gatilho automático de atualização
 
-## Objetivo
+### sync-crm-pacientes.gs
+- `sincronizarCRMPacientesSoproLife` — consolida CRM Espirometria e CRM Consultas em CRM Pacientes
+- `formatarDataBRSoproLife(valor)` — helper compartilhado de normalização de datas
 
-Criar e manter uma planilha privada com:
-- abas padronizadas;
-- cabeçalhos;
-- listas suspensas;
-- dados fictícios para teste;
-- resumo agregado para futura leitura pelo painel.
+### limpar-leads-e-manual-abas.gs
+- `organizarLeadsEManualPlanilhasSoproLife` — limpeza de dados demo, padronização de dropdowns e criação do Manual das Abas
+
+## Conceito central: Leads vs. CRM Pacientes
+
+A distinção mais importante para usar a planilha corretamente:
+
+| Aba | Momento | O que registra |
+|---|---|---|
+| **Leads** | Pré-atendimento | Contatos interessados que ainda NÃO realizaram atendimento |
+| **CRM Pacientes** | Pós-atendimento | Carteira-mãe — uma linha por pessoa, pós primeiro atendimento |
+| **CRM Espirometria** | Histórico | Uma linha por exame realizado — alimenta CRM Pacientes |
+| **CRM Consultas** | Histórico | Uma linha por consulta realizada — alimenta CRM Pacientes |
+| **Follow-up WhatsApp** | Ações futuras | Fila de contatos planejados, não cadastro permanente |
+
+Um lead migra para CRM Pacientes somente após o primeiro atendimento.
+
+## Ordem de execução recomendada (planilha nova)
+
+1. `setupSoproLifeSheetsLite` — cria abas e cabeçalhos
+2. `setupValidacoesSoproLife` — aplica dropdowns iniciais
+3. `organizarLeadsEManualPlanilhasSoproLife` — padroniza Leads e cria Manual das Abas
+4. Inserir dados reais (pacientes, leads, clínicas) manualmente ou via importação
+5. `sincronizarCRMPacientesSoproLife` — sincronizar CRM Pacientes (recorrente, via gatilho)
+6. `atualizarResumoDashboardSoproLife` — atualizar painel (automático via onEdit)
 
 ## Arquitetura das abas de CRM de pacientes
 

@@ -205,6 +205,50 @@ Campos principais:
 - template_usado
 - consentimento
 
+## Conceito central: Leads vs. CRM Pacientes
+
+A distinção mais importante para a operação correta da planilha:
+
+| Aba | Momento | Quem está aqui |
+|---|---|---|
+| **Leads** | Pré-atendimento | Contatos que demonstraram interesse mas ainda NÃO realizaram nenhum atendimento |
+| **CRM Pacientes** | Pós-atendimento | Pessoas que já realizaram ao menos um atendimento (carteira-mãe) |
+| **CRM Espirometria** | Histórico | Uma linha por exame realizado; alimenta o CRM Pacientes automaticamente |
+| **CRM Consultas** | Histórico | Uma linha por consulta realizada; alimenta o CRM Pacientes automaticamente |
+| **Follow-up WhatsApp** | Ações futuras | Fila de mensagens e contatos planejados; não é cadastro permanente |
+
+Um lead se torna paciente quando realiza o primeiro atendimento.
+Nesse momento ele deve ser registrado em CRM Espirometria ou CRM Consultas,
+e a sincronização cuida de consolidá-lo em CRM Pacientes.
+
+## Automação: organizarLeadsEManualPlanilhasSoproLife
+
+O arquivo `painel-soprolife/apps-script/limpar-leads-e-manual-abas.gs` contém a função
+`organizarLeadsEManualPlanilhasSoproLife()`.
+
+O que ela faz:
+1. Cria um backup da aba `Leads` antes de qualquer alteração (`_Backup_Leads_Demo_YYYYMMDD_HHMM`).
+2. Remove linhas com termos demonstrativos/fake (fictício, demonstrativo, teste do painel, etc.).
+3. Padroniza os dropdowns das colunas: `servico_interesse`, `etapa`, `canal`, `origem`.
+4. Adiciona notas explicativas nos cabeçalhos da aba `Leads`.
+5. Cria/atualiza a aba `Manual das Abas` com documentação de todas as abas operacionais.
+
+Dropdowns padronizados para `servico_interesse`:
+- Espirometria
+- Espirometria domiciliar
+- Teleconsulta respiratória
+- Consulta pneumologista
+- Clínicas
+- PCMSO / empresa
+
+Dropdowns padronizados para `etapa`:
+- Novo contato
+- Em conversa
+- Agendado
+- Não respondeu
+- Desistiu
+- Convertido em paciente
+
 ## Automação: sincronizarCRMPacientesSoproLife
 
 O arquivo `painel-soprolife/apps-script/sync-crm-pacientes.gs` contém a função
