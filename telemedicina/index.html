@@ -1158,8 +1158,9 @@
           <div class="sl-schedule-panel">
             <div class="sl-hours-box">
               <strong>Horários de atendimento</strong>
+              Segunda, terça, quarta e sexta: 16:00 às 20:00<br>
               Quinta-feira: 08:00 às 20:00<br>
-              Demais dias: fechado
+              Sábado e domingo: fechado
             </div>
             <button class="sl-request-btn" type="button" data-open-telemed data-doctor="vanessa">
               Solicitar horário
@@ -1272,10 +1273,11 @@
         },
         vanessa: {
           name: "Dra. Vanessa Silva Vaz",
-          hint: "Selecione uma data. Às quintas-feiras há horários entre 08:00 e 20:00.",
-          noSlots: "Escolha uma quinta-feira.",
+          hint: "Selecione uma data. Às quintas-feiras há horários entre 08:00 e 20:00. Segunda, terça, quarta e sexta: 16:00 às 20:00.",
+          noSlots: "Escolha um dia útil (segunda a sexta).",
           slots: function(day){
             if(day === 4) return halfHourSlots(8, 20);
+            if(day === 1 || day === 2 || day === 3 || day === 5) return halfHourSlots(16, 20);
             return [];
           }
         }
