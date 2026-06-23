@@ -1,6 +1,6 @@
 /**
  * sync-crm-pacientes.gs
- * Versão: 1.0  |  SoproLife Command Center
+ * Versão: 1.1  |  SoproLife Command Center
  *
  * Consolida a aba "CRM Pacientes" (carteira-mãe) a partir de
  * "CRM Espirometria" e "CRM Consultas".
@@ -149,7 +149,7 @@ function _lerAba(ss, nomeAba, headersEsperados) {
     var obj = {};
     headersEsperados.forEach(function(campo) {
       var idx = headers.indexOf(campo.toLowerCase());
-      obj[campo] = idx >= 0 ? String(row[idx] || "").trim() : "";
+      obj[campo] = idx >= 0 ? _extrairValorCelula(row[idx]) : "";
     });
     resultado.push(obj);
   }
@@ -172,7 +172,7 @@ function _lerPacientesExistentes(ss) {
     var obj = {};
     _HEADERS_PACIENTES.forEach(function(campo) {
       var idx = headers.indexOf(campo.toLowerCase());
-      obj[campo] = idx >= 0 ? String(row[idx] || "").trim() : "";
+      obj[campo] = idx >= 0 ? _extrairValorCelula(row[idx]) : "";
     });
     resultado.push(obj);
   }
@@ -222,12 +222,12 @@ function _normalizarNome(nome) {
 function _novoPacienteDeEspirometria(row) {
   return {
     paciente_id:            "",
-    data_cadastro:          row.data_entrada || _hoje(),
+    data_cadastro:          formatarDataBRSoproLife(row.data_entrada) || _hoje(),
     primeiro_nome:          row.primeiro_nome,
     telefone:               row.telefone,
     ultimo_servico:         "Espirometria",
     status_relacionamento:  "Em acompanhamento",
-    proximo_contato:        row.proximo_contato,
+    proximo_contato:        formatarDataBRSoproLife(row.proximo_contato),
     motivo_proximo_contato: row.motivo_proximo_contato,
     canal:                  row.canal || "WhatsApp",
     responsavel:            row.responsavel || "Não informado",
@@ -242,12 +242,12 @@ function _novoPacienteDeEspirometria(row) {
 function _novoPacienteDeConsulta(row) {
   return {
     paciente_id:            "",
-    data_cadastro:          row.data_entrada || _hoje(),
+    data_cadastro:          formatarDataBRSoproLife(row.data_entrada) || _hoje(),
     primeiro_nome:          row.primeiro_nome,
     telefone:               row.telefone,
     ultimo_servico:         row.tipo_consulta || "Consulta",
     status_relacionamento:  "Em acompanhamento",
-    proximo_contato:        row.proximo_contato,
+    proximo_contato:        formatarDataBRSoproLife(row.proximo_contato),
     motivo_proximo_contato: row.motivo_proximo_contato,
     canal:                  row.canal || "WhatsApp",
     responsavel:            row.responsavel || "Não informado",
@@ -282,7 +282,7 @@ function _mesclarEspirometria(pac, row) {
   pac.consentimento_whatsapp = _mesclarConsentimento(pac.consentimento_whatsapp, row.consentimento_whatsapp);
 
   // proximo_contato: preservar o mais recente/útil
-  if (!pac.proximo_contato && row.proximo_contato) pac.proximo_contato = row.proximo_contato;
+  if (!pac.proximo_contato && row.proximo_contato) pac.proximo_contato = formatarDataBRSoproLife(row.proximo_contato);
 
   // motivo: combinar se ainda não tiver
   pac.motivo_proximo_contato = _combinarMotivos(
@@ -310,7 +310,7 @@ function _mesclarConsulta(pac, row) {
 
   pac.consentimento_whatsapp = _mesclarConsentimento(pac.consentimento_whatsapp, row.consentimento_whatsapp);
 
-  if (!pac.proximo_contato && row.proximo_contato) pac.proximo_contato = row.proximo_contato;
+  if (!pac.proximo_contato && row.proximo_contato) pac.proximo_contato = formatarDataBRSoproLife(row.proximo_contato);
 
   pac.motivo_proximo_contato = _combinarMotivos(
     pac.motivo_proximo_contato,
@@ -387,7 +387,7 @@ function _atribuirIds(lista) {
   lista.forEach(function(p) {
     if (p.paciente_id && p.paciente_id.startsWith("PAC-")) return;
 
-    var hoje = _hoje();       // YYYYMMDD
+    var hoje = _hoje();       // dd/MM/yyyy
     var data = _extrairDataId(p.data_cadastro) || hoje;
 
     contadorDia[data] = (contadorDia[data] || 0) + 1;
@@ -436,11 +436,13 @@ function _reescreverAbaPacientes(ss, lista) {
   }
 
   // Dados
+  var _CAMPOS_DATA = ["data_cadastro", "proximo_contato"];
   var linhas = lista.map(function(p) {
     return _HEADERS_PACIENTES.map(function(campo) {
-      // Campos internos de controle não vão para a planilha
       if (campo.charAt(0) === "_") return "";
-      return p[campo] !== undefined ? String(p[campo]) : "";
+      var val = p[campo] !== undefined ? p[campo] : "";
+      if (_CAMPOS_DATA.indexOf(campo) >= 0) return formatarDataBRSoproLife(val);
+      return String(val);
     });
   });
 
@@ -516,6 +518,79 @@ function _dataParaTimestamp(data) {
   }
 
   return null;
+}
+
+// ── Nomes de meses em português ───────────────────────────────────────────
+
+var _MESES_PT = {
+  janeiro: "01", fevereiro: "02", março: "03", abril: "04",
+  maio: "05", junho: "06", julho: "07", agosto: "08",
+  setembro: "09", outubro: "10", novembro: "11", dezembro: "12",
+};
+
+/**
+ * Normaliza qualquer representação de data para dd/MM/yyyy (America/Sao_Paulo).
+ *
+ * Aceita:
+ *   Date object          → formata via Utilities.formatDate
+ *   "dd/MM/yyyy"         → preserva
+ *   "MM/yyyy" ou "M/yyyy"→ "01/MM/yyyy"  (ex.: "06/2026" → "01/06/2026")
+ *   "mês/yyyy"           → "01/MM/yyyy"  (ex.: "dezembro/2026" → "01/12/2026")
+ *   "yyyy-MM-dd" (ISO)   → "dd/MM/yyyy"
+ *   String longa JS      → extrai e reformata
+ *   vazio / null         → ""
+ */
+function formatarDataBRSoproLife(valor) {
+  if (!valor) return "";
+
+  // Date object: vem de getValues() quando a célula tem formato de data
+  if (valor instanceof Date) {
+    if (isNaN(valor.getTime())) return "";
+    return Utilities.formatDate(valor, "America/Sao_Paulo", "dd/MM/yyyy");
+  }
+
+  var s = String(valor).trim();
+  if (!s) return "";
+
+  // Já em dd/MM/yyyy — preservar
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+
+  // ISO yyyy-MM-dd
+  var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[3] + "/" + iso[2] + "/" + iso[1];
+
+  // MM/yyyy ou M/yyyy (ex.: "06/2026", "6/2026")
+  var mesAno = s.match(/^(\d{1,2})\/(\d{4})$/);
+  if (mesAno) return "01/" + String(mesAno[1]).padStart(2, "0") + "/" + mesAno[2];
+
+  // Nome de mês em português: "dezembro/2026" ou "dezembro 2026"
+  var nomeMes = s.toLowerCase().match(/^([a-záàâãçéêíóôõúü]+)[\/\s](\d{4})$/);
+  if (nomeMes && _MESES_PT[nomeMes[1]]) {
+    return "01/" + _MESES_PT[nomeMes[1]] + "/" + nomeMes[2];
+  }
+
+  // Formato longo de Date.toString(): "Thu Jun 18 2026 00:00:00 GMT-0300 (...)"
+  if (/GMT[+-]\d{4}/.test(s) || /\d{4}\s\d{2}:\d{2}:\d{2}/.test(s)) {
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return Utilities.formatDate(d, "America/Sao_Paulo", "dd/MM/yyyy");
+    }
+  }
+
+  return s; // valor não reconhecido: retornar como veio
+}
+
+/**
+ * Extrai o valor bruto de uma célula do Sheets como string limpa.
+ * Converte Date objects para dd/MM/yyyy; demais valores: String().trim().
+ * Usado em _lerAba e _lerPacientesExistentes para evitar o formato longo de JS.
+ */
+function _extrairValorCelula(val) {
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return "";
+    return Utilities.formatDate(val, "America/Sao_Paulo", "dd/MM/yyyy");
+  }
+  return String(val || "").trim();
 }
 
 function _hoje() {

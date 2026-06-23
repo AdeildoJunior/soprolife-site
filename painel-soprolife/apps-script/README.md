@@ -49,3 +49,9 @@ Regras de deduplicação:
 1. Dois registros com o mesmo telefone normalizado são o mesmo paciente.
 2. Se não houver telefone, o nome normalizado é usado como chave.
 3. Informações existentes em CRM Pacientes são preservadas; nada é apagado sem necessidade.
+
+Formato de datas em CRM Pacientes:
+- Todas as datas gravadas na aba `CRM Pacientes` usam o formato `dd/MM/yyyy` (ex.: `18/06/2026`).
+- O helper `formatarDataBRSoproLife(valor)` normaliza Date objects, strings ISO, strings
+  no formato `MM/yyyy` e nomes de mês em português (ex.: `dezembro/2026` → `01/12/2026`).
+- Timezone: `America/Sao_Paulo`.
