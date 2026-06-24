@@ -1152,6 +1152,7 @@ function renderEntradaDados(container) {
   const etapaOpts   = ["Não abordado", "Abordado", "Em conversa", "Proposta enviada", "Parceiro ativo"];
 
   const ACTION_MAP = {
+    lead:      "createLead",
     paciente:  "createPaciente",
     espi:      "createEspirometria",
     consulta:  "createConsulta",
@@ -1265,7 +1266,51 @@ function renderEntradaDados(container) {
     ].join(""));
   }
 
+  function buildFormLead() {
+    const servicoOpts = [
+      "Espirometria",
+      "Espirometria domiciliar",
+      "Teleconsulta respiratória",
+      "Consulta pneumologista",
+      "Clínicas",
+      "PCMSO / empresa",
+    ];
+    const origemLeadOpts = [
+      "Google",
+      "WhatsApp",
+      "Instagram",
+      "Site",
+      "Indicação",
+      "Clínica parceira",
+      "Tráfego pago",
+      "Outro",
+    ];
+    const etapaLeadOpts = [
+      "Novo contato",
+      "Em conversa",
+      "Aguardando retorno",
+      "Agendado",
+      "Realizou consulta",
+      "Realizou espirometria",
+      "Realizou consulta e espirometria",
+      "Não respondeu",
+      "Desistiu",
+    ];
+    return formWrapper("Novo Lead", [
+      field({ id: "nome",              label: "Nome",                required: true }),
+      field({ id: "telefone_whatsapp", label: "Telefone / WhatsApp", type: "tel", placeholder: "(21) 99999-9999" }),
+      field({ id: "servico_interesse", label: "Serviço de interesse", type: "select", options: servicoOpts }),
+      field({ id: "origem",            label: "Origem",              type: "select", options: origemLeadOpts }),
+      field({ id: "etapa",             label: "Etapa",               type: "select", options: etapaLeadOpts }),
+      field({ id: "responsavel",       label: "Responsável",         required: true }),
+      field({ id: "proxima_acao",      label: "Próxima ação" }),
+      field({ id: "data_proxima_acao", label: "Data da próxima ação", type: "date" }),
+      field({ id: "observacao",        label: "Observação" }),
+    ].join(""));
+  }
+
   const tabs = {
+    lead:      buildFormLead,
     paciente:  buildFormPaciente,
     espi:      buildFormEspi,
     consulta:  buildFormConsulta,
@@ -1354,7 +1399,8 @@ function renderEntradaDados(container) {
     ${warningHtml}
 
     <div class="cc-tabs" role="tablist">
-      <button class="cc-tab active" data-tab="paciente"  role="tab">Novo Paciente</button>
+      <button class="cc-tab active" data-tab="lead"      role="tab">Novo Lead</button>
+      <button class="cc-tab"        data-tab="paciente"  role="tab">Novo Paciente</button>
       <button class="cc-tab"        data-tab="espi"      role="tab">Nova Espirometria</button>
       <button class="cc-tab"        data-tab="consulta"  role="tab">Nova Consulta</button>
       <button class="cc-tab"        data-tab="clinica"   role="tab">Nova Clínica B2B</button>
@@ -1373,7 +1419,7 @@ function renderEntradaDados(container) {
     renderCrmView();
   });
 
-  showTab("paciente");
+  showTab("lead");
 }
 
 function renderCrmPlaceholder(container, area) {
