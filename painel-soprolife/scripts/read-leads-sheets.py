@@ -193,10 +193,6 @@ def _fetch_rows(build, google_auth_default, spreadsheet_id: str, sheet_name: str
     rows = result.get("values", [])
     print(f"rows_read: {len(rows)}")
 
-    if not rows:
-        print("ERRO: a aba Leads está vazia.")
-        sys.exit(1)
-
     return rows
 
 
@@ -443,11 +439,22 @@ def main() -> int:
         _show_structure(rows, sheet_name)
         return 0
 
-    records = _parse_records(rows)
+    records = _parse_records(rows) if rows else []
 
     if not records:
-        print("ERRO: nenhum registro válido encontrado na aba Leads.")
-        return 1
+        now_iso = datetime.now(timezone.utc).isoformat()
+        payload_private, payload_summary = _build_outputs([], now_iso)
+        if mode == "dry-run":
+            print()
+            print("OK: aba Leads vazia — 0 leads encontrados.")
+            print("next_step: use --write para gravar arquivos locais vazios.")
+            return 0
+        _write_files(payload_private, payload_summary)
+        print()
+        print("OK: aba Leads vazia — gerado arquivo local com 0 leads.")
+        print(f"  Privado:  {_OUT_PRIVATE}  (0 leads, chmod 600)")
+        print(f"  Resumo:   {_OUT_SUMMARY}  (0 leads, chmod 600)")
+        return 0
 
     print(f"records_valid: {len(records)}")
 
