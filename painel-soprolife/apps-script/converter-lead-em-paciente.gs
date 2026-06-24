@@ -1,393 +1,861 @@
 /**
  * converter-lead-em-paciente.gs
- * Versão: 3.0  |  SoproLife Command Center
+ * Versão: 4.2  |  SoproLife Command Center
  *
- * Conversão MANUAL de lead selecionado → CRM Pacientes.
+ * AUTOMAÇÃO (acionador instalável "Ao editar" — fluxo principal):
+ *   Quando a coluna 'etapa' da aba Leads é alterada para um dos valores abaixo,
+ *   o lead é convertido automaticamente e movido para 'Leads Convertidos':
  *
- * DESIGN:
- *   - getUi() nunca é chamado diretamente na função principal.
- *   - _cvTentarUI() envolve getUi() em try/catch: se falhar (editor AS),
- *     registra orientação e aborta imediatamente.
- *   - Age somente na linha selecionada na aba Leads.
- *   - B2B (Clínicas / PCMSO): orienta manualmente → CRM Clínicas. Não cria CRM Pacientes.
- *   - Pessoa física: cria CRM Pacientes com mapeamento direto de campos.
- *   - NÃO cria CRM Espirometria nem CRM Consultas automaticamente.
- *     Se necessário no futuro, essas serão funções separadas.
- *   - Após converter, atualiza a etapa do lead para "Convertido em paciente".
- *   - Checa duplicata por telefone antes de criar.
+ *     "Realizou consulta"                → CRM Pacientes + CRM Consultas
+ *     "Realizou espirometria"            → CRM Pacientes + CRM Espirometria
+ *     "Realizou consulta e espirometria" → CRM Pacientes + CRM Consultas + CRM Espirometria
+ *
+ * CONVERSÃO MANUAL (menu SoproLife → Leads → Converter lead selecionado → CRM):
+ *   Mesma lógica aplicada à linha atualmente selecionada. Exibe confirmação via UI.
+ *
+ * COMPATIBILIDADE COM CABEÇALHOS EXISTENTES:
+ *   As funções de escrita nos CRMs lêem o cabeçalho atual de cada aba e mapeiam
+ *   os campos pelo nome. Funciona com esquemas antigos e novos:
+ *     - Antigo: primeiro_nome / telefone / data_cadastro / data_entrada / ...
+ *     - Novo:   nome / telefone_whatsapp / data_registro / ...
+ *   Se a aba não existir ou estiver vazia, é criada com o cabeçalho padrão novo.
+ *
+ * REGRAS:
+ *   - LockService previne execução duplicada.
+ *   - B2B (Clínicas / PCMSO): registra no log, não cria CRM Pacientes.
+ *   - Não duplica paciente se o telefone já existir em CRM Pacientes.
+ *   - Não inventa data de exame, médica, laudo — deixa campos em branco.
+ *   - Sem getUi().alert() na função de automação.
+ *   - Logger.log + aba 'Log Conversões Leads' para rastreabilidade.
+ *   - Log gravado ANTES de remover o lead — histórico garantido mesmo em erro parcial.
  *
  * SEGURANÇA:
  *   - Sem ID ou URL de planilha real no código.
  *   - Sem dados reais hardcoded.
  *
- * COMO EXECUTAR:
- *   Menu SoproLife → Leads → Converter lead selecionado → CRM
+ * COMO INSTALAR O ACIONADOR (automático):
+ *   Este arquivo NÃO usa function onEdit() simples para evitar conflito com
+ *   outros arquivos do projeto (ex.: Código.gs).
+ *   Use um acionador instalável:
+ *     1. Extensões → Apps Script → Acionadores (ícone de relógio)
+ *     2. Adicionar acionador
+ *     3. Função: onEditConversaoLeadsSoproLife
+ *     4. Fonte do evento: Da planilha
+ *     5. Tipo de evento: Ao editar
+ *     6. Salvar
  *
- * NOTA: Se executada pelo botão "Executar" no editor do Apps Script,
- *   a função abortará com log explicativo — isso é comportamento esperado.
- *   Sempre usar pelo menu SoproLife.
+ * COMO USAR (manual):
+ *   Menu SoproLife → Leads → Converter lead selecionado → CRM
  */
 
-// ── Nomes das abas ─────────────────────────────────────────────────────────────
+// ── Nomes das abas ────────────────────────────────────────────────────────────
 
-var _CV_ABA_LEADS   = "Leads";
-var _CV_ABA_PAC     = "CRM Pacientes";
-var _CV_ABA_LOG     = "Log Centro Comando";
+var _CV_ABA_LEADS       = "Leads";
+var _CV_ABA_PAC         = "CRM Pacientes";
+var _CV_ABA_CON         = "CRM Consultas";
+var _CV_ABA_ESM         = "CRM Espirometria";
+var _CV_ABA_LOG         = "Log Conversões Leads";
+var _CV_ABA_CONVERTIDOS = "Leads Convertidos";
+var _CV_ABA_FOLLOWUP    = "Follow-up WhatsApp";
 
-// ── Serviços B2B (não vão para CRM Pacientes) ─────────────────────────────────
+// ── Etapas de conversão ───────────────────────────────────────────────────────
+
+var _CV_ETAPA_CONSULTA     = "Realizou consulta";
+var _CV_ETAPA_ESPIROMETRIA = "Realizou espirometria";
+var _CV_ETAPA_AMBOS        = "Realizou consulta e espirometria";
+
+var _CV_ETAPAS_CONVERSAO = [
+  _CV_ETAPA_CONSULTA,
+  _CV_ETAPA_ESPIROMETRIA,
+  _CV_ETAPA_AMBOS,
+];
+
+// ── Serviços B2B — não geram CRM Pacientes ───────────────────────────────────
 
 var _CV_ROTA_B2B = [
   "clínicas", "clinicas",
   "pcmso / empresa", "pcmso", "empresa",
 ];
 
-// ── Cabeçalho canônico do CRM Pacientes ───────────────────────────────────────
+// ── Cabeçalho canônico da aba Leads (11 colunas) ──────────────────────────────
+// Usado para criar 'Leads Convertidos' com o mesmo esquema.
 
-var _CV_HEADERS_PAC = [
+var _CV_LEADS_CABECALHO = [
+  "lead_id",
+  "data_contato",
+  "nome",
+  "telefone_whatsapp",
+  "servico_interesse",
+  "origem",
+  "etapa",
+  "responsavel",
+  "proxima_acao",
+  "data_proxima_acao",
+  "observacao",
+];
+
+// ── Cabeçalhos padrão para abas CRM criadas do zero ──────────────────────────
+// Usados apenas quando a aba não existe ou está vazia.
+// Se a aba já existir com cabeçalhos diferentes (esquema antigo),
+// os dados são mapeados pelo NOME da coluna — não sobrescreve a estrutura existente.
+
+var _CV_DEFAULT_HEADERS_PAC = [
   "paciente_id",
-  "data_cadastro",
-  "primeiro_nome",
-  "telefone",
+  "data_registro",
+  "nome",
+  "telefone_whatsapp",
+  "origem",
+  "servico",
+  "status",
+  "responsavel",
+  "data_proximo_contato",
+  "motivo_proximo_contato",
+  "observacao",
   "ultimo_servico",
   "status_relacionamento",
-  "proximo_contato",
+  "historico_resumido",
+];
+
+var _CV_DEFAULT_HEADERS_CON = [
+  "consulta_id",
+  "data_registro",
+  "nome",
+  "telefone_whatsapp",
+  "origem",
+  "servico",
+  "status",
+  "responsavel",
+  "data_proximo_contato",
   "motivo_proximo_contato",
+  "observacao",
+  "tipo_consulta",
+  "medica",
+  "data_consulta",
+];
+
+var _CV_DEFAULT_HEADERS_ESM = [
+  "exame_id",
+  "data_registro",
+  "nome",
+  "telefone_whatsapp",
+  "origem",
+  "servico",
+  "status",
+  "responsavel",
+  "data_proximo_contato",
+  "motivo_proximo_contato",
+  "observacao",
+  "tipo_exame",
+  "data_exame",
+  "status_exame",
+];
+
+var _CV_DEFAULT_HEADERS_FUP = [
+  "followup_id",
+  "data_criacao",
+  "primeiro_nome",
+  "telefone",
+  "tipo_mensagem",
+  "data_prevista",
+  "status",
   "canal",
   "responsavel",
+  "template_usado",
   "consentimento_whatsapp",
   "observacao_privada_minima",
 ];
 
-// ── Função pública principal ───────────────────────────────────────────────────
+var _CV_HEADERS_LOG = [
+  "data_hora",
+  "lead_id",
+  "nome",
+  "etapa",
+  "destinos_criados",
+  "resultado",
+  "followup_status",
+];
+
+// ── Automação por edição (acionador instalável) ───────────────────────────────
 
 /**
- * Converte o lead da linha selecionada para CRM Pacientes.
- * Acionada pelo menu SoproLife → Leads → Converter lead selecionado → CRM.
+ * Função de automação "Ao editar" — deve ser registrada como acionador instalável,
+ * NÃO como trigger simples onEdit(), para não conflitar com outros arquivos do projeto.
  *
- * NÃO chama SpreadsheetApp.getUi() diretamente.
- * Toda UI passa pelo helper _cvTentarUI(), que aborta se getUi() não estiver disponível.
+ * Como instalar: Extensões → Apps Script → Acionadores → Adicionar acionador
+ *   Função: onEditConversaoLeadsSoproLife | Evento: Da planilha → Ao editar
+ *
+ * Sai imediatamente se a edição não for relevante (sem chamadas de API extras).
+ * NÃO chama getUi() — segura para acionadores automáticos.
  */
-function converterLeadSelecionadoSoproLife() {
-  // 1. UI: se não disponível (ex.: chamada pelo editor AS), aborta com log claro.
-  var ui = _cvTentarUI();
-  if (!ui) return;
+function onEditConversaoLeadsSoproLife(e) {
+  if (!e || !e.range) return;
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  // Verificações rápidas sem chamadas de API
+  var sheet = e.range.getSheet();
+  if (sheet.getName() !== _CV_ABA_LEADS) return;
+  if (e.range.rowStart <= 1) return;
 
-  // 2. Busca a aba Leads explicitamente (não assume sheet ativa).
-  var leadsSheet = ss.getSheetByName(_CV_ABA_LEADS);
-  if (!leadsSheet) {
-    Logger.log("ERRO: aba '" + _CV_ABA_LEADS + "' não encontrada.");
-    ui.alert("Erro", "Aba '" + _CV_ABA_LEADS + "' não encontrada na planilha.", ui.ButtonSet.OK);
+  var novoValor = String(e.value || "").trim();
+  if (_CV_ETAPAS_CONVERSAO.indexOf(novoValor) < 0) return;
+
+  // Verifica que a coluna editada é 'etapa'
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return;
+  var header    = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var etapaIdx  = -1;
+  for (var i = 0; i < header.length; i++) {
+    if (String(header[i] || "").trim() === "etapa") { etapaIdx = i; break; }
+  }
+  if (etapaIdx < 0 || e.range.columnStart !== etapaIdx + 1) return;
+
+  // Lock para evitar execução duplicada
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (err) {
+    Logger.log("onEditConversaoLeads: lock não obtido após 15s — " + err.message);
     return;
   }
 
-  // 3. Verifica se o usuário está na aba Leads.
-  var abaAtiva = ss.getActiveSheet();
+  try {
+    _cvConverterLeadCore(e.source, sheet, e.range.rowStart, novoValor);
+  } catch (err) {
+    Logger.log("onEditConversaoLeads: erro — " + err.message);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ── Conversão manual (menu) ───────────────────────────────────────────────────
+
+/**
+ * Acionado por: SoproLife → Leads → Converter lead selecionado → CRM
+ * Útil quando o onEdit não disparou ou para re-converter com etapa já definida.
+ */
+function converterLeadSelecionadoSoproLife() {
+  var ui = _cvTentarUI();
+  if (!ui) return;
+
+  var ss         = SpreadsheetApp.getActiveSpreadsheet();
+  var abaAtiva   = ss.getActiveSheet();
+  var leadsSheet = ss.getSheetByName(_CV_ABA_LEADS);
+
+  if (!leadsSheet) {
+    ui.alert("Erro", "Aba '" + _CV_ABA_LEADS + "' não encontrada.", ui.ButtonSet.OK);
+    return;
+  }
+
   if (!abaAtiva || abaAtiva.getName() !== _CV_ABA_LEADS) {
-    Logger.log("Selecione uma linha da aba Leads antes de converter.");
     ui.alert(
       "Aba incorreta",
-      "Selecione uma linha da aba '" + _CV_ABA_LEADS + "' antes de executar esta função.",
+      "Selecione uma linha da aba '" + _CV_ABA_LEADS + "' antes de executar.",
       ui.ButtonSet.OK
     );
     return;
   }
 
-  // 4. Obtém a linha ativa com segurança.
   var activeRange = abaAtiva.getActiveRange();
   if (!activeRange) {
-    Logger.log("Selecione uma linha da aba Leads antes de converter.");
-    ui.alert("Linha não selecionada", "Selecione uma linha da aba Leads antes de converter.", ui.ButtonSet.OK);
+    ui.alert("Linha não selecionada", "Selecione uma linha da aba Leads.", ui.ButtonSet.OK);
     return;
   }
 
   var linha = activeRange.getRow();
   if (linha <= 1) {
-    Logger.log("Selecione uma linha da aba Leads antes de converter.");
     ui.alert("Linha inválida", "Selecione uma linha de dados (não o cabeçalho).", ui.ButtonSet.OK);
     return;
   }
 
-  // 5. Lê os dados da linha selecionada.
   var lastCol = leadsSheet.getLastColumn();
   if (lastCol < 1) {
-    Logger.log("Aba Leads sem colunas.");
     ui.alert("Erro", "Aba Leads parece estar vazia.", ui.ButtonSet.OK);
     return;
   }
+  var header  = leadsSheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var mapa    = _cvMapearHeader(header);
+  var rowData = leadsSheet.getRange(linha, 1, 1, lastCol).getValues()[0];
 
-  var header = leadsSheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var etapa  = _cvVal(rowData, mapa, "etapa");
+  var nome   = _cvVal(rowData, mapa, "nome");
+  var leadId = _cvVal(rowData, mapa, "lead_id") || ("linha-" + linha);
+
+  if (_CV_ETAPAS_CONVERSAO.indexOf(etapa) < 0) {
+    ui.alert(
+      "Etapa inválida para conversão",
+      "A etapa atual deste lead é: '" + (etapa || "(vazia)") + "'\n\n" +
+      "Para converter, mude a etapa para uma destas:\n" +
+      "  • Realizou consulta\n" +
+      "  • Realizou espirometria\n" +
+      "  • Realizou consulta e espirometria\n\n" +
+      "A conversão acontece automaticamente ao mudar a etapa.",
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+
+  var confirmMsg =
+    "Converter este lead para os CRMs de atendimento?\n\n" +
+    "Lead:  " + leadId               + "\n" +
+    "Nome:  " + (nome || "(vazio)") + "\n" +
+    "Etapa: " + etapa               + "\n\n" +
+    "Após a conversão, o lead será movido para 'Leads Convertidos'.";
+
+  var btn = ui.alert("Confirmar conversão", confirmMsg, ui.ButtonSet.YES_NO);
+  if (btn !== ui.Button.YES) {
+    Logger.log("[" + leadId + "] Conversão manual cancelada pelo usuário.");
+    return;
+  }
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (err) {
+    ui.alert(
+      "Erro de concorrência",
+      "Outra operação está em andamento. Aguarde e tente novamente.",
+      ui.ButtonSet.OK
+    );
+    return;
+  }
+
+  try {
+    _cvConverterLeadCore(ss, leadsSheet, linha, etapa);
+    ui.alert(
+      "Conversão concluída",
+      "Lead '" + leadId + "' convertido com sucesso.\n" +
+      "Movido para '" + _CV_ABA_CONVERTIDOS + "'.\n" +
+      "Log em: " + _CV_ABA_LOG,
+      ui.ButtonSet.OK
+    );
+  } catch (err) {
+    Logger.log("[" + leadId + "] Erro na conversão manual: " + err.message);
+    ui.alert("Erro na conversão", err.message, ui.ButtonSet.OK);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ── Núcleo da conversão ───────────────────────────────────────────────────────
+
+/**
+ * Lógica central. Usada pelo onEdit e pela função manual.
+ * Não chama getUi() — segura para triggers automáticos.
+ */
+function _cvConverterLeadCore(ss, leadsSheet, linha, etapa) {
+  var hoje     = Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy");
+  var hojeComp = Utilities.formatDate(new Date(), "America/Sao_Paulo", "yyyyMMdd");
+  var agora    = Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm:ss");
+
+  var lastCol = leadsSheet.getLastColumn();
+  if (lastCol < 1) {
+    Logger.log("ERRO: aba Leads sem colunas — conversão abortada.");
+    return;
+  }
+  var header  = leadsSheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var mapa    = _cvMapearHeader(header);
+  var rowData = leadsSheet.getRange(linha, 1, 1, lastCol).getValues()[0];
+
+  var leadId   = _cvVal(rowData, mapa, "lead_id") || ("linha-" + linha);
+  var nome     = _cvVal(rowData, mapa, "nome");
+  var tel      = _cvVal(rowData, mapa, "telefone_whatsapp");
+  var servico  = _cvVal(rowData, mapa, "servico_interesse");
+  var origem   = _cvVal(rowData, mapa, "origem");
+  var resp     = _cvVal(rowData, mapa, "responsavel");
+  var proxAcao = _cvVal(rowData, mapa, "proxima_acao");
+  var dataProx = _cvVal(rowData, mapa, "data_proxima_acao");
+  var obs      = _cvVal(rowData, mapa, "observacao");
+
+  var obsConv =
+    "Convertido de lead " + leadId + " · " + hoje +
+    (obs ? " | " + obs : "");
+
+  var servicoNorm = String(servico || "").toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "");
+  var ehB2B = _CV_ROTA_B2B.some(function(t) {
+    return servicoNorm.indexOf(t) >= 0;
+  });
+
+  var log = {
+    agora:          agora,
+    leadId:         leadId,
+    nome:           nome || "(sem nome)",
+    etapa:          etapa,
+    destinos:       [],
+    resultado:      "",
+    followupStatus: "",
+  };
+
+  Logger.log("[" + leadId + "] Conversão iniciada — etapa: " + etapa);
+
+  // B2B: orienta cadastro manual, move para Leads Convertidos
+  if (ehB2B) {
+    log.resultado =
+      "B2B — não convertido para CRM Pacientes. " +
+      "Cadastrar manualmente em CRM Clínicas ou Base B2B/PCMSO.";
+    log.destinos.push("CRM Clínicas/B2B (manual)");
+    Logger.log("[" + leadId + "] B2B — " + log.resultado);
+    _cvRegistrarLogConversoes(ss, log);
+    _cvMoverParaConvertidos(ss, leadsSheet, linha, rowData);
+    return;
+  }
+
+  // Nome obrigatório para pessoa física
+  if (!nome) {
+    log.resultado = "ERRO: campo 'nome' vazio — conversão abortada.";
+    Logger.log("[" + leadId + "] " + log.resultado);
+    _cvRegistrarLogConversoes(ss, log);
+    return;
+  }
+
+  // Pacote de dados comuns a todos os CRMs
+  var d = {
+    nome:     nome,
+    tel:      tel,
+    servico:  servico,
+    origem:   origem,
+    resp:     resp,
+    dataProx: dataProx,
+    proxAcao: proxAcao,
+    obs:      obsConv,
+  };
+
+  // CRM Pacientes (verifica duplicata por telefone)
+  var resPac = _cvCriarCRMPacientes(ss, hojeComp, hoje, d);
+  log.destinos.push(
+    "CRM Pacientes: " + (resPac.criado ? resPac.id : "telefone duplicado — não criado")
+  );
+
+  // CRM Consultas
+  if (etapa === _CV_ETAPA_CONSULTA || etapa === _CV_ETAPA_AMBOS) {
+    var resCon = _cvCriarCRMConsultas(ss, hojeComp, hoje, d);
+    log.destinos.push("CRM Consultas: " + resCon.id);
+  }
+
+  // CRM Espirometria
+  if (etapa === _CV_ETAPA_ESPIROMETRIA || etapa === _CV_ETAPA_AMBOS) {
+    var resEsm = _cvCriarCRMEspirometria(ss, hojeComp, hoje, d);
+    log.destinos.push("CRM Espirometria: " + resEsm.id);
+  }
+
+  // Follow-up WhatsApp (apenas leads pessoa física com telefone)
+  try {
+    var resFup = _cvCriarFollowupWhatsapp(ss, hojeComp, hoje, d, leadId, etapa);
+    log.followupStatus = resFup.status + (resFup.id ? " (" + resFup.id + ")" : "");
+    log.destinos.push("Follow-up WhatsApp: " + log.followupStatus);
+  } catch (errFup) {
+    log.followupStatus = "erro: " + errFup.message;
+    log.destinos.push("Follow-up WhatsApp: erro");
+    Logger.log("[" + leadId + "] Follow-up erro: " + errFup.message);
+  }
+
+  log.resultado = "Convertido com sucesso.";
+  Logger.log("[" + leadId + "] " + log.resultado + " | " + log.destinos.join(", "));
+
+  // Log antes de remover — garante rastreabilidade
+  _cvRegistrarLogConversoes(ss, log);
+
+  // Move para Leads Convertidos e remove da aba Leads
+  _cvMoverParaConvertidos(ss, leadsSheet, linha, rowData);
+}
+
+// ── Criação nos CRMs (compatível com esquemas antigo e novo) ──────────────────
+
+function _cvCriarCRMPacientes(ss, hojeComp, hoje, d) {
+  var sheet = _cvObterOuCriarAba(ss, _CV_ABA_PAC, _CV_DEFAULT_HEADERS_PAC);
+
+  // Checa duplicata por telefone
+  if (d.tel) {
+    var telDigitos = d.tel.replace(/\D/g, "");
+    if (telDigitos && _cvConjuntoTelefones(ss, _CV_ABA_PAC).has(telDigitos)) {
+      Logger.log("CRM Pacientes: telefone já existe — não duplicado. (" + d.nome + ")");
+      return { id: "(duplicado)", criado: false };
+    }
+  }
+
+  var lastCol = sheet.getLastColumn();
+  var headers = lastCol > 0
+    ? sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+    : _CV_DEFAULT_HEADERS_PAC;
+  var id = "PAC-" + hojeComp + "-" + String(Math.max(sheet.getLastRow(), 1)).padStart(3, "0");
+
+  sheet.appendRow(_cvConstruirLinhaParaCRM(headers, d, id, hoje, { statusPadrao: "Ativo" }));
+  Logger.log("CRM Pacientes: criado " + id + " — " + d.nome);
+  return { id: id, criado: true };
+}
+
+function _cvCriarCRMConsultas(ss, hojeComp, hoje, d) {
+  var sheet = _cvObterOuCriarAba(ss, _CV_ABA_CON, _CV_DEFAULT_HEADERS_CON);
+
+  var lastCol = sheet.getLastColumn();
+  var headers = lastCol > 0
+    ? sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+    : _CV_DEFAULT_HEADERS_CON;
+  var id = "CON-" + hojeComp + "-" + String(Math.max(sheet.getLastRow(), 1)).padStart(3, "0");
+
+  sheet.appendRow(_cvConstruirLinhaParaCRM(headers, d, id, hoje, { statusPadrao: "A confirmar" }));
+  Logger.log("CRM Consultas: criado " + id + " — " + d.nome);
+  return { id: id };
+}
+
+function _cvCriarCRMEspirometria(ss, hojeComp, hoje, d) {
+  var sheet = _cvObterOuCriarAba(ss, _CV_ABA_ESM, _CV_DEFAULT_HEADERS_ESM);
+
+  var lastCol = sheet.getLastColumn();
+  var headers = lastCol > 0
+    ? sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+    : _CV_DEFAULT_HEADERS_ESM;
+  var id = "ESM-" + hojeComp + "-" + String(Math.max(sheet.getLastRow(), 1)).padStart(3, "0");
+
+  // Garante que servico não fique vazio para registros de espirometria
+  var extras = {
+    statusPadrao: "A confirmar",
+    servico:      d.servico || "Espirometria",
+    tipoExame:    "Espirometria",
+  };
+  sheet.appendRow(_cvConstruirLinhaParaCRM(headers, d, id, hoje, extras));
+  Logger.log("CRM Espirometria: criado " + id + " — " + d.nome);
+  return { id: id };
+}
+
+// ── Follow-up WhatsApp ────────────────────────────────────────────────────────
+
+/**
+ * Cria linha na aba 'Follow-up WhatsApp' após conversão de lead.
+ * Não cria follow-up se: sem telefone, B2B (verificado pelo chamador), ou duplicata.
+ * Retorna { status, id? } — status: "criado" | "ja_existia" | "sem_telefone".
+ */
+function _cvCriarFollowupWhatsapp(ss, hojeComp, hoje, d, leadId, etapa) {
+  if (!d.tel) {
+    Logger.log("[" + leadId + "] Follow-up: sem telefone — não criado.");
+    return { status: "sem_telefone" };
+  }
+
+  var tipoMsg;
+  if (etapa === _CV_ETAPA_CONSULTA) {
+    tipoMsg = "Follow-up pós-consulta";
+  } else if (etapa === _CV_ETAPA_ESPIROMETRIA) {
+    tipoMsg = "Follow-up pós-espirometria";
+  } else {
+    tipoMsg = "Follow-up pós-consulta e pós-espirometria";
+  }
+
+  var dataObj = new Date();
+  dataObj.setMonth(dataObj.getMonth() + 5);
+  var dataPrevista = Utilities.formatDate(dataObj, "America/Sao_Paulo", "dd/MM/yyyy");
+
+  var sheet = _cvObterOuCriarAba(ss, _CV_ABA_FOLLOWUP, _CV_DEFAULT_HEADERS_FUP);
+
+  if (_cvFollowupJaExiste(sheet, d.tel, tipoMsg, leadId)) {
+    Logger.log("[" + leadId + "] Follow-up: já existe — não duplicado. (" + tipoMsg + ")");
+    return { status: "ja_existia" };
+  }
+
+  var fupId = "FUP-" + hojeComp + "-" + String(Math.max(sheet.getLastRow(), 1)).padStart(3, "0");
+
+  var lastCol = sheet.getLastColumn();
+  var headers = lastCol > 0
+    ? sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+    : _CV_DEFAULT_HEADERS_FUP;
+
+  var v = {
+    "followup_id":               fupId,
+    "data_criacao":              hoje,
+    "primeiro_nome":             d.nome || "",
+    "telefone":                  d.tel  || "",
+    "tipo_mensagem":             tipoMsg,
+    "data_prevista":             dataPrevista,
+    "status":                    "Pendente",
+    "canal":                     "WhatsApp",
+    "responsavel":               d.resp || "Não informado",
+    "template_usado":            "Follow-up 5 meses",
+    "consentimento_whatsapp":    "Não confirmado",
+    "observacao_privada_minima": "Criado automaticamente a partir do lead " + leadId + ". Revisar antes de enviar.",
+  };
+
+  var linha = headers.map(function(col) {
+    var key = String(col || "").trim();
+    return v.hasOwnProperty(key) ? v[key] : "";
+  });
+
+  sheet.appendRow(linha);
+  Logger.log("[" + leadId + "] Follow-up criado: " + fupId + " — " + tipoMsg);
+  return { status: "criado", id: fupId };
+}
+
+/**
+ * Verifica se já existe follow-up pendente para o mesmo telefone, tipo_mensagem e lead_id.
+ * Evita duplicidade quando a conversão é re-executada.
+ */
+function _cvFollowupJaExiste(sheet, tel, tipoMsg, leadId) {
+  if (sheet.getLastRow() < 2) return false;
+
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return false;
+
+  var header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var mapa   = _cvMapearHeader(header);
+
+  var idxTel    = mapa["telefone"];
+  var idxTipo   = mapa["tipo_mensagem"];
+  var idxStatus = mapa["status"];
+  var idxObs    = mapa["observacao_privada_minima"];
+
+  if (idxTel === undefined || idxTipo === undefined) return false;
+
+  var telDigitos = String(tel).replace(/\D/g, "");
+  var dados = sheet.getRange(2, 1, sheet.getLastRow() - 1, lastCol).getValues();
+
+  return dados.some(function(row) {
+    var rowTel    = String(row[idxTel]  || "").replace(/\D/g, "");
+    var rowTipo   = String(row[idxTipo] || "").trim();
+    var rowStatus = idxStatus !== undefined ? String(row[idxStatus] || "").trim() : "";
+    var rowObs    = idxObs    !== undefined ? String(row[idxObs]    || "")        : "";
+    return rowTel === telDigitos &&
+           rowTipo === tipoMsg &&
+           rowStatus === "Pendente" &&
+           rowObs.indexOf(leadId) >= 0;
+  });
+}
+
+// ── Mover para Leads Convertidos ──────────────────────────────────────────────
+
+function _cvMoverParaConvertidos(ss, leadsSheet, linha, rowData) {
+  var destSheet = ss.getSheetByName(_CV_ABA_CONVERTIDOS);
+
+  if (!destSheet) {
+    destSheet = ss.insertSheet(_CV_ABA_CONVERTIDOS);
+    destSheet.getRange(1, 1, 1, _CV_LEADS_CABECALHO.length)
+      .setValues([_CV_LEADS_CABECALHO])
+      .setFontWeight("bold")
+      .setFontColor("#ffffff")
+      .setBackground("#08243d");
+    Logger.log("Aba '" + _CV_ABA_CONVERTIDOS + "' criada.");
+  } else if (
+    destSheet.getLastRow() === 0 ||
+    String(destSheet.getRange(1, 1).getValue() || "").trim() === ""
+  ) {
+    destSheet.getRange(1, 1, 1, _CV_LEADS_CABECALHO.length)
+      .setValues([_CV_LEADS_CABECALHO]);
+  }
+
+  // Ajusta tamanho de rowData ao cabeçalho de destino
+  var row = _CV_LEADS_CABECALHO.map(function(_, idx) {
+    return idx < rowData.length ? rowData[idx] : "";
+  });
+
+  destSheet.appendRow(row);
+  leadsSheet.deleteRow(linha);
+  Logger.log(
+    "Lead movido para '" + _CV_ABA_CONVERTIDOS +
+    "' — linha " + linha + " removida de Leads."
+  );
+}
+
+// ── Log de Conversões ─────────────────────────────────────────────────────────
+
+function _cvRegistrarLogConversoes(ss, log) {
+  var sheet = _cvGarantirAba(ss, _CV_ABA_LOG, _CV_HEADERS_LOG);
+  sheet.appendRow([
+    log.agora,
+    log.leadId,
+    log.nome,
+    log.etapa,
+    log.destinos.join("; "),
+    log.resultado,
+    log.followupStatus || "",
+  ]);
+  Logger.log(
+    "Log: " + log.leadId +
+    " | etapa: " + log.etapa +
+    " | resultado: " + log.resultado
+  );
+}
+
+// ── Helpers gerais ────────────────────────────────────────────────────────────
+
+/**
+ * Mapeador de dados Lead → linha CRM.
+ * Lê o cabeçalho ATUAL da aba e mapeia cada coluna pelo nome.
+ * Compatível com esquemas antigos (primeiro_nome, telefone, data_cadastro...)
+ * e novos (nome, telefone_whatsapp, data_registro...).
+ *
+ * @param {Array}  headers     Cabeçalho atual da aba CRM (array de strings).
+ * @param {Object} d           Dados do lead: nome, tel, servico, origem, resp,
+ *                             dataProx, proxAcao, obs.
+ * @param {string} id          ID gerado para o novo registro.
+ * @param {string} hoje        Data atual em dd/MM/yyyy.
+ * @param {Object} [extras]    Substituições específicas: statusPadrao, servico, tipoExame.
+ * @returns {Array} Linha de valores alinhada ao cabeçalho.
+ */
+function _cvConstruirLinhaParaCRM(headers, d, id, hoje, extras) {
+  extras = extras || {};
+
+  var v = {
+    // IDs — apenas o correspondente existirá no cabeçalho de cada aba
+    "paciente_id":               id,
+    "consulta_id":               id,
+    "exame_id":                  id,
+
+    // Datas de registro (nomes antigos e novos)
+    "data_registro":             hoje,
+    "data_cadastro":             hoje,
+    "data_entrada":              hoje,
+
+    // Nome do paciente (esquema antigo: primeiro_nome / novo: nome)
+    "nome":                      d.nome || "",
+    "primeiro_nome":             d.nome || "",
+
+    // Telefone (antigo: telefone / novo: telefone_whatsapp)
+    "telefone_whatsapp":         d.tel  || "",
+    "telefone":                  d.tel  || "",
+
+    // Serviço — pode ser sobrescrito por extras.servico
+    "servico":                   extras.servico    || d.servico || "",
+    "servico_interesse":         d.servico || "",
+    "ultimo_servico":            d.servico || "",
+    "tipo_consulta":             d.servico || "",
+    "tipo_exame":                extras.tipoExame  || "Espirometria",
+
+    // Origem
+    "origem":                    d.origem  || "",
+
+    // Responsável
+    "responsavel":               d.resp    || "",
+
+    // Próximo contato (antigos: proximo_contato / novos: data_proximo_contato)
+    "proximo_contato":           d.dataProx  || "",
+    "data_proximo_contato":      d.dataProx  || "",
+    "motivo_proximo_contato":    d.proxAcao  || "",
+
+    // Observação (antigo: observacao_privada_minima / novo: observacao)
+    "observacao":                d.obs || "",
+    "observacao_privada_minima": d.obs || "",
+
+    // Status — pode ser sobrescrito por extras.statusPadrao
+    "status":                    extras.statusPadrao || "A confirmar",
+    "status_relacionamento":     "Em acompanhamento",
+    "status_exame":              "A confirmar",
+
+    // Campos a preencher pela equipe após o atendimento — sempre em branco
+    "medica":                    "",
+    "data_consulta":             "",
+    "data_exame":                "",
+    "historico_resumido":        "",
+
+    // Campos do esquema antigo sem equivalente no novo lead
+    "canal":                     "",
+    "consentimento_whatsapp":    "",
+  };
+
+  return headers.map(function(col) {
+    var key = String(col || "").trim();
+    return v.hasOwnProperty(key) ? v[key] : "";
+  });
+}
+
+/**
+ * Obtém ou cria uma aba CRM.
+ * Se a aba já existir com dados, NÃO altera o cabeçalho.
+ * Se a aba não existir ou estiver vazia, cria/aplica o cabeçalho padrão.
+ */
+function _cvObterOuCriarAba(ss, nomeAba, headersDefault) {
+  var sheet = ss.getSheetByName(nomeAba);
+  if (!sheet) {
+    sheet = ss.insertSheet(nomeAba);
+    sheet.getRange(1, 1, 1, headersDefault.length)
+      .setValues([headersDefault])
+      .setFontWeight("bold")
+      .setFontColor("#ffffff")
+      .setBackground("#08243d");
+    Logger.log("Aba '" + nomeAba + "' criada com cabeçalho padrão.");
+  } else if (
+    sheet.getLastRow() === 0 ||
+    String(sheet.getRange(1, 1).getValue() || "").trim() === ""
+  ) {
+    sheet.getRange(1, 1, 1, headersDefault.length)
+      .setValues([headersDefault])
+      .setFontWeight("bold")
+      .setFontColor("#ffffff")
+      .setBackground("#08243d");
+    Logger.log("Cabeçalho padrão aplicado em '" + nomeAba + "' (aba estava vazia).");
+  }
+  return sheet;
+}
+
+/**
+ * Obtém ou cria uma aba de suporte (log, etc.) e aplica cabeçalho se ausente.
+ * Sempre cria com o cabeçalho informado se a aba não tiver dados.
+ */
+function _cvGarantirAba(ss, nomeAba, headers) {
+  var sheet = ss.getSheetByName(nomeAba);
+  if (!sheet) {
+    sheet = ss.insertSheet(nomeAba);
+    Logger.log("Aba '" + nomeAba + "' criada.");
+  }
+  if (
+    sheet.getLastRow() === 0 ||
+    String(sheet.getRange(1, 1).getValue() || "").trim() === ""
+  ) {
+    sheet.getRange(1, 1, 1, headers.length)
+      .setValues([headers])
+      .setFontWeight("bold")
+      .setFontColor("#ffffff")
+      .setBackground("#08243d");
+  }
+  return sheet;
+}
+
+/**
+ * Mapeia array de cabeçalho para { nome_coluna: índice_base0 }.
+ */
+function _cvMapearHeader(header) {
   var mapa = {};
   header.forEach(function(nome, idx) {
     var n = String(nome || "").trim();
     if (n && !mapa.hasOwnProperty(n)) mapa[n] = idx;
   });
-
-  var rowData = leadsSheet.getRange(linha, 1, 1, lastCol).getValues()[0];
-
-  // 6. Extrai campos relevantes do lead.
-  var leadId       = _cvValArr(rowData, mapa, "lead_id")           || ("linha-" + linha);
-  var nome         = _cvValArr(rowData, mapa, "nome");
-  var tel          = _cvValArr(rowData, mapa, "telefone_whatsapp");
-  var servico      = _cvValArr(rowData, mapa, "servico_interesse");
-  var origem       = _cvValArr(rowData, mapa, "origem");
-  var canal        = _cvValArr(rowData, mapa, "canal");
-  var resp         = _cvValArr(rowData, mapa, "responsavel");
-  var proxAcao     = _cvValArr(rowData, mapa, "proxima_acao");
-  var dataProxAcao = _cvValArr(rowData, mapa, "data_proxima_acao");
-  var obs          = _cvValArr(rowData, mapa, "observacao");
-
-  var hoje = Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy");
-
-  var servicoNorm = String(servico).toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "");
-
-  // 7. Roteamento B2B: não vai para CRM Pacientes.
-  if (_cvEhB2B(servicoNorm)) {
-    var msgB2B =
-      "Este lead tem serviço '" + (servico || "B2B") + "', que é B2B (clínica ou empresa).\n\n" +
-      "Leads B2B não são cadastrados no CRM Pacientes.\n\n" +
-      "Ação recomendada:\n" +
-      "  1. Vá para a aba 'CRM Clinicas' ou 'Base Prospecção B2B PCMSO'.\n" +
-      "  2. Cadastre manualmente:\n" +
-      "     • Nome: "    + (nome   || "(não informado)") + "\n" +
-      "     • Serviço: " + (servico || "")              + "\n" +
-      "     • Origem: "  + (origem  || "(não informado)");
-    Logger.log("[" + leadId + "] B2B — orientação exibida. Não criado em CRM Pacientes.");
-    ui.alert("Lead B2B — CRM Clínicas", msgB2B, ui.ButtonSet.OK);
-    return;
-  }
-
-  // 8. Valida nome (obrigatório para pessoa física).
-  if (!nome) {
-    Logger.log("[" + leadId + "] Campo 'nome' vazio. Preencha antes de converter.");
-    ui.alert("Dado ausente", "O campo 'nome' está vazio nesta linha. Preencha antes de converter.", ui.ButtonSet.OK);
-    return;
-  }
-
-  // 9. Aviso se telefone ausente (não bloqueia, mas alerta).
-  if (!tel) {
-    var btnSemTel = ui.alert(
-      "Telefone ausente",
-      "O campo 'telefone_whatsapp' está vazio.\n\n" +
-      "Sem telefone, a checagem de duplicata não funcionará.\n\n" +
-      "Deseja continuar assim mesmo?",
-      ui.ButtonSet.YES_NO
-    );
-    if (btnSemTel !== ui.Button.YES) {
-      Logger.log("[" + leadId + "] Conversão cancelada: sem telefone.");
-      return;
-    }
-  }
-
-  // 10. Confirmação de conversão.
-  var msgConf =
-    "Converter este lead para CRM Pacientes?\n\n" +
-    "Lead: "       + leadId                      + "\n" +
-    "Nome: "       + nome                        + "\n" +
-    "Telefone: "   + (tel     || "(vazio)")       + "\n" +
-    "Serviço: "    + (servico || "(não informado)") + "\n\n" +
-    "Após a conversão:\n" +
-    "  • Entrada criada em CRM Pacientes (se não existir)\n" +
-    "  • Etapa do lead atualizada para 'Convertido em paciente'\n" +
-    "  • CRM Espirometria e CRM Consultas NÃO são criados aqui";
-
-  var btnConf = ui.alert("Confirmar conversão", msgConf, ui.ButtonSet.YES_NO);
-  if (btnConf !== ui.Button.YES) {
-    Logger.log("[" + leadId + "] Conversão cancelada pelo usuário.");
-    return;
-  }
-
-  // 11. Observação com origem da conversão.
-  var obsComOrigem =
-    "Convertido a partir da aba Leads (" + leadId + " · " + hoje + ")" +
-    (obs ? "\n" + obs : "");
-
-  // 12. Cria entrada em CRM Pacientes (se não existir por telefone).
-  var criadoPac = _cvCriarCRMPacientes(ss, hoje, {
-    nome:            nome,
-    telefone:        tel,
-    servico:         servico,
-    canal:           canal,
-    responsavel:     resp,
-    proximo_contato: dataProxAcao,
-    motivo:          proxAcao,
-    obs:             obsComOrigem,
-  });
-
-  // 13. Atualiza a etapa do lead para "Convertido em paciente".
-  var idxEtapa = mapa["etapa"];
-  if (idxEtapa !== undefined) {
-    leadsSheet.getRange(linha, idxEtapa + 1).setValue("Convertido em paciente");
-    Logger.log("[" + leadId + "] Etapa atualizada para 'Convertido em paciente'.");
-  } else {
-    Logger.log("[" + leadId + "] AVISO: coluna 'etapa' não encontrada — etapa não atualizada.");
-  }
-
-  // 14. Registra no Log Centro Comando.
-  _cvRegistrarLogManual(ss, hoje, leadId, nome, criadoPac);
-
-  // 15. Resumo final ao usuário.
-  var resumo =
-    "Conversão concluída para: " + nome + " (" + leadId + ")\n\n" +
-    (criadoPac
-      ? "✔ CRM Pacientes: criado\n"
-      : "— CRM Pacientes: telefone já existia — não duplicado\n") +
-    "✔ Etapa do lead: 'Convertido em paciente'\n\n" +
-    "Para registrar exame ou consulta realizada:\n" +
-    "use as funções de CRM Espirometria / CRM Consultas separadamente.";
-
-  ui.alert("Conversão concluída", resumo, ui.ButtonSet.OK);
+  return mapa;
 }
-
-// ── Helper de UI seguro ───────────────────────────────────────────────────────
 
 /**
- * Tenta obter SpreadsheetApp.getUi().
- * Se falhar (contexto sem UI, ex.: editor do Apps Script ou trigger automático),
- * registra orientação e retorna null — a função chamadora deve checar e abortar.
- *
- * IMPORTANTE: esta é a ÚNICA função do arquivo que chama SpreadsheetApp.getUi().
+ * Lê valor de uma coluna pelo nome usando mapa de índices.
  */
-function _cvTentarUI() {
-  try {
-    return SpreadsheetApp.getUi();
-  } catch (e) {
-    Logger.log(
-      "UI não disponível. Esta função deve ser executada pelo menu SoproLife. " +
-      "Abra a planilha → SoproLife → Leads → Converter lead selecionado → CRM. " +
-      "Erro: " + e.message
-    );
-    return null;
-  }
-}
-
-// ── Criação em CRM Pacientes ───────────────────────────────────────────────────
-
-/**
- * Mapeamento de campos (Leads → CRM Pacientes):
- *   nome              → primeiro_nome
- *   telefone_whatsapp → telefone
- *   servico_interesse → ultimo_servico
- *   canal             → canal
- *   responsavel       → responsavel
- *   data_proxima_acao → proximo_contato
- *   proxima_acao      → motivo_proximo_contato
- *   observacao        → observacao_privada_minima (prefixada com origem)
- */
-function _cvCriarCRMPacientes(ss, hoje, d) {
-  var sheet = ss.getSheetByName(_CV_ABA_PAC);
-  if (!sheet) {
-    Logger.log("AVISO: aba '" + _CV_ABA_PAC + "' não encontrada. CRM Pacientes não criado.");
-    return false;
-  }
-
-  _cvGarantirCabecalho(sheet, _CV_HEADERS_PAC);
-
-  // Checa duplicata por telefone (dígitos apenas).
-  if (d.telefone) {
-    var telDigitos = d.telefone.replace(/\D/g, "");
-    var telefonesExistentes = _cvConjuntoTelefones(ss, _CV_ABA_PAC);
-    if (telefonesExistentes.has(telDigitos)) {
-      Logger.log("CRM Pacientes: telefone '" + d.telefone + "' já existe — não duplicado. (" + d.nome + ")");
-      return false;
-    }
-  }
-
-  // Gera ID sequencial.
-  var lastRow  = sheet.getLastRow();
-  var seq      = String(Math.max(lastRow, 1)).padStart(3, "0");
-  var hojeComp = hoje.replace(/\//g, "");
-  var id       = "PAC-" + hojeComp + "-" + seq;
-
-  sheet.appendRow([
-    id,
-    hoje,
-    d.nome             || "",
-    d.telefone         || "",
-    d.servico          || "",
-    "Em acompanhamento",
-    d.proximo_contato  || "",
-    d.motivo           || "",
-    d.canal            || "",
-    d.responsavel      || "",
-    "",
-    d.obs              || "",
-  ]);
-
-  Logger.log("CRM Pacientes: criado " + id + " — " + d.nome);
-  return true;
-}
-
-// ── Roteamento B2B ────────────────────────────────────────────────────────────
-
-function _cvEhB2B(servicoNorm) {
-  return _CV_ROTA_B2B.some(function(t) { return servicoNorm.indexOf(t) >= 0; });
-}
-
-// ── Helpers de leitura ─────────────────────────────────────────────────────────
-
-/**
- * Lê valor de uma coluna pelo nome, usando array de dados + mapa de índices.
- */
-function _cvValArr(row, mapa, nomeCampo) {
-  var idx = mapa[nomeCampo];
+function _cvVal(row, mapa, campo) {
+  var idx = mapa[campo];
   if (idx === undefined) return "";
   var v = row[idx];
   return (v === undefined || v === null) ? "" : String(v).trim();
 }
 
 /**
- * Lê a aba e retorna { rows, mapa } onde mapa é { nome_coluna: índice }.
- */
-function _cvLerAbaComMapa(sheet) {
-  var lastRow = sheet.getLastRow();
-  var lastCol = sheet.getLastColumn();
-  if (lastRow < 1 || lastCol < 1) return null;
-
-  var header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  var mapa = {};
-  header.forEach(function(nome, idx) {
-    var n = String(nome || "").trim();
-    if (n && !mapa.hasOwnProperty(n)) mapa[n] = idx;
-  });
-
-  if (lastRow < 2) return { rows: [], mapa: mapa };
-  var dados = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-  return { rows: dados, mapa: mapa };
-}
-
-/**
- * Retorna Set de dígitos de telefone presentes em uma aba (campo "telefone").
+ * Retorna conjunto de dígitos de telefone presentes em uma aba CRM.
+ * Aceita colunas 'telefone_whatsapp' (novo) ou 'telefone' (antigo).
  */
 function _cvConjuntoTelefones(ss, nomeAba) {
-  var conj = _cvSetFallback();
+  var conj  = _cvSetFallback();
   var sheet = ss.getSheetByName(nomeAba);
-  if (!sheet) return conj;
+  if (!sheet || sheet.getLastRow() < 2) return conj;
 
-  var data = _cvLerAbaComMapa(sheet);
-  if (!data) return conj;
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return conj;
 
-  data.rows.forEach(function(row) {
-    var idx = data.mapa["telefone"];
-    if (idx === undefined) idx = data.mapa["telefone_whatsapp"];
-    if (idx === undefined) return;
+  var header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var mapa   = _cvMapearHeader(header);
+  var idx    = mapa["telefone_whatsapp"] !== undefined
+    ? mapa["telefone_whatsapp"]
+    : mapa["telefone"];
+  if (idx === undefined) return conj;
+
+  var dados = sheet.getRange(2, 1, sheet.getLastRow() - 1, lastCol).getValues();
+  dados.forEach(function(row) {
     var digits = String(row[idx] || "").replace(/\D/g, "");
     if (digits) conj.add(digits);
   });
-
   return conj;
 }
 
-function _cvNormalizar(s) {
-  return String(s || "").toLowerCase()
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .replace(/\s+/g, " ").trim();
-}
-
 /**
- * Fallback para ambientes Apps Script sem Set nativo.
+ * Set simples compatível com Apps Script (sem depender de Set nativo).
  */
 function _cvSetFallback() {
   var store = {};
@@ -397,36 +865,42 @@ function _cvSetFallback() {
   };
 }
 
-// ── Garantir cabeçalho ────────────────────────────────────────────────────────
-
-function _cvGarantirCabecalho(sheet, headers) {
-  var primeiraLinha = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-  var temCabecalho  = primeiraLinha.some(function(c) { return String(c || "").trim() !== ""; });
-  if (!temCabecalho) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    sheet.getRange(1, 1, 1, headers.length)
-      .setFontWeight("bold").setFontColor("#ffffff").setBackground("#08243d");
-    Logger.log("Cabeçalho criado em: " + sheet.getName());
+/**
+ * Tenta obter SpreadsheetApp.getUi().
+ * Retorna null em contextos sem UI (trigger automático, editor Apps Script).
+ */
+function _cvTentarUI() {
+  try {
+    return SpreadsheetApp.getUi();
+  } catch (e) {
+    Logger.log(
+      "UI não disponível. Use o menu SoproLife → Leads → Converter lead selecionado → CRM. " +
+      "Erro: " + e.message
+    );
+    return null;
   }
 }
 
-// ── Log Centro Comando ─────────────────────────────────────────────────────────
+// ── Utilitário: ocultar abas técnicas ─────────────────────────────────────────
 
-function _cvRegistrarLogManual(ss, hoje, leadId, nome, criadoPac) {
-  var abaLog = ss.getSheetByName(_CV_ABA_LOG);
-  if (!abaLog) {
-    Logger.log("AVISO: aba '" + _CV_ABA_LOG + "' não encontrada. Log não registrado.");
-    return;
-  }
+/**
+ * Oculta as abas técnicas de leads ('Leads Convertidos' e 'Log Conversões Leads')
+ * sem apagá-las. Útil para manter a planilha limpa para o uso diário.
+ * Execute via menu ou pelo editor Apps Script.
+ */
+function ocultarAbasTecnicasLeadsSoproLife() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var abasParaOcultar = [_CV_ABA_CONVERTIDOS, _CV_ABA_LOG];
 
-  if (abaLog.getLastRow() === 0 || abaLog.getRange(1, 1).getValue() === "") {
-    abaLog.getRange(1, 1, 1, 4).setValues([["data", "funcao", "lead", "resultado"]]);
-  }
+  abasParaOcultar.forEach(function(nomeAba) {
+    var sheet = ss.getSheetByName(nomeAba);
+    if (sheet) {
+      sheet.hideSheet();
+      Logger.log("Aba '" + nomeAba + "' ocultada.");
+    } else {
+      Logger.log("Aba '" + nomeAba + "' não encontrada — ignorada.");
+    }
+  });
 
-  var resultado =
-    "PAC=" + (criadoPac ? "criado" : "ja-existia") +
-    " | etapa=Convertido em paciente";
-
-  abaLog.appendRow([hoje, "converterLeadSelecionadoSoproLife", leadId + " — " + nome, resultado]);
-  Logger.log("Log registrado: " + leadId + " | " + resultado);
+  Logger.log("ocultarAbasTecnicasLeadsSoproLife concluído.");
 }
