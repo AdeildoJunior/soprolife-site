@@ -38,27 +38,22 @@ fi
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
-echo "1/7 - Atualizando status seguro da fonte Google Sheets..."
+echo "1/8 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
 
 echo
-echo "2/7 - Atualizando resumo seguro..."
+echo "2/8 - Atualizando resumo seguro..."
 
 if [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC"
   echo
 
-  # Falha segura: se o conector falhar, parar sem fallback silencioso para CSV.
-  # Fallback para CSV mascararia erros de planilha ou de autenticação.
   if ! "$_VENV_PYTHON" "$_SHEETS_SCRIPT" --write; then
     echo
-    echo "ERRO: falha ao ler Google Sheets via ADC."
-    echo "  Corrija a planilha ou a autenticação e tente novamente."
-    echo "  Fallback para CSV não é realizado quando Google Sheets está configurado."
-    echo
+    echo "AVISO: falha ao ler resumo do Google Sheets — painel pode mostrar dados desatualizados."
     echo "  Diagnóstico seguro da aba:"
     echo "  $_VENV_PYTHON $_SHEETS_SCRIPT --show-structure"
-    exit 1
+    echo "  (os demais passos continuarão normalmente)"
   fi
 
   echo
@@ -79,7 +74,7 @@ else
 fi
 
 echo
-echo "3/7 - Atualizando CRM Clínicas seguro..."
+echo "3/8 - Atualizando CRM Clínicas seguro..."
 
 if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
   echo "Fonte: Google Sheets via ADC (aba CRM Clinicas)"
@@ -99,7 +94,7 @@ else
 fi
 
 echo
-echo "4/7 - Atualizando Marketing & SEO..."
+echo "4/8 - Atualizando Marketing & SEO..."
 
 if [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "Marketing & SEO não configurado — usando dados demonstrativos."
@@ -123,7 +118,7 @@ else
 fi
 
 echo
-echo "5/7 - Atualizando Leads..."
+echo "5/8 - Atualizando Leads..."
 
 _LEADS_SCRIPT="painel-soprolife/scripts/read-leads-sheets.py"
 
@@ -150,11 +145,36 @@ else
 fi
 
 echo
-echo "6/7 - Verificando segurança..."
+echo "6/8 - Atualizando follow-up de pacientes..."
+
+_FOLLOWUP_SCRIPT="painel-soprolife/scripts/generate-followup-pacientes.py"
+
+if [ -f "$_FOLLOWUP_SCRIPT" ] && [ "$_sheets_available" = true ]; then
+  echo "Fonte: Google Sheets via ADC (CRM Espirometria + CRM Consultas)"
+  echo
+  if ! "$_VENV_PYTHON" "$_FOLLOWUP_SCRIPT" --write 2>&1; then
+    echo
+    echo "AVISO: falha ao gerar follow-up de pacientes."
+    echo "  Diagnóstico: $_VENV_PYTHON $_FOLLOWUP_SCRIPT --dry-run"
+  else
+    echo "Follow-up de pacientes atualizado."
+    echo "  Privado:  painel-soprolife/data-private/followup-pacientes.local.json"
+    echo "  Resumo:   painel-soprolife/data/followup-pacientes-summary.local.json"
+  fi
+else
+  if [ ! -f "$_FOLLOWUP_SCRIPT" ]; then
+    echo "Script de follow-up não encontrado."
+  else
+    echo "Google Sheets ADC não disponível — follow-up de pacientes pulado."
+  fi
+fi
+
+echo
+echo "7/8 - Verificando segurança..."
 painel-soprolife/scripts/check-access.sh
 
 echo
-echo "7/7 - Concluído."
+echo "8/8 - Concluído."
 echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"

@@ -142,7 +142,8 @@ async function init() {
       state.crm = crmLocal.clinicas.map(normalizeCrmRecord);
     }
 
-    const followupLocal = await loadOptionalJson("./data-private/followup-pacientes.local.json");
+    const _bust = `?_=${Date.now()}`;
+    const followupLocal = await loadOptionalJson(`./data-private/followup-pacientes.local.json${_bust}`);
     if (followupLocal) {
       state.followupPacientes = followupLocal;
     }
@@ -152,7 +153,7 @@ async function init() {
       state.followupSummary = followupSummary;
     }
 
-    const followupClinicasLocal = await loadOptionalJson("./data-private/followup-clinicas.local.json");
+    const followupClinicasLocal = await loadOptionalJson(`./data-private/followup-clinicas.local.json${_bust}`);
     if (followupClinicasLocal) {
       state.followupClinicas = followupClinicasLocal;
     }
@@ -160,7 +161,7 @@ async function init() {
     // Leads: privado (local/Tailscale) > resumo seguro > leads.json demonstrativo
     // Ambos gerados por: python3 painel-soprolife/scripts/read-leads-sheets.py --write
     const leadsSummaryLocal = await loadOptionalJson("./data/leads-summary.local.json");
-    const leadsPrivateLocal = await loadOptionalJson("./data-private/leads.local.json");
+    const leadsPrivateLocal = await loadOptionalJson(`./data-private/leads.local.json${_bust}`);
 
     if (leadsPrivateLocal?.leads?.length > 0) {
       // Dados reais disponíveis localmente (gitignored) — usa com nome e telefone
@@ -527,11 +528,12 @@ function renderCrmView() {
   if (!container) return;
 
   switch (state.crmView) {
-    case "clinicas": renderCrmClinicas(container); break;
-    case "pacientes": renderCrmPacientes(container); break;
-    case "relatorios": renderCrmPlaceholder(container, "relatorios"); break;
-    case "automacoes-crm": renderCrmAutomacoes(container); break;
-    case "entrada-dados":  renderEntradaDados(container);  break;
+    case "clinicas":          renderCrmClinicas(container);             break;
+    case "pacientes":         renderCrmPacientes(container);            break;
+    case "followup-detalhe":  renderCrmFollowupDetalhe(container);      break;
+    case "relatorios":        renderCrmPlaceholder(container, "relatorios"); break;
+    case "automacoes-crm":    renderCrmAutomacoes(container);           break;
+    case "entrada-dados":     renderEntradaDados(container);            break;
     default: renderCrmHub(container);
   }
 }
@@ -682,10 +684,15 @@ function renderCrmClinicas(container) {
 }
 
 function renderCrmPacientes(container) {
-  const fp = state.followupPacientes;
-  const espi  = fp ? fp.espirometria  : [];
-  const cons  = fp ? fp.consultas     : [];
-  const hoje  = todayIso();
+  const fp   = state.followupPacientes;
+  const espi = fp ? fp.espirometria : [];
+  const cons = fp ? fp.consultas    : [];
+  const all  = [...espi, ...cons];
+
+  const urgOrder = { atrasado: 0, hoje: 1, em_breve: 2, futuro: 3, sem_data: 4 };
+  const preview  = [...all]
+    .sort((a, b) => (urgOrder[a.status_followup] ?? 4) - (urgOrder[b.status_followup] ?? 4))
+    .slice(0, 5);
 
   function statusClass(r) {
     if (r.status_followup === "atrasado") return "status-atrasado";
@@ -694,72 +701,38 @@ function renderCrmPacientes(container) {
     if (r.status_followup === "futuro")   return "status-futuro";
     return "status-sem-data";
   }
-
   function statusLabel(r) {
     if (r.status_followup === "atrasado") return "Atrasado";
     if (r.status_followup === "hoje")     return "Hoje";
     if (r.status_followup === "em_breve") return formatDateBr(r.data_followup);
-    if (r.status_followup === "futuro")   return formatDateBr(r.data_followup) || "Agendado";
+    if (r.status_followup === "futuro")   return formatDateBr(r.data_followup) || "Futuro";
     return "Sem data";
   }
 
-  function patientItem(r) {
-    const tag = `<span class="fp-status ${statusClass(r)}">${statusLabel(r)}</span>`;
-    const waBtn = r.whatsapp_url
-      ? `<a class="fp-wa-btn" href="${r.whatsapp_url}" target="_blank" rel="noopener noreferrer" title="Abrir WhatsApp com mensagem pré-preenchida">WhatsApp</a>`
+  function prevItem(r) {
+    const tipo = r.tipo_followup === "espirometria" ? "🫁" : "💊";
+    const tag  = `<span class="fp-status ${statusClass(r)}">${statusLabel(r)}</span>`;
+    const wa   = r.whatsapp_url
+      ? `<a class="fp-wa-btn" href="${r.whatsapp_url}" target="_blank" rel="noopener noreferrer">WhatsApp</a>`
       : `<span class="fp-wa-btn fp-wa-disabled">Sem tel.</span>`;
     return `
-      <li class="fp-item">
-        <div class="fp-item-row">
-          <span class="fp-nome">${escapeHtml(r.nome)}</span>
-          ${tag}
-          ${waBtn}
-        </div>
-        ${r.motivo ? `<div class="fp-motivo">${escapeHtml(r.motivo)}</div>` : ""}
+      <li class="fp-prev-item">
+        <span class="fp-prev-tipo" aria-hidden="true">${tipo}</span>
+        <span class="fp-nome">${escapeHtml(r.nome || "—")}</span>
+        ${tag}${wa}
       </li>`;
   }
 
-  function followupBlock(title, icon, records) {
-    const atr    = records.filter(r => r.status_followup === "atrasado");
-    const hoje_  = records.filter(r => r.status_followup === "hoje");
-    const breve  = records.filter(r => r.status_followup === "em_breve");
-    const futuro = records.filter(r => r.status_followup === "futuro");
-    const semdat = records.filter(r => r.status_followup === "sem_data");
-
-    function card(cls, label, iconC, items) {
-      const body = items.length
-        ? `<ul class="fp-list">${items.map(patientItem).join("")}</ul>`
-        : `<p class="fp-empty">Nenhum registro</p>`;
-      return `
-        <article class="fp-card ${cls}">
-          <div class="fp-card-header">
-            <span class="fp-icon">${iconC}</span>
-            <div>
-              <strong>${label}</strong>
-              <span class="fp-count">${items.length}</span>
-            </div>
-          </div>
-          ${body}
-        </article>`;
-    }
-
-    return `
-      <section class="fp-section">
-        <h3 class="fp-section-title">${icon} ${title}</h3>
-        <div class="fp-grid">
-          ${card("fp-card-atrasado", "Atrasados",      "🔴", atr)}
-          ${card("fp-card-hoje",     "Hoje",            "🟡", hoje_)}
-          ${card("fp-card-breve",    "Próximos 7 dias", "🟢", breve)}
-          ${card("fp-card-futuro",   "Agendados",       "🔵", futuro)}
-        </div>
-        ${semdat.length ? `<div class="fp-semdata-note">Sem data agendada: ${semdat.length}</div>` : ""}
-      </section>`;
-  }
+  const nAtr = all.filter(r => r.status_followup === "atrasado").length;
+  const nHoj = all.filter(r => r.status_followup === "hoje").length;
+  const urgBadge = nAtr > 0
+    ? `<span class="fp-urgent-badge">⚠ ${nAtr} atrasado${nAtr > 1 ? "s" : ""}</span>`
+    : nHoj > 0 ? `<span class="fp-today-badge">🟡 ${nHoj} para hoje</span>` : "";
 
   const hasData = fp !== null;
   const privNote = hasData
-    ? `<div class="crm-private-note"><span>🔒</span><p>Dados carregados do arquivo privado local (<code>data-private/followup-pacientes.local.json</code>). Este arquivo é gitignored e não é enviado ao GitHub. O envio de WhatsApp é sempre assistido — nenhuma mensagem é disparada automaticamente.</p></div>`
-    : `<div class="crm-safe-note"><span>ℹ️</span><p>Arquivo privado não encontrado. Execute <code>python3 painel-soprolife/scripts/generate-followup-pacientes.py --write</code> para gerar os dados de follow-up.</p></div>`;
+    ? `<div class="crm-private-note"><span>🔒</span><p>Dados do arquivo privado local (<code>data-private/followup-pacientes.local.json</code>). Gitignored — nunca enviado ao GitHub. Envio de WhatsApp é sempre assistido.</p></div>`
+    : `<div class="crm-safe-note"><span>ℹ️</span><p>Arquivo privado não encontrado. Execute <code>update-local-data.sh</code> ou <code>generate-followup-pacientes.py --write</code> para gerar os dados de follow-up.</p></div>`;
 
   container.innerHTML = `
     <div class="crm-subview-header">
@@ -795,8 +768,18 @@ function renderCrmPacientes(container) {
     </div>
 
     ${hasData ? `
-      ${followupBlock("Follow-up Espirometria", "🫁", espi)}
-      ${followupBlock("Follow-up Consultas",    "💊", cons)}
+      <article class="panel fp-preview-panel">
+        <div class="panel-header">
+          <div>
+            <h3>Próximos follow-ups ${urgBadge}</h3>
+            <span>Os ${preview.length} mais urgentes de ${all.length} total</span>
+          </div>
+          <button class="btn-ver-todos" id="verTodosBtn">Ver todos (${all.length}) →</button>
+        </div>
+        ${preview.length
+          ? `<ul class="fp-prev-list">${preview.map(prevItem).join("")}</ul>`
+          : `<p class="fp-empty">Nenhum follow-up pendente.</p>`}
+      </article>
     ` : ""}
 
     ${privNote}
@@ -806,6 +789,199 @@ function renderCrmPacientes(container) {
     state.crmView = "hub";
     renderCrmView();
   });
+  if (hasData) {
+    document.querySelector("#verTodosBtn").addEventListener("click", () => {
+      state.crmView = "followup-detalhe";
+      renderCrmView();
+    });
+  }
+}
+
+function renderCrmFollowupDetalhe(container) {
+  const fp   = state.followupPacientes;
+  const espi = Array.isArray(fp?.espirometria) ? fp.espirometria : [];
+  const cons = Array.isArray(fp?.consultas)    ? fp.consultas    : [];
+
+  const urgOrder = { atrasado: 0, hoje: 1, em_breve: 2, futuro: 3, sem_data: 4 };
+  const all = [...espi, ...cons];
+
+  let activeFilter = "todos";
+  let searchTerm   = "";
+
+  const TODAY      = todayIso();
+  const THIS_MONTH = TODAY.slice(0, 7);
+  const WEEK_END   = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
+  function scCls(r) {
+    const m = { atrasado: "fpc-atrasado", hoje: "fpc-hoje", em_breve: "fpc-breve", futuro: "fpc-futuro" };
+    return m[r.status_followup] || "fpc-semdata";
+  }
+  function sbCls(r) {
+    const m = { atrasado: "status-atrasado", hoje: "status-hoje", em_breve: "status-breve", futuro: "status-futuro" };
+    return m[r.status_followup] || "status-sem-data";
+  }
+  function slbl(r) {
+    if (r.status_followup === "atrasado") return "Atrasado";
+    if (r.status_followup === "hoje")     return "Hoje";
+    if (r.status_followup === "em_breve") return fmtFull(r.data_followup);
+    if (r.status_followup === "futuro")   return fmtFull(r.data_followup) || "Futuro";
+    return "Sem data";
+  }
+
+  function fmtFull(iso) {
+    if (!iso) return "";
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  }
+
+  function filtrar(records) {
+    let f = records;
+    switch (activeFilter) {
+      case "hoje":      f = f.filter(r => r.data_followup === TODAY); break;
+      case "proximos7": f = f.filter(r => r.data_followup > TODAY && r.data_followup <= WEEK_END); break;
+      case "mes":       f = f.filter(r => r.data_followup && r.data_followup.startsWith(THIS_MONTH)); break;
+      case "atrasados": f = f.filter(r => r.status_followup === "atrasado"); break;
+      case "espi":      f = f.filter(r => r.tipo_followup === "espirometria"); break;
+      case "consulta":  f = f.filter(r => r.tipo_followup === "consulta"); break;
+      case "wa":        f = f.filter(r => r.whatsapp_url); break;
+    }
+    if (searchTerm) {
+      const t = searchTerm.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      f = f.filter(r =>
+        (r.nome || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(t)
+      );
+    }
+    return f;
+  }
+
+  function metaRow(label, value) {
+    if (!value) return "";
+    return `<div class="fpc-meta-row"><span class="fpc-label">${label}</span><span>${escapeHtml(String(value))}</span></div>`;
+  }
+
+  function card(r) {
+    const tipo = r.tipo_followup === "espirometria" ? "🫁 Espirometria" : "💊 Consulta";
+    const wa   = r.whatsapp_url
+      ? `<a class="fp-wa-btn fpc-wa" href="${r.whatsapp_url}" target="_blank" rel="noopener noreferrer" title="Abrir WhatsApp">WhatsApp</a>`
+      : `<span class="fpc-no-wa">Sem telefone</span>`;
+    const cCls = r.consentimento_whatsapp === "Confirmado" ? "fpc-consent-ok" : "fpc-consent-nd";
+    const cTxt = escapeHtml(r.consentimento_whatsapp || "Confirmado");
+    return `
+      <article class="fpc ${scCls(r)}">
+        <div class="fpc-header">
+          <div>
+            <div class="fpc-nome">${escapeHtml(r.nome || "—")}</div>
+            <div class="fpc-tipo">${tipo}</div>
+          </div>
+          <span class="fp-status ${sbCls(r)}">${slbl(r)}</span>
+        </div>
+        <div class="fpc-meta">
+          ${metaRow("Exame/Consulta", r.data_base   ? fmtFull(r.data_base)   : "")}
+          ${metaRow("Próx. contato",  r.data_followup ? fmtFull(r.data_followup) : "")}
+          ${metaRow("Motivo",         r.motivo)}
+          ${metaRow("Responsável",    r.responsavel)}
+          ${metaRow("Canal",          r.canal || "WhatsApp")}
+          <div class="fpc-meta-row"><span class="fpc-label">Consentimento</span><span class="${cCls}">${cTxt}</span></div>
+        </div>
+        <div class="fpc-actions">${wa}</div>
+      </article>`;
+  }
+
+  function renderCards() {
+    const sorted   = [...all].sort((a, b) => (urgOrder[a.status_followup] ?? 4) - (urgOrder[b.status_followup] ?? 4));
+    const filtered = filtrar(sorted);
+    document.querySelector("#fpCards").innerHTML = filtered.length
+      ? `<div class="fpc-grid">${filtered.map(card).join("")}</div>`
+      : `<p class="fp-detalhe-empty">Nenhum registro encontrado para este filtro.</p>`;
+    document.querySelector("#fpResultCount").textContent =
+      `${filtered.length} de ${all.length} registros`;
+  }
+
+  const FILTERS = [
+    { key: "todos",      label: "Todos",           cnt: all.length },
+    { key: "atrasados",  label: "Atrasados",        cnt: all.filter(r => r.status_followup === "atrasado").length },
+    { key: "hoje",       label: "Hoje",             cnt: all.filter(r => r.data_followup === TODAY).length },
+    { key: "proximos7",  label: "Próximos 7 dias",  cnt: all.filter(r => r.data_followup > TODAY && r.data_followup <= WEEK_END).length },
+    { key: "mes",        label: "Este mês",         cnt: all.filter(r => r.data_followup && r.data_followup.startsWith(THIS_MONTH)).length },
+    { key: "espi",       label: "Espirometria",     cnt: espi.length },
+    { key: "consulta",   label: "Consulta",         cnt: cons.length },
+    { key: "wa",         label: "Com WhatsApp",     cnt: all.filter(r => r.whatsapp_url).length },
+  ];
+
+  const filterBtns = FILTERS.map(f =>
+    `<button class="fp-filter-btn${f.key === "todos" ? " active" : ""}" data-filter="${f.key}">
+      ${f.label}<span class="fp-filter-count">${f.cnt}</span>
+    </button>`
+  ).join("");
+
+  container.innerHTML = `
+    <div class="crm-subview-header">
+      <button class="crm-back-btn" id="crmBackBtn">← Pacientes</button>
+      <div>
+        <p class="eyebrow">B2C · Clínico</p>
+        <h2>CRM Pacientes e Follow-ups</h2>
+        <p class="section-sub">Todos os registros com follow-up — envio assistido via WhatsApp</p>
+      </div>
+    </div>
+
+    <div class="crm-stats">
+      <article class="crm-stat-card">
+        <span>Total</span>
+        <strong>${all.length}</strong>
+        <small>pacientes</small>
+      </article>
+      <article class="crm-stat-card">
+        <span>Espirometrias</span>
+        <strong>${espi.length}</strong>
+        <small>registros</small>
+      </article>
+      <article class="crm-stat-card">
+        <span>Consultas</span>
+        <strong>${cons.length}</strong>
+        <small>registros</small>
+      </article>
+      <article class="crm-stat-card">
+        <span>Com WhatsApp</span>
+        <strong>${all.filter(r => r.whatsapp_url).length}</strong>
+        <small>prontos para envio</small>
+      </article>
+    </div>
+
+    <div class="fp-detalhe-toolbar">
+      <input type="search" id="fpSearch" class="fp-search" placeholder="Buscar por nome…" autocomplete="off" />
+      <span id="fpResultCount" class="fp-result-count"></span>
+    </div>
+
+    <div class="fp-filters" role="group" aria-label="Filtros de follow-up">
+      ${filterBtns}
+    </div>
+
+    <div id="fpCards" class="fp-cards-area" aria-live="polite"></div>
+
+    <div class="crm-private-note" style="margin-top:1.5rem">
+      <span>🔒</span>
+      <p>Dados de <code>data-private/followup-pacientes.local.json</code>. Gitignored — nunca enviado ao GitHub. Envio de WhatsApp é sempre assistido, nunca automático.</p>
+    </div>
+  `;
+
+  document.querySelector("#crmBackBtn").addEventListener("click", () => {
+    state.crmView = "pacientes";
+    renderCrmView();
+  });
+  document.querySelector("#fpSearch").addEventListener("input", e => {
+    searchTerm = e.target.value;
+    renderCards();
+  });
+  container.querySelectorAll(".fp-filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      container.querySelectorAll(".fp-filter-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeFilter = btn.dataset.filter;
+      renderCards();
+    });
+  });
+
+  renderCards();
 }
 
 function escapeHtml(str) {

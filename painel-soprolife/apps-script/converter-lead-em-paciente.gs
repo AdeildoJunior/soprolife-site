@@ -365,9 +365,13 @@ function _cvConverterLeadCore(ss, leadsSheet, linha, etapa) {
   var dataProx = _cvVal(rowData, mapa, "data_proxima_acao");
   var obs      = _cvVal(rowData, mapa, "observacao");
 
+  // Data de conversão: usa data_contato do lead; cai em hoje se vazia ou fora do padrão dd/MM/yyyy
+  var dataContato   = _cvVal(rowData, mapa, "data_contato");
+  var dataConversao = /^\d{2}\/\d{2}\/\d{4}$/.test(dataContato) ? dataContato : hoje;
+
   var obsConv =
-    "Convertido de lead " + leadId + " · " + hoje +
-    (obs ? " | " + obs : "");
+    "Convertido de lead " + leadId + " - " + dataConversao +
+    (obs ? ". " + obs : "");
 
   var servicoNorm = String(servico || "").toLowerCase()
     .normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -407,39 +411,75 @@ function _cvConverterLeadCore(ss, leadsSheet, linha, etapa) {
     return;
   }
 
+  // Próximo contato = dataConversao + 5 meses
+  var proxContato5m = _cvAddMeses(dataConversao, 5) || dataConversao;
+
+  // Determina ultimo_servico e motivo de follow-up por etapa
+  var ultimoServico, motivoFup;
+  if (etapa === _CV_ETAPA_ESPIROMETRIA) {
+    ultimoServico = "Espirometria";
+    motivoFup     = "Follow-up pós-espirometria";
+  } else if (etapa === _CV_ETAPA_CONSULTA) {
+    ultimoServico = "Consulta";
+    motivoFup     = "Follow-up pós-consulta";
+  } else {
+    ultimoServico = "Consulta + Espirometria";
+    motivoFup     = "Follow-up pós-consulta e pós-espirometria";
+  }
+
   // Pacote de dados comuns a todos os CRMs
   var d = {
-    nome:     nome,
-    tel:      tel,
-    servico:  servico,
-    origem:   origem,
-    resp:     resp,
-    dataProx: dataProx,
-    proxAcao: proxAcao,
-    obs:      obsConv,
+    nome:          nome,
+    tel:           tel,
+    servico:       servico,
+    origem:        origem || "Não informado",
+    resp:          resp   || "Adeildo",
+    dataProx:      dataProx,
+    proxAcao:      proxAcao,
+    obs:           obsConv,
+    dataConversao: dataConversao,
+    proxContato5m: proxContato5m,
   };
 
   // CRM Pacientes (verifica duplicata por telefone)
-  var resPac = _cvCriarCRMPacientes(ss, hojeComp, hoje, d);
+  var resPac = _cvCriarCRMPacientes(ss, hojeComp, dataConversao, d, {
+    statusPadrao:  "Ativo",
+    ultimoServico: ultimoServico,
+    motivo:        motivoFup,
+    dataProxCalc:  proxContato5m,
+  });
   log.destinos.push(
     "CRM Pacientes: " + (resPac.criado ? resPac.id : "telefone duplicado — não criado")
   );
 
   // CRM Consultas
   if (etapa === _CV_ETAPA_CONSULTA || etapa === _CV_ETAPA_AMBOS) {
-    var resCon = _cvCriarCRMConsultas(ss, hojeComp, hoje, d);
+    var resCon = _cvCriarCRMConsultas(ss, hojeComp, dataConversao, d, {
+      statusPadrao: "Consulta realizada",
+      motivo:       "Follow-up pós-consulta",
+      dataProxCalc: proxContato5m,
+      dataConsulta: dataConversao,
+    });
     log.destinos.push("CRM Consultas: " + resCon.id);
   }
 
   // CRM Espirometria
   if (etapa === _CV_ETAPA_ESPIROMETRIA || etapa === _CV_ETAPA_AMBOS) {
-    var resEsm = _cvCriarCRMEspirometria(ss, hojeComp, hoje, d);
+    var resEsm = _cvCriarCRMEspirometria(ss, hojeComp, dataConversao, d, {
+      statusPadrao: "Exame realizado",
+      servico:      "Espirometria",
+      tipoExame:    "Espirometria",
+      statusExame:  "Exame realizado",
+      motivo:       "Follow-up pós-espirometria",
+      dataProxCalc: proxContato5m,
+      dataExame:    dataConversao,
+    });
     log.destinos.push("CRM Espirometria: " + resEsm.id);
   }
 
   // Follow-up WhatsApp (apenas leads pessoa física com telefone)
   try {
-    var resFup = _cvCriarFollowupWhatsapp(ss, hojeComp, hoje, d, leadId, etapa);
+    var resFup = _cvCriarFollowupWhatsapp(ss, hojeComp, dataConversao, d, leadId, etapa);
     log.followupStatus = resFup.status + (resFup.id ? " (" + resFup.id + ")" : "");
     log.destinos.push("Follow-up WhatsApp: " + log.followupStatus);
   } catch (errFup) {
@@ -460,7 +500,8 @@ function _cvConverterLeadCore(ss, leadsSheet, linha, etapa) {
 
 // ── Criação nos CRMs (compatível com esquemas antigo e novo) ──────────────────
 
-function _cvCriarCRMPacientes(ss, hojeComp, hoje, d) {
+function _cvCriarCRMPacientes(ss, hojeComp, hoje, d, extras) {
+  extras = extras || {};
   var sheet = _cvObterOuCriarAba(ss, _CV_ABA_PAC, _CV_DEFAULT_HEADERS_PAC);
 
   // Checa duplicata por telefone
@@ -478,12 +519,13 @@ function _cvCriarCRMPacientes(ss, hojeComp, hoje, d) {
     : _CV_DEFAULT_HEADERS_PAC;
   var id = "PAC-" + hojeComp + "-" + String(Math.max(sheet.getLastRow(), 1)).padStart(3, "0");
 
-  sheet.appendRow(_cvConstruirLinhaParaCRM(headers, d, id, hoje, { statusPadrao: "Ativo" }));
+  sheet.appendRow(_cvConstruirLinhaParaCRM(headers, d, id, hoje, extras));
   Logger.log("CRM Pacientes: criado " + id + " — " + d.nome);
   return { id: id, criado: true };
 }
 
-function _cvCriarCRMConsultas(ss, hojeComp, hoje, d) {
+function _cvCriarCRMConsultas(ss, hojeComp, hoje, d, extras) {
+  extras = extras || {};
   var sheet = _cvObterOuCriarAba(ss, _CV_ABA_CON, _CV_DEFAULT_HEADERS_CON);
 
   var lastCol = sheet.getLastColumn();
@@ -492,12 +534,13 @@ function _cvCriarCRMConsultas(ss, hojeComp, hoje, d) {
     : _CV_DEFAULT_HEADERS_CON;
   var id = "CON-" + hojeComp + "-" + String(Math.max(sheet.getLastRow(), 1)).padStart(3, "0");
 
-  sheet.appendRow(_cvConstruirLinhaParaCRM(headers, d, id, hoje, { statusPadrao: "A confirmar" }));
+  sheet.appendRow(_cvConstruirLinhaParaCRM(headers, d, id, hoje, extras));
   Logger.log("CRM Consultas: criado " + id + " — " + d.nome);
   return { id: id };
 }
 
-function _cvCriarCRMEspirometria(ss, hojeComp, hoje, d) {
+function _cvCriarCRMEspirometria(ss, hojeComp, hoje, d, extras) {
+  extras = extras || {};
   var sheet = _cvObterOuCriarAba(ss, _CV_ABA_ESM, _CV_DEFAULT_HEADERS_ESM);
 
   var lastCol = sheet.getLastColumn();
@@ -506,12 +549,6 @@ function _cvCriarCRMEspirometria(ss, hojeComp, hoje, d) {
     : _CV_DEFAULT_HEADERS_ESM;
   var id = "ESM-" + hojeComp + "-" + String(Math.max(sheet.getLastRow(), 1)).padStart(3, "0");
 
-  // Garante que servico não fique vazio para registros de espirometria
-  var extras = {
-    statusPadrao: "A confirmar",
-    servico:      d.servico || "Espirometria",
-    tipoExame:    "Espirometria",
-  };
   sheet.appendRow(_cvConstruirLinhaParaCRM(headers, d, id, hoje, extras));
   Logger.log("CRM Espirometria: criado " + id + " — " + d.nome);
   return { id: id };
@@ -539,9 +576,11 @@ function _cvCriarFollowupWhatsapp(ss, hojeComp, hoje, d, leadId, etapa) {
     tipoMsg = "Follow-up pós-consulta e pós-espirometria";
   }
 
-  var dataObj = new Date();
-  dataObj.setMonth(dataObj.getMonth() + 5);
-  var dataPrevista = Utilities.formatDate(dataObj, "America/Sao_Paulo", "dd/MM/yyyy");
+  var dataPrevista = d.proxContato5m || (function() {
+    var dataObj = new Date();
+    dataObj.setMonth(dataObj.getMonth() + 5);
+    return Utilities.formatDate(dataObj, "America/Sao_Paulo", "dd/MM/yyyy");
+  })();
 
   var sheet = _cvObterOuCriarAba(ss, _CV_ABA_FOLLOWUP, _CV_DEFAULT_HEADERS_FUP);
 
@@ -566,9 +605,9 @@ function _cvCriarFollowupWhatsapp(ss, hojeComp, hoje, d, leadId, etapa) {
     "data_prevista":             dataPrevista,
     "status":                    "Pendente",
     "canal":                     "WhatsApp",
-    "responsavel":               d.resp || "Não informado",
+    "responsavel":               d.resp,
     "template_usado":            "Follow-up 5 meses",
-    "consentimento_whatsapp":    "Não confirmado",
+    "consentimento_whatsapp":    "Confirmado",
     "observacao_privada_minima": "Criado automaticamente a partir do lead " + leadId + ". Revisar antes de enviar.",
   };
 
@@ -674,17 +713,35 @@ function _cvRegistrarLogConversoes(ss, log) {
 // ── Helpers gerais ────────────────────────────────────────────────────────────
 
 /**
+ * Adiciona N meses a uma data em formato dd/MM/yyyy.
+ * Retorna string dd/MM/yyyy, ou "" se a data não for parseável.
+ */
+function _cvAddMeses(dataStr, meses) {
+  if (!dataStr) return "";
+  var partes = dataStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!partes) return "";
+  var d = new Date(parseInt(partes[3]), parseInt(partes[2]) - 1, parseInt(partes[1]));
+  d.setMonth(d.getMonth() + meses);
+  return (
+    String(d.getDate()).padStart(2, "0")   + "/" +
+    String(d.getMonth() + 1).padStart(2, "0") + "/" +
+    d.getFullYear()
+  );
+}
+
+/**
  * Mapeador de dados Lead → linha CRM.
  * Lê o cabeçalho ATUAL da aba e mapeia cada coluna pelo nome.
  * Compatível com esquemas antigos (primeiro_nome, telefone, data_cadastro...)
  * e novos (nome, telefone_whatsapp, data_registro...).
  *
- * @param {Array}  headers     Cabeçalho atual da aba CRM (array de strings).
- * @param {Object} d           Dados do lead: nome, tel, servico, origem, resp,
- *                             dataProx, proxAcao, obs.
- * @param {string} id          ID gerado para o novo registro.
- * @param {string} hoje        Data atual em dd/MM/yyyy.
- * @param {Object} [extras]    Substituições específicas: statusPadrao, servico, tipoExame.
+ * @param {Array}  headers  Cabeçalho atual da aba CRM (array de strings).
+ * @param {Object} d        Dados do lead: nome, tel, servico, origem, resp, obs, ...
+ * @param {string} id       ID gerado para o novo registro.
+ * @param {string} hoje     Data de conversão em dd/MM/yyyy.
+ * @param {Object} [extras] Extras por etapa: statusPadrao, servico, tipoExame,
+ *                          ultimoServico, motivo, dataProxCalc, dataExame,
+ *                          statusExame, dataConsulta.
  * @returns {Array} Linha de valores alinhada ao cabeçalho.
  */
 function _cvConstruirLinhaParaCRM(headers, d, id, hoje, extras) {
@@ -696,12 +753,12 @@ function _cvConstruirLinhaParaCRM(headers, d, id, hoje, extras) {
     "consulta_id":               id,
     "exame_id":                  id,
 
-    // Datas de registro (nomes antigos e novos)
+    // Datas de registro (nomes antigos e novos) — usa data de conversão
     "data_registro":             hoje,
     "data_cadastro":             hoje,
     "data_entrada":              hoje,
 
-    // Nome do paciente (esquema antigo: primeiro_nome / novo: nome)
+    // Nome (esquema antigo: primeiro_nome / novo: nome)
     "nome":                      d.nome || "",
     "primeiro_nome":             d.nome || "",
 
@@ -709,42 +766,42 @@ function _cvConstruirLinhaParaCRM(headers, d, id, hoje, extras) {
     "telefone_whatsapp":         d.tel  || "",
     "telefone":                  d.tel  || "",
 
-    // Serviço — pode ser sobrescrito por extras.servico
-    "servico":                   extras.servico    || d.servico || "",
+    // Serviço
+    "servico":                   extras.servico       || d.servico || "",
     "servico_interesse":         d.servico || "",
-    "ultimo_servico":            d.servico || "",
+    "ultimo_servico":            extras.ultimoServico || d.servico || "",
     "tipo_consulta":             d.servico || "",
-    "tipo_exame":                extras.tipoExame  || "Espirometria",
+    "tipo_exame":                extras.tipoExame     || "Espirometria",
 
     // Origem
-    "origem":                    d.origem  || "",
+    "origem":                    d.origem || "Não informado",
 
-    // Responsável
-    "responsavel":               d.resp    || "",
+    // Responsável — fallback garantido no objeto d
+    "responsavel":               d.resp,
 
-    // Próximo contato (antigos: proximo_contato / novos: data_proximo_contato)
-    "proximo_contato":           d.dataProx  || "",
-    "data_proximo_contato":      d.dataProx  || "",
-    "motivo_proximo_contato":    d.proxAcao  || "",
+    // Próximo contato — usa cálculo automático (+5 meses) quando disponível
+    "proximo_contato":           extras.dataProxCalc  || d.dataProx || "",
+    "data_proximo_contato":      extras.dataProxCalc  || d.dataProx || "",
+    "motivo_proximo_contato":    extras.motivo        || d.proxAcao || "",
 
-    // Observação (antigo: observacao_privada_minima / novo: observacao)
+    // Observação
     "observacao":                d.obs || "",
     "observacao_privada_minima": d.obs || "",
 
-    // Status — pode ser sobrescrito por extras.statusPadrao
-    "status":                    extras.statusPadrao || "A confirmar",
+    // Status
+    "status":                    extras.statusPadrao  || "A confirmar",
     "status_relacionamento":     "Em acompanhamento",
-    "status_exame":              "A confirmar",
+    "status_exame":              extras.statusExame   || "A confirmar",
 
-    // Campos a preencher pela equipe após o atendimento — sempre em branco
+    // Datas de atendimento — preenchidas pela automação quando informadas
     "medica":                    "",
-    "data_consulta":             "",
-    "data_exame":                "",
+    "data_consulta":             extras.dataConsulta  || "",
+    "data_exame":                extras.dataExame     || "",
     "historico_resumido":        "",
 
-    // Campos do esquema antigo sem equivalente no novo lead
-    "canal":                     "",
-    "consentimento_whatsapp":    "",
+    // Canal e consentimento — definidos na conversão automática
+    "canal":                     "WhatsApp",
+    "consentimento_whatsapp":    "Confirmado",
   };
 
   return headers.map(function(col) {

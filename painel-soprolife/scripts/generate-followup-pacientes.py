@@ -55,8 +55,16 @@ ABA_CONSULTA = "CRM Consultas"
 
 _BLOCKED_COLS = {"observacao_privada_minima", "observacao", "observação"}
 
-_CONSENT_POSITIVO = {"sim", "s", "yes", "y", "1", "aceito", "ok", "ativo", "true"}
-_CONSENT_NEGATIVO = {"não", "nao", "n", "no", "0", "recusa", "sair", "false"}
+# Valores que bloqueiam EXPLICITAMENTE o follow-up.
+# Vazio ou ausente = incluído (consentimento implícito para registros CRM/Lead).
+# Valores genéricos como "não", "n", "false" NÃO bloqueiam — só frases de opt-out claras.
+_CONSENT_BLOQUEADO = {
+    "não autorizado", "nao autorizado",
+    "opt-out", "optout", "opt out",
+    "bloqueado",
+    "não contatar", "nao contatar",
+    "sair",  # comando de opt-out do WhatsApp
+}
 
 # Meses por extenso em português (normalizado: sem acento, minúsculo)
 _MESES_PT: dict[str, int] = {
@@ -199,12 +207,10 @@ def _whatsapp_url(phone: str, msg: str) -> str:
 
 
 def _consent_ok(raw: str) -> bool:
-    v = _norm(raw)
-    if not v:
-        return False
-    if v in _CONSENT_NEGATIVO:
-        return False
-    return True
+    """Inclui por padrão. Só exclui com bloqueio explícito (opt-out, bloqueado, sair, etc.).
+    Vazio ou ausente = incluído (consentimento implícito para registros do CRM/Lead).
+    """
+    return _norm(raw) not in _CONSENT_BLOQUEADO
 
 
 def _sanitize_motivo(raw: str, label: str) -> str:
@@ -320,12 +326,15 @@ def parse_espirometria(rows: list, today: date) -> list[dict]:
     blocked = _blocked_indices(cm)
 
     i_id        = cm.get("exame_id")
-    i_nome      = cm.get("primeiro_nome")
-    i_telefone  = cm.get("telefone")
+    # Suporta esquema antigo (primeiro_nome, telefone, proximo_contato)
+    # e novo (nome, telefone_whatsapp, data_proximo_contato)
+    i_nome      = cm["primeiro_nome"] if "primeiro_nome" in cm else cm.get("nome")
+    i_telefone  = cm["telefone"] if "telefone" in cm else cm.get("telefone_whatsapp")
     i_data_exame = cm.get("data_exame")
-    i_prox_cont  = cm.get("proximo_contato")
-    i_motivo     = cm.get("motivo_proximo_contato")
-    i_consent    = cm.get("consentimento_whatsapp")
+    i_prox_cont   = cm["proximo_contato"] if "proximo_contato" in cm else cm.get("data_proximo_contato")
+    i_motivo      = cm.get("motivo_proximo_contato")
+    i_consent     = cm.get("consentimento_whatsapp")
+    i_responsavel = cm.get("responsavel")
 
     records = []
     n_sem_consent  = 0
@@ -350,6 +359,9 @@ def parse_espirometria(rows: list, today: date) -> list[dict]:
         if not _consent_ok(consent):
             n_sem_consent += 1
             continue
+
+        consent_norm = "Confirmado"
+        responsavel  = c(i_responsavel)
 
         # ── data_exame: diagnóstico + parse ──
         data_exame_raw = c(i_data_exame)
@@ -393,21 +405,24 @@ def parse_espirometria(rows: list, today: date) -> list[dict]:
         wa_url = _whatsapp_url(phone, msg) if phone else ""
 
         records.append({
-            "tipo_followup":   "espirometria",
-            "id":              exame_id,
-            "nome":            nome,
-            "telefone":        phone,
-            "data_base":       data_exame.isoformat() if data_exame else "",
-            "data_followup":   followup_date.isoformat() if followup_date else "",
-            "status_followup": status,
-            "motivo":          motivo,
-            "consentimento":   True,
-            "whatsapp_url":    wa_url,
+            "tipo_followup":          "espirometria",
+            "id":                     exame_id,
+            "nome":                   nome,
+            "telefone":               phone,
+            "data_base":              data_exame.isoformat() if data_exame else "",
+            "data_followup":          followup_date.isoformat() if followup_date else "",
+            "status_followup":        status,
+            "motivo":                 motivo,
+            "responsavel":            responsavel,
+            "canal":                  "WhatsApp",
+            "consentimento":          True,
+            "consentimento_whatsapp": consent_norm,
+            "whatsapp_url":           wa_url,
         })
 
     total_linhas = len(rows) - 1
     print(f"    total linhas de dados: {total_linhas}")
-    print(f"    sem consentimento: {n_sem_consent}")
+    print(f"    bloqueados (opt-out explícito): {n_sem_consent}")
     print(f"    incluídos no follow-up: {len(records)}")
     _print_date_diag("data_exame",      total_linhas, n_data_preen, n_data_parse)
     _print_date_diag("proximo_contato", total_linhas, n_prox_preen, n_prox_parse)
@@ -423,12 +438,15 @@ def parse_consultas(rows: list, today: date) -> list[dict]:
     blocked = _blocked_indices(cm)
 
     i_id         = cm.get("consulta_id")
-    i_nome       = cm.get("primeiro_nome")
-    i_telefone   = cm.get("telefone")
+    # Suporta esquema antigo (primeiro_nome, telefone, proximo_contato)
+    # e novo (nome, telefone_whatsapp, data_proximo_contato)
+    i_nome       = cm["primeiro_nome"] if "primeiro_nome" in cm else cm.get("nome")
+    i_telefone   = cm["telefone"] if "telefone" in cm else cm.get("telefone_whatsapp")
     i_data_cons  = cm.get("data_consulta")
-    i_prox_cont  = cm.get("proximo_contato")
-    i_motivo     = cm.get("motivo_proximo_contato")
-    i_consent    = cm.get("consentimento_whatsapp")
+    i_prox_cont   = cm["proximo_contato"] if "proximo_contato" in cm else cm.get("data_proximo_contato")
+    i_motivo      = cm.get("motivo_proximo_contato")
+    i_consent     = cm.get("consentimento_whatsapp")
+    i_responsavel = cm.get("responsavel")
 
     records = []
     n_sem_consent = 0
@@ -452,6 +470,9 @@ def parse_consultas(rows: list, today: date) -> list[dict]:
         if not _consent_ok(consent):
             n_sem_consent += 1
             continue
+
+        consent_norm = "Confirmado"
+        responsavel  = c(i_responsavel)
 
         # ── data_consulta ──
         data_cons_raw = c(i_data_cons)
@@ -490,21 +511,24 @@ def parse_consultas(rows: list, today: date) -> list[dict]:
         wa_url = _whatsapp_url(phone, msg) if phone else ""
 
         records.append({
-            "tipo_followup":   "consulta",
-            "id":              cons_id,
-            "nome":            nome,
-            "telefone":        phone,
-            "data_base":       data_cons.isoformat() if data_cons else "",
-            "data_followup":   followup_date.isoformat() if followup_date else "",
-            "status_followup": status,
-            "motivo":          motivo,
-            "consentimento":   True,
-            "whatsapp_url":    wa_url,
+            "tipo_followup":          "consulta",
+            "id":                     cons_id,
+            "nome":                   nome,
+            "telefone":               phone,
+            "data_base":              data_cons.isoformat() if data_cons else "",
+            "data_followup":          followup_date.isoformat() if followup_date else "",
+            "status_followup":        status,
+            "motivo":                 motivo,
+            "responsavel":            responsavel,
+            "canal":                  "WhatsApp",
+            "consentimento":          True,
+            "consentimento_whatsapp": consent_norm,
+            "whatsapp_url":           wa_url,
         })
 
     total_linhas = len(rows) - 1
     print(f"    total linhas de dados: {total_linhas}")
-    print(f"    sem consentimento: {n_sem_consent}")
+    print(f"    bloqueados (opt-out explícito): {n_sem_consent}")
     print(f"    incluídos no follow-up: {len(records)}")
     _print_date_diag("data_consulta",   total_linhas, n_cons_preen, n_cons_parse)
     _print_date_diag("proximo_contato", total_linhas, n_prox_preen, n_prox_parse)
