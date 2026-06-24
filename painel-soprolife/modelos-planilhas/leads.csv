@@ -1,1 +1,1 @@
-lead_id,data_entrada,origem,canal,servico_interesse,etapa,responsavel,proxima_acao,data_proxima_acao,observacao_anonima
+lead_id,data_contato,nome,telefone_whatsapp,servico_interesse,origem,canal,bairro_regiao,tem_pedido_medico,etapa,responsavel,proxima_acao,data_proxima_acao,observacao

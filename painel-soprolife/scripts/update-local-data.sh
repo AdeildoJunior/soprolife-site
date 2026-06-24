@@ -38,11 +38,11 @@ fi
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
-echo "1/6 - Atualizando status seguro da fonte Google Sheets..."
+echo "1/7 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
 
 echo
-echo "2/6 - Atualizando resumo seguro..."
+echo "2/7 - Atualizando resumo seguro..."
 
 if [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC"
@@ -79,7 +79,7 @@ else
 fi
 
 echo
-echo "3/6 - Atualizando CRM Clínicas seguro..."
+echo "3/7 - Atualizando CRM Clínicas seguro..."
 
 if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
   echo "Fonte: Google Sheets via ADC (aba CRM Clinicas)"
@@ -99,7 +99,7 @@ else
 fi
 
 echo
-echo "4/6 - Atualizando Marketing & SEO..."
+echo "4/7 - Atualizando Marketing & SEO..."
 
 if [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "Marketing & SEO não configurado — usando dados demonstrativos."
@@ -123,11 +123,38 @@ else
 fi
 
 echo
-echo "5/6 - Verificando segurança..."
+echo "5/7 - Atualizando Leads..."
+
+_LEADS_SCRIPT="painel-soprolife/scripts/read-leads-sheets.py"
+
+if [ -f "$_LEADS_SCRIPT" ] && [ "$_sheets_available" = true ]; then
+  echo "Fonte: Google Sheets via ADC (aba Leads)"
+  echo "Saída: data-private/leads.local.json + data/leads-summary.local.json"
+  echo
+  if ! "$_VENV_PYTHON" "$_LEADS_SCRIPT" --write 2>&1; then
+    echo
+    echo "AVISO: falha ao ler aba Leads. Painel usará leads.json demonstrativo."
+    echo "  Diagnóstico: $_VENV_PYTHON $_LEADS_SCRIPT --show-structure"
+    echo "  Dry-run:     $_VENV_PYTHON $_LEADS_SCRIPT --dry-run"
+  else
+    echo "Leads atualizados."
+    echo "  Privado:  painel-soprolife/data-private/leads.local.json"
+    echo "  Resumo:   painel-soprolife/data/leads-summary.local.json"
+  fi
+else
+  if [ ! -f "$_LEADS_SCRIPT" ]; then
+    echo "Script de Leads não encontrado — painel usa leads.json demonstrativo."
+  else
+    echo "Google Sheets ADC não disponível — painel usa leads.json demonstrativo."
+  fi
+fi
+
+echo
+echo "6/7 - Verificando segurança..."
 painel-soprolife/scripts/check-access.sh
 
 echo
-echo "6/6 - Concluído."
+echo "7/7 - Concluído."
 echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"

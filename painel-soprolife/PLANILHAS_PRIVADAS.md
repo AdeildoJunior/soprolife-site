@@ -29,21 +29,49 @@ Nunca inserir no GitHub:
 
 ### 1. Leads
 
-Finalidade: acompanhar contatos recebidos e etapa do atendimento.
+Finalidade: registrar contatos interessados **antes** do primeiro atendimento (pré-atendimento / funil de interesse).
 
-Campos:
-- lead_id
-- data_entrada
-- origem
-- canal
-- servico_interesse
-- etapa
-- responsavel
-- proxima_acao
-- data_proxima_acao
-- observacao_anonima
+Um lead só migra para **CRM Pacientes** quando realiza o primeiro atendimento.
+Leads B2B (Clínicas / PCMSO) migram para **CRM Clínicas**, não para CRM Pacientes.
+Enquanto não convertido, o lead permanece na aba Leads.
 
-Observação: não usar telefone real de paciente no GitHub.
+Campos (14 colunas — cabeçalho canônico):
+- `lead_id` — identificador único (ex.: LEAD-20260601-001)
+- `data_contato` — data do primeiro contato (dd/MM/yyyy)
+- `nome` — primeiro nome ou apelido (nunca nome completo em arquivos commitáveis)
+- `telefone_whatsapp` — **privado**: apenas em planilha e `data-private/leads.local.json` (gitignored)
+- `servico_interesse` — dropdown padronizado (ver abaixo); define roteamento B2B vs. pessoa física
+- `origem` — Google, Instagram, Indicação, etc.
+- `canal` — WhatsApp, Site, E-mail, etc.
+- `bairro_regiao` — bairro ou região (sem endereço completo)
+- `tem_pedido_medico` — dropdown padronizado
+- `etapa` — dropdown padronizado (estágio no funil)
+- `responsavel` — membro da equipe responsável
+- `proxima_acao` — ação concreta planejada
+- `data_proxima_acao` — data prevista para a próxima ação (dd/MM/yyyy)
+- `observacao` — **privado**: observação operacional livre (sem CPF, laudo, diagnóstico, pedido médico)
+
+Dropdowns `servico_interesse`: Espirometria, Espirometria domiciliar, Teleconsulta respiratória, Consulta pneumologista, Clínicas, PCMSO / empresa
+
+Dropdowns `etapa`: Novo contato, Em conversa, Aguardando retorno, Agendado, Não respondeu, Desistiu, Convertido em paciente, Convertido em clínica/parceiro
+
+Dropdowns `canal`: WhatsApp, Site, Google, Instagram, E-mail, Telefone, Indicação, Presencial, Outro
+
+Dropdowns `origem`: Google, WhatsApp, Instagram, Site, Indicação, Clínica parceira, Tráfego pago, Outro
+
+Dropdowns `tem_pedido_medico`: Sim, Não, Não informado, Não se aplica
+
+Arquivos locais relacionados:
+- `data-private/leads.local.json` — dados completos com telefone e observacao (gitignored)
+- `data/leads-summary.local.json` — resumo seguro sem telefone (gitignored)
+- `data/leads.json` — dados demonstrativos commitáveis (sem telefone real, sem observacao)
+
+Campos removidos na v2 (dados absorvidos em `observacao` se existentes na migração):
+- `preferencia_atendimento` — agora vai para observacao se preenchido
+- `valor_informado` — agora vai para observacao se preenchido
+- `consentimento_whatsapp` — agora vai para observacao se preenchido
+
+Observação: nunca usar telefone real nem nome completo de paciente em arquivos commitáveis.
 
 ### 2. CRM Clínicas
 
@@ -221,33 +249,25 @@ Um lead se torna paciente quando realiza o primeiro atendimento.
 Nesse momento ele deve ser registrado em CRM Espirometria ou CRM Consultas,
 e a sincronização cuida de consolidá-lo em CRM Pacientes.
 
-## Automação: organizarLeadsEManualPlanilhasSoproLife
+## Automação: organizarLeadsOperacionaisSoproLife (recomendada)
 
-O arquivo `painel-soprolife/apps-script/limpar-leads-e-manual-abas.gs` contém a função
-`organizarLeadsEManualPlanilhasSoproLife()`.
+O arquivo `painel-soprolife/apps-script/organizar-leads-operacionais.gs` contém a função
+`organizarLeadsOperacionaisSoproLife()`.
 
 O que ela faz:
-1. Cria um backup da aba `Leads` antes de qualquer alteração (`_Backup_Leads_Demo_YYYYMMDD_HHMM`).
-2. Remove linhas com termos demonstrativos/fake (fictício, demonstrativo, teste do painel, etc.).
-3. Padroniza os dropdowns das colunas: `servico_interesse`, `etapa`, `canal`, `origem`.
-4. Adiciona notas explicativas nos cabeçalhos da aba `Leads`.
-5. Cria/atualiza a aba `Manual das Abas` com documentação de todas as abas operacionais.
+1. Cria backup da aba `Leads` com nome `_Backup_Leads_Operacional_YYYYMMDD_HHMM`.
+2. Detecta o cabeçalho existente pelo nome das colunas (não por posição fixa).
+3. Migra dados existentes para o cabeçalho canônico de 17 colunas, preservando tudo.
+4. Remove apenas linhas com marcadores explícitos de dados demonstrativos.
+5. Aplica dropdowns em todas as 7 colunas com lista padronizada.
+6. Adiciona notas explicativas nos cabeçalhos.
+7. Usa apenas `Logger.log` — sem alertas de UI na função principal.
 
-Dropdowns padronizados para `servico_interesse`:
-- Espirometria
-- Espirometria domiciliar
-- Teleconsulta respiratória
-- Consulta pneumologista
-- Clínicas
-- PCMSO / empresa
+## Automação: organizarLeadsEManualPlanilhasSoproLife (compatibilidade)
 
-Dropdowns padronizados para `etapa`:
-- Novo contato
-- Em conversa
-- Agendado
-- Não respondeu
-- Desistiu
-- Convertido em paciente
+O arquivo `painel-soprolife/apps-script/limpar-leads-e-manual-abas.gs` mantém a função
+`organizarLeadsEManualPlanilhasSoproLife()` para compatibilidade com a estrutura anterior
+de 10 colunas. Também cria/atualiza a aba `Manual das Abas`.
 
 ## Automação: sincronizarCRMPacientesSoproLife
 

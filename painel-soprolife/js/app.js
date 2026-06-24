@@ -2,6 +2,8 @@ const state = {
   resumo: null,
   crm: [],
   leads: [],
+  leadsSummary: null,
+  leadsPrivate: null,
   marketing: null,
   marketingSeo: null,
   charts: {},
@@ -154,6 +156,30 @@ async function init() {
     if (followupClinicasLocal) {
       state.followupClinicas = followupClinicasLocal;
     }
+
+    // Leads: privado (local/Tailscale) > resumo seguro > leads.json demonstrativo
+    // Ambos gerados por: python3 painel-soprolife/scripts/read-leads-sheets.py --write
+    const leadsSummaryLocal = await loadOptionalJson("./data/leads-summary.local.json");
+    const leadsPrivateLocal = await loadOptionalJson("./data-private/leads.local.json");
+
+    if (leadsPrivateLocal?.leads?.length > 0) {
+      // Dados reais disponíveis localmente (gitignored) — usa com nome e telefone
+      state.leads = leadsPrivateLocal.leads;
+      state.leadsPrivate = leadsPrivateLocal.leads;
+      if (leadsSummaryLocal?.source?.safeToDisplay === true) {
+        state.leadsSummary = leadsSummaryLocal;
+      }
+    } else if (
+      leadsSummaryLocal?.source?.safeToDisplay === true &&
+      leadsSummaryLocal?.source?.containsPersonalData === false &&
+      Array.isArray(leadsSummaryLocal?.leads) &&
+      leadsSummaryLocal.leads.length > 0
+    ) {
+      // Resumo seguro disponível (sem nome/telefone, mas com etapa/serviço/etc.)
+      state.leads = leadsSummaryLocal.leads;
+      state.leadsSummary = leadsSummaryLocal;
+    }
+    // else: mantém leads.json demonstrativo já carregado em state.leads
 
     state.marketingSeo = await loadOptionalJson("./data/marketing-seo.local.json");
 
@@ -1392,21 +1418,24 @@ function renderCrmPlaceholder(container, area) {
 }
 
 
-function countLeadStatus(status) {
-  return state.leads.filter((item) => item.status === status).length;
+function countLeadEtapa(etapa) {
+  return state.leads.filter((item) => (item.etapa || item.status || "") === etapa).length;
 }
 
-function countLeadService(term) {
-  return state.leads.filter((item) => item.servico.toLowerCase().includes(term.toLowerCase())).length;
+function countLeadServico(term) {
+  return state.leads.filter((item) =>
+    (item.servico_interesse || item.servico || "").toLowerCase().includes(term.toLowerCase())
+  ).length;
 }
 
 function renderLeadStats() {
   const stats = [
-    { label: "Total de leads", value: state.leads.length },
-    { label: "Espirometria", value: countLeadService("Espirometria") },
-    { label: "Teleconsulta", value: countLeadService("Teleconsulta") },
-    { label: "Agendados", value: countLeadStatus("Agendado") },
-    { label: "Pendências", value: countLeadStatus("Aguardando pedido médico") }
+    { label: "Total de leads",    value: state.leads.length,                                            hint: "base total" },
+    { label: "Novos contatos",    value: countLeadEtapa("Novo contato"),                                hint: "aguardando 1º resposta" },
+    { label: "Em conversa",       value: countLeadEtapa("Em conversa") + countLeadEtapa("Aguardando retorno"), hint: "diálogo ativo" },
+    { label: "Agendados",         value: countLeadEtapa("Agendado"),                                    hint: "confirmados" },
+    { label: "Convertidos",       value: countLeadEtapa("Convertido em paciente") + countLeadEtapa("Convertido em clínica/parceiro"), hint: "migraram ao CRM" },
+    { label: "Sem resposta",      value: countLeadEtapa("Não respondeu"),                               hint: "inativos" },
   ];
 
   const container = document.querySelector("#leadStats");
@@ -1416,17 +1445,19 @@ function renderLeadStats() {
     <article class="lead-stat-card">
       <span>${item.label}</span>
       <strong>${item.value}</strong>
+      ${item.hint ? `<small>${item.hint}</small>` : ""}
     </article>
   `).join("");
 }
 
 function renderLeadPipeline() {
   const stages = [
-    { label: "Novo", value: countLeadStatus("Novo"), hint: "precisa resposta", tone: "warning" },
-    { label: "Aguardando pedido", value: countLeadStatus("Aguardando pedido médico"), hint: "oferecer teleconsulta", tone: "danger" },
-    { label: "Agendado", value: countLeadStatus("Agendado"), hint: "confirmar preparo", tone: "success" },
-    { label: "Negociação", value: countLeadStatus("Em negociação"), hint: "parceria ou condição", tone: "" },
-    { label: "Realizado", value: countLeadStatus("Realizado"), hint: "laudo/retorno", tone: "success" }
+    { label: "Novo contato",         value: countLeadEtapa("Novo contato"),          hint: "aguarda 1ª resposta",  tone: "warning" },
+    { label: "Em conversa",          value: countLeadEtapa("Em conversa"),            hint: "diálogo ativo",        tone: "" },
+    { label: "Aguardando retorno",   value: countLeadEtapa("Aguardando retorno"),     hint: "aguardando o lead",    tone: "warning" },
+    { label: "Agendado",             value: countLeadEtapa("Agendado"),               hint: "confirmar preparo",    tone: "success" },
+    { label: "Não respondeu",        value: countLeadEtapa("Não respondeu"),          hint: "reativar ou encerrar", tone: "danger" },
+    { label: "Convertido",           value: countLeadEtapa("Convertido em paciente") + countLeadEtapa("Convertido em clínica/parceiro"), hint: "migrado ao CRM", tone: "success" },
   ];
 
   const container = document.querySelector("#leadPipeline");
@@ -1537,18 +1568,58 @@ function renderCrmTable(filter = "Todos") {
   }).join("");
 }
 
+function resolveLeadWhatsApp(item) {
+  if (item.whatsapp_url) return item.whatsapp_url;
+  const phone = item.telefone_whatsapp || "";
+  if (!phone) return "";
+  const digits = String(phone).replace(/\D/g, "");
+  if (!digits) return "";
+  const country = digits.startsWith("55") ? digits : "55" + digits;
+  return `https://wa.me/${country}`;
+}
+
 function renderLeadsTable() {
   const tbody = document.querySelector("#leadsTable");
-  tbody.innerHTML = state.leads.map((item) => `
+  if (!tbody) return;
+
+  if (state.leads.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="crm-empty">Nenhum lead registrado.</td></tr>`;
+    return;
+  }
+
+  const today = todayIso();
+
+  tbody.innerHTML = state.leads.map((item) => {
+    const nome      = item.nome || item.lead || item.lead_id || "—";
+    const leadId    = item.lead_id || "";
+    const servico   = item.servico_interesse || item.servico || "—";
+    const etapa     = item.etapa || item.status || "—";
+    const acao      = item.proxima_acao || item.proximaAcao || "—";
+    const dataField = item.data_proxima_acao || item.dataProximaAcao || "";
+    const iso       = parseDateIso(dataField);
+    const dataCls   = iso && iso < today ? "data-atrasada" : iso === today ? "data-hoje" : "";
+    const dataLabel = formatDateBr(dataField);
+    const responsavel = item.responsavel || "—";
+
+    const waUrl = resolveLeadWhatsApp(item);
+    const waBtn = waUrl
+      ? `<a class="fp-wa-btn" href="${escapeHtml(waUrl)}" target="_blank" rel="noopener" title="Abrir WhatsApp">WhatsApp</a>`
+      : `<span class="fp-wa-disabled">—</span>`;
+
+    return `
     <tr>
-      <td><strong>${item.lead}</strong></td>
-      <td>${item.servico}</td>
-      <td>${item.origem}</td>
-      <td><span class="badge ${slug(item.status)}">${item.status}</span></td>
-      <td>${item.data}</td>
-      <td>${item.proximaAcao}</td>
-    </tr>
-  `).join("");
+      <td>
+        <strong>${escapeHtml(nome)}</strong>
+        ${leadId ? `<br><small class="lead-id-tag">${escapeHtml(leadId)}</small>` : ""}
+      </td>
+      <td>${waBtn}</td>
+      <td>${escapeHtml(servico)}</td>
+      <td><span class="badge ${slug(etapa)}">${escapeHtml(etapa)}</span></td>
+      <td>${escapeHtml(acao)}</td>
+      <td>${dataLabel ? `<span class="crm-data ${dataCls}">${dataLabel}</span>` : "—"}</td>
+      <td>${escapeHtml(responsavel)}</td>
+    </tr>`;
+  }).join("");
 }
 
 function renderSeoList() {

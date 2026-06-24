@@ -157,33 +157,43 @@
       <section id="leads" class="section">
         <div class="section-title">
           <div>
-            <p class="eyebrow">Operação</p>
-            <h2>Leads e agendamentos</h2>
+            <p class="eyebrow">Pré-atendimento · CRM</p>
+            <h2>Leads e Pré-atendimento</h2>
           </div>
-          <span class="safe-label">Sem dados reais de pacientes</span>
+          <span class="safe-label">Contatos antes do atendimento</span>
+        </div>
+
+        <div class="crm-safe-note leads-concept-note">
+          <span>ℹ️</span>
+          <p><strong>Leads = interessados antes do atendimento.</strong> Quando um lead realiza o primeiro atendimento (espirometria, consulta ou teleconsulta), ele migra para o <strong>CRM Pacientes</strong>. Enquanto não atendido, permanece aqui como lead.</p>
         </div>
 
         <div id="leadStats" class="lead-stats"></div>
 
         <article class="panel lead-flow-panel">
           <div class="panel-header">
-            <h3>Fluxo de atendimento</h3>
-            <span>Do primeiro contato ao exame realizado</span>
+            <h3>Funil de leads</h3>
+            <span>Do primeiro contato ao agendamento</span>
           </div>
           <div id="leadPipeline" class="lead-pipeline"></div>
         </article>
 
         <article class="panel">
+          <div class="panel-header">
+            <h3>Lista de leads</h3>
+            <span class="safe-label">Contatos interessados — pré-atendimento</span>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Lead</th>
-                  <th>Serviço</th>
-                  <th>Origem</th>
-                  <th>Status</th>
-                  <th>Data</th>
+                  <th>Nome / ID</th>
+                  <th>WhatsApp</th>
+                  <th>Serviço de interesse</th>
+                  <th>Etapa</th>
                   <th>Próxima ação</th>
+                  <th>Data</th>
+                  <th>Responsável</th>
                 </tr>
               </thead>
               <tbody id="leadsTable"></tbody>
