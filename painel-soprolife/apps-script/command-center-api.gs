@@ -22,6 +22,7 @@
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 var _SHEETS = {
+  LEADS:        "Leads",
   PACIENTES:    "CRM Pacientes",
   ESPIROMETRIA: "CRM Espirometria",
   CONSULTAS:    "CRM Consultas",
@@ -56,6 +57,7 @@ function doPost(e) {
     var data   = body.data || {};
 
     switch (action) {
+      case "createLead":                  return _createLead(data);
       case "createPaciente":              return _createPaciente(data);
       case "createEspirometria":          return _createEspirometria(data);
       case "createConsulta":              return _createConsulta(data);
@@ -72,6 +74,31 @@ function doPost(e) {
 }
 
 // ── Ações de escrita ──────────────────────────────────────────────────────────
+
+function _createLead(data) {
+  _required(data, ["nome", "responsavel"]);
+
+  var sheet = _getOrCreateSheet(_SHEETS.LEADS);
+  var id    = _nextId(sheet, "LEAD");
+
+  sheet.appendRow(_buildRow(sheet, {
+    lead_id:           id,
+    data_contato:      _nowBr(),
+    nome:              data.nome              || "",
+    telefone_whatsapp: data.telefone_whatsapp || "",
+    servico_interesse: data.servico_interesse || "",
+    origem:            data.origem            || "",
+    etapa:             data.etapa             || "Novo contato",
+    responsavel:       data.responsavel       || "",
+    proxima_acao:      data.proxima_acao      || "",
+    data_proxima_acao: data.data_proxima_acao || "",
+    observacao:        data.observacao        || "",
+  }));
+
+  // telefone_whatsapp e observacao nunca são registrados no log
+  _logEntry({ acao: "createLead", status: "OK", aba: _SHEETS.LEADS, id: id, resumo: "Lead registrado." });
+  return _ok({ id: id, message: "Lead registrado com sucesso." });
+}
 
 function _createPaciente(data) {
   _required(data, ["primeiro_nome", "responsavel"]);
