@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "soprolife/painel/leads",
   "title": "Leads — Painel SoproLife",
-  "description": "Contrato de dados seguros de leads. Proibido: telefone real, nome completo de paciente, CPF, pedido médico. Permitido: origem, serviço, etapa, responsável, observação anônima.",
+  "description": "Contrato de dados seguros de leads (pré-atendimento). Proibido em arquivos commitáveis: telefone real, nome real de paciente, CPF, pedido médico, observação clínica.",
   "type": "object",
   "required": ["source", "leads"],
   "additionalProperties": false,
@@ -26,18 +26,21 @@
         "required": ["lead_id", "etapa"],
         "additionalProperties": false,
         "properties": {
-          "lead_id": { "type": "string" },
-          "data_entrada": { "type": "string" },
-          "origem": { "type": "string" },
-          "canal": { "type": "string" },
-          "servico_interesse": { "type": "string" },
-          "etapa": { "type": "string" },
-          "responsavel": { "type": "string" },
-          "proxima_acao": { "type": "string" },
-          "data_proxima_acao": { "type": "string" },
-          "observacao_anonima": { "type": "string" }
+          "lead_id":           { "type": "string", "description": "Identificador único (ex.: LEAD-20260601-001)." },
+          "data_contato":      { "type": "string", "description": "Data do primeiro contato. Formato: dd/MM/yyyy." },
+          "nome":              { "type": "string", "description": "Primeiro nome ou apelido. Nunca nome completo em arquivo commitável." },
+          "servico_interesse": { "type": "string", "description": "Serviço de interesse do lead. 'Clínicas' e 'PCMSO / empresa' são leads B2B." },
+          "origem":            { "type": "string", "description": "Origem do lead: Google, Instagram, Indicação, etc." },
+          "canal":             { "type": "string", "description": "Canal de comunicação: WhatsApp, Site, E-mail, etc." },
+          "bairro_regiao":     { "type": "string", "description": "Bairro ou região — sem endereço completo." },
+          "tem_pedido_medico": { "type": "string", "description": "Possui pedido médico para espirometria?" },
+          "etapa":             { "type": "string", "description": "Etapa no funil. Valores: Novo contato, Em conversa, Aguardando retorno, Agendado, Não respondeu, Desistiu, Convertido em paciente, Convertido em clínica/parceiro." },
+          "responsavel":       { "type": "string", "description": "Responsável pelo acompanhamento." },
+          "proxima_acao":      { "type": "string", "description": "Próxima ação planejada." },
+          "data_proxima_acao": { "type": "string", "description": "Data da próxima ação. Formato: dd/MM/yyyy." }
         }
       }
     }
-  }
+  },
+  "$comment": "Campos PRIVADOS (apenas em data-private/leads.local.json, nunca commitáveis): telefone_whatsapp, observacao, whatsapp_url."
 }

@@ -608,6 +608,143 @@ PY
   fi
 }
 
+validate_leads() {
+  echo
+  echo "Verificando dados de Leads..."
+
+  local private_file="painel-soprolife/data-private/leads.local.json"
+  local summary_file="painel-soprolife/data/leads-summary.local.json"
+
+  # Arquivo privado de leads
+  if [ -f "$private_file" ]; then
+    if git check-ignore -q "$private_file" 2>/dev/null; then
+      echo "  OK (gitignored): $private_file"
+    else
+      echo "  ERRO CRÍTICO: $private_file NÃO está gitignored — dados com telefone podem vazar!"
+      echo "  Execute: git rm --cached \"$private_file\" antes de qualquer commit."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data-private/leads.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler JSON privado: {exc}")
+    sys.exit(1)
+
+leads = data.get("leads", [])
+
+BLOCKED_FIELDS = {
+    "cpf", "rg", "data_nascimento", "endereco", "endereço",
+    "pedido_medico", "laudo", "diagnostico", "diagnóstico",
+    "senha", "token", "nome_completo",
+}
+
+errors = 0
+for i, rec in enumerate(leads, start=1):
+    if not isinstance(rec, dict):
+        print(f"  ERRO: registro {i} não é um objeto.")
+        errors += 1
+        continue
+    for k in rec.keys():
+        if k.lower() in BLOCKED_FIELDS:
+            print(f"  ERRO: campo proibido '{k}' no registro {i}.")
+            errors += 1
+
+if errors == 0:
+    print(f"  OK: {len(leads)} leads. Nenhum campo proibido.")
+else:
+    print(f"  {errors} erros encontrados.")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $private_file não existe ainda (gerado manualmente ou por script futuro)."
+  fi
+
+  # Resumo seguro sem telefone
+  if [ -f "$summary_file" ]; then
+    if git check-ignore -q "$summary_file" 2>/dev/null; then
+      echo "  OK (gitignored): $summary_file"
+    else
+      echo "  ATENÇÃO: $summary_file não está gitignored."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data/leads-summary.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler resumo: {exc}")
+    sys.exit(1)
+
+source = data.get("source", {})
+leads  = data.get("leads", [])
+
+if source.get("safeToDisplay") is not True:
+    print("  ERRO: leads-summary.local.json não marcado como safeToDisplay=true.")
+    sys.exit(1)
+if source.get("containsPersonalData") is not False:
+    print("  ERRO: leads-summary.local.json pode conter dado pessoal (containsPersonalData deve ser false).")
+    sys.exit(1)
+
+_FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
+_CPF_RE  = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+
+# Campos de PII que NUNCA devem aparecer no resumo seguro
+PII_FIELDS = {
+    "nome",
+    "telefone_whatsapp",
+    "observacao",
+    "observacao_privada_minima",
+    "consentimento_whatsapp",
+}
+
+errors = 0
+for i, rec in enumerate(leads, start=1):
+    if not isinstance(rec, dict):
+        continue
+    rec_text = json.dumps(rec, ensure_ascii=False).lower()
+
+    for pii_field in PII_FIELDS:
+        if pii_field in rec:
+            print(f"  ERRO: campo PII '{pii_field}' presente no resumo (registro {i}) — dados pessoais não devem estar aqui.")
+            errors += 1
+
+    if _FONE_RE.search(rec_text):
+        print(f"  ERRO: padrão de telefone detectado no resumo, registro {i}.")
+        errors += 1
+    if _CPF_RE.search(rec_text):
+        print(f"  ERRO: padrão de CPF detectado no resumo, registro {i}.")
+        errors += 1
+
+# Conta por etapa para o relatório
+etapas: dict[str, int] = {}
+for rec in leads:
+    e = rec.get("etapa", "(sem etapa)") if isinstance(rec, dict) else "(inválido)"
+    etapas[e] = etapas.get(e, 0) + 1
+
+if errors == 0:
+    etapa_resumo = ", ".join(f"{e}={n}" for e, n in sorted(etapas.items()))
+    print(f"  OK: leads-summary seguro — {len(leads)} leads, sem telefone nem dado pessoal.")
+    if etapa_resumo:
+        print(f"  Etapas: {etapa_resumo}")
+else:
+    print(f"  {errors} erro(s) encontrado(s) no resumo.")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $summary_file não existe ainda."
+    echo "  Execute: python3 painel-soprolife/scripts/read-leads-sheets.py --write"
+    echo "  Painel usará leads.json demonstrativo enquanto o arquivo não existir."
+  fi
+}
+
 validate_marketing_seo() {
   echo
   echo "Verificando Marketing & SEO..."
@@ -791,6 +928,7 @@ main() {
   validate_runtime_status
   validate_dashboard_summary
   validate_crm_clinicas
+  validate_leads
   validate_followup_pacientes
   validate_followup_clinicas
   validate_command_center_config
