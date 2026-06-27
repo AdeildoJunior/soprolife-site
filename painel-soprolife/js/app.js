@@ -17,6 +17,7 @@ const state = {
   followupPacientes: null,
   followupSummary: null,
   followupClinicas: null,
+  ultimosLancamentos: null,
   ccConfigured: false,
 };
 
@@ -253,6 +254,11 @@ async function init() {
 
     state.ccConfigured = await fetchCcStatus();
 
+    const lancamentosData = await loadOptionalJson(`./data/ultimos-lancamentos-summary.local.json?_=${Date.now()}`);
+    if (lancamentosData?.source?.safeToDisplay === true && lancamentosData?.source?.containsPersonalData === false) {
+      state.ultimosLancamentos = lancamentosData;
+    }
+
     setPremiumChartDefaults();
     renderCards();
     renderDataFreshness();
@@ -268,6 +274,7 @@ async function init() {
     renderDocuments();
     renderFinance();
     renderAutomations();
+    renderLancamentos();
     bindEvents();
   } catch (error) {
     document.body.innerHTML = `
@@ -3145,4 +3152,87 @@ function formatDateTime(value) {
     dateStyle: "short",
     timeStyle: "short"
   }).format(date);
+}
+
+function renderLancamentos() {
+  const statsEl = document.querySelector("#lancamentosStats");
+  const timelineEl = document.querySelector("#lancamentosTimeline");
+  const subtitleEl = document.querySelector("#lancamentosSubtitle");
+  if (!statsEl || !timelineEl) return;
+
+  const data = state.ultimosLancamentos;
+
+  if (!data) {
+    statsEl.innerHTML = `
+      <article class="lancamentos-stat-card">
+        <span>Status</span>
+        <strong style="font-size:1.1rem">—</strong>
+        <small>Execute o gerador</small>
+      </article>`;
+    timelineEl.innerHTML = `
+      <div class="lancamentos-empty">
+        <p>Dados não disponíveis. Execute o gerador de últimos lançamentos:</p>
+        <code>python3 painel-soprolife/scripts/generate-ultimos-lancamentos.py --write</code>
+      </div>`;
+    return;
+  }
+
+  const st = data.stats || {};
+  const cards = [
+    { label: "Eventos recentes", value: st.total ?? 0,     hint: "registrados"    },
+    { label: "Hoje",             value: st.hoje ?? 0,       hint: "nesta sessão"   },
+    { label: "Da planilha",      value: st.planilha ?? 0,   hint: "Google Sheets"  },
+    { label: "Do painel",        value: st.painel ?? 0,     hint: "scripts locais" },
+    { label: "Pendências",       value: st.pendencias ?? 0, hint: "erros ou avisos" },
+  ];
+  statsEl.innerHTML = cards.map((c) => `
+    <article class="lancamentos-stat-card">
+      <span>${c.label}</span>
+      <strong>${c.value}</strong>
+      <small>${c.hint}</small>
+    </article>`).join("");
+
+  if (subtitleEl) {
+    const gen = data.source?.generatedAt;
+    const eventos = Array.isArray(data.eventos) ? data.eventos : [];
+    subtitleEl.textContent = gen
+      ? `Gerado em ${formatDateTime(gen)} · ${eventos.length} evento(s)`
+      : `${(data.eventos || []).length} evento(s) recentes`;
+  }
+
+  const eventos = Array.isArray(data.eventos) ? data.eventos : [];
+  if (eventos.length === 0) {
+    timelineEl.innerHTML = `<div class="lancamentos-empty"><p>Nenhum evento registrado ainda.</p></div>`;
+    return;
+  }
+
+  function statusBadge(status) {
+    const map = {
+      ok:       ["badge lancamento-badge-ok",       "✓ OK"    ],
+      pendente: ["badge lancamento-badge-pendente",  "Pendente"],
+      erro:     ["badge lancamento-badge-erro",      "Erro"    ],
+      info:     ["badge lancamento-badge-info",      "Info"    ],
+    };
+    const [cls, label] = map[status] || ["badge", escapeHtml(status)];
+    return `<span class="${cls}">${label}</span>`;
+  }
+
+  function origemBadge(origem) {
+    const cls = origem === "Planilha" ? "lancamento-origem-planilha" : "lancamento-origem-painel";
+    return `<span class="lancamento-origem ${cls}">${escapeHtml(origem)}</span>`;
+  }
+
+  timelineEl.innerHTML = eventos.map((evt, i) => `
+    <div class="lancamento-item${i === eventos.length - 1 ? " last" : ""}">
+      <div class="lancamento-dot dot-${escapeHtml(evt.status || "info")}"></div>
+      <div class="lancamento-body">
+        <div class="lancamento-header">
+          <span class="lancamento-tipo">${escapeHtml(evt.tipo || "")}</span>
+          ${origemBadge(evt.origem || "Painel")}
+          ${statusBadge(evt.status || "info")}
+        </div>
+        <p class="lancamento-resumo">${escapeHtml(evt.resumo || "")}</p>
+        <time class="lancamento-time">${escapeHtml(evt.data_br || "—")}</time>
+      </div>
+    </div>`).join("");
 }

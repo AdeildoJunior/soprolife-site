@@ -38,11 +38,11 @@ fi
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
-echo "1/8 - Atualizando status seguro da fonte Google Sheets..."
+echo "1/9 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
 
 echo
-echo "2/8 - Atualizando resumo seguro..."
+echo "2/9 - Atualizando resumo seguro..."
 
 if [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC"
@@ -74,7 +74,7 @@ else
 fi
 
 echo
-echo "3/8 - Atualizando CRM Clínicas seguro..."
+echo "3/9 - Atualizando CRM Clínicas seguro..."
 
 if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
   echo "Fonte: Google Sheets via ADC (aba CRM Clinicas)"
@@ -94,7 +94,7 @@ else
 fi
 
 echo
-echo "4/8 - Atualizando Marketing & SEO..."
+echo "4/9 - Atualizando Marketing & SEO..."
 
 if [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "Marketing & SEO não configurado — usando dados demonstrativos."
@@ -118,7 +118,7 @@ else
 fi
 
 echo
-echo "5/8 - Atualizando Leads..."
+echo "5/9 - Atualizando Leads..."
 
 _LEADS_SCRIPT="painel-soprolife/scripts/read-leads-sheets.py"
 
@@ -145,7 +145,7 @@ else
 fi
 
 echo
-echo "6/8 - Atualizando follow-up de pacientes..."
+echo "6/9 - Atualizando follow-up de pacientes..."
 
 _FOLLOWUP_SCRIPT="painel-soprolife/scripts/generate-followup-pacientes.py"
 
@@ -170,11 +170,29 @@ else
 fi
 
 echo
-echo "7/8 - Verificando segurança..."
+echo "7/9 - Atualizando timeline de últimos lançamentos..."
+
+_LANCAMENTOS_SCRIPT="painel-soprolife/scripts/generate-ultimos-lancamentos.py"
+
+if [ -f "$_LANCAMENTOS_SCRIPT" ]; then
+  if ! python3 "$_LANCAMENTOS_SCRIPT" --write 2>&1; then
+    echo
+    echo "AVISO: falha ao gerar timeline de últimos lançamentos."
+    echo "  Diagnóstico: python3 $_LANCAMENTOS_SCRIPT --dry-run"
+  else
+    echo "Timeline de lançamentos atualizada."
+    echo "  Resumo: painel-soprolife/data/ultimos-lancamentos-summary.local.json"
+  fi
+else
+  echo "Script não encontrado ($_LANCAMENTOS_SCRIPT)."
+fi
+
+echo
+echo "8/9 - Verificando segurança..."
 painel-soprolife/scripts/check-access.sh
 
 echo
-echo "8/8 - Concluído."
+echo "9/9 - Concluído."
 echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"
