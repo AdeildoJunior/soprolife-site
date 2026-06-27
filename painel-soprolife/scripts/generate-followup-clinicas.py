@@ -68,6 +68,20 @@ MSG_B2B = (
 
 # ── Normalização e parse ───────────────────────────────────────────────────────
 
+_ETAPA_ALIAS: dict[str, str] = {
+    "parceira":       "Parceiro ativo",
+    "parceiro":       "Parceiro ativo",
+    "parceiro ativo": "Parceiro ativo",
+    "implantação":    "Parceiro ativo",
+    "implantacao":    "Parceiro ativo",
+}
+
+
+def _normalize_etapa(etapa: str) -> str:
+    """Normaliza variantes de etapa para o valor canônico do painel."""
+    return _ETAPA_ALIAS.get(etapa.strip().lower(), etapa.strip())
+
+
 def _norm(text: str) -> str:
     nfkd = unicodedata.normalize("NFKD", text)
     plain = "".join(c for c in nfkd if not unicodedata.combining(c))
@@ -320,7 +334,7 @@ def build_records(
 
         rec: dict = {
             "nome_clinica":      info["nome_clinica"],
-            "etapa":             info["etapa"],
+            "etapa":             _normalize_etapa(info["etapa"]),
             "prioridade":        info["prioridade"],
             "proxima_acao":      info["proxima_acao"],
             "data_proxima_acao": data_dt.isoformat() if data_dt else "",

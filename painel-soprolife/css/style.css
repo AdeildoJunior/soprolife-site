@@ -1207,6 +1207,12 @@ td { font-size: .94rem; }
 .marco-body strong { display: block; font-size: .95rem; color: var(--navy); margin-bottom: .2rem; }
 .marco-body p { font-size: .84rem; color: var(--muted); margin: 0; line-height: 1.5; }
 
+.marco-banner-parceiro {
+  background: linear-gradient(135deg, #d4f5ec 0%, #e7f8f5 100%);
+  border-color: rgba(13, 122, 95, .35);
+  border-left-color: #0d7a5f;
+}
+
 /* Altura mínima de canvas nos novos grids do overview e leads */
 #leadsEtapaChart,
 #crmEtapaChart,
@@ -1985,7 +1991,7 @@ td { font-size: .94rem; }
 
 .followup-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 14px;
   margin-top: 16px;
 }
@@ -2003,6 +2009,7 @@ td { font-size: .94rem; }
 .followup-card.card-atrasado { border-left-color: var(--danger); }
 .followup-card.card-alta     { border-left-color: var(--warning); }
 .followup-card.card-conversa { border-left-color: #4fa3d1; }
+.followup-card.card-parceiro { border-left-color: #0d7a5f; }
 
 .followup-card-header {
   display: flex;
