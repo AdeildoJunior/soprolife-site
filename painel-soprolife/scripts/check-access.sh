@@ -745,6 +745,126 @@ PY
   fi
 }
 
+validate_financeiro() {
+  echo
+  echo "Verificando dados financeiros..."
+
+  local private_file="painel-soprolife/data-private/financeiro.local.json"
+  local summary_file="painel-soprolife/data/financeiro-summary.local.json"
+
+  # Arquivo privado
+  if [ -f "$private_file" ]; then
+    if git check-ignore -q "$private_file" 2>/dev/null; then
+      echo "  OK (gitignored): $private_file"
+    else
+      echo "  ERRO CRÍTICO: $private_file NÃO está gitignored — dados financeiros podem vazar!"
+      echo "  Execute: git rm --cached \"$private_file\" antes de qualquer commit."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data-private/financeiro.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler financeiro privado: {exc}")
+    sys.exit(1)
+
+entradas = data.get("entradas", [])
+
+BLOCKED = {
+    "cpf", "rg", "nome_pagador", "nome_completo", "numero_conta",
+    "agencia", "banco", "pix_key_real", "chave_pix", "senha", "token",
+}
+_CPF_RE = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+
+errors = 0
+for i, rec in enumerate(entradas, start=1):
+    for k in rec.keys():
+        if k.lower() in BLOCKED:
+            print(f"  ERRO: campo proibido '{k}' no lançamento {i}.")
+            errors += 1
+    text = json.dumps(rec, ensure_ascii=False).lower()
+    if _CPF_RE.search(text):
+        print(f"  ERRO: padrão CPF detectado no lançamento {i}.")
+        errors += 1
+
+if errors == 0:
+    print(f"  OK: {len(entradas)} lançamentos. Nenhum dado bancário identificador.")
+else:
+    print(f"  {errors} erros encontrados.")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $private_file não existe ainda."
+    echo "        Crie com os lançamentos reais (sem nome de pagador, CPF ou dado bancário)."
+  fi
+
+  # Resumo público
+  if [ -f "$summary_file" ]; then
+    if git check-ignore -q "$summary_file" 2>/dev/null; then
+      echo "  OK (gitignored): $summary_file"
+    else
+      echo "  ATENÇÃO: $summary_file não está gitignored — verifique se não contém dados sensíveis."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data/financeiro-summary.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler resumo financeiro: {exc}")
+    sys.exit(1)
+
+source = data.get("source", {})
+if source.get("safeToDisplay") is not True:
+    print("  ERRO: financeiro-summary não marcado como safeToDisplay=true.")
+    sys.exit(1)
+if source.get("containsPersonalData") is not False:
+    print("  ERRO: financeiro-summary pode conter dado pessoal.")
+    sys.exit(1)
+
+text = json.dumps(data, ensure_ascii=False).lower()
+FORBIDDEN = [
+    "nome_pagador", "nome_completo", "agencia", "numero_conta",
+    "chave_pix", "access_token", "refresh_token", "private_key",
+    "cpf",
+]
+_CPF_RE = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+_FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
+
+errors = 0
+for f in FORBIDDEN:
+    if f in text:
+        print(f"  ERRO: termo proibido '{f}' em financeiro-summary.")
+        errors += 1
+if _CPF_RE.search(text):
+    print("  ERRO: padrão CPF em financeiro-summary.")
+    errors += 1
+if _FONE_RE.search(text):
+    print("  ERRO: padrão telefone em financeiro-summary.")
+    errors += 1
+
+if errors == 0:
+    total = data.get("total_lancamentos", 0)
+    receita = data.get("receita_exames", 0)
+    saldo = data.get("saldo_operacional", 0)
+    print(f"  OK: resumo financeiro seguro — {total} lanç., receita_exames=R${receita:.2f}, saldo=R${saldo:.2f}.")
+else:
+    print(f"  {errors} erros encontrados.")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $summary_file não existe ainda."
+    echo "        Crie com valores agregados (sem nomes de pagadores)."
+  fi
+}
+
 validate_marketing_seo() {
   echo
   echo "Verificando Marketing & SEO..."
@@ -931,6 +1051,7 @@ main() {
   validate_leads
   validate_followup_pacientes
   validate_followup_clinicas
+  validate_financeiro
   validate_command_center_config
   validate_command_center_proxy
   validate_marketing_seo

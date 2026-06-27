@@ -9,7 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./css/style.css?v=2026062202" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
+  <script src="./js/vendor/chart.umd.min.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -141,6 +142,24 @@
           </article>
         </div>
 
+        <div class="grid-two">
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Leads por etapa</h3>
+              <span>Distribuição no funil comercial</span>
+            </div>
+            <canvas id="leadsEtapaChart"></canvas>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Clínicas B2B — pipeline</h3>
+              <span>Etapas de prospecção</span>
+            </div>
+            <canvas id="crmEtapaChart"></canvas>
+          </article>
+        </div>
+
         <article class="panel">
           <div class="panel-header">
             <h3>Próximas ações</h3>
@@ -177,6 +196,24 @@
           </div>
           <div id="leadPipeline" class="lead-pipeline"></div>
         </article>
+
+        <div class="grid-two">
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Origem dos leads</h3>
+              <span>Canal de aquisição</span>
+            </div>
+            <canvas id="leadsOrigemChart"></canvas>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <h3>Funil — contagem por etapa</h3>
+              <span>Volume em cada estágio</span>
+            </div>
+            <canvas id="leadsFunilChart"></canvas>
+          </article>
+        </div>
 
         <article class="panel">
           <div class="panel-header">
@@ -365,6 +402,7 @@
         </div>
 
         <div id="financeStats" class="finance-stats"></div>
+        <div id="financeNote" class="finance-real-note" hidden></div>
 
         <div class="grid-two finance-grid">
           <article class="panel">
@@ -383,6 +421,14 @@
             <canvas id="originRevenueChart"></canvas>
           </article>
         </div>
+
+        <article class="panel" id="financeEntradasPanel" hidden>
+          <div class="panel-header">
+            <h3>Entradas por lançamento</h3>
+            <span>Receita realizada no período</span>
+          </div>
+          <canvas id="financeEntradasChart"></canvas>
+        </article>
 
         <article class="panel">
           <div class="panel-header">
