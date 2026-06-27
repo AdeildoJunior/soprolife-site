@@ -137,16 +137,37 @@ function chartGradient(canvasEl, r, g, b, alphaTop = 0.25, alphaBottom = 0.02) {
   return gradient;
 }
 
+// Aliases de etapa: variantes encontradas na planilha → valor canônico do painel
+const _ETAPA_ALIAS = {
+  "parceira":       "Parceiro ativo",
+  "parceiro":       "Parceiro ativo",
+  "parceiro ativo": "Parceiro ativo",
+  "implantação":    "Parceiro ativo",
+  "implantacao":    "Parceiro ativo",
+};
+
+function normalizeCrmEtapa(etapa) {
+  return _ETAPA_ALIAS[String(etapa).toLowerCase().trim()] ?? etapa;
+}
+
+// Transforma próximas ações genéricas de parceiros em algo operacional
+// (camada visual apenas — a planilha não é alterada)
+const _PROXIMA_ACAO_LABEL = {
+  "parceria fechada": "Alinhar agenda piloto e fluxo operacional — início previsto na segunda semana de julho",
+};
+
 function normalizeCrmRecord(item) {
   const bairro = item.bairro || "";
   const regiao = item.regiao || "";
+  const etapaRaw = item.etapa || "";
+  const acaoRaw  = item.proxima_acao || item.proximaAcao || "";
   return {
     clinica: item.nome_clinica || item.clinica || "",
     bairro: regiao && regiao !== bairro ? `${regiao} · ${bairro}` : bairro,
     tipo: item.tipo_clinica || item.tipo || "",
-    etapa: item.etapa || "",
+    etapa: normalizeCrmEtapa(etapaRaw),
     prioridade: item.prioridade || "",
-    proximaAcao: item.proxima_acao || item.proximaAcao || "",
+    proximaAcao: _PROXIMA_ACAO_LABEL[acaoRaw.toLowerCase().trim()] ?? acaoRaw,
     dataProximaAcao: item.data_proxima_acao || item.dataProximaAcao || "",
     responsavel: item.responsavel || "",
     ultimaInteracao: item.ultima_interacao || null,
@@ -465,15 +486,17 @@ function countCrmPrioridade(prioridade) {
 }
 
 function renderCrmStats() {
+  const parceirosAtivos = countCrmEtapa("Parceiro ativo");
   const emProspeccao = state.crm.filter(
     (item) => item.etapa !== "Parceiro ativo" && item.etapa !== "Não abordado"
   ).length;
 
   const stats = [
-    { label: "Clínicas cadastradas", value: state.crm.length, hint: "base total" },
-    { label: "Em prospecção", value: emProspeccao, hint: "ativas no funil" },
-    { label: "Prioridade alta", value: countCrmPrioridade("Alta"), hint: "foco imediato" },
-    { label: "Com ação definida", value: state.crm.filter((c) => c.proximaAcao).length, hint: "próximas ações" }
+    { label: "Clínicas cadastradas", value: state.crm.length,           hint: "base total"          },
+    { label: "Em prospecção",        value: emProspeccao,                hint: "ativas no funil"     },
+    { label: "Parceiros ativos",     value: parceirosAtivos,             hint: "parcerias fechadas"  },
+    { label: "Prioridade alta",      value: countCrmPrioridade("Alta"),  hint: "foco imediato"       },
+    { label: "Com ação definida",    value: state.crm.filter((c) => c.proximaAcao).length, hint: "próximas ações" }
   ];
 
   const container = document.querySelector("#crmStats");
@@ -536,6 +559,10 @@ function renderFollowupB2B() {
     .filter((c) => c.etapa === "Em conversa")
     .sort((a, b) => a.clinica.localeCompare(b.clinica));
 
+  const parceirosAtivos = state.crm
+    .filter((c) => c.etapa === "Parceiro ativo")
+    .sort((a, b) => (a.prioridade === "Alta" ? -1 : 1) || a.clinica.localeCompare(b.clinica));
+
   function waButton(item) {
     if (!state.followupClinicas) return "";
     const clinicas = state.followupClinicas.clinicas || [];
@@ -583,10 +610,11 @@ function renderFollowupB2B() {
       <span>Ações prioritárias do CRM</span>
     </div>
     <div class="followup-grid">
-      ${card({ cls: "card-hoje",     icon: "⚡", title: "Hoje",            items: hoje,      empty: "Nenhuma ação agendada para hoje" })}
-      ${card({ cls: "card-atrasado", icon: "⚠",  title: "Atrasados",       items: atrasados, empty: "Nenhum follow-up em atraso" })}
-      ${card({ cls: "card-alta",     icon: "🔴", title: "Alta prioridade", items: altaPrio,  empty: "Nenhuma clínica de alta prioridade" })}
-      ${card({ cls: "card-conversa", icon: "💬", title: "Em conversa",     items: emConversa, empty: "Nenhuma clínica em conversa ativa" })}
+      ${card({ cls: "card-hoje",     icon: "⚡", title: "Hoje",            items: hoje,          empty: "Nenhuma ação agendada para hoje" })}
+      ${card({ cls: "card-atrasado", icon: "⚠",  title: "Atrasados",       items: atrasados,     empty: "Nenhum follow-up em atraso" })}
+      ${card({ cls: "card-alta",     icon: "🔴", title: "Alta prioridade", items: altaPrio,      empty: "Nenhuma clínica de alta prioridade" })}
+      ${card({ cls: "card-conversa", icon: "💬", title: "Em conversa",     items: emConversa,    empty: "Nenhuma clínica em conversa ativa" })}
+      ${card({ cls: "card-parceiro", icon: "🤝", title: "Parceiros ativos", items: parceirosAtivos, empty: "Nenhum parceiro ativo ainda" })}
     </div>
   `;
 }
@@ -639,18 +667,30 @@ function renderCrmHub(container) {
     (item) => item.etapa !== "Parceiro ativo" && item.etapa !== "Não abordado"
   ).length;
 
-  const parceriasEstrategicas = state.crm.filter((c) =>
+  const parceirosAtivosAlta = state.crm.filter((c) =>
+    c.etapa === "Parceiro ativo" && c.prioridade === "Alta"
+  );
+  const propostasEstrategicas = state.crm.filter((c) =>
     c.prioridade === "Alta" &&
-    (c.etapa === "Proposta enviada" || c.etapa === "Parceiro ativo") &&
+    c.etapa === "Proposta enviada" &&
     (c.tipo.toLowerCase().includes("estratégica") || c.tipo.toLowerCase().includes("rede"))
   );
 
-  const marcoHtml = parceriasEstrategicas.length > 0 ? `
+  const marcoHtml = parceirosAtivosAlta.length > 0 ? `
+    <div class="marco-banner marco-banner-parceiro">
+      <span class="marco-icon" aria-hidden="true">🤝</span>
+      <div class="marco-body">
+        <strong>Implantação / Piloto — parceiro(s) ativo(s)</strong>
+        <p>${parceirosAtivosAlta.map((p) => `<b>${escapeHtml(p.clinica)}</b>${p.bairro ? ` (${escapeHtml(p.bairro.split(" · ").pop())})` : ""} — ${escapeHtml(p.proximaAcao || "Alinhar próximo passo")}`).join("<br>")}</p>
+      </div>
+      <span class="badge parceiro-ativo">Parceiro ativo</span>
+    </div>
+  ` : propostasEstrategicas.length > 0 ? `
     <div class="marco-banner">
       <span class="marco-icon" aria-hidden="true">🏆</span>
       <div class="marco-body">
         <strong>Marco estratégico em andamento</strong>
-        <p>${parceriasEstrategicas.map((p) => `<b>${escapeHtml(p.clinica)}</b> — ${escapeHtml(p.proximaAcao)}`).join("<br>")}</p>
+        <p>${propostasEstrategicas.map((p) => `<b>${escapeHtml(p.clinica)}</b> — ${escapeHtml(p.proximaAcao)}`).join("<br>")}</p>
       </div>
       <span class="badge proposta-enviada">Aguardando contrato</span>
     </div>

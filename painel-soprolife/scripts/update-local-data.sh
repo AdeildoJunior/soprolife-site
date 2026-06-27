@@ -38,11 +38,11 @@ fi
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
-echo "1/9 - Atualizando status seguro da fonte Google Sheets..."
+echo "1/10 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
 
 echo
-echo "2/9 - Atualizando resumo seguro..."
+echo "2/10 - Atualizando resumo seguro..."
 
 if [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC"
@@ -74,7 +74,7 @@ else
 fi
 
 echo
-echo "3/9 - Atualizando CRM Clínicas seguro..."
+echo "3/10 - Atualizando CRM Clínicas seguro..."
 
 if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
   echo "Fonte: Google Sheets via ADC (aba CRM Clinicas)"
@@ -94,7 +94,35 @@ else
 fi
 
 echo
-echo "4/9 - Atualizando Marketing & SEO..."
+echo "4/10 - Atualizando follow-up B2B de clínicas..."
+
+_FOLLOWUP_CLINICAS_SCRIPT="painel-soprolife/scripts/generate-followup-clinicas.py"
+
+if [ -f "$_FOLLOWUP_CLINICAS_SCRIPT" ] && [ "$_sheets_available" = true ]; then
+  echo "Fonte: Google Sheets via ADC (CRM Clinicas + Base Prospecção B2B PCMSO)"
+  echo
+  if ! python3 "$_FOLLOWUP_CLINICAS_SCRIPT" --write 2>&1; then
+    echo
+    echo "AVISO: falha ao gerar follow-up B2B de clínicas."
+    echo "  Diagnóstico: python3 $_FOLLOWUP_CLINICAS_SCRIPT --dry-run"
+    echo "  (os demais passos continuarão normalmente)"
+  else
+    echo "Follow-up B2B de clínicas atualizado."
+    echo "  Privado:  painel-soprolife/data-private/followup-clinicas.local.json"
+    echo "  Resumo:   painel-soprolife/data/followup-clinicas-summary.local.json"
+  fi
+else
+  if [ ! -f "$_FOLLOWUP_CLINICAS_SCRIPT" ]; then
+    echo "Script de follow-up B2B não encontrado ($FOLLOWUP_CLINICAS_SCRIPT)."
+  else
+    echo "Google Sheets ADC não disponível — follow-up B2B de clínicas pulado."
+    echo "  Execute manualmente se precisar atualizar:"
+    echo "  python3 $_FOLLOWUP_CLINICAS_SCRIPT --write"
+  fi
+fi
+
+echo
+echo "5/10 - Atualizando Marketing & SEO..."
 
 if [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "Marketing & SEO não configurado — usando dados demonstrativos."
@@ -118,7 +146,7 @@ else
 fi
 
 echo
-echo "5/9 - Atualizando Leads..."
+echo "6/10 - Atualizando Leads..."
 
 _LEADS_SCRIPT="painel-soprolife/scripts/read-leads-sheets.py"
 
@@ -145,7 +173,7 @@ else
 fi
 
 echo
-echo "6/9 - Atualizando follow-up de pacientes..."
+echo "7/10 - Atualizando follow-up de pacientes..."
 
 _FOLLOWUP_SCRIPT="painel-soprolife/scripts/generate-followup-pacientes.py"
 
@@ -170,7 +198,7 @@ else
 fi
 
 echo
-echo "7/9 - Atualizando timeline de últimos lançamentos..."
+echo "8/10 - Atualizando timeline de últimos lançamentos..."
 
 _LANCAMENTOS_SCRIPT="painel-soprolife/scripts/generate-ultimos-lancamentos.py"
 
@@ -188,11 +216,11 @@ else
 fi
 
 echo
-echo "8/9 - Verificando segurança..."
+echo "9/10 - Verificando segurança..."
 painel-soprolife/scripts/check-access.sh
 
 echo
-echo "9/9 - Concluído."
+echo "10/10 - Concluído."
 echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"
