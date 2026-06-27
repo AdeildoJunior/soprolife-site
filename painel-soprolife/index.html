@@ -60,6 +60,11 @@
           Redes Sociais
         </button>
 
+        <button class="nav-item" data-section="lancamentos">
+          <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="4" r="1.5"/><circle cx="5" cy="9" r="1.5"/><circle cx="5" cy="14" r="1.5"/><line x1="5" y1="5.5" x2="5" y2="7.5"/><line x1="5" y1="10.5" x2="5" y2="12.5"/><line x1="8" y1="4" x2="15" y2="4"/><line x1="8" y1="9" x2="15" y2="9"/><line x1="8" y1="14" x2="15" y2="14"/></svg>
+          Últimos lançamentos
+        </button>
+
         <div class="nav-group-label">Gestão</div>
 
         <button class="nav-item" data-section="financeiro">
@@ -504,6 +509,31 @@
             </div>
             <div class="automation-timeline" id="automationPhases"></div>
           </article>
+        </div>
+      </section>
+
+      <section id="lancamentos" class="section">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Histórico de atualizações</p>
+            <h2>Últimos lançamentos</h2>
+          </div>
+          <span class="safe-label">Metadados — sem dados pessoais</span>
+        </div>
+
+        <div id="lancamentosStats" class="lancamentos-stats"></div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h3>Timeline de atualizações</h3>
+            <span id="lancamentosSubtitle">Últimas 10 atualizações do painel</span>
+          </div>
+          <div id="lancamentosTimeline" class="lancamentos-timeline"></div>
+        </article>
+
+        <div class="crm-safe-note" style="margin-top:1rem">
+          <span>ℹ️</span>
+          <p>Esta aba exibe apenas metadados das atualizações: quando cada módulo foi sincronizado, quantos registros foram processados e se houve erros. Nenhum dado pessoal, nome de paciente, telefone ou informação clínica é exibido aqui.</p>
         </div>
       </section>
 

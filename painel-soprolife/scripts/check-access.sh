@@ -1041,6 +1041,98 @@ validate_command_center_proxy() {
   fi
 }
 
+validate_ultimos_lancamentos() {
+  echo
+  echo "Verificando timeline de últimos lançamentos..."
+
+  local private_file="painel-soprolife/data-private/ultimos-lancamentos.local.json"
+  local summary_file="painel-soprolife/data/ultimos-lancamentos-summary.local.json"
+
+  # Arquivo privado
+  if [ -f "$private_file" ]; then
+    if git check-ignore -q "$private_file" 2>/dev/null; then
+      echo "  OK (gitignored): $private_file"
+    else
+      echo "  ERRO CRÍTICO: $private_file NÃO está gitignored!"
+      echo "  Execute: git rm --cached \"$private_file\" antes de qualquer commit."
+    fi
+  else
+    echo "  INFO: $private_file não existe (normal — gerado por generate-ultimos-lancamentos.py)."
+  fi
+
+  # Resumo seguro
+  if [ ! -f "$summary_file" ]; then
+    echo "  INFO: $summary_file não existe ainda."
+    echo "        Execute: python3 painel-soprolife/scripts/generate-ultimos-lancamentos.py --write"
+    return
+  fi
+
+  if git check-ignore -q "$summary_file" 2>/dev/null; then
+    echo "  OK (gitignored): $summary_file"
+  else
+    echo "  ATENÇÃO: $summary_file não está gitignored."
+  fi
+
+  python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data/ultimos-lancamentos-summary.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler JSON: {exc}")
+    sys.exit(1)
+
+source = data.get("source", {})
+eventos = data.get("eventos", [])
+
+if source.get("safeToDisplay") is not True:
+    print("  ERRO: ultimos-lancamentos-summary não marcado como safeToDisplay=true.")
+    sys.exit(1)
+if source.get("containsPersonalData") is not False:
+    print("  ERRO: ultimos-lancamentos-summary pode conter dado pessoal.")
+    sys.exit(1)
+if source.get("containsHealthData") is not False:
+    print("  ERRO: ultimos-lancamentos-summary pode conter dado clínico.")
+    sys.exit(1)
+
+FORBIDDEN = [
+    "cpf", "telefone", "celular", "whatsapp",
+    "pedido médico", "pedido medico", "laudo",
+    "diagnóstico", "diagnostico", "endereço", "endereco",
+    "data de nascimento", "nome completo",
+    "access_token", "refresh_token", "private_key",
+    "client_secret", "client_email",
+    "https://docs.google.com", "/spreadsheets/d/", "spreadsheet_id",
+]
+_CPF_RE  = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+_FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
+
+text = json.dumps(data, ensure_ascii=False).lower()
+
+errors = 0
+for f in FORBIDDEN:
+    if f in text:
+        print(f"  ERRO: termo proibido '{f}' detectado em ultimos-lancamentos-summary.")
+        errors += 1
+if _CPF_RE.search(text):
+    print("  ERRO: padrão de CPF detectado em ultimos-lancamentos-summary.")
+    errors += 1
+if _FONE_RE.search(text):
+    print("  ERRO: padrão de telefone detectado em ultimos-lancamentos-summary.")
+    errors += 1
+
+if errors == 0:
+    stats = data.get("stats", {})
+    print(f"  OK: ultimos-lancamentos-summary seguro — {len(eventos)} eventos, "
+          f"total={stats.get('total',0)}, pendencias={stats.get('pendencias',0)}.")
+else:
+    print(f"  {errors} erro(s) encontrado(s).")
+    sys.exit(1)
+PY
+}
+
 main() {
   check_ports
   check_extra_network_services
@@ -1055,6 +1147,7 @@ main() {
   validate_command_center_config
   validate_command_center_proxy
   validate_marketing_seo
+  validate_ultimos_lancamentos
 }
 
 main
