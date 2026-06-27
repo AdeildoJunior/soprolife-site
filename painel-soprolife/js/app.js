@@ -9,7 +9,7 @@ const state = {
   charts: {},
   tarefas: null,
   documentos: [],
-  financeiro: null,
+  financeiro_summary: null,
   automacoes: null,
   runtimeStatus: null,
   dashboardSummary: null,
@@ -26,6 +26,29 @@ const slug = (text) =>
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, "-");
+
+const CHART_COLORS = [
+  "rgba(29, 183, 166, .85)",
+  "rgba(30, 58, 100, .85)",
+  "rgba(99, 138, 181, .85)",
+  "rgba(248, 171, 50, .85)",
+  "rgba(231, 76, 60, .85)",
+  "rgba(46, 204, 113, .85)",
+  "rgba(155, 89, 182, .85)",
+  "rgba(149, 165, 166, .85)",
+];
+
+const CHART_COLORS_FUNNEL = [
+  "rgba(149, 165, 166, .65)",
+  "rgba(99, 138, 181, .80)",
+  "rgba(248, 171, 50, .85)",
+  "rgba(41, 128, 185, .85)",
+  "rgba(29, 183, 166, .90)",
+];
+
+function fmtBRL(value) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0);
+}
 
 async function loadJson(path) {
   const response = await fetch(path);
@@ -114,14 +137,13 @@ function formatDateBr(dateStr) {
 
 async function init() {
   try {
-    const [resumo, crm, leads, marketing, tarefas, documentos, financeiro, automacoes] = await Promise.all([
+    const [resumo, crm, leads, marketing, tarefas, documentos, automacoes] = await Promise.all([
       loadJson("./data/resumo.json"),
       loadJson("./data/crm-clinicas.json"),
       loadJson("./data/leads.json"),
       loadJson("./data/marketing.json"),
       loadJson("./data/tarefas.json"),
       loadJson("./data/documentos.json"),
-      loadJson("./data/financeiro.json"),
       loadJson("./data/automacoes.json")
     ]);
 
@@ -131,7 +153,6 @@ async function init() {
     state.marketing = marketing;
     state.tarefas = tarefas;
     state.documentos = documentos;
-    state.financeiro = financeiro;
     state.automacoes = automacoes;
 
     state.runtimeStatus = await loadOptionalJson("./data/runtime-status.local.json");
@@ -184,6 +205,14 @@ async function init() {
 
     state.marketingSeo = await loadOptionalJson("./data/marketing-seo.local.json");
 
+    const financeiroSummaryData = await loadOptionalJson("./data/financeiro-summary.local.json");
+    if (
+      financeiroSummaryData?.source?.safeToDisplay === true &&
+      financeiroSummaryData?.source?.containsPersonalData === false
+    ) {
+      state.financeiro_summary = financeiroSummaryData;
+    }
+
     state.ccConfigured = await fetchCcStatus();
 
     renderCards();
@@ -195,6 +224,7 @@ async function init() {
     renderLeadsTable();
     renderMarketingSection();
     renderCharts();
+    renderLeadsCharts();
     renderTaskBoard();
     renderDocuments();
     renderFinance();
@@ -311,6 +341,7 @@ function renderCards() {
 
 function getDashboardCards() {
   const localSummary = state.dashboardSummary;
+  const finSummary = state.financeiro_summary;
 
   const isSafeLocalSummary = Boolean(
     localSummary?.source?.safeToDisplay &&
@@ -319,17 +350,36 @@ function getDashboardCards() {
     Array.isArray(localSummary?.cards)
   );
 
+  const hasRealFinance = Boolean(
+    finSummary?.source?.safeToDisplay === true &&
+    finSummary?.source?.containsPersonalData === false
+  );
+
   if (!isSafeLocalSummary) {
     return state.resumo.cards;
   }
 
-  return localSummary.cards.map((card) => ({
+  let cards = localSummary.cards.map((card) => ({
     key: card.key,
     label: card.label,
     value: formatDashboardValue(card.key, card.value),
     variation: "Local seguro",
     type: "neutral"
   }));
+
+  if (hasRealFinance) {
+    // Remove previsão desatualizada; substitui recebido pelo valor real de espirometrias
+    cards = cards
+      .filter((c) => c.key !== "receitaPrevista")
+      .map((c) => {
+        if (c.key === "receitaRecebida") {
+          return { ...c, label: "Receita oficial de espirometrias", value: fmtBRL(finSummary.receita_exames), variation: "Financeiro real" };
+        }
+        return c;
+      });
+  }
+
+  return cards;
 }
 
 function formatDashboardValue(key, value) {
@@ -543,12 +593,30 @@ function renderCrmHub(container) {
     (item) => item.etapa !== "Parceiro ativo" && item.etapa !== "Não abordado"
   ).length;
 
+  const parceriasEstrategicas = state.crm.filter((c) =>
+    c.prioridade === "Alta" &&
+    (c.etapa === "Proposta enviada" || c.etapa === "Parceiro ativo") &&
+    (c.tipo.toLowerCase().includes("estratégica") || c.tipo.toLowerCase().includes("rede"))
+  );
+
+  const marcoHtml = parceriasEstrategicas.length > 0 ? `
+    <div class="marco-banner">
+      <span class="marco-icon" aria-hidden="true">🏆</span>
+      <div class="marco-body">
+        <strong>Marco estratégico em andamento</strong>
+        <p>${parceriasEstrategicas.map((p) => `<b>${escapeHtml(p.clinica)}</b> — ${escapeHtml(p.proximaAcao)}`).join("<br>")}</p>
+      </div>
+      <span class="badge proposta-enviada">Aguardando contrato</span>
+    </div>
+  ` : "";
+
   container.innerHTML = `
     <div class="crm-hub-header">
       <p class="eyebrow">Relacionamento</p>
       <h2>CRM SoproLife</h2>
       <p class="section-sub">Relacionamento, parcerias, pacientes e recorrência</p>
     </div>
+    ${marcoHtml}
     <div class="crm-hub-grid">
       ${crmModuleCard({
         icon: "🏥",
@@ -2382,7 +2450,9 @@ function renderCharts() {
         {
           label: ga4Sources?.length ? "Sessões por origem (GA4)" : "Origem dos contatos",
           data: channelsData.values,
-          borderWidth: 2
+          backgroundColor: CHART_COLORS,
+          borderWidth: 2,
+          borderColor: "#fff"
         }
       ]
     },
@@ -2391,6 +2461,152 @@ function renderCharts() {
       maintainAspectRatio: false,
       plugins: {
         legend: { position: "bottom" }
+      }
+    }
+  });
+
+  renderOverviewExtraCharts();
+}
+
+function renderOverviewExtraCharts() {
+  // Leads por etapa — donut
+  const leadsByEtapa = {};
+  state.leads.forEach((l) => {
+    const e = l.etapa || l.status || "Desconhecido";
+    leadsByEtapa[e] = (leadsByEtapa[e] || 0) + 1;
+  });
+  const etapaLabels = Object.keys(leadsByEtapa);
+  if (etapaLabels.length > 0) {
+    createChart("leadsEtapa", "#leadsEtapaChart", {
+      type: "doughnut",
+      data: {
+        labels: etapaLabels,
+        datasets: [{
+          data: Object.values(leadsByEtapa),
+          backgroundColor: CHART_COLORS.slice(0, etapaLabels.length),
+          borderWidth: 2,
+          borderColor: "#fff"
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw} lead(s)` } }
+        }
+      }
+    });
+  }
+
+  // Clínicas B2B por etapa — barra horizontal (etapas dinâmicas da base real)
+  const crmByEtapa = {};
+  state.crm.forEach((c) => {
+    const e = c.etapa || "Outros";
+    crmByEtapa[e] = (crmByEtapa[e] || 0) + 1;
+  });
+  const crmEtapaLabels = Object.keys(crmByEtapa);
+  const crmEtapaValues = Object.values(crmByEtapa);
+  if (crmEtapaLabels.length > 0) {
+    createChart("crmEtapa", "#crmEtapaChart", {
+      type: "bar",
+      data: {
+        labels: crmEtapaLabels,
+        datasets: [{
+          label: "Clínicas",
+          data: crmEtapaValues,
+          backgroundColor: CHART_COLORS.slice(0, crmEtapaLabels.length),
+          borderRadius: 8,
+          borderWidth: 0
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} clínica(s)` } }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            grid: { color: "rgba(109,123,138,.1)" },
+            ticks: { stepSize: 1, font: { size: 11 } }
+          },
+          y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+        }
+      }
+    });
+  }
+}
+
+function renderLeadsCharts() {
+  // Origem dos leads — donut
+  const leadsByOrigem = {};
+  state.leads.forEach((l) => {
+    const o = l.origem || "Não informado";
+    leadsByOrigem[o] = (leadsByOrigem[o] || 0) + 1;
+  });
+  const origemLabels = Object.keys(leadsByOrigem);
+  if (origemLabels.length > 0) {
+    createChart("leadsOrigem", "#leadsOrigemChart", {
+      type: "doughnut",
+      data: {
+        labels: origemLabels,
+        datasets: [{
+          data: Object.values(leadsByOrigem),
+          backgroundColor: CHART_COLORS.slice(0, origemLabels.length),
+          borderWidth: 2,
+          borderColor: "#fff"
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } }
+        }
+      }
+    });
+  }
+
+  // Funil de leads — barras verticais
+  const etapasFunil = [
+    ["Novo contato", countLeadEtapa("Novo contato")],
+    ["Em conversa", countLeadEtapa("Em conversa")],
+    ["Aguardando", countLeadEtapa("Aguardando retorno")],
+    ["Agendado", countLeadEtapa("Agendado")],
+    ["Sem resposta", countLeadEtapa("Não respondeu")],
+    ["Convertido", countLeadEtapa("Convertido em paciente") + countLeadEtapa("Convertido em clínica/parceiro")]
+  ];
+  createChart("leadsFunil", "#leadsFunilChart", {
+    type: "bar",
+    data: {
+      labels: etapasFunil.map((e) => e[0]),
+      datasets: [{
+        label: "Leads",
+        data: etapasFunil.map((e) => e[1]),
+        backgroundColor: CHART_COLORS.slice(0, etapasFunil.length),
+        borderRadius: 8,
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} lead(s)` } }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: "rgba(109,123,138,.1)" },
+          ticks: { stepSize: 1, font: { size: 11 } }
+        },
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } }
       }
     }
   });
@@ -2521,74 +2737,191 @@ function renderDocuments() {
 
 function renderFinance() {
   const statsContainer = document.querySelector("#financeStats");
+  const financeNote = document.querySelector("#financeNote");
   const table = document.querySelector("#financeTable");
   const serviceCanvas = document.querySelector("#serviceRevenueChart");
   const originCanvas = document.querySelector("#originRevenueChart");
 
-  if (!statsContainer || !table || !serviceCanvas || !originCanvas || !state.financeiro) return;
+  if (!statsContainer || !table) return;
 
-  statsContainer.innerHTML = state.financeiro.resumo.map((item) => `
-    <article class="finance-stat-card">
-      <span>${item.label}</span>
-      <strong>${item.value}</strong>
-      <small>${item.hint}</small>
-    </article>
-  `).join("");
+  const summary = state.financeiro_summary;
+  const hasRealData = Boolean(
+    summary?.source?.safeToDisplay === true &&
+    summary?.source?.containsPersonalData === false
+  );
 
-  table.innerHTML = state.financeiro.lancamentos.map((item) => `
-    <tr>
-      <td><strong>${item.descricao}</strong></td>
-      <td>${item.servico}</td>
-      <td>${item.origem}</td>
-      <td>${item.valor}</td>
-      <td><span class="badge ${slug(item.status)}">${item.status}</span></td>
-      <td>${item.data}</td>
-    </tr>
-  `).join("");
+  if (hasRealData) {
+    const safeLabel = document.querySelector("#financeiro .safe-label");
+    if (safeLabel) safeLabel.textContent = "Dados reais — jun/2026";
 
-  createChart("serviceRevenue", "#serviceRevenueChart", {
-    type: "bar",
-    data: {
-      labels: state.financeiro.porServico.map((item) => item.servico),
-      datasets: [
-        {
-          label: "Receita por serviço",
-          data: state.financeiro.porServico.map((item) => item.valor),
-          borderWidth: 1,
-          borderRadius: 12
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.14)" } },
-        x: { grid: { display: false } }
-      }
+    statsContainer.innerHTML = [
+      { label: "Saldo em conta",              value: fmtBRL(summary.saldo_operacional),              hint: "total acumulado · CRM Espirometria" },
+      { label: "Receita oficial (espiro.)",   value: fmtBRL(summary.receita_exames),                 hint: `${summary.espirometrias_pagas} exames · jun/2026` },
+      { label: "Ticket médio real",           value: fmtBRL(summary.ticket_medio_real),              hint: `base ${fmtBRL(summary.valor_base_exame)} / +${fmtBRL(summary.diferenca_acima_base)} acima` },
+      { label: "Consultas",                   value: "R$ 0,00",                                      hint: "fase estratégica/parceria" },
+      { label: "Parceria / excepcional",      value: fmtBRL(summary.receita_parceria_excepcional),   hint: "Pix espontâneo · fora do padrão" },
+      { label: "Entradas recentes",           value: `${summary.total_lancamentos} lanç.`,           hint: `${fmtBRL(summary.total_entradas_mes_atual)} · destaque extrato` }
+    ].map((item) => `
+      <article class="finance-stat-card">
+        <span>${item.label}</span>
+        <strong>${item.value}</strong>
+        <small>${item.hint}</small>
+      </article>
+    `).join("");
+
+    if (financeNote) {
+      financeNote.innerHTML = [
+        `Receita oficial calculada sobre ${summary.espirometrias_pagas} espirometrias pagas no CRM Espirometria.`,
+        `Valor base atual do exame residencial: ${fmtBRL(summary.valor_base_exame)}.`,
+        `Ticket médio acima do valor base por pequenos pagamentos acima de ${fmtBRL(summary.valor_base_exame)}.`,
+        `${fmtBRL(summary.receita_parceria_excepcional)} classificados como parceria/entrada excepcional, fora do preço padrão.`,
+        "Consultas em fase estratégica/parceria, sem cobrança no momento."
+      ].join("<br>");
+      financeNote.removeAttribute("hidden");
     }
-  });
 
-  createChart("originRevenue", "#originRevenueChart", {
-    type: "doughnut",
-    data: {
-      labels: state.financeiro.porOrigem.map((item) => item.origem),
-      datasets: [
-        {
-          label: "Receita por origem",
-          data: state.financeiro.porOrigem.map((item) => item.valor),
-          borderWidth: 2
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: "bottom" }
+    table.innerHTML = summary.lancamentos_agregados.map((item) => `
+      <tr>
+        <td><strong>${escapeHtml(item.descricao)}</strong></td>
+        <td>${escapeHtml(item.servico)}</td>
+        <td>—</td>
+        <td><strong>${fmtBRL(item.valor)}</strong></td>
+        <td><span class="badge ${slug(item.status)}">${escapeHtml(item.status)}</span></td>
+        <td>${escapeHtml(item.data)}</td>
+      </tr>
+    `).join("");
+
+    // Atualiza títulos dos painéis de gráficos para refletir os dados reais
+    if (serviceCanvas) {
+      const servicePanel = serviceCanvas.closest(".panel")?.querySelector(".panel-header");
+      if (servicePanel) {
+        const h3 = servicePanel.querySelector("h3");
+        const span = servicePanel.querySelector("span");
+        if (h3) h3.textContent = "Receita por categoria";
+        if (span) span.textContent = "Espirometrias oficiais, parceria/excepcional e consultas";
       }
+      createChart("serviceRevenue", "#serviceRevenueChart", {
+        type: "bar",
+        data: {
+          labels: summary.por_servico.map((i) => i.servico),
+          datasets: [{
+            label: "Receita (R$)",
+            data: summary.por_servico.map((i) => i.valor),
+            backgroundColor: CHART_COLORS.slice(0, summary.por_servico.length),
+            borderRadius: 12,
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => ` ${fmtBRL(ctx.raw)}` } }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(109,123,138,.14)" },
+              ticks: { callback: (v) => fmtBRL(v), font: { size: 11 } }
+            },
+            x: { grid: { display: false } }
+          }
+        }
+      });
     }
-  });
+
+    if (originCanvas && summary.por_origem.length > 0) {
+      const originPanel = originCanvas.closest(".panel")?.querySelector(".panel-header");
+      if (originPanel) {
+        const h3 = originPanel.querySelector("h3");
+        const span = originPanel.querySelector("span");
+        if (h3) h3.textContent = "Distribuição de receita";
+        if (span) span.textContent = "Espirometrias oficiais vs parceria/excepcional";
+      }
+      createChart("originRevenue", "#originRevenueChart", {
+        type: "doughnut",
+        data: {
+          labels: summary.por_origem.map((i) => i.origem),
+          datasets: [{
+            data: summary.por_origem.map((i) => i.valor),
+            backgroundColor: CHART_COLORS,
+            borderWidth: 2,
+            borderColor: "#fff"
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "bottom" },
+            tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${fmtBRL(ctx.raw)}` } }
+          }
+        }
+      });
+    }
+
+    // Gráfico de entradas recentes destacadas
+    const entradasCanvas = document.querySelector("#financeEntradasChart");
+    const entradasPanel = document.querySelector("#financeEntradasPanel");
+    if (entradasCanvas && entradasPanel && summary.lancamentos_agregados.length > 0) {
+      const entradasHeader = entradasPanel.querySelector(".panel-header span");
+      if (entradasHeader) entradasHeader.textContent = "Lançamentos recentes visíveis no extrato — não representam o total da operação";
+      entradasPanel.removeAttribute("hidden");
+      createChart("financeEntradas", "#financeEntradasChart", {
+        type: "bar",
+        data: {
+          labels: summary.lancamentos_agregados.map((i) => i.descricao),
+          datasets: [{
+            label: "Valor (R$)",
+            data: summary.lancamentos_agregados.map((i) => i.valor),
+            backgroundColor: CHART_COLORS.slice(0, summary.lancamentos_agregados.length),
+            borderRadius: 10,
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => ` ${fmtBRL(ctx.raw)}` } }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(109,123,138,.14)" },
+              ticks: { callback: (v) => fmtBRL(v), font: { size: 11 } }
+            },
+            x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+          }
+        }
+      });
+    }
+
+  } else {
+    // Resumo financeiro local não disponível — exibe estado vazio/pendente
+    statsContainer.innerHTML = `
+      <article class="finance-stat-card finance-stat-pending">
+        <span>Resumo financeiro</span>
+        <strong>—</strong>
+        <small>Resumo financeiro local não encontrado</small>
+      </article>
+    `;
+
+    if (financeNote) {
+      financeNote.textContent = "Resumo financeiro local não encontrado. Gere o arquivo data/financeiro-summary.local.json para exibir dados reais.";
+      financeNote.removeAttribute("hidden");
+    }
+
+    table.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align:center;color:var(--text-muted,#888);padding:1.5rem">
+          Nenhum dado financeiro disponível — resumo local não encontrado.
+        </td>
+      </tr>
+    `;
+  }
 }
 
 
