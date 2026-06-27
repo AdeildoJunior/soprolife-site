@@ -28,22 +28,22 @@ const slug = (text) =>
     .replace(/\s+/g, "-");
 
 const CHART_COLORS = [
-  "rgba(29, 183, 166, .85)",
-  "rgba(30, 58, 100, .85)",
-  "rgba(99, 138, 181, .85)",
-  "rgba(248, 171, 50, .85)",
-  "rgba(231, 76, 60, .85)",
-  "rgba(46, 204, 113, .85)",
-  "rgba(155, 89, 182, .85)",
-  "rgba(149, 165, 166, .85)",
+  "rgba(29, 183, 166, .92)",   // teal — cor da marca
+  "rgba(99, 102, 241, .92)",   // indigo
+  "rgba(245, 158, 11, .92)",   // amber
+  "rgba(239, 68, 68, .90)",    // red
+  "rgba(16, 185, 129, .90)",   // emerald
+  "rgba(37, 99, 235, .90)",    // blue
+  "rgba(168, 85, 247, .90)",   // purple
+  "rgba(100, 116, 139, .88)",  // slate
 ];
 
 const CHART_COLORS_FUNNEL = [
-  "rgba(149, 165, 166, .65)",
-  "rgba(99, 138, 181, .80)",
-  "rgba(248, 171, 50, .85)",
-  "rgba(41, 128, 185, .85)",
-  "rgba(29, 183, 166, .90)",
+  "rgba(100, 116, 139, .65)",
+  "rgba(99, 102, 241, .80)",
+  "rgba(245, 158, 11, .88)",
+  "rgba(37, 99, 235, .88)",
+  "rgba(29, 183, 166, .92)",
 ];
 
 function fmtBRL(value) {
@@ -96,6 +96,44 @@ function createChart(key, canvasSelector, config) {
 
 function resizeCharts() {
   Object.values(state.charts).forEach((chart) => chart.resize());
+}
+
+function setPremiumChartDefaults() {
+  const d = Chart.defaults;
+  d.font.family = "Inter, system-ui, -apple-system, sans-serif";
+  d.font.size = 11;
+  d.color = "#6d7b8a";
+  d.animation.duration = 600;
+  d.animation.easing = "easeOutQuart";
+
+  const tt = d.plugins.tooltip;
+  tt.backgroundColor = "#0b1f36";
+  tt.titleColor = "#ffffff";
+  tt.bodyColor = "rgba(200,215,230,.85)";
+  tt.padding = { x: 14, y: 10 };
+  tt.cornerRadius = 12;
+  tt.boxPadding = 5;
+  tt.borderColor = "rgba(255,255,255,.06)";
+  tt.borderWidth = 1;
+  tt.usePointStyle = true;
+
+  d.elements.line.borderWidth = 2.5;
+  d.elements.line.tension = 0.42;
+  d.elements.point.radius = 0;
+  d.elements.point.hoverRadius = 5;
+  d.elements.point.hoverBorderWidth = 2;
+  d.elements.bar.borderRadius = 10;
+  d.elements.arc.borderWidth = 2;
+}
+
+function chartGradient(canvasEl, r, g, b, alphaTop = 0.25, alphaBottom = 0.02) {
+  if (!canvasEl) return `rgba(${r},${g},${b},${alphaTop})`;
+  const ctx = canvasEl.getContext("2d");
+  const h = canvasEl.parentElement?.clientHeight || 280;
+  const gradient = ctx.createLinearGradient(0, 0, 0, h);
+  gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${alphaTop})`);
+  gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, ${alphaBottom})`);
+  return gradient;
 }
 
 function normalizeCrmRecord(item) {
@@ -215,6 +253,7 @@ async function init() {
 
     state.ccConfigured = await fetchCcStatus();
 
+    setPremiumChartDefaults();
     renderCards();
     renderDataFreshness();
     renderTasks();
@@ -2348,6 +2387,7 @@ function renderMktTrendChart() {
   if (!byDate?.length || !panel) return;
 
   panel.hidden = false;
+  const canvas = document.querySelector("#mktTrendChart");
 
   createChart("mktTrend", "#mktTrendChart", {
     type: "line",
@@ -2356,13 +2396,11 @@ function renderMktTrendChart() {
       datasets: [{
         label: "Impressões",
         data: byDate.map((d) => d.impressions),
-        borderWidth: 2,
-        tension: 0.4,
+        borderColor: "rgba(29, 183, 166, .95)",
+        backgroundColor: chartGradient(canvas, 29, 183, 166, 0.22),
         fill: true,
-        backgroundColor: "rgba(29, 183, 166, .09)",
-        borderColor: "rgba(29, 183, 166, .85)",
         pointRadius: 0,
-        pointHoverRadius: 4,
+        pointHoverRadius: 5,
       }],
     },
     options: {
@@ -2370,31 +2408,24 @@ function renderMktTrendChart() {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.08)" }, ticks: { font: { size: 10 }, maxTicksLimit: 4 } },
-        x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 7 } },
+        y: {
+          beginAtZero: true,
+          grid: { color: "rgba(109,123,138,.07)" },
+          ticks: { font: { size: 10 }, maxTicksLimit: 4 },
+          border: { display: false }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 10 }, maxTicksLimit: 7 },
+          border: { display: false }
+        },
       },
     },
   });
 }
 
 function renderCharts() {
-  const defaultOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        labels: {
-          boxWidth: 12,
-          font: { family: "system-ui" }
-        }
-      }
-    },
-    scales: {
-      y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.14)" } },
-      x: { grid: { display: false } }
-    }
-  };
-
+  const weeklyCanvas = document.querySelector("#weeklyChart");
   createChart("weekly", "#weeklyChart", {
     type: "line",
     data: {
@@ -2403,19 +2434,30 @@ function renderCharts() {
         {
           label: "Leads",
           data: state.resumo.evolucaoSemanal.leads,
-          borderWidth: 3,
-          tension: .38,
-          fill: true
+          borderColor: "rgba(29, 183, 166, .95)",
+          backgroundColor: chartGradient(weeklyCanvas, 29, 183, 166, 0.28),
+          fill: true,
         },
         {
           label: "Agendamentos",
           data: state.resumo.evolucaoSemanal.agendamentos,
-          borderWidth: 3,
-          tension: .38
+          borderColor: "rgba(99, 102, 241, .95)",
+          backgroundColor: chartGradient(weeklyCanvas, 99, 102, 241, 0.15),
+          fill: true,
         }
       ]
     },
-    options: defaultOptions
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, padding: 16 } }
+      },
+      scales: {
+        y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.07)" }, border: { display: false } },
+        x: { grid: { display: false }, border: { display: false } }
+      }
+    }
   });
 
   createChart("funnel", "#funnelChart", {
@@ -2426,12 +2468,21 @@ function renderCharts() {
         {
           label: "Clínicas",
           data: state.resumo.funilClinicas.values,
-          borderWidth: 1,
-          borderRadius: 12
+          backgroundColor: CHART_COLORS_FUNNEL,
+          borderRadius: 14,
+          borderSkipped: false,
         }
       ]
     },
-    options: defaultOptions
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.07)" }, border: { display: false } },
+        x: { grid: { display: false }, border: { display: false } }
+      }
+    }
   });
 
   const ga4Sources = state.marketingSeo?.ga4?.trafficSources;
@@ -2451,16 +2502,21 @@ function renderCharts() {
           label: ga4Sources?.length ? "Sessões por origem (GA4)" : "Origem dos contatos",
           data: channelsData.values,
           backgroundColor: CHART_COLORS,
-          borderWidth: 2,
-          borderColor: "#fff"
+          borderWidth: 3,
+          borderColor: "#f3f7fb",
+          hoverOffset: 8,
         }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      cutout: "70%",
       plugins: {
-        legend: { position: "bottom" }
+        legend: {
+          position: "bottom",
+          labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, padding: 14 }
+        }
       }
     }
   });
@@ -2484,15 +2540,17 @@ function renderOverviewExtraCharts() {
         datasets: [{
           data: Object.values(leadsByEtapa),
           backgroundColor: CHART_COLORS.slice(0, etapaLabels.length),
-          borderWidth: 2,
-          borderColor: "#fff"
+          borderWidth: 3,
+          borderColor: "#f3f7fb",
+          hoverOffset: 8,
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        cutout: "68%",
         plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+          legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, font: { size: 11 }, padding: 12 } },
           tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw} lead(s)` } }
         }
       }
@@ -2517,7 +2575,7 @@ function renderOverviewExtraCharts() {
           data: crmEtapaValues,
           backgroundColor: CHART_COLORS.slice(0, crmEtapaLabels.length),
           borderRadius: 8,
-          borderWidth: 0
+          borderSkipped: false,
         }]
       },
       options: {
@@ -2531,10 +2589,11 @@ function renderOverviewExtraCharts() {
         scales: {
           x: {
             beginAtZero: true,
-            grid: { color: "rgba(109,123,138,.1)" },
-            ticks: { stepSize: 1, font: { size: 11 } }
+            grid: { color: "rgba(109,123,138,.07)" },
+            ticks: { stepSize: 1, font: { size: 11 } },
+            border: { display: false }
           },
-          y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+          y: { grid: { display: false }, ticks: { font: { size: 11 } }, border: { display: false } }
         }
       }
     });
@@ -2557,15 +2616,17 @@ function renderLeadsCharts() {
         datasets: [{
           data: Object.values(leadsByOrigem),
           backgroundColor: CHART_COLORS.slice(0, origemLabels.length),
-          borderWidth: 2,
-          borderColor: "#fff"
+          borderWidth: 3,
+          borderColor: "#f3f7fb",
+          hoverOffset: 8,
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        cutout: "68%",
         plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+          legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, font: { size: 11 }, padding: 12 } },
           tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } }
         }
       }
@@ -2575,11 +2636,11 @@ function renderLeadsCharts() {
   // Funil de leads — barras verticais
   const etapasFunil = [
     ["Novo contato", countLeadEtapa("Novo contato")],
-    ["Em conversa", countLeadEtapa("Em conversa")],
-    ["Aguardando", countLeadEtapa("Aguardando retorno")],
-    ["Agendado", countLeadEtapa("Agendado")],
+    ["Em conversa",  countLeadEtapa("Em conversa")],
+    ["Aguardando",   countLeadEtapa("Aguardando retorno")],
+    ["Agendado",     countLeadEtapa("Agendado")],
     ["Sem resposta", countLeadEtapa("Não respondeu")],
-    ["Convertido", countLeadEtapa("Convertido em paciente") + countLeadEtapa("Convertido em clínica/parceiro")]
+    ["Convertido",   countLeadEtapa("Convertido em paciente") + countLeadEtapa("Convertido em clínica/parceiro")]
   ];
   createChart("leadsFunil", "#leadsFunilChart", {
     type: "bar",
@@ -2589,8 +2650,8 @@ function renderLeadsCharts() {
         label: "Leads",
         data: etapasFunil.map((e) => e[1]),
         backgroundColor: CHART_COLORS.slice(0, etapasFunil.length),
-        borderRadius: 8,
-        borderWidth: 0
+        borderRadius: 10,
+        borderSkipped: false,
       }]
     },
     options: {
@@ -2603,10 +2664,11 @@ function renderLeadsCharts() {
       scales: {
         y: {
           beginAtZero: true,
-          grid: { color: "rgba(109,123,138,.1)" },
-          ticks: { stepSize: 1, font: { size: 11 } }
+          grid: { color: "rgba(109,123,138,.07)" },
+          ticks: { stepSize: 1, font: { size: 11 } },
+          border: { display: false }
         },
-        x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+        x: { grid: { display: false }, ticks: { font: { size: 11 } }, border: { display: false } }
       }
     }
   });
@@ -2754,13 +2816,18 @@ function renderFinance() {
     const safeLabel = document.querySelector("#financeiro .safe-label");
     if (safeLabel) safeLabel.textContent = "Dados reais — jun/2026";
 
+    const nExames = Number(summary.espirometrias_pagas) || 0;
+    const baseExame = Number(summary.valor_base_exame) || 0;
+    const difTotal = Number(summary.diferenca_acima_base) || 0;
+    const difPorExame = nExames > 0 ? difTotal / nExames : 0;
+
     statsContainer.innerHTML = [
-      { label: "Saldo em conta",              value: fmtBRL(summary.saldo_operacional),              hint: "total acumulado · CRM Espirometria" },
-      { label: "Receita oficial (espiro.)",   value: fmtBRL(summary.receita_exames),                 hint: `${summary.espirometrias_pagas} exames · jun/2026` },
-      { label: "Ticket médio real",           value: fmtBRL(summary.ticket_medio_real),              hint: `base ${fmtBRL(summary.valor_base_exame)} / +${fmtBRL(summary.diferenca_acima_base)} acima` },
+      { label: "Saldo em conta",              value: fmtBRL(summary.saldo_operacional),              hint: "total atual na conta" },
+      { label: "Receita das 9 espirometrias", value: fmtBRL(summary.receita_exames),                 hint: `${nExames} exames pagos oficiais` },
+      { label: "Ticket médio real",           value: fmtBRL(summary.ticket_medio_real),              hint: `base ${fmtBRL(baseExame)} / +${fmtBRL(difPorExame)} por exame` },
+      { label: "Parceria / excepcional",      value: fmtBRL(summary.receita_parceria_excepcional),   hint: "Pix espontâneo, fora do padrão" },
       { label: "Consultas",                   value: "R$ 0,00",                                      hint: "fase estratégica/parceria" },
-      { label: "Parceria / excepcional",      value: fmtBRL(summary.receita_parceria_excepcional),   hint: "Pix espontâneo · fora do padrão" },
-      { label: "Entradas recentes",           value: `${summary.total_lancamentos} lanç.`,           hint: `${fmtBRL(summary.total_entradas_mes_atual)} · destaque extrato` }
+      { label: "Entradas recentes",           value: `${summary.total_lancamentos} lançamentos`,     hint: `${fmtBRL(summary.total_entradas_mes_atual)} destacados no extrato` }
     ].map((item) => `
       <article class="finance-stat-card">
         <span>${item.label}</span>
@@ -2771,10 +2838,10 @@ function renderFinance() {
 
     if (financeNote) {
       financeNote.innerHTML = [
-        `Receita oficial calculada sobre ${summary.espirometrias_pagas} espirometrias pagas no CRM Espirometria.`,
-        `Valor base atual do exame residencial: ${fmtBRL(summary.valor_base_exame)}.`,
-        `Ticket médio acima do valor base por pequenos pagamentos acima de ${fmtBRL(summary.valor_base_exame)}.`,
-        `${fmtBRL(summary.receita_parceria_excepcional)} classificados como parceria/entrada excepcional, fora do preço padrão.`,
+        `Receita oficial calculada sobre ${nExames} espirometrias pagas no CRM Espirometria.`,
+        `Valor base atual do exame residencial: ${fmtBRL(baseExame)}.`,
+        `Ticket médio acima do valor base por pequenos pagamentos acima de ${fmtBRL(baseExame)}.`,
+        `${fmtBRL(Number(summary.receita_parceria_excepcional) || 0)} classificados como parceria/entrada excepcional, fora do preço padrão.`,
         "Consultas em fase estratégica/parceria, sem cobrança no momento."
       ].join("<br>");
       financeNote.removeAttribute("hidden");
@@ -2808,8 +2875,8 @@ function renderFinance() {
             label: "Receita (R$)",
             data: summary.por_servico.map((i) => i.valor),
             backgroundColor: CHART_COLORS.slice(0, summary.por_servico.length),
-            borderRadius: 12,
-            borderWidth: 0
+            borderRadius: 14,
+            borderSkipped: false,
           }]
         },
         options: {
@@ -2822,10 +2889,11 @@ function renderFinance() {
           scales: {
             y: {
               beginAtZero: true,
-              grid: { color: "rgba(109,123,138,.14)" },
-              ticks: { callback: (v) => fmtBRL(v), font: { size: 11 } }
+              grid: { color: "rgba(109,123,138,.07)" },
+              ticks: { callback: (v) => fmtBRL(v), font: { size: 11 } },
+              border: { display: false }
             },
-            x: { grid: { display: false } }
+            x: { grid: { display: false }, border: { display: false } }
           }
         }
       });
@@ -2846,15 +2914,17 @@ function renderFinance() {
           datasets: [{
             data: summary.por_origem.map((i) => i.valor),
             backgroundColor: CHART_COLORS,
-            borderWidth: 2,
-            borderColor: "#fff"
+            borderWidth: 3,
+            borderColor: "#f3f7fb",
+            hoverOffset: 8,
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          cutout: "68%",
           plugins: {
-            legend: { position: "bottom" },
+            legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, padding: 12 } },
             tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${fmtBRL(ctx.raw)}` } }
           }
         }
@@ -2876,8 +2946,8 @@ function renderFinance() {
             label: "Valor (R$)",
             data: summary.lancamentos_agregados.map((i) => i.valor),
             backgroundColor: CHART_COLORS.slice(0, summary.lancamentos_agregados.length),
-            borderRadius: 10,
-            borderWidth: 0
+            borderRadius: 12,
+            borderSkipped: false,
           }]
         },
         options: {
@@ -2890,10 +2960,11 @@ function renderFinance() {
           scales: {
             y: {
               beginAtZero: true,
-              grid: { color: "rgba(109,123,138,.14)" },
-              ticks: { callback: (v) => fmtBRL(v), font: { size: 11 } }
+              grid: { color: "rgba(109,123,138,.07)" },
+              ticks: { callback: (v) => fmtBRL(v), font: { size: 11 } },
+              border: { display: false }
             },
-            x: { grid: { display: false }, ticks: { font: { size: 11 } } }
+            x: { grid: { display: false }, ticks: { font: { size: 11 } }, border: { display: false } }
           }
         }
       });
