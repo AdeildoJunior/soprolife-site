@@ -123,8 +123,7 @@ echo "3. Python venv para Google Sheets..."
 
 if [ -f "$_VENV_PYTHON" ]; then
   _PY_VER=$("$_VENV_PYTHON" --version 2>&1 || echo "versão desconhecida")
-  _pass "venv encontrado: $_VENV_PYTHON ($PY_VER)"
-  _pass "$_PY_VER"
+  _pass "venv encontrado: $_VENV_PYTHON ($_PY_VER)"
 else
   _fail "venv não encontrado: $_VENV_PYTHON"
   _info "Crie com:"
