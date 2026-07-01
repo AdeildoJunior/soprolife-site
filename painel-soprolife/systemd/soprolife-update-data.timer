@@ -1,0 +1,14 @@
+[Unit]
+Description=SoproLife — Timer de atualização automática do painel
+Requires=soprolife-update-data.service
+
+[Timer]
+# Executa 2 minutos após o boot (aguarda rede e credenciais)
+OnBootSec=2min
+# Re-executa a cada 10 minutos após a última ativação
+OnUnitActiveSec=10min
+# Persiste disparo pendente entre reboots (útil se VPS estiver offline)
+Persistent=true
+
+[Install]
+WantedBy=timers.target

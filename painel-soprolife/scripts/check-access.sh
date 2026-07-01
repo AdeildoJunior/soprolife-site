@@ -1133,6 +1133,130 @@ else:
 PY
 }
 
+validate_custos_investimentos() {
+  echo
+  echo "Verificando Custos & Investimentos..."
+
+  local private_file="painel-soprolife/data-private/custos-investimentos.local.json"
+  local summary_file="painel-soprolife/data/custos-investimentos-summary.local.json"
+
+  if [ -f "$private_file" ]; then
+    if git check-ignore -q "$private_file" 2>/dev/null; then
+      echo "  OK (gitignored): $private_file"
+    else
+      echo "  ERRO CRÍTICO: $private_file NÃO está gitignored!"
+      echo "  Execute: git rm --cached \"$private_file\" antes de qualquer commit."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data-private/custos-investimentos.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler JSON privado: {exc}")
+    sys.exit(1)
+
+BLOCKED = {
+    "cpf", "rg", "senha", "token", "access_token", "refresh_token",
+    "private_key", "client_secret", "numero_conta", "agencia", "banco",
+    "chave_pix", "numero_cartao", "cvv", "login",
+}
+_CPF_RE  = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+_FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
+
+text = json.dumps(data, ensure_ascii=False).lower()
+errors = 0
+
+for blocked in BLOCKED:
+    if f'"{blocked}"' in text or f': "{blocked}"' in text:
+        print(f"  ERRO: chave proibida '{blocked}' detectada.")
+        errors += 1
+
+if _CPF_RE.search(text):
+    print("  ERRO: padrão de CPF detectado.")
+    errors += 1
+if _FONE_RE.search(text):
+    print("  ERRO: padrão de telefone detectado.")
+    errors += 1
+
+itens = data.get("itens", [])
+pendencias = data.get("pendencias", [])
+if errors == 0:
+    print(f"  OK: {len(itens)} itens, {len(pendencias)} pendências. Nenhum dado sensível.")
+else:
+    print(f"  {errors} erro(s) encontrado(s).")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $private_file não existe ainda."
+    echo "        Crie com os itens de custo (sem CPF, token, dados bancários)."
+  fi
+
+  if [ -f "$summary_file" ]; then
+    if git check-ignore -q "$summary_file" 2>/dev/null; then
+      echo "  OK (gitignored): $summary_file"
+    else
+      echo "  ATENÇÃO: $summary_file não está gitignored — verifique se não contém dados sensíveis."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data/custos-investimentos-summary.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler summary de custos: {exc}")
+    sys.exit(1)
+
+source = data.get("source", {})
+if source.get("safeToDisplay") is not True:
+    print("  ERRO: custos-summary não marcado como safeToDisplay=true.")
+    sys.exit(1)
+if source.get("containsPersonalData") is not False:
+    print("  ERRO: custos-summary pode conter dado pessoal.")
+    sys.exit(1)
+
+FORBIDDEN = [
+    "cpf", "telefone", "celular", "nome_pagador", "nome_completo",
+    "numero_conta", "agencia", "banco", "chave_pix", "numero_cartao",
+    "access_token", "refresh_token", "private_key", "client_secret", "senha",
+]
+_CPF_RE  = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+_FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
+
+text = json.dumps(data, ensure_ascii=False).lower()
+errors = 0
+for f in FORBIDDEN:
+    if f in text:
+        print(f"  ERRO: termo proibido '{f}' em custos-summary.")
+        errors += 1
+if _CPF_RE.search(text):
+    print("  ERRO: padrão CPF em custos-summary.")
+    errors += 1
+if _FONE_RE.search(text):
+    print("  ERRO: padrão telefone em custos-summary.")
+    errors += 1
+
+if errors == 0:
+    total = data.get("total_mensal_atual", 0)
+    itens = len(data.get("itens", []))
+    pend  = data.get("pendencias_cadastro", 0)
+    print(f"  OK: custos-summary seguro — {itens} itens, total_mensal=R${total:.2f}, pendências={pend}.")
+else:
+    print(f"  {errors} erro(s) encontrado(s).")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $summary_file não existe ainda."
+    echo "        Crie com valores agregados de custos e investimentos."
+  fi
+}
+
 main() {
   check_ports
   check_extra_network_services
@@ -1144,6 +1268,7 @@ main() {
   validate_followup_pacientes
   validate_followup_clinicas
   validate_financeiro
+  validate_custos_investimentos
   validate_command_center_config
   validate_command_center_proxy
   validate_marketing_seo

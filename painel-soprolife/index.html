@@ -72,6 +72,11 @@
           Financeiro
         </button>
 
+        <button class="nav-item" data-section="custos-investimentos">
+          <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="7"/><line x1="9" y1="6" x2="9" y2="9"/><polyline points="9,9 11.5,11.5"/><path d="M6 3.5C7 3 8 2.5 9 2.5s3 .7 3.5 1M14.5 6a7 7 0 0 1 .5 3"/></svg>
+          Custos & Investimentos
+        </button>
+
         <button class="nav-item" data-section="documentos">
           <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><polyline points="11,2 11,7 16,7"/><line x1="5" y1="10" x2="13" y2="10"/><line x1="5" y1="13" x2="9" y2="13"/></svg>
           Documentos
@@ -456,6 +461,33 @@
             </table>
           </div>
         </article>
+      </section>
+
+
+      <section id="custos-investimentos" class="section">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Controle financeiro interno</p>
+            <h2>Custos &amp; Investimentos</h2>
+          </div>
+          <span class="safe-label" id="ciSafeLabel">Dados locais</span>
+        </div>
+
+        <div id="ciStats" class="ci-stats"></div>
+
+        <div class="ci-tabs" role="tablist">
+          <button class="ci-tab active" data-ci-tab="resumo"       role="tab">Resumo</button>
+          <button class="ci-tab"        data-ci-tab="recorrentes"  role="tab">Recorrentes</button>
+          <button class="ci-tab"        data-ci-tab="equipamentos" role="tab">Equipamentos</button>
+          <button class="ci-tab"        data-ci-tab="socios"       role="tab">Sócios / Rateio</button>
+          <button class="ci-tab"        data-ci-tab="pendencias"   role="tab">Pendências</button>
+        </div>
+
+        <div id="ci-resumo"       class="ci-pane"></div>
+        <div id="ci-recorrentes"  class="ci-pane" hidden></div>
+        <div id="ci-equipamentos" class="ci-pane" hidden></div>
+        <div id="ci-socios"       class="ci-pane" hidden></div>
+        <div id="ci-pendencias"   class="ci-pane" hidden></div>
       </section>
 
 

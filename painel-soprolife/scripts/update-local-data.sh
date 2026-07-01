@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# update-local-data.sh — Atualização segura dos dados do Painel SoproLife.
+#
+# Garante que falhas em qualquer módulo isolado (Sheets, CSV, resumo, leads,
+# marketing, follow-up, custos) não interrompam os demais.
+# Retorna 0 se todas as falhas forem de aviso controlado.
+# Retorna 1 somente se check-access.sh detectar problema de segurança crítico.
+
+set -uo pipefail
+# Nota: set -e REMOVIDO intencionalmente — cada etapa usa if/|| para controle
+# granular de erros, evitando que uma falha isolada interrompa o script inteiro.
 
 cd "$(dirname "$0")/../../" || exit 1
 
@@ -33,13 +42,18 @@ if [ -f "$_SHEETS_CONFIG" ] && \
   _sheets_available=true
 fi
 
+_security_fail=false
+
 # ---------------------------------------------------------------------------
 
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
 echo "1/10 - Atualizando status seguro da fonte Google Sheets..."
-painel-soprolife/scripts/generate-runtime-status.sh
+if ! painel-soprolife/scripts/generate-runtime-status.sh; then
+  echo "AVISO: generate-runtime-status.sh falhou — painel usará status anterior."
+  echo "  (os demais passos continuarão normalmente)"
+fi
 
 echo
 echo "2/10 - Atualizando resumo seguro..."
@@ -57,19 +71,32 @@ if [ "$_sheets_available" = true ]; then
   fi
 
   echo
-  painel-soprolife/scripts/sync-dashboard-summary.sh
+  if ! painel-soprolife/scripts/sync-dashboard-summary.sh; then
+    echo
+    echo "AVISO: sync-dashboard-summary.sh falhou — painel usará dados anteriores do resumo."
+    echo "  (os demais passos continuarão normalmente)"
+  fi
 
 else
-  echo "Google Sheets ADC não disponível. Usando fluxo CSV."
+  echo "AVISO: Google Sheets ADC não disponível neste ambiente."
+  echo "  Motivos possíveis:"
+  [ ! -f "$_ADC_CONFIG" ]    && echo "    - ADC não configurado: $_ADC_CONFIG"
+  [ ! -f "$_SHEETS_CONFIG" ] && echo "    - Config de planilha ausente: $_SHEETS_CONFIG"
+  [ ! -f "$_VENV_PYTHON" ]   && echo "    - Python venv ausente: $_VENV_PYTHON"
+  echo "  Execute painel-soprolife/scripts/check-vps-google-adc.sh para diagnóstico."
   echo
 
   if [ -f "$_CSV_PATH" ]; then
-    echo "CSV encontrado."
-    painel-soprolife/scripts/import-summary-csv.sh "$_CSV_PATH"
+    echo "CSV encontrado — importando..."
+    if ! painel-soprolife/scripts/import-summary-csv.sh "$_CSV_PATH"; then
+      echo "AVISO: import CSV falhou — continuando com dados anteriores."
+    fi
   else
-    echo "CSV não encontrado."
-    echo "Usando resumo-dashboard.json privado já existente, se disponível."
-    painel-soprolife/scripts/sync-dashboard-summary.sh
+    echo "CSV não encontrado. Tentando usar resumo privado já existente..."
+    if ! painel-soprolife/scripts/sync-dashboard-summary.sh; then
+      echo "AVISO: resumo privado não disponível — painel usará dados demonstrativos."
+      echo "  (os demais passos continuarão normalmente)"
+    fi
   fi
 fi
 
@@ -86,7 +113,9 @@ if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
     echo "  Diagnóstico: $_VENV_PYTHON $_CRM_SCRIPT --show-structure"
   else
     echo
-    painel-soprolife/scripts/sync-crm-clinicas.sh
+    if ! painel-soprolife/scripts/sync-crm-clinicas.sh; then
+      echo "AVISO: sync-crm-clinicas.sh falhou."
+    fi
   fi
 else
   echo "Google Sheets ADC não disponível ou script ausente."
@@ -113,7 +142,7 @@ if [ -f "$_FOLLOWUP_CLINICAS_SCRIPT" ] && [ "$_sheets_available" = true ]; then
   fi
 else
   if [ ! -f "$_FOLLOWUP_CLINICAS_SCRIPT" ]; then
-    echo "Script de follow-up B2B não encontrado ($FOLLOWUP_CLINICAS_SCRIPT)."
+    echo "Script de follow-up B2B não encontrado."
   else
     echo "Google Sheets ADC não disponível — follow-up B2B de clínicas pulado."
     echo "  Execute manualmente se precisar atualizar:"
@@ -129,7 +158,7 @@ if [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "(Crie $_MARKETING_CONFIG a partir de"
   echo " painel-soprolife/config-examples/marketing-seo.local.example.json)"
 elif [ ! -f "$_MARKETING_SCRIPT" ]; then
-  echo "AVISO: script de Marketing & SEO não encontrado ($MARKETING_SCRIPT)."
+  echo "AVISO: script de Marketing & SEO não encontrado ($_MARKETING_SCRIPT)."
 elif [ ! -f "$_ADC_CONFIG" ]; then
   echo "AVISO: ADC não configurado (gcloud). Marketing & SEO pulado."
   echo "  Execute: gcloud auth application-default login"
@@ -217,13 +246,29 @@ fi
 
 echo
 echo "9/10 - Verificando segurança..."
-painel-soprolife/scripts/check-access.sh
+if ! painel-soprolife/scripts/check-access.sh; then
+  echo
+  echo "AVISO: check-access.sh reportou problema(s) de segurança."
+  echo "  Verifique os ERROs acima antes de compartilhar o painel."
+  _security_fail=true
+fi
 
 echo
 echo "10/10 - Concluído."
 echo
+
+if [ "$_security_fail" = true ]; then
+  echo "ATENÇÃO: problemas de segurança detectados — veja saída do passo 9."
+fi
+
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"
 echo
 echo "Para abrir via Tailscale:"
 echo "painel-soprolife/scripts/start-tailscale.sh"
+
+# Retorna 1 somente se check-access detectou problema crítico de segurança
+if [ "$_security_fail" = true ]; then
+  exit 1
+fi
+exit 0

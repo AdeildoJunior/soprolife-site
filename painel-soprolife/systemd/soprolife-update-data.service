@@ -1,0 +1,17 @@
+[Unit]
+Description=SoproLife — Atualização automática dos dados do painel
+Documentation=https://github.com/soprolife/soprolife-site
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=HOME=/root
+WorkingDirectory=/opt/soprolife/soprolife-site
+ExecStart=/opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

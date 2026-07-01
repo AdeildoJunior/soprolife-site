@@ -154,7 +154,20 @@ def collect_eventos():
                             resumo=f"Marketing & SEO atualizado com {fontes}",
                             status="ok"))
 
-    # 8. Runtime Status (Google Sheets)
+    # 8. Custos & Investimentos
+    d = safe_read(DATA / "custos-investimentos-summary.local.json")
+    if d and d.get("source", {}).get("safeToDisplay"):
+        ts = d.get("source", {}).get("generatedAt") or iso_now()
+        total_mensal = d.get("total_mensal_atual", 0)
+        itens = d.get("itens_ativos", 0)
+        pend  = d.get("pendencias_cadastro", 0)
+        eventos.append(dict(id=new_id(), timestamp=ts, data_br=fmt_ts(ts),
+                            origem="Painel", tipo="Custos & Investimentos",
+                            resumo=f"Custos cadastrados: {itens} itens, R${total_mensal:,.2f}/mês"
+                                   + (f", {pend} pendência(s)" if pend else ""),
+                            status="ok"))
+
+    # 9. Runtime Status (Google Sheets)
     d = safe_read(DATA / "runtime-status.local.json")
     if d:
         gs = d.get("googleSheets", {})

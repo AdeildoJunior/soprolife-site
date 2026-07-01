@@ -19,6 +19,7 @@ const state = {
   followupClinicas: null,
   ultimosLancamentos: null,
   ccConfigured: false,
+  custosInvestimentos: null,
 };
 
 const slug = (text) =>
@@ -280,6 +281,11 @@ async function init() {
       state.ultimosLancamentos = lancamentosData;
     }
 
+    const custosData = await loadOptionalJson("./data/custos-investimentos-summary.local.json");
+    if (custosData?.source?.safeToDisplay === true && custosData?.source?.containsPersonalData === false) {
+      state.custosInvestimentos = custosData;
+    }
+
     setPremiumChartDefaults();
     renderCards();
     renderDataFreshness();
@@ -294,6 +300,7 @@ async function init() {
     renderTaskBoard();
     renderDocuments();
     renderFinance();
+    renderCustosInvestimentos();
     renderAutomations();
     renderLancamentos();
     bindEvents();
@@ -1610,6 +1617,7 @@ function renderEntradaDados(container) {
       "WhatsApp",
       "Instagram",
       "Site",
+      "Painel VPS",
       "Indicação",
       "Clínica parceira",
       "Tráfego pago",
@@ -3040,6 +3048,349 @@ function renderFinance() {
       </tr>
     `;
   }
+}
+
+
+function renderCustosInvestimentos() {
+  const statsContainer = document.querySelector("#ciStats");
+  if (!statsContainer) return;
+
+  const ci = state.custosInvestimentos;
+
+  if (!ci?.source?.safeToDisplay) {
+    statsContainer.innerHTML = `
+      <article class="ci-stat-card accent-warn">
+        <span>Custos &amp; Investimentos</span>
+        <strong>—</strong>
+        <small>Resumo local não encontrado</small>
+      </article>
+    `;
+    const pane = document.querySelector("#ci-resumo");
+    if (pane) pane.innerHTML = `
+      <article class="panel">
+        <div class="panel-header"><h3>Dados não disponíveis</h3></div>
+        <p style="padding:1rem 1.25rem;color:var(--muted);font-size:.88rem">
+          Arquivo <code>data/custos-investimentos-summary.local.json</code> não encontrado ou não seguro.
+        </p>
+      </article>
+    `;
+    return;
+  }
+
+  const safeLabel = document.querySelector("#ciSafeLabel");
+  if (safeLabel) safeLabel.textContent = "Dados locais — jun/2026";
+
+  statsContainer.innerHTML = [
+    { label: "Custo mensal atual",        value: fmtBRL(ci.total_mensal_atual),              hint: "recorrentes + infraestrutura + parcelas",     accent: "accent-teal"   },
+    { label: "Investido em equipamentos", value: fmtBRL(ci.total_investido_equipamentos),     hint: "Spirobank + Seringa Calibração",               accent: "accent-navy"   },
+    { label: "Parcelas mensais",          value: fmtBRL(ci.parcelas_mensais_equipamentos),    hint: `10× de ${fmtBRL(ci.parcelas_mensais_equipamentos)}`,  accent: "accent-navy"   },
+    { label: "Recorrentes + infra/mês",   value: fmtBRL(ci.total_mensal_recorrente),          hint: "Workspace · Tailscale · Hostinger",           accent: "accent-teal"   },
+    { label: "Itens cadastrados",         value: String(ci.itens_ativos),                    hint: "todos — responsabilidade Adeildo",             accent: "accent-teal"   },
+    { label: "Pendências de cadastro",    value: String(ci.pendencias_cadastro),             hint: "Koko + regularização",                        accent: "accent-warn"   },
+  ].map((c) => `
+    <article class="ci-stat-card ${c.accent}">
+      <span>${c.label}</span>
+      <strong>${c.value}</strong>
+      <small>${c.hint}</small>
+    </article>
+  `).join("");
+
+  function statusBadge(status) {
+    const cls = status === "ativo" ? "ci-badge-ativo"
+              : status === "parcelado" ? "ci-badge-parcelado"
+              : "ci-badge-pendente";
+    return `<span class="ci-badge ${cls}">${escapeHtml(status)}</span>`;
+  }
+
+  function catBadge(cat) {
+    const cls = cat === "Equipamento" ? "ci-badge-equipamento" : "ci-badge-recorrente";
+    return `<span class="ci-badge ${cls}">${escapeHtml(cat)}</span>`;
+  }
+
+  function buildResumoPane() {
+    const rows = ci.itens.map((it) => {
+      const parcProgress = it.parcelas_total != null ? `${it.parcelas_pagas}/${it.parcelas_total}` : "—";
+      const saldo = it.parcelas_total != null
+        ? fmtBRL((it.parcelas_total - it.parcelas_pagas) * it.valor_mensal)
+        : "—";
+      const totalFmt = it.valor_total != null ? fmtBRL(it.valor_total) : "—";
+      return `
+        <tr>
+          <td><strong>${escapeHtml(it.nome)}</strong>${it.obs_curta ? `<br><small style="color:var(--muted);font-size:.76rem">${escapeHtml(it.obs_curta)}</small>` : ""}</td>
+          <td>${catBadge(it.categoria)}</td>
+          <td>${escapeHtml(it.responsavel)}</td>
+          <td>${totalFmt}</td>
+          <td><strong>${fmtBRL(it.valor_mensal)}</strong></td>
+          <td style="font-variant-numeric:tabular-nums">${parcProgress}</td>
+          <td>${saldo}</td>
+          <td>${escapeHtml(it.inicio)}</td>
+          <td>${statusBadge(it.status)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    const porRespHtml = ci.por_responsavel.map((r) => `
+      <div class="ci-socio-stat">
+        <span>${escapeHtml(r.responsavel)}</span>
+        <strong>${fmtBRL(r.total_mensal)}/mês · ${r.itens} item(ns)${r.nota ? ` <em style="font-weight:400;color:var(--muted);font-style:normal">· ${escapeHtml(r.nota)}</em>` : ""}</strong>
+      </div>
+    `).join("");
+
+    const porCatHtml = ci.por_categoria.map((c) => `
+      <div class="ci-socio-stat">
+        <span>${escapeHtml(c.categoria)}</span>
+        <strong>${fmtBRL(c.total_mensal)}/mês</strong>
+      </div>
+    `).join("");
+
+    return `
+      <article class="panel">
+        <div class="panel-header">
+          <h3>Todos os itens cadastrados</h3>
+          <span>${ci.itens_ativos} ativo(s) · total ${fmtBRL(ci.total_mensal_atual)}/mês</span>
+        </div>
+        <div class="table-wrap">
+          <table class="ci-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Categoria</th>
+                <th>Responsável</th>
+                <th>Total</th>
+                <th>Mensal / Parcela</th>
+                <th>Parcelas</th>
+                <th>Saldo</th>
+                <th>Início</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </article>
+      <div class="grid-two" style="margin-top:1rem">
+        <article class="panel">
+          <div class="panel-header"><h3>Por responsável</h3></div>
+          <div class="ci-table-inner">${porRespHtml}</div>
+        </article>
+        <article class="panel">
+          <div class="panel-header"><h3>Por categoria</h3></div>
+          <div class="ci-table-inner">${porCatHtml}</div>
+        </article>
+      </div>
+    `;
+  }
+
+  function buildRecorrentesPane() {
+    const itens = ci.itens.filter((it) => it.categoria === "Recorrente" || it.categoria === "Infraestrutura");
+    const total = itens.reduce((s, it) => s + it.valor_mensal, 0);
+
+    const rows = itens.map((it) => {
+      const isHist = it.id === "ws-001";
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(it.nome)}</strong>
+            ${isHist ? `<div class="ci-hist-note">Pagamentos históricos desde dez/2025 — número de parcelas a revisar</div>` : ""}
+          </td>
+          <td>${catBadge(it.categoria)}</td>
+          <td>${escapeHtml(it.responsavel)}</td>
+          <td><strong>${fmtBRL(it.valor_mensal)}/mês</strong></td>
+          <td>${escapeHtml(it.inicio)}</td>
+          <td>${statusBadge(it.status)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    return `
+      <article class="panel">
+        <div class="panel-header">
+          <h3>Custos recorrentes e infraestrutura</h3>
+          <span>Total mensal: ${fmtBRL(total)}</span>
+        </div>
+        <div class="table-wrap">
+          <table class="ci-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Categoria</th>
+                <th>Responsável</th>
+                <th>Valor mensal</th>
+                <th>Início</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </article>
+      <div class="finance-real-note" style="margin-top:.75rem">
+        Google Workspace: ativo desde dez/2025. O número exato de meses históricos pode ser ajustado a qualquer momento sem travar o sistema.
+        Tailscale: US$ 8/mês convertido e arredondado para R$ 42,00 para controle interno.
+        Hostinger VPS: plano anual de 12 meses — vencimento em jun/2027.
+      </div>
+    `;
+  }
+
+  function buildEquipamentosPane() {
+    const equips = ci.itens.filter((it) => it.categoria === "Equipamento");
+    const totalInv = equips.reduce((s, it) => s + (it.valor_total || 0), 0);
+    const totalParc = equips.reduce((s, it) => s + it.valor_mensal, 0);
+
+    const rows = equips.map((it) => {
+      const parcPagas = it.parcelas_pagas || 0;
+      const parcTotal = it.parcelas_total || 10;
+      const pct = parcTotal > 0 ? Math.round((parcPagas / parcTotal) * 100) : 0;
+      const saldo = fmtBRL((parcTotal - parcPagas) * it.valor_mensal);
+      return `
+        <tr>
+          <td><strong>${escapeHtml(it.nome)}</strong><br><small style="color:var(--muted);font-size:.76rem">${escapeHtml(it.obs_curta || "")}</small></td>
+          <td>${escapeHtml(it.responsavel)}</td>
+          <td>${fmtBRL(it.valor_total)}</td>
+          <td><strong>${fmtBRL(it.valor_mensal)}</strong></td>
+          <td>
+            <div class="ci-progress-wrap">
+              <div class="ci-progress-bar"><div class="ci-progress-fill" style="width:${pct}%"></div></div>
+              <span class="ci-progress-label">${parcPagas}/${parcTotal}×</span>
+            </div>
+          </td>
+          <td>${saldo}</td>
+          <td>${escapeHtml(it.inicio)}</td>
+          <td>${statusBadge(it.status)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    return `
+      <div class="ci-stats" style="margin-bottom:1rem">
+        <article class="ci-stat-card accent-navy">
+          <span>Total investido (equipamentos)</span>
+          <strong>${fmtBRL(totalInv)}</strong>
+          <small>Spirobank + Seringa Calibração</small>
+        </article>
+        <article class="ci-stat-card accent-teal">
+          <span>Parcela mensal total</span>
+          <strong>${fmtBRL(totalParc)}</strong>
+          <small>10× de ${fmtBRL(totalParc)}</small>
+        </article>
+        <article class="ci-stat-card accent-warn">
+          <span>Espirômetro Koko</span>
+          <strong>Pendente</strong>
+          <small>Parcelas a cadastrar — Faustino</small>
+        </article>
+      </div>
+      <article class="panel">
+        <div class="panel-header">
+          <h3>Equipamentos &amp; Parcelamentos</h3>
+          <span>Total investido: ${fmtBRL(totalInv)}</span>
+        </div>
+        <div class="table-wrap">
+          <table class="ci-table">
+            <thead>
+              <tr>
+                <th>Equipamento</th>
+                <th>Responsável</th>
+                <th>Valor total</th>
+                <th>Valor parcela</th>
+                <th>Progresso</th>
+                <th>Saldo restante</th>
+                <th>Início</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </article>
+    `;
+  }
+
+  function buildSociosPane() {
+    const cards = ci.por_responsavel.map((s) => {
+      const initials = s.responsavel.slice(0, 2).toUpperCase();
+      const statusTxt = s.itens > 0 ? "Ativo" : "Aguardando dados";
+      const statusCls = s.itens > 0 ? "ci-badge-ativo" : "ci-badge-pendente";
+      return `
+        <article class="ci-socio-card">
+          <div class="socio-name">
+            <div class="socio-avatar">${escapeHtml(initials)}</div>
+            ${escapeHtml(s.responsavel)}
+          </div>
+          <div class="ci-socio-stat">
+            <span>Itens cadastrados</span>
+            <strong>${s.itens}</strong>
+          </div>
+          <div class="ci-socio-stat">
+            <span>Custo mensal total</span>
+            <strong>${fmtBRL(s.total_mensal)}</strong>
+          </div>
+          <div class="ci-socio-stat">
+            <span>Status</span>
+            <strong><span class="ci-badge ${statusCls}">${escapeHtml(statusTxt)}</span></strong>
+          </div>
+          ${s.nota ? `<div class="ci-socio-nota">${escapeHtml(s.nota)}</div>` : ""}
+        </article>
+      `;
+    }).join("");
+
+    return `<div class="ci-socios-grid">${cards}</div>`;
+  }
+
+  function buildPendenciasPane() {
+    const alertCards = ci.alertas.map((alerta, i) => `
+      <div class="ci-pending-card">
+        <div class="ci-pending-icon">⚠️</div>
+        <div class="ci-pending-body">
+          <strong>Pendência ${i + 1} de ${ci.pendencias_cadastro}</strong>
+          <p>${escapeHtml(alerta)}</p>
+        </div>
+      </div>
+    `).join("");
+
+    return `
+      <div class="ci-pending-list">
+        ${alertCards}
+        <div class="ci-pending-card" style="border-left-color:var(--muted)">
+          <div class="ci-pending-icon">📋</div>
+          <div class="ci-pending-body">
+            <strong>Regularização / Documentos da empresa</strong>
+            <p>Pendente cadastrar: alvará, CREMERJ PJ, CNES, licenciamento sanitário, contador, custos de abertura e outros documentos.</p>
+            <div class="ci-pending-meta">Responsável: Adeildo · Status: aguardando levantamento completo dos custos</div>
+          </div>
+        </div>
+        <div class="ci-pending-card" style="border-left-color:var(--navy)">
+          <div class="ci-pending-icon">ℹ️</div>
+          <div class="ci-pending-body">
+            <strong>Como cadastrar novos itens</strong>
+            <p>Adicione ao arquivo <code>data-private/custos-investimentos.local.json</code> e atualize o summary em <code>data/custos-investimentos-summary.local.json</code>. Os dados são carregados automaticamente ao recarregar o painel.</p>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const panes = {
+    resumo:       buildResumoPane(),
+    recorrentes:  buildRecorrentesPane(),
+    equipamentos: buildEquipamentosPane(),
+    socios:       buildSociosPane(),
+    pendencias:   buildPendenciasPane(),
+  };
+
+  Object.entries(panes).forEach(([key, html]) => {
+    const el = document.querySelector(`#ci-${key}`);
+    if (el) el.innerHTML = html;
+  });
+
+  document.querySelectorAll(".ci-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".ci-tab").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".ci-pane").forEach((p) => p.setAttribute("hidden", ""));
+      btn.classList.add("active");
+      const pane = document.querySelector(`#ci-${btn.dataset.ciTab}`);
+      if (pane) pane.removeAttribute("hidden");
+    });
+  });
 }
 
 
