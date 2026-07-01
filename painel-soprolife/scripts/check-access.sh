@@ -1098,7 +1098,9 @@ if source.get("containsHealthData") is not False:
     sys.exit(1)
 
 FORBIDDEN = [
-    "cpf", "telefone", "celular", "whatsapp",
+    "cpf", "telefone", "celular",
+    # "whatsapp" permitido como nome de canal agregado ("Com WhatsApp: 4 clínicas")
+    # — a regex _FONE_RE abaixo já bloqueia números de telefone/WhatsApp.
     "pedido médico", "pedido medico", "laudo",
     "diagnóstico", "diagnostico", "endereço", "endereco",
     "data de nascimento", "nome completo",
@@ -1106,12 +1108,18 @@ FORBIDDEN = [
     "client_secret", "client_email",
     "https://docs.google.com", "/spreadsheets/d/", "spreadsheet_id",
 ]
+# Campos que nunca devem aparecer como chave em eventos individuais.
+# proxima_acao é excluído porque é texto livre e pode conter dados sensíveis.
+BLOCKED_EVENT_KEYS = {"nome", "telefone", "telefone_whatsapp", "celular",
+                       "cpf", "observacao", "observação", "laudo", "diagnostico",
+                       "proxima_acao", "data_proxima_acao"}
 _CPF_RE  = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
 _FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
 
-text = json.dumps(data, ensure_ascii=False).lower()
-
 errors = 0
+
+# Verifica termos proibidos no payload completo
+text = json.dumps(data, ensure_ascii=False).lower()
 for f in FORBIDDEN:
     if f in text:
         print(f"  ERRO: termo proibido '{f}' detectado em ultimos-lancamentos-summary.")
@@ -1123,10 +1131,30 @@ if _FONE_RE.search(text):
     print("  ERRO: padrão de telefone detectado em ultimos-lancamentos-summary.")
     errors += 1
 
+# Verifica campos proibidos em cada evento individualmente
+for i, evt in enumerate(eventos):
+    for key in evt.keys():
+        if key.lower() in BLOCKED_EVENT_KEYS:
+            print(f"  ERRO: campo proibido '{key}' em evento [{i}] id={evt.get('id','?')}.")
+            errors += 1
+    if evt.get("safeToDisplay") is not True:
+        print(f"  ERRO: evento [{i}] id={evt.get('id','?')} não marcado como safeToDisplay=true.")
+        errors += 1
+
+# Verifica estrutura mínima dos eventos
+campos_obrigatorios = {"id", "titulo", "descricao", "categoria", "timestamp"}
+for i, evt in enumerate(eventos):
+    ausentes = campos_obrigatorios - set(evt.keys())
+    if ausentes:
+        print(f"  AVISO: evento [{i}] faltando campos: {ausentes}.")
+
 if errors == 0:
     stats = data.get("stats", {})
-    print(f"  OK: ultimos-lancamentos-summary seguro — {len(eventos)} eventos, "
-          f"total={stats.get('total',0)}, pendencias={stats.get('pendencias',0)}.")
+    cats = stats.get("por_categoria", {})
+    cats_txt = ", ".join(f"{k}:{v}" for k, v in cats.items()) if cats else "—"
+    print(f"  OK: ultimos-lancamentos-summary seguro — {len(eventos)} eventos "
+          f"(hoje={stats.get('hoje',0)}, alta={stats.get('prioridade_alta',0)}, "
+          f"pendencias={stats.get('pendencias',0)}) · categorias: {cats_txt}.")
 else:
     print(f"  {errors} erro(s) encontrado(s).")
     sys.exit(1)

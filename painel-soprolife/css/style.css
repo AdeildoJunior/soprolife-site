@@ -3655,9 +3655,11 @@ td { font-size: .94rem; }
    ÚLTIMOS LANÇAMENTOS — timeline de atualizações do painel
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ── Últimos lançamentos — stat cards ────────────────────────────────────── */
+
 .lancamentos-stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -3670,6 +3672,10 @@ td { font-size: .94rem; }
   padding: 16px;
   box-shadow: var(--shadow);
 }
+.lancamentos-stat-card.accent-teal   { border-top-color: var(--teal);    }
+.lancamentos-stat-card.accent-navy   { border-top-color: var(--navy);    }
+.lancamentos-stat-card.accent-warn   { border-top-color: var(--warning); }
+.lancamentos-stat-card.accent-danger { border-top-color: var(--danger);  }
 
 .lancamentos-stat-card span {
   display: block;
@@ -3677,14 +3683,12 @@ td { font-size: .94rem; }
   font-size: .82rem;
   margin-bottom: 8px;
 }
-
 .lancamentos-stat-card strong {
   display: block;
   font-size: 1.65rem;
   letter-spacing: -.04em;
   color: var(--navy);
 }
-
 .lancamentos-stat-card small {
   display: block;
   color: var(--teal-dark);
@@ -3708,7 +3712,6 @@ td { font-size: .94rem; }
   position: relative;
   padding-bottom: 22px;
 }
-
 .lancamento-item::before {
   content: "";
   position: absolute;
@@ -3718,8 +3721,17 @@ td { font-size: .94rem; }
   width: 2px;
   background: var(--line);
 }
-
 .lancamento-item.last::before { display: none; }
+
+/* destaque sutil para eventos de hoje */
+.lancamento-item.lancamento-hoje > .lancamento-body {
+  background: rgba(29, 183, 166, .05);
+  border-radius: 10px;
+  padding: 6px 10px 4px;
+  margin-left: -4px;
+}
+
+/* ── Dot ─────────────────────────────────────────────────────────────────── */
 
 .lancamento-dot {
   width: 18px;
@@ -3731,68 +3743,84 @@ td { font-size: .94rem; }
   margin-top: 2px;
   flex-shrink: 0;
 }
-
-.dot-ok      { border-color: var(--teal);   background: rgba(29,183,166,.12); }
+.dot-ok      { border-color: var(--teal);    background: rgba(29,183,166,.12); }
 .dot-pendente{ border-color: var(--warning); background: rgba(245,158,11,.12); }
 .dot-erro    { border-color: var(--danger);  background: rgba(239,68,68,.12);  }
 .dot-info    { border-color: #6366f1;        background: rgba(99,102,241,.12); }
+.dot-alta    { border-color: var(--warning); background: rgba(245,158,11,.18); box-shadow: 0 0 0 3px rgba(245,158,11,.12); }
+.dot-lead    { border-color: #10b981;        background: rgba(16,185,129,.15); }
+
+/* ── Corpo do evento ─────────────────────────────────────────────────────── */
 
 .lancamento-body { padding-top: 1px; }
 
 .lancamento-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex-wrap: wrap;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
-.lancamento-tipo {
+.lancamento-titulo {
   font-weight: 700;
   font-size: .9rem;
   color: var(--navy);
 }
 
-.lancamento-origem {
-  font-size: .72rem;
+.lancamento-descricao {
+  margin: 0 0 5px;
+  font-size: .85rem;
+  color: var(--text);
+  line-height: 1.5;
+  opacity: .9;
+}
+
+.lancamento-time {
+  font-size: .75rem;
+  color: var(--muted);
+}
+
+/* ── Badges de categoria ─────────────────────────────────────────────────── */
+
+.lancamento-cat {
+  font-size: .7rem;
   font-weight: 700;
   border-radius: 999px;
   padding: 2px 8px;
   white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: .04em;
 }
+.cat-leads      { background: rgba(16,185,129,.12);  color: #059669; }
+.cat-crm        { background: rgba(14,165,233,.12);  color: #0284c7; }
+.cat-followup   { background: rgba(99,102,241,.12);  color: #4f46e5; }
+.cat-b2b        { background: rgba(168,85,247,.12);  color: #7c3aed; }
+.cat-marketing  { background: rgba(245,158,11,.12);  color: #b45309; }
+.cat-financeiro { background: rgba(29,183,166,.12);  color: var(--teal-dark); }
+.cat-custos     { background: rgba(239,68,68,.10);   color: #dc2626; }
+.cat-sistema    { background: rgba(148,163,184,.15); color: #475569; }
 
-.lancamento-origem-planilha { background: rgba(29,183,166,.12);  color: var(--teal-dark); }
-.lancamento-origem-painel   { background: rgba(99,102,241,.12);  color: #4f46e5;          }
+/* ── Badges de status/prioridade ─────────────────────────────────────────── */
 
-.lancamento-resumo {
-  margin: 0 0 5px;
-  font-size: .88rem;
-  color: var(--text);
-  line-height: 1.45;
-}
-
-.lancamento-time {
-  font-size: .76rem;
-  color: var(--muted);
-}
-
-/* badges específicos do módulo (evitam conflito com .badge global) */
 .badge.lancamento-badge-ok      { background: #d4f5ec; color: #0d7a5f; }
 .badge.lancamento-badge-pendente{ background: #fef3e0; color: #b5730a; }
 .badge.lancamento-badge-erro    { background: #ffe9eb; color: var(--danger); }
 .badge.lancamento-badge-info    { background: rgba(99,102,241,.12); color: #4f46e5; }
+.badge.lancamento-badge-alta    { background: #fef3e0; color: #b5730a; font-weight: 800; }
+.badge.lancamento-badge-baixa   { background: rgba(148,163,184,.12); color: #64748b; }
+
+/* ── Estado vazio ────────────────────────────────────────────────────────── */
 
 .lancamentos-empty {
   text-align: center;
   padding: 2.5rem 1rem;
   color: var(--muted);
 }
-
 .lancamentos-empty p {
   margin: 0 0 .75rem;
   font-size: .9rem;
 }
-
 .lancamentos-empty code {
   background: #f4f8fb;
   border-radius: 8px;
@@ -3802,10 +3830,9 @@ td { font-size: .94rem; }
   color: var(--navy);
 }
 
+/* ── Responsivo ──────────────────────────────────────────────────────────── */
+
 @media (max-width: 1180px) {
-  .lancamentos-stats { grid-template-columns: repeat(3, 1fr); }
-}
-@media (max-width: 820px) {
   .lancamentos-stats { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 480px) {

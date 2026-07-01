@@ -3546,7 +3546,7 @@ function formatDateTime(value) {
 }
 
 function renderLancamentos() {
-  const statsEl = document.querySelector("#lancamentosStats");
+  const statsEl    = document.querySelector("#lancamentosStats");
   const timelineEl = document.querySelector("#lancamentosTimeline");
   const subtitleEl = document.querySelector("#lancamentosSubtitle");
   if (!statsEl || !timelineEl) return;
@@ -3570,25 +3570,24 @@ function renderLancamentos() {
 
   const st = data.stats || {};
   const cards = [
-    { label: "Eventos recentes", value: st.total ?? 0,     hint: "registrados"    },
-    { label: "Hoje",             value: st.hoje ?? 0,       hint: "nesta sessão"   },
-    { label: "Da planilha",      value: st.planilha ?? 0,   hint: "Google Sheets"  },
-    { label: "Do painel",        value: st.painel ?? 0,     hint: "scripts locais" },
-    { label: "Pendências",       value: st.pendencias ?? 0, hint: "erros ou avisos" },
+    { label: "Eventos",    value: st.totalEventos ?? 0,      hint: "na timeline",       accent: "teal"   },
+    { label: "Hoje",       value: st.hoje ?? 0,               hint: "nesta data",        accent: "navy"   },
+    { label: "Alta prio.", value: st.prioridade_alta ?? 0,    hint: "requer atenção",    accent: "warn"   },
+    { label: "Pendências", value: st.pendencias ?? 0,         hint: "erros ou avisos",   accent: "danger" },
   ];
   statsEl.innerHTML = cards.map((c) => `
-    <article class="lancamentos-stat-card">
+    <article class="lancamentos-stat-card accent-${c.accent}">
       <span>${c.label}</span>
       <strong>${c.value}</strong>
       <small>${c.hint}</small>
     </article>`).join("");
 
   if (subtitleEl) {
-    const gen = data.source?.generatedAt;
+    const gen     = data.source?.generatedAt;
     const eventos = Array.isArray(data.eventos) ? data.eventos : [];
     subtitleEl.textContent = gen
       ? `Gerado em ${formatDateTime(gen)} · ${eventos.length} evento(s)`
-      : `${(data.eventos || []).length} evento(s) recentes`;
+      : `${eventos.length} evento(s) recentes`;
   }
 
   const eventos = Array.isArray(data.eventos) ? data.eventos : [];
@@ -3597,33 +3596,72 @@ function renderLancamentos() {
     return;
   }
 
+  // Categoria → cor/ícone textual
+  const CAT_META = {
+    leads:      { cls: "cat-leads",     label: "Leads"      },
+    crm:        { cls: "cat-crm",       label: "CRM"        },
+    followup:   { cls: "cat-followup",  label: "Follow-up"  },
+    b2b:        { cls: "cat-b2b",       label: "B2B"        },
+    marketing:  { cls: "cat-marketing", label: "Marketing"  },
+    financeiro: { cls: "cat-financeiro",label: "Financeiro" },
+    custos:     { cls: "cat-custos",    label: "Custos"     },
+    sistema:    { cls: "cat-sistema",   label: "Sistema"    },
+  };
+
+  function catBadge(categoria) {
+    const m = CAT_META[categoria] || { cls: "cat-sistema", label: escapeHtml(categoria || "—") };
+    return `<span class="lancamento-cat ${m.cls}">${m.label}</span>`;
+  }
+
+  function prioBadge(prioridade) {
+    if (prioridade === "alta")
+      return `<span class="badge lancamento-badge-alta">Alta</span>`;
+    if (prioridade === "baixa")
+      return `<span class="badge lancamento-badge-baixa">Baixa</span>`;
+    return "";
+  }
+
   function statusBadge(status) {
     const map = {
-      ok:       ["badge lancamento-badge-ok",       "✓ OK"    ],
+      ok:       ["badge lancamento-badge-ok",       "OK"      ],
       pendente: ["badge lancamento-badge-pendente",  "Pendente"],
       erro:     ["badge lancamento-badge-erro",      "Erro"    ],
       info:     ["badge lancamento-badge-info",      "Info"    ],
     };
-    const [cls, label] = map[status] || ["badge", escapeHtml(status)];
-    return `<span class="${cls}">${label}</span>`;
+    const [cls, lbl] = map[status] || [];
+    return cls ? `<span class="${cls}">${lbl}</span>` : "";
   }
 
-  function origemBadge(origem) {
-    const cls = origem === "Planilha" ? "lancamento-origem-planilha" : "lancamento-origem-painel";
-    return `<span class="lancamento-origem ${cls}">${escapeHtml(origem)}</span>`;
+  function dotClass(evt) {
+    if (evt.status === "erro")           return "dot-erro";
+    if (evt.prioridade === "alta")       return "dot-alta";
+    if (evt.categoria === "leads" && evt.tipo === "Novo lead") return "dot-lead";
+    return `dot-${evt.status || "info"}`;
   }
 
-  timelineEl.innerHTML = eventos.map((evt, i) => `
-    <div class="lancamento-item${i === eventos.length - 1 ? " last" : ""}">
-      <div class="lancamento-dot dot-${escapeHtml(evt.status || "info")}"></div>
+  function isToday(ts) {
+    if (!ts) return false;
+    const d = new Date(ts);
+    const n = new Date();
+    return d.toDateString() === n.toDateString();
+  }
+
+  timelineEl.innerHTML = eventos.map((evt, i) => {
+    const hoje   = isToday(evt.timestamp);
+    const last   = i === eventos.length - 1;
+    return `
+    <div class="lancamento-item${last ? " last" : ""}${hoje ? " lancamento-hoje" : ""}">
+      <div class="lancamento-dot ${dotClass(evt)}"></div>
       <div class="lancamento-body">
         <div class="lancamento-header">
-          <span class="lancamento-tipo">${escapeHtml(evt.tipo || "")}</span>
-          ${origemBadge(evt.origem || "Painel")}
-          ${statusBadge(evt.status || "info")}
+          ${catBadge(evt.categoria)}
+          <span class="lancamento-titulo">${escapeHtml(evt.titulo || evt.tipo || "")}</span>
+          ${prioBadge(evt.prioridade)}
+          ${statusBadge(evt.status)}
         </div>
-        <p class="lancamento-resumo">${escapeHtml(evt.resumo || "")}</p>
+        <p class="lancamento-descricao">${escapeHtml(evt.descricao || "")}</p>
         <time class="lancamento-time">${escapeHtml(evt.data_br || "—")}</time>
       </div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
