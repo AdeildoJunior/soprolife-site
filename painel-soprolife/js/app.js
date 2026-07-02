@@ -465,7 +465,7 @@ function tipAttrs(key, label, value) {
 // usado em todas as seções para evitar duplicar a lógica de tooltip em cada ponto.
 function statCardHtml(baseClass, item) {
   const t = tipAttrs(item.key, item.label, item.value);
-  const classes = [baseClass, item.extraClass, t.cls].filter(Boolean).join(" ");
+  const classes = ["stat-card", baseClass, item.extraClass, t.cls].filter(Boolean).join(" ");
   const valueStyle = item.valueStyle ? ` style="${item.valueStyle}"` : "";
   return `
     <article class="${classes}"${t.attrs}>
@@ -476,17 +476,25 @@ function statCardHtml(baseClass, item) {
   `;
 }
 
+const KPI_ACCENTS = {
+  up: "var(--teal)",
+  down: "var(--danger)",
+  neutral: "var(--muted-light)"
+};
+
 function renderMetricCard(card) {
   const t = tipAttrs(card.key, card.label, card.value);
   const classes = ["metric-card", "kpi-card", t.cls].filter(Boolean).join(" ");
-  const showVariation = card.variation && card.variation !== "Local seguro" && card.variation.trim() !== "";
+  const typeClass = card.type === "down" || card.type === "neutral" ? card.type : "up";
+  const accent = KPI_ACCENTS[typeClass];
+  const showVariation = Boolean(card.variation && card.variation.trim() !== "");
   return `
-    <article class="${classes}"${t.attrs}>
+    <article class="${classes}"${t.attrs} style="--kpi-accent:${accent}">
       <div class="kpi-top">
         <span class="kpi-label">${card.label}</span>
         <strong class="kpi-value">${card.value}</strong>
       </div>
-      ${showVariation ? `<div class="variation${card.type === "neutral" ? " neutral" : ""}">${card.variation}</div>` : ""}
+      ${showVariation ? `<div class="variation ${typeClass}">${card.variation}</div>` : ""}
     </article>
   `;
 }
@@ -3125,8 +3133,8 @@ function renderFinance() {
 
     table.innerHTML = `
       <tr>
-        <td colspan="6" style="text-align:center;color:var(--text-muted,#888);padding:1.5rem">
-          Nenhum dado financeiro disponível — resumo local não encontrado.
+        <td colspan="6" class="table-empty-cell">
+          <div class="empty-state">Dados ainda não carregados neste ambiente de preview.</div>
         </td>
       </tr>
     `;
@@ -3563,8 +3571,8 @@ function renderDataFreshness() {
     container.innerHTML = `
       <div class="freshness-meta">
         <span>Fonte dos dados</span>
-        <strong>Local seguro</strong>
-        <small>Última atualização: não informada</small>
+        <strong>Ambiente de preview</strong>
+        <small>Dados ainda não carregados neste ambiente de preview.</small>
       </div>
     `;
     return;
@@ -3576,7 +3584,7 @@ function renderDataFreshness() {
     runtimeGS?.configValid !== false
   );
 
-  const sourceLabel = isGoogleSheets ? "Google Sheets via ADC" : "Local seguro";
+  const sourceLabel = isGoogleSheets ? "Google Sheets via ADC" : "Arquivo local (preview)";
   const updatedAt = formatDateTime(source.generatedAt);
 
   const securityBadge = (!source.containsPersonalData && !source.containsHealthData)
