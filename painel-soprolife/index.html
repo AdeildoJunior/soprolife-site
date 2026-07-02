@@ -101,28 +101,45 @@
 
     <main class="main">
       <header class="topbar">
-        <div>
+        <div class="topbar-brand">
           <p class="eyebrow">Painel operacional</p>
-          <h1>Painel SoproLife</h1>
+          <h1>SoproLife <span class="topbar-cc">Command Center</span></h1>
         </div>
 
         <div class="top-actions">
-          <input id="globalSearch" type="search" placeholder="Buscar no painel..." />
-          <button id="refreshBtn">Atualizar</button>
+          <input id="globalSearch" type="search" placeholder="Buscar no painel..." aria-label="Buscar no painel" />
+          <button id="refreshBtn" title="Recarregar dados do painel">
+            <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4v5h5"/><path d="M17 14v-5h-5"/><path d="M15.5 6.5A7 7 0 1 0 16 9"/></svg>
+            Atualizar
+          </button>
           <div class="topbar-avatar" title="Painel interno SoproLife">SL</div>
         </div>
       </header>
 
       <section id="overview" class="section active">
         <div class="hero">
-          <div>
-            <p class="eyebrow">Hoje na SoproLife</p>
-            <h2>Visão rápida de operação, comercial e marketing</h2>
-            <p>Este é o primeiro MVP visual. Depois conectaremos planilhas, CRM, Search Console, Instagram e automações.</p>
+          <div class="hero-body">
+            <p class="eyebrow">SoproLife Command Center</p>
+            <h2>Central de Operações</h2>
+            <p class="hero-sub">Visão consolidada de comercial, CRM, financeiro e marketing da SoproLife.</p>
+            <div class="hero-chips">
+              <span class="hero-chip">Dados agregados</span>
+              <span class="hero-chip hero-chip-teal">Painel seguro</span>
+            </div>
           </div>
-          <div class="hero-badge">
-            <strong>Fase 0.1</strong>
-            <span>Protótipo seguro</span>
+          <div class="hero-status-panel">
+            <div class="hero-stat">
+              <span>Fase</span>
+              <strong>0.1 · MVP</strong>
+            </div>
+            <div class="hero-stat">
+              <span>Fonte</span>
+              <strong id="heroSourceLabel">Local seguro</strong>
+            </div>
+            <div class="hero-stat">
+              <span>Privacidade</span>
+              <strong class="hero-stat-ok">Sem dados pessoais</strong>
+            </div>
           </div>
         </div>
 

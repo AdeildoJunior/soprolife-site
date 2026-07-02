@@ -478,14 +478,15 @@ function statCardHtml(baseClass, item) {
 
 function renderMetricCard(card) {
   const t = tipAttrs(card.key, card.label, card.value);
-  const classes = ["metric-card", t.cls].filter(Boolean).join(" ");
+  const classes = ["metric-card", "kpi-card", t.cls].filter(Boolean).join(" ");
+  const showVariation = card.variation && card.variation !== "Local seguro" && card.variation.trim() !== "";
   return `
     <article class="${classes}"${t.attrs}>
-      <div>
-        <span>${card.label}</span>
-        <strong>${card.value}</strong>
+      <div class="kpi-top">
+        <span class="kpi-label">${card.label}</span>
+        <strong class="kpi-value">${card.value}</strong>
       </div>
-      ${card.variation ? `<div class="variation${card.type === "neutral" ? " neutral" : ""}">${card.variation}</div>` : ""}
+      ${showVariation ? `<div class="variation${card.type === "neutral" ? " neutral" : ""}">${card.variation}</div>` : ""}
     </article>
   `;
 }
