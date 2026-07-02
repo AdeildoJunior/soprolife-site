@@ -1,21 +1,25 @@
 {
   "resumo": [
     {
+      "key": "automationIntegracoesPlanejadas",
       "label": "Integrações planejadas",
       "value": "10",
       "hint": "Mapa inicial do centro de comando"
     },
     {
+      "key": "automationFontesPrivadas",
       "label": "Fontes privadas",
       "value": "6",
       "hint": "Sheets, Gmail, Agenda, Meta, GA4 e CRM"
     },
     {
+      "key": "automationStatusAtual",
       "label": "Status atual",
       "value": "Protótipo",
       "hint": "Sem dados reais no GitHub"
     },
     {
+      "key": "automationPrioridade",
       "label": "Prioridade",
       "value": "Segurança",
       "hint": "Dados sensíveis fora do repositório"

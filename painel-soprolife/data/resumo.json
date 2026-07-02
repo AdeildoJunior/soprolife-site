@@ -2,12 +2,12 @@
   "empresa": "SoproLife",
   "periodo": "Junho/2026",
   "cards": [
-    { "label": "Leads novos", "value": 18, "variation": "+12%", "type": "up" },
-    { "label": "Agendamentos", "value": 9, "variation": "+5%", "type": "up" },
-    { "label": "Exames realizados", "value": 6, "variation": "MVP", "type": "neutral" },
-    { "label": "Clínicas abordadas", "value": 27, "variation": "+8 hoje", "type": "up" },
-    { "label": "Taxa de resposta", "value": "22%", "variation": "em teste", "type": "neutral" },
-    { "label": "Receita estimada", "value": "R$ 2.340", "variation": "+18%", "type": "up" }
+    { "key": "leadsNovos", "label": "Leads novos", "value": 18, "variation": "+12%", "type": "up" },
+    { "key": "leadsAgendados", "label": "Agendamentos", "value": 9, "variation": "+5%", "type": "up" },
+    { "key": "examesRealizados", "label": "Exames realizados", "value": 6, "variation": "MVP", "type": "neutral" },
+    { "key": "clinicasAbordadas", "label": "Clínicas abordadas", "value": 27, "variation": "+8 hoje", "type": "up" },
+    { "key": "taxaResposta", "label": "Taxa de resposta", "value": "22%", "variation": "em teste", "type": "neutral" },
+    { "key": "receitaEstimada", "label": "Receita estimada", "value": "R$ 2.340", "variation": "+18%", "type": "up" }
   ],
   "evolucaoSemanal": {
     "labels": ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],

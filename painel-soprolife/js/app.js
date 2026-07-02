@@ -356,14 +356,136 @@ const CARD_GROUPS = [
   }
 ];
 
-function renderMetricCard(card) {
+// ─── Tooltips explicativos dos indicadores — mapa central por chave de métrica ──
+// Cada texto explica o que o número significa, de onde vem (quando aplicável) e
+// como interpretar. Menções a dado agregado/seguro ficam só aqui, não no card.
+const METRIC_INFO = {
+  // Painel geral / visão rápida
+  totalLeads: "Total de contatos comerciais/pacientes cadastrados na aba Leads da planilha. Dado agregado, sem exibir nome ou telefone neste resumo.",
+  leadsNovos: "Leads que ainda estão no início do funil e aguardam qualificação ou primeiro retorno.",
+  leadsAgendados: "Leads que avançaram para uma etapa com agendamento ou intenção clara de atendimento.",
+  leadsConcluidos: "Leads que já passaram pelo primeiro atendimento (espirometria, consulta ou teleconsulta) e migraram para o CRM de pacientes.",
+  clinicasCadastradas: "Número de clínicas/parceiros B2B cadastrados para prospecção, parceria ou acompanhamento.",
+  tarefasPendentes: "Tarefas operacionais ainda abertas no painel ou na planilha de controle.",
+  receitaPrevista: "Estimativa de receita a partir dos lançamentos e agendamentos já registrados no controle financeiro.",
+  receitaRecebida: "Receita já recebida, considerando os lançamentos financeiros confirmados. Quando o financeiro real está ativo, mostra a receita oficial de espirometrias pagas/confirmadas.",
+  conteudosPlanejados: "Quantidade de conteúdos previstos no planejamento de marketing, como posts, campanhas ou materiais educativos.",
+  eventosAgendados: "Eventos, ações comerciais, atendimentos ou compromissos previstos na agenda operacional.",
+
+  // Fallback demonstrativo (data/resumo.json)
+  examesRealizados: "Quantidade de exames de espirometria já realizados no período, segundo o controle demonstrativo do painel.",
+  clinicasAbordadas: "Clínicas e parceiros já contatados na prospecção B2B, incluindo etapas iniciais de conversa.",
+  taxaResposta: "Percentual de leads e clínicas que retornaram contato após a primeira abordagem.",
+  receitaEstimada: "Estimativa de receita do período com base nos dados demonstrativos do painel.",
+
+  // CRM — Clínicas e Parceiros
+  crmEmProspeccao: "Clínicas/parceiros que já tiveram algum contato, mas ainda não fecharam parceria nem foram descartados.",
+  crmParceirosAtivos: "Clínicas com parceria já fechada e em operação com a SoproLife.",
+  crmPrioridadeAlta: "Clínicas ou parceiros marcados como prioridade alta para a próxima ação comercial.",
+  crmComAcaoDefinida: "Clínicas ou parceiros que já têm uma próxima ação registrada no pipeline.",
+
+  // CRM — Pacientes / follow-up
+  crmPacientesEmAcompanhamento: "Pacientes com acompanhamento ativo de espirometria ou consulta na base de follow-up.",
+  crmPacientesEspirometrias: "Pacientes com espirometria em acompanhamento de follow-up.",
+  crmPacientesConsultas: "Pacientes com consulta em acompanhamento de follow-up.",
+  crmRecorrenciasAtivas: "Pacientes com exames ou consultas periódicas programadas para retorno recorrente.",
+  crmFollowupTotal: "Total de registros de pacientes com follow-up ativo, somando espirometrias e consultas.",
+  crmFollowupComWhatsapp: "Registros de follow-up com WhatsApp cadastrado, prontos para envio assistido de mensagem.",
+
+  // Leads e Agendamentos
+  leadsNovosContatos: "Leads recém-cadastrados que ainda aguardam a primeira resposta da equipe.",
+  leadsEmConversa: "Leads em diálogo ativo, incluindo os que aguardam retorno do próprio lead.",
+  leadsConvertidos: "Leads que já migraram para o CRM como paciente ou clínica/parceiro após o primeiro atendimento.",
+  leadsSemResposta: "Leads que não responderam ao contato inicial e ainda não foram reativados ou encerrados.",
+
+  // Marketing & SEO
+  searchConsoleImpressions: "Dados agregados de desempenho orgânico do site no Google Search Console: quantas vezes o site apareceu nos resultados de busca.",
+  searchConsoleClicks: "Dados agregados de desempenho orgânico do site no Google Search Console: cliques recebidos a partir da busca do Google.",
+  ga4Users: "Dados agregados de tráfego do site no Google Analytics 4: visitantes únicos no período.",
+  ga4Sessions: "Dados agregados de tráfego do site no Google Analytics 4: total de visitas (sessões) no período.",
+
+  // Documentos
+  documentosMapeados: "Total de documentos institucionais mapeados no controle de compliance da empresa.",
+  documentosStatusPositivo: "Documentos com status regular, ativo ou concedido, sem pendência aparente.",
+  documentosComValidade: "Documentos que possuem data de validade e por isso precisam de monitoramento periódico.",
+  documentosDadosPessoais: "Lembrete de que esta área é só para dados institucionais — nunca CPF, prontuário ou informação pessoal de paciente.",
+
+  // Financeiro
+  financeSaldoConta: "Saldo operacional atual em conta, conforme o controle financeiro interno.",
+  receitaEspirometrias: "Receita registrada de exames de espirometria pagos/confirmados no controle financeiro.",
+  financeTicketMedio: "Valor médio efetivamente recebido por exame, considerando eventuais valores acima do preço base.",
+  financeParceriaExcepcional: "Entradas classificadas como parceria ou pagamento espontâneo, fora do preço padrão do serviço.",
+  financeConsultas: "Receita de consultas — atualmente em fase estratégica/parceria, sem cobrança direta ao paciente.",
+  financeEntradasRecentes: "Lançamentos financeiros mais recentes já destacados no extrato do período.",
+  financeResumoPendente: "Nenhum resumo financeiro local foi gerado ainda neste ambiente.",
+
+  // Custos & Investimentos
+  custosMensais: "Estimativa de despesas recorrentes mensais já cadastradas, como ferramentas, infraestrutura e parcelamentos.",
+  investimentosEquipamentos: "Itens de investimento da SoproLife, como equipamentos, estrutura e implantação.",
+  ciParcelasMensais: "Soma das parcelas mensais em aberto referentes aos equipamentos financiados.",
+  ciRecorrentesInfra: "Total mensal de assinaturas e infraestrutura recorrente, como workspace, VPN e hospedagem.",
+  ciItensCadastrados: "Quantidade de itens de custo/investimento já cadastrados e ativos no controle interno.",
+  ciPendenciasCadastro: "Itens que ainda precisam ser formalizados ou regularizados no controle de custos.",
+  ciResumoIndisponivel: "Nenhum resumo de custos e investimentos local foi encontrado neste ambiente.",
+  ciEquipTotalInvestido: "Valor total já investido em equipamentos da SoproLife.",
+  ciEquipParcelaMensal: "Soma das parcelas mensais dos equipamentos financiados.",
+  ciEquipPendente: "Equipamento com parcelas ainda não cadastradas no controle financeiro.",
+
+  // Automações
+  automationIntegracoesPlanejadas: "Quantidade de integrações mapeadas no plano do centro de comando.",
+  automationFontesPrivadas: "Número de fontes de dados privadas previstas para alimentar o painel (Sheets, Gmail, Agenda, Meta, GA4, CRM).",
+  automationStatusAtual: "Estágio atual de implantação do painel privado da SoproLife.",
+  automationPrioridade: "Foco atual da automação — hoje, manter dados sensíveis fora do repositório público.",
+
+  // Últimos lançamentos
+  lancamentosEventos: "Total de eventos registrados na timeline de atualizações do painel.",
+  lancamentosHoje: "Eventos de atualização registrados no dia de hoje.",
+  lancamentosAltaPrioridade: "Eventos marcados como alta prioridade, que merecem atenção mais rápida.",
+  lancamentosPendencias: "Eventos com erro ou pendência que ainda precisam ser resolvidos.",
+  lancamentosStatusIndisponivel: "O gerador de últimos lançamentos ainda não foi executado neste ambiente.",
+};
+
+// Gera os atributos de tooltip (data-tip, aria-label, tabindex) para um card,
+// a partir da chave de métrica. Retorna strings vazias quando não há texto mapeado.
+function tipAttrs(key, label, value) {
+  const text = key ? METRIC_INFO[key] : null;
+  if (!text) return { cls: "", attrs: "" };
+  const safeTip = escapeHtml(text);
+  const ariaBits = [label, value]
+    .filter((v) => v !== undefined && v !== null && String(v) !== "")
+    .map((v) => escapeHtml(String(v)));
+  const ariaLabel = ariaBits.length ? `${ariaBits.join(": ")}. ${safeTip}` : safeTip;
+  return {
+    cls: "has-tip",
+    attrs: ` tabindex="0" data-tip="${safeTip}" aria-label="${ariaLabel}"`
+  };
+}
+
+// Renderizador genérico para os "quadradinhos" de indicador ({key,label,value,hint,extraClass}),
+// usado em todas as seções para evitar duplicar a lógica de tooltip em cada ponto.
+function statCardHtml(baseClass, item) {
+  const t = tipAttrs(item.key, item.label, item.value);
+  const classes = [baseClass, item.extraClass, t.cls].filter(Boolean).join(" ");
+  const valueStyle = item.valueStyle ? ` style="${item.valueStyle}"` : "";
   return `
-    <article class="metric-card">
+    <article class="${classes}"${t.attrs}>
+      <span>${item.label}</span>
+      <strong${valueStyle}>${item.value}</strong>
+      ${item.hint !== undefined ? `<small>${item.hint}</small>` : ""}
+    </article>
+  `;
+}
+
+function renderMetricCard(card) {
+  const t = tipAttrs(card.key, card.label, card.value);
+  const classes = ["metric-card", t.cls].filter(Boolean).join(" ");
+  return `
+    <article class="${classes}"${t.attrs}>
       <div>
         <span>${card.label}</span>
         <strong>${card.value}</strong>
       </div>
-      <div class="variation ${card.type === "neutral" ? "neutral" : ""}">${card.variation}</div>
+      ${card.variation ? `<div class="variation${card.type === "neutral" ? " neutral" : ""}">${card.variation}</div>` : ""}
     </article>
   `;
 }
@@ -436,9 +558,7 @@ function getDashboardCards() {
   let cards = localSummary.cards.map((card) => ({
     key: card.key,
     label: card.label,
-    value: formatDashboardValue(card.key, card.value),
-    variation: "Local seguro",
-    type: "neutral"
+    value: formatDashboardValue(card.key, card.value)
   }));
 
   if (hasRealFinance) {
@@ -499,23 +619,17 @@ function renderCrmStats() {
   ).length;
 
   const stats = [
-    { label: "Clínicas cadastradas", value: state.crm.length,           hint: "base total"          },
-    { label: "Em prospecção",        value: emProspeccao,                hint: "ativas no funil"     },
-    { label: "Parceiros ativos",     value: parceirosAtivos,             hint: "parcerias fechadas"  },
-    { label: "Prioridade alta",      value: countCrmPrioridade("Alta"),  hint: "foco imediato"       },
-    { label: "Com ação definida",    value: state.crm.filter((c) => c.proximaAcao).length, hint: "próximas ações" }
+    { key: "clinicasCadastradas", label: "Clínicas cadastradas", value: state.crm.length,           hint: "base total"          },
+    { key: "crmEmProspeccao",     label: "Em prospecção",        value: emProspeccao,                hint: "ativas no funil"     },
+    { key: "crmParceirosAtivos",  label: "Parceiros ativos",     value: parceirosAtivos,             hint: "parcerias fechadas"  },
+    { key: "crmPrioridadeAlta",   label: "Prioridade alta",      value: countCrmPrioridade("Alta"),  hint: "foco imediato"       },
+    { key: "crmComAcaoDefinida",  label: "Com ação definida",    value: state.crm.filter((c) => c.proximaAcao).length, hint: "próximas ações" }
   ];
 
   const container = document.querySelector("#crmStats");
   if (!container) return;
 
-  container.innerHTML = stats.map((item) => `
-    <article class="crm-stat-card">
-      <span>${item.label}</span>
-      <strong>${item.value}</strong>
-      ${item.hint ? `<small>${item.hint}</small>` : ""}
-    </article>
-  `).join("");
+  container.innerHTML = stats.map((item) => statCardHtml("crm-stat-card", item)).join("");
 }
 
 function renderCrmFunnelVisual() {
@@ -895,6 +1009,13 @@ function renderCrmPacientes(container) {
     ? `<div class="crm-private-note"><span>🔒</span><p>Dados do arquivo privado local (<code>data-private/followup-pacientes.local.json</code>). Gitignored — nunca enviado ao GitHub. Envio de WhatsApp é sempre assistido.</p></div>`
     : `<div class="crm-safe-note"><span>ℹ️</span><p>Arquivo privado não encontrado. Execute <code>update-local-data.sh</code> ou <code>generate-followup-pacientes.py --write</code> para gerar os dados de follow-up.</p></div>`;
 
+  const pacientesStats = [
+    { key: "crmPacientesEmAcompanhamento", label: "Em acompanhamento", value: getCrmCardValue("pacientesEmAcompanhamento"), hint: "base ativa" },
+    { key: "crmPacientesEspirometrias",    label: "Espirometrias",      value: espi.length || getCrmCardValue("examesEspirometriaRealizados"), hint: "com follow-up" },
+    { key: "crmPacientesConsultas",        label: "Consultas",          value: cons.length || getCrmCardValue("teleconsultasRealizadas"), hint: "com follow-up" },
+    { key: "crmRecorrenciasAtivas",        label: "Recorrências ativas", value: getCrmCardValue("recorrenciasAtivas"), hint: "periódicos" }
+  ];
+
   container.innerHTML = `
     <div class="crm-subview-header">
       <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
@@ -906,26 +1027,7 @@ function renderCrmPacientes(container) {
     </div>
 
     <div class="crm-stats">
-      <article class="crm-stat-card">
-        <span>Em acompanhamento</span>
-        <strong>${getCrmCardValue("pacientesEmAcompanhamento")}</strong>
-        <small>base ativa</small>
-      </article>
-      <article class="crm-stat-card">
-        <span>Espirometrias</span>
-        <strong>${espi.length || getCrmCardValue("examesEspirometriaRealizados")}</strong>
-        <small>com follow-up</small>
-      </article>
-      <article class="crm-stat-card">
-        <span>Consultas</span>
-        <strong>${cons.length || getCrmCardValue("teleconsultasRealizadas")}</strong>
-        <small>com follow-up</small>
-      </article>
-      <article class="crm-stat-card">
-        <span>Recorrências ativas</span>
-        <strong>${getCrmCardValue("recorrenciasAtivas")}</strong>
-        <small>periódicos</small>
-      </article>
+      ${pacientesStats.map((item) => statCardHtml("crm-stat-card", item)).join("")}
     </div>
 
     ${hasData ? `
@@ -1086,26 +1188,12 @@ function renderCrmFollowupDetalhe(container) {
     </div>
 
     <div class="crm-stats">
-      <article class="crm-stat-card">
-        <span>Total</span>
-        <strong>${all.length}</strong>
-        <small>pacientes</small>
-      </article>
-      <article class="crm-stat-card">
-        <span>Espirometrias</span>
-        <strong>${espi.length}</strong>
-        <small>registros</small>
-      </article>
-      <article class="crm-stat-card">
-        <span>Consultas</span>
-        <strong>${cons.length}</strong>
-        <small>registros</small>
-      </article>
-      <article class="crm-stat-card">
-        <span>Com WhatsApp</span>
-        <strong>${all.filter(r => r.whatsapp_url).length}</strong>
-        <small>prontos para envio</small>
-      </article>
+      ${[
+        { key: "crmFollowupTotal",       label: "Total",         value: all.length,  hint: "pacientes" },
+        { key: "crmPacientesEspirometrias", label: "Espirometrias", value: espi.length, hint: "registros" },
+        { key: "crmPacientesConsultas",  label: "Consultas",     value: cons.length, hint: "registros" },
+        { key: "crmFollowupComWhatsapp", label: "Com WhatsApp",  value: all.filter(r => r.whatsapp_url).length, hint: "prontos para envio" }
+      ].map((item) => statCardHtml("crm-stat-card", item)).join("")}
     </div>
 
     <div class="fp-detalhe-toolbar">
@@ -1814,24 +1902,18 @@ function countLeadServico(term) {
 
 function renderLeadStats() {
   const stats = [
-    { label: "Total de leads",    value: state.leads.length,                                            hint: "base total" },
-    { label: "Novos contatos",    value: countLeadEtapa("Novo contato"),                                hint: "aguardando 1º resposta" },
-    { label: "Em conversa",       value: countLeadEtapa("Em conversa") + countLeadEtapa("Aguardando retorno"), hint: "diálogo ativo" },
-    { label: "Agendados",         value: countLeadEtapa("Agendado"),                                    hint: "confirmados" },
-    { label: "Convertidos",       value: countLeadEtapa("Convertido em paciente") + countLeadEtapa("Convertido em clínica/parceiro"), hint: "migraram ao CRM" },
-    { label: "Sem resposta",      value: countLeadEtapa("Não respondeu"),                               hint: "inativos" },
+    { key: "totalLeads",         label: "Total de leads",    value: state.leads.length,                                            hint: "base total" },
+    { key: "leadsNovosContatos", label: "Novos contatos",    value: countLeadEtapa("Novo contato"),                                hint: "aguardando 1º resposta" },
+    { key: "leadsEmConversa",    label: "Em conversa",       value: countLeadEtapa("Em conversa") + countLeadEtapa("Aguardando retorno"), hint: "diálogo ativo" },
+    { key: "leadsAgendados",     label: "Agendados",         value: countLeadEtapa("Agendado"),                                    hint: "confirmados" },
+    { key: "leadsConvertidos",   label: "Convertidos",       value: countLeadEtapa("Convertido em paciente") + countLeadEtapa("Convertido em clínica/parceiro"), hint: "migraram ao CRM" },
+    { key: "leadsSemResposta",   label: "Sem resposta",      value: countLeadEtapa("Não respondeu"),                               hint: "inativos" },
   ];
 
   const container = document.querySelector("#leadStats");
   if (!container) return;
 
-  container.innerHTML = stats.map((item) => `
-    <article class="lead-stat-card">
-      <span>${item.label}</span>
-      <strong>${item.value}</strong>
-      ${item.hint ? `<small>${item.hint}</small>` : ""}
-    </article>
-  `).join("");
+  container.innerHTML = stats.map((item) => statCardHtml("lead-stat-card", item)).join("");
 }
 
 function renderLeadPipeline() {
@@ -2172,12 +2254,24 @@ function renderMktKpiStrip() {
   }
 
   container.innerHTML = kpis.map((k) => `
-    <article class="mkt-kpi-card kpi-${k.src}${k.tip ? " mkt-tip" : ""}"${k.tip ? ` data-tip="${escapeHtml(k.tip)}"` : ""}>
+    <article class="mkt-kpi-card kpi-${k.src}${k.tip ? " mkt-tip" : ""}"${mktTipAttrs(k.tip, k.label, k.value)}>
       <span class="mkt-kpi-label">${escapeHtml(k.label)}</span>
       <strong class="mkt-kpi-value">${escapeHtml(k.value)}</strong>
       <small class="mkt-kpi-src">${k.src === "sc" ? "Search Console" : "GA4"}</small>
     </article>
   `).join("");
+}
+
+// Anexa tabindex/data-tip/aria-label a cards que já carregam seu próprio texto de tooltip
+// (usado nas seções que constroem o texto por item em vez de por chave central).
+function mktTipAttrs(tip, label, value) {
+  if (!tip) return "";
+  const safeTip = escapeHtml(tip);
+  const ariaBits = [label, value]
+    .filter((v) => v !== undefined && v !== null && String(v) !== "")
+    .map((v) => escapeHtml(String(v)));
+  const aria = ariaBits.length ? `${ariaBits.join(": ")}. ${safeTip}` : safeTip;
+  return ` tabindex="0" data-tip="${safeTip}" aria-label="${aria}"`;
 }
 
 function renderMktKpiStripDemo() {
@@ -2190,14 +2284,14 @@ function renderMktKpiStripDemo() {
   const topTerm  = state.marketing.seo.reduce((b, i) => i.cliques > b.cliques ? i : b, state.marketing.seo[0]);
 
   const kpis = [
-    { label: "Impressões", value: totalImp, src: "sc" },
-    { label: "Cliques estimados", value: totalClk, src: "sc" },
-    { label: "Posição média", value: avgPos.toFixed(1), src: "sc" },
-    { label: "Melhor termo", value: topTerm.termo, src: "sc" },
+    { label: "Impressões", value: totalImp, src: "sc", tip: "Dados demonstrativos de desempenho orgânico do site — vezes que o site apareceria nos resultados de busca do Google." },
+    { label: "Cliques estimados", value: totalClk, src: "sc", tip: "Estimativa demonstrativa de cliques orgânicos vindos da busca do Google." },
+    { label: "Posição média", value: avgPos.toFixed(1), src: "sc", tip: "Posição média demonstrativa no ranking de busca do Google." },
+    { label: "Melhor termo", value: topTerm.termo, src: "sc", tip: "Termo de busca com melhor desempenho de cliques no período demonstrativo." },
   ];
 
   container.innerHTML = kpis.map((k) => `
-    <article class="mkt-kpi-card kpi-${k.src}">
+    <article class="mkt-kpi-card kpi-${k.src}${k.tip ? " mkt-tip" : ""}"${mktTipAttrs(k.tip, k.label, k.value)}>
       <span class="mkt-kpi-label">${k.label}</span>
       <strong class="mkt-kpi-value">${k.value}</strong>
       <small class="mkt-kpi-src">Demonstrativo</small>
@@ -2238,7 +2332,7 @@ function renderMktInsights() {
   container.innerHTML = insights.slice(0, 4).map((ins) => {
     const tip = MKT_INSIGHT_TIPS[ins.type] || null;
     return `
-    <article class="mkt-insight ins-${ins.type}${tip ? " mkt-tip" : ""}"${tip ? ` data-tip="${escapeHtml(tip)}"` : ""}>
+    <article class="mkt-insight ins-${ins.type}${tip ? " mkt-tip" : ""}"${mktTipAttrs(tip, ins.label, ins.title)}>
       <span class="ins-icon">${ins.icon}</span>
       <div class="ins-body">
         <small>${escapeHtml(ins.label)}</small>
@@ -2254,8 +2348,7 @@ function renderMktInsights() {
 function mktMiniRow(labelHtml, chips, barVal, barMax, tip) {
   const pct = Math.max(4, Math.round((barVal / barMax) * 100));
   const extraCls = tip ? " mkt-tip" : "";
-  const tipAttr  = tip ? ` data-tip="${escapeHtml(tip)}"` : "";
-  return `<div class="mkt-mini-row${extraCls}"${tipAttr}>
+  return `<div class="mkt-mini-row${extraCls}"${mktTipAttrs(tip, "", "")}>
     <div class="mkt-mini-row-top">
       <span class="mkt-mini-term">${labelHtml}</span>
       <span class="mkt-mini-chips">${chips.map((c) => `<span>${c}</span>`).join("")}</span>
@@ -2809,18 +2902,13 @@ function renderDocuments() {
   ).length;
 
   const stats = [
-    { label: "Documentos mapeados", value: state.documentos.length },
-    { label: "Status positivo", value: ativos },
-    { label: "Com validade/monitoramento", value: comValidade },
-    { label: "Dados pessoais", value: "Não usar" }
+    { key: "documentosMapeados",      label: "Documentos mapeados", value: state.documentos.length },
+    { key: "documentosStatusPositivo", label: "Status positivo", value: ativos },
+    { key: "documentosComValidade",   label: "Com validade/monitoramento", value: comValidade },
+    { key: "documentosDadosPessoais", label: "Dados pessoais", value: "Não usar" }
   ];
 
-  statsContainer.innerHTML = stats.map((item) => `
-    <article class="document-stat-card">
-      <span>${item.label}</span>
-      <strong>${item.value}</strong>
-    </article>
-  `).join("");
+  statsContainer.innerHTML = stats.map((item) => statCardHtml("document-stat-card", item)).join("");
 
   grid.innerHTML = state.documentos.map((doc) => {
     const warning = doc.validade.includes("30/04") || doc.validade.includes("29/05") ? "warning" : "";
@@ -2877,19 +2965,13 @@ function renderFinance() {
     const difPorExame = nExames > 0 ? difTotal / nExames : 0;
 
     statsContainer.innerHTML = [
-      { label: "Saldo em conta",              value: fmtBRL(summary.saldo_operacional),              hint: "total atual na conta" },
-      { label: "Receita das 9 espirometrias", value: fmtBRL(summary.receita_exames),                 hint: `${nExames} exames pagos oficiais` },
-      { label: "Ticket médio real",           value: fmtBRL(summary.ticket_medio_real),              hint: `base ${fmtBRL(baseExame)} / +${fmtBRL(difPorExame)} por exame` },
-      { label: "Parceria / excepcional",      value: fmtBRL(summary.receita_parceria_excepcional),   hint: "Pix espontâneo, fora do padrão" },
-      { label: "Consultas",                   value: "R$ 0,00",                                      hint: "fase estratégica/parceria" },
-      { label: "Entradas recentes",           value: `${summary.total_lancamentos} lançamentos`,     hint: `${fmtBRL(summary.total_entradas_mes_atual)} destacados no extrato` }
-    ].map((item) => `
-      <article class="finance-stat-card">
-        <span>${item.label}</span>
-        <strong>${item.value}</strong>
-        <small>${item.hint}</small>
-      </article>
-    `).join("");
+      { key: "financeSaldoConta",          label: "Saldo em conta",              value: fmtBRL(summary.saldo_operacional),              hint: "total atual na conta" },
+      { key: "receitaEspirometrias",       label: "Receita das 9 espirometrias", value: fmtBRL(summary.receita_exames),                 hint: `${nExames} exames pagos oficiais` },
+      { key: "financeTicketMedio",         label: "Ticket médio real",           value: fmtBRL(summary.ticket_medio_real),              hint: `base ${fmtBRL(baseExame)} / +${fmtBRL(difPorExame)} por exame` },
+      { key: "financeParceriaExcepcional", label: "Parceria / excepcional",      value: fmtBRL(summary.receita_parceria_excepcional),   hint: "Pix espontâneo, fora do padrão" },
+      { key: "financeConsultas",           label: "Consultas",                   value: "R$ 0,00",                                      hint: "fase estratégica/parceria" },
+      { key: "financeEntradasRecentes",    label: "Entradas recentes",           value: `${summary.total_lancamentos} lançamentos`,     hint: `${fmtBRL(summary.total_entradas_mes_atual)} destacados no extrato` }
+    ].map((item) => statCardHtml("finance-stat-card", item)).join("");
 
     if (financeNote) {
       financeNote.innerHTML = [
@@ -3027,13 +3109,12 @@ function renderFinance() {
 
   } else {
     // Resumo financeiro local não disponível — exibe estado vazio/pendente
-    statsContainer.innerHTML = `
-      <article class="finance-stat-card finance-stat-pending">
-        <span>Resumo financeiro</span>
-        <strong>—</strong>
-        <small>Resumo financeiro local não encontrado</small>
-      </article>
-    `;
+    statsContainer.innerHTML = statCardHtml("finance-stat-card finance-stat-pending", {
+      key: "financeResumoPendente",
+      label: "Resumo financeiro",
+      value: "—",
+      hint: "Resumo financeiro local não encontrado"
+    });
 
     if (financeNote) {
       financeNote.textContent = "Resumo financeiro local não encontrado. Gere o arquivo data/financeiro-summary.local.json para exibir dados reais.";
@@ -3058,13 +3139,13 @@ function renderCustosInvestimentos() {
   const ci = state.custosInvestimentos;
 
   if (!ci?.source?.safeToDisplay) {
-    statsContainer.innerHTML = `
-      <article class="ci-stat-card accent-warn">
-        <span>Custos &amp; Investimentos</span>
-        <strong>—</strong>
-        <small>Resumo local não encontrado</small>
-      </article>
-    `;
+    statsContainer.innerHTML = statCardHtml("ci-stat-card", {
+      key: "ciResumoIndisponivel",
+      extraClass: "accent-warn",
+      label: "Custos & Investimentos",
+      value: "—",
+      hint: "Resumo local não encontrado"
+    });
     const pane = document.querySelector("#ci-resumo");
     if (pane) pane.innerHTML = `
       <article class="panel">
@@ -3081,19 +3162,13 @@ function renderCustosInvestimentos() {
   if (safeLabel) safeLabel.textContent = "Dados locais — jun/2026";
 
   statsContainer.innerHTML = [
-    { label: "Custo mensal atual",        value: fmtBRL(ci.total_mensal_atual),              hint: "recorrentes + infraestrutura + parcelas",     accent: "accent-teal"   },
-    { label: "Investido em equipamentos", value: fmtBRL(ci.total_investido_equipamentos),     hint: "Spirobank + Seringa Calibração",               accent: "accent-navy"   },
-    { label: "Parcelas mensais",          value: fmtBRL(ci.parcelas_mensais_equipamentos),    hint: `10× de ${fmtBRL(ci.parcelas_mensais_equipamentos)}`,  accent: "accent-navy"   },
-    { label: "Recorrentes + infra/mês",   value: fmtBRL(ci.total_mensal_recorrente),          hint: "Workspace · Tailscale · Hostinger",           accent: "accent-teal"   },
-    { label: "Itens cadastrados",         value: String(ci.itens_ativos),                    hint: "todos — responsabilidade Adeildo",             accent: "accent-teal"   },
-    { label: "Pendências de cadastro",    value: String(ci.pendencias_cadastro),             hint: "Koko + regularização",                        accent: "accent-warn"   },
-  ].map((c) => `
-    <article class="ci-stat-card ${c.accent}">
-      <span>${c.label}</span>
-      <strong>${c.value}</strong>
-      <small>${c.hint}</small>
-    </article>
-  `).join("");
+    { key: "custosMensais",             label: "Custo mensal atual",        value: fmtBRL(ci.total_mensal_atual),              hint: "recorrentes + infraestrutura + parcelas",     extraClass: "accent-teal"   },
+    { key: "investimentosEquipamentos", label: "Investido em equipamentos", value: fmtBRL(ci.total_investido_equipamentos),     hint: "Spirobank + Seringa Calibração",               extraClass: "accent-navy"   },
+    { key: "ciParcelasMensais",         label: "Parcelas mensais",          value: fmtBRL(ci.parcelas_mensais_equipamentos),    hint: `10× de ${fmtBRL(ci.parcelas_mensais_equipamentos)}`,  extraClass: "accent-navy"   },
+    { key: "ciRecorrentesInfra",        label: "Recorrentes + infra/mês",   value: fmtBRL(ci.total_mensal_recorrente),          hint: "Workspace · Tailscale · Hostinger",           extraClass: "accent-teal"   },
+    { key: "ciItensCadastrados",        label: "Itens cadastrados",         value: String(ci.itens_ativos),                    hint: "todos — responsabilidade Adeildo",             extraClass: "accent-teal"   },
+    { key: "ciPendenciasCadastro",      label: "Pendências de cadastro",    value: String(ci.pendencias_cadastro),             hint: "Koko + regularização",                        extraClass: "accent-warn"   },
+  ].map((c) => statCardHtml("ci-stat-card", c)).join("");
 
   function statusBadge(status) {
     const cls = status === "ativo" ? "ci-badge-ativo"
@@ -3261,23 +3336,15 @@ function renderCustosInvestimentos() {
       `;
     }).join("");
 
+    const equipStats = [
+      { key: "ciEquipTotalInvestido", extraClass: "accent-navy", label: "Total investido (equipamentos)", value: fmtBRL(totalInv), hint: "Spirobank + Seringa Calibração" },
+      { key: "ciEquipParcelaMensal",  extraClass: "accent-teal", label: "Parcela mensal total",           value: fmtBRL(totalParc), hint: `10× de ${fmtBRL(totalParc)}` },
+      { key: "ciEquipPendente",       extraClass: "accent-warn", label: "Espirômetro Koko",                value: "Pendente", hint: "Parcelas a cadastrar — Faustino" },
+    ];
+
     return `
       <div class="ci-stats" style="margin-bottom:1rem">
-        <article class="ci-stat-card accent-navy">
-          <span>Total investido (equipamentos)</span>
-          <strong>${fmtBRL(totalInv)}</strong>
-          <small>Spirobank + Seringa Calibração</small>
-        </article>
-        <article class="ci-stat-card accent-teal">
-          <span>Parcela mensal total</span>
-          <strong>${fmtBRL(totalParc)}</strong>
-          <small>10× de ${fmtBRL(totalParc)}</small>
-        </article>
-        <article class="ci-stat-card accent-warn">
-          <span>Espirômetro Koko</span>
-          <strong>Pendente</strong>
-          <small>Parcelas a cadastrar — Faustino</small>
-        </article>
+        ${equipStats.map((c) => statCardHtml("ci-stat-card", c)).join("")}
       </div>
       <article class="panel">
         <div class="panel-header">
@@ -3414,13 +3481,7 @@ function renderAutomations() {
 
   if (!statsContainer || !sourcesContainer || !phasesContainer) return;
 
-  statsContainer.innerHTML = state.automacoes.resumo.map((item) => `
-    <article class="automation-stat-card">
-      <span>${item.label}</span>
-      <strong>${item.value}</strong>
-      <small>${item.hint}</small>
-    </article>
-  `).join("");
+  statsContainer.innerHTML = state.automacoes.resumo.map((item) => statCardHtml("automation-stat-card", item)).join("");
 
   sourcesContainer.innerHTML = state.automacoes.fontes.map((item) => `
     <article class="automation-source-card">
@@ -3554,12 +3615,13 @@ function renderLancamentos() {
   const data = state.ultimosLancamentos;
 
   if (!data) {
-    statsEl.innerHTML = `
-      <article class="lancamentos-stat-card">
-        <span>Status</span>
-        <strong style="font-size:1.1rem">—</strong>
-        <small>Execute o gerador</small>
-      </article>`;
+    statsEl.innerHTML = statCardHtml("lancamentos-stat-card", {
+      key: "lancamentosStatusIndisponivel",
+      label: "Status",
+      value: "—",
+      valueStyle: "font-size:1.1rem",
+      hint: "Execute o gerador"
+    });
     timelineEl.innerHTML = `
       <div class="lancamentos-empty">
         <p>Dados não disponíveis. Execute o gerador de últimos lançamentos:</p>
@@ -3570,17 +3632,12 @@ function renderLancamentos() {
 
   const st = data.stats || {};
   const cards = [
-    { label: "Eventos",    value: st.totalEventos ?? 0,      hint: "na timeline",       accent: "teal"   },
-    { label: "Hoje",       value: st.hoje ?? 0,               hint: "nesta data",        accent: "navy"   },
-    { label: "Alta prio.", value: st.prioridade_alta ?? 0,    hint: "requer atenção",    accent: "warn"   },
-    { label: "Pendências", value: st.pendencias ?? 0,         hint: "erros ou avisos",   accent: "danger" },
+    { key: "lancamentosEventos",         label: "Eventos",    value: st.totalEventos ?? 0,      hint: "na timeline",       extraClass: "accent-teal"   },
+    { key: "lancamentosHoje",             label: "Hoje",       value: st.hoje ?? 0,               hint: "nesta data",        extraClass: "accent-navy"   },
+    { key: "lancamentosAltaPrioridade",   label: "Alta prio.", value: st.prioridade_alta ?? 0,    hint: "requer atenção",    extraClass: "accent-warn"   },
+    { key: "lancamentosPendencias",       label: "Pendências", value: st.pendencias ?? 0,         hint: "erros ou avisos",   extraClass: "accent-danger" },
   ];
-  statsEl.innerHTML = cards.map((c) => `
-    <article class="lancamentos-stat-card accent-${c.accent}">
-      <span>${c.label}</span>
-      <strong>${c.value}</strong>
-      <small>${c.hint}</small>
-    </article>`).join("");
+  statsEl.innerHTML = cards.map((c) => statCardHtml("lancamentos-stat-card", c)).join("");
 
   if (subtitleEl) {
     const gen     = data.source?.generatedAt;

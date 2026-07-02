@@ -1608,6 +1608,10 @@ td { font-size: .94rem; }
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
 }
 
+.cards-sections .metric-card.has-tip {
+  cursor: help;
+}
+
 .cards-sections .metric-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 20px 40px rgba(15, 34, 57, .14);
@@ -2971,11 +2975,13 @@ td { font-size: .94rem; }
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   SISTEMA DE TOOLTIP — inline (.tt::before) e bloco (.mkt-tip::after)
+   SISTEMA DE TOOLTIP — inline (.tt::before) e bloco (.mkt-tip / .has-tip ::after)
+   .has-tip é o nome genérico usado nos cards de indicador de todas as seções;
+   .mkt-tip é mantido como alias por compatibilidade com o Marketing & SEO.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Shared balloon styles via custom properties to avoid duplication */
-.tt, .mkt-tip { cursor: help; }
+.tt, .mkt-tip, .has-tip { cursor: help; }
 
 /* Inline tooltip (texto dentro de parágrafo) — usa ::before */
 .tt {
@@ -3009,14 +3015,17 @@ td { font-size: .94rem; }
   z-index: 9999;
 }
 
-.tt:hover::before { opacity: 1; }
+.tt:hover::before,
+.tt:focus::before,
+.tt:focus-visible::before { opacity: 1; }
 
 /* Bloco tooltip (cards, rows) — usa ::after para não conflitar com ::before de ícones/listras */
-.mkt-tip {
+.mkt-tip, .has-tip {
   position: relative;
+  overflow: visible;
 }
 
-.mkt-tip::after {
+.mkt-tip::after, .has-tip::after {
   content: attr(data-tip);
   position: absolute;
   bottom: calc(100% + 9px);
@@ -3041,7 +3050,27 @@ td { font-size: .94rem; }
   z-index: 9999;
 }
 
-.mkt-tip:hover::after { opacity: 1; }
+.mkt-tip:hover::after,
+.has-tip:hover::after,
+.mkt-tip:focus::after,
+.has-tip:focus::after,
+.mkt-tip:focus-visible::after,
+.has-tip:focus-visible::after { opacity: 1; }
+
+/* Foco de teclado — anel discreto no tom da marca, sem remover o outline padrão */
+.has-tip:focus-visible, .mkt-tip:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+/* Telas pequenas: evita que o balão do tooltip vaze para fora da viewport */
+@media (max-width: 640px) {
+  .mkt-tip::after, .has-tip::after {
+    left: 0;
+    transform: none;
+    max-width: min(220px, 70vw);
+  }
+}
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
