@@ -32,6 +32,14 @@ var _SHEETS = {
   LOG:          "Log Centro Comando",
 };
 
+// Etapas que disparam a conversão automática do lead para os CRMs de
+// atendimento (mesma lista usada pelo gatilho onEdit em converter-lead-em-paciente.gs).
+var _LEAD_ETAPAS_CONVERSAO = [
+  "Realizou consulta",
+  "Realizou espirometria",
+  "Realizou consulta e espirometria",
+];
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 function doPost(e) {
@@ -64,6 +72,7 @@ function doPost(e) {
       case "createClinicaB2B":            return _createClinicaB2B(data);
       case "registrarInteracaoClinica":   return _registrarInteracaoClinica(data);
       case "registrarInteracaoPaciente":  return _registrarInteracaoPaciente(data);
+      case "updateLeadStage":             return _updateLeadStage(data);
       default:
         return _err("Ação desconhecida: " + action, 400);
     }
@@ -293,6 +302,106 @@ function _registrarInteracaoPaciente(data) {
 
   _logEntry({ acao: "registrarInteracaoPaciente", status: "OK", aba: _SHEETS.FOLLOWUP_WA, id: id, resumo: "Follow-up registrado." });
   return _ok({ id: id, message: "Interação registrada." });
+}
+
+/**
+ * Atualiza a etapa de um lead já existente na aba Leads, identificado por lead_id.
+ * Usado pelo botão "Mudar etapa" do painel (Leads e Agendamentos).
+ *
+ * Não cria uma linha nova se o lead_id não for encontrado — retorna erro,
+ * já que uma atualização de etapa pressupõe um lead já cadastrado.
+ *
+ * Quando a nova etapa é uma das etapas de conversão ("Realizou consulta",
+ * "Realizou espirometria", "Realizou consulta e espirometria"), reaproveita
+ * o mesmo núcleo de conversão usado pelo gatilho onEdit manual
+ * (_cvConverterLeadCore, definido em converter-lead-em-paciente.gs), para que
+ * o resultado seja idêntico a editar a célula 'etapa' diretamente na planilha:
+ * cria CRM Pacientes/Consultas/Espirometria e move o lead para 'Leads Convertidos'.
+ * Se esse arquivo não estiver instalado no projeto, apenas atualiza a célula
+ * de etapa (sem interromper a ação com erro).
+ */
+function _updateLeadStage(data) {
+  _required(data, ["lead_id", "etapa"]);
+
+  var novaEtapa = String(data.etapa).trim();
+  var targetId  = String(data.lead_id).trim();
+
+  var sheet = _getOrCreateSheet(_SHEETS.LEADS);
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) {
+    return _err("Nenhum lead cadastrado na aba " + _SHEETS.LEADS + ".", 404);
+  }
+
+  var allData = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  var headers = allData[0].map(function(h) { return String(h).trim(); });
+
+  var idIdx = headers.indexOf("lead_id");
+  if (idIdx < 0) return _err("Coluna lead_id não encontrada na aba " + _SHEETS.LEADS + ".", 500);
+
+  var etapaIdx = headers.indexOf("etapa");
+  if (etapaIdx < 0) return _err("Coluna etapa não encontrada na aba " + _SHEETS.LEADS + ".", 500);
+
+  var rowIdx = -1; // 1-based, índice de linha na planilha
+  for (var i = 1; i < allData.length; i++) {
+    if (String(allData[i][idIdx] || "").trim() === targetId) {
+      rowIdx = i + 1;
+      break;
+    }
+  }
+
+  if (rowIdx < 0) {
+    _logEntry({ acao: "updateLeadStage", status: "NAO-ENCONTRADO", aba: _SHEETS.LEADS, id: targetId, resumo: "Lead não encontrado para atualização de etapa." });
+    return _err("Lead não encontrado: " + targetId, 404);
+  }
+
+  // Atualiza a etapa
+  sheet.getRange(rowIdx, etapaIdx + 1).setValue(novaEtapa);
+
+  // Nota curta de histórico na coluna observacao, se existir — sem dados sensíveis
+  var obsIdx = headers.indexOf("observacao");
+  if (obsIdx >= 0) {
+    var obsAtual = String(allData[rowIdx - 1][obsIdx] || "").trim();
+    var nota     = "[" + _nowBr() + "] Etapa alterada para \"" + novaEtapa + "\" via painel.";
+    sheet.getRange(rowIdx, obsIdx + 1).setValue(obsAtual ? (obsAtual + " | " + nota) : nota);
+  }
+
+  // Responsável pela mudança — só sobrescreve se enviado explicitamente
+  var respIdx = headers.indexOf("responsavel");
+  if (respIdx >= 0 && data.responsavel) {
+    sheet.getRange(rowIdx, respIdx + 1).setValue(String(data.responsavel).trim());
+  }
+
+  var converted = false;
+  if (_LEAD_ETAPAS_CONVERSAO.indexOf(novaEtapa) >= 0 && typeof _cvConverterLeadCore === "function") {
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(15000);
+      _cvConverterLeadCore(SpreadsheetApp.getActiveSpreadsheet(), sheet, rowIdx, novaEtapa);
+      converted = true;
+    } catch (convErr) {
+      _logEntry({ acao: "updateLeadStage", status: "ERRO-CONVERSAO", aba: _SHEETS.LEADS, id: targetId, resumo: convErr.message });
+      return _err("Etapa atualizada, mas a conversão automática para CRM falhou: " + convErr.message, 500);
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  _logEntry({
+    acao:   "updateLeadStage",
+    status: "OK",
+    aba:    _SHEETS.LEADS,
+    id:     targetId,
+    resumo: "Etapa alterada para " + novaEtapa + (converted ? " (convertido para CRM)" : ""),
+  });
+
+  return _ok({
+    id: targetId,
+    message: converted
+      ? "Etapa atualizada e lead convertido para os CRMs de atendimento."
+      : "Etapa atualizada com sucesso.",
+    converted: converted,
+  });
 }
 
 // ── Helpers de infra ──────────────────────────────────────────────────────────

@@ -29,6 +29,35 @@ const slug = (text) =>
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, "-");
 
+// Etapas oficiais do funil de leads — mesma lista usada para criar um lead
+// (aba "Novo Lead" em Entrada de Dados) e para mudar a etapa de um lead
+// existente (botão "Mudar etapa" na tabela de Leads e Agendamentos).
+// "Concluído" e "Perdido" foram adicionados por já constarem como opções
+// previstas no template inicial da planilha (soprolife-sheets-template.gs);
+// as demais etapas preservam exatamente a lista já usada em produção.
+const LEAD_ETAPA_OPTIONS = [
+  "Novo contato",
+  "Em conversa",
+  "Aguardando retorno",
+  "Agendado",
+  "Realizou consulta",
+  "Realizou espirometria",
+  "Realizou consulta e espirometria",
+  "Concluído",
+  "Não respondeu",
+  "Desistiu",
+  "Perdido",
+];
+
+// Etapas que, ao serem definidas via painel, disparam a conversão automática
+// do lead para os CRMs de atendimento no Apps Script (ver _updateLeadStage
+// em apps-script/command-center-api.gs).
+const LEAD_ETAPAS_CONVERSAO = [
+  "Realizou consulta",
+  "Realizou espirometria",
+  "Realizou consulta e espirometria",
+];
+
 const CHART_COLORS = [
   "rgba(29, 183, 166, .92)",   // teal — cor da marca
   "rgba(99, 102, 241, .92)",   // indigo
@@ -1721,17 +1750,7 @@ function renderEntradaDados(container) {
       "Painel VPS",
       "Outro",
     ];
-    const etapaLeadOpts = [
-      "Novo contato",
-      "Em conversa",
-      "Aguardando retorno",
-      "Agendado",
-      "Realizou consulta",
-      "Realizou espirometria",
-      "Realizou consulta e espirometria",
-      "Não respondeu",
-      "Desistiu",
-    ];
+    const etapaLeadOpts = LEAD_ETAPA_OPTIONS;
     return formWrapper("Novo Lead", [
       field({ id: "nome",              label: "Nome",                required: true }),
       field({ id: "telefone_whatsapp", label: "Telefone / WhatsApp", type: "tel", placeholder: "(21) 99999-9999" }),
@@ -2059,7 +2078,7 @@ function renderLeadsTable() {
   if (!tbody) return;
 
   if (state.leads.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="crm-empty">Nenhum lead registrado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="crm-empty">Nenhum lead registrado.</td></tr>`;
     return;
   }
 
@@ -2082,6 +2101,13 @@ function renderLeadsTable() {
       ? `<a class="fp-wa-btn" href="${escapeHtml(waUrl)}" target="_blank" rel="noopener" title="Abrir WhatsApp">WhatsApp</a>`
       : `<span class="fp-wa-disabled">—</span>`;
 
+    const stageBtn = leadId
+      ? `<button type="button" class="lead-stage-btn" data-lead-id="${escapeHtml(leadId)}" data-tip="Mudar a etapa deste lead" aria-label="Mudar etapa de ${escapeHtml(nome)}">
+           <svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.5 2.5l3 3-9 9-3.6.6.6-3.6z"/></svg>
+           Mudar etapa
+         </button>`
+      : `<span class="lead-stage-disabled" tabindex="0" data-tip="Este lead não tem lead_id — não é possível editar pelo painel." aria-label="Ação indisponível: lead sem identificador">—</span>`;
+
     return `
     <tr>
       <td>
@@ -2094,8 +2120,148 @@ function renderLeadsTable() {
       <td>${escapeHtml(acao)}</td>
       <td>${dataLabel ? `<span class="crm-data ${dataCls}">${dataLabel}</span>` : "—"}</td>
       <td>${escapeHtml(responsavel)}</td>
+      <td>${stageBtn}</td>
     </tr>`;
   }).join("");
+}
+
+// ─── Mudar etapa de um lead — modal + chamada ao Command Center ────────────
+
+let _leadStageTrigger = null;
+
+function closeLeadStageModal() {
+  const overlay = document.querySelector(".lead-stage-overlay");
+  if (overlay) overlay.remove();
+  document.removeEventListener("keydown", _leadStageKeydown);
+  if (_leadStageTrigger) {
+    _leadStageTrigger.focus();
+    _leadStageTrigger = null;
+  }
+}
+
+function _leadStageKeydown(event) {
+  if (event.key === "Escape") closeLeadStageModal();
+}
+
+function openLeadStageModal(lead, triggerBtn) {
+  closeLeadStageModal();
+  _leadStageTrigger = triggerBtn || null;
+
+  const nome    = lead.nome || lead.lead || lead.lead_id || "Lead";
+  const current = lead.etapa || lead.status || "";
+
+  const options = LEAD_ETAPA_OPTIONS.map((op) =>
+    `<option value="${escapeHtml(op)}"${op === current ? " selected" : ""}>${escapeHtml(op)}</option>`
+  ).join("");
+
+  const overlay = document.createElement("div");
+  overlay.className = "lead-stage-overlay";
+  overlay.innerHTML = `
+    <div class="lead-stage-modal" role="dialog" aria-modal="true" aria-labelledby="leadStageTitle">
+      <div class="lead-stage-modal-header">
+        <div>
+          <p class="eyebrow">Mudar etapa</p>
+          <h4 id="leadStageTitle">${escapeHtml(nome)}</h4>
+        </div>
+        <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
+      </div>
+
+      <p class="lead-stage-current">
+        Etapa atual: <span class="badge ${slug(current || "—")}">${escapeHtml(current || "—")}</span>
+      </p>
+
+      <label class="cc-label" for="leadStageSelect">Nova etapa</label>
+      <select id="leadStageSelect" class="cc-select">${options}</select>
+
+      <p class="lead-stage-convert-hint" hidden>
+        Esta etapa converte o lead automaticamente para o CRM de atendimento
+        e o remove desta lista de leads.
+      </p>
+
+      <div class="cc-result lead-stage-result" hidden></div>
+
+      <div class="lead-stage-actions">
+        <button type="button" class="lead-stage-cancel">Cancelar</button>
+        <button type="button" class="lead-stage-save">Salvar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", _leadStageKeydown);
+
+  const select      = overlay.querySelector("#leadStageSelect");
+  const convertHint = overlay.querySelector(".lead-stage-convert-hint");
+  const result       = overlay.querySelector(".lead-stage-result");
+  const saveBtn  = overlay.querySelector(".lead-stage-save");
+  const cancelBtn = overlay.querySelector(".lead-stage-cancel");
+
+  const toggleConvertHint = () => {
+    convertHint.hidden = !LEAD_ETAPAS_CONVERSAO.includes(select.value);
+  };
+  toggleConvertHint();
+  select.addEventListener("change", toggleConvertHint);
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeLeadStageModal();
+  });
+  overlay.querySelector(".lead-stage-close").addEventListener("click", closeLeadStageModal);
+  cancelBtn.addEventListener("click", closeLeadStageModal);
+
+  saveBtn.addEventListener("click", async () => {
+    const novaEtapa = select.value;
+    if (!novaEtapa || novaEtapa === current) {
+      closeLeadStageModal();
+      return;
+    }
+
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    select.disabled = true;
+    saveBtn.textContent = "Salvando…";
+    result.hidden = true;
+
+    try {
+      const resp = await submitToCommandCenter("updateLeadStage", {
+        lead_id: lead.lead_id,
+        etapa:   novaEtapa,
+      });
+
+      result.className = "cc-result lead-stage-result cc-result-ok";
+      result.textContent = resp.message || "Etapa atualizada com sucesso.";
+      result.hidden = false;
+
+      applyLeadStageUpdate(lead.lead_id, novaEtapa, resp.converted === true);
+
+      setTimeout(closeLeadStageModal, 1100);
+    } catch (err) {
+      result.className = "cc-result lead-stage-result cc-result-err";
+      result.textContent = "Erro: " + err.message;
+      result.hidden = false;
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
+      select.disabled = false;
+      saveBtn.textContent = "Salvar";
+    }
+  });
+
+  select.focus();
+}
+
+// Aplica o resultado da mudança de etapa localmente, sem recarregar a página.
+// Se o lead foi convertido (migrou para os CRMs), ele sai da lista de Leads.
+function applyLeadStageUpdate(leadId, novaEtapa, converted) {
+  if (converted) {
+    state.leads = state.leads.filter((l) => l.lead_id !== leadId);
+  } else {
+    const item = state.leads.find((l) => l.lead_id === leadId);
+    if (item) item.etapa = novaEtapa;
+  }
+
+  renderLeadsTable();
+  renderLeadStats();
+  renderLeadPipeline();
+  renderLeadsCharts();
+  renderOverviewExtraCharts();
 }
 
 function renderSeoList() {
@@ -2861,6 +3027,19 @@ function bindEvents() {
       row.style.display = visible || !term ? "" : "none";
     });
   });
+
+  // Delegado no tbody (persiste entre re-renders de renderLeadsTable)
+  const leadsTbody = document.querySelector("#leadsTable");
+  if (leadsTbody) {
+    leadsTbody.addEventListener("click", (event) => {
+      const btn = event.target.closest(".lead-stage-btn");
+      if (!btn) return;
+      const leadId = btn.dataset.leadId;
+      const lead = state.leads.find((l) => l.lead_id === leadId);
+      if (!lead) return;
+      openLeadStageModal(lead, btn);
+    });
+  }
 }
 
 init();

@@ -5701,3 +5701,204 @@ th {
     linear-gradient(128deg, #0d2544 0%, #0a1e36 50%, #071829 100%);
   background-size: auto, auto, 26px 26px, auto;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Mudar etapa do lead — botão de ação na tabela + modal
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lead-stage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: .72rem;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  background: var(--teal-soft, var(--soft));
+  color: var(--teal-dark);
+  border: 1px solid rgba(23,181,165,.28);
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--ease-fast, .12s), border-color var(--ease-fast, .12s), transform var(--ease-fast, .12s);
+}
+
+.lead-stage-btn:hover {
+  background: rgba(23,181,165,.16);
+  border-color: rgba(23,181,165,.45);
+}
+
+.lead-stage-btn:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.lead-stage-btn svg { flex-shrink: 0; opacity: .85; }
+
+.lead-stage-disabled {
+  color: var(--muted-light, var(--muted));
+  cursor: help;
+  font-size: .8rem;
+}
+
+.lead-stage-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 18, 33, .52);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 10000;
+  animation: leadStageFadeIn .15s ease;
+}
+
+@keyframes leadStageFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.lead-stage-modal {
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(8,18,33,.35);
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 22px 24px 24px;
+}
+
+.lead-stage-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.lead-stage-modal-header h4 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -.02em;
+}
+
+.lead-stage-modal .eyebrow {
+  margin: 0 0 4px;
+}
+
+.lead-stage-close {
+  border: none;
+  background: var(--line-light, #eef2f7);
+  color: var(--muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: .85rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .12s, color .12s;
+}
+
+.lead-stage-close:hover { background: #e2e8f0; color: var(--navy); }
+
+.lead-stage-current {
+  margin: 0 0 16px;
+  font-size: .82rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lead-stage-modal .cc-label { margin-top: 0; }
+.lead-stage-modal .cc-select { width: 100%; margin-bottom: 4px; }
+
+.lead-stage-convert-hint {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--warn-soft, #fff8ed);
+  color: #8a5f00;
+  font-size: .76rem;
+  line-height: 1.45;
+}
+
+.lead-stage-modal .lead-stage-result {
+  margin-top: 12px;
+}
+
+.lead-stage-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.lead-stage-cancel {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: .84rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.lead-stage-cancel:hover:not(:disabled) { background: var(--line-light, #f4f7fa); }
+.lead-stage-cancel:disabled { opacity: .5; cursor: not-allowed; }
+
+.lead-stage-save {
+  border: none;
+  background: var(--teal);
+  color: #fff;
+  border-radius: 10px;
+  padding: 9px 18px;
+  font-size: .84rem;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background .12s;
+}
+
+.lead-stage-save:hover:not(:disabled) { background: var(--teal-dark); }
+.lead-stage-save:disabled { opacity: .55; cursor: not-allowed; }
+
+@media (max-width: 480px) {
+  .lead-stage-overlay { padding: 12px; align-items: flex-end; }
+  .lead-stage-modal {
+    max-width: 100%;
+    border-radius: 18px 18px 0 0;
+    max-height: calc(100vh - 24px);
+  }
+}
+
+/* ── Badges de etapa de lead — cores dedicadas ────────────────────────────── */
+.badge.novo-contato {
+  background: #e8f0fe;
+  color: #2f5fce;
+}
+.badge.aguardando-retorno {
+  background: #fff4dc;
+  color: #a66d00;
+}
+.badge.realizou-consulta,
+.badge.realizou-espirometria,
+.badge.realizou-consulta-e-espirometria,
+.badge.concluido {
+  background: #e7f8f5;
+  color: var(--success, var(--ok));
+  font-weight: 800;
+}
+.badge.desistiu,
+.badge.perdido {
+  background: #ffe9eb;
+  color: var(--danger);
+}
