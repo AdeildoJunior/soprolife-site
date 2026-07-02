@@ -28,8 +28,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-HOST = "127.0.0.1"
-PORT = 8765
+HOST = os.environ.get("SOPROLIFE_PANEL_HOST", "127.0.0.1")
+PORT = int(os.environ.get("SOPROLIFE_PANEL_PORT", "8765"))
 
 _CONFIG_PATH = Path("painel-soprolife/data-private/command-center-config.local.json")
 _API_PATH    = "/painel-soprolife/api/command-center"
