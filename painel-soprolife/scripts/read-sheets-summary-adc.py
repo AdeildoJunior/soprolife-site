@@ -6,9 +6,16 @@ Lê indicadores agregados da aba "Resumo Dashboard" usando
 Application Default Credentials (gcloud). Nunca imprime
 spreadsheet_id, URLs privadas, tokens ou credenciais.
 
-Formatos aceitos na aba:
-  A) chave_tecnica | rotulo       | valor    (chave camelCase na coluna A)
-  B) area          | indicador    | valor    (texto livre na coluna B, mapeado automaticamente)
+Suporta dois formatos de aba:
+  Formato A (chave direta):
+    Coluna A: chave técnica  (ex: totalLeads)
+    Coluna B: rótulo         (ex: Total de leads)
+    Coluna C: valor          (ex: 42)
+
+  Formato B (área + indicador):
+    Coluna A: área           (ex: Comercial)
+    Coluna B: indicador      (ex: Total de leads)
+    Coluna C: valor          (ex: 42)
 
 Pré-requisito:
     pip install -r painel-soprolife/requirements-google.txt
@@ -81,110 +88,53 @@ FORBIDDEN_PATTERNS = [
     "data de nascimento",
 ]
 
-_HEADER_SYNONYMS = {"key", "indicador", "metrica", "métrica", "campo", "chave", "label"}
+_HEADER_SYNONYMS = {"key", "indicador", "metrica", "métrica", "campo", "chave", "label", "area", "área"}
+
+# Cabeçalhos que identificam o Formato B (área | indicador | valor)
+_AREA_HEADER_NORMS = {"area", "area", "modulo", "categoria"}
+_INDICATOR_HEADER_NORMS = {"indicador", "metrica", "campo", "indicadores"}
 
 
-def _normalize_text(text: str) -> str:
-    """Minúsculas + sem acentos + espaços/hífens/barras/underscores → espaço simples."""
-    nfd = unicodedata.normalize("NFD", text.lower())
-    no_accents = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
-    return re.sub(r"[\s\-_/]+", " ", no_accents).strip()
+def _normalize_label(s: str) -> str:
+    """Normaliza rótulo para busca no _INDICATOR_MAP.
+
+    Converte para minúsculas, remove acentos e suprime espaços/hífens/barras.
+    """
+    s = s.strip().lower()
+    s = unicodedata.normalize("NFD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = re.sub(r"[\s\-/_()]+", "", s)
+    return s
 
 
-# Mapeamento de rótulos normalizados → chaves técnicas.
-# Usado no formato B (area | indicador | valor): col B é o indicador em texto livre.
-_LABEL_TO_KEY: dict[str, str] = {
-    # totalLeads
-    "total de leads": "totalLeads",
-    "total leads": "totalLeads",
-    "totalleads": "totalLeads",
-    # leadsNovos
-    "leads novos": "leadsNovos",
-    "novos leads": "leadsNovos",
-    "leads novo": "leadsNovos",
-    "novo lead": "leadsNovos",
-    "leadsnovos": "leadsNovos",
-    # leadsAgendados
-    "leads agendados": "leadsAgendados",
-    "leads agendado": "leadsAgendados",
-    "leadsagendados": "leadsAgendados",
-    # leadsConcluidos
-    "leads concluidos": "leadsConcluidos",
-    "leads concluido": "leadsConcluidos",
-    "leads finalizados": "leadsConcluidos",
-    "leads finalizado": "leadsConcluidos",
-    "leads convertidos": "leadsConcluidos",
-    "leads convertido": "leadsConcluidos",
-    "leadsconcluidos": "leadsConcluidos",
-    # clinicasCadastradas
-    "clinicas cadastradas": "clinicasCadastradas",
-    "clinica cadastrada": "clinicasCadastradas",
-    "parceiros cadastrados": "clinicasCadastradas",
-    "parceiro cadastrado": "clinicasCadastradas",
-    "clinicascadastradas": "clinicasCadastradas",
-    # tarefasPendentes
-    "tarefas pendentes": "tarefasPendentes",
-    "tarefa pendente": "tarefasPendentes",
-    "tarefaspendentes": "tarefasPendentes",
-    # receitaPrevista
-    "receita prevista": "receitaPrevista",
-    "receita esperada": "receitaPrevista",
-    "previsao de receita": "receitaPrevista",
-    "previsao receita": "receitaPrevista",
-    "receitaprevista": "receitaPrevista",
-    # receitaRecebida
-    "receita recebida": "receitaRecebida",
-    "receita efetiva": "receitaRecebida",
-    "receita realizada": "receitaRecebida",
-    "receitarecebida": "receitaRecebida",
-    # conteudosPlanejados
-    "conteudos planejados": "conteudosPlanejados",
-    "conteudo planejado": "conteudosPlanejados",
-    "postagens planejadas": "conteudosPlanejados",
-    "publicacoes planejadas": "conteudosPlanejados",
-    "conteudosplanejados": "conteudosPlanejados",
-    # eventosAgendados
-    "eventos agendados": "eventosAgendados",
-    "evento agendado": "eventosAgendados",
-    "eventosagendados": "eventosAgendados",
-    # pacientesEmAcompanhamento — chave pré-aprovada; rótulo pode conter "paciente"
-    "pacientes em acompanhamento": "pacientesEmAcompanhamento",
-    "paciente em acompanhamento": "pacientesEmAcompanhamento",
-    "em acompanhamento": "pacientesEmAcompanhamento",
-    "acompanhamentos ativos": "pacientesEmAcompanhamento",
-    "pacientesemacompanhamento": "pacientesEmAcompanhamento",
-    # examesEspirometriaRealizados
-    "espirometrias realizadas": "examesEspirometriaRealizados",
-    "espirometria realizada": "examesEspirometriaRealizados",
-    "exames espirometria realizados": "examesEspirometriaRealizados",
-    "exames de espirometria realizados": "examesEspirometriaRealizados",
-    "exames realizados": "examesEspirometriaRealizados",
+# Mapeamento de rótulos normalizados → chave técnica.
+# Aceita tanto camelCase (chave técnica em minúsculas) quanto rótulos em português.
+_INDICATOR_MAP: dict[str, str] = {
+    # camelCase (chave técnica, lowercased)
+    "totalleads":                   "totalLeads",
+    "leadsnovos":                   "leadsNovos",
+    "leadsagendados":               "leadsAgendados",
+    "leadsconcluidos":              "leadsConcluidos",
+    "clinicascadastradas":          "clinicasCadastradas",
+    "tarefaspendentes":             "tarefasPendentes",
+    "receitaprevista":              "receitaPrevista",
+    "receitarecebida":              "receitaRecebida",
+    "conteudosplanejados":          "conteudosPlanejados",
+    "eventosagendados":             "eventosAgendados",
+    "pacientesemacompanhamento":    "pacientesEmAcompanhamento",
     "examesespirometriarealizados": "examesEspirometriaRealizados",
-    # teleconsultasRealizadas
-    "teleconsultas realizadas": "teleconsultasRealizadas",
-    "teleconsulta realizada": "teleconsultasRealizadas",
-    "teleconsultasrealizadas": "teleconsultasRealizadas",
-    # followupsPendentes
-    "follow ups pendentes": "followupsPendentes",
-    "follow up pendente": "followupsPendentes",
-    "followups pendentes": "followupsPendentes",
-    "followup pendente": "followupsPendentes",
-    "followupspendentes": "followupsPendentes",
-    # lembretesWhatsAppPendentes — chave pré-aprovada; rótulo pode conter "whatsapp"
-    "lembretes whatsapp pendentes": "lembretesWhatsAppPendentes",
-    "lembrete whatsapp pendente": "lembretesWhatsAppPendentes",
-    "lembretes whatsapp": "lembretesWhatsAppPendentes",
-    "lembreteswhatsapppendentes": "lembretesWhatsAppPendentes",
-    # recorrenciasAtivas
-    "recorrencias ativas": "recorrenciasAtivas",
-    "recorrencia ativa": "recorrenciasAtivas",
-    "planos ativos": "recorrenciasAtivas",
-    "recorrenciasativas": "recorrenciasAtivas",
-    # consultasPrevistas
-    "consultas previstas": "consultasPrevistas",
-    "consulta prevista": "consultasPrevistas",
-    "consultas agendadas": "consultasPrevistas",
-    "consultasprevistas": "consultasPrevistas",
+    "teleconsultasrealizadas":      "teleconsultasRealizadas",
+    "followupspendentes":           "followupsPendentes",
+    "lembreteswhatsapppendentes":   "lembretesWhatsAppPendentes",
+    "recorrenciasativas":           "recorrenciasAtivas",
+    "consultasprevistas":           "consultasPrevistas",
+    # Rótulos em português — coluna B do Formato B
+    "totaldeleads":                 "totalLeads",
+    "espirometriasrealizadas":      "examesEspirometriaRealizados",
+    "espirometriasrealizados":      "examesEspirometriaRealizados",
+    "examesespirometria":           "examesEspirometriaRealizados",
+    "followupspendente":            "followupsPendentes",
+    "recorrenciaativa":             "recorrenciasAtivas",
 }
 
 
@@ -329,18 +279,19 @@ def _fetch_rows(
 
 
 def _detect_format(rows: list) -> str:
-    """
-    Detecta o formato da aba:
-      'A' — chave_tecnica | rotulo | valor  (chave camelCase na coluna A)
-      'B' — area          | indicador | valor (indicador em texto livre na coluna B)
+    """Detecta o formato da aba.
+
+    Retorna 'B' se a primeira linha tiver 'area' na coluna A e 'indicador'/'metrica'
+    na coluna B (Formato B). Caso contrário retorna 'A' (Formato A, comportamento original).
     """
     if not rows:
         return "A"
-    first = [str(c).strip() for c in rows[0]]
-    if not first:
+    first_row = [str(c).strip() for c in rows[0]]
+    if not first_row:
         return "A"
-    col_a_norm = _normalize_text(first[0])
-    if col_a_norm == "area":
+    col_a_norm = _normalize_label(first_row[0])
+    col_b_norm = _normalize_label(first_row[1]) if len(first_row) > 1 else ""
+    if col_a_norm in _AREA_HEADER_NORMS and col_b_norm in _INDICATOR_HEADER_NORMS:
         return "B"
     return "A"
 
@@ -361,46 +312,56 @@ def _show_structure(rows: list, sheet_name: str) -> None:
         headers_display = " | ".join(first_row)
         print(f"  headers: {headers_display}")
 
-    fmt = _detect_format(rows)
-    print(f"  formato_detectado: {fmt}")
+    detected = _detect_format(rows)
+    print(f"  format_detected: {detected}")
     print()
     print("Nota: somente a primeira linha foi inspecionada.")
     print("Os valores das linhas de dados não foram impressos.")
     print()
 
-    if fmt == "B":
-        print("Formato B detectado: area | indicador | valor")
-        print("  Coluna A: área temática (ex: Leads, Receita, CRM)")
-        print("  Coluna B: indicador em texto livre (ex: Total de leads)")
-        print("  Coluna C: valor numérico (ex: 42)")
+    if detected == "B":
+        print("Formato B detectado (área | indicador | valor).")
+        print("O script mapeará a coluna B (indicador) para as chaves técnicas do painel.")
         print()
-        print("Rótulos reconhecidos na coluna B (exemplos):")
-        shown = set()
-        for label, key in sorted(_LABEL_TO_KEY.items()):
-            if key not in shown:
-                print(f"  '{label}' → {key}")
-                shown.add(key)
+        print("Indicadores reconhecidos na coluna B (português ou camelCase):")
+        labels_by_key: dict[str, list[str]] = {}
+        for norm_label, tech_key in _INDICATOR_MAP.items():
+            labels_by_key.setdefault(tech_key, []).append(norm_label)
+        for key in ORDERED_KEYS:
+            variants = labels_by_key.get(key, [])
+            print(f"  {key}")
+            if variants:
+                sample = sorted(variants)[:2]
+                print(f"    ex: {', '.join(sample)}")
     else:
-        print("Formato A detectado: chave | rótulo | valor")
-        print("  Coluna A: chave técnica (ex: totalLeads)")
-        print("  Coluna B: rótulo legível (ex: Total de leads)")
-        print("  Coluna C: valor numérico (ex: 42)")
-        print()
         found_expected = any(h.lower() in _HEADER_SYNONYMS for h in first_row)
         if found_expected:
-            print("A primeira linha parece ser um cabeçalho reconhecido.")
+            print("Formato A: primeira linha parece ser um cabeçalho reconhecido.")
             print("Se valid_indicators retornou 0, verifique se as chaves da coluna A")
             print("correspondem exatamente aos nomes esperados:")
         else:
-            print("ATENÇÃO: a primeira linha não parece ser um cabeçalho reconhecido.")
-            print("Chaves técnicas esperadas na coluna A:")
+            print("Formato A não confirmado. A aba pode estar no Formato B.")
+            print()
+            print("Formatos aceitos:")
+            print()
+            print("  Formato A (chave direta):")
+            print("    Coluna A: chave técnica  (ex: totalLeads)")
+            print("    Coluna B: rótulo         (ex: Total de leads)")
+            print("    Coluna C: valor          (ex: 42)")
+            print()
+            print("  Formato B (área + indicador):")
+            print("    Coluna A: area           (ex: Comercial)")
+            print("    Coluna B: indicador      (ex: Total de leads)")
+            print("    Coluna C: valor          (ex: 42)")
+            print()
+            print("Chaves esperadas (Formato A) / indicadores mapeados (Formato B):")
 
         for key in sorted(ALLOWED_KEYS):
             print(f"  {key}")
 
 
 def _parse_indicators_format_a(rows: list) -> dict[str, float]:
-    """Formato A: chave camelCase na coluna A. Nunca imprime valores de dados."""
+    """Formato A: chave técnica | rótulo | valor (coluna A = chave camelCase)."""
     summary: dict[str, float] = {}
 
     for i, row in enumerate(rows):
@@ -443,65 +404,66 @@ def _parse_indicators_format_a(rows: list) -> dict[str, float]:
 
 
 def _parse_indicators_format_b(rows: list) -> dict[str, float]:
-    """
-    Formato B: area | indicador | valor.
-    Usa a coluna B (indicador) mapeada para chave técnica via _LABEL_TO_KEY.
-    Nunca imprime valores de dados.
-    """
+    """Formato B: área | indicador | valor (coluna B = rótulo mapeado para chave técnica)."""
     summary: dict[str, float] = {}
+    skipped_unmapped = 0
 
     for i, row in enumerate(rows):
-        if i == 0:
-            continue  # pula cabeçalho (area | indicador | valor)
         if not row:
             continue
 
-        label_raw = str(row[1]).strip() if len(row) > 1 else ""
-        if not label_raw:
+        area_raw = str(row[0]).strip()
+        indicator_raw = str(row[1]).strip() if len(row) > 1 else ""
+
+        # Pular linha de cabeçalho
+        if _normalize_label(area_raw) in _AREA_HEADER_NORMS:
             continue
 
-        label_norm = _normalize_text(label_raw)
-        key = _LABEL_TO_KEY.get(label_norm)
+        # Pular linhas sem indicador
+        if not indicator_raw:
+            continue
 
-        if key is None:
-            # Rótulo não mapeado — verificar palavras proibidas antes de ignorar.
-            # Rótulos mapeados para chaves em ALLOWED_KEYS são pré-aprovados e
-            # bypassam essa verificação (ex: "Pacientes em acompanhamento").
-            forbidden = _check_forbidden(label_raw)
-            if forbidden:
-                print(f"ERRO: palavra proibida '{forbidden}' detectada na coluna B, linha {i + 1}.")
-                sys.exit(1)
+        # Mapear rótulo da coluna B → chave técnica
+        norm = _normalize_label(indicator_raw)
+        tech_key = _INDICATOR_MAP.get(norm)
+
+        if tech_key is None:
+            skipped_unmapped += 1
             continue
 
         if len(row) < 3:
-            print(f"AVISO: indicador '{label_raw}' na linha {i + 1} sem coluna de valor (C); ignorado.")
+            print(f"AVISO: indicador '{indicator_raw}' na linha {i + 1} sem valor (coluna C); ignorado.")
             continue
 
         value_raw = str(row[2]).strip()
 
+        # Verificar palavras proibidas somente no valor (coluna C)
         forbidden = _check_forbidden(value_raw)
         if forbidden:
             print(f"ERRO: palavra proibida '{forbidden}' detectada no valor da linha {i + 1}.")
             sys.exit(1)
 
         try:
-            summary[key] = _parse_number(value_raw)
+            summary[tech_key] = _parse_number(value_raw)
         except ValueError as exc:
-            print(f"ERRO: valor inválido para '{label_raw}': {exc}")
+            print(f"ERRO: valor inválido para '{tech_key}' (indicador: '{indicator_raw}'): {exc}")
             sys.exit(1)
+
+    if skipped_unmapped > 0:
+        print(f"INFO: {skipped_unmapped} linha(s) com indicador não mapeado ignorada(s).")
 
     return summary
 
 
 def _parse_indicators(rows: list) -> dict[str, float]:
-    """Extrai indicadores válidos. Detecta formato A ou B automaticamente."""
+    """Detecta o formato e extrai os indicadores válidos."""
     fmt = _detect_format(rows)
+    print(f"format_detected: {fmt}")
     if fmt == "B":
-        print("formato_detectado: B (area | indicador | valor)")
+        print("Usando Formato B: área | indicador | valor")
         return _parse_indicators_format_b(rows)
-    else:
-        print("formato_detectado: A (chave | rotulo | valor)")
-        return _parse_indicators_format_a(rows)
+    print("Usando Formato A: chave | rótulo | valor")
+    return _parse_indicators_format_a(rows)
 
 
 def main() -> int:
@@ -559,33 +521,23 @@ def main() -> int:
         print()
         print("ERRO: nenhum indicador válido encontrado na aba.")
         print()
-        fmt = _detect_format(rows)
-        if fmt == "B":
-            print("A aba está no formato B (area | indicador | valor).")
-            print("Verifique se os textos da coluna B correspondem aos rótulos reconhecidos.")
-            print()
-            print("Exemplos de rótulos aceitos na coluna B:")
-            shown = set()
-            for label, key in sorted(_LABEL_TO_KEY.items()):
-                if key not in shown and not label.endswith(key.lower()):
-                    print(f"  '{label}' → {key}")
-                    shown.add(key)
-        else:
-            print("A aba precisa estar no formato:")
-            print("  Coluna A: chave    (ex: totalLeads)")
-            print("  Coluna B: rótulo   (ex: Total de leads)")
-            print("  Coluna C: valor    (ex: 42)")
-            print()
-            print("Ou no formato B com cabeçalho 'area' na coluna A:")
-            print("  Coluna A: area     (ex: Leads)")
-            print("  Coluna B: indicador (ex: Total de leads)")
-            print("  Coluna C: valor    (ex: 42)")
-            print()
-            print("Chaves esperadas na coluna A (formato A):")
-            for key in ORDERED_KEYS:
-                print(f"  {key}")
+        print("A aba deve estar em um dos formatos abaixo:")
         print()
-        print("Use --show-structure para inspecionar a estrutura atual da aba.")
+        print("  Formato A (chave direta):")
+        print("    Coluna A: chave técnica  (ex: totalLeads)")
+        print("    Coluna B: rótulo         (ex: Total de leads)")
+        print("    Coluna C: valor          (ex: 42)")
+        print()
+        print("  Formato B (área + indicador)  ← detectado por cabeçalho 'area | indicador | valor':")
+        print("    Coluna A: área           (ex: Comercial)")
+        print("    Coluna B: indicador      (ex: Total de leads)")
+        print("    Coluna C: valor          (ex: 42)")
+        print()
+        print("Chaves esperadas (Formato A) — ou nomes de indicadores mapeados (Formato B):")
+        for key in ORDERED_KEYS:
+            print(f"  {key}")
+        print()
+        print("Use --show-structure para inspecionar o formato atual da aba.")
         return 1
 
     missing_old = set(_OLD_KEYS) - set(summary.keys())

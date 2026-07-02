@@ -1709,6 +1709,7 @@ function renderEntradaDados(container) {
       "Indicação",
       "Clínica parceira",
       "Tráfego pago",
+      "Painel VPS",
       "Outro",
     ];
     const etapaLeadOpts = [
