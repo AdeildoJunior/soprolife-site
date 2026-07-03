@@ -40,6 +40,22 @@ var _LEAD_ETAPAS_CONVERSAO = [
   "Realizou consulta e espirometria",
 ];
 
+// Etapas oficiais aceitas pelo painel e pelo dropdown da aba Leads.
+// A função updateLeadStage garante que a célula permita a etapa antes de gravar.
+var _LEAD_ETAPAS_OFICIAIS = [
+  "Novo contato",
+  "Em conversa",
+  "Aguardando retorno",
+  "Agendado",
+  "Realizou consulta",
+  "Realizou espirometria",
+  "Realizou consulta e espirometria",
+  "Concluído",
+  "Não respondeu",
+  "Desistiu",
+  "Perdido"
+];
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 function doPost(e) {
@@ -355,8 +371,24 @@ function _updateLeadStage(data) {
     return _err("Lead não encontrado: " + targetId, 404);
   }
 
-  // Atualiza a etapa
-  sheet.getRange(rowIdx, etapaIdx + 1).setValue(novaEtapa);
+  // Atualiza a etapa e verifica se a gravação realmente persistiu.
+  // Alguns dropdowns/validações do Google Sheets podem impedir a alteração sem erro claro.
+  var etapaCell = sheet.getRange(rowIdx, etapaIdx + 1);
+  _ensureLeadStageValidationAllows(etapaCell, novaEtapa);
+  etapaCell.setValue(novaEtapa);
+  SpreadsheetApp.flush();
+
+  var etapaGravada = String(etapaCell.getDisplayValue() || etapaCell.getValue() || "").trim();
+  if (etapaGravada !== novaEtapa) {
+    _logEntry({
+      acao:   "updateLeadStage",
+      status: "ERRO-GRAVACAO",
+      aba:    _SHEETS.LEADS,
+      id:     targetId,
+      resumo: "Etapa desejada: " + novaEtapa + " | Etapa lida: " + etapaGravada,
+    });
+    return _err("Falha ao gravar etapa. Etapa desejada: " + novaEtapa + " | Etapa lida: " + etapaGravada, 500);
+  }
 
   // Nota curta de histórico na coluna observacao, se existir — sem dados sensíveis
   var obsIdx = headers.indexOf("observacao");
@@ -377,7 +409,7 @@ function _updateLeadStage(data) {
     var lock = LockService.getScriptLock();
     try {
       lock.waitLock(15000);
-      _cvConverterLeadCore(SpreadsheetApp.getActiveSpreadsheet(), sheet, rowIdx, novaEtapa);
+      _cvConverterLeadCore(_getWorkbook(), sheet, rowIdx, novaEtapa);
       converted = true;
     } catch (convErr) {
       _logEntry({ acao: "updateLeadStage", status: "ERRO-CONVERSAO", aba: _SHEETS.LEADS, id: targetId, resumo: convErr.message });
@@ -406,8 +438,36 @@ function _updateLeadStage(data) {
 
 // ── Helpers de infra ──────────────────────────────────────────────────────────
 
+function _ensureLeadStageValidationAllows(cell, novaEtapa) {
+  var etapas = _LEAD_ETAPAS_OFICIAIS.slice();
+
+  if (novaEtapa && etapas.indexOf(novaEtapa) < 0) {
+    etapas.push(novaEtapa);
+  }
+
+  var rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(etapas, true)
+    .setAllowInvalid(false)
+    .build();
+
+  cell.setDataValidation(rule);
+}
+
+function _getWorkbook() {
+  var spreadsheetId = PropertiesService.getScriptProperties().getProperty("SPREADSHEET_ID");
+  if (spreadsheetId && String(spreadsheetId).trim()) {
+    return SpreadsheetApp.openById(String(spreadsheetId).trim());
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    throw new Error("SPREADSHEET_ID não configurado e nenhuma planilha ativa encontrada.");
+  }
+  return ss;
+}
+
 function _getOrCreateSheet(name) {
-  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var ss    = _getWorkbook();
   var sheet = ss.getSheetByName(name);
   if (!sheet) sheet = ss.insertSheet(name);
   return sheet;
