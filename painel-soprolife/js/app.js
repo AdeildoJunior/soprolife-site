@@ -22,6 +22,8 @@ const state = {
   custosInvestimentos: null,
   leadsFilter: "Ativos",
   crmContatosB2B: [],
+  followupClinicasSummary: null,
+  crmReportFilters: null,
 };
 
 const slug = (text) =>
@@ -321,6 +323,13 @@ async function init() {
     const followupClinicasLocal = await loadOptionalJson(`./data-private/followup-clinicas.local.json${_bust}`);
     if (followupClinicasLocal) {
       state.followupClinicas = followupClinicasLocal;
+    }
+
+    // Resumo seguro (sem nome/telefone) usado apenas para indicadores agregados
+    // em Relatórios CRM — nunca usar state.followupClinicas (privado) nessa página.
+    const followupClinicasSummary = await loadOptionalJson("./data/followup-clinicas-summary.local.json");
+    if (followupClinicasSummary?.safeToDisplay === true && followupClinicasSummary?.containsPersonalData === false) {
+      state.followupClinicasSummary = followupClinicasSummary;
     }
 
     // Leads: privado (local/Tailscale) > resumo seguro > leads.json demonstrativo
@@ -868,7 +877,7 @@ function renderCrmView() {
     case "clinicas":          renderCrmClinicas(container);             break;
     case "pacientes":         renderCrmPacientes(container);            break;
     case "followup-detalhe":  renderCrmFollowupDetalhe(container);      break;
-    case "relatorios":        renderCrmPlaceholder(container, "relatorios"); break;
+    case "relatorios":        renderCrmRelatorios(container);               break;
     case "automacoes-crm":    renderCrmAutomacoes(container);           break;
     case "entrada-dados":     renderEntradaDados(container);            break;
     default: renderCrmHub(container);
@@ -1933,12 +1942,6 @@ function renderEntradaDados(container) {
 
 function renderCrmPlaceholder(container, area) {
   const configs = {
-    relatorios: {
-      icon: "📊",
-      title: "Relatórios CRM",
-      subtitle: "Indicadores consolidados de relacionamento",
-      description: "Gráficos e indicadores de desempenho comercial e de relacionamento. Conectará com Google Sheets, CRM e histórico de atendimentos."
-    },
     "automacoes-crm": {
       icon: "⚡",
       title: "Automações CRM",
@@ -1972,6 +1975,526 @@ function renderCrmPlaceholder(container, area) {
   });
 }
 
+// ── Relatórios CRM ───────────────────────────────────────────────────────────
+// Página de indicadores consolidados. Usa apenas dados agregados/seguros já
+// carregados em state (leads, crm, resumos de follow-up e contatos B2B) —
+// nunca state.followupPacientes / state.followupClinicas (privados, com nome
+// e telefone) nem qualquer campo pessoal.
+
+const CRM_REPORT_ORIGENS_CONHECIDAS = ["Google", "Site", "Indicação"];
+
+function parseLeadDate(dateStr) {
+  if (!dateStr) return null;
+  const datePart = String(dateStr).trim().split(" ")[0];
+  const iso = parseDateIso(datePart);
+  if (!iso) return null;
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function leadMatchesPeriodo(lead, periodo) {
+  if (periodo === "Todos") return true;
+  const d = parseLeadDate(lead.data_contato);
+  if (!d) return false;
+  const now = new Date();
+  if (periodo === "mesAtual") {
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }
+  const diffDias = (now - d) / 86400000;
+  if (periodo === "7d") return diffDias >= 0 && diffDias <= 7;
+  if (periodo === "30d") return diffDias >= 0 && diffDias <= 30;
+  return true;
+}
+
+function leadMatchesTipo(lead, tipo) {
+  if (tipo === "Todos") return true;
+  return tipo === "B2B" ? isB2BLead(lead) : !isB2BLead(lead);
+}
+
+function leadMatchesOrigem(lead, origem) {
+  if (origem === "Todas") return true;
+  const o = (lead.origem || "").trim();
+  if (origem === "Outro") return !CRM_REPORT_ORIGENS_CONHECIDAS.includes(o);
+  return o === origem;
+}
+
+function getCrmReportFilteredLeads() {
+  const f = state.crmReportFilters;
+  return state.leads.filter((l) =>
+    leadMatchesPeriodo(l, f.periodo) &&
+    leadMatchesTipo(l, f.tipo) &&
+    leadMatchesOrigem(l, f.origem)
+  );
+}
+
+function crmReportStatCard(key, label, value, hint) {
+  const isEmpty = value === null || value === undefined || value === "";
+  return statCardHtml("crm-stat-card", {
+    key,
+    label,
+    value: isEmpty ? "—" : value,
+    hint: isEmpty ? "dado ainda não disponível" : hint,
+  });
+}
+
+function crmReportChartPanel({ title, subtitle, canvasId, hasData, emptyMsg }) {
+  const body = hasData
+    ? `<canvas id="${canvasId}"></canvas>`
+    : `<p class="crm-report-chart-empty">${emptyMsg || "Dado ainda não disponível"}</p>`;
+  return `
+    <article class="panel">
+      <div class="panel-header">
+        <h3>${title}</h3>
+        <span>${subtitle}</span>
+      </div>
+      ${body}
+    </article>
+  `;
+}
+
+function renderCrmRelatorios(container) {
+  if (!state.crmReportFilters) {
+    state.crmReportFilters = { periodo: "Todos", tipo: "Todos", origem: "Todas" };
+  }
+  const f = state.crmReportFilters;
+
+  container.innerHTML = `
+    <div class="crm-subview-header">
+      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
+      <div>
+        <p class="eyebrow">CRM SoproLife</p>
+        <h2>Relatórios CRM</h2>
+        <p class="section-sub">Indicadores consolidados de relacionamento</p>
+      </div>
+    </div>
+
+    <div class="crm-report-filters">
+      <label>Período
+        <select id="crmReportPeriodo" class="crm-filter-select">
+          <option value="Todos"${f.periodo === "Todos" ? " selected" : ""}>Todos</option>
+          <option value="7d"${f.periodo === "7d" ? " selected" : ""}>Últimos 7 dias</option>
+          <option value="30d"${f.periodo === "30d" ? " selected" : ""}>Últimos 30 dias</option>
+          <option value="mesAtual"${f.periodo === "mesAtual" ? " selected" : ""}>Mês atual</option>
+        </select>
+      </label>
+      <label>Tipo
+        <select id="crmReportTipo" class="crm-filter-select">
+          <option value="Todos"${f.tipo === "Todos" ? " selected" : ""}>Todos</option>
+          <option value="Pacientes"${f.tipo === "Pacientes" ? " selected" : ""}>Pacientes</option>
+          <option value="B2B"${f.tipo === "B2B" ? " selected" : ""}>B2B / Clínicas</option>
+        </select>
+      </label>
+      <label>Origem
+        <select id="crmReportOrigem" class="crm-filter-select">
+          <option value="Todas"${f.origem === "Todas" ? " selected" : ""}>Todas</option>
+          <option value="Google"${f.origem === "Google" ? " selected" : ""}>Google</option>
+          <option value="Site"${f.origem === "Site" ? " selected" : ""}>Site</option>
+          <option value="Indicação"${f.origem === "Indicação" ? " selected" : ""}>Indicação</option>
+          <option value="Outro"${f.origem === "Outro" ? " selected" : ""}>Outro</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="crmReportStats" class="crm-stats"></div>
+    <div id="crmReportChartsGrid"></div>
+
+    <article class="panel">
+      <div class="panel-header">
+        <h3>Leituras rápidas</h3>
+        <span>Insights automáticos com base nos dados atuais</span>
+      </div>
+      <div id="crmReportInsights" class="crm-report-insights"></div>
+    </article>
+
+    <div class="crm-safe-note">
+      <span>📊</span>
+      <p><strong>Dados agregados do CRM.</strong> Atualizado a partir dos arquivos locais seguros. Sem dados pessoais exibidos nesta visão.</p>
+    </div>
+  `;
+
+  document.querySelector("#crmBackBtn").addEventListener("click", () => {
+    state.crmView = "hub";
+    renderCrmView();
+  });
+
+  const filterIdToKey = { crmReportPeriodo: "periodo", crmReportTipo: "tipo", crmReportOrigem: "origem" };
+  Object.keys(filterIdToKey).forEach((id) => {
+    document.querySelector(`#${id}`).addEventListener("change", (e) => {
+      state.crmReportFilters[filterIdToKey[id]] = e.target.value;
+      renderCrmReportBody();
+    });
+  });
+
+  renderCrmReportBody();
+}
+
+function renderCrmReportBody() {
+  const leads = getCrmReportFilteredLeads();
+  renderCrmReportStats(leads);
+  renderCrmReportCharts(leads);
+  renderCrmReportInsights(leads);
+}
+
+function renderCrmReportStats(leads) {
+  const container = document.querySelector("#crmReportStats");
+  if (!container) return;
+
+  const ativos = leads.filter((l) => !isLeadConvertido(l)).length;
+  const convertidos = leads.filter(isLeadConvertido).length;
+  const taxaConversao = leads.length > 0 ? `${Math.round((convertidos / leads.length) * 100)}%` : null;
+
+  const emProspeccao = state.crm.filter(
+    (item) => item.etapa !== "Parceiro ativo" && item.etapa !== "Não abordado"
+  ).length;
+  const parceirosAtivos = countCrmEtapa("Parceiro ativo");
+
+  const espirometrias = state.followupSummary?.espirometria?.total ?? null;
+  const consultas = state.followupSummary?.consultas?.total ?? null;
+
+  const pendentesDe = (grupo) =>
+    grupo ? (grupo.atrasados || 0) + (grupo.hoje || 0) + (grupo.proximos7dias || 0) : null;
+  const pendentesEspi = pendentesDe(state.followupSummary?.espirometria);
+  const pendentesConsulta = pendentesDe(state.followupSummary?.consultas);
+  const pendentesClinicas = pendentesDe(state.followupClinicasSummary?.clinicas);
+  const parcelasPendentes = [pendentesEspi, pendentesConsulta, pendentesClinicas];
+  const followupsPendentes = parcelasPendentes.some((v) => v !== null)
+    ? parcelasPendentes.reduce((sum, v) => sum + (v || 0), 0)
+    : null;
+
+  const stats = [
+    crmReportStatCard("crmRelLeadsAtivos", "Leads ativos", ativos, "no filtro atual"),
+    crmReportStatCard("crmRelLeadsConv", "Leads convertidos", convertidos, "no filtro atual"),
+    crmReportStatCard("crmRelTaxaConv", "Taxa de conversão", taxaConversao, "aproximada"),
+    crmReportStatCard("crmRelClinicasCad", "Clínicas cadastradas", state.crm.length, "base total"),
+    crmReportStatCard("crmRelClinicasProsp", "Clínicas em prospecção", emProspeccao, "ativas no funil"),
+    crmReportStatCard("crmRelParceiros", "Parceiros ativos", parceirosAtivos, "parcerias fechadas"),
+    crmReportStatCard("crmRelEspirometrias", "Espirometrias registradas", espirometrias, "base de follow-up"),
+    crmReportStatCard("crmRelConsultas", "Consultas registradas", consultas, "base de follow-up"),
+    crmReportStatCard("crmRelFollowupsPend", "Follow-ups pendentes", followupsPendentes, "atrasados + hoje + 7 dias"),
+    crmReportStatCard("crmRelContatosB2B", "Contatos B2B vinculados", state.crmContatosB2B.length, "vinculados a clínicas"),
+  ];
+
+  container.innerHTML = stats.join("");
+}
+
+function renderCrmReportCharts(leads) {
+  const grid = document.querySelector("#crmReportChartsGrid");
+  if (!grid) return;
+
+  // 1) Funil de leads por etapa (segue os filtros da página)
+  const etapaCounts = {};
+  leads.forEach((l) => {
+    const e = l.etapa || l.status || "Desconhecido";
+    etapaCounts[e] = (etapaCounts[e] || 0) + 1;
+  });
+  const etapaOrdenadas = LEAD_ETAPA_OPTIONS.filter((e) => etapaCounts[e] > 0);
+  Object.keys(etapaCounts).forEach((e) => {
+    if (!etapaOrdenadas.includes(e)) etapaOrdenadas.push(e);
+  });
+  const hasFunil = etapaOrdenadas.length > 0;
+
+  // 2) Origem dos leads (segue os filtros da página)
+  const origemCounts = {};
+  leads.forEach((l) => {
+    const o = l.origem || "Não informado";
+    origemCounts[o] = (origemCounts[o] || 0) + 1;
+  });
+  const origemLabels = Object.keys(origemCounts);
+  const hasOrigem = origemLabels.length > 0;
+
+  // 3) Clínicas por etapa — domínio próprio do CRM B2B, não é filtrado por lead
+  const clinicaEtapaCounts = {};
+  state.crm.forEach((c) => {
+    const e = c.etapa || "Outros";
+    clinicaEtapaCounts[e] = (clinicaEtapaCounts[e] || 0) + 1;
+  });
+  const clinicaEtapaLabels = Object.keys(clinicaEtapaCounts);
+  const hasClinicas = clinicaEtapaLabels.length > 0;
+
+  // 4) Atendimentos por tipo — espirometria x consulta (resumo seguro)
+  const espiTotal = state.followupSummary?.espirometria?.total;
+  const consultaTotal = state.followupSummary?.consultas?.total;
+  const hasAtendimentos = espiTotal != null && consultaTotal != null && (espiTotal + consultaTotal) > 0;
+
+  // 5) Status de follow-up — pacientes + clínicas agregados (resumos seguros)
+  const statusLabelsMap = { atrasados: "Atrasados", hoje: "Hoje", proximos7dias: "Próx. 7 dias", futuro: "Futuro", semData: "Sem data" };
+  const statusKeys = Object.keys(statusLabelsMap);
+  const statusTotals = {};
+  [state.followupSummary?.espirometria, state.followupSummary?.consultas, state.followupClinicasSummary?.clinicas].forEach((grupo) => {
+    if (!grupo) return;
+    statusKeys.forEach((k) => { statusTotals[k] = (statusTotals[k] || 0) + (grupo[k] || 0); });
+  });
+  const hasStatus = Object.values(statusTotals).some((v) => v > 0);
+
+  // 6) Conversões B2B / parceiros ativos (não segue os filtros de lead — visão geral B2B)
+  const parceirosAtivosB2B = countCrmEtapa("Parceiro ativo");
+  const emProspeccaoB2B = state.crm.filter((c) => c.etapa !== "Parceiro ativo" && c.etapa !== "Não abordado").length;
+  const leadsB2BConvertidos = state.leads.filter((l) => isB2BLead(l) && isLeadConvertido(l)).length;
+  const hasB2B = (parceirosAtivosB2B + emProspeccaoB2B + leadsB2BConvertidos) > 0;
+
+  grid.innerHTML = `
+    <div class="grid-two">
+      ${crmReportChartPanel({ title: "Funil de leads por etapa", subtitle: "Distribuição no filtro atual", canvasId: "crmRelFunilChart", hasData: hasFunil, emptyMsg: "Nenhum lead no filtro selecionado" })}
+      ${crmReportChartPanel({ title: "Origem dos leads", subtitle: "Canal de aquisição no filtro atual", canvasId: "crmRelOrigemChart", hasData: hasOrigem, emptyMsg: "Nenhum lead no filtro selecionado" })}
+    </div>
+    <div class="grid-two">
+      ${crmReportChartPanel({ title: "Clínicas por etapa", subtitle: "Prospecção e parceria", canvasId: "crmRelClinicasChart", hasData: hasClinicas, emptyMsg: "Nenhuma clínica cadastrada" })}
+      ${crmReportChartPanel({ title: "Atendimentos por tipo", subtitle: "Espirometria x consulta", canvasId: "crmRelAtendimentosChart", hasData: hasAtendimentos, emptyMsg: "Dado ainda não disponível" })}
+    </div>
+    <div class="grid-two">
+      ${crmReportChartPanel({ title: "Status de follow-up", subtitle: "Pacientes e clínicas agregados", canvasId: "crmRelFollowupChart", hasData: hasStatus, emptyMsg: "Dado ainda não disponível" })}
+      ${crmReportChartPanel({ title: "Conversões B2B / parceiros", subtitle: "Prospecção, conversão e parceria ativa", canvasId: "crmRelB2BChart", hasData: hasB2B, emptyMsg: "Dado ainda não disponível" })}
+    </div>
+  `;
+
+  if (hasFunil) {
+    createChart("crmRelFunil", "#crmRelFunilChart", {
+      type: "bar",
+      data: {
+        labels: etapaOrdenadas,
+        datasets: [{
+          label: "Leads",
+          data: etapaOrdenadas.map((e) => etapaCounts[e]),
+          backgroundColor: etapaOrdenadas.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+          borderRadius: 10,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} lead(s)` } }
+        },
+        scales: {
+          y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.07)" }, ticks: { stepSize: 1, font: { size: 11 } }, border: { display: false } },
+          x: { grid: { display: false }, ticks: { font: { size: 10 } }, border: { display: false } }
+        }
+      }
+    });
+  } else {
+    destroyChart("crmRelFunil");
+  }
+
+  if (hasOrigem) {
+    createChart("crmRelOrigem", "#crmRelOrigemChart", {
+      type: "doughnut",
+      data: {
+        labels: origemLabels,
+        datasets: [{
+          data: Object.values(origemCounts),
+          backgroundColor: origemLabels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+          borderWidth: 3,
+          borderColor: "#f3f7fb",
+          hoverOffset: 8,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "68%",
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, font: { size: 11 }, padding: 12 } },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } }
+        }
+      }
+    });
+  } else {
+    destroyChart("crmRelOrigem");
+  }
+
+  if (hasClinicas) {
+    createChart("crmRelClinicas", "#crmRelClinicasChart", {
+      type: "bar",
+      data: {
+        labels: clinicaEtapaLabels,
+        datasets: [{
+          label: "Clínicas",
+          data: Object.values(clinicaEtapaCounts),
+          backgroundColor: clinicaEtapaLabels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+          borderRadius: 8,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} clínica(s)` } }
+        },
+        scales: {
+          x: { beginAtZero: true, grid: { color: "rgba(109,123,138,.07)" }, ticks: { stepSize: 1, font: { size: 11 } }, border: { display: false } },
+          y: { grid: { display: false }, ticks: { font: { size: 11 } }, border: { display: false } }
+        }
+      }
+    });
+  } else {
+    destroyChart("crmRelClinicas");
+  }
+
+  if (hasAtendimentos) {
+    createChart("crmRelAtendimentos", "#crmRelAtendimentosChart", {
+      type: "doughnut",
+      data: {
+        labels: ["Espirometria", "Consulta"],
+        datasets: [{
+          data: [espiTotal, consultaTotal],
+          backgroundColor: [CHART_COLORS[0], CHART_COLORS[1]],
+          borderWidth: 3,
+          borderColor: "#f3f7fb",
+          hoverOffset: 8,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "68%",
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, font: { size: 11 }, padding: 12 } },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } }
+        }
+      }
+    });
+  } else {
+    destroyChart("crmRelAtendimentos");
+  }
+
+  if (hasStatus) {
+    createChart("crmRelFollowup", "#crmRelFollowupChart", {
+      type: "bar",
+      data: {
+        labels: statusKeys.map((k) => statusLabelsMap[k]),
+        datasets: [{
+          label: "Follow-ups",
+          data: statusKeys.map((k) => statusTotals[k] || 0),
+          backgroundColor: statusKeys.map((_, i) => CHART_COLORS_FUNNEL[i % CHART_COLORS_FUNNEL.length]),
+          borderRadius: 10,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} follow-up(s)` } }
+        },
+        scales: {
+          y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.07)" }, ticks: { stepSize: 1, font: { size: 11 } }, border: { display: false } },
+          x: { grid: { display: false }, ticks: { font: { size: 10 } }, border: { display: false } }
+        }
+      }
+    });
+  } else {
+    destroyChart("crmRelFollowup");
+  }
+
+  if (hasB2B) {
+    createChart("crmRelB2B", "#crmRelB2BChart", {
+      type: "bar",
+      data: {
+        labels: ["Em prospecção", "Convertidos (leads)", "Parceiros ativos"],
+        datasets: [{
+          label: "B2B",
+          data: [emProspeccaoB2B, leadsB2BConvertidos, parceirosAtivosB2B],
+          backgroundColor: [CHART_COLORS[5], CHART_COLORS[2], CHART_COLORS[0]],
+          borderRadius: 10,
+          borderSkipped: false,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw}` } }
+        },
+        scales: {
+          y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.07)" }, ticks: { stepSize: 1, font: { size: 11 } }, border: { display: false } },
+          x: { grid: { display: false }, ticks: { font: { size: 11 } }, border: { display: false } }
+        }
+      }
+    });
+  } else {
+    destroyChart("crmRelB2B");
+  }
+}
+
+function renderCrmReportInsights(leads) {
+  const container = document.querySelector("#crmReportInsights");
+  if (!container) return;
+
+  const insights = [];
+
+  if (leads.length > 0) {
+    const etapaCounts = {};
+    leads.forEach((l) => {
+      const e = l.etapa || l.status || "Desconhecido";
+      etapaCounts[e] = (etapaCounts[e] || 0) + 1;
+    });
+    const etapaEntries = Object.entries(etapaCounts);
+    const [topEtapa, topEtapaCount] = etapaEntries.reduce((best, cur) => (cur[1] > best[1] ? cur : best), etapaEntries[0]);
+    insights.push({
+      icon: "📌", type: "info",
+      label: "Etapa predominante",
+      title: `A maior parte dos leads está em "${topEtapa}"`,
+      meta: `${topEtapaCount} de ${leads.length} lead(s) no filtro atual`
+    });
+
+    const origemCounts = {};
+    leads.forEach((l) => {
+      const o = l.origem || "Não informado";
+      origemCounts[o] = (origemCounts[o] || 0) + 1;
+    });
+    const origemEntries = Object.entries(origemCounts);
+    const [topOrigem, topOrigemCount] = origemEntries.reduce((best, cur) => (cur[1] > best[1] ? cur : best), origemEntries[0]);
+    insights.push({
+      icon: "📡", type: "neutral",
+      label: "Canal principal",
+      title: `O canal com mais leads é ${topOrigem}`,
+      meta: `${topOrigemCount} lead(s) no filtro atual`
+    });
+  }
+
+  if (state.crm.length > 0) {
+    const emProspeccao = state.crm.filter((c) => c.etapa !== "Parceiro ativo" && c.etapa !== "Não abordado").length;
+    const parceirosAtivos = countCrmEtapa("Parceiro ativo");
+    insights.push({
+      icon: "🏥", type: "neutral",
+      label: "Clínicas",
+      title: `Há ${emProspeccao} clínica(s) em prospecção e ${parceirosAtivos} parceira(s)`,
+      meta: `${state.crm.length} clínica(s) cadastradas no total`
+    });
+  }
+
+  if (state.crmContatosB2B.length > 0) {
+    insights.push({
+      icon: "🤝", type: "neutral",
+      label: "Contatos B2B",
+      title: `Existem ${state.crmContatosB2B.length} contato(s) B2B vinculados a clínicas`,
+      meta: "Base de relacionamento institucional"
+    });
+  }
+
+  if (insights.length === 0) {
+    container.innerHTML = `<p class="crm-report-chart-empty">Dados ainda insuficientes para gerar leituras automáticas.</p>`;
+    return;
+  }
+
+  container.innerHTML = insights.map((ins) => `
+    <article class="crm-report-insight ins-${ins.type}">
+      <span class="ins-icon">${ins.icon}</span>
+      <div class="ins-body">
+        <small>${escapeHtml(ins.label)}</small>
+        <strong>${escapeHtml(ins.title)}</strong>
+        <span>${escapeHtml(ins.meta)}</span>
+      </div>
+    </article>
+  `).join("");
+}
 
 function countLeadEtapa(etapa) {
   return state.leads.filter((item) => (item.etapa || item.status || "") === etapa).length;

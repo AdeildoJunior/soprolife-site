@@ -2296,6 +2296,77 @@ td { font-size: .94rem; }
   .fp-grid { grid-template-columns: 1fr; }
 }
 
+/* ── Relatórios CRM ──────────────────────────────────────────────────────── */
+.crm-report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  margin-bottom: 18px;
+}
+
+.crm-report-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.crm-report-filters .crm-filter-select {
+  margin: 0;
+}
+
+.crm-report-chart-empty {
+  margin: 0;
+  padding: 32px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: .84rem;
+}
+
+.crm-report-insights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.crm-report-insight {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1 1 220px;
+  min-width: 200px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 14px rgba(15, 34, 57, .05);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.crm-report-insight:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(15, 34, 57, .09);
+}
+
+/* Insights aqui são frases completas, não termos curtos — permite quebra de linha */
+.crm-report-insight .ins-body strong {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+@media (max-width: 640px) {
+  .crm-report-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* ── Automações CRM ──────────────────────────────────────────────────────── */
 
 /* Status atual */
