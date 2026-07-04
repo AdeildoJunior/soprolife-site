@@ -38,11 +38,11 @@ fi
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
-echo "1/10 - Atualizando status seguro da fonte Google Sheets..."
+echo "1/11 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
 
 echo
-echo "2/10 - Atualizando resumo seguro..."
+echo "2/11 - Atualizando resumo seguro..."
 
 if [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC"
@@ -83,7 +83,7 @@ else
 fi
 
 echo
-echo "3/10 - Atualizando CRM Clínicas seguro..."
+echo "3/11 - Atualizando CRM Clínicas seguro..."
 
 if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
   echo "Fonte: Google Sheets via ADC (aba CRM Clinicas)"
@@ -103,7 +103,7 @@ else
 fi
 
 echo
-echo "4/10 - Atualizando follow-up B2B de clínicas..."
+echo "4/11 - Atualizando follow-up B2B de clínicas..."
 
 _FOLLOWUP_CLINICAS_SCRIPT="painel-soprolife/scripts/generate-followup-clinicas.py"
 
@@ -131,7 +131,7 @@ else
 fi
 
 echo
-echo "5/10 - Atualizando Marketing & SEO..."
+echo "5/11 - Atualizando Marketing & SEO..."
 
 if [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "Marketing & SEO não configurado — usando dados demonstrativos."
@@ -155,7 +155,7 @@ else
 fi
 
 echo
-echo "6/10 - Atualizando Leads..."
+echo "6/11 - Atualizando Leads..."
 
 _LEADS_SCRIPT="painel-soprolife/scripts/read-leads-sheets.py"
 
@@ -182,7 +182,35 @@ else
 fi
 
 echo
-echo "7/10 - Atualizando follow-up de pacientes..."
+echo "7/11 - Atualizando CRM Contatos B2B..."
+
+_CONTATOS_B2B_SCRIPT="painel-soprolife/scripts/read-crm-contatos-b2b-adc.py"
+
+if [ -f "$_CONTATOS_B2B_SCRIPT" ] && [ "$_sheets_available" = true ]; then
+  echo "Fonte: Google Sheets via ADC (aba CRM Contatos B2B)"
+  echo "Saída: data-private/crm-contatos-b2b.local.json + data/crm-contatos-b2b-summary.local.json"
+  echo
+  if ! "$_VENV_PYTHON" "$_CONTATOS_B2B_SCRIPT" --write 2>&1; then
+    echo
+    echo "AVISO: falha ao ler aba CRM Contatos B2B."
+    echo "  Isso é esperado se a aba ainda não foi criada (só existe após o primeiro"
+    echo "  vínculo via vincularLeadAClinica no painel)."
+    echo "  Diagnóstico: $_VENV_PYTHON $_CONTATOS_B2B_SCRIPT --show-structure"
+  else
+    echo "CRM Contatos B2B atualizado."
+    echo "  Privado:  painel-soprolife/data-private/crm-contatos-b2b.local.json"
+    echo "  Resumo:   painel-soprolife/data/crm-contatos-b2b-summary.local.json"
+  fi
+else
+  if [ ! -f "$_CONTATOS_B2B_SCRIPT" ]; then
+    echo "Script de CRM Contatos B2B não encontrado — painel não mostrará contatos vinculados."
+  else
+    echo "Google Sheets ADC não disponível — painel não mostrará contatos vinculados."
+  fi
+fi
+
+echo
+echo "8/11 - Atualizando follow-up de pacientes..."
 
 _FOLLOWUP_SCRIPT="painel-soprolife/scripts/generate-followup-pacientes.py"
 
@@ -207,7 +235,7 @@ else
 fi
 
 echo
-echo "8/10 - Atualizando timeline de últimos lançamentos..."
+echo "9/11 - Atualizando timeline de últimos lançamentos..."
 
 _LANCAMENTOS_SCRIPT="painel-soprolife/scripts/generate-ultimos-lancamentos.py"
 
@@ -225,11 +253,11 @@ else
 fi
 
 echo
-echo "9/10 - Verificando segurança..."
+echo "10/11 - Verificando segurança..."
 painel-soprolife/scripts/check-access.sh
 
 echo
-echo "10/10 - Concluído."
+echo "11/11 - Concluído."
 echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"

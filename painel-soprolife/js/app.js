@@ -20,6 +20,8 @@ const state = {
   ultimosLancamentos: null,
   ccConfigured: false,
   custosInvestimentos: null,
+  leadsFilter: "Ativos",
+  crmContatosB2B: [],
 };
 
 const slug = (text) =>
@@ -47,6 +49,13 @@ const LEAD_ETAPA_OPTIONS = [
   "Não respondeu",
   "Desistiu",
   "Perdido",
+  // Etapas B2B / parcerias (leads de clínica, PCMSO, empresas) — ver vincularLeadAClinica.
+  "Reunião marcada",
+  "Proposta enviada",
+  "Parceria fechada",
+  "Parceiro ativo",
+  "Convertido em clínica/parceiro",
+  "Sem resposta",
 ];
 
 // Etapas que, ao serem definidas via painel, disparam a conversão automática
@@ -57,6 +66,36 @@ const LEAD_ETAPAS_CONVERSAO = [
   "Realizou espirometria",
   "Realizou consulta e espirometria",
 ];
+
+// Serviços que caracterizam um lead B2B (clínica/parceiro/PCMSO) — mesma lista
+// usada no backend para decidir a rota de conversão (ver _CV_ROTA_B2B em
+// converter-lead-em-paciente.gs). Esses leads usam "Vincular a clínica" em vez
+// da conversão automática para paciente.
+const LEAD_SERVICOS_B2B = ["clínicas", "clinicas", "pcmso / empresa", "pcmso", "empresa"];
+
+// Etapas B2B terminais que sempre marcam um lead como convertido/arquivado,
+// independente de tipo_lead — ocultadas por padrão da lista principal de
+// Leads e Agendamentos (filtro "Ativos"). "Concluído" NÃO entra aqui: só é
+// terminal quando o lead é B2B (ver isLeadConvertido) — para leads de
+// paciente, "Concluído" é apenas mais uma etapa do funil.
+const LEAD_ETAPAS_TERMINAIS = ["Convertido em clínica/parceiro", "Parceiro ativo"];
+
+function isB2BLead(item) {
+  const servico = (item.servico_interesse || item.servico || "").toLowerCase().trim();
+  return LEAD_SERVICOS_B2B.includes(servico) || item.tipo_lead === "b2b";
+}
+
+// Regra de "convertido/arquivado" (oculto do filtro Ativos):
+//   status_operacional === "convertido"
+//   OU etapa em ["Convertido em clínica/parceiro", "Parceiro ativo"]
+//   OU (etapa === "Concluído" E tipo_lead === "b2b")
+function isLeadConvertido(item) {
+  if (item.status_operacional === "convertido") return true;
+  const etapa = item.etapa || item.status || "";
+  if (LEAD_ETAPAS_TERMINAIS.includes(etapa)) return true;
+  if (etapa === "Concluído" && item.tipo_lead === "b2b") return true;
+  return false;
+}
 
 const CHART_COLORS = [
   "rgba(29, 183, 166, .92)",   // teal — cor da marca
@@ -192,6 +231,7 @@ function normalizeCrmRecord(item) {
   const etapaRaw = item.etapa || "";
   const acaoRaw  = item.proxima_acao || item.proximaAcao || "";
   return {
+    id: item.clinica_id || item.id || "",
     clinica: item.nome_clinica || item.clinica || "",
     bairro: regiao && regiao !== bairro ? `${regiao} · ${bairro}` : bairro,
     tipo: item.tipo_clinica || item.tipo || "",
@@ -251,6 +291,20 @@ async function init() {
     const crmLocal = await loadOptionalJson("./data/crm-clinicas.local.json");
     if (crmLocal && Array.isArray(crmLocal.clinicas)) {
       state.crm = crmLocal.clinicas.map(normalizeCrmRecord);
+    }
+
+    // Contatos B2B: resumo seguro (sem nome/telefone/email) > privado local (Tailscale) > nada.
+    // Gerado por: python3 painel-soprolife/scripts/read-crm-contatos-b2b-adc.py --write
+    const contatosSummary = await loadOptionalJson("./data/crm-contatos-b2b-summary.local.json");
+    const contatosPrivate = await loadOptionalJson(`./data-private/crm-contatos-b2b.local.json?_=${Date.now()}`);
+    if (contatosPrivate?.contatos?.length > 0) {
+      state.crmContatosB2B = contatosPrivate.contatos;
+    } else if (
+      contatosSummary?.source?.safeToDisplay === true &&
+      contatosSummary?.source?.containsPersonalData === false &&
+      Array.isArray(contatosSummary?.contatos)
+    ) {
+      state.crmContatosB2B = contatosSummary.contatos;
     }
 
     const _bust = `?_=${Date.now()}`;
@@ -1935,7 +1989,7 @@ function renderLeadStats() {
     { key: "leadsNovosContatos", label: "Novos contatos",    value: countLeadEtapa("Novo contato"),                                hint: "aguardando 1º resposta" },
     { key: "leadsEmConversa",    label: "Em conversa",       value: countLeadEtapa("Em conversa") + countLeadEtapa("Aguardando retorno"), hint: "diálogo ativo" },
     { key: "leadsAgendados",     label: "Agendados",         value: countLeadEtapa("Agendado"),                                    hint: "confirmados" },
-    { key: "leadsConvertidos",   label: "Convertidos",       value: countLeadEtapa("Convertido em paciente") + countLeadEtapa("Convertido em clínica/parceiro"), hint: "migraram ao CRM" },
+    { key: "leadsConvertidos",   label: "Convertidos",       value: state.leads.filter(isLeadConvertido).length, hint: "migraram ao CRM ou parceria" },
     { key: "leadsSemResposta",   label: "Sem resposta",      value: countLeadEtapa("Não respondeu"),                               hint: "inativos" },
   ];
 
@@ -1952,7 +2006,7 @@ function renderLeadPipeline() {
     { label: "Aguardando retorno",   value: countLeadEtapa("Aguardando retorno"),     hint: "aguardando o lead",    tone: "warning" },
     { label: "Agendado",             value: countLeadEtapa("Agendado"),               hint: "confirmar preparo",    tone: "success" },
     { label: "Não respondeu",        value: countLeadEtapa("Não respondeu"),          hint: "reativar ou encerrar", tone: "danger" },
-    { label: "Convertido",           value: countLeadEtapa("Convertido em paciente") + countLeadEtapa("Convertido em clínica/parceiro"), hint: "migrado ao CRM", tone: "success" },
+    { label: "Convertido",           value: state.leads.filter(isLeadConvertido).length, hint: "migrado ao CRM ou parceria", tone: "success" },
   ];
 
   const container = document.querySelector("#leadPipeline");
@@ -2028,6 +2082,17 @@ function renderSeoFocus() {
   `).join("");
 }
 
+// Retorna o contato B2B vinculado a uma clínica (por clinica_id), se houver.
+// Prefere um contato "Ativo"; nome só aparece se o arquivo privado local
+// (data-private/crm-contatos-b2b.local.json) estiver disponível — o resumo
+// seguro traz apenas cargo/papel/status.
+function findContatoB2B(clinicaId) {
+  if (!clinicaId || !Array.isArray(state.crmContatosB2B)) return null;
+  const contatos = state.crmContatosB2B.filter((c) => c.clinica_id === clinicaId);
+  if (contatos.length === 0) return null;
+  return contatos.find((c) => c.status_relacionamento === "Ativo") || contatos[0];
+}
+
 function renderCrmTable(filter = "Todos") {
   const tbody = document.querySelector("#crmTable");
   const rows = filter === "Todos"
@@ -2049,9 +2114,13 @@ function renderCrmTable(filter = "Todos") {
     const iso = parseDateIso(item.dataProximaAcao);
     const dataCls = iso && iso < today ? "data-atrasada" : iso === today ? "data-hoje" : "";
     const dataLabel = formatDateBr(item.dataProximaAcao);
+    const contato = findContatoB2B(item.id);
+    const contatoTag = contato
+      ? `<br><small class="crm-contato-tag">👤 ${escapeHtml(contato.nome_contato || "Contato vinculado")}${contato.cargo ? " — " + escapeHtml(contato.cargo) : ""}${contato.papel ? " · " + escapeHtml(contato.papel) : ""}</small>`
+      : "";
     return `
     <tr>
-      <td><strong>${item.clinica}</strong></td>
+      <td><strong>${item.clinica}</strong>${contatoTag}</td>
       <td>${item.bairro}</td>
       <td><span class="crm-tipo">${item.tipo}</span></td>
       <td><span class="badge ${slug(item.etapa)}">${item.etapa}</span></td>
@@ -2077,14 +2146,21 @@ function renderLeadsTable() {
   const tbody = document.querySelector("#leadsTable");
   if (!tbody) return;
 
-  if (state.leads.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="crm-empty">Nenhum lead registrado.</td></tr>`;
+  const filter = state.leadsFilter || "Ativos";
+  const rows = filter === "Todos"
+    ? state.leads
+    : filter === "Convertidos"
+      ? state.leads.filter(isLeadConvertido)
+      : state.leads.filter((item) => !isLeadConvertido(item));
+
+  if (rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="crm-empty">Nenhum lead nesta lista.</td></tr>`;
     return;
   }
 
   const today = todayIso();
 
-  tbody.innerHTML = state.leads.map((item) => {
+  tbody.innerHTML = rows.map((item) => {
     const nome      = item.nome || item.lead || item.lead_id || "—";
     const leadId    = item.lead_id || "";
     const servico   = item.servico_interesse || item.servico || "—";
@@ -2108,6 +2184,12 @@ function renderLeadsTable() {
          </button>`
       : `<span class="lead-stage-disabled" tabindex="0" data-tip="Este lead não tem lead_id — não é possível editar pelo painel." aria-label="Ação indisponível: lead sem identificador">—</span>`;
 
+    const linkBtn = leadId && isB2BLead(item) && !isLeadConvertido(item)
+      ? `<button type="button" class="lead-link-btn" data-lead-id="${escapeHtml(leadId)}" data-tip="Vincular a uma clínica parceira" aria-label="Vincular a clínica: ${escapeHtml(nome)}">
+           Vincular a clínica
+         </button>`
+      : "";
+
     return `
     <tr>
       <td>
@@ -2120,7 +2202,7 @@ function renderLeadsTable() {
       <td>${escapeHtml(acao)}</td>
       <td>${dataLabel ? `<span class="crm-data ${dataCls}">${dataLabel}</span>` : "—"}</td>
       <td>${escapeHtml(responsavel)}</td>
-      <td>${stageBtn}</td>
+      <td class="lead-actions-cell">${stageBtn}${linkBtn}</td>
     </tr>`;
   }).join("");
 }
@@ -2262,6 +2344,158 @@ function applyLeadStageUpdate(leadId, novaEtapa, converted) {
   renderLeadPipeline();
   renderLeadsCharts();
   renderOverviewExtraCharts();
+}
+
+// ─── Vincular lead B2B a clínica parceira — modal + chamada ao Command Center ──
+
+let _vincularClinicaTrigger = null;
+
+function closeVincularClinicaModal() {
+  const overlay = document.querySelector(".vincular-clinica-overlay");
+  if (overlay) overlay.remove();
+  document.removeEventListener("keydown", _vincularClinicaKeydown);
+  if (_vincularClinicaTrigger) {
+    _vincularClinicaTrigger.focus();
+    _vincularClinicaTrigger = null;
+  }
+}
+
+function _vincularClinicaKeydown(event) {
+  if (event.key === "Escape") closeVincularClinicaModal();
+}
+
+function openVincularClinicaModal(lead, triggerBtn) {
+  closeVincularClinicaModal();
+  _vincularClinicaTrigger = triggerBtn || null;
+
+  const nome = lead.nome || lead.lead || lead.lead_id || "Lead";
+
+  const clinicaOptions = state.crm
+    .filter((c) => c.id)
+    .map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.clinica)} (${escapeHtml(c.id)})</option>`)
+    .join("");
+
+  const overlay = document.createElement("div");
+  overlay.className = "vincular-clinica-overlay lead-stage-overlay";
+  overlay.innerHTML = `
+    <div class="lead-stage-modal vincular-clinica-modal" role="dialog" aria-modal="true" aria-labelledby="vincularClinicaTitle">
+      <div class="lead-stage-modal-header">
+        <div>
+          <p class="eyebrow">Vincular a clínica</p>
+          <h4 id="vincularClinicaTitle">${escapeHtml(nome)}</h4>
+        </div>
+        <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
+      </div>
+
+      <label class="cc-label" for="vincularClinicaSelect">Clínica parceira</label>
+      <select id="vincularClinicaSelect" class="cc-select">
+        <option value="">Selecione uma clínica…</option>
+        ${clinicaOptions}
+      </select>
+
+      <label class="cc-label" for="vincularEtapaSelect">Etapa resultante</label>
+      <select id="vincularEtapaSelect" class="cc-select">
+        <option value="Convertido em clínica/parceiro">Convertido em clínica/parceiro</option>
+        <option value="Parceiro ativo">Parceiro ativo</option>
+      </select>
+
+      <label class="cc-label" for="vincularNomeContato">Nome do contato (opcional)</label>
+      <input type="text" id="vincularNomeContato" class="cc-select" placeholder="Ex.: Juan Valenciano" />
+
+      <label class="cc-label" for="vincularCargo">Cargo (opcional)</label>
+      <input type="text" id="vincularCargo" class="cc-select" placeholder="Ex.: Diretor médico" />
+
+      <label class="cc-label" for="vincularPapel">Papel (opcional)</label>
+      <input type="text" id="vincularPapel" class="cc-select" placeholder="Ex.: Contato principal / decisor técnico" />
+
+      <label class="cc-label" for="vincularProximaAcao">Próxima ação (opcional)</label>
+      <input type="text" id="vincularProximaAcao" class="cc-select" placeholder="Ex.: Reunião" />
+
+      <label class="cc-label" for="vincularDataProxima">Data da próxima ação (opcional)</label>
+      <input type="date" id="vincularDataProxima" class="cc-select" />
+
+      <label class="cc-label" for="vincularResponsavel">Responsável</label>
+      <input type="text" id="vincularResponsavel" class="cc-select" value="${escapeHtml(lead.responsavel || "")}" />
+
+      <div class="cc-result vincular-clinica-result" hidden></div>
+
+      <div class="lead-stage-actions">
+        <button type="button" class="lead-stage-cancel">Cancelar</button>
+        <button type="button" class="lead-stage-save">Confirmar vínculo</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", _vincularClinicaKeydown);
+
+  const clinicaSelect = overlay.querySelector("#vincularClinicaSelect");
+  const etapaSelect   = overlay.querySelector("#vincularEtapaSelect");
+  const result        = overlay.querySelector(".vincular-clinica-result");
+  const saveBtn       = overlay.querySelector(".lead-stage-save");
+  const cancelBtn     = overlay.querySelector(".lead-stage-cancel");
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeVincularClinicaModal();
+  });
+  overlay.querySelector(".lead-stage-close").addEventListener("click", closeVincularClinicaModal);
+  cancelBtn.addEventListener("click", closeVincularClinicaModal);
+
+  saveBtn.addEventListener("click", async () => {
+    const clinicaId  = clinicaSelect.value;
+    const responsavel = overlay.querySelector("#vincularResponsavel").value.trim();
+
+    if (!clinicaId) {
+      result.className = "cc-result vincular-clinica-result cc-result-err";
+      result.textContent = "Selecione uma clínica.";
+      result.hidden = false;
+      return;
+    }
+    if (!responsavel) {
+      result.className = "cc-result vincular-clinica-result cc-result-err";
+      result.textContent = "Informe o responsável.";
+      result.hidden = false;
+      return;
+    }
+
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    saveBtn.textContent = "Vinculando…";
+    result.hidden = true;
+
+    try {
+      const resp = await submitToCommandCenter("vincularLeadAClinica", {
+        lead_id:            lead.lead_id,
+        clinica_id:         clinicaId,
+        etapa:              etapaSelect.value,
+        nome_contato:       overlay.querySelector("#vincularNomeContato").value.trim(),
+        cargo:              overlay.querySelector("#vincularCargo").value.trim(),
+        papel:              overlay.querySelector("#vincularPapel").value.trim(),
+        proxima_acao:       overlay.querySelector("#vincularProximaAcao").value.trim(),
+        data_proxima_acao:  overlay.querySelector("#vincularDataProxima").value,
+        responsavel,
+      });
+
+      result.className = "cc-result vincular-clinica-result cc-result-ok";
+      result.textContent = resp.message || "Lead vinculado com sucesso.";
+      result.hidden = false;
+
+      applyLeadStageUpdate(lead.lead_id, etapaSelect.value, false);
+      const item = state.leads.find((l) => l.lead_id === lead.lead_id);
+      if (item) item.status_operacional = "convertido";
+      renderLeadsTable();
+
+      setTimeout(closeVincularClinicaModal, 1400);
+    } catch (err) {
+      result.className = "cc-result vincular-clinica-result cc-result-err";
+      result.textContent = "Erro: " + err.message;
+      result.hidden = false;
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
+      saveBtn.textContent = "Confirmar vínculo";
+    }
+  });
+
+  clinicaSelect.focus();
 }
 
 function renderSeoList() {
@@ -3032,12 +3266,27 @@ function bindEvents() {
   const leadsTbody = document.querySelector("#leadsTable");
   if (leadsTbody) {
     leadsTbody.addEventListener("click", (event) => {
-      const btn = event.target.closest(".lead-stage-btn");
-      if (!btn) return;
-      const leadId = btn.dataset.leadId;
-      const lead = state.leads.find((l) => l.lead_id === leadId);
-      if (!lead) return;
-      openLeadStageModal(lead, btn);
+      const stageBtn = event.target.closest(".lead-stage-btn");
+      if (stageBtn) {
+        const lead = state.leads.find((l) => l.lead_id === stageBtn.dataset.leadId);
+        if (lead) openLeadStageModal(lead, stageBtn);
+        return;
+      }
+
+      const linkBtn = event.target.closest(".lead-link-btn");
+      if (linkBtn) {
+        const lead = state.leads.find((l) => l.lead_id === linkBtn.dataset.leadId);
+        if (lead) openVincularClinicaModal(lead, linkBtn);
+      }
+    });
+  }
+
+  const leadsFilterEl = document.querySelector("#leadsFilter");
+  if (leadsFilterEl) {
+    leadsFilterEl.value = state.leadsFilter || "Ativos";
+    leadsFilterEl.addEventListener("change", (event) => {
+      state.leadsFilter = event.target.value;
+      renderLeadsTable();
     });
   }
 }
