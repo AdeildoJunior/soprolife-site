@@ -4100,89 +4100,21 @@ function renderFinance() {
   }
 }
 
-// Deriva quanto cada sócio já pagou e quanto falta, por item. Prioriza os
-// campos explícitos do resumo (pago_adeildo, pago_faustino, pendente_adeildo,
-// pendente_faustino, saldo_restante) quando presentes. Se estiverem ausentes
-// (ex.: resumo gerado antes desses campos existirem, ou copiado para outro
-// ambiente sem eles), deriva com segurança a partir de campos que sempre
-// existem — responsavel, status, parcelas_pagas/parcelas_total, valor_mensal,
-// valor_total — nunca dividindo um item de responsabilidade mista/indefinida
-// (ex.: "Faustino e Adeildo") sem os campos explícitos: nesse caso retorna
-// null e a UI mostra "—" em vez de inventar R$ 0,00.
-function computeItemRateio(it) {
-  const resp = it.responsavel || "";
-  const temAdeildo = /adeildo/i.test(resp);
-  const temFaustino = /faustino/i.test(resp);
-  const isSingleAdeildo = temAdeildo && !temFaustino;
-  const isSingleFaustino = temFaustino && !temAdeildo;
-
-  let pagoAdeildo = typeof it.pago_adeildo === "number" ? it.pago_adeildo : null;
-  let pagoFaustino = typeof it.pago_faustino === "number" ? it.pago_faustino : null;
-  let pendenteAdeildo = typeof it.pendente_adeildo === "number" ? it.pendente_adeildo : null;
-  let pendenteFaustino = typeof it.pendente_faustino === "number" ? it.pendente_faustino : null;
-  let saldoRestante = typeof it.saldo_restante === "number" ? it.saldo_restante : null;
-
-  if (pagoAdeildo === null && pagoFaustino === null) {
-    let pagoTotal = null;
-    let saldoTotal = null;
-
-    if (it.status === "pago") {
-      pagoTotal = it.valor_total ?? 0;
-      saldoTotal = 0;
-    } else if (it.parcelas_total != null && it.parcelas_pagas != null && it.valor_mensal != null) {
-      pagoTotal = it.parcelas_pagas * it.valor_mensal;
-      saldoTotal = (it.parcelas_total - it.parcelas_pagas) * it.valor_mensal;
-    } else if (it.valor_total != null) {
-      pagoTotal = it.valor_total; // ex.: plano anual pago integralmente na contratação
-      saldoTotal = 0;
-    } else if (it.valor_mensal != null) {
-      pagoTotal = it.valor_mensal; // recorrente sem total fixo — taxa mensal atual
-      saldoTotal = null;
-    }
-
-    if (pagoTotal != null && isSingleAdeildo) {
-      pagoAdeildo = pagoTotal;
-      pagoFaustino = 0;
-      pendenteAdeildo = saldoTotal;
-      pendenteFaustino = saldoTotal != null ? 0 : null;
-      saldoRestante = saldoTotal;
-    } else if (pagoTotal != null && isSingleFaustino) {
-      pagoFaustino = pagoTotal;
-      pagoAdeildo = 0;
-      pendenteFaustino = saldoTotal;
-      pendenteAdeildo = saldoTotal != null ? 0 : null;
-      saldoRestante = saldoTotal;
-    }
-    // responsabilidade mista sem campos explícitos: fica tudo null → UI mostra "—"
-  }
-
-  const tipoValor = it.tipo_valor || (it.valor_total == null && it.valor_mensal != null ? "mensal" : "unico");
-
-  return { pagoAdeildo, pagoFaustino, pendenteAdeildo, pendenteFaustino, saldoRestante, tipoValor };
+// Lê o rateio de sócios diretamente dos campos estruturados do resumo
+// (ci.rateio_socios / ci.rateio_itens). Nunca infere pagamento a partir do
+// campo "responsavel" nem faz parsing de texto de observação — se o resumo
+// ainda não tiver essa estrutura, retorna null/[] e a UI mostra "dado ainda
+// não disponível" em vez de adivinhar quem pagou o quê.
+function getRateioSocios(ci) {
+  return Array.isArray(ci.rateio_socios) && ci.rateio_socios.length > 0 ? ci.rateio_socios : null;
 }
 
-// Agrega o rateio por sócio a partir de computeItemRateio(). Itens "mensal"
-// (assinaturas recorrentes sem total fixo) ficam fora da soma — misturar uma
-// taxa mensal com um total histórico distorceria o gráfico. semPagadorDefinido
-// cobre casos como o Espirômetro Koko, cujo saldo restante ainda não tem
-// responsável designado (não é somado a nenhum dos dois sócios).
-function computeSociosRateio(ci) {
-  let pagoAdeildo = 0, pagoFaustino = 0, pendenteAdeildo = 0, pendenteFaustino = 0, semPagadorDefinido = 0;
+function getRateioItens(ci) {
+  return Array.isArray(ci.rateio_itens) ? ci.rateio_itens : [];
+}
 
-  ci.itens.forEach((it) => {
-    const r = computeItemRateio(it);
-    if (r.tipoValor === "mensal") return;
-    if (r.pagoAdeildo != null) pagoAdeildo += r.pagoAdeildo;
-    if (r.pagoFaustino != null) pagoFaustino += r.pagoFaustino;
-    if (r.pendenteAdeildo != null) pendenteAdeildo += r.pendenteAdeildo;
-    if (r.pendenteFaustino != null) pendenteFaustino += r.pendenteFaustino;
-    if (r.saldoRestante != null) {
-      const atribuido = (r.pendenteAdeildo || 0) + (r.pendenteFaustino || 0);
-      semPagadorDefinido += Math.max(0, r.saldoRestante - atribuido);
-    }
-  });
-
-  return { pagoAdeildo, pagoFaustino, pendenteAdeildo, pendenteFaustino, semPagadorDefinido };
+function findSocio(socios, nomeParcial) {
+  return socios.find((s) => new RegExp(nomeParcial, "i").test(s.nome || "")) || null;
 }
 
 function renderCustosInvestimentos() {
@@ -4433,10 +4365,23 @@ function renderCustosInvestimentos() {
   }
 
   function buildSociosPane() {
-    const rateio = computeSociosRateio(ci);
-    const { pagoAdeildo, pagoFaustino, pendenteAdeildo, pendenteFaustino, semPagadorDefinido } = rateio;
-    const hasDesembolso = (pagoAdeildo + pagoFaustino) > 0;
-    const hasPagoPendente = (pagoAdeildo + pagoFaustino + pendenteAdeildo + pendenteFaustino) > 0;
+    const socios = getRateioSocios(ci);
+    const itens = getRateioItens(ci);
+
+    if (!socios) {
+      return `<p class="crm-report-chart-empty">Dado ainda não disponível — o resumo ainda não tem a estrutura rateio_socios.</p>`;
+    }
+
+    const adeildo = findSocio(socios, "adeildo") || {};
+    const faustino = findSocio(socios, "faustino") || {};
+    const semPagador = itens.reduce((s, it) => s + (it.pendente_sem_pagador || 0), 0);
+
+    const hasDesembolso = ((adeildo.total_desembolsado || 0) + (faustino.total_desembolsado || 0)) > 0;
+    const hasPagoPendente = (
+      (adeildo.total_desembolsado || 0) + (faustino.total_desembolsado || 0) +
+      (adeildo.saldo_pendente_atribuido || 0) + (faustino.saldo_pendente_atribuido || 0) +
+      semPagador
+    ) > 0;
 
     // A) Gráficos primeiro — visão geral antes do detalhe.
     const chartsHtml = `
@@ -4453,69 +4398,80 @@ function renderCustosInvestimentos() {
         <article class="panel">
           <div class="panel-header">
             <h3>Pago x Pendente por sócio</h3>
-            <span>Desembolsado até agora x saldo em aberto</span>
+            <span>Pago, pendente atribuído e sem pagador definido</span>
           </div>
           ${hasPagoPendente
             ? `<canvas id="ciSociosPagoPendenteChart"></canvas>`
             : `<p class="crm-report-chart-empty">Dado ainda não disponível</p>`}
-          ${semPagadorDefinido > 0
-            ? `<div class="ci-hist-note">${fmtBRL(semPagadorDefinido)} em saldo ainda sem pagador definido — não incluído nas barras acima.</div>`
-            : ""}
         </article>
       </div>
     `;
 
     // B) Cards compactos por sócio — só números principais, sem parágrafos.
-    const cards = ci.por_responsavel.map((s) => {
-      const isFaustino = /faustino/i.test(s.responsavel);
-      const pago = isFaustino ? pagoFaustino : pagoAdeildo;
-      const pendente = isFaustino ? pendenteFaustino : pendenteAdeildo;
-      const initials = s.responsavel.slice(0, 2).toUpperCase();
+    const cardFor = (s) => {
+      const initials = (s.nome || "—").slice(0, 2).toUpperCase();
       return `
         <article class="ci-socio-card">
           <div class="socio-name">
             <div class="socio-avatar">${escapeHtml(initials)}</div>
-            ${escapeHtml(s.responsavel)}
+            ${escapeHtml(s.nome || "—")}
           </div>
           <div class="ci-socio-stat">
             <span>Total desembolsado</span>
-            <strong>${fmtBRL(pago)}</strong>
+            <strong>${fmtBRL(s.total_desembolsado)}</strong>
           </div>
           <div class="ci-socio-stat">
             <span>Compromisso mensal</span>
-            <strong>${fmtBRL(s.total_mensal)}</strong>
+            <strong>${fmtBRL(s.compromisso_mensal)}</strong>
           </div>
           <div class="ci-socio-stat">
-            <span>Saldo pendente</span>
-            <strong>${fmtBRL(pendente)}</strong>
+            <span>Saldo pendente atribuído</span>
+            <strong>${fmtBRL(s.saldo_pendente_atribuido)}</strong>
           </div>
+          ${s.pendente_sem_pagador_relacionado > 0 ? `
+          <div class="ci-socio-stat">
+            <span>Sem pagador definido</span>
+            <strong>${fmtBRL(s.pendente_sem_pagador_relacionado)}</strong>
+          </div>` : ""}
           <div class="ci-socio-stat">
             <span>Itens vinculados</span>
-            <strong>${s.itens}</strong>
+            <strong>${s.itens_vinculados ?? "—"}</strong>
           </div>
         </article>
       `;
-    }).join("");
-    const cardsHtml = `<div class="ci-socios-grid" style="margin-top:1rem">${cards}</div>`;
+    };
+    const cardsHtml = `<div class="ci-socios-grid" style="margin-top:1rem">${socios.map(cardFor).join("")}</div>`;
 
-    // C) Tabela detalhada por item — "—" quando o item é de responsabilidade
-    // mista e ainda não tem divisão explícita (nunca R$ 0,00 fictício).
+    // C) Tabela detalhada por item, lida direto de rateio_itens — nunca
+    // inferida do campo "responsavel". "—" quando o valor é desconhecido;
+    // R$ 0,00 só quando o zero é um fato confirmado (ex.: 0/10 parcelas pagas).
     const fmtOrDash = (v, suffix) => (v == null ? "—" : `${fmtBRL(v)}${suffix || ""}`);
-    const itemRows = ci.itens.map((it) => {
-      const r = computeItemRateio(it);
-      const isMensal = r.tipoValor === "mensal";
+    const itemRows = itens.map((it) => {
+      const isMensal = it.tipo_valor === "mensal";
       const totalFmt = it.valor_total != null ? fmtBRL(it.valor_total) : "—";
-      const pagoAFmt = fmtOrDash(r.pagoAdeildo, isMensal ? "/mês" : "");
-      const pagoFFmt = fmtOrDash(r.pagoFaustino, isMensal ? "/mês" : "");
-      const saldoFmt = isMensal ? "—" : fmtOrDash(r.saldoRestante);
+      const pagoAFmt = fmtOrDash(it.pago_adeildo, isMensal ? "/mês" : "");
+      const pagoFFmt = fmtOrDash(it.pago_faustino, isMensal ? "/mês" : "");
+
+      let saldoFmt = "—";
+      if (!isMensal) {
+        const semDado = it.pendente_adeildo == null && it.pendente_faustino == null && !it.pendente_sem_pagador;
+        if (!semDado) {
+          const total = (it.pendente_adeildo || 0) + (it.pendente_faustino || 0) + (it.pendente_sem_pagador || 0);
+          saldoFmt = fmtBRL(total);
+          if (it.pendente_sem_pagador > 0) {
+            saldoFmt += ` <small style="color:var(--warn,#b5730a)">(sem pagador: ${fmtBRL(it.pendente_sem_pagador)})</small>`;
+          }
+        }
+      }
+
       return `
         <tr>
-          <td><strong>${escapeHtml(it.nome)}</strong></td>
+          <td><strong>${escapeHtml(it.item)}</strong></td>
           <td>${totalFmt}</td>
           <td>${pagoAFmt}</td>
           <td>${pagoFFmt}</td>
           <td>${saldoFmt}</td>
-          <td><small style="color:var(--muted);font-size:.78rem">${escapeHtml(it.obs_curta || "")}</small></td>
+          <td><small style="color:var(--muted);font-size:.78rem">${escapeHtml(it.observacao_curta || "")}</small></td>
         </tr>
       `;
     }).join("");
@@ -4548,8 +4504,21 @@ function renderCustosInvestimentos() {
   }
 
   function renderCiSociosCharts() {
-    const { pagoAdeildo, pagoFaustino, pendenteAdeildo, pendenteFaustino } = computeSociosRateio(ci);
-    const hasPagoPendente = (pagoAdeildo + pagoFaustino + pendenteAdeildo + pendenteFaustino) > 0;
+    const socios = getRateioSocios(ci);
+    if (!socios) {
+      destroyChart("ciSociosDesembolso");
+      destroyChart("ciSociosPagoPendente");
+      return;
+    }
+    const itens = getRateioItens(ci);
+    const adeildo = findSocio(socios, "adeildo") || {};
+    const faustino = findSocio(socios, "faustino") || {};
+    const semPagador = itens.reduce((s, it) => s + (it.pendente_sem_pagador || 0), 0);
+
+    const pagoAdeildo = adeildo.total_desembolsado || 0;
+    const pagoFaustino = faustino.total_desembolsado || 0;
+    const pendenteAdeildo = adeildo.saldo_pendente_atribuido || 0;
+    const pendenteFaustino = faustino.saldo_pendente_atribuido || 0;
 
     if (pagoAdeildo + pagoFaustino > 0) {
       createChart("ciSociosDesembolso", "#ciSociosDesembolsoChart", {
@@ -4578,22 +4547,26 @@ function renderCustosInvestimentos() {
       destroyChart("ciSociosDesembolso");
     }
 
+    const hasPagoPendente = (pagoAdeildo + pagoFaustino + pendenteAdeildo + pendenteFaustino + semPagador) > 0;
     if (hasPagoPendente) {
+      // "Sem pagador definido" entra como uma 3ª categoria no eixo X, separada
+      // de Adeildo/Faustino — não é somada a nenhum dos dois (ex.: parcelas
+      // 10 a 15 do Koko, que ninguém confirmou que vai pagar ainda).
       createChart("ciSociosPagoPendente", "#ciSociosPagoPendenteChart", {
         type: "bar",
         data: {
-          labels: ["Adeildo", "Faustino"],
+          labels: ["Adeildo", "Faustino", "Sem pagador definido"],
           datasets: [
             {
               label: "Pago",
-              data: [pagoAdeildo, pagoFaustino],
+              data: [pagoAdeildo, pagoFaustino, 0],
               backgroundColor: CHART_COLORS[4],
               borderRadius: 8,
               borderSkipped: false,
             },
             {
               label: "Pendente",
-              data: [pendenteAdeildo, pendenteFaustino],
+              data: [pendenteAdeildo, pendenteFaustino, semPagador],
               backgroundColor: CHART_COLORS[2],
               borderRadius: 8,
               borderSkipped: false,
