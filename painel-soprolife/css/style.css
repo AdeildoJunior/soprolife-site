@@ -1615,7 +1615,7 @@ td { font-size: .94rem; }
 }
 
 .cards-sections .metric-card.has-tip {
-  cursor: help;
+  cursor: default;
 }
 
 .cards-sections .metric-card:hover {
@@ -3058,7 +3058,7 @@ td { font-size: .94rem; }
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* Shared balloon styles via custom properties to avoid duplication */
-.tt, .mkt-tip, .has-tip { cursor: help; }
+.tt, .mkt-tip, .has-tip { cursor: default; }
 
 /* Inline tooltip (texto dentro de parágrafo) — usa ::before */
 .tt {
@@ -4507,7 +4507,7 @@ h1 { font-size: clamp(1.55rem, 3vw, 2rem); }
   background: #ffffff;
   border: 1px solid rgba(219,229,239,.65);
   box-shadow: var(--shadow-xs);
-  cursor: help;
+  cursor: default;
   overflow: visible;
   transition: transform var(--ease), box-shadow var(--ease), border-color var(--ease);
 }
@@ -4614,7 +4614,7 @@ h1 { font-size: clamp(1.55rem, 3vw, 2rem); }
 /* Override antigo para metric-card dentro de cards-sections */
 .cards-sections .metric-card {
   overflow: visible;
-  cursor: help;
+  cursor: default;
 }
 
 /* ── Panels — visual melhorado ──────────────────────────────────────────── */
@@ -5134,7 +5134,7 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  cursor: help;
+  cursor: default;
   overflow: visible;
   box-shadow: var(--shadow-xs);
   transition: transform var(--ease), box-shadow var(--ease), border-color var(--ease);
@@ -5634,7 +5634,9 @@ canvas { display: block; }
   overflow: hidden;
 }
 
-.stat-card::after {
+/* Círculo decorativo de textura — usa ::before para nunca disputar o ::after
+   do tooltip (.has-tip::after), que é quem deve renderizar attr(data-tip). */
+.stat-card::before {
   content: '';
   position: absolute;
   top: -30px; right: -30px;
@@ -5643,6 +5645,12 @@ canvas { display: block; }
   background: var(--stat-accent, var(--teal));
   opacity: .06;
   pointer-events: none;
+}
+
+/* Cards com tooltip precisam escapar do overflow:hidden acima, senão o
+   balão do .has-tip::after fica cortado e nunca aparece. */
+.stat-card.has-tip {
+  overflow: visible;
 }
 
 .stat-card:hover {
@@ -5814,7 +5822,7 @@ th {
 
 .lead-stage-disabled {
   color: var(--muted-light, var(--muted));
-  cursor: help;
+  cursor: default;
   font-size: .8rem;
 }
 
