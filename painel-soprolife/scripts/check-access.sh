@@ -745,6 +745,123 @@ PY
   fi
 }
 
+validate_crm_contatos_b2b() {
+  echo
+  echo "Verificando dados de CRM Contatos B2B..."
+
+  local private_file="painel-soprolife/data-private/crm-contatos-b2b.local.json"
+  local summary_file="painel-soprolife/data/crm-contatos-b2b-summary.local.json"
+
+  if [ -f "$private_file" ]; then
+    if git check-ignore -q "$private_file" 2>/dev/null; then
+      echo "  OK (gitignored): $private_file"
+    else
+      echo "  ERRO CRÍTICO: $private_file NÃO está gitignored — dados com telefone/e-mail podem vazar!"
+      echo "  Execute: git rm --cached \"$private_file\" antes de qualquer commit."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, sys
+
+path = Path("painel-soprolife/data-private/crm-contatos-b2b.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler JSON privado: {exc}")
+    sys.exit(1)
+
+contatos = data.get("contatos", [])
+
+BLOCKED_FIELDS = {
+    "cpf", "rg", "data_nascimento", "endereco", "endereço",
+    "senha", "token", "pedido_medico", "laudo", "diagnostico", "diagnóstico",
+}
+
+errors = 0
+for i, rec in enumerate(contatos, start=1):
+    if not isinstance(rec, dict):
+        print(f"  ERRO: registro {i} não é um objeto.")
+        errors += 1
+        continue
+    for k in rec.keys():
+        if k.lower() in BLOCKED_FIELDS:
+            print(f"  ERRO: campo proibido '{k}' no registro {i}.")
+            errors += 1
+
+if errors == 0:
+    print(f"  OK: {len(contatos)} contatos B2B. Nenhum campo proibido.")
+else:
+    print(f"  {errors} erros encontrados.")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $private_file não existe ainda (aba CRM Contatos B2B só é criada no primeiro vínculo)."
+  fi
+
+  if [ -f "$summary_file" ]; then
+    if git check-ignore -q "$summary_file" 2>/dev/null; then
+      echo "  OK (gitignored): $summary_file"
+    else
+      echo "  ATENÇÃO: $summary_file não está gitignored."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data/crm-contatos-b2b-summary.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler resumo: {exc}")
+    sys.exit(1)
+
+source   = data.get("source", {})
+contatos = data.get("contatos", [])
+
+if source.get("safeToDisplay") is not True:
+    print("  ERRO: crm-contatos-b2b-summary.local.json não marcado como safeToDisplay=true.")
+    sys.exit(1)
+if source.get("containsPersonalData") is not False:
+    print("  ERRO: crm-contatos-b2b-summary.local.json pode conter dado pessoal.")
+    sys.exit(1)
+
+_FONE_RE  = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+
+PII_FIELDS = {"nome_contato", "telefone_whatsapp", "email", "observacao"}
+
+errors = 0
+for i, rec in enumerate(contatos, start=1):
+    if not isinstance(rec, dict):
+        continue
+    rec_text = json.dumps(rec, ensure_ascii=False)
+
+    for pii_field in PII_FIELDS:
+        if pii_field in rec:
+            print(f"  ERRO: campo PII '{pii_field}' presente no resumo (registro {i}).")
+            errors += 1
+
+    if _FONE_RE.search(rec_text):
+        print(f"  ERRO: padrão de telefone detectado no resumo, registro {i}.")
+        errors += 1
+    if _EMAIL_RE.search(rec_text):
+        print(f"  ERRO: padrão de e-mail detectado no resumo, registro {i}.")
+        errors += 1
+
+if errors == 0:
+    print(f"  OK: crm-contatos-b2b-summary seguro — {len(contatos)} contatos, sem telefone/e-mail/nome.")
+else:
+    print(f"  {errors} erro(s) encontrado(s) no resumo.")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $summary_file não existe ainda."
+    echo "  Execute: python3 painel-soprolife/scripts/read-crm-contatos-b2b-adc.py --write"
+  fi
+}
+
 validate_financeiro() {
   echo
   echo "Verificando dados financeiros..."
@@ -1293,6 +1410,7 @@ main() {
   validate_dashboard_summary
   validate_crm_clinicas
   validate_leads
+  validate_crm_contatos_b2b
   validate_followup_pacientes
   validate_followup_clinicas
   validate_financeiro

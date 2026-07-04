@@ -733,6 +733,12 @@ td { font-size: .94rem; }
   font-family: monospace;
 }
 
+.crm-contato-tag {
+  color: #4338ca;
+  font-size: .72rem;
+  font-weight: 600;
+}
+
 .leads-concept-note {
   margin-bottom: 18px;
 }
@@ -5739,6 +5745,43 @@ th {
   color: var(--muted-light, var(--muted));
   cursor: help;
   font-size: .8rem;
+}
+
+.lead-actions-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lead-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: .72rem;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  background: rgba(99,102,241,.10);
+  color: #4338ca;
+  border: 1px solid rgba(99,102,241,.28);
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--ease-fast, .12s), border-color var(--ease-fast, .12s);
+}
+
+.lead-link-btn:hover {
+  background: rgba(99,102,241,.18);
+  border-color: rgba(99,102,241,.45);
+}
+
+.lead-link-btn:focus-visible {
+  outline: 2px solid #4338ca;
+  outline-offset: 2px;
+}
+
+.vincular-clinica-modal {
+  max-width: 460px;
 }
 
 .lead-stage-overlay {
