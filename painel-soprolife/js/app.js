@@ -122,8 +122,17 @@ function fmtBRL(value) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0);
 }
 
+// Evita que o navegador sirva uma versão antiga em cache de um JSON de dados
+// local (ex.: depois de atualizar um *.local.json na VPS, o painel continuava
+// mostrando os valores antigos até um hard-refresh). Usado por loadJson() e
+// loadOptionalJson() — helper único para todas as leituras de dados do painel.
+function withCacheBust(path) {
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}_cb=${Date.now()}`;
+}
+
 async function loadJson(path) {
-  const response = await fetch(path);
+  const response = await fetch(withCacheBust(path), { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Erro ao carregar ${path}`);
   }
@@ -132,7 +141,7 @@ async function loadJson(path) {
 
 async function loadOptionalJson(path) {
   try {
-    const response = await fetch(path);
+    const response = await fetch(withCacheBust(path), { cache: "no-store" });
 
     if (response.status === 404) {
       return null;
@@ -298,7 +307,7 @@ async function init() {
     // Contatos B2B: resumo seguro (sem nome/telefone/email) > privado local (Tailscale) > nada.
     // Gerado por: python3 painel-soprolife/scripts/read-crm-contatos-b2b-adc.py --write
     const contatosSummary = await loadOptionalJson("./data/crm-contatos-b2b-summary.local.json");
-    const contatosPrivate = await loadOptionalJson(`./data-private/crm-contatos-b2b.local.json?_=${Date.now()}`);
+    const contatosPrivate = await loadOptionalJson("./data-private/crm-contatos-b2b.local.json");
     if (contatosPrivate?.contatos?.length > 0) {
       state.crmContatosB2B = contatosPrivate.contatos;
     } else if (
@@ -309,8 +318,7 @@ async function init() {
       state.crmContatosB2B = contatosSummary.contatos;
     }
 
-    const _bust = `?_=${Date.now()}`;
-    const followupLocal = await loadOptionalJson(`./data-private/followup-pacientes.local.json${_bust}`);
+    const followupLocal = await loadOptionalJson("./data-private/followup-pacientes.local.json");
     if (followupLocal) {
       state.followupPacientes = followupLocal;
     }
@@ -320,7 +328,7 @@ async function init() {
       state.followupSummary = followupSummary;
     }
 
-    const followupClinicasLocal = await loadOptionalJson(`./data-private/followup-clinicas.local.json${_bust}`);
+    const followupClinicasLocal = await loadOptionalJson("./data-private/followup-clinicas.local.json");
     if (followupClinicasLocal) {
       state.followupClinicas = followupClinicasLocal;
     }
@@ -335,7 +343,7 @@ async function init() {
     // Leads: privado (local/Tailscale) > resumo seguro > leads.json demonstrativo
     // Ambos gerados por: python3 painel-soprolife/scripts/read-leads-sheets.py --write
     const leadsSummaryLocal = await loadOptionalJson("./data/leads-summary.local.json");
-    const leadsPrivateLocal = await loadOptionalJson(`./data-private/leads.local.json${_bust}`);
+    const leadsPrivateLocal = await loadOptionalJson("./data-private/leads.local.json");
 
     if (leadsPrivateLocal?.leads?.length > 0) {
       // Dados reais disponíveis localmente (gitignored) — usa com nome e telefone
@@ -368,7 +376,7 @@ async function init() {
 
     state.ccConfigured = await fetchCcStatus();
 
-    const lancamentosData = await loadOptionalJson(`./data/ultimos-lancamentos-summary.local.json?_=${Date.now()}`);
+    const lancamentosData = await loadOptionalJson("./data/ultimos-lancamentos-summary.local.json");
     if (lancamentosData?.source?.safeToDisplay === true && lancamentosData?.source?.containsPersonalData === false) {
       state.ultimosLancamentos = lancamentosData;
     }
