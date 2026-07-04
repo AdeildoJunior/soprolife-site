@@ -521,7 +521,7 @@ const METRIC_INFO = {
   ciResumoIndisponivel: "Nenhum resumo de custos e investimentos local foi encontrado neste ambiente.",
   ciEquipTotalInvestido: "Valor total já investido em equipamentos da SoproLife.",
   ciEquipParcelaMensal: "Soma das parcelas mensais dos equipamentos financiados.",
-  ciEquipPendente: "Equipamento com parcelas ainda não cadastradas no controle financeiro.",
+  ciEquipPendente: "Saldo restante do parcelamento do Espirômetro Koko — parcelas ainda sem data e sem pagador definido.",
 
   // Automações
   automationIntegracoesPlanejadas: "Quantidade de integrações mapeadas no plano do centro de comando.",
@@ -4124,15 +4124,15 @@ function renderCustosInvestimentos() {
 
   statsContainer.innerHTML = [
     { key: "custosMensais",             label: "Custo mensal atual",        value: fmtBRL(ci.total_mensal_atual),              hint: "recorrentes + infraestrutura + parcelas",     extraClass: "accent-teal"   },
-    { key: "investimentosEquipamentos", label: "Investido em equipamentos", value: fmtBRL(ci.total_investido_equipamentos),     hint: "Spirobank + Seringa Calibração",               extraClass: "accent-navy"   },
-    { key: "ciParcelasMensais",         label: "Parcelas mensais",          value: fmtBRL(ci.parcelas_mensais_equipamentos),    hint: `10× de ${fmtBRL(ci.parcelas_mensais_equipamentos)}`,  extraClass: "accent-navy"   },
+    { key: "investimentosEquipamentos", label: "Investido em equipamentos", value: fmtBRL(ci.total_investido_equipamentos),     hint: "Spirobank, Seringa e Koko",                   extraClass: "accent-navy"   },
+    { key: "ciParcelasMensais",         label: "Parcelas mensais",          value: fmtBRL(ci.parcelas_mensais_equipamentos),    hint: "Equipamentos parcelados ativos",              extraClass: "accent-navy"   },
     { key: "ciRecorrentesInfra",        label: "Recorrentes + infra/mês",   value: fmtBRL(ci.total_mensal_recorrente),          hint: "Workspace · Tailscale · Hostinger",           extraClass: "accent-teal"   },
-    { key: "ciItensCadastrados",        label: "Itens cadastrados",         value: String(ci.itens_ativos),                    hint: "todos — responsabilidade Adeildo",             extraClass: "accent-teal"   },
-    { key: "ciPendenciasCadastro",      label: "Pendências de cadastro",    value: String(ci.pendencias_cadastro),             hint: "Koko + regularização",                        extraClass: "accent-warn"   },
+    { key: "ciItensCadastrados",        label: "Itens cadastrados",         value: String(ci.itens_ativos),                    hint: "Adeildo e Faustino",                          extraClass: "accent-teal"   },
+    { key: "ciPendenciasCadastro",      label: "Pendências de cadastro",    value: String(ci.pendencias_cadastro),             hint: "Regularização + parcelas Koko sem pagador",   extraClass: "accent-warn"   },
   ].map((c) => statCardHtml("ci-stat-card", c)).join("");
 
   function statusBadge(status) {
-    const cls = status === "ativo" ? "ci-badge-ativo"
+    const cls = status === "ativo" || status === "pago" ? "ci-badge-ativo"
               : status === "parcelado" ? "ci-badge-parcelado"
               : "ci-badge-pendente";
     return `<span class="ci-badge ${cls}">${escapeHtml(status)}</span>`;
@@ -4297,10 +4297,15 @@ function renderCustosInvestimentos() {
       `;
     }).join("");
 
+    const koko = equips.find((it) => it.id === "koko-001");
+    const kokoSaldo = koko && koko.parcelas_total != null
+      ? (koko.parcelas_total - koko.parcelas_pagas) * koko.valor_mensal
+      : null;
+
     const equipStats = [
-      { key: "ciEquipTotalInvestido", extraClass: "accent-navy", label: "Total investido (equipamentos)", value: fmtBRL(totalInv), hint: "Spirobank + Seringa Calibração" },
-      { key: "ciEquipParcelaMensal",  extraClass: "accent-teal", label: "Parcela mensal total",           value: fmtBRL(totalParc), hint: `10× de ${fmtBRL(totalParc)}` },
-      { key: "ciEquipPendente",       extraClass: "accent-warn", label: "Espirômetro Koko",                value: "Pendente", hint: "Parcelas a cadastrar — Faustino" },
+      { key: "ciEquipTotalInvestido", extraClass: "accent-navy", label: "Total investido (equipamentos)", value: fmtBRL(totalInv), hint: "Spirobank, Seringa e Koko" },
+      { key: "ciEquipParcelaMensal",  extraClass: "accent-teal", label: "Parcela mensal total",           value: fmtBRL(totalParc), hint: "Equipamentos parcelados ativos" },
+      { key: "ciEquipPendente",       extraClass: "accent-warn", label: "Saldo pendente — Koko", value: kokoSaldo != null ? fmtBRL(kokoSaldo) : "Pendente", hint: kokoSaldo != null ? "6 parcelas sem data definida" : "Parcelas a cadastrar — Faustino" },
     ];
 
     return `
@@ -4382,7 +4387,7 @@ function renderCustosInvestimentos() {
           <div class="ci-pending-icon">📋</div>
           <div class="ci-pending-body">
             <strong>Regularização / Documentos da empresa</strong>
-            <p>Pendente cadastrar: alvará, CREMERJ PJ, CNES, licenciamento sanitário, contador, custos de abertura e outros documentos.</p>
+            <p>CREMERJ PJ já registrado (pago em 11/03/2026). Pendente cadastrar: alvará, CNES, licenciamento sanitário, contador, custos de abertura e outros documentos.</p>
             <div class="ci-pending-meta">Responsável: Adeildo · Status: aguardando levantamento completo dos custos</div>
           </div>
         </div>
