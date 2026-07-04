@@ -36,6 +36,11 @@ function setupSoproLifeSheetsLite() {
     "Agenda Operacional": [
       "evento_id", "data", "hora", "tipo_evento", "local", "responsavel", "status", "observacao_anonima"
     ],
+    "Rateio Sócios": [
+      "item_id", "item", "categoria", "valor_total", "valor_mensal",
+      "pago_adeildo", "pago_faustino", "pendente_adeildo", "pendente_faustino",
+      "status", "observacao"
+    ],
     "Resumo": [
       "area", "indicador", "valor", "observacao"
     ]
@@ -137,6 +142,15 @@ function setupValidacoesSoproLife() {
   dropdown("Agenda Operacional", "F", ["Adeildo", "Raquel", "Médica", "Administrativo", "A definir"]);
   dropdown("Agenda Operacional", "G", ["Agendado", "Confirmado", "Realizado", "Remarcar", "Cancelado"]);
   dateColumn("Agenda Operacional", "B");
+
+  dropdown("Rateio Sócios", "C", ["Recorrente", "Infraestrutura", "Equipamento", "Regularização", "Outro"]);
+  dropdown("Rateio Sócios", "J", ["ativo", "parcelado", "pago", "pendente"]);
+  moneyColumn("Rateio Sócios", "D");
+  moneyColumn("Rateio Sócios", "E");
+  moneyColumn("Rateio Sócios", "F");
+  moneyColumn("Rateio Sócios", "G");
+  moneyColumn("Rateio Sócios", "H");
+  moneyColumn("Rateio Sócios", "I");
 
   SpreadsheetApp.flush();
   Logger.log("Validações da planilha SoproLife aplicadas com sucesso.");

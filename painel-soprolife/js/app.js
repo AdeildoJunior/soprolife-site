@@ -4100,6 +4100,23 @@ function renderFinance() {
   }
 }
 
+// Soma o desembolso e o pendente por sócio a partir de ci.itens. Itens "mensal"
+// (assinaturas recorrentes sem total fixo, ex.: Workspace/Tailscale) ficam de
+// fora — misturar uma taxa mensal com um total histórico distorceria o gráfico.
+// semPagadorDefinido cobre casos como o Espirômetro Koko, cujo saldo restante
+// ainda não tem responsável designado (não deve ser atribuído a ninguém).
+function computeSociosRateio(ci) {
+  const itensUnicos = ci.itens.filter((it) => it.tipo_valor !== "mensal");
+  const pagoAdeildo = itensUnicos.reduce((s, it) => s + (it.pago_adeildo || 0), 0);
+  const pagoFaustino = itensUnicos.reduce((s, it) => s + (it.pago_faustino || 0), 0);
+  const pendenteAdeildo = itensUnicos.reduce((s, it) => s + (it.pendente_adeildo || 0), 0);
+  const pendenteFaustino = itensUnicos.reduce((s, it) => s + (it.pendente_faustino || 0), 0);
+  const semPagadorDefinido = ci.itens.reduce((s, it) => {
+    const naoAtribuido = (it.saldo_restante || 0) - (it.pendente_adeildo || 0) - (it.pendente_faustino || 0);
+    return s + Math.max(0, naoAtribuido);
+  }, 0);
+  return { pagoAdeildo, pagoFaustino, pendenteAdeildo, pendenteFaustino, semPagadorDefinido };
+}
 
 function renderCustosInvestimentos() {
   const statsContainer = document.querySelector("#ciStats");
@@ -4374,7 +4391,147 @@ function renderCustosInvestimentos() {
       `;
     }).join("");
 
-    return `<div class="ci-socios-grid">${cards}</div>`;
+    const { pagoAdeildo, pagoFaustino, semPagadorDefinido } = computeSociosRateio(ci);
+    const hasDesembolso = (pagoAdeildo + pagoFaustino) > 0;
+
+    const chartsHtml = `
+      <div class="grid-two" style="margin-top:1rem">
+        <article class="panel">
+          <div class="panel-header">
+            <h3>Desembolsado por sócio</h3>
+            <span>Quanto cada um já pagou (itens com valor fechado)</span>
+          </div>
+          ${hasDesembolso
+            ? `<canvas id="ciSociosDesembolsoChart"></canvas>`
+            : `<p class="crm-report-chart-empty">Dado ainda não disponível</p>`}
+        </article>
+        <article class="panel">
+          <div class="panel-header">
+            <h3>Pago x Pendente por sócio</h3>
+            <span>Desembolsado até agora x saldo em aberto</span>
+          </div>
+          <canvas id="ciSociosPagoPendenteChart"></canvas>
+          ${semPagadorDefinido > 0
+            ? `<div class="ci-hist-note">${fmtBRL(semPagadorDefinido)} em saldo ainda sem pagador definido (Espirômetro Koko) — não incluído nas barras acima.</div>`
+            : ""}
+        </article>
+      </div>
+    `;
+
+    const itemRows = ci.itens.map((it) => {
+      const isMensal = it.tipo_valor === "mensal";
+      const totalFmt = it.valor_total != null ? fmtBRL(it.valor_total) : "—";
+      const pagoAFmt = isMensal ? `${fmtBRL(it.pago_adeildo || 0)}/mês` : fmtBRL(it.pago_adeildo || 0);
+      const pagoFFmt = isMensal ? `${fmtBRL(it.pago_faustino || 0)}/mês` : fmtBRL(it.pago_faustino || 0);
+      const saldoFmt = isMensal ? "—" : fmtBRL(it.saldo_restante || 0);
+      return `
+        <tr>
+          <td><strong>${escapeHtml(it.nome)}</strong></td>
+          <td>${totalFmt}</td>
+          <td>${pagoAFmt}</td>
+          <td>${pagoFFmt}</td>
+          <td>${saldoFmt}</td>
+          <td><small style="color:var(--muted);font-size:.78rem">${escapeHtml(it.obs_curta || "")}</small></td>
+        </tr>
+      `;
+    }).join("");
+
+    const itemTableHtml = `
+      <article class="panel" style="margin-top:1rem">
+        <div class="panel-header">
+          <h3>Rateio por item</h3>
+          <span>Quanto cada sócio já pagou, item a item</span>
+        </div>
+        <div class="table-wrap">
+          <table class="ci-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Valor total</th>
+                <th>Pago Adeildo</th>
+                <th>Pago Faustino</th>
+                <th>Saldo restante</th>
+                <th>Observação</th>
+              </tr>
+            </thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+        </div>
+      </article>
+    `;
+
+    return `<div class="ci-socios-grid">${cards}</div>${chartsHtml}${itemTableHtml}`;
+  }
+
+  function renderCiSociosCharts() {
+    const { pagoAdeildo, pagoFaustino, pendenteAdeildo, pendenteFaustino } = computeSociosRateio(ci);
+
+    if (pagoAdeildo + pagoFaustino > 0) {
+      createChart("ciSociosDesembolso", "#ciSociosDesembolsoChart", {
+        type: "doughnut",
+        data: {
+          labels: ["Adeildo", "Faustino"],
+          datasets: [{
+            data: [pagoAdeildo, pagoFaustino],
+            backgroundColor: [CHART_COLORS[0], CHART_COLORS[1]],
+            borderWidth: 3,
+            borderColor: "#f3f7fb",
+            hoverOffset: 8,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "68%",
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, font: { size: 11 }, padding: 12 } },
+            tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${fmtBRL(ctx.raw)}` } }
+          }
+        }
+      });
+    } else {
+      destroyChart("ciSociosDesembolso");
+    }
+
+    createChart("ciSociosPagoPendente", "#ciSociosPagoPendenteChart", {
+      type: "bar",
+      data: {
+        labels: ["Adeildo", "Faustino"],
+        datasets: [
+          {
+            label: "Pago",
+            data: [pagoAdeildo, pagoFaustino],
+            backgroundColor: CHART_COLORS[4],
+            borderRadius: 8,
+            borderSkipped: false,
+          },
+          {
+            label: "Pendente",
+            data: [pendenteAdeildo, pendenteFaustino],
+            backgroundColor: CHART_COLORS[2],
+            borderRadius: 8,
+            borderSkipped: false,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, padding: 12 } },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtBRL(ctx.raw)}` } }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: { color: "rgba(109,123,138,.07)" },
+            ticks: { font: { size: 10 }, callback: (v) => fmtBRL(v) },
+            border: { display: false }
+          },
+          x: { grid: { display: false }, border: { display: false } }
+        }
+      }
+    });
   }
 
   function buildPendenciasPane() {
@@ -4423,6 +4580,10 @@ function renderCustosInvestimentos() {
     if (el) el.innerHTML = html;
   });
 
+  // Os canvases dos gráficos de sócios só existem no DOM depois do innerHTML
+  // acima — precisam ser criados agora, e não dentro de buildSociosPane().
+  renderCiSociosCharts();
+
   document.querySelectorAll(".ci-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".ci-tab").forEach((b) => b.classList.remove("active"));
@@ -4430,6 +4591,10 @@ function renderCustosInvestimentos() {
       btn.classList.add("active");
       const pane = document.querySelector(`#ci-${btn.dataset.ciTab}`);
       if (pane) pane.removeAttribute("hidden");
+      // A aba "Sócios" nasce oculta ([hidden] = display:none), então os canvases
+      // dos gráficos são criados com largura/altura zero. Ao reexibir a aba,
+      // força o Chart.js a remedir o container e redesenhar corretamente.
+      if (btn.dataset.ciTab === "socios") resizeCharts();
     });
   });
 }
