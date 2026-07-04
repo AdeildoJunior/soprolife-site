@@ -495,7 +495,7 @@ const METRIC_INFO = {
   // Leads e Agendamentos
   leadsNovosContatos: "Leads recém-cadastrados que ainda aguardam a primeira resposta da equipe.",
   leadsEmConversa: "Leads em diálogo ativo, incluindo os que aguardam retorno do próprio lead.",
-  leadsConvertidos: "Leads que já migraram para o CRM como paciente ou clínica/parceiro após o primeiro atendimento.",
+  leadsConvertidos: "Leads que já viraram paciente, exame, consulta ou parceria B2B. Exemplo: Juan/Pastore aparece aqui como parceiro ativo.",
   leadsSemResposta: "Leads que não responderam ao contato inicial e ainda não foram reativados ou encerrados.",
 
   // Marketing & SEO
@@ -2537,19 +2537,31 @@ function renderLeadPipeline() {
     { label: "Aguardando retorno",   value: countLeadEtapa("Aguardando retorno"),     hint: "aguardando o lead",    tone: "warning" },
     { label: "Agendado",             value: countLeadEtapa("Agendado"),               hint: "confirmar preparo",    tone: "success" },
     { label: "Não respondeu",        value: countLeadEtapa("Não respondeu"),          hint: "reativar ou encerrar", tone: "danger" },
-    { label: "Convertido",           value: state.leads.filter(isLeadConvertido).length, hint: "migrado ao CRM ou parceria", tone: "success" },
+    {
+      label: "Convertido / parceiro ativo",
+      value: state.leads.filter(isLeadConvertido).length,
+      hint: "migrado ao CRM ou parceria",
+      tone: "success",
+      tip: "Leads que já viraram paciente, exame, consulta ou parceria B2B. Exemplo: Juan/Pastore aparece aqui como parceiro ativo."
+    },
   ];
 
   const container = document.querySelector("#leadPipeline");
   if (!container) return;
 
-  container.innerHTML = stages.map((stage) => `
-    <div class="lead-stage ${stage.tone}">
+  container.innerHTML = stages.map((stage) => {
+    const cls = ["lead-stage", stage.tone, stage.tip ? "has-tip" : ""].filter(Boolean).join(" ");
+    const tipAttrs = stage.tip
+      ? ` tabindex="0" data-tip="${escapeHtml(stage.tip)}" aria-label="${escapeHtml(stage.label)}: ${stage.value}. ${escapeHtml(stage.tip)}"`
+      : "";
+    return `
+    <div class="${cls}"${tipAttrs}>
       <small>${stage.label}</small>
       <strong>${stage.value}</strong>
       <span>${stage.hint}</span>
     </div>
-  `).join("");
+  `;
+  }).join("");
 }
 
 
@@ -2673,6 +2685,23 @@ function resolveLeadWhatsApp(item) {
   return `https://wa.me/${country}`;
 }
 
+// Badges de etapa que representam conversão/parceria já fechada recebem um
+// tooltip explicando o que isso significa (ex.: "Parceiro ativo" no caso do
+// Juan/Pastore) — nas demais etapas o badge continua igual, sem tooltip.
+const LEAD_ETAPA_BADGE_TIP = {
+  "Parceiro ativo": "Contato B2B já vinculado a uma clínica/parceria ativa. Continua no histórico de leads, mas sai da lista de ativos.",
+  "Convertido em clínica/parceiro": "Leads que já viraram paciente, exame, consulta ou parceria B2B. Exemplo: Juan/Pastore aparece aqui como parceiro ativo.",
+};
+
+function leadEtapaBadgeHtml(etapa) {
+  const tip = LEAD_ETAPA_BADGE_TIP[etapa];
+  if (!tip) return `<span class="badge ${slug(etapa)}">${escapeHtml(etapa)}</span>`;
+  // Usa title nativo (não o balão .has-tip::after) porque este badge fica
+  // dentro de .table-wrap, que tem overflow:auto — um popup customizado
+  // ficaria cortado ao rolar a tabela. title escapa esse corte.
+  return `<span class="badge ${slug(etapa)}" tabindex="0" title="${escapeHtml(tip)}" aria-label="${escapeHtml(etapa)}. ${escapeHtml(tip)}">${escapeHtml(etapa)}</span>`;
+}
+
 function renderLeadsTable() {
   const tbody = document.querySelector("#leadsTable");
   if (!tbody) return;
@@ -2729,7 +2758,7 @@ function renderLeadsTable() {
       </td>
       <td>${waBtn}</td>
       <td>${escapeHtml(servico)}</td>
-      <td><span class="badge ${slug(etapa)}">${escapeHtml(etapa)}</span></td>
+      <td>${leadEtapaBadgeHtml(etapa)}</td>
       <td>${escapeHtml(acao)}</td>
       <td>${dataLabel ? `<span class="crm-data ${dataCls}">${dataLabel}</span>` : "—"}</td>
       <td>${escapeHtml(responsavel)}</td>
@@ -3716,20 +3745,36 @@ function renderLeadsCharts() {
         cutout: "68%",
         plugins: {
           legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, font: { size: 11 }, padding: 12 } },
-          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } }
+          tooltip: {
+            callbacks: {
+              // Canal + quantidade na primeira linha, lembrete de que isto não
+              // é a etapa comercial na segunda — evita a confusão de achar que
+              // este gráfico mostra quem já converteu.
+              label: (ctx) => [
+                ` ${ctx.label}: ${ctx.raw} lead(s)`,
+                "Canal de entrada — não indica se o lead foi convertido."
+              ]
+            }
+          }
         }
       }
     });
   }
 
-  // Funil de leads — barras verticais
+  // Funil comercial — barras verticais por etapa atual. "Convertido / parceiro
+  // ativo" usa a mesma regra de isLeadConvertido() do card "Convertidos" e do
+  // filtro da tabela (Ativos/Convertidos/Todos), para não haver dois números
+  // diferentes de "convertido" na mesma tela.
+  const FUNIL_ETAPA_EXPLICACAO = {
+    "Convertido / parceiro ativo": "Inclui pacientes convertidos e parceiros B2B (ex.: Juan/Pastore)."
+  };
   const etapasFunil = [
     ["Novo contato", countLeadEtapa("Novo contato")],
     ["Em conversa",  countLeadEtapa("Em conversa")],
     ["Aguardando",   countLeadEtapa("Aguardando retorno")],
     ["Agendado",     countLeadEtapa("Agendado")],
     ["Sem resposta", countLeadEtapa("Não respondeu")],
-    ["Convertido",   countLeadEtapa("Convertido em paciente") + countLeadEtapa("Convertido em clínica/parceiro")]
+    ["Convertido / parceiro ativo", state.leads.filter(isLeadConvertido).length]
   ];
   createChart("leadsFunil", "#leadsFunilChart", {
     type: "bar",
@@ -3748,7 +3793,16 @@ function renderLeadsCharts() {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => ` ${ctx.raw} lead(s)` } }
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const lines = [` ${ctx.raw} lead(s)`];
+              const extra = FUNIL_ETAPA_EXPLICACAO[ctx.label];
+              if (extra) lines.push(extra);
+              return lines;
+            }
+          }
+        }
       },
       scales: {
         y: {
@@ -3757,7 +3811,7 @@ function renderLeadsCharts() {
           ticks: { stepSize: 1, font: { size: 11 } },
           border: { display: false }
         },
-        x: { grid: { display: false }, ticks: { font: { size: 11 } }, border: { display: false } }
+        x: { grid: { display: false }, ticks: { font: { size: 10 } }, border: { display: false } }
       }
     }
   });
@@ -3815,11 +3869,27 @@ function bindEvents() {
   const leadsFilterEl = document.querySelector("#leadsFilter");
   if (leadsFilterEl) {
     leadsFilterEl.value = state.leadsFilter || "Ativos";
+    updateLeadsFilterTip(leadsFilterEl);
     leadsFilterEl.addEventListener("change", (event) => {
       state.leadsFilter = event.target.value;
+      updateLeadsFilterTip(leadsFilterEl);
       renderLeadsTable();
     });
   }
+}
+
+// Explica o que cada opção do filtro Ativos/Convertidos/Todos mostra — o
+// texto muda junto com a seleção via title + aria-label nativos do <select>.
+const LEADS_FILTER_TIP = {
+  Ativos:      "Mostra leads ainda em andamento, sem conversão final.",
+  Convertidos: "Mostra leads que já foram convertidos ou vinculados a paciente, atendimento ou parceria.",
+  Todos:       "Mostra ativos e convertidos juntos.",
+};
+
+function updateLeadsFilterTip(el) {
+  const tip = LEADS_FILTER_TIP[el.value] || "";
+  el.title = tip;
+  el.setAttribute("aria-label", `Filtro de leads: ${el.value}. ${tip}`);
 }
 
 init();

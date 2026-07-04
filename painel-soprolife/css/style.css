@@ -3096,6 +3096,29 @@ td { font-size: .94rem; }
 .tt:focus::before,
 .tt:focus-visible::before { opacity: 1; }
 
+/* Ícone de ajuda "ⓘ" em cabeçalhos de painel (ex.: gráficos de Leads e
+   Agendamentos). Painéis normalmente cortam overflow para arredondar o
+   canvas — libera especificamente quem tem um .tt no cabeçalho, senão o
+   balão do tooltip fica cortado no topo do card. */
+.panel-header .tt.panel-help {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: .82rem;
+  color: var(--muted);
+  border-bottom: none;
+  white-space: normal;
+  vertical-align: middle;
+}
+
+.panel-header .tt.panel-help:hover,
+.panel-header .tt.panel-help:focus-visible {
+  color: var(--teal-dark);
+}
+
+.panel:has(> .panel-header .tt) {
+  overflow: visible;
+}
+
 /* Bloco tooltip (cards, rows) — usa ::after para não conflitar com ::before de ícones/listras */
 .mkt-tip, .has-tip {
   position: relative;
