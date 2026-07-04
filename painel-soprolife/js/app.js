@@ -93,7 +93,7 @@ function isLeadConvertido(item) {
   if (item.status_operacional === "convertido") return true;
   const etapa = item.etapa || item.status || "";
   if (LEAD_ETAPAS_TERMINAIS.includes(etapa)) return true;
-  if (etapa === "Concluído" && item.tipo_lead === "b2b") return true;
+  if (etapa === "Concluído" && isB2BLead(item)) return true;
   return false;
 }
 
