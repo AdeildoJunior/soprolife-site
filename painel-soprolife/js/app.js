@@ -4100,21 +4100,88 @@ function renderFinance() {
   }
 }
 
-// Soma o desembolso e o pendente por sócio a partir de ci.itens. Itens "mensal"
-// (assinaturas recorrentes sem total fixo, ex.: Workspace/Tailscale) ficam de
-// fora — misturar uma taxa mensal com um total histórico distorceria o gráfico.
-// semPagadorDefinido cobre casos como o Espirômetro Koko, cujo saldo restante
-// ainda não tem responsável designado (não deve ser atribuído a ninguém).
+// Deriva quanto cada sócio já pagou e quanto falta, por item. Prioriza os
+// campos explícitos do resumo (pago_adeildo, pago_faustino, pendente_adeildo,
+// pendente_faustino, saldo_restante) quando presentes. Se estiverem ausentes
+// (ex.: resumo gerado antes desses campos existirem, ou copiado para outro
+// ambiente sem eles), deriva com segurança a partir de campos que sempre
+// existem — responsavel, status, parcelas_pagas/parcelas_total, valor_mensal,
+// valor_total — nunca dividindo um item de responsabilidade mista/indefinida
+// (ex.: "Faustino e Adeildo") sem os campos explícitos: nesse caso retorna
+// null e a UI mostra "—" em vez de inventar R$ 0,00.
+function computeItemRateio(it) {
+  const resp = it.responsavel || "";
+  const temAdeildo = /adeildo/i.test(resp);
+  const temFaustino = /faustino/i.test(resp);
+  const isSingleAdeildo = temAdeildo && !temFaustino;
+  const isSingleFaustino = temFaustino && !temAdeildo;
+
+  let pagoAdeildo = typeof it.pago_adeildo === "number" ? it.pago_adeildo : null;
+  let pagoFaustino = typeof it.pago_faustino === "number" ? it.pago_faustino : null;
+  let pendenteAdeildo = typeof it.pendente_adeildo === "number" ? it.pendente_adeildo : null;
+  let pendenteFaustino = typeof it.pendente_faustino === "number" ? it.pendente_faustino : null;
+  let saldoRestante = typeof it.saldo_restante === "number" ? it.saldo_restante : null;
+
+  if (pagoAdeildo === null && pagoFaustino === null) {
+    let pagoTotal = null;
+    let saldoTotal = null;
+
+    if (it.status === "pago") {
+      pagoTotal = it.valor_total ?? 0;
+      saldoTotal = 0;
+    } else if (it.parcelas_total != null && it.parcelas_pagas != null && it.valor_mensal != null) {
+      pagoTotal = it.parcelas_pagas * it.valor_mensal;
+      saldoTotal = (it.parcelas_total - it.parcelas_pagas) * it.valor_mensal;
+    } else if (it.valor_total != null) {
+      pagoTotal = it.valor_total; // ex.: plano anual pago integralmente na contratação
+      saldoTotal = 0;
+    } else if (it.valor_mensal != null) {
+      pagoTotal = it.valor_mensal; // recorrente sem total fixo — taxa mensal atual
+      saldoTotal = null;
+    }
+
+    if (pagoTotal != null && isSingleAdeildo) {
+      pagoAdeildo = pagoTotal;
+      pagoFaustino = 0;
+      pendenteAdeildo = saldoTotal;
+      pendenteFaustino = saldoTotal != null ? 0 : null;
+      saldoRestante = saldoTotal;
+    } else if (pagoTotal != null && isSingleFaustino) {
+      pagoFaustino = pagoTotal;
+      pagoAdeildo = 0;
+      pendenteFaustino = saldoTotal;
+      pendenteAdeildo = saldoTotal != null ? 0 : null;
+      saldoRestante = saldoTotal;
+    }
+    // responsabilidade mista sem campos explícitos: fica tudo null → UI mostra "—"
+  }
+
+  const tipoValor = it.tipo_valor || (it.valor_total == null && it.valor_mensal != null ? "mensal" : "unico");
+
+  return { pagoAdeildo, pagoFaustino, pendenteAdeildo, pendenteFaustino, saldoRestante, tipoValor };
+}
+
+// Agrega o rateio por sócio a partir de computeItemRateio(). Itens "mensal"
+// (assinaturas recorrentes sem total fixo) ficam fora da soma — misturar uma
+// taxa mensal com um total histórico distorceria o gráfico. semPagadorDefinido
+// cobre casos como o Espirômetro Koko, cujo saldo restante ainda não tem
+// responsável designado (não é somado a nenhum dos dois sócios).
 function computeSociosRateio(ci) {
-  const itensUnicos = ci.itens.filter((it) => it.tipo_valor !== "mensal");
-  const pagoAdeildo = itensUnicos.reduce((s, it) => s + (it.pago_adeildo || 0), 0);
-  const pagoFaustino = itensUnicos.reduce((s, it) => s + (it.pago_faustino || 0), 0);
-  const pendenteAdeildo = itensUnicos.reduce((s, it) => s + (it.pendente_adeildo || 0), 0);
-  const pendenteFaustino = itensUnicos.reduce((s, it) => s + (it.pendente_faustino || 0), 0);
-  const semPagadorDefinido = ci.itens.reduce((s, it) => {
-    const naoAtribuido = (it.saldo_restante || 0) - (it.pendente_adeildo || 0) - (it.pendente_faustino || 0);
-    return s + Math.max(0, naoAtribuido);
-  }, 0);
+  let pagoAdeildo = 0, pagoFaustino = 0, pendenteAdeildo = 0, pendenteFaustino = 0, semPagadorDefinido = 0;
+
+  ci.itens.forEach((it) => {
+    const r = computeItemRateio(it);
+    if (r.tipoValor === "mensal") return;
+    if (r.pagoAdeildo != null) pagoAdeildo += r.pagoAdeildo;
+    if (r.pagoFaustino != null) pagoFaustino += r.pagoFaustino;
+    if (r.pendenteAdeildo != null) pendenteAdeildo += r.pendenteAdeildo;
+    if (r.pendenteFaustino != null) pendenteFaustino += r.pendenteFaustino;
+    if (r.saldoRestante != null) {
+      const atribuido = (r.pendenteAdeildo || 0) + (r.pendenteFaustino || 0);
+      semPagadorDefinido += Math.max(0, r.saldoRestante - atribuido);
+    }
+  });
+
   return { pagoAdeildo, pagoFaustino, pendenteAdeildo, pendenteFaustino, semPagadorDefinido };
 }
 
@@ -4190,10 +4257,12 @@ function renderCustosInvestimentos() {
       `;
     }).join("");
 
+    // Números apenas — detalhamento completo (com observações) fica na aba
+    // "Sócios / Rateio", não aqui no resumo geral.
     const porRespHtml = ci.por_responsavel.map((r) => `
       <div class="ci-socio-stat">
         <span>${escapeHtml(r.responsavel)}</span>
-        <strong>${fmtBRL(r.total_mensal)}/mês · ${r.itens} item(ns)${r.nota ? ` <em style="font-weight:400;color:var(--muted);font-style:normal">· ${escapeHtml(r.nota)}</em>` : ""}</strong>
+        <strong>${fmtBRL(r.total_mensal)}/mês · ${r.itens} item(ns)</strong>
       </div>
     `).join("");
 
@@ -4364,42 +4433,18 @@ function renderCustosInvestimentos() {
   }
 
   function buildSociosPane() {
-    const cards = ci.por_responsavel.map((s) => {
-      const initials = s.responsavel.slice(0, 2).toUpperCase();
-      const statusTxt = s.itens > 0 ? "Ativo" : "Aguardando dados";
-      const statusCls = s.itens > 0 ? "ci-badge-ativo" : "ci-badge-pendente";
-      return `
-        <article class="ci-socio-card">
-          <div class="socio-name">
-            <div class="socio-avatar">${escapeHtml(initials)}</div>
-            ${escapeHtml(s.responsavel)}
-          </div>
-          <div class="ci-socio-stat">
-            <span>Itens cadastrados</span>
-            <strong>${s.itens}</strong>
-          </div>
-          <div class="ci-socio-stat">
-            <span>Custo mensal total</span>
-            <strong>${fmtBRL(s.total_mensal)}</strong>
-          </div>
-          <div class="ci-socio-stat">
-            <span>Status</span>
-            <strong><span class="ci-badge ${statusCls}">${escapeHtml(statusTxt)}</span></strong>
-          </div>
-          ${s.nota ? `<div class="ci-socio-nota">${escapeHtml(s.nota)}</div>` : ""}
-        </article>
-      `;
-    }).join("");
-
-    const { pagoAdeildo, pagoFaustino, semPagadorDefinido } = computeSociosRateio(ci);
+    const rateio = computeSociosRateio(ci);
+    const { pagoAdeildo, pagoFaustino, pendenteAdeildo, pendenteFaustino, semPagadorDefinido } = rateio;
     const hasDesembolso = (pagoAdeildo + pagoFaustino) > 0;
+    const hasPagoPendente = (pagoAdeildo + pagoFaustino + pendenteAdeildo + pendenteFaustino) > 0;
 
+    // A) Gráficos primeiro — visão geral antes do detalhe.
     const chartsHtml = `
-      <div class="grid-two" style="margin-top:1rem">
+      <div class="grid-two">
         <article class="panel">
           <div class="panel-header">
             <h3>Desembolsado por sócio</h3>
-            <span>Quanto cada um já pagou (itens com valor fechado)</span>
+            <span>Quanto cada um já pagou</span>
           </div>
           ${hasDesembolso
             ? `<canvas id="ciSociosDesembolsoChart"></canvas>`
@@ -4410,20 +4455,59 @@ function renderCustosInvestimentos() {
             <h3>Pago x Pendente por sócio</h3>
             <span>Desembolsado até agora x saldo em aberto</span>
           </div>
-          <canvas id="ciSociosPagoPendenteChart"></canvas>
+          ${hasPagoPendente
+            ? `<canvas id="ciSociosPagoPendenteChart"></canvas>`
+            : `<p class="crm-report-chart-empty">Dado ainda não disponível</p>`}
           ${semPagadorDefinido > 0
-            ? `<div class="ci-hist-note">${fmtBRL(semPagadorDefinido)} em saldo ainda sem pagador definido (Espirômetro Koko) — não incluído nas barras acima.</div>`
+            ? `<div class="ci-hist-note">${fmtBRL(semPagadorDefinido)} em saldo ainda sem pagador definido — não incluído nas barras acima.</div>`
             : ""}
         </article>
       </div>
     `;
 
+    // B) Cards compactos por sócio — só números principais, sem parágrafos.
+    const cards = ci.por_responsavel.map((s) => {
+      const isFaustino = /faustino/i.test(s.responsavel);
+      const pago = isFaustino ? pagoFaustino : pagoAdeildo;
+      const pendente = isFaustino ? pendenteFaustino : pendenteAdeildo;
+      const initials = s.responsavel.slice(0, 2).toUpperCase();
+      return `
+        <article class="ci-socio-card">
+          <div class="socio-name">
+            <div class="socio-avatar">${escapeHtml(initials)}</div>
+            ${escapeHtml(s.responsavel)}
+          </div>
+          <div class="ci-socio-stat">
+            <span>Total desembolsado</span>
+            <strong>${fmtBRL(pago)}</strong>
+          </div>
+          <div class="ci-socio-stat">
+            <span>Compromisso mensal</span>
+            <strong>${fmtBRL(s.total_mensal)}</strong>
+          </div>
+          <div class="ci-socio-stat">
+            <span>Saldo pendente</span>
+            <strong>${fmtBRL(pendente)}</strong>
+          </div>
+          <div class="ci-socio-stat">
+            <span>Itens vinculados</span>
+            <strong>${s.itens}</strong>
+          </div>
+        </article>
+      `;
+    }).join("");
+    const cardsHtml = `<div class="ci-socios-grid" style="margin-top:1rem">${cards}</div>`;
+
+    // C) Tabela detalhada por item — "—" quando o item é de responsabilidade
+    // mista e ainda não tem divisão explícita (nunca R$ 0,00 fictício).
+    const fmtOrDash = (v, suffix) => (v == null ? "—" : `${fmtBRL(v)}${suffix || ""}`);
     const itemRows = ci.itens.map((it) => {
-      const isMensal = it.tipo_valor === "mensal";
+      const r = computeItemRateio(it);
+      const isMensal = r.tipoValor === "mensal";
       const totalFmt = it.valor_total != null ? fmtBRL(it.valor_total) : "—";
-      const pagoAFmt = isMensal ? `${fmtBRL(it.pago_adeildo || 0)}/mês` : fmtBRL(it.pago_adeildo || 0);
-      const pagoFFmt = isMensal ? `${fmtBRL(it.pago_faustino || 0)}/mês` : fmtBRL(it.pago_faustino || 0);
-      const saldoFmt = isMensal ? "—" : fmtBRL(it.saldo_restante || 0);
+      const pagoAFmt = fmtOrDash(r.pagoAdeildo, isMensal ? "/mês" : "");
+      const pagoFFmt = fmtOrDash(r.pagoFaustino, isMensal ? "/mês" : "");
+      const saldoFmt = isMensal ? "—" : fmtOrDash(r.saldoRestante);
       return `
         <tr>
           <td><strong>${escapeHtml(it.nome)}</strong></td>
@@ -4460,11 +4544,12 @@ function renderCustosInvestimentos() {
       </article>
     `;
 
-    return `<div class="ci-socios-grid">${cards}</div>${chartsHtml}${itemTableHtml}`;
+    return `${chartsHtml}${cardsHtml}${itemTableHtml}`;
   }
 
   function renderCiSociosCharts() {
     const { pagoAdeildo, pagoFaustino, pendenteAdeildo, pendenteFaustino } = computeSociosRateio(ci);
+    const hasPagoPendente = (pagoAdeildo + pagoFaustino + pendenteAdeildo + pendenteFaustino) > 0;
 
     if (pagoAdeildo + pagoFaustino > 0) {
       createChart("ciSociosDesembolso", "#ciSociosDesembolsoChart", {
@@ -4493,45 +4578,49 @@ function renderCustosInvestimentos() {
       destroyChart("ciSociosDesembolso");
     }
 
-    createChart("ciSociosPagoPendente", "#ciSociosPagoPendenteChart", {
-      type: "bar",
-      data: {
-        labels: ["Adeildo", "Faustino"],
-        datasets: [
-          {
-            label: "Pago",
-            data: [pagoAdeildo, pagoFaustino],
-            backgroundColor: CHART_COLORS[4],
-            borderRadius: 8,
-            borderSkipped: false,
-          },
-          {
-            label: "Pendente",
-            data: [pendenteAdeildo, pendenteFaustino],
-            backgroundColor: CHART_COLORS[2],
-            borderRadius: 8,
-            borderSkipped: false,
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, padding: 12 } },
-          tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtBRL(ctx.raw)}` } }
+    if (hasPagoPendente) {
+      createChart("ciSociosPagoPendente", "#ciSociosPagoPendenteChart", {
+        type: "bar",
+        data: {
+          labels: ["Adeildo", "Faustino"],
+          datasets: [
+            {
+              label: "Pago",
+              data: [pagoAdeildo, pagoFaustino],
+              backgroundColor: CHART_COLORS[4],
+              borderRadius: 8,
+              borderSkipped: false,
+            },
+            {
+              label: "Pendente",
+              data: [pendenteAdeildo, pendenteFaustino],
+              backgroundColor: CHART_COLORS[2],
+              borderRadius: 8,
+              borderSkipped: false,
+            }
+          ]
         },
-        scales: {
-          y: {
-            beginAtZero: true,
-            grid: { color: "rgba(109,123,138,.07)" },
-            ticks: { font: { size: 10 }, callback: (v) => fmtBRL(v) },
-            border: { display: false }
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, padding: 12 } },
+            tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtBRL(ctx.raw)}` } }
           },
-          x: { grid: { display: false }, border: { display: false } }
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(109,123,138,.07)" },
+              ticks: { font: { size: 10 }, callback: (v) => fmtBRL(v) },
+              border: { display: false }
+            },
+            x: { grid: { display: false }, border: { display: false } }
+          }
         }
-      }
-    });
+      });
+    } else {
+      destroyChart("ciSociosPagoPendente");
+    }
   }
 
   function buildPendenciasPane() {
