@@ -6157,9 +6157,17 @@ th {
 }
 
 /* ── Parcerias → Pastore ───────────────────────────────────────────────── */
+.parceria-title-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .parceria-chips {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
   align-items: center;
 }

@@ -475,13 +475,7 @@ async function init() {
     // "A definir"/null enquanto os valores comerciais não forem fechados, e
     // agregados de pacientes sem nome/telefone). Dados pessoais reais ficam
     // só em data-private/parcerias-pastore.local.json, fora do Git.
-    const parceriaPastoreData = await loadOptionalJson("./data/parcerias-pastore-summary.local.json");
-    if (
-      parceriaPastoreData?.source?.safeToDisplay === true &&
-      parceriaPastoreData?.source?.containsPersonalData === false
-    ) {
-      state.parceriaPastore = parceriaPastoreData;
-    }
+    state.parceriaPastore = await loadParceriaPastoreSummary();
 
     // Documentos → Equipamentos: só metadados seguros (equipamento, tipo de
     // documento, data, status, validade, observação curta). Os arquivos
@@ -4619,6 +4613,51 @@ function findSocio(socios, nomeParcial) {
 // CRM agregado da parceria). Valor financeiro desconhecido usa "—"/"A definir",
 // nunca R$ 0,00 inventado (ver soprolife-finance-costs). Dados pessoais de
 // pacientes ficam só em data-private/parcerias-pastore.local.json.
+//
+// Cadeia de carregamento (para funcionar em qualquer ambiente, inclusive VPS
+// recém-clonada sem *.local.json): .local.json (dev/privado, gitignored) →
+// .json committável (fallback seguro no Git) → objeto interno abaixo (nunca
+// deve faltar dado — evita a tela mostrar "arquivo não encontrado").
+const PARCERIA_PASTORE_FALLBACK = {
+  source: { type: "parcerias_pastore_summary", safeToDisplay: true, containsPersonalData: false, generatedAt: null },
+  parceria: {
+    nome: "Parceria Pastore",
+    unidade: "Pastore Ipanema",
+    servico: "Espirometria com ou sem broncodilatador",
+    status: "planejada",
+    status_label: "Estrutura inicial da parceria",
+    chips: ["Pastore Ipanema", "Terças e sábados", "08h às 12h"],
+  },
+  kpis: { exames_realizados: 0, receita_estimada: null, resultado_liquido_estimado: null, ocupacao_agenda_pct: 0 },
+  producao_por_data: { labels: [], exames: [] },
+  financeiro_por_periodo: { labels: [], receita: [], custos: [], resultado: [] },
+  agenda: [
+    { unidade: "Pastore Ipanema", dia_semana: "Terça-feira", horario: "08h às 12h", status: "planejada", capacidade_estimada_por_turno: null },
+    { unidade: "Pastore Ipanema", dia_semana: "Sábado",      horario: "08h às 12h", status: "planejada", capacidade_estimada_por_turno: null },
+  ],
+  financeiro_parametros: {
+    valor_exame_sem_broncodilatador: null, valor_exame_com_broncodilatador: null, repasse_percentual_pastore: null,
+    custo_deslocamento: null, custo_insumos: null, custo_profissional: null, outros_custos: null,
+    receita_bruta: null, custo_total: null, resultado_liquido: null, margem_estimada_pct: null,
+    observacao: "Valores comerciais ainda não definidos com a Pastore.",
+  },
+  pacientes_pastore: { total_atendidos: 0, followup_pendente: 0, recorrentes: 0, distribuicao_tipo_exame: { sem_broncodilatador: 0, com_broncodilatador: 0 } },
+};
+
+function isSafeParceriaSummary(d) {
+  return d?.source?.safeToDisplay === true && d?.source?.containsPersonalData === false;
+}
+
+async function loadParceriaPastoreSummary() {
+  const local = await loadOptionalJson("./data/parcerias-pastore-summary.local.json");
+  if (isSafeParceriaSummary(local)) return local;
+
+  const committed = await loadOptionalJson("./data/parcerias-pastore-summary.json");
+  if (isSafeParceriaSummary(committed)) return committed;
+
+  return PARCERIA_PASTORE_FALLBACK;
+}
+
 function fmtBRLOrDash(value) {
   return (value === null || value === undefined) ? "—" : fmtBRL(value);
 }
@@ -4630,30 +4669,39 @@ function fmtPctOrDash(value) {
 function renderParceriaPastore() {
   const chipsContainer = document.querySelector("#parceriaPastoreChips");
   const statsContainer = document.querySelector("#parceriaPastoreStats");
+  const statusLabel = document.querySelector("#parceriaPastoreStatusLabel");
   if (!chipsContainer || !statsContainer) return;
 
   const pp = state.parceriaPastore;
 
+  // Na prática isto não deve mais acontecer — loadParceriaPastoreSummary()
+  // sempre retorna um objeto seguro (local → committável → fallback interno).
+  // Mantido só como rede de segurança para um estado inesperado do state.
   if (!pp) {
+    if (statusLabel) statusLabel.textContent = "Aguardando início da produção";
     chipsContainer.innerHTML = "";
     statsContainer.innerHTML = statCardHtml("parceria-stat-card", {
       key: "parceriaPastoreIndisponivel",
       label: "Parceria Pastore",
       value: "—",
-      hint: "Resumo local não encontrado",
+      hint: "Aguardando início da produção",
     });
     ["#parceria-agenda", "#parceria-financeiro", "#parceria-pacientes"].forEach((sel) => {
       const pane = document.querySelector(sel);
       if (pane) pane.innerHTML = `
         <article class="panel">
-          <div class="panel-header"><h3>Dados não disponíveis</h3></div>
+          <div class="panel-header"><h3>Estrutura inicial da parceria</h3></div>
           <p style="padding:1rem 1.25rem;color:var(--muted);font-size:.88rem">
-            Arquivo <code>data/parcerias-pastore-summary.local.json</code> não encontrado ou não seguro.
+            Aguardando início da produção — os dados aparecerão aqui assim que o atendimento começar.
           </p>
         </article>
       `;
     });
     return;
+  }
+
+  if (statusLabel) {
+    statusLabel.textContent = pp.parceria?.status_label || "Estrutura inicial da parceria";
   }
 
   const chips = Array.isArray(pp.parceria?.chips) && pp.parceria.chips.length
@@ -4662,11 +4710,12 @@ function renderParceriaPastore() {
   chipsContainer.innerHTML = chips.map((c) => `<span class="badge parceria-chip">${escapeHtml(c)}</span>`).join("");
 
   const kpis = pp.kpis || {};
+  const semProducaoAinda = (kpis.exames_realizados ?? 0) === 0;
   statsContainer.innerHTML = [
     { key: "parceriaExamesRealizados",    label: "Exames realizados",          value: String(kpis.exames_realizados ?? 0),        hint: "produção acumulada" },
-    { key: "parceriaReceitaEstimada",     label: "Receita estimada",           value: fmtBRLOrDash(kpis.receita_estimada),         hint: "com base nos exames realizados" },
-    { key: "parceriaResultadoLiquido",    label: "Resultado líquido estimado", value: fmtBRLOrDash(kpis.resultado_liquido_estimado), hint: "receita − custos" },
-    { key: "parceriaOcupacaoAgenda",      label: "Ocupação da agenda",         value: fmtPctOrDash(kpis.ocupacao_agenda_pct),      hint: "realizado ÷ capacidade" },
+    { key: "parceriaReceitaEstimada",     label: "Receita estimada",           value: fmtBRLOrDash(kpis.receita_estimada),         hint: semProducaoAinda ? "Aguardando início de produção" : "com base nos exames realizados" },
+    { key: "parceriaResultadoLiquido",    label: "Resultado líquido estimado", value: fmtBRLOrDash(kpis.resultado_liquido_estimado), hint: semProducaoAinda ? "Aguardando início de produção" : "receita − custos" },
+    { key: "parceriaOcupacaoAgenda",      label: "Ocupação da agenda",         value: fmtPctOrDash(kpis.ocupacao_agenda_pct),      hint: semProducaoAinda ? "Aguardando início de produção" : "realizado ÷ capacidade" },
   ].map((c) => statCardHtml("parceria-stat-card", c)).join("");
 
   // Gráfico: produção por agenda/data — sem dado real ainda, mostra estado vazio
