@@ -77,6 +77,25 @@ var _LEAD_ETAPAS_B2B_TERMINAL = [
   "Parceiro ativo",
 ];
 
+// Etapas oficiais do CRM Clínicas / Base Prospecção B2B PCMSO — mesmo
+// vocabulário canônico usado em app.js (CRM_ETAPAS_ATIVAS + CRM_ETAPAS_TERMINAIS)
+// e nos scripts Python (generate-followup-clinicas.py, promote-pcmso-to-crm.py).
+// Duplicado de propósito: cada arquivo é instalado/editado independentemente.
+// updateCrmClinicaEtapa recusa qualquer valor fora desta lista.
+var _CRM_ETAPAS_OFICIAIS = [
+  "Não abordada",
+  "Abordada",
+  "Em conversa",
+  "Pediu apresentação",
+  "Aguardando retorno",
+  "Proposta enviada",
+  "Parceiro ativo",
+  "Sem interesse",
+  "Não contatar / bloqueou",
+  "Sem canal válido",
+  "Arquivada",
+];
+
 // Colunas novas de suporte ao modelo B2B na aba Leads — criadas sob demanda
 // (a primeira vez que vincularLeadAClinica rodar) sem remover/reordenar as
 // colunas antigas: lead_id, data_contato, nome, telefone_whatsapp,
@@ -180,6 +199,7 @@ function doPost(e) {
       case "registrarInteracaoClinica":   return _registrarInteracaoClinica(data);
       case "registrarInteracaoPaciente":  return _registrarInteracaoPaciente(data);
       case "updateLeadStage":             return _updateLeadStage(data);
+      case "updateCrmClinicaEtapa":       return _updateCrmClinicaEtapa(data);
       case "vincularLeadAClinica":        return _vincularLeadAClinica(data);
       case "dedupLeadsConvertidos":       return _dedupLeadsConvertidos(data);
       case "organizarAbasCommandCenter":  return _organizarAbasCommandCenter(data);
@@ -537,6 +557,169 @@ function _updateLeadStage(data) {
       : "Etapa atualizada com sucesso.",
     converted: converted,
   });
+}
+
+/**
+ * Atualiza a etapa comercial de uma clínica/parceiro já existente em
+ * "CRM Clinicas", identificada por clinica_id (nunca por telefone/nome
+ * exposto no frontend — o painel já carrega clinica_id junto com cada linha
+ * da tabela CRM Clínicas). Usado pelo botão "Mudar etapa" do painel
+ * (CRM → Clínicas e Parceiros), espelhando updateLeadStage.
+ *
+ * Regra do funil (ver skill soprolife-b2b-pcmso-crm): Etapa é a única fonte
+ * de verdade da fase comercial — Status/Próximo passo/Observação nunca
+ * substituem a Etapa, e a cor da linha na planilha não é considerada aqui.
+ *
+ * Não cria uma linha nova se clinica_id não for encontrado (mesma regra de
+ * updateLeadStage: atualização de etapa pressupõe uma clínica já cadastrada).
+ * Nunca apaga nem move linhas.
+ *
+ * Efeito colateral best-effort: se a aba "Base Prospecção B2B PCMSO" existir
+ * e tiver (ou puder ganhar, de forma idempotente) uma coluna "Etapa", e uma
+ * linha com nome de clínica compatível for encontrada lá, a mesma etapa é
+ * espelhada nessa linha também — mantendo a base de prospecção bruta
+ * alinhada com o CRM Clínicas já promovido. Falha nesse espelhamento NUNCA
+ * derruba a ação principal (a escrita em CRM Clinicas já terá sido
+ * confirmada); o retorno informa se o espelhamento ocorreu.
+ *
+ * data esperado:
+ *   clinica_id   (obrigatório) — CLIN-... / CLI-... já cadastrado em CRM Clinicas
+ *   etapa        (obrigatório) — precisa estar em _CRM_ETAPAS_OFICIAIS
+ *   responsavel  (opcional)    — só sobrescreve se enviado explicitamente
+ */
+function _updateCrmClinicaEtapa(data) {
+  _required(data, ["clinica_id", "etapa"]);
+
+  var novaEtapa = String(data.etapa).trim();
+  var clinicaId = String(data.clinica_id).trim();
+
+  if (_CRM_ETAPAS_OFICIAIS.indexOf(novaEtapa) < 0) {
+    return _err("Etapa inválida: " + novaEtapa + ". Use uma das etapas oficiais.", 400);
+  }
+
+  var sheet = _getOrCreateSheet(_SHEETS.CRM_CLINICAS);
+  var found = _findRowByIdColumn(sheet, "clinica_id", clinicaId);
+  if (!found) {
+    _logEntry({ acao: "updateCrmClinicaEtapa", status: "NAO-ENCONTRADO", aba: _SHEETS.CRM_CLINICAS, id: clinicaId, resumo: "Clínica não encontrada para atualização de etapa." });
+    return _err("Clínica não encontrada: " + clinicaId, 404);
+  }
+
+  var headers  = found.headers;
+  var rowIdx   = found.rowIdx;
+  var etapaIdx = headers.indexOf("etapa");
+  if (etapaIdx < 0) return _err("Coluna etapa não encontrada na aba " + _SHEETS.CRM_CLINICAS + ".", 500);
+
+  if (!_writeEtapaVerified(sheet, rowIdx, etapaIdx + 1, novaEtapa, _CRM_ETAPAS_OFICIAIS)) {
+    var etapaLida = String(sheet.getRange(rowIdx, etapaIdx + 1).getDisplayValue() || "").trim();
+    _logEntry({
+      acao:   "updateCrmClinicaEtapa",
+      status: "ERRO-GRAVACAO",
+      aba:    _SHEETS.CRM_CLINICAS,
+      id:     clinicaId,
+      resumo: "Etapa desejada: " + novaEtapa + " | Etapa lida: " + etapaLida,
+    });
+    return _err("Falha ao gravar etapa. Etapa desejada: " + novaEtapa + " | Etapa lida: " + etapaLida, 500);
+  }
+
+  // Nota curta de histórico em observacao, se a coluna existir — sem dados sensíveis.
+  var obsIdx = headers.indexOf("observacao");
+  if (obsIdx >= 0) {
+    var obsAtual = String(found.rowData[obsIdx] || "").trim();
+    var nota     = "[" + _nowBr() + "] Etapa alterada para \"" + novaEtapa + "\" via painel.";
+    var obsNovo  = obsAtual ? (obsAtual + " | " + nota) : nota;
+    if (!_writeCellVerified(sheet, rowIdx, obsIdx + 1, obsNovo)) {
+      _logEntry({ acao: "updateCrmClinicaEtapa", status: "ERRO-GRAVACAO", aba: _SHEETS.CRM_CLINICAS, id: clinicaId, resumo: "Falha ao gravar nota em observacao." });
+      return _err("Etapa gravada, mas falha ao gravar nota em observacao.", 500);
+    }
+  }
+
+  // Mantém "última interação" fresca — mesmo campo que registrarInteracaoClinica atualiza.
+  var ultimaIdx = headers.indexOf("ultima_interacao");
+  if (ultimaIdx >= 0) {
+    _writeCellVerified(sheet, rowIdx, ultimaIdx + 1, _nowBr());
+  }
+
+  // Responsável pela mudança — só sobrescreve se enviado explicitamente.
+  var respIdx = headers.indexOf("responsavel");
+  if (respIdx >= 0 && data.responsavel) {
+    _writeCellVerified(sheet, rowIdx, respIdx + 1, String(data.responsavel).trim());
+  }
+
+  var nomeClinicaIdx = headers.indexOf("nome_clinica");
+  var nomeClinica = nomeClinicaIdx >= 0 ? String(found.rowData[nomeClinicaIdx] || "").trim() : "";
+  var pcmsoAtualizado = _mirrorEtapaParaPcmso(nomeClinica, novaEtapa);
+
+  _logEntry({
+    acao:   "updateCrmClinicaEtapa",
+    status: "OK",
+    aba:    _SHEETS.CRM_CLINICAS + (pcmsoAtualizado ? " + " + _SHEETS.B2B_PCMSO : ""),
+    id:     clinicaId,
+    resumo: "Etapa alterada para " + novaEtapa,
+  });
+
+  return _ok({
+    id: clinicaId,
+    message: "Etapa atualizada com sucesso." + (pcmsoAtualizado ? " Base PCMSO também atualizada." : ""),
+    pcmsoAtualizado: pcmsoAtualizado,
+  });
+}
+
+/**
+ * Espelha (best-effort) a nova etapa na aba "Base Prospecção B2B PCMSO",
+ * coluna "Etapa" — garante a coluna de forma idempotente (nunca apaga/reordena
+ * colunas existentes) e localiza a linha por nome normalizado (mesma técnica
+ * de _keyNorm usada em registrarInteracaoClinica e no matching de
+ * promote-pcmso-to-crm.py), nunca por telefone. Se a aba não existir, o nome
+ * não for encontrado, ou a coluna de nome não existir, retorna false
+ * silenciosamente — isso NUNCA deve derrubar a ação principal
+ * (updateCrmClinicaEtapa já confirmou a escrita em CRM Clinicas).
+ */
+function _mirrorEtapaParaPcmso(nomeClinica, novaEtapa) {
+  if (!nomeClinica) return false;
+
+  var ss = _getWorkbook();
+  var sheet = ss.getSheetByName(_SHEETS.B2B_PCMSO);
+  if (!sheet) return false;
+
+  try {
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    if (lastRow < 2 || lastCol < 1) return false;
+
+    var allData = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+    var headers = allData[0].map(function(h) { return String(h).trim(); });
+    var headersLower = headers.map(function(h) { return h.toLowerCase(); });
+
+    var nomeCandidatos = ["nome da clinica/empresa", "nome da clínica/empresa", "nome da clinica", "nome da clínica", "nome"];
+    var nomeIdx = -1;
+    for (var n = 0; n < nomeCandidatos.length; n++) {
+      var idx = headersLower.indexOf(nomeCandidatos[n]);
+      if (idx >= 0) { nomeIdx = idx; break; }
+    }
+    if (nomeIdx < 0) return false;
+
+    var targetKey = _keyNorm(nomeClinica);
+    var rowIdx = -1;
+    for (var i = 1; i < allData.length; i++) {
+      var candKey = _keyNorm(String(allData[i][nomeIdx] || ""));
+      if (!candKey) continue;
+      if (candKey === targetKey) { rowIdx = i + 1; break; }
+      var minLen = Math.min(candKey.length, targetKey.length);
+      if (minLen >= 5 && (candKey.indexOf(targetKey) >= 0 || targetKey.indexOf(candKey) >= 0)) {
+        rowIdx = i + 1; // não interrompe: prefere igualdade exata se aparecer depois
+      }
+    }
+    if (rowIdx < 0) return false;
+
+    // Garante a coluna "Etapa" de forma idempotente (acrescenta ao final, nunca reordena/apaga).
+    var headersAtualizados = _ensureExtraColumns(sheet, ["Etapa"]);
+    var etapaIdx = headersAtualizados.indexOf("Etapa");
+    if (etapaIdx < 0) return false;
+
+    return _writeCellVerified(sheet, rowIdx, etapaIdx + 1, novaEtapa);
+  } catch (e) {
+    return false;
+  }
 }
 
 /**
@@ -973,8 +1156,10 @@ function _writeCellVerified(sheet, row, col, value) {
   return display === esperado;
 }
 
-function _ensureLeadStageValidationAllows(cell, novaEtapa) {
-  var etapas = _LEAD_ETAPAS_OFICIAIS.slice();
+// etapasOficiais é opcional — por padrão preserva o comportamento original
+// (dropdown de Leads). updateCrmClinicaEtapa passa _CRM_ETAPAS_OFICIAIS.
+function _ensureLeadStageValidationAllows(cell, novaEtapa, etapasOficiais) {
+  var etapas = (etapasOficiais || _LEAD_ETAPAS_OFICIAIS).slice();
 
   if (novaEtapa && etapas.indexOf(novaEtapa) < 0) {
     etapas.push(novaEtapa);
@@ -989,22 +1174,26 @@ function _ensureLeadStageValidationAllows(cell, novaEtapa) {
 }
 
 /**
- * Escreve a etapa de um lead de forma segura e verificada. Primeiro tenta o
- * caminho "inteligente": estende o dropdown oficial de etapas para incluir a
- * nova etapa (preserva a validação para uso manual futuro na planilha). Se,
- * por qualquer motivo, a validação da célula não for um dropdown simples
- * (ex.: fórmula customizada, validação legada) e a escrita ainda assim
- * falhar, cai em um fallback que remove qualquer validação da célula e tenta
- * de novo. Sempre confirma a gravação lendo o valor de volta.
+ * Escreve a etapa (de um lead OU de uma clínica CRM) de forma segura e
+ * verificada. Primeiro tenta o caminho "inteligente": estende o dropdown
+ * oficial de etapas (etapasOficiais) para incluir a nova etapa (preserva a
+ * validação para uso manual futuro na planilha). Se, por qualquer motivo, a
+ * validação da célula não for um dropdown simples (ex.: fórmula customizada,
+ * validação legada) e a escrita ainda assim falhar, cai em um fallback que
+ * remove qualquer validação da célula e tenta de novo. Sempre confirma a
+ * gravação lendo o valor de volta.
+ *
+ * etapasOficiais é opcional — omitir preserva o comportamento original
+ * (dropdown de Leads, _LEAD_ETAPAS_OFICIAIS).
  *
  * Retorna true/false — nunca deixa "Selecione uma opção da lista." (ou
  * qualquer outra exceção de validação) subir sem tratamento.
  */
-function _writeEtapaVerified(sheet, row, col, novaEtapa) {
+function _writeEtapaVerified(sheet, row, col, novaEtapa, etapasOficiais) {
   var cell = sheet.getRange(row, col);
 
   try {
-    _ensureLeadStageValidationAllows(cell, novaEtapa);
+    _ensureLeadStageValidationAllows(cell, novaEtapa, etapasOficiais);
     cell.setValue(novaEtapa);
     SpreadsheetApp.flush();
   } catch (e1) {

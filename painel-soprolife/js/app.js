@@ -1150,6 +1150,7 @@ function renderCrmClinicas(container) {
               <th>Próxima ação</th>
               <th>Data</th>
               <th>Responsável</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody id="crmTable"></tbody>
@@ -1175,6 +1176,17 @@ function renderCrmClinicas(container) {
     state.crmFilter = e.target.value;
     updateCrmFilterTip(crmFilterEl);
     renderCrmTable(e.target.value);
+  });
+
+  // Delegado no tbody (persiste entre re-renders de renderCrmTable, já que só
+  // o innerHTML do tbody muda — o próprio elemento #crmTable é recriado
+  // apenas quando renderCrmClinicas roda de novo, daí o listener ser
+  // registrado aqui e não em bindEvents/init).
+  document.querySelector("#crmTable").addEventListener("click", (event) => {
+    const stageBtn = event.target.closest(".crm-stage-btn");
+    if (!stageBtn) return;
+    const clinica = state.crm.find((c) => c.id === stageBtn.dataset.clinicaId);
+    if (clinica) openCrmStageModal(clinica, stageBtn);
   });
 }
 
@@ -2776,7 +2788,7 @@ function renderCrmTable(filter = "Ativos") {
   if (rows.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" class="crm-empty">Nenhuma clínica cadastrada nesta lista.</td>
+        <td colspan="9" class="crm-empty">Nenhuma clínica cadastrada nesta lista.</td>
       </tr>
     `;
     return;
@@ -2790,6 +2802,12 @@ function renderCrmTable(filter = "Ativos") {
     const contatoTag = contato
       ? `<br><small class="crm-contato-tag">👤 ${escapeHtml(contato.nome_contato || "Contato vinculado")}${contato.cargo ? " — " + escapeHtml(contato.cargo) : ""}${contato.papel ? " · " + escapeHtml(contato.papel) : ""}</small>`
       : "";
+    const stageBtn = item.id
+      ? `<button type="button" class="lead-stage-btn crm-stage-btn" data-clinica-id="${escapeHtml(item.id)}" data-tip="Mudar a etapa desta clínica" aria-label="Mudar etapa de ${escapeHtml(item.clinica)}">
+           <svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.5 2.5l3 3-9 9-3.6.6.6-3.6z"/></svg>
+           Mudar etapa
+         </button>`
+      : `<span class="lead-stage-disabled" tabindex="0" data-tip="Esta clínica não tem clinica_id — não é possível editar pelo painel." aria-label="Ação indisponível: clínica sem identificador">—</span>`;
     return `
     <tr>
       <td><strong>${item.clinica}</strong>${contatoTag}</td>
@@ -2800,6 +2818,7 @@ function renderCrmTable(filter = "Ativos") {
       <td>${item.proximaAcao}</td>
       <td>${dataLabel ? `<span class="crm-data ${dataCls}">${dataLabel}</span>` : ""}</td>
       <td>${item.responsavel}</td>
+      <td class="lead-actions-cell">${stageBtn}</td>
     </tr>`;
   }).join("");
 }
@@ -3050,6 +3069,145 @@ function applyLeadStageUpdate(leadId, novaEtapa, converted) {
   renderLeadPipeline();
   renderLeadsCharts();
   renderOverviewExtraCharts();
+}
+
+// ─── Mudar etapa de uma clínica CRM — modal + chamada ao Command Center ────────
+// Mesmo padrão visual/UX do "Mudar etapa" de Leads (openLeadStageModal), com
+// estado e handlers próprios para não interferir no modal de Leads.
+
+let _crmStageTrigger = null;
+
+function closeCrmStageModal() {
+  const overlay = document.querySelector(".crm-stage-overlay");
+  if (overlay) overlay.remove();
+  document.removeEventListener("keydown", _crmStageKeydown);
+  if (_crmStageTrigger) {
+    _crmStageTrigger.focus();
+    _crmStageTrigger = null;
+  }
+}
+
+function _crmStageKeydown(event) {
+  if (event.key === "Escape") closeCrmStageModal();
+}
+
+function openCrmStageModal(clinica, triggerBtn) {
+  closeCrmStageModal();
+  _crmStageTrigger = triggerBtn || null;
+
+  const nome    = clinica.clinica || clinica.id || "Clínica";
+  const current = clinica.etapa || "";
+
+  const etapaOpcoes = [...CRM_ETAPAS_ATIVAS, ...CRM_ETAPAS_TERMINAIS];
+  const options = etapaOpcoes.map((op) =>
+    `<option value="${escapeHtml(op)}"${op === current ? " selected" : ""}>${escapeHtml(op)}</option>`
+  ).join("");
+
+  const overlay = document.createElement("div");
+  overlay.className = "crm-stage-overlay lead-stage-overlay";
+  overlay.innerHTML = `
+    <div class="lead-stage-modal" role="dialog" aria-modal="true" aria-labelledby="crmStageTitle">
+      <div class="lead-stage-modal-header">
+        <div>
+          <p class="eyebrow">Mudar etapa</p>
+          <h4 id="crmStageTitle">${escapeHtml(nome)}</h4>
+        </div>
+        <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
+      </div>
+
+      <p class="lead-stage-current">
+        Etapa atual: <span class="badge ${slug(current || "—")}">${escapeHtml(current || "—")}</span>
+      </p>
+
+      <label class="cc-label" for="crmStageSelect">Nova etapa</label>
+      <select id="crmStageSelect" class="cc-select">${options}</select>
+
+      <p class="lead-stage-convert-hint" hidden>
+        Etapa terminal: esta clínica sai da lista Ativos. "Parceiro ativo" passa
+        a aparecer em Parceiros ativos; as demais aparecem em Perdidas / sem interesse.
+      </p>
+
+      <div class="cc-result lead-stage-result" hidden></div>
+
+      <div class="lead-stage-actions">
+        <button type="button" class="lead-stage-cancel">Cancelar</button>
+        <button type="button" class="lead-stage-save">Salvar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", _crmStageKeydown);
+
+  const select    = overlay.querySelector("#crmStageSelect");
+  const stageHint = overlay.querySelector(".lead-stage-convert-hint");
+  const result    = overlay.querySelector(".lead-stage-result");
+  const saveBtn   = overlay.querySelector(".lead-stage-save");
+  const cancelBtn = overlay.querySelector(".lead-stage-cancel");
+
+  const toggleStageHint = () => {
+    stageHint.hidden = !isCrmEtapaTerminal(select.value);
+  };
+  toggleStageHint();
+  select.addEventListener("change", toggleStageHint);
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeCrmStageModal();
+  });
+  overlay.querySelector(".lead-stage-close").addEventListener("click", closeCrmStageModal);
+  cancelBtn.addEventListener("click", closeCrmStageModal);
+
+  saveBtn.addEventListener("click", async () => {
+    const novaEtapa = select.value;
+    if (!novaEtapa || novaEtapa === current) {
+      closeCrmStageModal();
+      return;
+    }
+
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    select.disabled = true;
+    saveBtn.textContent = "Salvando…";
+    result.hidden = true;
+
+    try {
+      const resp = await submitToCommandCenter("updateCrmClinicaEtapa", {
+        clinica_id: clinica.id,
+        etapa:      novaEtapa,
+      });
+
+      result.className = "cc-result lead-stage-result cc-result-ok";
+      result.textContent = resp.message || "Etapa atualizada com sucesso.";
+      result.hidden = false;
+
+      applyCrmStageUpdate(clinica.id, novaEtapa);
+
+      setTimeout(closeCrmStageModal, 1100);
+    } catch (err) {
+      result.className = "cc-result lead-stage-result cc-result-err";
+      result.textContent = "Erro: " + err.message;
+      result.hidden = false;
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
+      select.disabled = false;
+      saveBtn.textContent = "Salvar";
+    }
+  });
+
+  select.focus();
+}
+
+// Aplica o resultado da mudança de etapa localmente, sem recarregar a página,
+// e rerenderiza tudo que depende de state.crm — stats, funil, follow-up B2B e
+// a própria tabela (respeitando o filtro ativo, para a clínica sumir/aparecer
+// na lista certa automaticamente conforme a nova etapa).
+function applyCrmStageUpdate(clinicaId, novaEtapa) {
+  const item = state.crm.find((c) => c.id === clinicaId);
+  if (item) item.etapa = novaEtapa;
+
+  renderCrmStats();
+  renderCrmFunnelVisual();
+  renderFollowupB2B();
+  renderCrmTable(state.crmFilter || "Ativos");
 }
 
 // ─── Vincular lead B2B a clínica parceira — modal + chamada ao Command Center ──
