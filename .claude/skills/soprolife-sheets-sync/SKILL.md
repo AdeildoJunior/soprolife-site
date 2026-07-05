@@ -67,3 +67,45 @@ Antes de rodar qualquer script com `--write` ou equivalente, ler o código do sc
 ```
 python3 -m json.tool painel-soprolife/data/<arquivo>-summary.local.json > /dev/null && echo "JSON válido"
 ```
+
+## Aprendizado — Google ADC, quota project e dados automáticos do painel
+
+Quando o painel SoproLife não atualizar Google Sheets, Search Console ou GA4 e aparecer erro de reautenticação/quota:
+
+1. Diferenciar duas autenticações:
+   - `gcloud auth application-default login` cria/renova o ADC usado pelos scripts Python.
+   - `gcloud auth login` autentica o CLI do gcloud para listar projetos, habilitar APIs e configurar quota project.
+
+2. ADC válido não basta se o projeto ativo estiver `(unset)` ou se aparecer:
+   - `requires a quota project`
+   - `Cannot find a quota project to add to ADC`
+   - `The sheets.googleapis.com API requires a quota project`
+   - `The searchconsole.googleapis.com API requires a quota project`
+
+3. Fluxo correto:
+   - `gcloud auth login --no-launch-browser`
+   - `gcloud projects list`
+   - `gcloud config set project <PROJECT_ID>`
+   - habilitar APIs necessárias:
+     - `serviceusage.googleapis.com`
+     - `sheets.googleapis.com`
+     - `searchconsole.googleapis.com`
+     - `analyticsdata.googleapis.com`
+   - `gcloud auth application-default set-quota-project <PROJECT_ID>`
+
+4. Depois testar com:
+   - `gcloud auth application-default print-access-token`
+   - `bash painel-soprolife/scripts/update-local-data.sh`
+   - procurar erros com `grep` por `Reauthentication`, `quota`, `permission`, `acesso negado`, `Search Console`, `GA4`.
+
+5. Indicadores de sucesso:
+   - painel mostra `Dados reais`
+   - painel mostra `Search Console`
+   - painel mostra `GA4`
+   - `marketing-seo.local.json seguro — configured=True, SC=True, GA4=True`
+   - `soprolife-update-data.service` termina com `status=0/SUCCESS`.
+
+6. Segurança:
+   - nunca gravar token, URL secreta, client secret ou credential no frontend;
+   - configs privadas ficam em `painel-soprolife/data-private/`;
+   - resumos exibidos no painel devem ser agregados e seguros.

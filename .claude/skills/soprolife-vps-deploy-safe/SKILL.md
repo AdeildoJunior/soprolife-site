@@ -74,3 +74,30 @@ scp <arquivo_local> <TAILSCALE_USER>@<TAILSCALE_IP>:<CAMINHO_REMOTO>
 ```
 ssh <TAILSCALE_USER>@<TAILSCALE_IP> "cd /opt/soprolife/soprolife-site && git log --oneline -3 && git status --short"
 ```
+
+## Aprendizado — timer automático da VPS para atualizar dados reais
+
+Depois de corrigir autenticação Google/ADC/quota project, validar a atualização automática na VPS:
+
+1. Conferir timer:
+   - `systemctl status soprolife-update-data.timer --no-pager`
+   - sucesso esperado: `enabled` e `active (waiting)`.
+
+2. Conferir serviço:
+   - `systemctl status soprolife-update-data.service --no-pager`
+   - sucesso esperado: `code=exited, status=0/SUCCESS`.
+
+3. Conferir logs:
+   - `journalctl -u soprolife-update-data.service -n 120 --no-pager`
+
+4. Conferir próximas execuções:
+   - `systemctl list-timers | grep -i soprolife || true`
+
+5. Se o timer não estiver ativo:
+   - `systemctl enable --now soprolife-update-data.timer`
+
+6. Critério de aceite:
+   - update executa 11/11 etapas;
+   - `check-access.sh` passa sem vazamento de token;
+   - Marketing & SEO mostra Search Console e GA4 com dados reais;
+   - arquivos privados continuam gitignored.
