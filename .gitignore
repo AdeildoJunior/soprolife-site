@@ -43,3 +43,6 @@ painel-soprolife/**/*.secret.json
 
 # Claude Code local settings — never commit machine-specific commands or secrets
 .claude/settings.local.json
+
+# Private equipment/documents archive — never commit originals
+painel-soprolife/data-private/documentos/

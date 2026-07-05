@@ -1,0 +1,43 @@
+{
+  "source": {
+    "type": "local_safe_documentos_equipamentos",
+    "safeToDisplay": true,
+    "containsPersonalData": false,
+    "containsSensitiveEquipmentData": false,
+    "generatedAt": "2026-07-05T00:00:00-03:00"
+  },
+  "categoria": "Equipamentos",
+  "atualizado_em": "2026-07-05",
+  "equipamentos": [
+    {
+      "equipamento": "Espirômetro",
+      "fabricante": "MIR (Medical International Research)",
+      "modelo": "Spirobank II",
+      "categoria": "Diagnóstico respiratório",
+      "documentos": [
+        "Nota fiscal de compra",
+        "Guia de recolhimento tributário (ICMS-ST)",
+        "Manual/instruções de uso",
+        "Guia de instalação de software"
+      ],
+      "status_documental": "Arquivado",
+      "validade_ou_calibracao": "Não identificado — nenhum certificado de calibração próprio encontrado nas fotos arquivadas",
+      "proxima_acao": "Confirmar se o espirômetro exige calibração periódica própria e arquivar certificado, se aplicável",
+      "observacao": "Adquirido na mesma nota fiscal da seringa de calibração 3L, via revenda Smart Medical."
+    },
+    {
+      "equipamento": "Seringa de calibração 3L",
+      "fabricante": "Alpharad",
+      "modelo": "SC03L",
+      "categoria": "Calibração",
+      "documentos": [
+        "Nota fiscal de compra (mesma nota do espirômetro)",
+        "Certificado de calibração"
+      ],
+      "status_documental": "Arquivado",
+      "validade_ou_calibracao": "Calibrada em 23/06/2026 — próxima revisão em 22/06/2027",
+      "proxima_acao": "Agendar nova calibração até 22/06/2027",
+      "observacao": "Certificado emitido pela Alpharad; usada para verificação periódica do espirômetro."
+    }
+  ]
+}
