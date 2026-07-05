@@ -388,7 +388,21 @@ canvas { max-height: 310px; }
   border: 1px solid var(--line);
 }
 
-.task strong { display: block; }
+/* Título+tag da tarefa (primeiro filho de .task): sem min-width:0 um título
+   longo não encolhe/quebra e empurra a badge de prioridade pra fora do card
+   — mesmo padrão já usado nos cards de indicador (.kpi-card/.kpi-top). */
+.task > div:first-child {
+  min-width: 0;
+}
+
+.task strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.task .badge {
+  flex-shrink: 0;
+}
 .task span { color: var(--muted); font-size: .88rem; }
 
 .badge, .safe-label {
@@ -4526,6 +4540,8 @@ h1 { font-size: clamp(1.55rem, 3vw, 2rem); }
   justify-content: space-between;
   padding: 15px 14px 12px;
   min-height: 90px;
+  min-width: 0; /* item de grid (.cards-group): sem isso, o valor não encolhe/quebra e vaza pra fora do card */
+  container-type: inline-size; /* permite .kpi-value usar cqw p/ encolher a fonte conforme a largura do próprio card */
   border-radius: 14px;
   background: #ffffff;
   border: 1px solid rgba(219,229,239,.65);
@@ -4571,6 +4587,7 @@ h1 { font-size: clamp(1.55rem, 3vw, 2rem); }
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .kpi-label {
@@ -4580,6 +4597,7 @@ h1 { font-size: clamp(1.55rem, 3vw, 2rem); }
   text-transform: none !important;
   letter-spacing: 0 !important;
   line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .kpi-value {
@@ -4589,6 +4607,7 @@ h1 { font-size: clamp(1.55rem, 3vw, 2rem); }
   color: var(--navy) !important;
   line-height: 1 !important;
   margin-top: 0 !important;
+  white-space: nowrap; /* nunca quebra dentro do valor (ex.: "R$ 2.285," / "79") — em vez disso a fonte encolhe via clamp() */
 }
 
 /* Tooltip no card KPI — usa ::after via .mkt-tip */
@@ -5571,7 +5590,10 @@ canvas { display: block; }
 .kpi-card:hover::before, .kpi-card:focus::before { opacity: 1; }
 
 .kpi-value {
-  font-size: 1.85rem !important;
+  /* Encolhe suavemente com a largura do card (cqw) em vez de quebrar linha.
+     Mínimo 1.05rem garante leitura mesmo no card mais estreito do grid;
+     máximo 1.85rem preserva o tamanho atual quando o card tem espaço sobrando. */
+  font-size: clamp(1.05rem, 17cqw, 1.85rem) !important;
   font-variant-numeric: tabular-nums;
 }
 
