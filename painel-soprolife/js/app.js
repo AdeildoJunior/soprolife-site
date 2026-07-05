@@ -950,10 +950,17 @@ function renderCrmHub(container) {
         title: "Pacientes",
         subtitle: "Consultas, espirometrias, recorrência e follow-up",
         view: "pacientes",
+        // Mesma fonte usada dentro da tela "Pacientes" (renderCrmPacientes):
+        // state.followupPacientes. getCrmCardValue() lia chaves que não
+        // existem no resumo (pacientesEmAcompanhamento/examesEspirometriaRealizados/
+        // followupsPendentes) e por isso sempre mostrava "—" aqui no hub,
+        // mesmo com dado real já carregado.
         stats: [
-          { label: "Acompanhamento", value: getCrmCardValue("pacientesEmAcompanhamento") },
-          { label: "Espirometrias", value: getCrmCardValue("examesEspirometriaRealizados") },
-          { label: "Follow-ups", value: getCrmCardValue("followupsPendentes") }
+          { label: "Espirometrias", value: state.followupPacientes ? (state.followupPacientes.espirometria || []).length : "—" },
+          { label: "Consultas", value: state.followupPacientes ? (state.followupPacientes.consultas || []).length : "—" },
+          { label: "Follow-ups", value: state.followupPacientes
+              ? (state.followupPacientes.espirometria || []).length + (state.followupPacientes.consultas || []).length
+              : "—" }
         ]
       })}
       ${crmModuleCard({
