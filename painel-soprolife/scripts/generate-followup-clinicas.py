@@ -74,12 +74,79 @@ _ETAPA_ALIAS: dict[str, str] = {
     "parceiro ativo": "Parceiro ativo",
     "implantação":    "Parceiro ativo",
     "implantacao":    "Parceiro ativo",
+    "abordado":            "Abordada",
+    "abordada":            "Abordada",
+    "primeiro contato":    "Abordada",
+    "não abordado":        "Não abordada",
+    "nao abordado":        "Não abordada",
+    "não abordada":        "Não abordada",
+    "respondeu":           "Em conversa",
+    "em conversa":         "Em conversa",
+    "reunião":             "Pediu apresentação",
+    "reuniao":             "Pediu apresentação",
+    "pediu apresentação":  "Pediu apresentação",
+    "pediu apresentacao":  "Pediu apresentação",
+    "sem resposta":        "Aguardando retorno",
+    "aguardando retorno":  "Aguardando retorno",
+    "pausada":             "Aguardando retorno",
+    "proposta":            "Proposta enviada",
+    "proposta enviada":    "Proposta enviada",
+    "sem interesse":               "Sem interesse",
+    "não contatar / bloqueou":     "Não contatar / bloqueou",
+    "não contatar":                "Não contatar / bloqueou",
+    "bloqueou":                    "Não contatar / bloqueou",
+    "sem canal válido":            "Sem canal válido",
+    "sem canal valido":            "Sem canal válido",
+    "arquivada":                   "Arquivada",
 }
 
+# Etapa terminal = fase comercial que já "fechou" (positiva ou negativamente)
+# e por isso sai das listas de prospecção ativa (Atrasados, Alta prioridade,
+# Em conversa). Mesmo vocabulário canônico usado em app.js e
+# promote-pcmso-to-crm.py (duplicado de propósito, scripts independentes).
+CRM_ETAPA_TERMINAL_POSITIVA = "Parceiro ativo"
+CRM_ETAPAS_TERMINAIS_NEGATIVAS = [
+    "Sem interesse",
+    "Não contatar / bloqueou",
+    "Sem canal válido",
+    "Arquivada",
+]
+CRM_ETAPAS_TERMINAIS = [CRM_ETAPA_TERMINAL_POSITIVA] + CRM_ETAPAS_TERMINAIS_NEGATIVAS
 
-def _normalize_etapa(etapa: str) -> str:
-    """Normaliza variantes de etapa para o valor canônico do painel."""
-    return _ETAPA_ALIAS.get(etapa.strip().lower(), etapa.strip())
+_ETAPA_NEGATIVA_PATTERNS = [
+    (re.compile(r"sem interesse", re.I), "Sem interesse"),
+    (re.compile(r"n[aã]o contatar|bloqueou", re.I), "Não contatar / bloqueou"),
+    (re.compile(r"encerrar contato|n[aã]o insistir|perdid[oa]", re.I), "Arquivada"),
+    (re.compile(r"sem canal v[aá]lido|sem whatsapp|n[aã]o tem whatsapp", re.I), "Sem canal válido"),
+]
+
+
+def _infer_etapa_negativa(*textos: str) -> str | None:
+    """Heurística de apoio: se a Etapa não resolver para um valor terminal
+    conhecido, tenta inferir uma etapa terminal negativa a partir de texto
+    livre (Status/Próximo passo/Observação). A cor da linha na planilha NÃO
+    é usada como fonte de verdade — a regra precisa estar em texto."""
+    joined = " ".join(t for t in textos if t).lower()
+    for pattern, etapa in _ETAPA_NEGATIVA_PATTERNS:
+        if pattern.search(joined):
+            return etapa
+    return None
+
+
+def _normalize_etapa(etapa: str, *contexto_texto: str) -> str:
+    """Normaliza variantes de etapa para o valor canônico do painel. Se não
+    resolver para um valor terminal conhecido, tenta inferir uma etapa
+    terminal negativa a partir de texto de apoio (contexto_texto)."""
+    canon = _ETAPA_ALIAS.get(etapa.strip().lower(), etapa.strip())
+    if canon not in CRM_ETAPAS_TERMINAIS:
+        inferida = _infer_etapa_negativa(etapa, *contexto_texto)
+        if inferida:
+            return inferida
+    return canon
+
+
+def _is_etapa_terminal(etapa: str) -> bool:
+    return etapa in CRM_ETAPAS_TERMINAIS
 
 
 def _norm(text: str) -> str:
@@ -331,10 +398,12 @@ def build_records(
         data_raw = info["data_proxima_acao"]
         data_dt  = _parse_date(data_raw)
         status   = _followup_status(data_dt, today)
+        etapa    = _normalize_etapa(info["etapa"], info["proxima_acao"])
 
         rec: dict = {
             "nome_clinica":      info["nome_clinica"],
-            "etapa":             _normalize_etapa(info["etapa"]),
+            "etapa":             etapa,
+            "etapa_terminal":    _is_etapa_terminal(etapa),
             "prioridade":        info["prioridade"],
             "proxima_acao":      info["proxima_acao"],
             "data_proxima_acao": data_dt.isoformat() if data_dt else "",
@@ -361,14 +430,20 @@ def build_records(
 
 
 def _summarize(records: list[dict]) -> dict:
+    """Atrasados/hoje/proximos7dias/futuro/semData contam apenas prospecção
+    ativa (etapa_terminal=False) — Parceiro ativo e etapas terminais
+    negativas não entram como "atraso de prospecção comum"."""
+    ativos = [r for r in records if not r["etapa_terminal"]]
     return {
-        "total":         len(records),
-        "atrasados":     sum(1 for r in records if r["status_followup"] == "atrasado"),
-        "hoje":          sum(1 for r in records if r["status_followup"] == "hoje"),
-        "proximos7dias": sum(1 for r in records if r["status_followup"] == "em_breve"),
-        "futuro":        sum(1 for r in records if r["status_followup"] == "futuro"),
-        "semData":       sum(1 for r in records if r["status_followup"] == "sem_data"),
-        "comWhatsApp":   sum(1 for r in records if r["tem_whatsapp"]),
+        "total":              len(records),
+        "atrasados":          sum(1 for r in ativos if r["status_followup"] == "atrasado"),
+        "hoje":               sum(1 for r in ativos if r["status_followup"] == "hoje"),
+        "proximos7dias":      sum(1 for r in ativos if r["status_followup"] == "em_breve"),
+        "futuro":             sum(1 for r in ativos if r["status_followup"] == "futuro"),
+        "semData":            sum(1 for r in ativos if r["status_followup"] == "sem_data"),
+        "comWhatsApp":        sum(1 for r in records if r["tem_whatsapp"]),
+        "parceirosAtivos":    sum(1 for r in records if r["etapa"] == CRM_ETAPA_TERMINAL_POSITIVA),
+        "perdidasArquivadas": sum(1 for r in records if r["etapa"] in CRM_ETAPAS_TERMINAIS_NEGATIVAS),
     }
 
 

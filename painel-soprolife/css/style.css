@@ -2034,6 +2034,7 @@ td { font-size: .94rem; }
 .followup-card.card-alta     { border-left-color: var(--warning); }
 .followup-card.card-conversa { border-left-color: #4fa3d1; }
 .followup-card.card-parceiro { border-left-color: #0d7a5f; }
+.followup-card.card-perdido  { border-left-color: #8a8f98; }
 
 .followup-card-header {
   display: flex;

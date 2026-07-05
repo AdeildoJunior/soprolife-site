@@ -21,6 +21,7 @@ const state = {
   ccConfigured: false,
   custosInvestimentos: null,
   leadsFilter: "Ativos",
+  crmFilter: "Ativos",
   crmContatosB2B: [],
   followupClinicasSummary: null,
   crmReportFilters: null,
@@ -224,10 +225,91 @@ const _ETAPA_ALIAS = {
   "parceiro ativo": "Parceiro ativo",
   "implantação":    "Parceiro ativo",
   "implantacao":    "Parceiro ativo",
+  "abordado":            "Abordada",
+  "abordada":            "Abordada",
+  "primeiro contato":    "Abordada",
+  "não abordado":        "Não abordada",
+  "nao abordado":        "Não abordada",
+  "não abordada":        "Não abordada",
+  "respondeu":           "Em conversa",
+  "em conversa":         "Em conversa",
+  "reunião":             "Pediu apresentação",
+  "reuniao":             "Pediu apresentação",
+  "pediu apresentação":  "Pediu apresentação",
+  "pediu apresentacao":  "Pediu apresentação",
+  "sem resposta":        "Aguardando retorno",
+  "aguardando retorno":  "Aguardando retorno",
+  "pausada":             "Aguardando retorno",
+  "proposta":            "Proposta enviada",
+  "proposta enviada":    "Proposta enviada",
+  "sem interesse":            "Sem interesse",
+  "não contatar / bloqueou":  "Não contatar / bloqueou",
+  "não contatar":             "Não contatar / bloqueou",
+  "bloqueou":                 "Não contatar / bloqueou",
+  "sem canal válido":         "Sem canal válido",
+  "sem canal valido":         "Sem canal válido",
+  "arquivada":                "Arquivada",
 };
 
-function normalizeCrmEtapa(etapa) {
-  return _ETAPA_ALIAS[String(etapa).toLowerCase().trim()] ?? etapa;
+// Etapa terminal = fase comercial que já "fechou" (positiva ou negativa) e
+// por isso sai das listas de prospecção ativa (Atrasados, Alta prioridade,
+// Em conversa) — mesma ideia de isLeadConvertido()/LEAD_ETAPAS_TERMINAIS,
+// aplicada ao domínio de CRM Clínicas/PCMSO. Pessoa ≠ clínica, Status ≠
+// etapa, Próximo passo ≠ etapa: Etapa é a única fonte de verdade do funil.
+const CRM_ETAPA_TERMINAL_POSITIVA = "Parceiro ativo";
+const CRM_ETAPAS_TERMINAIS_NEGATIVAS = [
+  "Sem interesse",
+  "Não contatar / bloqueou",
+  "Sem canal válido",
+  "Arquivada",
+];
+const CRM_ETAPAS_TERMINAIS = [CRM_ETAPA_TERMINAL_POSITIVA, ...CRM_ETAPAS_TERMINAIS_NEGATIVAS];
+
+// Etapas ativas do funil comercial (excluem as terminais, que têm blocos e
+// filtros próprios) — usadas no funil visual e no formulário de nova clínica.
+const CRM_ETAPAS_ATIVAS = [
+  "Não abordada",
+  "Abordada",
+  "Em conversa",
+  "Pediu apresentação",
+  "Aguardando retorno",
+  "Proposta enviada",
+];
+
+const _ETAPA_NEGATIVA_PATTERNS = [
+  [/sem interesse/i, "Sem interesse"],
+  [/n[aã]o contatar|bloqueou/i, "Não contatar / bloqueou"],
+  [/encerrar contato|n[aã]o insistir|perdid[oa]/i, "Arquivada"],
+  [/sem canal v[aá]lido|sem whatsapp|n[aã]o tem whatsapp/i, "Sem canal válido"],
+];
+
+// Heurística de apoio: se a Etapa não resolver para um valor terminal
+// conhecido, tenta inferir uma etapa terminal negativa a partir de texto
+// livre (Próximo passo/Observação). A cor da linha na planilha NÃO é usada
+// como fonte de verdade — a regra precisa estar em texto na coluna Etapa.
+function inferEtapaNegativaDeTexto(...textos) {
+  const joined = textos.filter(Boolean).join(" ").toLowerCase();
+  for (const [pattern, etapa] of _ETAPA_NEGATIVA_PATTERNS) {
+    if (pattern.test(joined)) return etapa;
+  }
+  return null;
+}
+
+function normalizeCrmEtapa(etapa, ...contextoTexto) {
+  const canon = _ETAPA_ALIAS[String(etapa).toLowerCase().trim()] ?? String(etapa).trim();
+  if (!CRM_ETAPAS_TERMINAIS.includes(canon)) {
+    const inferida = inferEtapaNegativaDeTexto(etapa, ...contextoTexto);
+    if (inferida) return inferida;
+  }
+  return canon;
+}
+
+function isCrmEtapaTerminal(etapa) {
+  return CRM_ETAPAS_TERMINAIS.includes(etapa);
+}
+
+function isCrmEtapaTerminalNegativa(etapa) {
+  return CRM_ETAPAS_TERMINAIS_NEGATIVAS.includes(etapa);
 }
 
 // Transforma próximas ações genéricas de parceiros em algo operacional
@@ -241,12 +323,13 @@ function normalizeCrmRecord(item) {
   const regiao = item.regiao || "";
   const etapaRaw = item.etapa || "";
   const acaoRaw  = item.proxima_acao || item.proximaAcao || "";
+  const observacao = item.observacao || "";
   return {
     id: item.clinica_id || item.id || "",
     clinica: item.nome_clinica || item.clinica || "",
     bairro: regiao && regiao !== bairro ? `${regiao} · ${bairro}` : bairro,
     tipo: item.tipo_clinica || item.tipo || "",
-    etapa: normalizeCrmEtapa(etapaRaw),
+    etapa: normalizeCrmEtapa(etapaRaw, acaoRaw, observacao),
     prioridade: item.prioridade || "",
     proximaAcao: _PROXIMA_ACAO_LABEL[acaoRaw.toLowerCase().trim()] ?? acaoRaw,
     dataProximaAcao: item.data_proxima_acao || item.dataProximaAcao || "",
@@ -717,20 +800,25 @@ function countCrmEtapa(etapa) {
   return state.crm.filter((item) => item.etapa === etapa).length;
 }
 
-function countCrmPrioridade(prioridade) {
-  return state.crm.filter((item) => item.prioridade === prioridade).length;
+// Por padrão só conta prioridade dentro da prospecção ativa: uma clínica já
+// "Parceiro ativo" ou já perdida/arquivada não deveria inflar o card
+// "Prioridade alta" da prospecção comum (etapa terminal ≠ atraso comum).
+function countCrmPrioridade(prioridade, { incluirTerminais = false } = {}) {
+  return state.crm.filter(
+    (item) => item.prioridade === prioridade && (incluirTerminais || !isCrmEtapaTerminal(item.etapa))
+  ).length;
 }
 
 function renderCrmStats() {
-  const parceirosAtivos = countCrmEtapa("Parceiro ativo");
-  const emProspeccao = state.crm.filter(
-    (item) => item.etapa !== "Parceiro ativo" && item.etapa !== "Não abordado"
-  ).length;
+  const parceirosAtivos = countCrmEtapa(CRM_ETAPA_TERMINAL_POSITIVA);
+  const perdidasArquivadas = state.crm.filter((item) => isCrmEtapaTerminalNegativa(item.etapa)).length;
+  const emProspeccao = state.crm.filter((item) => !isCrmEtapaTerminal(item.etapa)).length;
 
   const stats = [
     { key: "clinicasCadastradas", label: "Clínicas cadastradas", value: state.crm.length,           hint: "base total"          },
     { key: "crmEmProspeccao",     label: "Em prospecção",        value: emProspeccao,                hint: "ativas no funil"     },
-    { key: "crmParceirosAtivos",  label: "Parceiros ativos",     value: parceirosAtivos,             hint: "parcerias fechadas"  },
+    { key: "crmParceirosAtivos",  label: "Parceiros ativos",     value: parceirosAtivos,             hint: "etapa terminal positiva"  },
+    { key: "crmPerdidasArquivadas", label: "Perdidas/Arquivadas", value: perdidasArquivadas,          hint: "etapa terminal negativa" },
     { key: "crmPrioridadeAlta",   label: "Prioridade alta",      value: countCrmPrioridade("Alta"),  hint: "foco imediato"       },
     { key: "crmComAcaoDefinida",  label: "Com ação definida",    value: state.crm.filter((c) => c.proximaAcao).length, hint: "próximas ações" }
   ];
@@ -742,12 +830,17 @@ function renderCrmStats() {
 }
 
 function renderCrmFunnelVisual() {
+  const hints = {
+    "Não abordada": "sem contato",
+    "Abordada": "abordagem feita",
+    "Em conversa": "diálogo ativo",
+    "Pediu apresentação": "reunião/apresentação pedida",
+    "Aguardando retorno": "aguardando resposta",
+    "Proposta enviada": "aguardando decisão",
+  };
   const steps = [
-    { label: "Não abordado", value: countCrmEtapa("Não abordado"), hint: "sem contato" },
-    { label: "Primeiro contato", value: countCrmEtapa("Primeiro contato"), hint: "abordagem feita" },
-    { label: "Em conversa", value: countCrmEtapa("Em conversa"), hint: "diálogo ativo" },
-    { label: "Proposta enviada", value: countCrmEtapa("Proposta enviada"), hint: "aguardando retorno" },
-    { label: "Parceiro ativo", value: countCrmEtapa("Parceiro ativo"), hint: "meta alcançada" }
+    ...CRM_ETAPAS_ATIVAS.map((label) => ({ label, value: countCrmEtapa(label), hint: hints[label] || "" })),
+    { label: "Parceiro ativo", value: countCrmEtapa(CRM_ETAPA_TERMINAL_POSITIVA), hint: "meta alcançada · etapa terminal" },
   ];
 
   const max = Math.max(...steps.map((step) => step.value), 1);
@@ -773,25 +866,34 @@ function renderFollowupB2B() {
 
   const today = todayIso();
 
-  const hoje = state.crm
+  // Etapas terminais (positiva ou negativa) já "fecharam" a prospecção —
+  // não entram como atraso/prioridade/conversa de prospecção comum. Cada
+  // uma tem seu próprio card abaixo (Parceiros ativos / Perdidas-Arquivadas).
+  const ativos = state.crm.filter((c) => !isCrmEtapaTerminal(c.etapa));
+
+  const hoje = ativos
     .filter((c) => { const iso = parseDateIso(c.dataProximaAcao); return iso && iso === today; })
     .sort((a, b) => (a.prioridade === "Alta" ? -1 : 1));
 
-  const atrasados = state.crm
+  const atrasados = ativos
     .filter((c) => { const iso = parseDateIso(c.dataProximaAcao); return iso && iso < today; })
     .sort((a, b) => parseDateIso(a.dataProximaAcao).localeCompare(parseDateIso(b.dataProximaAcao)));
 
-  const altaPrio = state.crm
+  const altaPrio = ativos
     .filter((c) => c.prioridade === "Alta")
     .sort((a, b) => a.clinica.localeCompare(b.clinica));
 
-  const emConversa = state.crm
+  const emConversa = ativos
     .filter((c) => c.etapa === "Em conversa")
     .sort((a, b) => a.clinica.localeCompare(b.clinica));
 
   const parceirosAtivos = state.crm
-    .filter((c) => c.etapa === "Parceiro ativo")
+    .filter((c) => c.etapa === CRM_ETAPA_TERMINAL_POSITIVA)
     .sort((a, b) => (a.prioridade === "Alta" ? -1 : 1) || a.clinica.localeCompare(b.clinica));
+
+  const perdidasArquivadas = state.crm
+    .filter((c) => isCrmEtapaTerminalNegativa(c.etapa))
+    .sort((a, b) => a.clinica.localeCompare(b.clinica));
 
   function waButton(item) {
     if (!state.followupClinicas) return "";
@@ -817,13 +919,13 @@ function renderFollowupB2B() {
     </li>`;
   }
 
-  function card({ cls, icon, title, items, empty }) {
+  function card({ cls, icon, title, items, empty, tip }) {
     const count = items.length;
     const body = count > 0
       ? `<ul class="followup-list">${items.map(itemHtml).join("")}</ul>`
       : `<p class="followup-empty">${empty}</p>`;
     return `<article class="followup-card ${cls}">
-      <div class="followup-card-header">
+      <div class="followup-card-header"${tip ? ` title="${escapeHtml(tip)}"` : ""}>
         <span class="followup-icon" aria-hidden="true">${icon}</span>
         <div>
           <strong>${title}</strong>
@@ -844,7 +946,8 @@ function renderFollowupB2B() {
       ${card({ cls: "card-atrasado", icon: "⚠",  title: "Atrasados",       items: atrasados,     empty: "Nenhum follow-up em atraso" })}
       ${card({ cls: "card-alta",     icon: "🔴", title: "Alta prioridade", items: altaPrio,      empty: "Nenhuma clínica de alta prioridade" })}
       ${card({ cls: "card-conversa", icon: "💬", title: "Em conversa",     items: emConversa,    empty: "Nenhuma clínica em conversa ativa" })}
-      ${card({ cls: "card-parceiro", icon: "🤝", title: "Parceiros ativos", items: parceirosAtivos, empty: "Nenhum parceiro ativo ainda" })}
+      ${card({ cls: "card-parceiro", icon: "🤝", title: "Parceiros ativos", items: parceirosAtivos, empty: "Nenhum parceiro ativo ainda", tip: "Etapa terminal positiva: parceria já fechada. Fica aqui — não conta como atraso ou alta prioridade de prospecção comum." })}
+      ${card({ cls: "card-perdido",  icon: "🗂",  title: "Perdidas/Arquivadas", items: perdidasArquivadas, empty: "Nenhuma clínica perdida ou arquivada", tip: "Etapa terminal negativa: sem interesse, não contatar/bloqueou, sem canal válido ou arquivada. Fora do funil ativo." })}
     </div>
   `;
 }
@@ -893,12 +996,10 @@ function renderCrmView() {
 }
 
 function renderCrmHub(container) {
-  const emProspeccao = state.crm.filter(
-    (item) => item.etapa !== "Parceiro ativo" && item.etapa !== "Não abordado"
-  ).length;
+  const emProspeccao = state.crm.filter((item) => !isCrmEtapaTerminal(item.etapa)).length;
 
   const parceirosAtivosAlta = state.crm.filter((c) =>
-    c.etapa === "Parceiro ativo" && c.prioridade === "Alta"
+    c.etapa === CRM_ETAPA_TERMINAL_POSITIVA && c.prioridade === "Alta"
   );
   const propostasEstrategicas = state.crm.filter((c) =>
     c.prioridade === "Alta" &&
@@ -1011,12 +1112,10 @@ function renderCrmClinicas(container) {
         <p class="section-sub">Prospecção B2B, parcerias e PCMSO</p>
       </div>
       <select id="crmFilter" class="crm-filter-select">
-        <option value="Todos">Todas as etapas</option>
-        <option value="Não abordado">Não abordado</option>
-        <option value="Primeiro contato">Primeiro contato</option>
-        <option value="Em conversa">Em conversa</option>
-        <option value="Proposta enviada">Proposta enviada</option>
-        <option value="Parceiro ativo">Parceiro ativo</option>
+        <option value="Ativos">Ativos</option>
+        <option value="Parceiros ativos">Parceiros ativos</option>
+        <option value="Perdidas">Perdidas / sem interesse</option>
+        <option value="Todos">Todos</option>
       </select>
     </div>
 
@@ -1062,16 +1161,36 @@ function renderCrmClinicas(container) {
   renderCrmStats();
   renderCrmFunnelVisual();
   renderFollowupB2B();
-  renderCrmTable();
+  renderCrmTable(state.crmFilter);
 
   document.querySelector("#crmBackBtn").addEventListener("click", () => {
     state.crmView = "hub";
     renderCrmView();
   });
 
-  document.querySelector("#crmFilter").addEventListener("change", (e) => {
+  const crmFilterEl = document.querySelector("#crmFilter");
+  crmFilterEl.value = state.crmFilter || "Ativos";
+  updateCrmFilterTip(crmFilterEl);
+  crmFilterEl.addEventListener("change", (e) => {
+    state.crmFilter = e.target.value;
+    updateCrmFilterTip(crmFilterEl);
     renderCrmTable(e.target.value);
   });
+}
+
+// Explica o que cada opção do filtro Ativos/Parceiros ativos/Perdidas/Todos
+// mostra — mesmo padrão de LEADS_FILTER_TIP/updateLeadsFilterTip.
+const CRM_FILTER_TIP = {
+  "Ativos":          "Mostra clínicas ainda em prospecção, sem etapa terminal (nem parceria fechada, nem perdida/arquivada).",
+  "Parceiros ativos": "Mostra clínicas na etapa terminal positiva — parceria já fechada.",
+  "Perdidas":         "Mostra clínicas em etapa terminal negativa: sem interesse, não contatar/bloqueou, sem canal válido ou arquivada.",
+  "Todos":            "Mostra todas as clínicas cadastradas, em qualquer etapa.",
+};
+
+function updateCrmFilterTip(el) {
+  const tip = CRM_FILTER_TIP[el.value] || "";
+  el.title = tip;
+  el.setAttribute("aria-label", `Filtro de clínicas: ${el.value}. ${tip}`);
 }
 
 function renderCrmPacientes(container) {
@@ -1690,7 +1809,7 @@ function renderEntradaDados(container) {
   const consentOpts = ["Sim", "Não", "Não informado"];
   const canalOpts   = ["Indicação", "WhatsApp", "Instagram", "Google", "Ligação", "Presencial", "Outro"];
   const prioOpts    = ["Alta", "Normal", "Baixa"];
-  const etapaOpts   = ["Não abordado", "Abordado", "Em conversa", "Proposta enviada", "Parceiro ativo"];
+  const etapaOpts   = [...CRM_ETAPAS_ATIVAS, ...CRM_ETAPAS_TERMINAIS];
 
   const ACTION_MAP = {
     lead:      "createLead",
@@ -2158,10 +2277,8 @@ function renderCrmReportStats(leads) {
   const convertidos = leads.filter(isLeadConvertido).length;
   const taxaConversao = leads.length > 0 ? `${Math.round((convertidos / leads.length) * 100)}%` : null;
 
-  const emProspeccao = state.crm.filter(
-    (item) => item.etapa !== "Parceiro ativo" && item.etapa !== "Não abordado"
-  ).length;
-  const parceirosAtivos = countCrmEtapa("Parceiro ativo");
+  const emProspeccao = state.crm.filter((item) => !isCrmEtapaTerminal(item.etapa)).length;
+  const parceirosAtivos = countCrmEtapa(CRM_ETAPA_TERMINAL_POSITIVA);
 
   const espirometrias = state.followupSummary?.espirometria?.total ?? null;
   const consultas = state.followupSummary?.consultas?.total ?? null;
@@ -2242,8 +2359,8 @@ function renderCrmReportCharts(leads) {
   const hasStatus = Object.values(statusTotals).some((v) => v > 0);
 
   // 6) Conversões B2B / parceiros ativos (não segue os filtros de lead — visão geral B2B)
-  const parceirosAtivosB2B = countCrmEtapa("Parceiro ativo");
-  const emProspeccaoB2B = state.crm.filter((c) => c.etapa !== "Parceiro ativo" && c.etapa !== "Não abordado").length;
+  const parceirosAtivosB2B = countCrmEtapa(CRM_ETAPA_TERMINAL_POSITIVA);
+  const emProspeccaoB2B = state.crm.filter((c) => !isCrmEtapaTerminal(c.etapa)).length;
   const leadsB2BConvertidos = state.leads.filter((l) => isB2BLead(l) && isLeadConvertido(l)).length;
   const hasB2B = (parceirosAtivosB2B + emProspeccaoB2B + leadsB2BConvertidos) > 0;
 
@@ -2475,8 +2592,8 @@ function renderCrmReportInsights(leads) {
   }
 
   if (state.crm.length > 0) {
-    const emProspeccao = state.crm.filter((c) => c.etapa !== "Parceiro ativo" && c.etapa !== "Não abordado").length;
-    const parceirosAtivos = countCrmEtapa("Parceiro ativo");
+    const emProspeccao = state.crm.filter((c) => !isCrmEtapaTerminal(c.etapa)).length;
+    const parceirosAtivos = countCrmEtapa(CRM_ETAPA_TERMINAL_POSITIVA);
     insights.push({
       icon: "🏥", type: "neutral",
       label: "Clínicas",
@@ -2643,18 +2760,23 @@ function findContatoB2B(clinicaId) {
   return contatos.find((c) => c.status_relacionamento === "Ativo") || contatos[0];
 }
 
-function renderCrmTable(filter = "Todos") {
+// Filtro do CRM Clínicas é por meta-categoria (Ativos/Parceiros ativos/
+// Perdidas/Todos), não mais por etapa exata — mesma ideia do filtro
+// Ativos/Convertidos/Todos de Leads.
+function renderCrmTable(filter = "Ativos") {
   const tbody = document.querySelector("#crmTable");
-  const rows = filter === "Todos"
-    ? state.crm
-    : state.crm.filter((item) => item.etapa === filter);
+  const rows =
+    filter === "Todos"           ? state.crm :
+    filter === "Parceiros ativos" ? state.crm.filter((item) => item.etapa === CRM_ETAPA_TERMINAL_POSITIVA) :
+    filter === "Perdidas"         ? state.crm.filter((item) => isCrmEtapaTerminalNegativa(item.etapa)) :
+    /* Ativos */                    state.crm.filter((item) => !isCrmEtapaTerminal(item.etapa));
 
   const today = todayIso();
 
   if (rows.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" class="crm-empty">Nenhuma clínica cadastrada nesta etapa.</td>
+        <td colspan="8" class="crm-empty">Nenhuma clínica cadastrada nesta lista.</td>
       </tr>
     `;
     return;
@@ -2673,7 +2795,7 @@ function renderCrmTable(filter = "Todos") {
       <td><strong>${item.clinica}</strong>${contatoTag}</td>
       <td>${item.bairro}</td>
       <td><span class="crm-tipo">${item.tipo}</span></td>
-      <td><span class="badge ${slug(item.etapa)}">${item.etapa}</span></td>
+      <td>${crmEtapaBadgeHtml(item.etapa)}</td>
       <td><span class="badge prio-${slug(item.prioridade)}">${item.prioridade}</span></td>
       <td>${item.proximaAcao}</td>
       <td>${dataLabel ? `<span class="crm-data ${dataCls}">${dataLabel}</span>` : ""}</td>
@@ -2692,9 +2814,26 @@ function resolveLeadWhatsApp(item) {
   return `https://wa.me/${country}`;
 }
 
-// Badges de etapa que representam conversão/parceria já fechada recebem um
-// tooltip explicando o que isso significa (ex.: "Parceiro ativo" no caso do
-// Juan/Pastore) — nas demais etapas o badge continua igual, sem tooltip.
+// Badges de etapa terminal (positiva ou negativa) do CRM Clínicas recebem
+// tooltip explicando o que isso significa — mesmo padrão de
+// LEAD_ETAPA_BADGE_TIP/leadEtapaBadgeHtml, aplicado ao domínio de clínicas.
+const CRM_ETAPA_BADGE_TIP = {
+  "Parceiro ativo": "Etapa terminal positiva: parceria já fechada. Não conta como atraso/alta prioridade da prospecção comum — aparece em Parceiros ativos.",
+  "Sem interesse": "Etapa terminal negativa: clínica sinalizou que não tem interesse. Fora do funil ativo.",
+  "Não contatar / bloqueou": "Etapa terminal negativa: clínica pediu para não ser contatada novamente ou bloqueou o contato. Fora do funil ativo.",
+  "Sem canal válido": "Etapa terminal negativa: não há telefone/WhatsApp válido para retomar contato. Fora do funil ativo.",
+  "Arquivada": "Etapa terminal negativa: contato encerrado/arquivado. Fora do funil ativo.",
+};
+
+function crmEtapaBadgeHtml(etapa) {
+  const tip = CRM_ETAPA_BADGE_TIP[etapa];
+  if (!tip) return `<span class="badge ${slug(etapa)}">${escapeHtml(etapa)}</span>`;
+  // title nativo (não o balão .has-tip::after) porque este badge fica dentro
+  // de .table-wrap, que tem overflow:auto — um popup customizado ficaria
+  // cortado ao rolar a tabela.
+  return `<span class="badge ${slug(etapa)}" tabindex="0" title="${escapeHtml(tip)}" aria-label="${escapeHtml(etapa)}. ${escapeHtml(tip)}">${escapeHtml(etapa)}</span>`;
+}
+
 const LEAD_ETAPA_BADGE_TIP = {
   "Parceiro ativo": "Contato B2B já vinculado a uma clínica/parceria ativa. Continua no histórico de leads, mas sai da lista de ativos.",
   "Convertido em clínica/parceiro": "Leads que já viraram paciente, exame, consulta ou parceria B2B. Exemplo: Juan/Pastore aparece aqui como parceiro ativo.",

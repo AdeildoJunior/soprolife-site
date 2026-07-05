@@ -7,10 +7,20 @@ para a aba "CRM Clinicas" usando Application Default Credentials (gcloud).
 
 Regras de promoção
 ──────────────────
-Promove apenas Status:  Pediu apresentação · Abordado · Em conversa ·
-                        Proposta enviada · Parceiro ativo
-NÃO promove Status:     Não tem whatsapp · Sem interesse ou perdido ·
-                        Não abordado · (em branco)
+Etapa (coluna nova, opcional):
+                        Se a aba PCMSO já tiver uma coluna "Etapa", ela é a
+                        fonte principal do funil (Pessoa ≠ clínica, Status ≠
+                        etapa, Próximo passo ≠ etapa). Quando ausente ou
+                        vazia numa linha, cai para a heurística por Status
+                        abaixo (compatibilidade).
+Promove (por Etapa ou, na ausência dela, por Status):
+                        Pediu apresentação · Abordado/Abordada · Em conversa ·
+                        Proposta enviada · Parceiro ativo (etapa terminal
+                        positiva) · Sem interesse · Não contatar/bloqueou ·
+                        Sem canal válido · Arquivada (etapas terminais
+                        negativas — entram como "perdidas/arquivadas", não
+                        ficam mais invisíveis).
+NÃO promove:            Não abordado/Não abordada · Status/Etapa em branco.
 Dedup:                  Usa _key() para matching robusto — remove termos
                         genéricos, colapsa letras repetidas, tolera
                         variações como "Focosseg"/"FOCOSEG" e nomes
@@ -56,31 +66,113 @@ SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
 DEFAULT_PCMSO_SHEET = "Base Prospecção B2B PCMSO"
 DEFAULT_CRM_SHEET = "CRM Clinicas"
 
+# Heurística de compatibilidade usada apenas quando a linha não tem Etapa
+# preenchida ainda. Quando Etapa existe, ela manda — ver _resolve_etapa().
 _STATUS_MAP: dict[str, tuple[str, str]] = {
-    "pediu apresentacao": ("Em conversa", "Alta"),
-    "pediu apresentação": ("Em conversa", "Alta"),
-    "abordado": ("Primeiro contato", "Média"),
+    "pediu apresentacao": ("Pediu apresentação", "Alta"),
+    "pediu apresentação": ("Pediu apresentação", "Alta"),
+    "abordado": ("Abordada", "Média"),
     "em conversa": ("Em conversa", "Alta"),
     "proposta enviada": ("Proposta enviada", "Alta"),
     "parceiro ativo": ("Parceiro ativo", "Alta"),
-}
-
-_STATUS_DATE_OFFSET: dict[str, int | None] = {
-    "pediu apresentacao": 2,
-    "pediu apresentação": 2,
-    "abordado": 3,
-    "em conversa": 1,
-    "proposta enviada": 2,
-    "parceiro ativo": None,
+    # Antes eram bloqueados (invisíveis no CRM); agora são promovidos com
+    # etapa terminal negativa para aparecerem como "perdidas/arquivadas".
+    "sem interesse ou perdido": ("Sem interesse", "Baixa"),
+    "nao tem whatsapp": ("Sem canal válido", "Baixa"),
+    "não tem whatsapp": ("Sem canal válido", "Baixa"),
 }
 
 _STATUS_BLOCK = {
-    "nao tem whatsapp",
-    "não tem whatsapp",
-    "sem interesse ou perdido",
     "nao abordado",
     "não abordado",
     "",
+}
+
+# Etapas terminais — mesmo vocabulário canônico usado em app.js e em
+# generate-followup-clinicas.py. Mantido duplicado de propósito (scripts
+# independentes), não importado de um módulo compartilhado.
+CRM_ETAPA_TERMINAL_POSITIVA = "Parceiro ativo"
+CRM_ETAPAS_TERMINAIS_NEGATIVAS = [
+    "Sem interesse",
+    "Não contatar / bloqueou",
+    "Sem canal válido",
+    "Arquivada",
+]
+CRM_ETAPAS_TERMINAIS = [CRM_ETAPA_TERMINAL_POSITIVA] + CRM_ETAPAS_TERMINAIS_NEGATIVAS
+
+_ETAPA_ALIAS: dict[str, str] = {
+    "parceira": "Parceiro ativo",
+    "parceiro": "Parceiro ativo",
+    "parceiro ativo": "Parceiro ativo",
+    "implantação": "Parceiro ativo",
+    "implantacao": "Parceiro ativo",
+    "abordado": "Abordada",
+    "abordada": "Abordada",
+    "primeiro contato": "Abordada",
+    "não abordado": "Não abordada",
+    "nao abordado": "Não abordada",
+    "não abordada": "Não abordada",
+    "respondeu": "Em conversa",
+    "em conversa": "Em conversa",
+    "reunião": "Pediu apresentação",
+    "reuniao": "Pediu apresentação",
+    "pediu apresentação": "Pediu apresentação",
+    "pediu apresentacao": "Pediu apresentação",
+    "sem resposta": "Aguardando retorno",
+    "aguardando retorno": "Aguardando retorno",
+    "pausada": "Aguardando retorno",
+    "proposta": "Proposta enviada",
+    "proposta enviada": "Proposta enviada",
+    "sem interesse": "Sem interesse",
+    "não contatar / bloqueou": "Não contatar / bloqueou",
+    "não contatar": "Não contatar / bloqueou",
+    "bloqueou": "Não contatar / bloqueou",
+    "sem canal válido": "Sem canal válido",
+    "sem canal valido": "Sem canal válido",
+    "arquivada": "Arquivada",
+}
+
+_ETAPA_NEGATIVA_PATTERNS = [
+    (re.compile(r"sem interesse", re.I), "Sem interesse"),
+    (re.compile(r"n[aã]o contatar|bloqueou", re.I), "Não contatar / bloqueou"),
+    (re.compile(r"encerrar contato|n[aã]o insistir|perdid[oa]", re.I), "Arquivada"),
+    (re.compile(r"sem canal v[aá]lido|sem whatsapp|n[aã]o tem whatsapp", re.I), "Sem canal válido"),
+]
+
+
+def _infer_etapa_negativa(*textos: str) -> str | None:
+    """Heurística de apoio: se a Etapa não resolver para um valor terminal
+    conhecido, tenta inferir uma etapa terminal negativa a partir de texto
+    livre (Status/Próximo passo/Observação). A cor da linha na planilha NÃO
+    é usada como fonte — a regra precisa estar em texto."""
+    joined = " ".join(t for t in textos if t).lower()
+    for pattern, etapa in _ETAPA_NEGATIVA_PATTERNS:
+        if pattern.search(joined):
+            return etapa
+    return None
+
+
+def _normalize_etapa(etapa_raw: str, *contexto_texto: str) -> str:
+    """Normaliza a coluna Etapa para o valor canônico do painel, com
+    inferência de apoio a partir de texto de contexto quando necessário."""
+    canon = _ETAPA_ALIAS.get(etapa_raw.strip().lower(), etapa_raw.strip())
+    if canon not in CRM_ETAPAS_TERMINAIS:
+        inferida = _infer_etapa_negativa(etapa_raw, *contexto_texto)
+        if inferida:
+            return inferida
+    return canon
+
+
+_ETAPA_DATE_OFFSET: dict[str, int | None] = {
+    "Pediu apresentação": 2,
+    "Abordada": 3,
+    "Em conversa": 1,
+    "Proposta enviada": 2,
+    "Parceiro ativo": None,
+    "Sem interesse": None,
+    "Não contatar / bloqueou": None,
+    "Sem canal válido": None,
+    "Arquivada": None,
 }
 
 CRM_HEADERS = [
@@ -156,12 +248,39 @@ def _parse_date(raw: str) -> str:
     return ""
 
 
-def _fallback_date(status_key: str) -> str:
-    """Retorna data de próxima ação por status (YYYY-MM-DD), ou vazio."""
-    offset = _STATUS_DATE_OFFSET.get(status_key)
+def _fallback_date(etapa: str) -> str:
+    """Retorna data de próxima ação por etapa (YYYY-MM-DD), ou vazio."""
+    offset = _ETAPA_DATE_OFFSET.get(etapa)
     if offset is None:
         return ""
     return (date.today() + timedelta(days=offset)).isoformat()
+
+
+def _resolve_etapa(status_raw: str, etapa_raw: str, proxima_acao_raw: str) -> tuple[str, str] | None:
+    """Resolve (etapa, prioridade) para uma linha da base PCMSO.
+
+    Etapa (quando preenchida) manda — Status e Próximo passo continuam
+    existindo como campos de apoio, mas não decidem mais o funil sozinhos.
+    Sem Etapa preenchida, cai para a heurística por Status (compatibilidade
+    com planilhas que ainda não têm a coluna). Retorna None quando a linha
+    deve ser ignorada (não abordada / status vazio ou desconhecido).
+    """
+    if etapa_raw.strip():
+        etapa = _normalize_etapa(etapa_raw, status_raw, proxima_acao_raw)
+        if etapa == "Não abordada" or not etapa:
+            return None
+        if etapa in CRM_ETAPAS_TERMINAIS_NEGATIVAS:
+            return etapa, "Baixa"
+        if etapa == CRM_ETAPA_TERMINAL_POSITIVA:
+            return etapa, "Alta"
+        status_key = _norm(status_raw)
+        _, prioridade_status = _STATUS_MAP.get(status_key, (None, "Média"))
+        return etapa, prioridade_status
+
+    status_key = _norm(status_raw)
+    if status_key in _STATUS_BLOCK or status_key not in _STATUS_MAP:
+        return None
+    return _STATUS_MAP[status_key]
 
 
 def _matches(key_a: str, key_b: str) -> bool:
@@ -321,6 +440,7 @@ def _parse_pcmso(rows: list) -> list[dict]:
     interesse_idx = _first_col(col_map, "interesse")
     prox_idx     = _first_col(col_map, "proximo passo", "próximo passo")
     data_idx     = _first_col(col_map, "data do proximo passo", "data do próximo passo")
+    etapa_idx    = _first_col(col_map, "etapa")
 
     if nome_idx is None:
         print("ERRO: coluna 'Nome da clínica/empresa' não encontrada.")
@@ -328,6 +448,10 @@ def _parse_pcmso(rows: list) -> list[dict]:
     if status_idx is None:
         print("ERRO: coluna 'Status' não encontrada.")
         sys.exit(1)
+    if etapa_idx is not None:
+        print("    coluna 'Etapa' encontrada — usada como fonte principal do funil.")
+    else:
+        print("    coluna 'Etapa' ausente — usando heurística por Status (compatibilidade).")
 
     def cell(row: list, idx: int | None) -> str:
         if idx is None or idx in blocked_idx:
@@ -344,22 +468,23 @@ def _parse_pcmso(rows: list) -> list[dict]:
         if not nome:
             continue
 
-        status_key = _norm(cell(row, status_idx))
+        status_raw   = cell(row, status_idx)
+        etapa_raw    = cell(row, etapa_idx) if etapa_idx is not None else ""
+        proxima_acao = cell(row, prox_idx)
 
-        if status_key in _STATUS_BLOCK:
-            skipped_block += 1
+        resolved = _resolve_etapa(status_raw, etapa_raw, proxima_acao)
+        if resolved is None:
+            if _norm(status_raw) in _STATUS_BLOCK or not etapa_raw.strip():
+                skipped_block += 1
+            else:
+                skipped_unknown += 1
             continue
-        if status_key not in _STATUS_MAP:
-            skipped_unknown += 1
-            continue
-
-        etapa, prioridade = _STATUS_MAP[status_key]
+        etapa, prioridade = resolved
 
         bairro       = cell(row, bairro_idx)
         tipo         = cell(row, tipo_idx)
-        proxima_acao = cell(row, prox_idx)
         data_raw     = cell(row, data_idx)
-        data_proxima_acao = _parse_date(data_raw) or _fallback_date(status_key)
+        data_proxima_acao = _parse_date(data_raw) or _fallback_date(etapa)
         ultima       = today_str
 
         interesse = cell(row, interesse_idx)
@@ -372,6 +497,8 @@ def _parse_pcmso(rows: list) -> list[dict]:
         _check_safe(bairro,      f"Bairro linha {row_num}")
         _check_safe(tipo,        f"Tipo linha {row_num}")
         _check_safe(proxima_acao, f"Próximo passo linha {row_num}")
+        if etapa_raw:
+            _check_safe(etapa_raw, f"Etapa linha {row_num}")
 
         records.append({
             "_key": _key(nome),
