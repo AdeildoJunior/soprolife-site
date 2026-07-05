@@ -6155,3 +6155,114 @@ th {
   background: #ffe9eb;
   color: var(--danger);
 }
+
+/* ── Parcerias → Pastore ───────────────────────────────────────────────── */
+.parceria-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.parceria-chip {
+  background: var(--soft);
+  color: var(--navy-2);
+}
+
+.parceria-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 14px;
+  margin: 16px 0 20px;
+}
+
+.parceria-stat-card { --stat-accent: var(--navy-2); }
+
+.parceria-chart-wrap {
+  min-height: 240px;
+}
+
+.parceria-chart-wrap .crm-empty {
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Tabs — classes próprias, isoladas de .ci-tab/.ci-pane (Custos & Investimentos)
+   para não acoplar a lógica das duas seções. Mesmo tratamento visual. */
+.parceria-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 20px 0 18px;
+  border-bottom: 2px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.parceria-tab {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 8px 18px;
+  margin-bottom: -2px;
+  border-radius: 10px 10px 0 0;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: .9rem;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.parceria-tab:hover  { color: var(--navy); background: rgba(29,183,166,.05); }
+.parceria-tab.active { color: var(--navy); font-weight: 700; border-bottom-color: var(--teal); }
+
+/* Blocos premium do corpo (Financeiro): label pequeno acima, valor abaixo,
+   mesmo eixo esquerdo — ver soprolife-panel-ui-ux "Blocos internos de card". */
+.parceria-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.parceria-field {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 5px;
+  padding: 12px 14px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.parceria-field-label {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+
+.parceria-field-value {
+  margin: 0;
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.parceria-financeiro-note {
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.55;
+  max-width: 920px;
+  margin: 4px 0 0;
+}
+
+@media (max-width: 1180px) {
+  .parceria-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 620px) {
+  .parceria-stats { grid-template-columns: 1fr; }
+}

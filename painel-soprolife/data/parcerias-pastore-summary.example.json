@@ -1,0 +1,70 @@
+{
+  "source": {
+    "type": "parcerias_pastore_summary",
+    "safeToDisplay": true,
+    "containsPersonalData": false,
+    "generatedAt": "2026-07-05T00:00:00-03:00"
+  },
+  "parceria": {
+    "nome": "Parceria Pastore",
+    "unidade": "Pastore Ipanema",
+    "servico": "Espirometria com ou sem broncodilatador",
+    "status": "planejada",
+    "chips": ["Pastore Ipanema", "Terças e sábados", "08h às 12h"]
+  },
+  "kpis": {
+    "exames_realizados": 0,
+    "receita_estimada": null,
+    "resultado_liquido_estimado": null,
+    "ocupacao_agenda_pct": null
+  },
+  "producao_por_data": {
+    "labels": [],
+    "exames": []
+  },
+  "financeiro_por_periodo": {
+    "labels": [],
+    "receita": [],
+    "custos": [],
+    "resultado": []
+  },
+  "agenda": [
+    {
+      "unidade": "Pastore Ipanema",
+      "dia_semana": "Terça-feira",
+      "horario": "08h às 12h",
+      "status": "planejada",
+      "capacidade_estimada_por_turno": null
+    },
+    {
+      "unidade": "Pastore Ipanema",
+      "dia_semana": "Sábado",
+      "horario": "08h às 12h",
+      "status": "planejada",
+      "capacidade_estimada_por_turno": null
+    }
+  ],
+  "financeiro_parametros": {
+    "valor_exame_sem_broncodilatador": null,
+    "valor_exame_com_broncodilatador": null,
+    "repasse_percentual_pastore": null,
+    "custo_deslocamento": null,
+    "custo_insumos": null,
+    "custo_profissional": null,
+    "outros_custos": null,
+    "receita_bruta": null,
+    "custo_total": null,
+    "resultado_liquido": null,
+    "margem_estimada_pct": null,
+    "observacao": "Valores comerciais ainda não definidos com a Pastore."
+  },
+  "pacientes_pastore": {
+    "total_atendidos": 0,
+    "followup_pendente": 0,
+    "recorrentes": 0,
+    "distribuicao_tipo_exame": {
+      "sem_broncodilatador": 0,
+      "com_broncodilatador": 0
+    }
+  }
+}

@@ -26,6 +26,7 @@ const state = {
   crmContatosB2B: [],
   followupClinicasSummary: null,
   crmReportFilters: null,
+  parceriaPastore: null,
 };
 
 const slug = (text) =>
@@ -470,6 +471,18 @@ async function init() {
       state.custosInvestimentos = custosData;
     }
 
+    // Parcerias → Pastore: resumo agregado e seguro (agenda, KPIs, financeiro
+    // "A definir"/null enquanto os valores comerciais não forem fechados, e
+    // agregados de pacientes sem nome/telefone). Dados pessoais reais ficam
+    // só em data-private/parcerias-pastore.local.json, fora do Git.
+    const parceriaPastoreData = await loadOptionalJson("./data/parcerias-pastore-summary.local.json");
+    if (
+      parceriaPastoreData?.source?.safeToDisplay === true &&
+      parceriaPastoreData?.source?.containsPersonalData === false
+    ) {
+      state.parceriaPastore = parceriaPastoreData;
+    }
+
     // Documentos → Equipamentos: só metadados seguros (equipamento, tipo de
     // documento, data, status, validade, observação curta). Os arquivos
     // originais (fotos/PDFs) ficam só em data-private/documentos/equipamentos/,
@@ -497,6 +510,7 @@ async function init() {
     renderDocuments();
     renderDocumentosEquipamentos();
     renderFinance();
+    renderParceriaPastore();
     renderCustosInvestimentos();
     renderAutomations();
     renderLancamentos();
@@ -4599,6 +4613,267 @@ function getRateioItens(ci) {
 
 function findSocio(socios, nomeParcial) {
   return socios.find((s) => new RegExp(nomeParcial, "i").test(s.nome || "")) || null;
+}
+
+// Parcerias → Pastore — resumo executivo (produção, financeiro, agenda e
+// CRM agregado da parceria). Valor financeiro desconhecido usa "—"/"A definir",
+// nunca R$ 0,00 inventado (ver soprolife-finance-costs). Dados pessoais de
+// pacientes ficam só em data-private/parcerias-pastore.local.json.
+function fmtBRLOrDash(value) {
+  return (value === null || value === undefined) ? "—" : fmtBRL(value);
+}
+
+function fmtPctOrDash(value) {
+  return (value === null || value === undefined) ? "—" : `${value}%`;
+}
+
+function renderParceriaPastore() {
+  const chipsContainer = document.querySelector("#parceriaPastoreChips");
+  const statsContainer = document.querySelector("#parceriaPastoreStats");
+  if (!chipsContainer || !statsContainer) return;
+
+  const pp = state.parceriaPastore;
+
+  if (!pp) {
+    chipsContainer.innerHTML = "";
+    statsContainer.innerHTML = statCardHtml("parceria-stat-card", {
+      key: "parceriaPastoreIndisponivel",
+      label: "Parceria Pastore",
+      value: "—",
+      hint: "Resumo local não encontrado",
+    });
+    ["#parceria-agenda", "#parceria-financeiro", "#parceria-pacientes"].forEach((sel) => {
+      const pane = document.querySelector(sel);
+      if (pane) pane.innerHTML = `
+        <article class="panel">
+          <div class="panel-header"><h3>Dados não disponíveis</h3></div>
+          <p style="padding:1rem 1.25rem;color:var(--muted);font-size:.88rem">
+            Arquivo <code>data/parcerias-pastore-summary.local.json</code> não encontrado ou não seguro.
+          </p>
+        </article>
+      `;
+    });
+    return;
+  }
+
+  const chips = Array.isArray(pp.parceria?.chips) && pp.parceria.chips.length
+    ? pp.parceria.chips
+    : [pp.parceria?.unidade].filter(Boolean);
+  chipsContainer.innerHTML = chips.map((c) => `<span class="badge parceria-chip">${escapeHtml(c)}</span>`).join("");
+
+  const kpis = pp.kpis || {};
+  statsContainer.innerHTML = [
+    { key: "parceriaExamesRealizados",    label: "Exames realizados",          value: String(kpis.exames_realizados ?? 0),        hint: "produção acumulada" },
+    { key: "parceriaReceitaEstimada",     label: "Receita estimada",           value: fmtBRLOrDash(kpis.receita_estimada),         hint: "com base nos exames realizados" },
+    { key: "parceriaResultadoLiquido",    label: "Resultado líquido estimado", value: fmtBRLOrDash(kpis.resultado_liquido_estimado), hint: "receita − custos" },
+    { key: "parceriaOcupacaoAgenda",      label: "Ocupação da agenda",         value: fmtPctOrDash(kpis.ocupacao_agenda_pct),      hint: "realizado ÷ capacidade" },
+  ].map((c) => statCardHtml("parceria-stat-card", c)).join("");
+
+  // Gráfico: produção por agenda/data — sem dado real ainda, mostra estado vazio
+  // em vez de inventar números (a parceria ainda não iniciou o atendimento).
+  const producao = pp.producao_por_data || { labels: [], exames: [] };
+  const producaoCanvas = document.querySelector("#parceriaProducaoChart");
+  const producaoEmpty  = document.querySelector("#parceriaProducaoEmpty");
+  if (producao.labels?.length) {
+    if (producaoCanvas) producaoCanvas.hidden = false;
+    if (producaoEmpty) producaoEmpty.hidden = true;
+    createChart("parceriaProducao", "#parceriaProducaoChart", {
+      type: "bar",
+      data: {
+        labels: producao.labels,
+        datasets: [{
+          label: "Exames realizados",
+          data: producao.exames,
+          backgroundColor: "rgba(29, 183, 166, .85)",
+          borderRadius: 10,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.07)" }, border: { display: false } },
+          x: { grid: { display: false }, border: { display: false } },
+        },
+      },
+    });
+  } else {
+    destroyChart("parceriaProducao");
+    if (producaoCanvas) producaoCanvas.hidden = true;
+    if (producaoEmpty) producaoEmpty.hidden = false;
+  }
+
+  // Gráfico: receita x custos x resultado — mesmo raciocínio de estado vazio.
+  const fin = pp.financeiro_por_periodo || { labels: [], receita: [], custos: [], resultado: [] };
+  const finCanvas = document.querySelector("#parceriaFinanceiroChart");
+  const finEmpty  = document.querySelector("#parceriaFinanceiroEmpty");
+  if (fin.labels?.length) {
+    if (finCanvas) finCanvas.hidden = false;
+    if (finEmpty) finEmpty.hidden = true;
+    createChart("parceriaFinanceiro", "#parceriaFinanceiroChart", {
+      type: "bar",
+      data: {
+        labels: fin.labels,
+        datasets: [
+          { label: "Receita",   data: fin.receita,   backgroundColor: "rgba(29, 183, 166, .85)", borderRadius: 8, borderSkipped: false },
+          { label: "Custos",    data: fin.custos,    backgroundColor: "rgba(228, 92, 100, .8)",  borderRadius: 8, borderSkipped: false },
+          { label: "Resultado", data: fin.resultado, backgroundColor: "rgba(11, 31, 54, .85)",   borderRadius: 8, borderSkipped: false },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, padding: 14 } },
+        },
+        scales: {
+          y: { beginAtZero: true, grid: { color: "rgba(109,123,138,.07)" }, border: { display: false } },
+          x: { grid: { display: false }, border: { display: false } },
+        },
+      },
+    });
+  } else {
+    destroyChart("parceriaFinanceiro");
+    if (finCanvas) finCanvas.hidden = true;
+    if (finEmpty) finEmpty.hidden = false;
+  }
+
+  // Aba: Agenda — poucos registros e campos curtos, tabela compacta cabe bem aqui.
+  const agendaPane = document.querySelector("#parceria-agenda");
+  if (agendaPane) {
+    const agenda = Array.isArray(pp.agenda) ? pp.agenda : [];
+    const rows = agenda.map((a) => `
+      <tr>
+        <td>${escapeHtml(a.unidade || "—")}</td>
+        <td>${escapeHtml(a.dia_semana || "—")}</td>
+        <td>${escapeHtml(a.horario || "—")}</td>
+        <td><span class="badge ${slug(a.status || "planejada")}">${escapeHtml(a.status || "planejada")}</span></td>
+        <td>${a.capacidade_estimada_por_turno != null ? escapeHtml(String(a.capacidade_estimada_por_turno)) : "A definir"}</td>
+      </tr>
+    `).join("");
+    agendaPane.innerHTML = `
+      <article class="panel">
+        <div class="panel-header">
+          <h3>Agenda da parceria</h3>
+          <span>Dias, horário e capacidade por turno</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Unidade</th>
+                <th>Dia da semana</th>
+                <th>Horário</th>
+                <th>Status</th>
+                <th>Capacidade estimada/turno</th>
+              </tr>
+            </thead>
+            <tbody>${rows || `<tr><td colspan="5" class="crm-empty">Nenhuma agenda cadastrada ainda.</td></tr>`}</tbody>
+          </table>
+        </div>
+      </article>
+    `;
+  }
+
+  // Aba: Financeiro — blocos premium (label acima, valor abaixo), nunca
+  // R$ 0,00 quando o valor real ainda não foi definido com a Pastore.
+  const financeiroPane = document.querySelector("#parceria-financeiro");
+  if (financeiroPane) {
+    const fp = pp.financeiro_parametros || {};
+    const field = (label, value) => `
+      <div class="parceria-field">
+        <span class="parceria-field-label">${escapeHtml(label)}</span>
+        <p class="parceria-field-value">${value}</p>
+      </div>
+    `;
+    financeiroPane.innerHTML = `
+      <article class="panel">
+        <div class="panel-header">
+          <h3>Preço por exame</h3>
+          <span>Valores acordados com a Pastore</span>
+        </div>
+        <div class="parceria-fields">
+          ${field("Valor sem broncodilatador", fmtBRLOrDash(fp.valor_exame_sem_broncodilatador))}
+          ${field("Valor com broncodilatador", fmtBRLOrDash(fp.valor_exame_com_broncodilatador))}
+          ${field("Repasse/percentual da Pastore", fp.repasse_percentual_pastore != null ? `${fp.repasse_percentual_pastore}%` : "A definir")}
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-header">
+          <h3>Custos operacionais</h3>
+          <span>Por turno/exame, quando aplicável</span>
+        </div>
+        <div class="parceria-fields">
+          ${field("Custo de deslocamento", fmtBRLOrDash(fp.custo_deslocamento))}
+          ${field("Custo de insumos", fmtBRLOrDash(fp.custo_insumos))}
+          ${field("Custo profissional", fmtBRLOrDash(fp.custo_profissional))}
+          ${field("Outros custos", fmtBRLOrDash(fp.outros_custos))}
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-header">
+          <h3>Resultado da parceria</h3>
+          <span>Consolidado — receita, custo e margem</span>
+        </div>
+        <div class="parceria-fields">
+          ${field("Receita bruta", fmtBRLOrDash(fp.receita_bruta))}
+          ${field("Custo total", fmtBRLOrDash(fp.custo_total))}
+          ${field("Resultado líquido", fmtBRLOrDash(fp.resultado_liquido))}
+          ${field("Margem estimada", fp.margem_estimada_pct != null ? `${fp.margem_estimada_pct}%` : "A definir")}
+        </div>
+        ${fp.observacao ? `<p class="parceria-financeiro-note">${escapeHtml(fp.observacao)}</p>` : ""}
+      </article>
+    `;
+  }
+
+  // Aba: Pacientes — CRM da parceria, só agregados (nunca nome/telefone aqui).
+  const pacientesPane = document.querySelector("#parceria-pacientes");
+  if (pacientesPane) {
+    const pac = pp.pacientes_pastore || {};
+    const dist = pac.distribuicao_tipo_exame || {};
+    const total = pac.total_atendidos ?? 0;
+    const stats = [
+      { key: "parceriaPacientesTotal",       label: "Pacientes atendidos via Pastore", value: String(total), hint: "acumulado" },
+      { key: "parceriaPacientesFollowup",    label: "Follow-up pendente",              value: String(pac.followup_pendente ?? 0), hint: "precisam de contato" },
+      { key: "parceriaPacientesRecorrentes", label: "Pacientes recorrentes",           value: String(pac.recorrentes ?? 0), hint: "mais de um exame" },
+    ];
+    pacientesPane.innerHTML = `
+      <div class="crm-stats">
+        ${stats.map((item) => statCardHtml("crm-stat-card", item)).join("")}
+      </div>
+      <article class="panel">
+        <div class="panel-header">
+          <h3>Distribuição por tipo de exame</h3>
+          <span>Sem broncodilatador x com broncodilatador</span>
+        </div>
+        <div class="ci-table-inner">
+          <div class="ci-socio-stat"><span>Sem broncodilatador</span><strong>${dist.sem_broncodilatador ?? 0}</strong></div>
+          <div class="ci-socio-stat"><span>Com broncodilatador</span><strong>${dist.com_broncodilatador ?? 0}</strong></div>
+        </div>
+      </article>
+      ${total === 0 ? `<p class="crm-empty">Nenhum paciente atendido via Pastore ainda — os dados aparecerão aqui quando o atendimento começar.</p>` : ""}
+      <div class="crm-private-note">
+        <span>🔒</span>
+        <p>Nome, telefone e observações ficam apenas no arquivo privado local (<code>data-private/parcerias-pastore.local.json</code>) — gitignored, nunca enviado ao GitHub. Aqui só aparecem agregados seguros.</p>
+      </div>
+    `;
+  }
+
+  // Wiring das abas — classes próprias (.parceria-tab/.parceria-pane), isoladas
+  // de .ci-tab para não acoplar com a lógica de Custos & Investimentos.
+  document.querySelectorAll(".parceria-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".parceria-tab").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".parceria-pane").forEach((p) => p.setAttribute("hidden", ""));
+      btn.classList.add("active");
+      const pane = document.querySelector(`#parceria-${btn.dataset.parceriaTab}`);
+      if (pane) pane.removeAttribute("hidden");
+    });
+  });
 }
 
 function renderCustosInvestimentos() {
