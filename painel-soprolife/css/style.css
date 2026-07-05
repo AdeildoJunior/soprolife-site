@@ -1139,6 +1139,91 @@ td { font-size: .94rem; }
   margin: 8px 0 0;
 }
 
+.document-equip-note {
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.55;
+  max-width: 920px;
+  margin: 14px 0 0;
+}
+
+.document-equip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.document-equip-card {
+  min-height: unset;
+}
+
+.document-equip-brand {
+  color: var(--muted);
+  font-size: .85rem;
+  margin: 0 0 14px;
+}
+
+.document-equip-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+/* Chips de documento precisam quebrar o próprio texto — o .badge padrão é
+   nowrap, o que fazia frases longas ("Guia de recolhimento tributário
+   (ICMS-ST)") estourarem para fora do card e sobrepor o texto vizinho. */
+.document-equip-chips .badge {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+  max-width: 100%;
+  line-height: 1.3;
+}
+
+/* Corpo premium do card de equipamento: cada bloco (Validade/Calibração,
+   Próxima ação, Status) começa no mesmo eixo esquerdo — rótulo pequeno em
+   caixa alta acima, valor abaixo com line-height confortável para frases
+   longas. Evita o visual de tabela improvisada (label/valor lado a lado). */
+.document-equip-fields {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.document-equip-field {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 5px;
+  padding: 12px 14px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.document-equip-field-label {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+}
+
+.document-equip-field-value {
+  margin: 0;
+  font-size: .92rem;
+  line-height: 1.55;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .document-equip-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1180px) {
   .document-stats {
     grid-template-columns: repeat(2, 1fr);

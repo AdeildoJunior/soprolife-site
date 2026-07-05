@@ -9,6 +9,7 @@ const state = {
   charts: {},
   tarefas: null,
   documentos: [],
+  documentosEquipamentos: null,
   financeiro_summary: null,
   automacoes: null,
   runtimeStatus: null,
@@ -469,6 +470,18 @@ async function init() {
       state.custosInvestimentos = custosData;
     }
 
+    // Documentos → Equipamentos: só metadados seguros (equipamento, tipo de
+    // documento, data, status, validade, observação curta). Os arquivos
+    // originais (fotos/PDFs) ficam só em data-private/documentos/equipamentos/,
+    // nunca neste arquivo nem no painel.
+    const documentosEquipamentosData = await loadOptionalJson("./data/documentos-equipamentos-summary.json");
+    if (
+      documentosEquipamentosData?.source?.safeToDisplay === true &&
+      documentosEquipamentosData?.source?.containsPersonalData === false
+    ) {
+      state.documentosEquipamentos = documentosEquipamentosData;
+    }
+
     setPremiumChartDefaults();
     renderCards();
     renderDataFreshness();
@@ -482,6 +495,7 @@ async function init() {
     renderLeadsCharts();
     renderTaskBoard();
     renderDocuments();
+    renderDocumentosEquipamentos();
     renderFinance();
     renderCustosInvestimentos();
     renderAutomations();
@@ -592,6 +606,12 @@ const METRIC_INFO = {
   documentosStatusPositivo: "Documentos com status regular, ativo ou concedido, sem pendência aparente.",
   documentosComValidade: "Documentos que possuem data de validade e por isso precisam de monitoramento periódico.",
   documentosDadosPessoais: "Lembrete de que esta área é só para dados institucionais — nunca CPF, prontuário ou informação pessoal de paciente.",
+
+  // Documentos → Equipamentos
+  docsEquipTotal: "Equipamentos com documentação técnica arquivada na pasta privada local — o painel mostra só o resumo por equipamento, nunca os arquivos originais.",
+  docsEquipDocumentos: "Total de documentos técnicos identificados (manual, certificado de calibração, garantia etc.), somados entre todos os equipamentos.",
+  docsEquipComValidade: "Equipamentos cuja validade ou calibração ainda não pôde ser confirmada com segurança a partir dos documentos arquivados.",
+  docsEquipProximaAcao: "Equipamentos com uma próxima ação registrada (ex.: agendar calibração, confirmar validade).",
 
   // Financeiro
   financeSaldoConta: "Saldo operacional atual em conta, conforme o controle financeiro interno.",
@@ -4279,6 +4299,96 @@ function renderDocuments() {
         <p class="document-action">${doc.acao}</p>
       </article>
     `;
+  }).join("");
+}
+
+// Documentos → Equipamentos: resumo técnico-documental por equipamento (não
+// por foto/arquivo) — ver data/documentos-equipamentos-summary.json. Nunca
+// número de série, QR code, nota fiscal, CPF/CNPJ, chave Pix, código de
+// compra ou etiqueta de rastreio — nenhum desses campos existe nesse arquivo,
+// e esta função não faz nenhuma tentativa de ler/exibir os arquivos reais
+// (que ficam só em data-private/documentos/equipamentos/, fora do Git).
+// Rótulo curto para o chip + texto completo preservado em title/aria-label,
+// para não perder informação (só compacta o que fica visível no card).
+const DOCUMENT_EQUIP_SHORT_LABELS = {
+  "Nota fiscal de compra": "Nota fiscal",
+  "Nota fiscal de compra (mesma nota do espirômetro)": "Nota fiscal",
+  "Guia de recolhimento tributário (ICMS-ST)": "Guia ICMS-ST",
+  "Manual/instruções de uso": "Manual",
+  "Guia de instalação de software": "Instalação software",
+  "Certificado de calibração": "Certificado calibração",
+};
+
+function shortDocEquipLabel(doc) {
+  return DOCUMENT_EQUIP_SHORT_LABELS[doc] || doc;
+}
+
+function renderDocumentosEquipamentos() {
+  const statsContainer = document.querySelector("#documentEquipStats");
+  const grid = document.querySelector("#documentEquipGrid");
+  if (!statsContainer || !grid) return;
+
+  const equipamentos = Array.isArray(state.documentosEquipamentos?.equipamentos)
+    ? state.documentosEquipamentos.equipamentos
+    : [];
+
+  const isPendente = (valor) => {
+    const v = (valor || "").toLowerCase();
+    return !v || v.includes("a confirmar") || v.includes("não identificado");
+  };
+
+  const totalDocumentos = equipamentos.reduce(
+    (sum, eq) => sum + (Array.isArray(eq.documentos) ? eq.documentos.length : 0),
+    0
+  );
+
+  const stats = [
+    { key: "docsEquipTotal",        label: "Equipamentos documentados",         value: equipamentos.length, hint: "metadados seguros" },
+    { key: "docsEquipDocumentos",   label: "Documentos técnicos identificados", value: totalDocumentos, hint: "por equipamento" },
+    { key: "docsEquipComValidade",  label: "Validades a confirmar",             value: equipamentos.filter((eq) => isPendente(eq.validade_ou_calibracao)).length, hint: "revisão manual pendente" },
+    { key: "docsEquipProximaAcao",  label: "Próximas ações",                    value: equipamentos.filter((eq) => eq.proxima_acao).length, hint: "ações registradas" },
+  ];
+  statsContainer.innerHTML = stats.map((item) => statCardHtml("document-stat-card", item)).join("");
+
+  if (equipamentos.length === 0) {
+    grid.innerHTML = `<p class="crm-empty">Nenhum equipamento documentado ainda.</p>`;
+    return;
+  }
+
+  grid.innerHTML = equipamentos.map((eq) => {
+    const nome = eq.equipamento || "Não identificado";
+    const fabricante = eq.fabricante || "A confirmar";
+    const modelo = eq.modelo || "A confirmar";
+    const status = eq.status_documental || "Arquivado";
+    const validade = eq.validade_ou_calibracao || "A confirmar";
+    const proximaAcao = eq.proxima_acao || "—";
+    const documentos = Array.isArray(eq.documentos) && eq.documentos.length
+      ? eq.documentos.map((d) => {
+          const full = escapeHtml(d);
+          const short = escapeHtml(shortDocEquipLabel(d));
+          return `<span class="badge" title="${full}" tabindex="0" aria-label="${full}">${short}</span>`;
+        }).join("")
+      : `<span class="crm-empty">—</span>`;
+    return `
+    <article class="document-card document-equip-card">
+      <h3>${escapeHtml(nome)}</h3>
+      <p class="document-equip-brand">${escapeHtml(fabricante)} · ${escapeHtml(modelo)}</p>
+      <div class="document-equip-chips">${documentos}</div>
+      <div class="document-equip-fields">
+        <div class="document-equip-field">
+          <span class="document-equip-field-label">Validade/Calibração</span>
+          <p class="document-equip-field-value">${escapeHtml(validade)}</p>
+        </div>
+        <div class="document-equip-field">
+          <span class="document-equip-field-label">Próxima ação</span>
+          <p class="document-equip-field-value">${escapeHtml(proximaAcao)}</p>
+        </div>
+        <div class="document-equip-field">
+          <span class="document-equip-field-label">Status documental</span>
+          <p class="document-equip-field-value"><span class="badge ${slug(status)}">${escapeHtml(status)}</span></p>
+        </div>
+      </div>
+    </article>`;
   }).join("");
 }
 
