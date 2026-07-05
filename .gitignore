@@ -40,3 +40,6 @@ painel-soprolife/**/*.private.json
 painel-soprolife/**/*.secret.json
 .env
 .env.*
+
+# Claude Code local settings — never commit machine-specific commands or secrets
+.claude/settings.local.json
