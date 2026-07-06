@@ -4923,6 +4923,209 @@ function renderParceriaPastore() {
       if (pane) pane.removeAttribute("hidden");
     });
   });
+
+  const novoAtendimentoBtn = document.querySelector("#parceriaNovoAtendimentoBtn");
+  if (novoAtendimentoBtn) {
+    novoAtendimentoBtn.addEventListener("click", () => openNovoAtendimentoPastoreModal(novoAtendimentoBtn));
+  }
+}
+
+// ── Modal "Novo atendimento" (Parceria Pastore) ─────────────────────────────
+// Escreve direto na aba "Parceria Pastore - Atendimentos" via proxy local do
+// Command Center (nunca URL/token direto no browser — ver submitToCommandCenter
+// e painel-soprolife/scripts/command-center-local-server.py). Nome, WhatsApp e
+// observação são privados: só vão para a planilha/data-private, nunca para o
+// summary público (ver painel-soprolife/docs/parceria-pastore-planilha.md).
+let _pastoreAtendTrigger = null;
+
+const DIAS_SEMANA_PT = [
+  "Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira",
+  "Quinta-feira", "Sexta-feira", "Sábado",
+];
+
+function _pastoreDiaSemanaFromData(dataStr) {
+  if (!dataStr) return "";
+  const d = new Date(`${dataStr}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  return DIAS_SEMANA_PT[d.getDay()];
+}
+
+function closeNovoAtendimentoPastoreModal() {
+  const overlay = document.querySelector(".pastore-atend-overlay");
+  if (overlay) overlay.remove();
+  document.removeEventListener("keydown", _pastoreAtendKeydown);
+  if (_pastoreAtendTrigger) {
+    _pastoreAtendTrigger.focus();
+    _pastoreAtendTrigger = null;
+  }
+}
+
+function _pastoreAtendKeydown(event) {
+  if (event.key === "Escape") closeNovoAtendimentoPastoreModal();
+}
+
+function openNovoAtendimentoPastoreModal(triggerBtn) {
+  closeNovoAtendimentoPastoreModal();
+  _pastoreAtendTrigger = triggerBtn || null;
+
+  const cfg = state.ccConfigured;
+  const hoje = new Date().toISOString().slice(0, 10);
+  const diaSemanaHoje = _pastoreDiaSemanaFromData(hoje) || "Terça-feira";
+
+  const diasOpts = ["Terça-feira", "Sábado", "Segunda-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Domingo"];
+  const statusOpts = ["Realizado", "Agendado", "Cancelado", "Não compareceu", "Laudo enviado"];
+  const followupOpts = ["A definir", "pendente", "em dia", "concluído"];
+  const consentOpts = ["A definir", "Sim", "Não"];
+  const pagamentoOpts = ["Pix", "Cartão", "Dinheiro", "Faturado Pastore", "Outro"];
+
+  function f({ id, label, type = "text", options, required, value, placeholder, step }) {
+    const req = required ? " *" : "";
+    if (type === "select" && options) {
+      const opts = options.map((o) =>
+        `<option value="${escapeHtml(o)}"${o === value ? " selected" : ""}>${escapeHtml(o)}</option>`
+      ).join("");
+      return `<div class="cc-field-group">
+        <label class="cc-label" for="pa_${id}">${label}${req}</label>
+        <select id="pa_${id}" name="${id}" class="cc-select"${required ? " required" : ""}>${opts}</select>
+      </div>`;
+    }
+    if (type === "textarea") {
+      return `<div class="cc-field-group">
+        <label class="cc-label" for="pa_${id}">${label}${req}</label>
+        <textarea id="pa_${id}" name="${id}" class="cc-input"${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}></textarea>
+      </div>`;
+    }
+    const valAttr = value !== undefined && value !== null ? ` value="${escapeHtml(String(value))}"` : "";
+    const stepAttr = step ? ` step="${step}"` : "";
+    return `<div class="cc-field-group">
+      <label class="cc-label" for="pa_${id}">${label}${req}</label>
+      <input id="pa_${id}" name="${id}" type="${type}" class="cc-input"${required ? " required" : ""}${valAttr}${stepAttr}${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}>
+    </div>`;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.className = "pastore-atend-overlay";
+  overlay.innerHTML = `
+    <div class="pastore-atend-modal" role="dialog" aria-modal="true" aria-labelledby="pastoreAtendTitle">
+      <div class="pastore-atend-header">
+        <div>
+          <p class="eyebrow">Parceria Pastore</p>
+          <h4 id="pastoreAtendTitle">Novo atendimento</h4>
+        </div>
+        <button type="button" class="pastore-atend-close" aria-label="Fechar">✕</button>
+      </div>
+
+      <form class="pastore-atend-form" novalidate>
+        <div class="pastore-atend-section">
+          <p class="pastore-atend-section-title">Atendimento</p>
+          <div class="pastore-atend-grid">
+            ${f({ id: "data_atendimento", label: "Data", type: "date", required: true, value: hoje })}
+            ${f({ id: "unidade", label: "Unidade", value: "Pastore Ipanema" })}
+            ${f({ id: "dia_semana", label: "Dia da semana", type: "select", options: diasOpts, value: diaSemanaHoje })}
+            ${f({ id: "horario_inicio", label: "Horário início", type: "time", value: "08:00" })}
+            ${f({ id: "horario_fim", label: "Horário fim", type: "time", value: "12:00" })}
+            ${f({ id: "origem", label: "Origem", value: "Pastore" })}
+          </div>
+        </div>
+
+        <div class="pastore-atend-section">
+          <p class="pastore-atend-section-title">Paciente</p>
+          <div class="pastore-atend-grid">
+            ${f({ id: "paciente_nome", label: "Nome do paciente", required: true })}
+            ${f({ id: "paciente_whatsapp", label: "WhatsApp", type: "tel", placeholder: "(21) 99999-9999" })}
+            ${f({ id: "tipo_exame", label: "Tipo de exame", required: true, value: "Espirometria" })}
+            ${f({ id: "broncodilatador", label: "Broncodilatador", type: "select", options: ["Não", "Sim"], value: "Não" })}
+          </div>
+        </div>
+
+        <div class="pastore-atend-section">
+          <p class="pastore-atend-section-title">Financeiro</p>
+          <div class="pastore-atend-grid-compact">
+            ${f({ id: "valor_cobrado", label: "Valor cobrado", type: "number", step: "0.01" })}
+            ${f({ id: "forma_pagamento", label: "Forma pagamento", type: "select", options: pagamentoOpts, value: "" })}
+            ${f({ id: "recebido_por", label: "Recebido por", value: "SoproLife" })}
+            ${f({ id: "repasse_pastore", label: "Repasse Pastore", type: "number", step: "0.01", value: 0 })}
+            ${f({ id: "custo_insumo", label: "Custo insumo", type: "number", step: "0.01" })}
+            ${f({ id: "custo_deslocamento", label: "Custo desloc.", type: "number", step: "0.01", value: 0 })}
+            ${f({ id: "custo_profissional", label: "Custo profissional", type: "number", step: "0.01", value: 0 })}
+            ${f({ id: "outros_custos", label: "Outros custos", type: "number", step: "0.01", value: 0 })}
+          </div>
+        </div>
+
+        <div class="pastore-atend-section">
+          <p class="pastore-atend-section-title">Follow-up</p>
+          <div class="pastore-atend-grid">
+            ${f({ id: "status", label: "Status", type: "select", options: statusOpts, value: "Realizado" })}
+            ${f({ id: "followup_status", label: "Follow-up", type: "select", options: followupOpts, value: "A definir" })}
+            ${f({ id: "consentimento_contato_futuro", label: "Consentimento contato futuro", type: "select", options: consentOpts, value: "A definir" })}
+          </div>
+          <div class="pastore-atend-grid" style="margin-top:.8rem">
+            ${f({ id: "observacao_privada_minima", label: "Observação privada (mínima)", type: "textarea", placeholder: "Nunca CPF, laudo ou diagnóstico" })}
+          </div>
+        </div>
+
+        <div class="cc-result" hidden></div>
+
+        <div class="pastore-atend-actions">
+          <button type="button" class="pastore-atend-cancel">Cancelar</button>
+          <button type="submit" class="pastore-atend-save"${!cfg ? " disabled title=\"Configure o proxy do Command Center primeiro.\"" : ""}>Salvar atendimento</button>
+        </div>
+      </form>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.addEventListener("keydown", _pastoreAtendKeydown);
+
+  const form = overlay.querySelector(".pastore-atend-form");
+  const result = overlay.querySelector(".cc-result");
+  const saveBtn = overlay.querySelector(".pastore-atend-save");
+  const cancelBtn = overlay.querySelector(".pastore-atend-cancel");
+
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeNovoAtendimentoPastoreModal();
+  });
+  overlay.querySelector(".pastore-atend-close").addEventListener("click", closeNovoAtendimentoPastoreModal);
+  cancelBtn.addEventListener("click", closeNovoAtendimentoPastoreModal);
+
+  // Auto-preenche dia da semana quando a data muda — campo continua editável
+  // manualmente (útil se a Pastore abrir uma exceção fora da agenda padrão).
+  const dataInput = overlay.querySelector("#pa_data_atendimento");
+  const diaSelect = overlay.querySelector("#pa_dia_semana");
+  dataInput.addEventListener("change", () => {
+    const dia = _pastoreDiaSemanaFromData(dataInput.value);
+    if (dia) diaSelect.value = dia;
+  });
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!cfg) return;
+
+    const formData = {};
+    new FormData(form).forEach((val, key) => { formData[key] = val; });
+
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    saveBtn.textContent = "Salvando…";
+    result.hidden = true;
+
+    try {
+      const resp = await submitToCommandCenter("registrarAtendimentoPastore", formData);
+      result.className = "cc-result cc-result-ok";
+      result.textContent = (resp.message || "Atendimento Pastore registrado") +
+        " — rode a sincronização (update-local-data.sh) e atualize a página para ver no resumo.";
+      result.hidden = false;
+      setTimeout(closeNovoAtendimentoPastoreModal, 2600);
+    } catch (err) {
+      result.className = "cc-result cc-result-err";
+      result.textContent = "Erro: " + err.message;
+      result.hidden = false;
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
+      saveBtn.textContent = "Salvar atendimento";
+    }
+  });
+
+  overlay.querySelector("#pa_paciente_nome").focus();
 }
 
 function renderCustosInvestimentos() {

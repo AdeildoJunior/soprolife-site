@@ -35,7 +35,26 @@ var _SHEETS = {
   CRM_CONTATOS_B2B:  "CRM Contatos B2B",
   FOLLOWUP_WA:       "Follow-up WhatsApp",
   LOG:               "Log Centro Comando",
+  // Parceria Pastore — ver painel-soprolife/docs/parceria-pastore-planilha.md
+  PARCERIA_PASTORE_ATENDIMENTOS: "Parceria Pastore - Atendimentos",
 };
+
+// Cabeçalho canônico da aba "Parceria Pastore - Atendimentos" — mesma ordem
+// de painel-soprolife/templates/parceria-pastore-atendimentos-template.csv.
+// Colunas S/T/U (receita_bruta, custo_total, resultado_liquido) são
+// calculadas por FÓRMULA na planilha real, nunca escritas por esta ação —
+// ver _registrarAtendimentoPastore e _ensureFormulaColumns.
+var _PARCERIA_PASTORE_ATENDIMENTOS_CABECALHO = [
+  "data_atendimento", "unidade", "dia_semana", "horario_inicio", "horario_fim",
+  "origem", "paciente_nome", "paciente_whatsapp", "tipo_exame", "broncodilatador",
+  "valor_cobrado", "forma_pagamento", "recebido_por", "repasse_pastore",
+  "custo_insumo", "custo_deslocamento", "custo_profissional", "outros_custos",
+  "receita_bruta", "custo_total", "resultado_liquido", "status", "followup_status",
+  "consentimento_contato_futuro", "observacao_privada_minima",
+];
+
+// S=19, T=20, U=21 — ver cabeçalho acima.
+var _PARCERIA_PASTORE_FORMULA_COLS = [19, 20, 21];
 
 // Etapas que disparam a conversão automática do lead para os CRMs de
 // atendimento (mesma lista usada pelo gatilho onEdit em converter-lead-em-paciente.gs).
@@ -203,6 +222,7 @@ function doPost(e) {
       case "vincularLeadAClinica":        return _vincularLeadAClinica(data);
       case "dedupLeadsConvertidos":       return _dedupLeadsConvertidos(data);
       case "organizarAbasCommandCenter":  return _organizarAbasCommandCenter(data);
+      case "registrarAtendimentoPastore": return _registrarAtendimentoPastore(data);
       default:
         return _err("Ação desconhecida: " + action, 400);
     }
@@ -438,6 +458,81 @@ function _registrarInteracaoPaciente(data) {
 
   _logEntry({ acao: "registrarInteracaoPaciente", status: "OK", aba: _SHEETS.FOLLOWUP_WA, id: id, resumo: "Follow-up registrado." });
   return _ok({ id: id, message: "Interação registrada." });
+}
+
+/**
+ * Registra um novo atendimento da Parceria Pastore direto na aba
+ * "Parceria Pastore - Atendimentos", a partir do modal "Novo atendimento"
+ * do painel (Parcerias → Pastore). Ver painel-soprolife/docs/parceria-pastore-planilha.md
+ * para o modelo completo de campos e privacidade.
+ *
+ * Nome, WhatsApp e observação são privados por definição (nunca saem desta
+ * planilha nem do arquivo data-private/parcerias-pastore.local.json — o
+ * summary público do painel só lê agregados, nunca estes campos).
+ *
+ * receita_bruta / custo_total / resultado_liquido (colunas S/T/U) NÃO são
+ * escritos aqui — a planilha real já calcula essas três colunas por fórmula
+ * por linha (ver _ensureFormulaColumns). Deixar em branco e copiar a fórmula
+ * da linha anterior é mais seguro do que tentar replicar o cálculo aqui e
+ * divergir da fórmula real.
+ */
+function _registrarAtendimentoPastore(data) {
+  _required(data, ["data_atendimento", "paciente_nome", "tipo_exame"]);
+
+  var sheet = _getOrCreateSheet(_SHEETS.PARCERIA_PASTORE_ATENDIMENTOS);
+  _ensureSheetHeader(sheet, _PARCERIA_PASTORE_ATENDIMENTOS_CABECALHO);
+
+  var row = _buildRow(sheet, {
+    data_atendimento:             data.data_atendimento             || "",
+    unidade:                      data.unidade                      || "Pastore Ipanema",
+    dia_semana:                   data.dia_semana                   || "",
+    horario_inicio:               data.horario_inicio               || "",
+    horario_fim:                  data.horario_fim                  || "",
+    origem:                       data.origem                       || "Pastore",
+    paciente_nome:                data.paciente_nome                || "",
+    paciente_whatsapp:            data.paciente_whatsapp            || "",
+    tipo_exame:                   data.tipo_exame                   || "",
+    broncodilatador:              data.broncodilatador              || "Não",
+    valor_cobrado:                data.valor_cobrado                || "",
+    forma_pagamento:              data.forma_pagamento              || "",
+    recebido_por:                 data.recebido_por                 || "SoproLife",
+    repasse_pastore:              data.repasse_pastore !== undefined && data.repasse_pastore !== "" ? data.repasse_pastore : 0,
+    custo_insumo:                 data.custo_insumo                 || "",
+    custo_deslocamento:           data.custo_deslocamento !== undefined && data.custo_deslocamento !== "" ? data.custo_deslocamento : 0,
+    custo_profissional:           data.custo_profissional !== undefined && data.custo_profissional !== "" ? data.custo_profissional : 0,
+    outros_custos:                data.outros_custos !== undefined && data.outros_custos !== "" ? data.outros_custos : 0,
+    status:                       data.status                       || "Realizado",
+    followup_status:              data.followup_status              || "A definir",
+    consentimento_contato_futuro: data.consentimento_contato_futuro || "A definir",
+    // receita_bruta / custo_total / resultado_liquido: propositalmente ausentes
+    // (ver docstring acima) — _buildRow grava "" nessas colunas, e
+    // _ensureFormulaColumns substitui pela fórmula copiada da linha anterior.
+  });
+
+  // _buildRow() nunca escreve observacao_privada_minima (proteção padrão
+  // aplicada a todas as abas). Aqui é intencional e seguro: o campo é privado
+  // por definição nesta aba específica (nunca sai da planilha/data-private) e
+  // o próprio formulário do painel pede essa observação.
+  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0]
+    .map(function(h) { return String(h).trim(); });
+  var obsIdx = headers.indexOf("observacao_privada_minima");
+  if (obsIdx >= 0 && data.observacao_privada_minima) {
+    row[obsIdx] = String(data.observacao_privada_minima);
+  }
+
+  var newRow = _appendRowSemValidacao(sheet, row);
+  _ensureFormulaColumns(sheet, newRow, _PARCERIA_PASTORE_FORMULA_COLS);
+
+  _logEntry({
+    acao:   "registrarAtendimentoPastore",
+    status: "OK",
+    aba:    _SHEETS.PARCERIA_PASTORE_ATENDIMENTOS,
+    id:     "linha " + newRow,
+    resumo: "Atendimento Pastore registrado (" + (data.tipo_exame || "") + ", status " + (data.status || "Realizado") + ").",
+    // nome, whatsapp e observação NUNCA entram no log — mesma regra do resto do arquivo
+  });
+
+  return _ok({ row: newRow, message: "Atendimento Pastore registrado com sucesso." });
 }
 
 /**
@@ -1670,6 +1765,27 @@ function _buildRow(sheet, fieldMap) {
   });
 }
 
+/**
+ * Garante que colunas calculadas por fórmula (ex.: receita_bruta/custo_total/
+ * resultado_liquido da aba Parceria Pastore - Atendimentos) continuem com
+ * fórmula na linha recém-inserida. appendRow/setValues NUNCA herda fórmula da
+ * linha de cima automaticamente — por isso copiamos explicitamente a fórmula
+ * da linha anterior (copyTo ajusta as referências relativas sozinho). Se a
+ * linha anterior também não tiver fórmula (ex.: primeira linha de dados),
+ * não faz nada — não inventa fórmula do zero.
+ */
+function _ensureFormulaColumns(sheet, newRow, cols) {
+  if (newRow < 3) return; // linha 2 é a primeira de dados; não há linha anterior pra copiar
+  cols.forEach(function(col) {
+    var newCell = sheet.getRange(newRow, col);
+    if (newCell.getFormula()) return; // já tem fórmula própria — não sobrescreve
+    var aboveCell = sheet.getRange(newRow - 1, col);
+    if (aboveCell.getFormula()) {
+      aboveCell.copyTo(newCell, SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
+    }
+  });
+}
+
 function _nowBr() {
   return Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm");
 }
@@ -1753,6 +1869,51 @@ function _testCreatePaciente() {
           origem:                 "Teste manual",
           consentimento_whatsapp: "Sim",
           responsavel:            "Adeildo",
+        },
+      }),
+    },
+  };
+  Logger.log(doPost(mock).getContent());
+}
+
+/**
+ * Teste manual de _registrarAtendimentoPastore — executar no editor do Apps
+ * Script (nunca via HTTP). Usa "TESTE - APAGAR" no nome do paciente, seguindo
+ * a regra de teste documentada em soprolife-sheets-sync: rodar o fluxo
+ * completo com linha fictícia evidente e remover manualmente depois de
+ * confirmar no painel.
+ */
+function _testRegistrarAtendimentoPastore() {
+  var token = PropertiesService.getScriptProperties().getProperty("API_TOKEN");
+  if (!token) throw new Error("API_TOKEN não configurado. Defina em Arquivo → Propriedades do projeto → Propriedades do script.");
+  var mock = {
+    postData: {
+      contents: JSON.stringify({
+        token:  token,
+        action: "registrarAtendimentoPastore",
+        data: {
+          data_atendimento: Utilities.formatDate(new Date(), "America/Sao_Paulo", "yyyy-MM-dd"),
+          unidade:          "Pastore Ipanema",
+          dia_semana:       "Terça-feira",
+          horario_inicio:   "08:00",
+          horario_fim:      "12:00",
+          origem:           "Pastore",
+          paciente_nome:    "TESTE - APAGAR",
+          paciente_whatsapp: "",
+          tipo_exame:       "Espirometria",
+          broncodilatador:  "Não",
+          valor_cobrado:    "150",
+          forma_pagamento:  "Pix",
+          recebido_por:     "SoproLife",
+          repasse_pastore:  "0",
+          custo_insumo:     "10",
+          custo_deslocamento: "0",
+          custo_profissional: "0",
+          outros_custos:      "0",
+          status:               "Realizado",
+          followup_status:      "A definir",
+          consentimento_contato_futuro: "A definir",
+          observacao_privada_minima: "Linha de teste — apagar após validar.",
         },
       }),
     },

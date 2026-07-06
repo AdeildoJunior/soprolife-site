@@ -6274,3 +6274,170 @@ th {
 @media (max-width: 620px) {
   .parceria-stats { grid-template-columns: 1fr; }
 }
+
+/* Linha de ferramentas: abas à esquerda, ação discreta à direita — mesma
+   linguagem visual do resto do painel, sem duplicar margem de .parceria-tabs. */
+.parceria-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.parceria-btn-novo-atendimento {
+  background: #fff;
+  border: 1.5px solid var(--teal);
+  color: var(--teal-dark);
+  border-radius: 10px;
+  padding: .5rem 1.1rem;
+  font-size: .84rem;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+  margin-bottom: 14px;
+}
+.parceria-btn-novo-atendimento:hover { background: var(--teal); color: #fff; }
+
+/* ── Modal "Novo atendimento" (Parceria Pastore) ──────────────────────────
+   Mesma linguagem visual dos modais existentes (.lead-stage-*) e dos campos
+   de formulário do Command Center (.cc-label/.cc-input/.cc-select/.cc-result),
+   em classes próprias para não acoplar com outras telas. */
+.pastore-atend-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 18, 33, .52);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 10000;
+  animation: leadStageFadeIn .15s ease;
+}
+
+.pastore-atend-modal {
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(8,18,33,.35);
+  width: 100%;
+  max-width: 720px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 22px 26px 26px;
+}
+
+.pastore-atend-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.pastore-atend-header h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -.02em;
+}
+
+.pastore-atend-header .eyebrow { margin: 0 0 4px; }
+
+.pastore-atend-close {
+  border: none;
+  background: var(--line-light, #eef2f7);
+  color: var(--muted);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: .85rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .12s, color .12s;
+}
+.pastore-atend-close:hover { background: #e2e8f0; color: var(--navy); }
+
+.pastore-atend-section {
+  margin-bottom: 18px;
+}
+
+.pastore-atend-section-title {
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--teal-dark);
+  margin: 0 0 10px;
+}
+
+.pastore-atend-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .8rem 1.2rem;
+}
+
+/* Bloco financeiro: mais campos, curtos — grid compacto de 4 colunas em vez de 2 */
+.pastore-atend-grid-compact {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: .7rem .9rem;
+}
+
+.pastore-atend-modal .cc-field-group { min-width: 0; }
+.pastore-atend-modal .cc-label { margin-top: 0; }
+.pastore-atend-modal textarea.cc-input {
+  resize: vertical;
+  min-height: 56px;
+  font-family: var(--font-sans);
+}
+
+.pastore-atend-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.pastore-atend-cancel {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: .84rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background .12s;
+}
+.pastore-atend-cancel:hover:not(:disabled) { background: var(--line-light, #f4f7fa); }
+.pastore-atend-cancel:disabled { opacity: .5; cursor: not-allowed; }
+
+.pastore-atend-save {
+  border: none;
+  background: var(--teal);
+  color: #fff;
+  border-radius: 10px;
+  padding: 9px 20px;
+  font-size: .84rem;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background .12s;
+}
+.pastore-atend-save:hover:not(:disabled) { background: var(--teal-dark); }
+.pastore-atend-save:disabled { opacity: .55; cursor: not-allowed; }
+
+.pastore-atend-modal .cc-result { margin-top: 14px; }
+
+@media (max-width: 640px) {
+  .pastore-atend-grid,
+  .pastore-atend-grid-compact {
+    grid-template-columns: 1fr;
+  }
+}
