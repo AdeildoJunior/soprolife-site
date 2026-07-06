@@ -139,3 +139,33 @@ Para summaries servidos pelo painel:
 
 Regra de teste:
 usar linha fictícia evidente, como `TESTE - APAGAR`, validar o fluxo completo e remover a linha após confirmar no painel.
+
+## Aprendizado — fórmulas Google Sheets, Apps Script e summaries servidos
+
+Ao criar fórmulas em Google Sheets via Apps Script, não presumir que a localidade visual da planilha define o idioma das funções.
+
+Caso apareça:
+- `#ERROR!`
+- `#NAME?`
+- `Função desconhecida: SE`
+
+Testar combinações entre:
+- funções em inglês: `IF`, `SUM`, `COUNTA`;
+- separador `;` em vez de `,`.
+
+Na planilha SoproLife/Pastore, a combinação validada foi:
+- funções em inglês;
+- separador `;`.
+
+Exemplos validados:
+- `=IF(K2="";"";K2)`
+- `=IF(COUNTA(N2:R2)=0;"";SUM(N2:R2))`
+- `=IF(S2="";"";S2-IF(T2="";0;T2))`
+
+Para summaries servidos pelo painel:
+- arquivos privados em `data-private/` devem ficar protegidos, preferencialmente `600`;
+- summaries seguros em `painel-soprolife/data/*.local.json`, quando precisam ser lidos pelo navegador, devem estar legíveis pelo serviço web, normalmente `644`;
+- se a VPS gera o JSON certo mas o navegador não atualiza, testar o JSON por HTTP com `curl`.
+
+Regra de teste:
+usar linha fictícia evidente, como `TESTE - APAGAR`, validar o fluxo completo Planilha → VPS → JSON seguro → Painel, e remover a linha após confirmar.
