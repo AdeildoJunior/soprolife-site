@@ -11,6 +11,7 @@ _SHEETS_CONFIG="$HOME/.config/soprolife/painel/google-sheets.local.json"
 _ADC_CONFIG="$HOME/.config/gcloud/application_default_credentials.json"
 _SHEETS_SCRIPT="painel-soprolife/scripts/read-sheets-summary-adc.py"
 _CRM_SCRIPT="painel-soprolife/scripts/read-crm-clinicas-adc.py"
+_PARCERIA_PASTORE_SCRIPT="painel-soprolife/scripts/read-parcerias-pastore-adc.py"
 _CSV_PATH="${SOPROLIFE_SUMMARY_CSV:-$HOME/.config/soprolife/painel/resumo-dashboard.csv}"
 
 # Pré-requisitos do conector Marketing & SEO
@@ -38,11 +39,11 @@ fi
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
-echo "1/11 - Atualizando status seguro da fonte Google Sheets..."
+echo "1/12 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
 
 echo
-echo "2/11 - Atualizando resumo seguro..."
+echo "2/12 - Atualizando resumo seguro..."
 
 if [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC"
@@ -83,7 +84,7 @@ else
 fi
 
 echo
-echo "3/11 - Atualizando CRM Clínicas seguro..."
+echo "3/12 - Atualizando CRM Clínicas seguro..."
 
 if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
   echo "Fonte: Google Sheets via ADC (aba CRM Clinicas)"
@@ -103,7 +104,7 @@ else
 fi
 
 echo
-echo "4/11 - Atualizando follow-up B2B de clínicas..."
+echo "4/12 - Atualizando follow-up B2B de clínicas..."
 
 _FOLLOWUP_CLINICAS_SCRIPT="painel-soprolife/scripts/generate-followup-clinicas.py"
 
@@ -131,7 +132,7 @@ else
 fi
 
 echo
-echo "5/11 - Atualizando Marketing & SEO..."
+echo "5/12 - Atualizando Marketing & SEO..."
 
 if [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "Marketing & SEO não configurado — usando dados demonstrativos."
@@ -155,7 +156,7 @@ else
 fi
 
 echo
-echo "6/11 - Atualizando Leads..."
+echo "6/12 - Atualizando Leads..."
 
 _LEADS_SCRIPT="painel-soprolife/scripts/read-leads-sheets.py"
 
@@ -182,7 +183,7 @@ else
 fi
 
 echo
-echo "7/11 - Atualizando CRM Contatos B2B..."
+echo "7/12 - Atualizando CRM Contatos B2B..."
 
 _CONTATOS_B2B_SCRIPT="painel-soprolife/scripts/read-crm-contatos-b2b-adc.py"
 
@@ -210,7 +211,7 @@ else
 fi
 
 echo
-echo "8/11 - Atualizando follow-up de pacientes..."
+echo "8/12 - Atualizando follow-up de pacientes..."
 
 _FOLLOWUP_SCRIPT="painel-soprolife/scripts/generate-followup-pacientes.py"
 
@@ -235,7 +236,7 @@ else
 fi
 
 echo
-echo "9/11 - Atualizando timeline de últimos lançamentos..."
+echo "9/12 - Atualizando timeline de últimos lançamentos..."
 
 _LANCAMENTOS_SCRIPT="painel-soprolife/scripts/generate-ultimos-lancamentos.py"
 
@@ -253,11 +254,37 @@ else
 fi
 
 echo
-echo "10/11 - Verificando segurança..."
+echo "10/12 - Atualizando Parceria Pastore..."
+
+if [ -f "$_PARCERIA_PASTORE_SCRIPT" ] && [ "$_sheets_available" = true ]; then
+  echo "Fonte: Google Sheets via ADC (Atendimentos + Custos + Config)"
+  echo
+  if ! "$_VENV_PYTHON" "$_PARCERIA_PASTORE_SCRIPT" --write 2>&1; then
+    echo
+    echo "AVISO: falha ao ler as abas da Parceria Pastore."
+    echo "  Painel usará o fallback commitável (data/parcerias-pastore-summary.json)."
+    echo "  Diagnóstico: $_VENV_PYTHON $_PARCERIA_PASTORE_SCRIPT --show-structure"
+    echo "  (os demais passos continuarão normalmente)"
+  else
+    echo "Parceria Pastore atualizada."
+    echo "  Privado:  painel-soprolife/data-private/parcerias-pastore.local.json"
+    echo "  Resumo:   painel-soprolife/data/parcerias-pastore-summary.local.json"
+  fi
+else
+  if [ ! -f "$_PARCERIA_PASTORE_SCRIPT" ]; then
+    echo "Script não encontrado — painel usará o fallback commitável."
+  else
+    echo "Google Sheets ADC não disponível — painel usará o fallback commitável"
+    echo "(data/parcerias-pastore-summary.json)."
+  fi
+fi
+
+echo
+echo "11/12 - Verificando segurança..."
 painel-soprolife/scripts/check-access.sh
 
 echo
-echo "11/11 - Concluído."
+echo "12/12 - Concluído."
 echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"

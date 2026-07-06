@@ -1402,6 +1402,142 @@ PY
   fi
 }
 
+validate_parcerias_pastore() {
+  echo "Verificando Parceria Pastore..."
+
+  local private_file="painel-soprolife/data-private/parcerias-pastore.local.json"
+  local summary_file="painel-soprolife/data/parcerias-pastore-summary.local.json"
+  local fallback_file="painel-soprolife/data/parcerias-pastore-summary.json"
+
+  # O arquivo privado PODE conter nome/WhatsApp de paciente (é o objetivo dele) —
+  # só precisa estar gitignored e nunca ter CPF, token ou dado bancário.
+  if [ -f "$private_file" ]; then
+    if git check-ignore -q "$private_file" 2>/dev/null; then
+      echo "  OK (gitignored): $private_file"
+    else
+      echo "  ERRO CRÍTICO: $private_file NÃO está gitignored!"
+      echo "  Execute: git rm --cached \"$private_file\" antes de qualquer commit."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data-private/parcerias-pastore.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler JSON privado: {exc}")
+    sys.exit(1)
+
+# Nome e WhatsApp são esperados aqui — só bloqueia o que nunca pode existir
+# em nenhum arquivo do painel, nem no privado.
+BLOCKED = {
+    "cpf", "rg", "senha", "token", "access_token", "refresh_token",
+    "private_key", "client_secret", "numero_conta", "agencia", "banco",
+    "chave_pix", "numero_cartao", "cvv", "login",
+}
+_CPF_RE = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+
+text = json.dumps(data, ensure_ascii=False).lower()
+errors = 0
+
+for blocked in BLOCKED:
+    if f'"{blocked}"' in text or f': "{blocked}"' in text:
+        print(f"  ERRO: chave proibida '{blocked}' detectada.")
+        errors += 1
+
+if _CPF_RE.search(text):
+    print("  ERRO: padrão de CPF detectado.")
+    errors += 1
+
+atend = data.get("atendimentos", [])
+custos = data.get("custos", [])
+config = data.get("config", [])
+if errors == 0:
+    print(f"  OK: {len(atend)} atendimento(s), {len(custos)} custo(s), {len(config)} linha(s) de config. Nenhum dado proibido.")
+else:
+    print(f"  {errors} erro(s) encontrado(s).")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $private_file não existe ainda."
+    echo "        Gere com: python3 painel-soprolife/scripts/read-parcerias-pastore-adc.py --write"
+  fi
+
+  # O resumo NUNCA pode ter nome, telefone, WhatsApp, CPF, e-mail ou observação.
+  if [ -f "$summary_file" ]; then
+    if git check-ignore -q "$summary_file" 2>/dev/null; then
+      echo "  OK (gitignored): $summary_file"
+    else
+      echo "  ATENÇÃO: $summary_file não está gitignored — verifique se não contém dados sensíveis."
+    fi
+
+    python3 - <<'PY'
+from pathlib import Path
+import json, re, sys
+
+path = Path("painel-soprolife/data/parcerias-pastore-summary.local.json")
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler summary da Parceria Pastore: {exc}")
+    sys.exit(1)
+
+source = data.get("source", {})
+if source.get("safeToDisplay") is not True:
+    print("  ERRO: parcerias-pastore-summary não marcado como safeToDisplay=true.")
+    sys.exit(1)
+if source.get("containsPersonalData") is not False:
+    print("  ERRO: parcerias-pastore-summary pode conter dado pessoal.")
+    sys.exit(1)
+
+FORBIDDEN = [
+    "paciente_nome", "nome_paciente", "paciente_whatsapp", "whatsapp",
+    "telefone", "celular", "cpf", "email", "e-mail",
+    "observacao_privada_minima", "observação privada",
+    "consentimento_contato_futuro", "forma_pagamento",
+    "access_token", "refresh_token", "private_key", "client_secret", "senha",
+]
+_CPF_RE   = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+_FONE_RE  = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
+_EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+")
+
+text = json.dumps(data, ensure_ascii=False).lower()
+errors = 0
+for f in FORBIDDEN:
+    if f in text:
+        print(f"  ERRO: termo proibido '{f}' em parcerias-pastore-summary.")
+        errors += 1
+if _CPF_RE.search(text):
+    print("  ERRO: padrão de CPF em parcerias-pastore-summary.")
+    errors += 1
+if _FONE_RE.search(text):
+    print("  ERRO: padrão de telefone em parcerias-pastore-summary.")
+    errors += 1
+if _EMAIL_RE.search(text):
+    print("  ERRO: padrão de e-mail em parcerias-pastore-summary.")
+    errors += 1
+
+if errors == 0:
+    exames = data.get("kpis", {}).get("exames_realizados", 0)
+    receita = data.get("kpis", {}).get("receita_estimada")
+    ocupacao = data.get("kpis", {}).get("ocupacao_agenda_pct")
+    print(f"  OK: parcerias-pastore-summary seguro — exames_realizados={exames}, receita_estimada={receita}, ocupacao_agenda_pct={ocupacao}.")
+else:
+    print(f"  {errors} erro(s) encontrado(s).")
+    sys.exit(1)
+PY
+  else
+    echo "  INFO: $summary_file não existe ainda (dado real ainda não sincronizado)."
+    if [ -f "$fallback_file" ]; then
+      echo "  OK: painel usará o fallback commitável ($fallback_file)."
+    else
+      echo "  ATENÇÃO: fallback commitável ($fallback_file) também não existe."
+    fi
+  fi
+}
+
 main() {
   check_ports
   check_extra_network_services
@@ -1415,6 +1551,7 @@ main() {
   validate_followup_clinicas
   validate_financeiro
   validate_custos_investimentos
+  validate_parcerias_pastore
   validate_command_center_config
   validate_command_center_proxy
   validate_marketing_seo
