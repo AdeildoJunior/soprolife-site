@@ -68,7 +68,7 @@ echo "### [6] usuario soprolife"
 id soprolife 2>/dev/null || echo "(usuario soprolife nao existe)"
 getent passwd soprolife 2>/dev/null || true
 passwd -S soprolife 2>/dev/null || echo "(passwd -S indisponivel ou usuario ausente)"
-ls -la /home/soprolife/.ssh/ 2>/dev/null || echo "(sem /home/soprolife/.ssh)"
+ls -la /var/lib/soprolife/.ssh/ 2>/dev/null || echo "(sem /var/lib/soprolife/.ssh)"
 
 echo "### [7] repositorio"
 git -C "$R" status --short 2>/dev/null || echo "(repo nao encontrado em $R)"
@@ -86,7 +86,7 @@ ls -l  /root/.config/gcloud/application_default_credentials.json 2>/dev/null || 
 
 echo "### [10] venvs"
 ls -ld /root/.local/share/soprolife/venvs/google-sheets 2>/dev/null || echo "(venv do root ausente)"
-ls -ld /home/soprolife/.local/share/soprolife/venvs/google-sheets 2>/dev/null || echo "(venv do soprolife ausente)"
+ls -ld /var/lib/soprolife/.local/share/soprolife/venvs/google-sheets 2>/dev/null || echo "(venv do soprolife ausente)"
 
 echo "### [11] http painel (localhost da VPS)"
 curl -s -o /dev/null -w "http_code=%{http_code}" --max-time 8 http://127.0.0.1:8765/painel-soprolife/ 2>/dev/null || echo "http_code=000"
@@ -136,7 +136,7 @@ else
   if printf '%s' "$SAFE_OUTPUT" | grep -qE '^soprolife NP '; then
     note "FAIL" "senha do usuario NAO travada (NP) — travar antes de prosseguir"; FAILS=$((FAILS+1))
   fi
-  if ! printf '%s' "$SAFE_OUTPUT" | grep -q "(sem /home/soprolife/.ssh)"; then
+  if ! printf '%s' "$SAFE_OUTPUT" | grep -q "(sem /var/lib/soprolife/.ssh)"; then
     note "WARN" "existe ~soprolife/.ssh — revisar authorized_keys manualmente"; WARNS=$((WARNS+1))
   fi
 fi

@@ -67,11 +67,11 @@ decisão caso a caso na revisão.
 
 ## Como anexar ao GPT
 
-O arquivo `.txt` gerado já é seguro por construção (sanitizado). Anexar
-ao pacote de revisão padrão (skill soprolife-review-pack) na mesma pasta
-`_REVISOES_GPT`, junto com: o commit local atual (`git log -1`) para o
-GPT conferir com a seção [7], e qualquer observação da janela. O GPT
-responde GO/NO-GO da F1–F5 com base no veredito + WARNs.
+O arquivo `.txt` gerado já é seguro por construção (sanitizado). Gerar o
+pacote padrão com `scripts/i1-generate-review-pack.sh` (mesma pasta
+`_REVISOES_GPT`) e anexar os dois juntos. O GPT responde GO/NO-GO da
+F1–F5 com base no veredito + WARNs + checklist
+`i1-go-no-go-checklist.md`.
 
 ## O que este script NÃO decide
 

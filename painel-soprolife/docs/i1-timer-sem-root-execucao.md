@@ -1,5 +1,9 @@
 # I1 — Timer sem root — Roteiro de EXECUÇÃO (janela na VPS)
 
+> **Para a janela real, usar `i1-execucao-assistida-f1-f5.md`** (roteiro
+> operacional com paradas GPT por fase) após o checklist
+> `i1-go-no-go-checklist.md`. Este arquivo permanece como visão geral.
+>
 > Complementa `i1-timer-sem-root-planejamento.md`. Nada aqui foi executado.
 > **TODOS os comandos abaixo são sugestões — NÃO EXECUTAR sem revisão GPT**
 > e sem o usuário presente na janela. Placeholders sempre (`<VPS_TAILSCALE>`).
@@ -23,8 +27,8 @@ systemctl cat soprolife-update-data.service soprolife-update-data.timer
 systemctl cat soprolife-painel.service          # confirmar o User= atual
 systemctl list-timers --all --no-pager | grep -i sopro
 id soprolife || echo "usuario nao existe — criar na F1 (fase aprovada)"
-sudo -l -U soprolife 2>/dev/null                 # se existir: NÃO pode ter sudo
-ls -la /home/soprolife/ /home/soprolife/.ssh/ 2>/dev/null   # chaves inesperadas?
+# grupos administrativos são checados via 'id' (o precheck faz isso sem sudo)
+ls -la /var/lib/soprolife/ /var/lib/soprolife/.ssh/ 2>/dev/null   # chaves inesperadas?
 ls -la /opt/soprolife/soprolife-site/painel-soprolife/data-private/
 ls -la /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json
 ls -la /root/.config/soprolife/painel/ /root/.config/gcloud/ 2>/dev/null  # só nomes
@@ -35,111 +39,31 @@ Critério para prosseguir: confirmado se o usuário `soprolife` existe (e,
 existindo, sem sudo e sem chave estranha); repo limpo e no commit esperado;
 localização de ADC/configs/venv confirmada.
 
-## F1 — Usuário e diretórios  ⚠️ NÃO EXECUTAR SEM REVISÃO GPT
+## F1–F5 — roteiro operacional movido
 
-Confirmar se o usuário existe; **criar SOMENTE se `id soprolife` falhar**
-(nesta fase aprovada, nunca na F0):
+> Os comandos fase a fase (com objetivo, checks, rollback por fase e
+> paradas GPT) vivem SOMENTE em **`i1-execucao-assistida-f1-f5.md`** —
+> fonte única, para não haver dois conjuntos de comandos divergentes.
+> Resumo do desenho decidido:
 
-```
-# criar apenas se não existir — sem senha (locked), sem sudo; shell bash é
-# necessário para os "sudo -u soprolife -i ..." das fases F2/F3:
-id soprolife 2>/dev/null || \
-  useradd --create-home --shell /bin/bash soprolife
-# conferir shell/estado resultante (senha deve constar como travada):
-getent passwd soprolife && passwd -S soprolife
-install -d -m 700 -o soprolife -g soprolife /home/soprolife/.config
-install -d -m 700 -o soprolife -g soprolife /home/soprolife/.config/soprolife/painel
-install -d -m 700 -o soprolife -g soprolife /home/soprolife/.config/gcloud
-```
-
-Posse dos dados do painel (cirúrgico, NUNCA `-R` no repo inteiro sem revisão):
-
-```
-chown -R soprolife:soprolife /opt/soprolife/soprolife-site/painel-soprolife/data-private
-chmod 700 /opt/soprolife/soprolife-site/painel-soprolife/data-private
-chown soprolife:soprolife /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json
-chmod 644 /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json
-```
-
-**Decisão pendente (GPT):** posse do repo — `chown` do repo para soprolife
-(e deploy passa a fazer pull como soprolife) OU repo continua de root com
-`git config --system safe.directory` e o pull segue como hoje.
-
-## F2 — Estratégia ADC, configs e venv  ⚠️ NÃO EXECUTAR SEM REVISÃO GPT
-
-```
-# copiar configs privadas preservando modo (600):
-cp -a /root/.config/soprolife/painel/. /home/soprolife/.config/soprolife/painel/
-chown -R soprolife:soprolife /home/soprolife/.config/soprolife
-
-# venv: RECRIAR (não copiar — venv tem caminhos absolutos do root):
-sudo -u soprolife bash -c '
-  python3 -m venv /home/soprolife/.local/share/soprolife/venvs/google-sheets &&
-  /home/soprolife/.local/share/soprolife/venvs/google-sheets/bin/pip install \
-    -r /opt/soprolife/soprolife-site/painel-soprolife/requirements-google.txt'
-
-# ADC como soprolife — fluxo sem navegador (device flow), interativo:
-sudo -u soprolife -i gcloud auth application-default login --no-launch-browser \
-  --scopes=<ESCOPOS: sheets.readonly, drive, webmasters.readonly, analytics.readonly>
-sudo -u soprolife -i gcloud auth application-default set-quota-project <PROJECT_ID>
-```
-
-**Decisões pendentes (GPT):** (a) escopos exatos — copiar a linha validada na
-skill soprolife-sheets-sync; (b) o `update-local-data.sh` usa
-`$HOME/.local/share/...` para o venv — com `HOME=/home/soprolife` no unit os
-caminhos resolvem sozinhos; confirmar que NENHUM script tem `/root/` fixo:
-`grep -rn "/root/" painel-soprolife/scripts/` (esperado: nada).
-
-## F3 — Teste manual como soprolife (DUAS execuções)
-
-```
-sudo -u soprolife HOME=/home/soprolife \
-  /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
-```
-
-Critérios (as duas vezes): 13/13 etapas; `check-access.sh` exit 0;
-summaries regenerados com dono soprolife e 644; painel (ainda servido pelo
-serviço atual) mostrando dado fresco após refresh; nenhuma escrita nova em
-`/root/`.
-
-## F4 — Instalar units + start manual  ⚠️ NÃO EXECUTAR SEM REVISÃO GPT
-
-Seguir soprolife-systemd-safe (backup datado ANTES, sempre):
-
-```
-# Backups defensivos — não falham se o unit ainda não existir:
-[ -f /etc/systemd/system/soprolife-update-data.service ] && \
-  cp /etc/systemd/system/soprolife-update-data.service{,.bak.$(date +%Y%m%d-%H%M%S)}
-[ -f /etc/systemd/system/soprolife-update-data.timer ] && \
-  cp /etc/systemd/system/soprolife-update-data.timer{,.bak.$(date +%Y%m%d-%H%M%S)}
-# instalar a partir do repo (fonte versionada = *.example):
-install -m 644 /opt/soprolife/soprolife-site/painel-soprolife/systemd/soprolife-update-data.service.example \
-  /etc/systemd/system/soprolife-update-data.service
-install -m 644 /opt/soprolife/soprolife-site/painel-soprolife/systemd/soprolife-update-data.timer.example \
-  /etc/systemd/system/soprolife-update-data.timer
-systemctl daemon-reload
-systemctl start soprolife-update-data.service
-systemctl status soprolife-update-data.service --no-pager
-journalctl -u soprolife-update-data.service -n 80 --no-pager
-ps -o user= -C python3   # durante execução: NÃO pode aparecer root
-```
-
-Critério: `status=0/SUCCESS` + mesmos critérios da F3.
-
-## F5 — Ativação do timer e monitoramento
-
-```
-systemctl restart soprolife-update-data.timer
-systemctl list-timers --no-pager | grep -i sopro
-# aguardar 2 ciclos (≈20 min) e conferir:
-journalctl -u soprolife-update-data.service --since "-25 min" --no-pager | tail -40
-curl -s -o /dev/null -w "%{http_code}\n" http://<VPS_TAILSCALE>:8765/painel-soprolife/
-```
-
-Monitoramento nas 24h seguintes: 1 olhada no journal + timestamp de um
-summary (`generatedAt`) + card "Últimas alterações"/fontes no painel.
-Só depois de estável: considerar F6 (painel.service sem root — etapa
-separada) e limpeza das cópias em `/root/.config` (não antes).
+- **F1** — usuário de SISTEMA `soprolife` (home `/var/lib/soprolife`,
+  shell `/usr/sbin/nologin`), criado SOMENTE se `id soprolife` falhar;
+  diretórios de config 700.
+- **F2** — permissões mínimas SEM quebrar o painel: primeiro identificar
+  o usuário real do `soprolife-painel.service`; grupo compartilhado
+  750/640 se o painel tiver usuário próprio; `chmod 700 data-private`
+  só se o painel rodar como root ou como o mesmo usuário do timer.
+  Posse do repo: `safe.directory` (recomendado); `chown -R` no repo
+  inteiro é NÃO RECOMENDADO e exige aprovação explícita do GPT.
+- **F3** — configs copiadas UMA A UMA (`install -m 600`, só arquivos
+  aprovados pelo GPT — sem `cp -a` cego); venv recriado; ADC próprio via
+  device flow com `sudo -u soprolife HOME=/var/lib/soprolife` (sem shell
+  de login); ADC do root NUNCA copiado sem aprovação explícita.
+- **F4** — units instalados a partir dos `.example` com backup datado
+  defensivo + `daemon-reload`, sem habilitar timer.
+- **F5** — DUAS execuções manuais (`systemctl start`) verdes + parada
+  GPT obrigatória → só então `systemctl enable --now` do timer;
+  monitorar 2 ciclos + 24h. F6 (painel.service) é etapa separada.
 
 ## Rollback (escrever aberto ao lado durante a F4/F5)
 
@@ -163,6 +87,6 @@ ajuste eventualmente necessário. Registrar a causa antes de tentar de novo.
 1. Posse do repo: `chown` vs `safe.directory` (F1) — impacta o deploy.
 2. Linha exata de escopos do ADC + quota project (F2).
 3. Resultado do `grep -rn "/root/"` nos scripts (F2) — precisa vir vazio.
-4. `sudo -l -U soprolife` vazio e `~/.ssh` sem surpresas (F0).
+4. `id soprolife` sem grupo administrativo e `~/.ssh` sem surpresas (F0).
 5. Janela única (F1→F5) ou F1–F3 num dia e F4–F5 no seguinte.
 6. `ProtectSystem=full` agora, `strict` só no endurecimento pós-estável.

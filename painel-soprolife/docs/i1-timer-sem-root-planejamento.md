@@ -23,8 +23,9 @@ sem quebrar o pipeline que hoje funciona.
   - `soprolife-update-data.timer` (enabled) — a cada 10 min, `Persistent=true`.
 - O unit de update versionado no repo roda como **`User=root` / `HOME=/root`**;
   o usuário do serviço do painel precisa ser confirmado na janela (F0).
-- **O usuário `soprolife` (uid 1000, grupo `soprolife`) JÁ existe na VPS** —
-  a migração não cria usuário; move configuração e posse de arquivos.
+- Existência/estado do usuário `soprolife` na VPS: **confirmar no
+  precheck (F0)** — não presumir; criação só ocorre na fase aprovada se
+  `id soprolife` falhar.
 - Dependências que hoje moram no HOME do root (a confirmar na F0):
   - ADC: `~/.config/gcloud/application_default_credentials.json`;
   - configs: `~/.config/soprolife/painel/*.json` (chmod 600);
@@ -43,8 +44,12 @@ sem quebrar o pipeline que hoje funciona.
 
 ## Usuário recomendado
 
-`soprolife` (já existente, uid 1000, sem sudo). Não criar segundo usuário;
-não conceder sudo; login por senha desabilitado (só chave, se necessário).
+Usuário de SISTEMA `soprolife`: home `/var/lib/soprolife`, shell
+`/usr/sbin/nologin`, sem senha, sem sudo. **Criado SOMENTE se
+`id soprolife` falhar** (se já existir, validar shell/home/grupos no
+precheck e decidir com o GPT antes de adotar). Comandos que precisem
+rodar como esse usuário usam `sudo -u soprolife HOME=/var/lib/soprolife`
+ou `runuser -u soprolife --` — nunca shell interativo/de login.
 
 ## Diretórios necessários e permissões recomendadas
 
@@ -53,9 +58,9 @@ não conceder sudo; login por senha desabilitado (só chave, se necessário).
 | `/opt/soprolife/soprolife-site` (repo) | `soprolife:soprolife` | padrão git | `git pull` pelo fluxo de deploy; `safe.directory` se o pull continuar sendo feito por outro usuário |
 | `painel-soprolife/data-private/` | `soprolife` | 700 (dir), 600 (arquivos) | dados reais + config do Command Center |
 | `painel-soprolife/data/*.local.json` | `soprolife` | **644** | summaries sem PII (M2) servidos ao navegador |
-| `~soprolife/.config/gcloud/` | `soprolife` | 700/600 | ADC reautenticado como `soprolife` |
-| `~soprolife/.config/soprolife/painel/` | `soprolife` | 700/600 | configs privadas dos conectores |
-| `~soprolife/.local/share/soprolife/venvs/` | `soprolife` | padrão | venv recriado (não copiar o do root — caminhos absolutos no venv) |
+| `/var/lib/soprolife/.config/gcloud/` | `soprolife` | 700/600 | ADC reautenticado como `soprolife` |
+| `/var/lib/soprolife/.config/soprolife/painel/` | `soprolife` | 700/600 | configs privadas dos conectores |
+| `/var/lib/soprolife/.local/share/soprolife/venvs/` | `soprolife` | padrão | venv recriado (não copiar o do root — caminhos absolutos no venv) |
 
 ## Scripts candidatos ao timer (os mesmos de hoje)
 
@@ -77,9 +82,9 @@ Wants=network-online.target
 Type=oneshot
 User=soprolife
 Group=soprolife
-Environment=HOME=/home/soprolife
+Environment=HOME=/var/lib/soprolife
 WorkingDirectory=/opt/soprolife/soprolife-site
-ExecStart=/opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
+ExecStart=/bin/bash /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
 StandardOutput=journal
 StandardError=journal
 # Endurecimento mínimo (não exagerar na 1ª migração):
@@ -102,13 +107,18 @@ WantedBy=timers.target
 
 ## Plano de migração em fases
 
+> Numeração HISTÓRICA deste planejamento. A numeração operacional
+> canônica (e os comandos finais) é a de `i1-execucao-assistida-f1-f5.md`.
+
 **F0 — Inventário fino (read-only, janela curta):** confirmar usuário do
 `soprolife-painel.service`; listar donos/permissões atuais de
 `data-private/` e `data/*.local.json`; confirmar onde estão ADC/venv/configs
 e se o `soprolife` já tem algo no HOME.
 
-**F1 — Preparar ambiente do usuário (sem tocar nos units):** copiar configs
-de `~root/.config/soprolife/` para `~soprolife/.config/soprolife/` (600);
+**F1 — Preparar ambiente do usuário (sem tocar nos units):** copiar
+SOMENTE configs aprovadas, arquivo por arquivo (`install -m 600`, sem
+`cp -a` cego), de `/root/.config/soprolife/painel/` para
+`/var/lib/soprolife/.config/soprolife/painel/`;
 recriar venv como `soprolife` (`pip install -r requirements-google.txt`);
 **reautenticar ADC como `soprolife`** com escopos explícitos (Sheets, Drive,
 Search Console, GA4) + quota project — fluxo já validado na skill
@@ -149,10 +159,10 @@ systemctl cat soprolife-painel.service
 ls -la /opt/soprolife/soprolife-site/painel-soprolife/data-private/
 ls -la /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json
 # F1 (como root, preparando o usuário)
-install -d -m 700 -o soprolife -g soprolife /home/soprolife/.config/soprolife/painel
-# ... cópias com --preserve=mode + chown; reauth ADC como soprolife
+install -d -m 700 -o soprolife -g soprolife /var/lib/soprolife/.config/soprolife/painel
+# ... cópias arquivo a arquivo com install -m 600; reauth ADC como soprolife
 # F2
-sudo -u soprolife HOME=/home/soprolife /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
+sudo -u soprolife HOME=/var/lib/soprolife /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
 # F3
 cp /etc/systemd/system/soprolife-update-data.service{,.bak.$(date +%Y%m%d-%H%M%S)}
 systemctl daemon-reload && systemctl start soprolife-update-data.service
@@ -166,8 +176,9 @@ journalctl -u soprolife-update-data.service -n 80 --no-pager
 2. **Posse do repo**: `chown -R soprolife` no repo inteiro vs. manter root e
    usar `safe.directory` — impacta o fluxo de deploy atual (`git pull` como
    quem?). Decidir antes da F1.
-3. **uid 1000 com grupo `users`**: confirmar que o usuário existente não tem
-   sudo nem chaves autorizadas inesperadas (F0).
+3. **Se o usuário já existir na VPS** (verificar no precheck): confirmar
+   que não tem sudo nem chaves autorizadas inesperadas, e decidir com o
+   GPT se adota o existente ou migra para o desenho de sistema (F0).
 4. **soprolife-painel.service (F4)**: janela de queda momentânea do painel —
    agendar com os sócios.
 5. Ordem F1→F3 numa janela só, ou F1 num dia e F3 no seguinte (mais seguro).

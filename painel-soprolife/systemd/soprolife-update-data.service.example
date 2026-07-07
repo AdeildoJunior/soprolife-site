@@ -17,7 +17,7 @@ Wants=network-online.target
 Type=oneshot
 User=soprolife
 Group=soprolife
-Environment=HOME=/home/soprolife
+Environment=HOME=/var/lib/soprolife
 WorkingDirectory=/opt/soprolife/soprolife-site
 ExecStart=/bin/bash /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
 StandardOutput=journal
@@ -35,7 +35,7 @@ ProtectSystem=full
 # tudo que o update-local-data.sh escreve hoje.
 ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/data
 ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/data-private
-ReadWritePaths=/home/soprolife/.config
+ReadWritePaths=/var/lib/soprolife/.config
 
 [Install]
 WantedBy=multi-user.target
