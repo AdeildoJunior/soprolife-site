@@ -74,3 +74,24 @@ grep -n "data-tip\|title=" painel-soprolife/js/app.js
 ```
 node --check painel-soprolife/js/app.js && echo "abrir http://localhost:8000 e testar visualmente"
 ```
+
+## Aprendizado — validação visual de cards e gráficos
+
+Ao validar módulo financeiro/operacional no painel:
+- primeiro confirmar se a planilha recebeu o dado;
+- depois confirmar se a VPS leu o dado;
+- depois confirmar se o JSON local seguro mudou;
+- por fim confirmar os cards e gráficos no navegador.
+
+No módulo Pastore, os valores esperados aparecem nos cards do topo:
+- Exames realizados;
+- Receita estimada;
+- Resultado líquido estimado;
+- Ocupação da agenda.
+
+Se a planilha estiver certa mas o painel continuar zerado, investigar:
+- falha no `update-local-data.sh`;
+- ADC expirado/escopo insuficiente;
+- JSON `.local.json` antigo;
+- permissão do summary local;
+- cache do navegador.

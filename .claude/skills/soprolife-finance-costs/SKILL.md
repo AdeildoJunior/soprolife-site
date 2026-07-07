@@ -71,3 +71,17 @@ bash painel-soprolife/scripts/check-access.sh
 ```
 python3 -c "import json; d=json.load(open('painel-soprolife/data/custos-investimentos-summary.local.json')); print('rateio_socios' in d, 'rateio_itens' in d)"
 ```
+
+## Aprendizado — Parcerias com resultado líquido
+
+Para parceria operacional como Pastore:
+- receita bruta vem do valor cobrado;
+- custo total soma repasse, insumo, deslocamento, profissional e outros custos;
+- resultado líquido = receita bruta - custo total;
+- o painel deve mostrar agregados, nunca paciente/telefone/observação.
+
+Validação usada:
+- valor cobrado: 150;
+- custo insumo: 10;
+- resultado esperado: 140;
+- teste sempre com paciente fictício `TESTE - APAGAR`.

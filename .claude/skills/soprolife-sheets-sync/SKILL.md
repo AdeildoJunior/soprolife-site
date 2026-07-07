@@ -169,3 +169,24 @@ Para summaries servidos pelo painel:
 
 Regra de teste:
 usar linha fictícia evidente, como `TESTE - APAGAR`, validar o fluxo completo Planilha → VPS → JSON seguro → Painel, e remover a linha após confirmar.
+
+## Aprendizado — Pastore, Apps Script e linhas pré-formatadas
+
+Em abas Google Sheets com dropdowns, fórmulas ou linhas pré-formatadas até 1000, `getLastRow() + 1` pode mandar a gravação para a linha 1001, mesmo quando a linha 2 está visualmente vazia.
+
+Para ações do painel que inserem registros reais, preferir:
+- localizar a primeira linha vazia real por colunas-chave;
+- no caso Pastore: `data_atendimento`, `paciente_nome`, `tipo_exame`;
+- preservar colunas de fórmula, como S/T/U;
+- copiar fórmula da linha anterior quando houver;
+- criar fallback de fórmula validado para primeira linha real.
+
+Aprendizado validado:
+- botão Pastore gravou primeiro na linha 1001/1002 por causa de linhas preparadas;
+- correção passou a gravar corretamente na linha 2;
+- fluxo validado: Painel → Apps Script → Planilha → VPS → JSON seguro → Painel.
+
+Também registrar:
+- salvar no editor do Apps Script não basta;
+- é obrigatório publicar `Nova versão` em `Implantar → Gerenciar implantações`;
+- teste manual `_testRegistrarAtendimentoPastore` é útil para separar erro de código do editor versus erro de implantação do Web App.

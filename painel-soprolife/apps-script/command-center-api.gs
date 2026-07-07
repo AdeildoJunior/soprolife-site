@@ -520,7 +520,8 @@ function _registrarAtendimentoPastore(data) {
     row[obsIdx] = String(data.observacao_privada_minima);
   }
 
-  var newRow = _appendRowSemValidacao(sheet, row);
+  var newRow = _firstEmptyRowByHeaders(sheet, ["data_atendimento", "paciente_nome", "tipo_exame"]);
+  _writeRowSkippingColumnsSemValidacao(sheet, newRow, row, _PARCERIA_PASTORE_FORMULA_COLS);
   _ensureFormulaColumns(sheet, newRow, _PARCERIA_PASTORE_FORMULA_COLS);
 
   _logEntry({
@@ -1189,10 +1190,67 @@ function _setValuesSemValidacao(range, values) {
   SpreadsheetApp.flush();
 }
 
+function _ensureSheetSize(sheet, minRows, minCols) {
+  var maxRows = sheet.getMaxRows();
+  var maxCols = sheet.getMaxColumns();
+
+  if (maxRows < minRows) {
+    sheet.insertRowsAfter(maxRows, minRows - maxRows);
+  }
+
+  if (maxCols < minCols) {
+    sheet.insertColumnsAfter(maxCols, minCols - maxCols);
+  }
+}
+
+
+function _firstEmptyRowByHeaders(sheet, keyHeaders) {
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var maxRows = Math.max(sheet.getMaxRows(), 2);
+
+  var headers = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0]
+    .map(function(h) { return String(h).trim(); });
+
+  var keyIdxs = keyHeaders
+    .map(function(h) { return headers.indexOf(h); })
+    .filter(function(idx) { return idx >= 0; });
+
+  if (keyIdxs.length === 0) {
+    return sheet.getLastRow() + 1;
+  }
+
+  var values = sheet.getRange(2, 1, maxRows - 1, lastCol).getDisplayValues();
+
+  for (var r = 0; r < values.length; r++) {
+    var hasMeaningfulData = keyIdxs.some(function(idx) {
+      return String(values[r][idx] || "").trim() !== "";
+    });
+    if (!hasMeaningfulData) return r + 2;
+  }
+
+  return maxRows + 1;
+}
+
+function _writeRowSkippingColumnsSemValidacao(sheet, targetRow, row, skipCols) {
+  var skip = {};
+  (skipCols || []).forEach(function(col) { skip[col] = true; });
+
+  _ensureSheetSize(sheet, targetRow, row.length);
+
+  for (var i = 0; i < row.length; i++) {
+    var col = i + 1;
+    if (skip[col]) continue;
+    _setCellSemValidacao(sheet.getRange(targetRow, col), row[i]);
+  }
+
+  return targetRow;
+}
+
 function _appendRowSemValidacao(sheet, row) {
   var nextRow = sheet.getLastRow() + 1;
-  var range = sheet.getRange(nextRow, 1, 1, row.length);
   try {
+    _ensureSheetSize(sheet, nextRow, row.length);
+    var range = sheet.getRange(nextRow, 1, 1, row.length);
     _setValuesSemValidacao(range, [row]);
   } catch (e) {
     throw new Error("Falha ao adicionar linha na aba '" + sheet.getName() + "': " + e.message);
@@ -1775,15 +1833,34 @@ function _buildRow(sheet, fieldMap) {
  * não faz nada — não inventa fórmula do zero.
  */
 function _ensureFormulaColumns(sheet, newRow, cols) {
-  if (newRow < 3) return; // linha 2 é a primeira de dados; não há linha anterior pra copiar
+  if (newRow < 2) return;
+
   cols.forEach(function(col) {
     var newCell = sheet.getRange(newRow, col);
-    if (newCell.getFormula()) return; // já tem fórmula própria — não sobrescreve
-    var aboveCell = sheet.getRange(newRow - 1, col);
-    if (aboveCell.getFormula()) {
-      aboveCell.copyTo(newCell, SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
+    if (newCell.getFormula()) return;
+
+    if (newRow >= 3) {
+      var aboveCell = sheet.getRange(newRow - 1, col);
+      if (aboveCell.getFormula()) {
+        aboveCell.copyTo(newCell, SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
+        return;
+      }
+    }
+
+    // Fallback explícito para a primeira linha real de dados da Pastore.
+    // Fórmulas validadas nesta planilha: funções em inglês + separador ';'.
+    if (sheet.getName() === _SHEETS.PARCERIA_PASTORE_ATENDIMENTOS) {
+      if (col === 19) {
+        newCell.setFormula('=IF(K' + newRow + '="";"";K' + newRow + ')');
+      } else if (col === 20) {
+        newCell.setFormula('=IF(COUNTA(N' + newRow + ':R' + newRow + ')=0;"";SUM(N' + newRow + ':R' + newRow + '))');
+      } else if (col === 21) {
+        newCell.setFormula('=IF(S' + newRow + '="";"";S' + newRow + '-IF(T' + newRow + '="";0;T' + newRow + '))');
+      }
     }
   });
+
+  SpreadsheetApp.flush();
 }
 
 function _nowBr() {

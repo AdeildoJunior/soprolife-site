@@ -101,3 +101,24 @@ Depois de corrigir autenticação Google/ADC/quota project, validar a atualizaç
    - `check-access.sh` passa sem vazamento de token;
    - Marketing & SEO mostra Search Console e GA4 com dados reais;
    - arquivos privados continuam gitignored.
+
+## Aprendizado — ADC da VPS e summaries locais
+
+Se `update-local-data.sh` falhar com:
+- `Reauthentication is needed`;
+- `ACCESS_TOKEN_SCOPE_INSUFFICIENT`;
+- `acesso negado`;
+- `Insufficient Permission`;
+
+o problema pode ser ADC expirado ou autenticado com escopos insuficientes.
+
+Procedimento validado:
+1. `gcloud auth application-default revoke -q`
+2. Reautenticar com escopos explícitos para Sheets, Drive, Search Console e GA4.
+3. Rodar `update-local-data.sh`.
+4. Confirmar que Search Console, GA4 e Sheets voltaram a OK.
+
+Além disso:
+- summaries seguros em `painel-soprolife/data/*.local.json` precisam ser legíveis pelo serviço web quando forem consumidos no navegador;
+- usar `chmod 644` nesses summaries seguros quando necessário;
+- arquivos em `data-private/` continuam protegidos, preferencialmente `600`.
