@@ -1,0 +1,21 @@
+# TEMPLATE (I1) — NÃO INSTALAR SEM REVISÃO GPT.
+# Template proposto para timer de atualização (a mudança do I1 é no
+# service, não aqui). Mantido como .example para os dois units serem
+# instalados juntos na F4 a partir da mesma origem versionada.
+
+[Unit]
+Description=SoproLife — Timer de atualização automática do painel
+Requires=soprolife-update-data.service
+
+[Timer]
+# Executa 2 minutos após o boot (aguarda rede e credenciais)
+OnBootSec=2min
+# Dispara 1 minuto após a ativação do serviço (para trigger manual imediato)
+OnActiveSec=1min
+# Re-executa a cada 10 minutos após a última ativação
+OnUnitActiveSec=10min
+# Persiste disparo pendente entre reboots (útil se VPS estiver offline)
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,41 @@
+# TEMPLATE (I1) — NÃO INSTALAR SEM REVISÃO GPT.
+# Substitui /etc/systemd/system/soprolife-update-data.service na fase F4
+# do plano (docs/i1-timer-sem-root-execucao.md). Mesma função do unit
+# atual, trocando root → soprolife + proteções básicas.
+#
+# Pré-requisitos ANTES de instalar (fases F0–F3 do doc de execução):
+#   - ambiente do usuário soprolife preparado (ADC, configs, venv);
+#   - teste manual 2x como soprolife com 13/13 etapas OK (F3);
+#   - backup datado do unit atual (skill soprolife-systemd-safe).
+
+[Unit]
+Description=SoproLife — Atualização automática dos dados do painel (sem root)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=soprolife
+Group=soprolife
+Environment=HOME=/home/soprolife
+WorkingDirectory=/opt/soprolife/soprolife-site
+ExecStart=/bin/bash /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
+StandardOutput=journal
+StandardError=journal
+
+# ── Proteções básicas (1ª migração — endurecer mais só depois de estável) ──
+NoNewPrivileges=true
+PrivateTmp=true
+# ProtectSystem=full deixa /usr, /boot e /etc somente-leitura; /opt e /home
+# continuam graváveis. NÃO usar "strict" nesta 1ª migração: o script escreve
+# em vários caminhos (repo, ~/.config) e um ReadWritePaths incompleto
+# derrubaria o timer silenciosamente — o pior modo de falha conhecido.
+ProtectSystem=full
+# Explícito para documentação e para a futura troca a "strict" (F5):
+# tudo que o update-local-data.sh escreve hoje.
+ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/data
+ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/data-private
+ReadWritePaths=/home/soprolife/.config
+
+[Install]
+WantedBy=multi-user.target
