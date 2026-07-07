@@ -1676,6 +1676,8 @@ if src.get("containsPersonalData") is not False:
     print(f"  ERRO: {path.name} pode conter dado pessoal."); errors += 1
 if path.name.endswith("saude-operacional.json") and src.get("dadosReais") is not False:
     print(f"  ERRO: demo commitável precisa de dadosReais=false."); errors += 1
+if path.name.endswith("summary.local.json") and src.get("dadosReais") is not True:
+    print(f"  ERRO: arquivo real (gerado) precisa de dadosReais=true."); errors += 1
 
 # Campos permitidos por item (allowlist — nada de texto sensível aqui).
 ALLOWED_IND = {"id", "label", "status", "detalhe", "tip"}

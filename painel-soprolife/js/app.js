@@ -5798,7 +5798,8 @@ function renderSaudeOperacional() {
 
   const meta = panel.querySelector("#saudeMeta");
   if (meta) {
-    const fonte = dados.source?.dadosReais === true ? "VPS (dados reais)" : "Dados demonstrativos";
+    // "Pipeline real" e não "VPS": o gerador pode rodar localmente também.
+    const fonte = dados.source?.dadosReais === true ? "Pipeline real" : "Dados demonstrativos";
     meta.innerHTML = `
       <span class="saude-meta-item" tabindex="0"
         data-tip="Quando o pipeline da VPS gerou este retrato de saúde pela última vez."

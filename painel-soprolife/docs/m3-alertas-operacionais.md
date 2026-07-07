@@ -55,20 +55,53 @@ Para testar o fallback: renomear temporariamente o JSON demo.
 - Nenhum alerta é calculado — a lista vem pronta do JSON.
 - O banner crítico não tem link clicável (aponta em texto para a seção).
 
-## O que falta para ligar com dados reais da VPS (v2)
+## v2 — Gerador real local (IMPLEMENTADO)
 
-1. **Gerador** `scripts/generate-saude-operacional.py` rodando na VPS ao
-   fim do `update-local-data.sh` (etapa 14), produzindo
-   `data/saude-operacional-summary.local.json` com `dadosReais=true` a
-   partir de fontes já disponíveis lá: exit code do próprio update,
-   resultado do check-access, timestamps `generatedAt` dos summaries,
-   flags do marketing-seo (`sources.searchConsole/ga4`), stats da
-   auditoria — **sem systemctl/journal** (o script roda dentro do
-   próprio timer; "timer ok" = o arquivo acabou de ser gerado).
-2. Passar o payload pelo `pii_guard` antes de gravar (padrão M2).
-3. Regras de alerta calculadas (ex.: `ultima_atualizacao` > 30 min →
-   crítico "painel com dado velho"; check-access ≠ 0 → crítico).
-4. Deploy normal via git + 1 ciclo do timer; conferir permissão 644.
+`scripts/generate-saude-operacional.py` produz
+`data/saude-operacional-summary.local.json` (gitignored, `dadosReais=true`,
+chmod 644) usando SOMENTE metadados dos 12 summaries seguros de `data/`:
+existência, JSON válido, flags `safeToDisplay`/`containsPersonalData`,
+frescor (mtime) e contagens agregadas (ex.: `stats.erros` da auditoria,
+`meta.sources` do marketing). **Nunca abre data-private/, ~/.config, ADC
+ou rede; nunca copia conteúdo.** Payload validado por allowlist estrita +
+`pii_guard` antes de gravar.
+
+Regras: fonte com PII flag errada ou JSON inválido → alerta CRÍTICO;
+pipeline sem atualização > 24h → CRÍTICO; > 30 min → ATENÇÃO; SC/GA4
+sem dados → ATENÇÃO; check-access só entra via `--check-access-exit N`
+(o update passa o exit real; sem o argumento fica "desconhecido" — o
+script nunca inventa resultado de segurança). "Pós-I1" é inferido de
+evidência local (docs I1 + pipeline vivo), **sem systemctl**.
+`status_geral` = pior nível entre ok/atenção/crítico; "desconhecido" não
+rebaixa o geral (é ausência de informação, visível nos próprios cards).
+
+### Como rodar / testar
+
+```bash
+python3 painel-soprolife/scripts/generate-saude-operacional.py            # dry-run
+python3 painel-soprolife/scripts/generate-saude-operacional.py --write
+python3 -m json.tool painel-soprolife/data/saude-operacional-summary.local.json
+bash painel-soprolife/scripts/check-access.sh   # valida demo E real (dadosReais true/false)
+```
+
+Integração: etapa **13/14** do `update-local-data.sh` — o check-access
+(12/14) tem o exit capturado e repassado ao gerador; falha do check
+continua derrubando o update ao final (semântica preservada); falha do
+gerador vira AVISO (painel cai no demo).
+
+### Limitações da v2
+
+- "Painel no ar" fica **desconhecido** (sem teste de rede por decisão);
+  na VPS, a alternativa futura é o próprio proxy gravar um heartbeat.
+- Frescor usa mtime local — depende do relógio da máquina que gera.
+- Rodado na estação (fora do ciclo), o pipeline aparecerá "atenção/
+  crítico" por idade — comportamento honesto, não bug.
+
+### Antes do deploy (revisão)
+
+Diff completo + este doc pelo GPT; na VPS, após o deploy, 1 ciclo do
+timer deve gerar o arquivo real e o card mudar para "Fonte: Pipeline
+real" — conferir também permissão 644 e o check-access remoto.
 
 ## Segurança
 
