@@ -1,0 +1,94 @@
+{
+  "source": {
+    "type": "saude_operacional_demo",
+    "safeToDisplay": true,
+    "containsPersonalData": false,
+    "containsHealthData": false,
+    "dadosReais": false,
+    "generatedAt": "2026-07-07T18:00:00-03:00",
+    "nota": "Dados DEMONSTRATIVOS. A versão real será gerada na VPS em data/saude-operacional-summary.local.json (gitignored), só com metadados agregados."
+  },
+  "status_geral": "atencao",
+  "ultima_atualizacao": "2026-07-07T17:50:00-03:00",
+  "indicadores": [
+    {
+      "id": "timer_update",
+      "label": "Timer de atualização",
+      "status": "ok",
+      "detalhe": "Última execução 0/SUCCESS (usuário soprolife)",
+      "tip": "Serviço que atualiza os dados do painel a cada 10 minutos na VPS. OK = última execução terminou sem erro."
+    },
+    {
+      "id": "check_access",
+      "label": "Check de segurança",
+      "status": "ok",
+      "detalhe": "check-access.sh passou na última execução",
+      "tip": "Auditoria automática que confere se nenhum dado sensível vazou para arquivos públicos."
+    },
+    {
+      "id": "google_sheets",
+      "label": "Google Sheets",
+      "status": "ok",
+      "detalhe": "Leitura das abas concluída",
+      "tip": "Conexão com a planilha privada (leads, CRM, Pastore). OK = todas as abas lidas na última atualização."
+    },
+    {
+      "id": "search_console",
+      "label": "Search Console",
+      "status": "ok",
+      "detalhe": "Métricas agregadas recebidas",
+      "tip": "Dados de busca do site (cliques, impressões). OK = API respondeu na última atualização."
+    },
+    {
+      "id": "ga4",
+      "label": "Google Analytics 4",
+      "status": "atencao",
+      "detalhe": "Sem dados novos no período consultado",
+      "tip": "Tráfego do site. Atenção = a API respondeu, mas sem dados novos — pode ser normal em período de baixo tráfego."
+    },
+    {
+      "id": "arquivos_locais",
+      "label": "Arquivos do painel",
+      "status": "ok",
+      "detalhe": "Summaries regenerados e legíveis",
+      "tip": "Os arquivos locais que o painel lê. OK = atualizados na última execução e com permissão correta."
+    },
+    {
+      "id": "auditoria",
+      "label": "Trilha de auditoria",
+      "status": "ok",
+      "detalhe": "Escritas registradas, sem erros",
+      "tip": "Registro de quem alterou o quê pelo painel (M1). OK = sem erros de gravação recentes."
+    },
+    {
+      "id": "pos_i1",
+      "label": "Pós-migração I1",
+      "status": "atencao",
+      "detalhe": "Janela de observação de 24h em andamento",
+      "tip": "O update automático acabou de migrar de root para o usuário soprolife. Atenção = monitorando as primeiras 24h."
+    },
+    {
+      "id": "painel_http",
+      "label": "Painel no ar",
+      "status": "ok",
+      "detalhe": "HTTP 200 via Tailscale",
+      "tip": "O painel respondendo no endereço interno da equipe."
+    }
+  ],
+  "alertas": [
+    {
+      "id": "ALERTA-DEMO-001",
+      "nivel": "atencao",
+      "titulo": "GA4 sem dados novos",
+      "mensagem": "O Google Analytics respondeu, mas não trouxe dados novos no período. Pode ser tráfego baixo real ou configuração a revisar.",
+      "proximo_passo": "Se persistir por mais de 2 dias, revisar a propriedade GA4 na seção Marketing & SEO."
+    },
+    {
+      "id": "ALERTA-DEMO-002",
+      "nivel": "atencao",
+      "titulo": "Observação pós-I1 em andamento",
+      "mensagem": "O update automático migrou de root para o usuário soprolife. As primeiras execuções foram bem-sucedidas.",
+      "proximo_passo": "Conferir amanhã se o painel continua com dados frescos; depois disso, este alerta some."
+    }
+  ]
+}

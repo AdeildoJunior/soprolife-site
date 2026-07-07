@@ -122,6 +122,8 @@
       </header>
 
       <section id="overview" class="section active">
+        <!-- Banner de saúde operacional: só aparece com alerta CRÍTICO (M3) -->
+        <div id="saudeBannerCritico" class="saude-banner-critico" hidden></div>
         <div class="hero">
           <div class="hero-body">
             <p class="eyebrow">SoproLife Command Center</p>
@@ -615,6 +617,19 @@
         </div>
 
         <div class="automation-stats" id="automationStats"></div>
+
+        <article class="panel automation-panel saude-panel" id="saudePanel" hidden>
+          <div class="panel-header">
+            <div>
+              <h3>Saúde Operacional</h3>
+              <span id="saudeSubtitulo">Estado do pipeline de dados e integrações do painel</span>
+            </div>
+            <span id="saudeStatusGeral" class="saude-status-chip"></span>
+          </div>
+          <div class="saude-meta" id="saudeMeta"></div>
+          <div class="saude-grid" id="saudeGrid"></div>
+          <div id="saudeAlertas"></div>
+        </article>
 
         <article class="panel automation-panel auditoria-panel" id="auditoriaPanel" hidden>
           <div class="panel-header">

@@ -28,6 +28,7 @@ const state = {
   crmReportFilters: null,
   parceriaPastore: null,
   auditoria: null,
+  saudeOperacional: null,
 };
 
 const slug = (text) =>
@@ -478,6 +479,18 @@ async function init() {
       state.auditoria = auditoriaData;
     }
 
+    // Saúde Operacional (M3): tenta o resumo REAL gerado na VPS (gitignored);
+    // sem ele, cai no demonstrativo commitável; sem nenhum, o card fica oculto.
+    const saudeReal = await loadOptionalJson("./data/saude-operacional-summary.local.json");
+    if (saudeReal?.source?.safeToDisplay === true && saudeReal?.source?.containsPersonalData === false) {
+      state.saudeOperacional = saudeReal;
+    } else {
+      const saudeDemo = await loadOptionalJson("./data/saude-operacional.json");
+      if (saudeDemo?.source?.safeToDisplay === true && saudeDemo?.source?.containsPersonalData === false) {
+        state.saudeOperacional = saudeDemo;
+      }
+    }
+
     const custosData = await loadOptionalJson("./data/custos-investimentos-summary.local.json");
     if (custosData?.source?.safeToDisplay === true && custosData?.source?.containsPersonalData === false) {
       state.custosInvestimentos = custosData;
@@ -519,6 +532,7 @@ async function init() {
     renderParceriaPastore();
     renderCustosInvestimentos();
     renderAutomations();
+    renderSaudeOperacional();
     renderAuditoria();
     renderLancamentos();
     bindEvents();
@@ -5739,6 +5753,108 @@ function renderAutomations() {
   `).join("");
 }
 
+
+// ── Saúde Operacional (M3) — painel na seção Automações ──────────────────────
+
+// Níveis de alerta: rótulo curto para operador não técnico + classe CSS.
+const SAUDE_NIVEIS = {
+  ok:           { rotulo: "OK",           cls: "saude-ok" },
+  atencao:      { rotulo: "Atenção",      cls: "saude-atencao" },
+  critico:      { rotulo: "Crítico",      cls: "saude-critico" },
+  desconhecido: { rotulo: "Desconhecido", cls: "saude-desconhecido" },
+};
+
+function saudeNivel(status) {
+  return SAUDE_NIVEIS[String(status || "").toLowerCase()] || SAUDE_NIVEIS.desconhecido;
+}
+
+function saudeFormataData(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return escapeHtml(String(iso));
+  return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function renderSaudeOperacional() {
+  const panel  = document.querySelector("#saudePanel");
+  const banner = document.querySelector("#saudeBannerCritico");
+  if (!panel) return;
+
+  const dados = state.saudeOperacional;
+  // Fallback elegante: sem dados (nem demo), o painel fica oculto e nada quebra.
+  if (!dados || !Array.isArray(dados.indicadores)) {
+    panel.hidden = true;
+    if (banner) banner.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  const geral = saudeNivel(dados.status_geral);
+  const chip  = panel.querySelector("#saudeStatusGeral");
+  if (chip) {
+    chip.textContent = `Status geral: ${geral.rotulo}`;
+    chip.className = `saude-status-chip ${geral.cls}`;
+  }
+
+  const meta = panel.querySelector("#saudeMeta");
+  if (meta) {
+    const fonte = dados.source?.dadosReais === true ? "VPS (dados reais)" : "Dados demonstrativos";
+    meta.innerHTML = `
+      <span class="saude-meta-item" tabindex="0"
+        data-tip="Quando o pipeline da VPS gerou este retrato de saúde pela última vez."
+        aria-label="Última atualização: ${escapeHtml(saudeFormataData(dados.ultima_atualizacao))}">
+        Última atualização: <strong>${escapeHtml(saudeFormataData(dados.ultima_atualizacao))}</strong>
+      </span>
+      <span class="saude-meta-item">Fonte: <strong>${escapeHtml(fonte)}</strong></span>`;
+  }
+
+  const grid = panel.querySelector("#saudeGrid");
+  if (grid) {
+    grid.innerHTML = dados.indicadores.map((ind) => {
+      const nivel = saudeNivel(ind.status);
+      const tip   = ind.tip ? escapeHtml(String(ind.tip)) : "";
+      return `
+        <article class="saude-card ${nivel.cls}"${tip ? ` tabindex="0" data-tip="${tip}" aria-label="${escapeHtml(String(ind.label || ""))}: ${nivel.rotulo}. ${tip}"` : ""}>
+          <span class="saude-card-label">${escapeHtml(String(ind.label || "—"))}</span>
+          <strong class="saude-card-status">${nivel.rotulo}</strong>
+          ${ind.detalhe ? `<small class="saude-card-detalhe">${escapeHtml(String(ind.detalhe))}</small>` : ""}
+        </article>`;
+    }).join("");
+  }
+
+  const alertasBox = panel.querySelector("#saudeAlertas");
+  const alertas = Array.isArray(dados.alertas) ? dados.alertas : [];
+  if (alertasBox) {
+    alertasBox.innerHTML = alertas.length === 0
+      ? `<p class="saude-vazio">Nenhum alerta ativo — tudo funcionando dentro do esperado.</p>`
+      : `<ul class="saude-alertas">${alertas.map((a) => {
+          const nivel = saudeNivel(a.nivel);
+          return `
+            <li class="saude-alerta ${nivel.cls}">
+              <span class="badge ${nivel.cls}">${nivel.rotulo}</span>
+              <div class="saude-alerta-body">
+                <strong>${escapeHtml(String(a.titulo || "Alerta"))}</strong>
+                ${a.mensagem ? `<p>${escapeHtml(String(a.mensagem))}</p>` : ""}
+                ${a.proximo_passo ? `<small><b>Próximo passo:</b> ${escapeHtml(String(a.proximo_passo))}</small>` : ""}
+              </div>
+            </li>`;
+        }).join("")}</ul>`;
+  }
+
+  // Banner no Painel Geral: SÓ com alerta crítico (discrição por padrão).
+  if (banner) {
+    const criticos = alertas.filter((a) => String(a.nivel).toLowerCase() === "critico");
+    if (criticos.length > 0) {
+      banner.hidden = false;
+      banner.innerHTML = `
+        <strong>⚠ ${criticos.length} alerta(s) crítico(s) na operação.</strong>
+        <span>${escapeHtml(String(criticos[0].titulo || ""))} — ver detalhes na seção Automações → Saúde Operacional.</span>`;
+    } else {
+      banner.hidden = true;
+      banner.innerHTML = "";
+    }
+  }
+}
 
 // ── Auditoria M1 — card "Últimas alterações" (seção Automações) ───────────────
 

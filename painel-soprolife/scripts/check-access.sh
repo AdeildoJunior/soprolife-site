@@ -1638,6 +1638,80 @@ else:
 PY
 }
 
+validate_saude_operacional() {
+  echo
+  echo "Verificando Saúde Operacional (M3)..."
+
+  local demo_file="painel-soprolife/data/saude-operacional.json"
+  local local_file="painel-soprolife/data/saude-operacional-summary.local.json"
+
+  if [ -f "$local_file" ]; then
+    if git check-ignore -q "$local_file" 2>/dev/null; then
+      echo "  OK (gitignored): $local_file"
+    else
+      echo "  ERRO CRÍTICO: $local_file NÃO está gitignored!"
+    fi
+  else
+    echo "  INFO: $local_file não existe (normal — gerador na VPS é etapa futura da M3)."
+  fi
+
+  for f in "$demo_file" "$local_file"; do
+    [ -f "$f" ] || continue
+    SAUDE_FILE="$f" python3 - <<'PY'
+from pathlib import Path
+import json, os, re, sys
+
+path = Path(os.environ["SAUDE_FILE"])
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"  ERRO ao ler {path.name}: {exc}")
+    sys.exit(1)
+
+src = data.get("source", {})
+errors = 0
+if src.get("safeToDisplay") is not True:
+    print(f"  ERRO: {path.name} sem safeToDisplay=true."); errors += 1
+if src.get("containsPersonalData") is not False:
+    print(f"  ERRO: {path.name} pode conter dado pessoal."); errors += 1
+if path.name.endswith("saude-operacional.json") and src.get("dadosReais") is not False:
+    print(f"  ERRO: demo commitável precisa de dadosReais=false."); errors += 1
+
+# Campos permitidos por item (allowlist — nada de texto sensível aqui).
+ALLOWED_IND = {"id", "label", "status", "detalhe", "tip"}
+ALLOWED_AL  = {"id", "nivel", "titulo", "mensagem", "proximo_passo"}
+NIVEIS = {"ok", "atencao", "critico", "desconhecido"}
+for i, ind in enumerate(data.get("indicadores", [])):
+    extras = set(ind) - ALLOWED_IND
+    if extras:
+        print(f"  ERRO: indicador [{i}] com campo(s) fora da allowlist: {sorted(extras)}"); errors += 1
+    if str(ind.get("status", "")).lower() not in NIVEIS:
+        print(f"  ERRO: indicador [{i}] com status inválido."); errors += 1
+for i, al in enumerate(data.get("alertas", [])):
+    extras = set(al) - ALLOWED_AL
+    if extras:
+        print(f"  ERRO: alerta [{i}] com campo(s) fora da allowlist: {sorted(extras)}"); errors += 1
+    if str(al.get("nivel", "")).lower() not in NIVEIS:
+        print(f"  ERRO: alerta [{i}] com nível inválido."); errors += 1
+
+text = json.dumps(data, ensure_ascii=False).lower()
+_CPF_RE  = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+_FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-\d{4}")
+for termo in ("telefone", "cpf", "paciente_nome", "primeiro_nome", "observacao_privada",
+              "access_token", "private_key", "/spreadsheets/d/", "script.google"):
+    if termo in text:
+        print(f"  ERRO: termo proibido '{termo}' em {path.name}."); errors += 1
+if _CPF_RE.search(text) or _FONE_RE.search(text):
+    print(f"  ERRO: padrão de CPF/telefone em {path.name}."); errors += 1
+
+if errors:
+    print(f"  {errors} erro(s) em {path.name}."); sys.exit(1)
+n_ind = len(data.get("indicadores", [])); n_al = len(data.get("alertas", []))
+print(f"  OK: {path.name} seguro — {n_ind} indicador(es), {n_al} alerta(s), geral={data.get('status_geral')}.")
+PY
+  done
+}
+
 main() {
   check_ports
   check_extra_network_services
@@ -1657,6 +1731,7 @@ main() {
   validate_marketing_seo
   validate_ultimos_lancamentos
   validate_auditoria
+  validate_saude_operacional
 }
 
 main

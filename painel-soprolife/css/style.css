@@ -6517,3 +6517,124 @@ th {
     gap: 6px 14px;
   }
 }
+
+/* ── Saúde Operacional (M3) — seção Automações + banner no overview ──────── */
+
+.saude-panel {
+  margin-bottom: 18px;
+}
+
+.saude-status-chip {
+  font-size: .8rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.saude-ok           { background: #d4f5ec; color: #0d7a5f; }
+.saude-atencao      { background: #fef3e0; color: #b5730a; }
+.saude-critico      { background: #fde3e3; color: #b3261e; }
+.saude-desconhecido { background: #e8edf3; color: #5b6b7c; }
+
+.saude-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  color: var(--muted);
+  font-size: .85rem;
+  margin-bottom: 14px;
+}
+
+.saude-meta-item strong { color: var(--navy); }
+
+.saude-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.saude-card {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.saude-card.saude-ok           { border-left-color: #0d7a5f; background: #f2fbf8; }
+.saude-card.saude-atencao      { border-left-color: #b5730a; background: #fffaf1; }
+.saude-card.saude-critico      { border-left-color: #b3261e; background: #fdf4f4; }
+.saude-card.saude-desconhecido { border-left-color: #8195a8; }
+
+.saude-card-label {
+  color: var(--muted);
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.saude-card-status { color: var(--navy); font-size: 1.02rem; }
+
+.saude-card.saude-atencao .saude-card-status { color: #b5730a; }
+.saude-card.saude-critico .saude-card-status { color: #b3261e; }
+
+.saude-card-detalhe {
+  color: var(--muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.saude-vazio { color: var(--muted); font-size: .9rem; padding: 4px 2px; }
+
+.saude-alertas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.saude-alerta {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+
+.saude-alerta .badge { white-space: nowrap; }
+
+.saude-alerta-body { min-width: 0; }
+.saude-alerta-body strong { display: block; color: var(--navy); line-height: 1.4; }
+.saude-alerta-body p      { margin: 4px 0 6px; color: var(--muted); line-height: 1.5; }
+.saude-alerta-body small  { color: var(--muted); line-height: 1.45; display: block; }
+.saude-alerta-body small b { color: var(--navy); }
+
+.saude-banner-critico {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: baseline;
+  background: #fde3e3;
+  border: 1px solid #f3b8b4;
+  border-left: 4px solid #b3261e;
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #7c1d17;
+}
+
+.saude-banner-critico strong { color: #b3261e; }
+
+@media (max-width: 720px) {
+  .saude-grid { grid-template-columns: 1fr 1fr; }
+  .saude-alerta { flex-direction: column; gap: 8px; }
+}
