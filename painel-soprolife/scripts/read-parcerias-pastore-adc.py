@@ -50,6 +50,24 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+# Guarda de PII compartilhada (M2) — mesma pasta deste script.
+# A validação local _validate_summary abaixo permanece como redundância.
+import pii_guard
+
+# Regras da guarda para o parcerias-pastore-summary:
+# - institucionais: nome/unidade/chips ("Parceria Pastore", "Pastore
+#   Ipanema") são nomes de parceria/unidade, não de pessoa; dia_semana/
+#   horario/servico/status_label são rótulos gerados;
+# - observacao (em financeiro_parametros) é EXCEÇÃO: frase-template gerada
+#   por este script (nunca texto digitado) — a chave não bloqueia, mas o
+#   valor continua passando por todos os scans.
+_PII_RULES = {
+    "campos_pessoa": [],
+    "campos_institucionais": ["nome", "unidade", "chips", "dia_semana",
+                              "horario", "servico", "status_label"],
+    "chaves_permitidas_excecao": ["observacao"],
+}
+
 _CONFIG_PATH = Path("~/.config/soprolife/painel/google-sheets.local.json").expanduser()
 _OUT_PRIVATE = Path("painel-soprolife/data-private/parcerias-pastore.local.json")
 _OUT_SUMMARY = Path("painel-soprolife/data/parcerias-pastore-summary.local.json")
@@ -714,7 +732,10 @@ def main() -> int:
 
     print("Validando resumo seguro...")
     _validate_summary(payload_summary)
-    print("Validação OK. Nenhum dado pessoal no resumo.")
+    # 2ª validação: guarda de PII compartilhada (M2) — aborta com exit 1 se
+    # encontrar violação; nunca imprime o valor sensível.
+    pii_guard.ensure_summary_safe(payload_summary, rules=_PII_RULES, context="parcerias-pastore-summary")
+    print("Validação OK (local + pii_guard). Nenhum dado pessoal no resumo.")
     print()
     print(f"exames_realizados: {payload_summary['kpis']['exames_realizados']}")
     print(f"receita_estimada:  {payload_summary['kpis']['receita_estimada']}")

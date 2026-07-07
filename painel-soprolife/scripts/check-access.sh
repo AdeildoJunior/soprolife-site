@@ -976,6 +976,11 @@ else:
     print(f"  {errors} erros encontrados.")
     sys.exit(1)
 PY
+
+    # Guarda de PII compartilhada (M2) — arquivo mantido à mão, sem gerador:
+    # a validação acontece aqui, na leitura, com ruleset registrado no módulo.
+    python3 painel-soprolife/scripts/pii_guard.py \
+      --check-file "$summary_file" --ruleset financeiro-summary | sed 's/^/  /'
   else
     echo "  INFO: $summary_file não existe ainda."
     echo "        Crie com valores agregados (sem nomes de pagadores)."
@@ -1396,6 +1401,11 @@ else:
     print(f"  {errors} erro(s) encontrado(s).")
     sys.exit(1)
 PY
+
+    # Guarda de PII compartilhada (M2) — arquivo mantido à mão, sem gerador:
+    # a validação acontece aqui, na leitura, com ruleset registrado no módulo.
+    python3 painel-soprolife/scripts/pii_guard.py \
+      --check-file "$summary_file" --ruleset custos-investimentos-summary | sed 's/^/  /'
   else
     echo "  INFO: $summary_file não existe ainda."
     echo "        Crie com valores agregados de custos e investimentos."

@@ -28,6 +28,21 @@ from collections import Counter
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+# Guarda de PII compartilhada (M2) — mesma pasta deste script.
+# A validação local validate_output_safety abaixo permanece como redundância.
+import pii_guard
+
+# Regras da guarda para o ultimos-lancamentos-summary:
+# - titulo/descricao são TEMPLATES gerados por este script (mk() abaixo) a
+#   partir de contagens e rótulos institucionais ("CRM de clínicas
+#   atualizado", nome de parceria) — isentos do detector de nome, mas os
+#   scans de telefone/CPF/e-mail/segredos continuam valendo para eles.
+_PII_RULES = {
+    "campos_pessoa": [],
+    "campos_institucionais": ["titulo", "descricao", "categoria"],
+    "chaves_proibidas_extras": ["proxima_acao"],
+}
+
 BASE = Path(__file__).resolve().parent.parent.parent
 DATA = BASE / "painel-soprolife" / "data"
 DATA_PRIVATE = BASE / "painel-soprolife" / "data-private"
@@ -474,6 +489,10 @@ def main():
             print(f"  - {err}")
         print("Arquivo NÃO gravado.")
         sys.exit(1)
+
+    # 2ª validação: guarda de PII compartilhada (M2) — aborta com exit 1 se
+    # encontrar violação; nunca imprime o valor sensível.
+    pii_guard.ensure_summary_safe(payload, rules=_PII_RULES, context="ultimos-lancamentos-summary")
 
     DATA.mkdir(parents=True, exist_ok=True)
     SUMMARY_OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

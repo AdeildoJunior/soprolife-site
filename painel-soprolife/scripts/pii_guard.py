@@ -32,7 +32,16 @@ API:
         "campos_pessoa":         ["primeiro_nome", ...],  # nome de pessoa: 2+ palavras = erro
         "campos_institucionais": ["nome_clinica", "operador", ...],  # isentos do detector de nome
         "chaves_proibidas_extras": ["valor_anterior", ...],
+        # Exceções à lista de chaves proibidas: campos CURTOS e estruturados
+        # cujo nome colide com um token proibido (ex.: obs_curta, descricao,
+        # nota). A chave deixa de bloquear, mas o VALOR continua passando por
+        # todos os scans de conteúdo (telefone/CPF/nome/segredos).
+        "chaves_permitidas_excecao": ["obs_curta", ...],
     }
+
+Arquivos mantidos à mão (sem gerador): validar com
+    python3 painel-soprolife/scripts/pii_guard.py --check-file <path> --ruleset <nome>
+Rulesets registrados em _FILE_RULESETS (financeiro-summary, custos-investimentos-summary).
 
 Self-test offline:
     python3 painel-soprolife/scripts/pii_guard.py --self-test
@@ -75,6 +84,7 @@ _CONTENT_SCANS = [
     ("chave de API Google",     re.compile(r"AIza[0-9A-Za-z_-]{10,}|ya29\.")),
     ("possivel token/ID longo", re.compile(r"[A-Za-z0-9_-]{35,}")),
     ("termo clinico livre",     re.compile(r"(?i)\blaudo\b|pedido m[eé]dico|diagn[oó]stico|resultado de exame")),
+    ("referencia a chave pix",  re.compile(r"(?i)chave\s*pix")),
 ]
 
 # Detector de possível nome de pessoa: 2+ palavras Capitalizadas consecutivas
@@ -88,6 +98,8 @@ _FORBIDDEN_KEY_TOKENS = {
     "endereco", "endereço", "observacao", "observação", "obs", "laudo",
     "diagnostico", "diagnóstico", "token", "senha", "password", "secret",
     "credential", "credencial", "apikey", "authorization", "nascimento",
+    # Dados bancários/pagamento — nunca em summary (M2 Etapa 3).
+    "pix", "conta", "agencia", "agência", "banco", "comprovante", "cartao", "cartão",
 }
 
 
@@ -109,6 +121,7 @@ def _norm_rules(rules) -> dict:
         "pessoa":        {str(f).lower() for f in rules.get("campos_pessoa", [])},
         "institucional": {str(f).lower() for f in rules.get("campos_institucionais", [])},
         "extra_keys":    {str(f).lower() for f in rules.get("chaves_proibidas_extras", [])},
+        "excecao":       {str(f).lower() for f in rules.get("chaves_permitidas_excecao", [])},
     }
 
 
@@ -124,9 +137,12 @@ def validate_summary(payload, rules=None, context="") -> list:
         if isinstance(node, dict):
             for k, v in node.items():
                 kl = str(k).lower()
-                if _key_tokens(k) & _FORBIDDEN_KEY_TOKENS or kl in r["extra_keys"]:
-                    violations.append(f"chave proibida '{k}' em {path or 'raiz'}")
-                    continue  # não desce: o conteúdo é proibido por definição
+                # Exceção declarada: a chave não bloqueia, mas o valor ainda
+                # passa por todos os scans de conteúdo ao descer.
+                if kl not in r["excecao"]:
+                    if _key_tokens(k) & _FORBIDDEN_KEY_TOKENS or kl in r["extra_keys"]:
+                        violations.append(f"chave proibida '{k}' em {path or 'raiz'}")
+                        continue  # não desce: o conteúdo é proibido por definição
                 _walk(v, f"{path}.{k}" if path else str(k), k)
             return
 
@@ -173,6 +189,58 @@ def ensure_summary_safe(payload, rules=None, context="") -> None:
             print(v)
         print(f"ERRO: {len(violations)} violacao(oes) de PII — gravacao do summary abortada.")
         sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Rulesets para summaries SEM gerador (mantidos à mão) — usados via
+# `--check-file <path> --ruleset <nome>` pelo check-access.sh.
+# Chaves de exceção são campos CURTOS estruturados já existentes nesses
+# arquivos; os valores continuam passando por todos os scans.
+# ---------------------------------------------------------------------------
+
+_FILE_RULESETS = {
+    "financeiro-summary": {
+        "campos_pessoa": [],
+        "campos_institucionais": ["origem", "servico"],
+        "chaves_permitidas_excecao": ["descricao", "alerta_nota", "consultas_nota", "nota"],
+    },
+    "custos-investimentos-summary": {
+        "campos_pessoa": [],
+        # nome/item = equipamento ou primeiro nome de sócio (permitido pelo
+        # projeto); responsavel = membro da equipe; nota = texto curto curado
+        # pelos sócios que cita nomes de EQUIPAMENTO ("Espirômetro Koko") —
+        # isento do detector de nome, mas scans de telefone/CPF/pix valem.
+        "campos_institucionais": ["nome", "item", "categoria", "responsavel", "alertas", "nota"],
+        "chaves_permitidas_excecao": ["obs_curta", "observacao_curta", "nota"],
+    },
+}
+
+
+def _check_file(path: str, ruleset_name: str) -> int:
+    from pathlib import Path
+    p = Path(path)
+    if not p.exists():
+        print(f"INFO: {path} não existe — nada a validar.")
+        return 0
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"ERRO: JSON inválido em {path} — {exc}")
+        return 1
+
+    rules = _FILE_RULESETS.get(ruleset_name)
+    if ruleset_name and rules is None:
+        print(f"ERRO: ruleset '{ruleset_name}' não registrado em pii_guard._FILE_RULESETS.")
+        return 1
+
+    violations = validate_summary(payload, rules=rules, context=ruleset_name or p.name)
+    if violations:
+        for v in violations:
+            print(v)
+        print(f"ERRO: {len(violations)} violacao(oes) de PII em {path}.")
+        return 1
+    print(f"OK: {path} sem PII (ruleset: {ruleset_name or 'padrao'}).")
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +291,15 @@ def _self_test() -> int:
         ("termo clinico livre falha",              _clone_with("campo_x", "paciente trouxe pedido medico"), base_rules, False),
         ("id tecnico passa",                       _clone_with("campo_x", "AUD-0001"),               base_rules, True),
         ("timestamp ISO com fuso passa",           _clone_with("campo_x", "2026-07-07T09:00:00+00:00"), base_rules, True),
+        ("chave pix em valor falha",               _clone_with("campo_x", "pagar na chave pix do consultorio"), base_rules, False),
+        ("chave bancaria (nome de chave) falha",   _clone_with("chave_pix", "x"),                    base_rules, False),
+        ("excecao permite obs_curta com texto seguro",
+         _clone_with("obs_curta", "aparelho em uso na unidade"),
+         {**base_rules, "chaves_permitidas_excecao": ["obs_curta"]}, True),
+        ("excecao NAO desliga scans (telefone em obs_curta falha)",
+         _clone_with("obs_curta", "retorno (21) 98888-7777"),
+         {**base_rules, "chaves_permitidas_excecao": ["obs_curta"]}, False),
+        ("obs_curta sem excecao declarada falha",  _clone_with("obs_curta", "texto qualquer"),       base_rules, False),
     ]
 
     failures = 0
@@ -248,9 +325,22 @@ def main() -> int:
         print("pii_guard — self-test offline (nenhum dado real, nenhuma rede)")
         return _self_test()
 
+    if "--check-file" in sys.argv:
+        idx = sys.argv.index("--check-file")
+        if idx + 1 >= len(sys.argv):
+            print("ERRO: --check-file exige um caminho.")
+            return 1
+        path = sys.argv[idx + 1]
+        ruleset = ""
+        if "--ruleset" in sys.argv:
+            ridx = sys.argv.index("--ruleset")
+            ruleset = sys.argv[ridx + 1] if ridx + 1 < len(sys.argv) else ""
+        return _check_file(path, ruleset)
+
     print(__doc__.strip())
     print()
     print("Uso: python3 painel-soprolife/scripts/pii_guard.py --self-test")
+    print("     python3 painel-soprolife/scripts/pii_guard.py --check-file <path> [--ruleset <nome>]")
     return 0
 
 
