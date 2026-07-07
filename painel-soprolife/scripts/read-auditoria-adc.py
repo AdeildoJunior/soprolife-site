@@ -47,6 +47,20 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
+# Guarda de PII compartilhada (M2) — mesma pasta deste script.
+# A validação local _validate_summary abaixo permanece como redundância.
+import pii_guard
+
+# Regras da guarda para este summary: nenhum campo de pessoa deve existir;
+# operador/origem são identidade de instância/equipe (institucional), nunca
+# de paciente. request_id/derivado_de/valor_* já são proibidos aqui por
+# definição (ver docstring) — reforçados como chaves proibidas extras.
+_PII_RULES = {
+    "campos_pessoa": [],
+    "campos_institucionais": ["operador", "origem"],
+    "chaves_proibidas_extras": ["valor_anterior", "valor_novo", "derivado_de", "request_id"],
+}
+
 _CONFIG_PATH = Path("~/.config/soprolife/painel/google-sheets.local.json").expanduser()
 _OUT_SUMMARY = Path("painel-soprolife/data/auditoria-summary.local.json")
 
@@ -362,7 +376,10 @@ def main() -> int:
 
     print("Validando resumo seguro...")
     _validate_summary(payload)
-    print("Validação OK. Nenhum dado pessoal ou conteúdo de campo no resumo.")
+    # 2ª validação: guarda de PII compartilhada (M2) — aborta com exit 1 se
+    # encontrar violação; nunca imprime o valor sensível.
+    pii_guard.ensure_summary_safe(payload, rules=_PII_RULES, context="auditoria-summary")
+    print("Validação OK (local + pii_guard). Nenhum dado pessoal ou conteúdo de campo no resumo.")
     print()
     print(f"total_eventos: {payload['stats']['total_eventos']}")
     print(f"erros:         {payload['stats']['erros']}")
