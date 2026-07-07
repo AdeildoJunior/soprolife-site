@@ -23,6 +23,24 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+# Guarda de PII compartilhada (M2) — mesma pasta deste script.
+# _scan_for_secrets abaixo permanece como redundância.
+import pii_guard
+
+# Regras da guarda para o marketing-seo.local.json (mesmo conteúdo vai ao
+# arquivo privado e ao público — a guarda protege os dois):
+# - query = termos de busca digitados por usuários do Google (agregados,
+#   permitidos pelo projeto) e page/siteUrl = URLs do site público —
+#   isentos do detector de nome, mas scans de telefone/CPF/segredos valem
+#   (um telefone digitado como busca NÃO pode chegar ao painel);
+# - warnings = mensagens de erro de API (podem citar a propriedade) —
+#   idem, isentas só do detector de nome.
+_PII_RULES = {
+    "campos_pessoa": [],
+    "campos_institucionais": ["query", "page", "siteUrl", "warnings", "sources"],
+    "chaves_proibidas_extras": [],
+}
+
 _CONFIG_PATH = Path("painel-soprolife/data-private/marketing-seo-config.local.json")
 _OUT_PRIVATE = Path("~/.config/soprolife/painel/marketing-seo.json").expanduser()
 _OUT_PUBLIC  = Path("painel-soprolife/data/marketing-seo.local.json")
@@ -292,6 +310,10 @@ def _write_output(output):
         print(f"ERRO CRÍTICO: padrão proibido '{found}' detectado no JSON de saída.")
         print("  Abortando gravação para proteger dados sensíveis.")
         sys.exit(1)
+
+    # 2ª validação: guarda de PII compartilhada (M2) — aborta com exit 1 se
+    # encontrar violação; nunca imprime o valor sensível.
+    pii_guard.ensure_summary_safe(output, rules=_PII_RULES, context="marketing-seo")
 
     text = json.dumps(output, ensure_ascii=False, indent=2) + "\n"
 

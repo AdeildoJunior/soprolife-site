@@ -325,7 +325,11 @@ function normalizeCrmRecord(item) {
   const bairro = item.bairro || "";
   const regiao = item.regiao || "";
   const etapaRaw = item.etapa || "";
-  const acaoRaw  = item.proxima_acao || item.proximaAcao || "";
+  // Dado real não traz o texto de proxima_acao (texto livre, M2) — só o
+  // booleano tem_proxima_acao; o texto completo fica na planilha privada.
+  // O demo (crm-clinicas.json) continua trazendo o texto e renderiza igual.
+  const acaoRaw  = item.proxima_acao || item.proximaAcao ||
+    (item.tem_proxima_acao ? "Ação definida — ver planilha" : "");
   const observacao = item.observacao || "";
   return {
     id: item.clinica_id || item.id || "",

@@ -39,6 +39,9 @@ import sys
 import unicodedata
 from pathlib import Path
 
+# Guarda de PII compartilhada (M2) — mesma pasta deste script.
+import pii_guard
+
 _CONFIG_PATH = Path("~/.config/soprolife/painel/google-sheets.local.json").expanduser()
 _OUT_PATH = Path("~/.config/soprolife/painel/resumo-dashboard.json").expanduser()
 
@@ -573,6 +576,11 @@ def main() -> int:
     for key in _NEW_KEYS:
         if key in summary:
             output[key] = _as_display(summary[key])
+
+    # Guarda de PII compartilhada (M2): o resumo do dashboard é só
+    # {chave técnica: número} — regras padrão (default-fechado) bastam.
+    # Aborta com exit 1 antes de gravar se algo vazar.
+    pii_guard.ensure_summary_safe(output, context="resumo-dashboard")
 
     _OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     _OUT_PATH.write_text(json.dumps(output, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -373,8 +373,10 @@ if not isinstance(clinicas, list):
 
 ALLOWED_FIELDS = {
     "clinica_id", "nome_clinica", "bairro", "regiao", "tipo_clinica",
-    "etapa", "ultima_interacao", "proxima_acao", "data_proxima_acao",
+    "etapa", "ultima_interacao", "tem_proxima_acao", "data_proxima_acao",
     "responsavel", "prioridade",
+    # proxima_acao (texto livre) foi substituída pelo booleano
+    # tem_proxima_acao na M2 Etapa 4 — texto livre aqui agora é ERRO.
 }
 BLOCKED_FIELDS = {
     "observacao", "observação", "cpf", "telefone", "celular", "email",

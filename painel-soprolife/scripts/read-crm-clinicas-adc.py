@@ -23,6 +23,19 @@ import re
 import sys
 from pathlib import Path
 
+# Guarda de PII compartilhada (M2) — mesma pasta deste script.
+# _check_value/ALLOWED_COLUMNS abaixo permanecem como redundância.
+import pii_guard
+
+# Regras da guarda para o export de CRM Clínicas (dados institucionais B2B):
+# nome_clinica/bairro/regiao/tipo_clinica são nomes institucionais/lugares
+# ("Barra da Tijuca" não é pessoa); responsavel é membro da equipe.
+_PII_RULES = {
+    "campos_pessoa": [],
+    "campos_institucionais": ["nome_clinica", "bairro", "regiao", "tipo_clinica", "responsavel"],
+    "chaves_proibidas_extras": ["proxima_acao"],
+}
+
 _CONFIG_PATH = Path("~/.config/soprolife/painel/google-sheets.local.json").expanduser()
 _OUT_PATH = Path("~/.config/soprolife/painel/crm-clinicas.json").expanduser()
 
@@ -37,7 +50,8 @@ ALLOWED_COLUMNS = {
     "tipo_clinica",
     "etapa",
     "ultima_interacao",
-    "proxima_acao",
+    # proxima_acao (texto livre) NÃO é exportada: o painel recebe só o
+    # booleano derivado tem_proxima_acao — ver _parse_rows (M2 Etapa 4).
     "data_proxima_acao",
     "responsavel",
     "prioridade",
@@ -234,6 +248,9 @@ def _parse_records(rows: list) -> list[dict]:
         if h in ALLOWED_COLUMNS:
             col_indices[h] = i
 
+    # proxima_acao é texto livre — só o booleano derivado vai ao painel.
+    proxima_idx = headers.index("proxima_acao") if "proxima_acao" in headers else -1
+
     if not col_indices:
         print("ERRO: nenhuma coluna reconhecida encontrada no cabeçalho.")
         print(f"  Cabeçalhos encontrados: {' | '.join(headers)}")
@@ -252,6 +269,9 @@ def _parse_records(rows: list) -> list[dict]:
 
         if not any(record.values()):
             continue
+
+        if proxima_idx >= 0 and proxima_idx < len(row) and str(row[proxima_idx]).strip():
+            record["tem_proxima_acao"] = True
 
         records.append(record)
 
@@ -304,7 +324,10 @@ def main() -> int:
 
     print(f"records_valid: {len(records)}")
     print()
-    print("Validação concluída. Nenhum dado sensível detectado.")
+    # 2ª validação: guarda de PII compartilhada (M2) — aborta com exit 1 se
+    # encontrar violação; nunca imprime o valor sensível.
+    pii_guard.ensure_summary_safe(records, rules=_PII_RULES, context="crm-clinicas")
+    print("Validação concluída (local + pii_guard). Nenhum dado sensível detectado.")
 
     if mode == "dry-run":
         print()

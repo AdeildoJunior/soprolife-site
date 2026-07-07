@@ -28,7 +28,9 @@ ALLOWED_FIELDS = {
     "tipo_clinica",
     "etapa",
     "ultima_interacao",
-    "proxima_acao",
+    # proxima_acao (texto livre) foi substituída pelo booleano derivado
+    # tem_proxima_acao — ver read-crm-clinicas-adc.py (M2 Etapa 4).
+    "tem_proxima_acao",
     "data_proxima_acao",
     "responsavel",
     "prioridade",
@@ -86,7 +88,9 @@ for i, record in enumerate(records, start=1):
     if extra:
         print(f"AVISO: campos não reconhecidos ignorados no registro {i}: {', '.join(sorted(extra))}")
 
-    safe_record = {k: str(v) for k, v in record.items() if k in ALLOWED_FIELDS}
+    # Booleans (tem_proxima_acao) preservados; demais valores viram string.
+    safe_record = {k: (v if isinstance(v, bool) else str(v))
+                   for k, v in record.items() if k in ALLOWED_FIELDS}
 
     record_text = json.dumps(safe_record, ensure_ascii=False).lower()
     for term in FORBIDDEN_TERMS:

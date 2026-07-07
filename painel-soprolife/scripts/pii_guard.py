@@ -82,7 +82,10 @@ _CONTENT_SCANS = [
     ("URL Apps Script",         re.compile(r"(?i)script\.google")),
     ("URL de planilha",         re.compile(r"(?i)docs\.google\.com|/spreadsheets/d/")),
     ("chave de API Google",     re.compile(r"AIza[0-9A-Za-z_-]{10,}|ya29\.")),
-    ("possivel token/ID longo", re.compile(r"[A-Za-z0-9_-]{35,}")),
+    # Exige ao menos um dígito: slugs longos de URL do site público
+    # ("consulta-pneumologista-rio-de-janeiro") não são token; IDs de
+    # planilha/credencial contêm dígitos.
+    ("possivel token/ID longo", re.compile(r"(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{35,}")),
     ("termo clinico livre",     re.compile(r"(?i)\blaudo\b|pedido m[eé]dico|diagn[oó]stico|resultado de exame")),
     ("referencia a chave pix",  re.compile(r"(?i)chave\s*pix")),
 ]
@@ -300,6 +303,10 @@ def _self_test() -> int:
          _clone_with("obs_curta", "retorno (21) 98888-7777"),
          {**base_rules, "chaves_permitidas_excecao": ["obs_curta"]}, False),
         ("obs_curta sem excecao declarada falha",  _clone_with("obs_curta", "texto qualquer"),       base_rules, False),
+        ("slug longo de URL sem digito passa",
+         _clone_with("campo_x", "/consulta-pneumologista-rio-de-janeiro/"), base_rules, True),
+        ("ID longo com digitos falha",
+         _clone_with("campo_x", "1AbC2dEf3GhI4jKl5MnO6pQr7StU8vWx9Yz0aBcDe"), base_rules, False),
     ]
 
     failures = 0

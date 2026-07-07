@@ -42,6 +42,20 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Guarda de PII compartilhada (M2) — mesma pasta deste script.
+# A validação local _validate_summary abaixo permanece como redundância.
+import pii_guard
+
+# Regras da guarda para o crm-contatos-b2b-summary: nunca nome/telefone/
+# e-mail de contato (ficam só no privado); cargo/papel/responsavel são
+# rótulos institucionais; proxima_acao (texto livre) NÃO sai — só o
+# booleano derivado tem_proxima_acao.
+_PII_RULES = {
+    "campos_pessoa": [],
+    "campos_institucionais": ["cargo", "papel", "responsavel"],
+    "chaves_proibidas_extras": ["proxima_acao"],
+}
+
 _CONFIG_PATH = Path("~/.config/soprolife/painel/google-sheets.local.json").expanduser()
 _OUT_PRIVATE = Path("painel-soprolife/data-private/crm-contatos-b2b.local.json")
 _OUT_SUMMARY = Path("painel-soprolife/data/crm-contatos-b2b-summary.local.json")
@@ -71,7 +85,9 @@ PRIVATE_FIELDS = {"nome_contato", "telefone_whatsapp", "email", "observacao"}
 # Campos seguros: podem ir no resumo público
 SAFE_FIELDS = {
     "contato_id", "clinica_id", "cargo", "papel", "status_relacionamento",
-    "ultima_interacao", "proxima_acao", "data_proxima_acao", "responsavel",
+    "ultima_interacao", "data_proxima_acao", "responsavel",
+    # proxima_acao (texto livre) NÃO entra: o resumo leva só o booleano
+    # derivado tem_proxima_acao — ver _build_outputs (M2 Etapa 4).
 }
 
 BLOCKED_FIELDS = {
@@ -249,6 +265,9 @@ def _build_outputs(records: list[dict], now_iso: str) -> tuple[dict, dict]:
     for rec in records:
         private_contatos.append({k: v for k, v in rec.items() if v != ""})
         safe_rec = {k: v for k, v in rec.items() if k in SAFE_FIELDS and v != ""}
+        # proxima_acao é texto livre — o resumo leva só o booleano derivado.
+        if str(rec.get("proxima_acao", "")).strip():
+            safe_rec["tem_proxima_acao"] = True
         summary_contatos.append(safe_rec)
 
     payload_private = {
@@ -285,6 +304,9 @@ def _validate_summary(payload_summary: dict) -> None:
             if field in rec:
                 print(f"ERRO interno: campo '{field}' vazou para o resumo no registro {i}.")
                 errors += 1
+        if "proxima_acao" in rec:
+            print(f"ERRO interno: campo 'proxima_acao' (texto livre) vazou para o resumo no registro {i}.")
+            errors += 1
 
         rec_text = json.dumps(rec, ensure_ascii=False)
         if _FONE_RE.search(rec_text):
@@ -374,7 +396,10 @@ def main() -> int:
     print()
     print("Validando resumo seguro...")
     _validate_summary(payload_summary)
-    print("Validação OK. Nenhum dado pessoal no resumo.")
+    # 2ª validação: guarda de PII compartilhada (M2) — aborta com exit 1 se
+    # encontrar violação; nunca imprime o valor sensível.
+    pii_guard.ensure_summary_safe(payload_summary, rules=_PII_RULES, context="crm-contatos-b2b-summary")
+    print("Validação OK (local + pii_guard). Nenhum dado pessoal no resumo.")
 
     n_priv = len(payload_private["contatos"])
     n_summ = len(payload_summary["contatos"])
