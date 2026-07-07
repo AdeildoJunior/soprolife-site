@@ -6441,3 +6441,79 @@ th {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Auditoria M1 — card "Últimas alterações" (seção Automações) ─────────── */
+
+.auditoria-panel {
+  margin-bottom: 18px;
+}
+
+.auditoria-stats {
+  grid-template-columns: repeat(3, minmax(170px, 1fr));
+  margin-bottom: 14px;
+}
+
+.auditoria-stat-alerta strong {
+  color: #b5470a;
+}
+
+.auditoria-empty {
+  color: var(--muted);
+  font-size: .9rem;
+  padding: 6px 2px;
+}
+
+.auditoria-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.auditoria-event {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.auditoria-event:last-child {
+  border-bottom: none;
+}
+
+.auditoria-event-time {
+  color: var(--muted);
+  font-size: .8rem;
+  white-space: nowrap;
+  min-width: 118px;
+}
+
+.auditoria-event-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.auditoria-event-body strong {
+  display: block;
+  color: var(--navy);
+  font-size: .92rem;
+  line-height: 1.4;
+}
+
+.auditoria-event-body small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .auditoria-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .auditoria-event {
+    flex-wrap: wrap;
+    gap: 6px 14px;
+  }
+}

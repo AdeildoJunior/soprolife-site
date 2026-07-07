@@ -1,5 +1,8 @@
 {
   "_instrucoes": "Copie este arquivo para painel-soprolife/data-private/command-center-config.local.json e preencha os valores reais.",
   "webAppUrl": "https://script.google.com/macros/s/SEU_DEPLOYMENT_ID/exec",
-  "apiToken": "SEU_TOKEN_SECRETO_AQUI"
+  "apiToken": "SEU_TOKEN_SECRETO_AQUI",
+  "_instrucoes_auditoria": "Campos opcionais de identidade para a aba Log Auditoria (M1). instanceName identifica ESTA instância do proxy (ex.: painel-vps, painel-notebook); se vazio, usa o hostname da máquina. operatorName identifica quem opera nesta máquina (ex.: primeiro nome do sócio); se vazio, registra 'desconhecido'. O proxy sempre sobrescreve valores vindos do browser.",
+  "instanceName": "painel-exemplo",
+  "operatorName": "operador-exemplo"
 }

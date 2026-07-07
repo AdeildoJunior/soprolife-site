@@ -27,6 +27,7 @@ const state = {
   followupClinicasSummary: null,
   crmReportFilters: null,
   parceriaPastore: null,
+  auditoria: null,
 };
 
 const slug = (text) =>
@@ -466,6 +467,13 @@ async function init() {
       state.ultimosLancamentos = lancamentosData;
     }
 
+    // Auditoria M1: resumo seguro da aba Log Auditoria (só agregados e
+    // eventos com ação/tipo/ID/operador/resultado — nunca conteúdo de campo).
+    const auditoriaData = await loadOptionalJson("./data/auditoria-summary.local.json");
+    if (auditoriaData?.source?.safeToDisplay === true && auditoriaData?.source?.containsPersonalData === false) {
+      state.auditoria = auditoriaData;
+    }
+
     const custosData = await loadOptionalJson("./data/custos-investimentos-summary.local.json");
     if (custosData?.source?.safeToDisplay === true && custosData?.source?.containsPersonalData === false) {
       state.custosInvestimentos = custosData;
@@ -507,6 +515,7 @@ async function init() {
     renderParceriaPastore();
     renderCustosInvestimentos();
     renderAutomations();
+    renderAuditoria();
     renderLancamentos();
     bindEvents();
   } catch (error) {
@@ -654,6 +663,9 @@ const METRIC_INFO = {
   lancamentosAltaPrioridade: "Eventos marcados como alta prioridade, que merecem atenção mais rápida.",
   lancamentosPendencias: "Eventos com erro ou pendência que ainda precisam ser resolvidos.",
   lancamentosStatusIndisponivel: "O gerador de últimos lançamentos ainda não foi executado neste ambiente.",
+  auditoriaTotal: "Total de escritas feitas pelo painel registradas na aba Log Auditoria da planilha.",
+  auditoriaErros: "Escritas que falharam ao gravar na planilha — se crescer, investigar o Apps Script.",
+  auditoriaOperadores: "Quantos operadores distintos já fizeram alterações pelo painel.",
 };
 
 // Gera os atributos de tooltip (data-tip, aria-label, tabindex) para um card,
@@ -5720,6 +5732,77 @@ function renderAutomations() {
   `).join("");
 }
 
+
+// ── Auditoria M1 — card "Últimas alterações" (seção Automações) ───────────────
+
+// Rótulos amigáveis por slug de ação da aba Log Auditoria. Slug desconhecido
+// cai no próprio slug (novas ações aparecem sem quebrar o card).
+const AUDITORIA_ACAO_LABELS = {
+  update_lead_stage:            "Etapa de lead alterada",
+  update_crm_clinica_etapa:     "Etapa de clínica alterada",
+  mirror_etapa_pcmso:           "Espelhamento na base PCMSO",
+  create_lead:                  "Lead criado",
+  create_paciente:              "Paciente cadastrado",
+  create_espirometria:          "Espirometria registrada",
+  create_consulta:              "Consulta registrada",
+  create_clinica_b2b:           "Clínica B2B cadastrada",
+  registrar_interacao_clinica:  "Interação com clínica",
+  registrar_interacao_paciente: "Follow-up de paciente",
+  registrar_atendimento_pastore:"Atendimento Pastore",
+  upsert_contato_b2b:           "Contato B2B atualizado",
+  teste_apagar:                 "Teste (apagar)",
+};
+
+function renderAuditoria() {
+  const panel = document.querySelector("#auditoriaPanel");
+  if (!panel) return;
+
+  const stats = state.auditoria?.stats;
+  const eventos = state.auditoria?.ultimos_eventos;
+
+  // Sem summary (pipeline ainda não rodou / aba ainda não existe): card oculto.
+  if (!stats || !Array.isArray(eventos)) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  const statsContainer = panel.querySelector("#auditoriaStats");
+  const listContainer  = panel.querySelector("#auditoriaList");
+  if (!statsContainer || !listContainer) return;
+
+  const operadores = Object.keys(stats.por_operador || {}).length;
+  statsContainer.innerHTML = [
+    { key: "auditoriaTotal",      label: "Escritas registradas", value: stats.total_eventos ?? 0 },
+    { key: "auditoriaErros",      label: "Erros de gravação",    value: stats.erros ?? 0,
+      extraClass: (stats.erros ?? 0) > 0 ? "auditoria-stat-alerta" : "" },
+    { key: "auditoriaOperadores", label: "Operadores",           value: operadores },
+  ].map((item) => statCardHtml("automation-stat-card", item)).join("");
+
+  if (!eventos.length) {
+    listContainer.innerHTML = `<p class="auditoria-empty">Nenhuma escrita registrada ainda — as alterações feitas pelo painel aparecerão aqui.</p>`;
+    return;
+  }
+
+  listContainer.innerHTML = `
+    <ul class="auditoria-events">
+      ${eventos.map((evt) => {
+        const acaoLabel = AUDITORIA_ACAO_LABELS[evt.acao] || evt.acao || "Ação desconhecida";
+        const ok = String(evt.resultado || "").toLowerCase().startsWith("ok");
+        const detalhe = [evt.entidade_id, evt.operador ? `por ${evt.operador}` : ""]
+          .filter(Boolean).map((v) => escapeHtml(String(v))).join(" · ");
+        return `
+          <li class="auditoria-event">
+            <span class="auditoria-event-time">${escapeHtml(String(evt.timestamp || ""))}</span>
+            <div class="auditoria-event-body">
+              <strong>${escapeHtml(acaoLabel)}</strong>
+              ${detalhe ? `<small>${detalhe}</small>` : ""}
+            </div>
+            <span class="badge ${ok ? "lancamento-badge-ok" : "lancamento-badge-pendente"}">${ok ? "OK" : "Erro"}</span>
+          </li>`;
+      }).join("")}
+    </ul>`;
+}
 
 function renderRuntimeStatus() {
   const container = document.querySelector("#runtimeStatus");

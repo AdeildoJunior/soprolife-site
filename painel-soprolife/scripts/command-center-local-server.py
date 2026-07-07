@@ -23,6 +23,7 @@ Uso:
 import http.server
 import json
 import os
+import socket
 import sys
 import urllib.error
 import urllib.request
@@ -34,6 +35,12 @@ PORT = int(os.environ.get("SOPROLIFE_PANEL_PORT", "8765"))
 _CONFIG_PATH = Path("painel-soprolife/data-private/command-center-config.local.json")
 _API_PATH    = "/painel-soprolife/api/command-center"
 _STATUS_PATH = "/painel-soprolife/api/command-center/status"
+
+
+def _audit_meta(value, fallback: str) -> str:
+    """Sanitiza metadado de auditoria: string curta, sem quebras, com fallback."""
+    v = " ".join(str(value or "").split())[:40]
+    return v or fallback
 
 
 # ── Handler ───────────────────────────────────────────────────────────────────
@@ -103,6 +110,20 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         if not web_url or not api_token:
             self._json({"ok": False, "error": "Configuração incompleta."}, 503)
             return
+
+        # Identidade de auditoria (M1 Etapa 4) — atributo do SERVIDOR, como o
+        # token: sobrescreve qualquer audit_* vindo do browser (nunca confiar
+        # no cliente). Lida da config local: instanceName → audit_origem
+        # (fallback: hostname), operatorName → audit_operador. Campos usados
+        # pelo Apps Script apenas na aba Log Auditoria — nunca contêm dado
+        # pessoal, só o nome da instância e do operador declarado na config.
+        if isinstance(data, dict):
+            try:
+                hostname = socket.gethostname()
+            except Exception:
+                hostname = ""
+            data["audit_origem"]   = _audit_meta(cfg.get("instanceName"), _audit_meta(hostname, "desconhecida"))
+            data["audit_operador"] = _audit_meta(cfg.get("operatorName"), "desconhecido")
 
         # Adiciona token server-side e encaminha para o Apps Script
         forward = json.dumps({

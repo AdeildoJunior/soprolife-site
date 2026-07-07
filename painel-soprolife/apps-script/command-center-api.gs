@@ -35,6 +35,8 @@ var _SHEETS = {
   CRM_CONTATOS_B2B:  "CRM Contatos B2B",
   FOLLOWUP_WA:       "Follow-up WhatsApp",
   LOG:               "Log Centro Comando",
+  // Trilha de auditoria append-only das escritas (M1) — ver _logAudit.
+  LOG_AUDITORIA:     "Log Auditoria",
   // Parceria Pastore — ver painel-soprolife/docs/parceria-pastore-planilha.md
   PARCERIA_PASTORE_ATENDIMENTOS: "Parceria Pastore - Atendimentos",
 };
@@ -237,151 +239,202 @@ function doPost(e) {
 function _createLead(data) {
   _required(data, ["nome", "responsavel"]);
 
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
+
   var sheet = _getOrCreateSheet(_SHEETS.LEADS);
   var id    = _nextId(sheet, "LEAD");
 
-  _appendRowSemValidacao(sheet, _buildRow(sheet, {
-    lead_id:           id,
-    data_contato:      _nowBr(),
-    nome:              data.nome              || "",
-    telefone_whatsapp: data.telefone_whatsapp || "",
-    servico_interesse: data.servico_interesse || "",
-    origem:            data.origem            || "",
-    etapa:             data.etapa             || "Novo contato",
-    responsavel:       data.responsavel       || "",
-    proxima_acao:      data.proxima_acao      || "",
-    data_proxima_acao: data.data_proxima_acao || "",
-    observacao:        data.observacao        || "",
-  }));
+  try {
+    _appendRowSemValidacao(sheet, _buildRow(sheet, {
+      lead_id:           id,
+      data_contato:      _nowBr(),
+      nome:              data.nome              || "",
+      telefone_whatsapp: data.telefone_whatsapp || "",
+      servico_interesse: data.servico_interesse || "",
+      origem:            data.origem            || "",
+      etapa:             data.etapa             || "Novo contato",
+      responsavel:       data.responsavel       || "",
+      proxima_acao:      data.proxima_acao      || "",
+      data_proxima_acao: data.data_proxima_acao || "",
+      observacao:        data.observacao        || "",
+    }));
+  } catch (e) {
+    _auditAcao(auditRequestId, auditT0, "create_lead", "lead", id, data, "ERROR: falha na gravacao");
+    throw e;
+  }
 
   // telefone_whatsapp e observacao nunca são registrados no log
   _logEntry({ acao: "createLead", status: "OK", aba: _SHEETS.LEADS, id: id, resumo: "Lead registrado." });
+  _auditAcao(auditRequestId, auditT0, "create_lead", "lead", id, data, "ok");
   return _ok({ id: id, message: "Lead registrado com sucesso." });
 }
 
 function _createPaciente(data) {
   _required(data, ["primeiro_nome", "responsavel"]);
 
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
+
   var sheet   = _getOrCreateSheet(_SHEETS.PACIENTES);
   var id      = _nextId(sheet, "PAC");
   var consent = _normalizeConsent(data.consentimento_whatsapp);
 
-  _appendRowSemValidacao(sheet, _buildRow(sheet, {
-    paciente_id:            id,
-    data_cadastro:          _nowBr(),
-    primeiro_nome:          data.primeiro_nome              || "",
-    telefone:               data.telefone                   || "",
-    ultimo_servico:         data.origem                     || "",
-    status_relacionamento:  "Ativo",
-    proximo_contato:        data.proximo_contato            || "",
-    motivo_proximo_contato: "",
-    canal:                  data.canal                      || "",
-    responsavel:            data.responsavel                || "",
-    consentimento_whatsapp: consent,
-  }));
+  try {
+    _appendRowSemValidacao(sheet, _buildRow(sheet, {
+      paciente_id:            id,
+      data_cadastro:          _nowBr(),
+      primeiro_nome:          data.primeiro_nome              || "",
+      telefone:               data.telefone                   || "",
+      ultimo_servico:         data.origem                     || "",
+      status_relacionamento:  "Ativo",
+      proximo_contato:        data.proximo_contato            || "",
+      motivo_proximo_contato: "",
+      canal:                  data.canal                      || "",
+      responsavel:            data.responsavel                || "",
+      consentimento_whatsapp: consent,
+    }));
+  } catch (e) {
+    _auditAcao(auditRequestId, auditT0, "create_paciente", "paciente", id, data, "ERROR: falha na gravacao");
+    throw e;
+  }
 
   _logEntry({ acao: "createPaciente", status: "OK", aba: _SHEETS.PACIENTES, id: id, resumo: "Paciente cadastrado." });
+  _auditAcao(auditRequestId, auditT0, "create_paciente", "paciente", id, data, "ok");
   return _ok({ id: id, message: "Paciente criado com sucesso." });
 }
 
 function _createEspirometria(data) {
   _required(data, ["primeiro_nome", "responsavel"]);
 
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
+
   var sheet   = _getOrCreateSheet(_SHEETS.ESPIROMETRIA);
   var id      = _nextId(sheet, "ESP");
   var consent = _normalizeConsent(data.consentimento_whatsapp);
 
-  _appendRowSemValidacao(sheet, _buildRow(sheet, {
-    exame_id:               id,
-    data_entrada:           _nowBr(),
-    primeiro_nome:          data.primeiro_nome              || "",
-    telefone:               data.telefone                   || "",
-    servico:                data.servico                    || "Espirometria",
-    origem:                 data.origem                     || "",
-    status_exame:           data.status_exame               || "Aguardando",
-    data_exame:             data.data_exame                 || "",
-    proximo_contato:        data.proximo_contato            || "",
-    motivo_proximo_contato: data.motivo_proximo_contato     || "",
-    canal:                  data.canal                      || "",
-    responsavel:            data.responsavel                || "",
-    consentimento_whatsapp: consent,
-  }));
+  try {
+    _appendRowSemValidacao(sheet, _buildRow(sheet, {
+      exame_id:               id,
+      data_entrada:           _nowBr(),
+      primeiro_nome:          data.primeiro_nome              || "",
+      telefone:               data.telefone                   || "",
+      servico:                data.servico                    || "Espirometria",
+      origem:                 data.origem                     || "",
+      status_exame:           data.status_exame               || "Aguardando",
+      data_exame:             data.data_exame                 || "",
+      proximo_contato:        data.proximo_contato            || "",
+      motivo_proximo_contato: data.motivo_proximo_contato     || "",
+      canal:                  data.canal                      || "",
+      responsavel:            data.responsavel                || "",
+      consentimento_whatsapp: consent,
+    }));
+  } catch (e) {
+    _auditAcao(auditRequestId, auditT0, "create_espirometria", "espirometria", id, data, "ERROR: falha na gravacao");
+    throw e;
+  }
 
   _logEntry({ acao: "createEspirometria", status: "OK", aba: _SHEETS.ESPIROMETRIA, id: id, resumo: "Espirometria registrada." });
+  _auditAcao(auditRequestId, auditT0, "create_espirometria", "espirometria", id, data, "ok");
   return _ok({ id: id, message: "Espirometria registrada com sucesso." });
 }
 
 function _createConsulta(data) {
   _required(data, ["primeiro_nome", "responsavel"]);
 
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
+
   var sheet   = _getOrCreateSheet(_SHEETS.CONSULTAS);
   var id      = _nextId(sheet, "CON");
   var consent = _normalizeConsent(data.consentimento_whatsapp);
 
-  _appendRowSemValidacao(sheet, _buildRow(sheet, {
-    consulta_id:            id,
-    data_entrada:           _nowBr(),
-    primeiro_nome:          data.primeiro_nome              || "",
-    telefone:               data.telefone                   || "",
-    origem:                 data.origem                     || "",
-    tipo_consulta:          data.tipo_consulta              || "",
-    status:                 data.status                     || "Agendada",
-    medica:                 data.medica                     || "",
-    data_consulta:          data.data_consulta              || "",
-    proximo_contato:        data.proximo_contato            || "",
-    motivo_proximo_contato: data.motivo_proximo_contato     || "",
-    canal:                  data.canal                      || "",
-    responsavel:            data.responsavel                || "",
-    consentimento_whatsapp: consent,
-  }));
+  try {
+    _appendRowSemValidacao(sheet, _buildRow(sheet, {
+      consulta_id:            id,
+      data_entrada:           _nowBr(),
+      primeiro_nome:          data.primeiro_nome              || "",
+      telefone:               data.telefone                   || "",
+      origem:                 data.origem                     || "",
+      tipo_consulta:          data.tipo_consulta              || "",
+      status:                 data.status                     || "Agendada",
+      medica:                 data.medica                     || "",
+      data_consulta:          data.data_consulta              || "",
+      proximo_contato:        data.proximo_contato            || "",
+      motivo_proximo_contato: data.motivo_proximo_contato     || "",
+      canal:                  data.canal                      || "",
+      responsavel:            data.responsavel                || "",
+      consentimento_whatsapp: consent,
+    }));
+  } catch (e) {
+    _auditAcao(auditRequestId, auditT0, "create_consulta", "consulta", id, data, "ERROR: falha na gravacao");
+    throw e;
+  }
 
   _logEntry({ acao: "createConsulta", status: "OK", aba: _SHEETS.CONSULTAS, id: id, resumo: "Consulta registrada." });
+  _auditAcao(auditRequestId, auditT0, "create_consulta", "consulta", id, data, "ok");
   return _ok({ id: id, message: "Consulta registrada com sucesso." });
 }
 
 function _createClinicaB2B(data) {
   _required(data, ["nome_clinica", "status"]);
 
-  // Escreve na aba PCMSO (prospecção)
-  var pcmsoSheet = _getOrCreateSheet(_SHEETS.B2B_PCMSO);
-  _appendRowSemValidacao(pcmsoSheet, _buildRow(pcmsoSheet, {
-    "Nome da clínica/empresa": data.nome_clinica       || "",
-    "Tipo":                    data.tipo_clinica        || "",
-    "Bairro/Região":           _joinNotEmpty(data.bairro, data.regiao),
-    "Telefone/WhatsApp":       data.telefone_whatsapp   || "",
-    "Pessoa de contato":       "",
-    "Origem da lista":         data.origem              || "",
-    "Status":                  data.status              || "",
-    "Interesse":               data.interesse           || "",
-    "Próximo passo":           data.proximo_passo       || "",
-    "Data do próximo passo":   data.data_proximo_passo  || "",
-    "Observações":             "",
-  }));
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
 
-  // Escreve também no CRM Clinicas
-  var crmSheet = _getOrCreateSheet(_SHEETS.CRM_CLINICAS);
-  var crmId    = _nextId(crmSheet, "CLI");
-  _appendRowSemValidacao(crmSheet, _buildRow(crmSheet, {
-    clinica_id:        crmId,
-    nome_clinica:      data.nome_clinica      || "",
-    bairro:            data.bairro            || "",
-    regiao:            data.regiao            || "",
-    tipo_clinica:      data.tipo_clinica      || "",
-    etapa:             data.status            || "Não abordado",
-    ultima_interacao:  _nowBr(),
-    proxima_acao:      data.proximo_passo     || "",
-    data_proxima_acao: data.data_proximo_passo || "",
-    responsavel:       data.responsavel       || "",
-    prioridade:        data.prioridade        || "Normal",
-    observacao:        "",
-  }));
+  var pcmsoSheet = _getOrCreateSheet(_SHEETS.B2B_PCMSO);
+  var crmSheet   = _getOrCreateSheet(_SHEETS.CRM_CLINICAS);
+  var crmId      = _nextId(crmSheet, "CLI");
+
+  // Uma ação de negócio (cadastro da clínica), duas abas escritas —
+  // um único evento de auditoria, identificado pelo clinica_id do CRM.
+  try {
+    // Escreve na aba PCMSO (prospecção)
+    _appendRowSemValidacao(pcmsoSheet, _buildRow(pcmsoSheet, {
+      "Nome da clínica/empresa": data.nome_clinica       || "",
+      "Tipo":                    data.tipo_clinica        || "",
+      "Bairro/Região":           _joinNotEmpty(data.bairro, data.regiao),
+      "Telefone/WhatsApp":       data.telefone_whatsapp   || "",
+      "Pessoa de contato":       "",
+      "Origem da lista":         data.origem              || "",
+      "Status":                  data.status              || "",
+      "Interesse":               data.interesse           || "",
+      "Próximo passo":           data.proximo_passo       || "",
+      "Data do próximo passo":   data.data_proximo_passo  || "",
+      "Observações":             "",
+    }));
+
+    // Escreve também no CRM Clinicas
+    _appendRowSemValidacao(crmSheet, _buildRow(crmSheet, {
+      clinica_id:        crmId,
+      nome_clinica:      data.nome_clinica      || "",
+      bairro:            data.bairro            || "",
+      regiao:            data.regiao            || "",
+      tipo_clinica:      data.tipo_clinica      || "",
+      etapa:             data.status            || "Não abordado",
+      ultima_interacao:  _nowBr(),
+      proxima_acao:      data.proximo_passo     || "",
+      data_proxima_acao: data.data_proximo_passo || "",
+      responsavel:       data.responsavel       || "",
+      prioridade:        data.prioridade        || "Normal",
+      observacao:        "",
+    }));
+  } catch (e) {
+    _auditAcao(auditRequestId, auditT0, "create_clinica_b2b", "clinica", crmId, data, "ERROR: falha na gravacao");
+    throw e;
+  }
 
   _logEntry({ acao: "createClinicaB2B", status: "OK", aba: _SHEETS.B2B_PCMSO + " + " + _SHEETS.CRM_CLINICAS, id: crmId, resumo: "Clínica B2B cadastrada." });
+  _auditAcao(auditRequestId, auditT0, "create_clinica_b2b", "clinica", crmId, data, "ok");
   return _ok({ id: crmId, message: "Clínica cadastrada com sucesso." });
 }
 
 function _registrarInteracaoClinica(data) {
   _required(data, ["nome_clinica", "etapa", "responsavel"]);
+
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
 
   var sheet    = _getOrCreateSheet(_SHEETS.CRM_CLINICAS);
   var allData  = sheet.getDataRange().getValues();
@@ -410,6 +463,10 @@ function _registrarInteracaoClinica(data) {
   };
 
   if (rowIdx > 0) {
+    // clinica_id da linha encontrada — só para identificar a entidade no log.
+    var idColIdx      = headers.indexOf("clinica_id");
+    var clinicaIdAudit = idColIdx >= 0 ? String(allData[rowIdx - 1][idColIdx] || "").trim() : "";
+
     var updateFailures = [];
     Object.keys(updates).forEach(function(col) {
       var colIdx = headers.indexOf(col);
@@ -418,45 +475,62 @@ function _registrarInteracaoClinica(data) {
     });
     if (updateFailures.length > 0) {
       _logEntry({ acao: "registrarInteracaoClinica", status: "ERRO-GRAVACAO", aba: _SHEETS.CRM_CLINICAS, id: "", resumo: "Falha ao gravar: " + updateFailures.join(", ") });
+      _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", clinicaIdAudit, data, "ERROR: falha na gravacao");
       return _err("Falha ao gravar campos: " + updateFailures.join(", "), 500);
     }
     _logEntry({ acao: "registrarInteracaoClinica", status: "OK", aba: _SHEETS.CRM_CLINICAS, id: "", resumo: "Interação atualizada." });
+    _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", clinicaIdAudit, data, "ok: update");
     return _ok({ message: "Interação registrada com sucesso.", updated: true });
   }
 
   // Clínica não encontrada: cria nova linha
   var newId = _nextId(sheet, "CLI");
-  _appendRowSemValidacao(sheet, _buildRow(sheet, Object.assign({
-    clinica_id:   newId,
-    nome_clinica: data.nome_clinica || "",
-    bairro: "", regiao: "", tipo_clinica: "", observacao: "",
-  }, updates)));
+  try {
+    _appendRowSemValidacao(sheet, _buildRow(sheet, Object.assign({
+      clinica_id:   newId,
+      nome_clinica: data.nome_clinica || "",
+      bairro: "", regiao: "", tipo_clinica: "", observacao: "",
+    }, updates)));
+  } catch (e) {
+    _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", newId, data, "ERROR: falha na gravacao");
+    throw e;
+  }
   _logEntry({ acao: "registrarInteracaoClinica", status: "OK-NOVO", aba: _SHEETS.CRM_CLINICAS, id: newId, resumo: "Nova clínica criada via interação." });
+  _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", newId, data, "ok: insert");
   return _ok({ id: newId, message: "Clínica não encontrada — nova entrada criada.", created: true });
 }
 
 function _registrarInteracaoPaciente(data) {
   _required(data, ["primeiro_nome", "tipo_mensagem", "responsavel"]);
 
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
+
   var sheet   = _getOrCreateSheet(_SHEETS.FOLLOWUP_WA);
   var id      = _nextId(sheet, "FUP");
   var consent = _normalizeConsent(data.consentimento);
 
-  _appendRowSemValidacao(sheet, _buildRow(sheet, {
-    followup_id:    id,
-    data_criacao:   _nowBr(),
-    primeiro_nome:  data.primeiro_nome  || "",
-    telefone:       data.telefone       || "",
-    tipo_mensagem:  data.tipo_mensagem  || "",
-    data_prevista:  data.data_prevista  || "",
-    status:         "Pendente",
-    canal:          data.canal          || "WhatsApp",
-    responsavel:    data.responsavel    || "",
-    template_usado: data.template_usado || "",
-    consentimento:  consent,
-  }));
+  try {
+    _appendRowSemValidacao(sheet, _buildRow(sheet, {
+      followup_id:    id,
+      data_criacao:   _nowBr(),
+      primeiro_nome:  data.primeiro_nome  || "",
+      telefone:       data.telefone       || "",
+      tipo_mensagem:  data.tipo_mensagem  || "",
+      data_prevista:  data.data_prevista  || "",
+      status:         "Pendente",
+      canal:          data.canal          || "WhatsApp",
+      responsavel:    data.responsavel    || "",
+      template_usado: data.template_usado || "",
+      consentimento:  consent,
+    }));
+  } catch (e) {
+    _auditAcao(auditRequestId, auditT0, "registrar_interacao_paciente", "followup", id, data, "ERROR: falha na gravacao");
+    throw e;
+  }
 
   _logEntry({ acao: "registrarInteracaoPaciente", status: "OK", aba: _SHEETS.FOLLOWUP_WA, id: id, resumo: "Follow-up registrado." });
+  _auditAcao(auditRequestId, auditT0, "registrar_interacao_paciente", "followup", id, data, "ok");
   return _ok({ id: id, message: "Interação registrada." });
 }
 
@@ -478,6 +552,9 @@ function _registrarInteracaoPaciente(data) {
  */
 function _registrarAtendimentoPastore(data) {
   _required(data, ["data_atendimento", "paciente_nome", "tipo_exame"]);
+
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
 
   var sheet = _getOrCreateSheet(_SHEETS.PARCERIA_PASTORE_ATENDIMENTOS);
   _ensureSheetHeader(sheet, _PARCERIA_PASTORE_ATENDIMENTOS_CABECALHO);
@@ -521,8 +598,14 @@ function _registrarAtendimentoPastore(data) {
   }
 
   var newRow = _firstEmptyRowByHeaders(sheet, ["data_atendimento", "paciente_nome", "tipo_exame"]);
-  _writeRowSkippingColumnsSemValidacao(sheet, newRow, row, _PARCERIA_PASTORE_FORMULA_COLS);
-  _ensureFormulaColumns(sheet, newRow, _PARCERIA_PASTORE_FORMULA_COLS);
+  try {
+    _writeRowSkippingColumnsSemValidacao(sheet, newRow, row, _PARCERIA_PASTORE_FORMULA_COLS);
+    _ensureFormulaColumns(sheet, newRow, _PARCERIA_PASTORE_FORMULA_COLS);
+  } catch (e) {
+    // A aba não tem coluna de ID — a linha é o identificador (mesmo padrão de _logEntry abaixo).
+    _auditAcao(auditRequestId, auditT0, "registrar_atendimento_pastore", "pastore", "linha-" + newRow, data, "ERROR: falha na gravacao");
+    throw e;
+  }
 
   _logEntry({
     acao:   "registrarAtendimentoPastore",
@@ -532,6 +615,7 @@ function _registrarAtendimentoPastore(data) {
     resumo: "Atendimento Pastore registrado (" + (data.tipo_exame || "") + ", status " + (data.status || "Realizado") + ").",
     // nome, whatsapp e observação NUNCA entram no log — mesma regra do resto do arquivo
   });
+  _auditAcao(auditRequestId, auditT0, "registrar_atendimento_pastore", "pastore", "linha-" + newRow, data, "ok");
 
   return _ok({ row: newRow, message: "Atendimento Pastore registrado com sucesso." });
 }
@@ -554,6 +638,11 @@ function _registrarAtendimentoPastore(data) {
  */
 function _updateLeadStage(data) {
   _required(data, ["lead_id", "etapa"]);
+
+  // request_id único por ação — correlaciona todas as linhas de auditoria
+  // desta chamada (principal + derivadas) na aba Log Auditoria.
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
 
   var novaEtapa = String(data.etapa).trim();
   var targetId  = String(data.lead_id).trim();
@@ -587,6 +676,9 @@ function _updateLeadStage(data) {
     return _err("Lead não encontrado: " + targetId, 404);
   }
 
+  // Valor anterior lido ANTES da escrita — allData foi carregado acima.
+  var etapaAnterior = String(allData[rowIdx - 1][etapaIdx] || "").trim();
+
   // Atualiza a etapa e verifica se a gravação realmente persistiu.
   // Alguns dropdowns/validações do Google Sheets podem impedir a alteração sem erro claro
   // (ex.: "Selecione uma opção da lista."). _writeEtapaVerified trata isso de forma segura.
@@ -599,8 +691,39 @@ function _updateLeadStage(data) {
       id:     targetId,
       resumo: "Etapa desejada: " + novaEtapa + " | Etapa lida: " + etapaLida,
     });
+    _logAudit({
+      requestId:     auditRequestId,
+      acao:          "update_lead_stage",
+      entidadeTipo:  "lead",
+      entidadeId:    targetId,
+      campo:         "etapa",
+      valorAnterior: etapaAnterior,
+      valorNovo:     novaEtapa,
+      origem:        data.audit_origem,
+      operador:      data.audit_operador,
+      trigger:       "web_app",
+      resultado:     "ERROR: falha na gravacao da etapa",
+      durationMs:    Date.now() - auditT0,
+    });
     return _err("Falha ao gravar etapa. Etapa desejada: " + novaEtapa + " | Etapa lida: " + etapaLida, 500);
   }
+
+  // Auditoria da transição de etapa — logo após a escrita confirmada.
+  // Falha aqui nunca interrompe a operação (garantido dentro de _logAudit).
+  _logAudit({
+    requestId:     auditRequestId,
+    acao:          "update_lead_stage",
+    entidadeTipo:  "lead",
+    entidadeId:    targetId,
+    campo:         "etapa",
+    valorAnterior: etapaAnterior,
+    valorNovo:     novaEtapa,
+    origem:        data.audit_origem,
+    operador:      data.audit_operador,
+    trigger:       "web_app",
+    resultado:     "ok",
+    durationMs:    Date.now() - auditT0,
+  });
 
   // Nota curta de histórico na coluna observacao, se existir — sem dados sensíveis
   var obsIdx = headers.indexOf("observacao");
@@ -686,6 +809,11 @@ function _updateLeadStage(data) {
 function _updateCrmClinicaEtapa(data) {
   _required(data, ["clinica_id", "etapa"]);
 
+  // request_id único por ação — o espelhamento PCMSO grava um evento
+  // derivado apontando para este id via derivado_de.
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
+
   var novaEtapa = String(data.etapa).trim();
   var clinicaId = String(data.clinica_id).trim();
 
@@ -705,6 +833,9 @@ function _updateCrmClinicaEtapa(data) {
   var etapaIdx = headers.indexOf("etapa");
   if (etapaIdx < 0) return _err("Coluna etapa não encontrada na aba " + _SHEETS.CRM_CLINICAS + ".", 500);
 
+  // Valor anterior lido ANTES da escrita — found.rowData veio de _findRowByIdColumn.
+  var etapaAnterior = String(found.rowData[etapaIdx] || "").trim();
+
   if (!_writeEtapaVerified(sheet, rowIdx, etapaIdx + 1, novaEtapa, _CRM_ETAPAS_OFICIAIS)) {
     var etapaLida = String(sheet.getRange(rowIdx, etapaIdx + 1).getDisplayValue() || "").trim();
     _logEntry({
@@ -714,8 +845,38 @@ function _updateCrmClinicaEtapa(data) {
       id:     clinicaId,
       resumo: "Etapa desejada: " + novaEtapa + " | Etapa lida: " + etapaLida,
     });
+    _logAudit({
+      requestId:     auditRequestId,
+      acao:          "update_crm_clinica_etapa",
+      entidadeTipo:  "clinica",
+      entidadeId:    clinicaId,
+      campo:         "etapa",
+      valorAnterior: etapaAnterior,
+      valorNovo:     novaEtapa,
+      origem:        data.audit_origem,
+      operador:      data.audit_operador,
+      trigger:       "web_app",
+      resultado:     "ERROR: falha na gravacao da etapa",
+      durationMs:    Date.now() - auditT0,
+    });
     return _err("Falha ao gravar etapa. Etapa desejada: " + novaEtapa + " | Etapa lida: " + etapaLida, 500);
   }
+
+  // Auditoria da transição de etapa — logo após a escrita confirmada.
+  _logAudit({
+    requestId:     auditRequestId,
+    acao:          "update_crm_clinica_etapa",
+    entidadeTipo:  "clinica",
+    entidadeId:    clinicaId,
+    campo:         "etapa",
+    valorAnterior: etapaAnterior,
+    valorNovo:     novaEtapa,
+    origem:        data.audit_origem,
+    operador:      data.audit_operador,
+    trigger:       "web_app",
+    resultado:     "ok",
+    durationMs:    Date.now() - auditT0,
+  });
 
   // Nota curta de histórico em observacao, se a coluna existir — sem dados sensíveis.
   var obsIdx = headers.indexOf("observacao");
@@ -743,7 +904,7 @@ function _updateCrmClinicaEtapa(data) {
 
   var nomeClinicaIdx = headers.indexOf("nome_clinica");
   var nomeClinica = nomeClinicaIdx >= 0 ? String(found.rowData[nomeClinicaIdx] || "").trim() : "";
-  var pcmsoAtualizado = _mirrorEtapaParaPcmso(nomeClinica, novaEtapa);
+  var pcmsoAtualizado = _mirrorEtapaParaPcmso(nomeClinica, novaEtapa, clinicaId, auditRequestId);
 
   _logEntry({
     acao:   "updateCrmClinicaEtapa",
@@ -769,8 +930,13 @@ function _updateCrmClinicaEtapa(data) {
  * não for encontrado, ou a coluna de nome não existir, retorna false
  * silenciosamente — isso NUNCA deve derrubar a ação principal
  * (updateCrmClinicaEtapa já confirmou a escrita em CRM Clinicas).
+ *
+ * Auditoria: quando o espelhamento chega a ESCREVER (sucesso ou falha de
+ * gravação), registra um evento derivado em Log Auditoria com derivado_de =
+ * requestIdPrincipal da ação que o disparou. Os retornos false silenciosos
+ * (aba/linha/coluna ausente) não geram auditoria — nada foi escrito.
  */
-function _mirrorEtapaParaPcmso(nomeClinica, novaEtapa) {
+function _mirrorEtapaParaPcmso(nomeClinica, novaEtapa, clinicaId, requestIdPrincipal) {
   if (!nomeClinica) return false;
 
   var ss = _getWorkbook();
@@ -812,7 +978,29 @@ function _mirrorEtapaParaPcmso(nomeClinica, novaEtapa) {
     var etapaIdx = headersAtualizados.indexOf("Etapa");
     if (etapaIdx < 0) return false;
 
-    return _writeCellVerified(sheet, rowIdx, etapaIdx + 1, novaEtapa);
+    // Valor anterior só existe em allData se a coluna Etapa já existia
+    // antes de _ensureExtraColumns; se acabou de ser criada, era vazio.
+    var etapaAnterior = etapaIdx < allData[0].length
+      ? String(allData[rowIdx - 1][etapaIdx] || "").trim()
+      : "";
+
+    var gravou = _writeCellVerified(sheet, rowIdx, etapaIdx + 1, novaEtapa);
+
+    // Evento derivado: entidade_id é o clinica_id do CRM (a linha PCMSO não
+    // tem ID próprio); a correlação com a ação principal é via derivado_de.
+    _logAudit({
+      acao:          "mirror_etapa_pcmso",
+      entidadeTipo:  "pcmso",
+      entidadeId:    clinicaId,
+      campo:         "etapa",
+      valorAnterior: etapaAnterior,
+      valorNovo:     novaEtapa,
+      trigger:       "web_app",
+      resultado:     gravou ? "ok" : "ERROR: falha na gravacao do espelhamento",
+      derivadoDe:    requestIdPrincipal,
+    });
+
+    return gravou;
   } catch (e) {
     return false;
   }
@@ -1110,6 +1298,11 @@ function _logConversaoLeads(leadId, nome, etapa, destinosCriados, resultado) {
  * na primeira vez que um contato é vinculado.
  */
 function _upsertContatoB2B(info) {
+  // Função interna (chamada por _vincularLeadAClinica) — o evento de
+  // auditoria dela recebe request_id próprio (UUID de fallback em _logAudit);
+  // quando _vincularLeadAClinica for instrumentada, passar derivado_de aqui.
+  var auditT0 = Date.now();
+
   var sheet = _getOrCreateSheet(_SHEETS.CRM_CONTATOS_B2B);
   _ensureSheetHeader(sheet, _CRM_CONTATOS_B2B_CABECALHO);
 
@@ -1161,14 +1354,23 @@ function _upsertContatoB2B(info) {
       if (!_writeCellVerified(sheet, rowIdx, idx + 1, updates[col])) contatoUpdateFailures.push(col);
     });
     if (contatoUpdateFailures.length > 0) {
+      _auditAcao(null, auditT0, "upsert_contato_b2b", "contato_b2b", String(info.contatoId || ""), null, "ERROR: falha na gravacao");
       throw new Error("Falha ao gravar contato B2B — campos: " + contatoUpdateFailures.join(", "));
     }
     var contatoIdIdx = headers.indexOf("contato_id");
-    return contatoIdIdx >= 0 ? String(sheet.getRange(rowIdx, contatoIdIdx + 1).getValue() || "") : "";
+    var contatoIdExistente = contatoIdIdx >= 0 ? String(sheet.getRange(rowIdx, contatoIdIdx + 1).getValue() || "") : "";
+    _auditAcao(null, auditT0, "upsert_contato_b2b", "contato_b2b", contatoIdExistente, null, "ok: update");
+    return contatoIdExistente;
   }
 
   var newId = _nextId(sheet, "CONT");
-  _appendRowSemValidacao(sheet, _buildRow(sheet, Object.assign({ contato_id: newId }, updates)));
+  try {
+    _appendRowSemValidacao(sheet, _buildRow(sheet, Object.assign({ contato_id: newId }, updates)));
+  } catch (e) {
+    _auditAcao(null, auditT0, "upsert_contato_b2b", "contato_b2b", newId, null, "ERROR: falha na gravacao");
+    throw e;
+  }
+  _auditAcao(null, auditT0, "upsert_contato_b2b", "contato_b2b", newId, null, "ok: insert");
   return newId;
 }
 
@@ -1915,6 +2117,202 @@ function _logEntry(entry) {
   } catch (_) {
     // Silencioso: falha no log não deve interromper a ação principal
   }
+}
+
+// ── Auditoria mínima das escritas (M1 — Etapa 1) ──────────────────────────────
+//
+// Base da trilha de auditoria append-only na aba "Log Auditoria".
+// Etapa 2: _updateLeadStage, _updateCrmClinicaEtapa, _mirrorEtapaParaPcmso
+// (evento derivado, com valor anterior/novo da etapa).
+// Etapa 3: creates, _registrarInteracao*, _registrarAtendimentoPastore e
+// _upsertContatoB2B — via _auditAcao, só ação/tipo/ID/resultado, nunca
+// conteúdo de campo. Pendente: _vincularLeadAClinica (decidir na Etapa 4+).
+// Metadados de origem/operador: data.audit_origem / data.audit_operador
+// (namespace audit_* para não colidir com o campo de negócio "origem" dos
+// creates) — injetados pelo proxy (Etapa 4: instanceName/operatorName da
+// config local, sobrescrevendo o browser) e sanitizados aqui por
+// _auditShortMeta (limite de tamanho + fallback "desconhecido/a").
+//
+// Regras invioláveis:
+//   - O log registra transição de estado, nunca conteúdo sensível.
+//   - Allowlist default-fechada: campo fora de _AUDIT_CAMPOS_PERMITIDOS tem
+//     valor_anterior/valor_novo substituídos por "[campo privado]" — o log
+//     registra QUE o campo mudou, nunca PARA O QUÊ.
+//   - Telefone, nome de paciente, observação livre, CPF, WhatsApp, laudo ou
+//     pedido médico NUNCA são gravados — nem truncados, nem mascarados.
+//   - Append-only: esta seção só adiciona linhas, nunca edita nem apaga.
+//   - Falha de auditoria nunca interrompe a operação principal.
+
+var _LOG_AUDITORIA_CABECALHO = [
+  "log_id", "request_id", "timestamp", "acao", "entidade_tipo", "entidade_id",
+  "campo", "valor_anterior", "valor_novo", "origem", "operador", "trigger",
+  "resultado", "derivado_de", "duration_ms", "build_version",
+];
+
+// Campos cujo VALOR pode aparecer em valor_anterior/valor_novo.
+// Só campos de dropdown/enum ou datas — nunca texto livre nem PII.
+// Campo novo no futuro nasce protegido por padrão (default-fechado).
+var _AUDIT_CAMPOS_PERMITIDOS = [
+  "etapa",
+  "status",
+  "prioridade",
+  "responsavel",           // membro da equipe, nunca paciente
+  "status_relacionamento",
+  "followup_status",
+  "data_proxima_acao",
+  "ultima_interacao",
+];
+
+var _AUDIT_VALOR_PRIVADO = "[campo privado]";
+
+// Gravado em build_version quando a propriedade BUILD_VERSION não existe.
+// Ao publicar nova versão do Web App, atualizar a propriedade BUILD_VERSION
+// (Arquivo → Propriedades do projeto) com a versão ou o git sha do repo.
+var _AUDIT_BUILD_VERSION_FALLBACK = "cc-api-m1";
+
+/**
+ * Sanitiza um valor de campo para valor_anterior/valor_novo.
+ * Allowlist default-fechada + defesa em profundidade: mesmo em campo
+ * permitido, valor que pareça telefone/CPF/CNPJ (dado colado na célula
+ * errada) é suprimido. Datas dd/MM/yyyy e ISO são liberadas.
+ */
+function _auditSanitizeValor(campo, valor) {
+  var v = String(valor === undefined || valor === null ? "" : valor).trim();
+  if (v === "") return "";
+  if (_AUDIT_CAMPOS_PERMITIDOS.indexOf(String(campo || "").trim()) < 0) {
+    return _AUDIT_VALOR_PRIVADO;
+  }
+  var isData = /^\d{2}\/\d{2}\/\d{4}( \d{2}:\d{2})?$/.test(v) ||
+               /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if (!isData && v.replace(/\D/g, "").length >= 8) return _AUDIT_VALOR_PRIVADO;
+  if (v.length > 80) v = v.slice(0, 77) + "...";
+  return v;
+}
+
+/**
+ * Sanitiza metadado curto do log (acao, origem, operador, trigger, ids):
+ * string sem quebra de linha, limitada, com fallback quando vazia.
+ */
+function _auditShortMeta(valor, fallback, maxLen) {
+  var v = String(valor === undefined || valor === null ? "" : valor)
+    .replace(/[\r\n\t]+/g, " ").trim();
+  if (v === "") return fallback || "";
+  var max = maxLen || 40;
+  return v.length > max ? v.slice(0, max) : v;
+}
+
+/**
+ * Atalho de auditoria para ações SEM conteúdo de campo (creates, registros,
+ * upserts): grava só ação/tipo/ID/resultado + metadados. O conteúdo criado
+ * já está na linha da entidade — repeti-lo no log duplicaria dado sensível.
+ * requestId null/vazio → _logAudit gera UUID próprio.
+ * data null (funções internas sem audit_*) → origem/operador caem no
+ * fallback "desconhecida"/"desconhecido" de _logAudit.
+ */
+function _auditAcao(requestId, t0, acao, entidadeTipo, entidadeId, data, resultado, derivadoDe) {
+  _logAudit({
+    requestId:    requestId,
+    acao:         acao,
+    entidadeTipo: entidadeTipo,
+    entidadeId:   entidadeId,
+    origem:       data ? data.audit_origem : "",
+    operador:     data ? data.audit_operador : "",
+    trigger:      "web_app",
+    resultado:    resultado,
+    derivadoDe:   derivadoDe,
+    durationMs:   Date.now() - t0,
+  });
+}
+
+/**
+ * Registra uma linha na aba "Log Auditoria" (append-only). Recebe:
+ *   { requestId, acao, entidadeTipo, entidadeId, campo, valorAnterior,
+ *     valorNovo, origem, operador, trigger, resultado, derivadoDe, durationMs }
+ *
+ * entidadeId é sempre o ID (LEAD-/CLI-/etc.), nunca nome de pessoa.
+ * Falha aqui NUNCA propaga para a operação principal — o erro é registrado
+ * apenas com Logger.log (diferente de _logEntry, que é 100% silencioso:
+ * aqui o erro precisa ser diagnosticável).
+ */
+function _logAudit(info) {
+  try {
+    info = info || {};
+    var sheet = _getOrCreateSheet(_SHEETS.LOG_AUDITORIA);
+    _ensureSheetHeader(sheet, _LOG_AUDITORIA_CABECALHO);
+
+    var buildVersion = _AUDIT_BUILD_VERSION_FALLBACK;
+    try {
+      var prop = PropertiesService.getScriptProperties().getProperty("BUILD_VERSION");
+      if (prop && String(prop).trim()) buildVersion = String(prop).trim();
+    } catch (_) {}
+
+    var requestId = _auditShortMeta(info.requestId, "", 64);
+    if (!requestId) requestId = Utilities.getUuid();
+
+    var campo      = _auditShortMeta(info.campo, "", 40);
+    var durationMs = parseInt(info.durationMs, 10);
+
+    _appendRowSemValidacao(sheet, [
+      _nextId(sheet, "AUD"),
+      requestId,
+      _nowBr(),
+      _auditShortMeta(info.acao,         "desconhecida", 40),
+      _auditShortMeta(info.entidadeTipo, "desconhecido", 40),
+      _auditShortMeta(info.entidadeId,   "",             40),
+      campo,
+      _auditSanitizeValor(campo, info.valorAnterior),
+      _auditSanitizeValor(campo, info.valorNovo),
+      _auditShortMeta(info.origem,   "desconhecida", 40),
+      _auditShortMeta(info.operador, "desconhecido", 40),
+      _auditShortMeta(info.trigger,  "desconhecido", 40),
+      _auditShortMeta(info.resultado, "ok", 80),
+      _auditShortMeta(info.derivadoDe, "", 40),
+      isNaN(durationMs) ? "" : durationMs,
+      _auditShortMeta(buildVersion, _AUDIT_BUILD_VERSION_FALLBACK, 40),
+    ]);
+  } catch (e) {
+    // Falha de auditoria nunca interrompe a operação principal.
+    try {
+      Logger.log("Falha ao gravar Log Auditoria: " + (e && e.message ? e.message : e));
+    } catch (_) {}
+  }
+}
+
+/**
+ * Teste manual de _logAudit — executar no editor do Apps Script (nunca via
+ * HTTP). Grava duas linhas evidentes de teste na aba Log Auditoria:
+ *   1. campo permitido (etapa) — valores devem aparecer legíveis;
+ *   2. campo proibido (observacao) — valores devem virar "[campo privado]".
+ * Apagar as linhas manualmente após validar, conforme a regra de teste
+ * de soprolife-sheets-sync (linha fictícia evidente → validar → remover).
+ */
+function _testLogAudit() {
+  _logAudit({
+    acao:          "teste_apagar",
+    entidadeTipo:  "teste",
+    entidadeId:    "TESTE-APAGAR-0001",
+    campo:         "etapa",
+    valorAnterior: "Em conversa",
+    valorNovo:     "Agendado",
+    origem:        "editor-apps-script",
+    operador:      "teste-manual",
+    trigger:       "manual_editor",
+    resultado:     "ok",
+    durationMs:    12,
+  });
+  _logAudit({
+    acao:          "teste_apagar",
+    entidadeTipo:  "teste",
+    entidadeId:    "TESTE-APAGAR-0002",
+    campo:         "observacao",
+    valorAnterior: "conteudo que nao pode aparecer",
+    valorNovo:     "conteudo que nao pode aparecer",
+    origem:        "editor-apps-script",
+    operador:      "teste-manual",
+    trigger:       "manual_editor",
+    resultado:     "ok",
+  });
+  Logger.log("Duas linhas de teste gravadas em '" + _SHEETS.LOG_AUDITORIA + "' — validar e apagar.");
 }
 
 function _ok(payload) {

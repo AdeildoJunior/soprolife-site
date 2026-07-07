@@ -39,11 +39,11 @@ fi
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
-echo "1/12 - Atualizando status seguro da fonte Google Sheets..."
+echo "1/13 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
 
 echo
-echo "2/12 - Atualizando resumo seguro..."
+echo "2/13 - Atualizando resumo seguro..."
 
 if [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC"
@@ -84,7 +84,7 @@ else
 fi
 
 echo
-echo "3/12 - Atualizando CRM Clínicas seguro..."
+echo "3/13 - Atualizando CRM Clínicas seguro..."
 
 if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
   echo "Fonte: Google Sheets via ADC (aba CRM Clinicas)"
@@ -104,7 +104,7 @@ else
 fi
 
 echo
-echo "4/12 - Atualizando follow-up B2B de clínicas..."
+echo "4/13 - Atualizando follow-up B2B de clínicas..."
 
 _FOLLOWUP_CLINICAS_SCRIPT="painel-soprolife/scripts/generate-followup-clinicas.py"
 
@@ -132,7 +132,7 @@ else
 fi
 
 echo
-echo "5/12 - Atualizando Marketing & SEO..."
+echo "5/13 - Atualizando Marketing & SEO..."
 
 if [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "Marketing & SEO não configurado — usando dados demonstrativos."
@@ -156,7 +156,7 @@ else
 fi
 
 echo
-echo "6/12 - Atualizando Leads..."
+echo "6/13 - Atualizando Leads..."
 
 _LEADS_SCRIPT="painel-soprolife/scripts/read-leads-sheets.py"
 
@@ -183,7 +183,7 @@ else
 fi
 
 echo
-echo "7/12 - Atualizando CRM Contatos B2B..."
+echo "7/13 - Atualizando CRM Contatos B2B..."
 
 _CONTATOS_B2B_SCRIPT="painel-soprolife/scripts/read-crm-contatos-b2b-adc.py"
 
@@ -211,7 +211,7 @@ else
 fi
 
 echo
-echo "8/12 - Atualizando follow-up de pacientes..."
+echo "8/13 - Atualizando follow-up de pacientes..."
 
 _FOLLOWUP_SCRIPT="painel-soprolife/scripts/generate-followup-pacientes.py"
 
@@ -236,7 +236,7 @@ else
 fi
 
 echo
-echo "9/12 - Atualizando timeline de últimos lançamentos..."
+echo "9/13 - Atualizando timeline de últimos lançamentos..."
 
 _LANCAMENTOS_SCRIPT="painel-soprolife/scripts/generate-ultimos-lancamentos.py"
 
@@ -254,7 +254,7 @@ else
 fi
 
 echo
-echo "10/12 - Atualizando Parceria Pastore..."
+echo "10/13 - Atualizando Parceria Pastore..."
 
 if [ -f "$_PARCERIA_PASTORE_SCRIPT" ] && [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC (Atendimentos + Custos + Config)"
@@ -280,11 +280,37 @@ else
 fi
 
 echo
-echo "11/12 - Verificando segurança..."
+echo "11/13 - Atualizando resumo de auditoria (Log Auditoria)..."
+
+_AUDITORIA_SCRIPT="painel-soprolife/scripts/read-auditoria-adc.py"
+
+if [ -f "$_AUDITORIA_SCRIPT" ] && [ "$_sheets_available" = true ]; then
+  echo "Fonte: Google Sheets via ADC (aba Log Auditoria)"
+  echo
+  if ! "$_VENV_PYTHON" "$_AUDITORIA_SCRIPT" --write 2>&1; then
+    echo
+    echo "AVISO: falha ao ler a aba Log Auditoria."
+    echo "  Isso é esperado se a aba ainda não existe (só é criada após a"
+    echo "  primeira escrita auditada via painel — M1 Etapas 1-4 publicadas)."
+    echo "  Diagnóstico: $_VENV_PYTHON $_AUDITORIA_SCRIPT --show-structure"
+  else
+    echo "Resumo de auditoria atualizado."
+    echo "  Resumo: painel-soprolife/data/auditoria-summary.local.json"
+  fi
+else
+  if [ ! -f "$_AUDITORIA_SCRIPT" ]; then
+    echo "Script de auditoria não encontrado — resumo de auditoria pulado."
+  else
+    echo "Google Sheets ADC não disponível — resumo de auditoria pulado."
+  fi
+fi
+
+echo
+echo "12/13 - Verificando segurança..."
 painel-soprolife/scripts/check-access.sh
 
 echo
-echo "12/12 - Concluído."
+echo "13/13 - Concluído."
 echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"
