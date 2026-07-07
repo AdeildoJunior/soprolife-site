@@ -2930,7 +2930,10 @@ function renderLeadsTable() {
     const leadId    = item.lead_id || "";
     const servico   = item.servico_interesse || item.servico || "—";
     const etapa     = item.etapa || item.status || "—";
-    const acao      = item.proxima_acao || item.proximaAcao || "—";
+    // Resumo real não traz o texto de proxima_acao (texto livre, M2) — só o
+    // booleano tem_proxima_acao; o texto completo fica na planilha privada.
+    const acao      = item.proxima_acao || item.proximaAcao ||
+      (item.tem_proxima_acao ? "Ação definida — ver planilha" : "—");
     const dataField = item.data_proxima_acao || item.dataProximaAcao || "";
     const iso       = parseDateIso(dataField);
     const dataCls   = iso && iso < today ? "data-atrasada" : iso === today ? "data-hoje" : "";

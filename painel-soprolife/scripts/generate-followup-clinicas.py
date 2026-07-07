@@ -35,6 +35,10 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
+# Guarda de PII compartilhada (M2) — mesma pasta deste script.
+# O resumo é só de contagens: regras padrão (default-fechado) bastam.
+import pii_guard
+
 _CONFIG_PATH = Path("~/.config/soprolife/painel/google-sheets.local.json").expanduser()
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 
@@ -513,6 +517,9 @@ def run(dry_run: bool) -> int:
         "containsPersonalData": False,
         "clinicas":             summary,
     }
+    # Guarda de PII (M2): aborta com exit 1 antes de gravar se algo vazar.
+    pii_guard.ensure_summary_safe(summary_data, context="followup-clinicas-summary")
+
     SUMMARY_OUT.write_text(
         json.dumps(summary_data, ensure_ascii=False, indent=2),
         encoding="utf-8"
