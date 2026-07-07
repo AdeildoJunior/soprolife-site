@@ -26,9 +26,9 @@
 systemctl cat soprolife-update-data.service soprolife-update-data.timer
 systemctl cat soprolife-painel.service          # confirmar o User= atual
 systemctl list-timers --all --no-pager | grep -i sopro
-id soprolife || echo "usuario nao existe — criar na F1 (fase aprovada)"
+id soprolife || echo "usuario nao existe — INESPERADO (precheck real mostrou existente)"
 # grupos administrativos são checados via 'id' (o precheck faz isso sem sudo)
-ls -la /var/lib/soprolife/ /var/lib/soprolife/.ssh/ 2>/dev/null   # chaves inesperadas?
+ls -la /home/soprolife/ /home/soprolife/.ssh/ 2>/dev/null   # chaves inesperadas?
 ls -la /opt/soprolife/soprolife-site/painel-soprolife/data-private/
 ls -la /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json
 ls -la /root/.config/soprolife/painel/ /root/.config/gcloud/ 2>/dev/null  # só nomes
@@ -46,24 +46,29 @@ localização de ADC/configs/venv confirmada.
 > fonte única, para não haver dois conjuntos de comandos divergentes.
 > Resumo do desenho decidido:
 
-- **F1** — usuário de SISTEMA `soprolife` (home `/var/lib/soprolife`,
-  shell `/usr/sbin/nologin`), criado SOMENTE se `id soprolife` falhar;
-  diretórios de config 700.
-- **F2** — permissões mínimas SEM quebrar o painel: primeiro identificar
-  o usuário real do `soprolife-painel.service`; grupo compartilhado
-  750/640 se o painel tiver usuário próprio; `chmod 700 data-private`
-  só se o painel rodar como root ou como o mesmo usuário do timer.
-  Posse do repo: `safe.directory` (recomendado); `chown -R` no repo
-  inteiro é NÃO RECOMENDADO e exige aprovação explícita do GPT.
+> **Contexto pós-precheck:** este I1 é a MIGRAÇÃO do timer EXISTENTE
+> (update-data roda como root); o painel web JÁ roda como soprolife; o
+> usuário soprolife JÁ existe (uid 1000, `/home/soprolife`, `/bin/bash`).
+
+- **F1** — CONFIRMAR o usuário existente (sem useradd/usermod/chsh —
+  criação só ocorreria se `id soprolife` falhasse, o que o precheck
+  descarta); diretórios de config 700 em `/home/soprolife/.config`.
+- **F2** — permissões mínimas e DIRIGIDAS: LISTAR antes; corrigir só o
+  aprovado (summaries `root:root 600` em `data/` → soprolife 644;
+  `data-private/` → soprolife 700 — seguro porque painel e timer usam o
+  MESMO usuário). Posse do repo: `safe.directory` (recomendado);
+  `chown -R` no repo inteiro é NÃO RECOMENDADO e exige aprovação
+  explícita do GPT.
 - **F3** — configs copiadas UMA A UMA (`install -m 600`, só arquivos
   aprovados pelo GPT — sem `cp -a` cego); venv recriado; ADC próprio via
-  device flow com `sudo -u soprolife HOME=/var/lib/soprolife` (sem shell
+  device flow com `sudo -u soprolife HOME=/home/soprolife` (sem shell
   de login); ADC do root NUNCA copiado sem aprovação explícita.
-- **F4** — units instalados a partir dos `.example` com backup datado
-  defensivo + `daemon-reload`, sem habilitar timer.
+- **F4** — PAUSAR o timer (`systemctl stop`), backup datado dos units
+  existentes, instalar os `.example` + `daemon-reload` — sem reativar.
 - **F5** — DUAS execuções manuais (`systemctl start`) verdes + parada
   GPT obrigatória → só então `systemctl enable --now` do timer;
-  monitorar 2 ciclos + 24h. F6 (painel.service) é etapa separada.
+  monitorar 2 ciclos + 24h. Não há F6 de painel (já roda como
+  soprolife); endurecimento `strict` fica como etapa futura.
 
 ## Rollback (escrever aberto ao lado durante a F4/F5)
 
@@ -78,7 +83,7 @@ journalctl -u soprolife-update-data.service -n 40 --no-pager   # 0/SUCCESS como 
 ```
 
 Não apagar nada do ambiente soprolife preparado (fica para a próxima
-tentativa). Se os `chown` da F1 atrapalharem o unit antigo (root lê tudo —
+tentativa). Se os `chown` da F2 atrapalharem o unit antigo (root lê tudo —
 não deveriam), reverter posse só de `data-private/` para root é o único
 ajuste eventualmente necessário. Registrar a causa antes de tentar de novo.
 

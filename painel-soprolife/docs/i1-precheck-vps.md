@@ -55,6 +55,28 @@ O caminho do relatório é impresso ao final. Exit: `0` relatório gerado;
    permissões de `data/` e `data-private/`; configs+ADC do root
    (só existência/dono/permissão — nunca conteúdo); venvs; HTTP do painel.
 
+## Interpretação pós-precheck real (estado confirmado da VPS)
+
+O precheck real já rodou e fixou a realidade que a análise local agora
+reconhece:
+
+- usuário `soprolife` EXISTE (uid 1000, home `/home/soprolife`, shell
+  `/bin/bash`) — home/shell atuais são **válidos**; ausência do usuário
+  vira WARN "inesperado" (nada de criar sem GPT); `/var/lib/soprolife`
+  NÃO é verificado — não é a realidade atual;
+- painel `User=soprolife` → OK (mesmo usuário pós-migração; `chmod 700`
+  em `data-private/` é seguro); painel com outro usuário → WARN;
+- update `User=root` → INFO (motivo do I1); `User=soprolife` → I1 feito;
+- timer enabled → INFO "pausar (`systemctl stop`) antes da troca na F4";
+- ADC/venv presentes no root → INFO (F3 cria os do soprolife; nunca
+  copiar ADC sem GPT); venv do soprolife ausente → INFO (esperado);
+- arquivos `root:root` em `data/` → **WARN com contagem** — se 600, o
+  painel (soprolife) não consegue lê-los; corrigir de forma DIRIGIDA na
+  F2, com listagem aprovada;
+- HTTP `000` no localhost → **WARN, não FAIL** — esperado quando o
+  painel binda só no IP Tailscale; conferir manualmente em
+  `http://<VPS_TAILSCALE>:8765/painel-soprolife/`.
+
 ## Critérios de NO-GO (análise local)
 
 - usuário `soprolife` em grupo administrativo (sudo/wheel/admin);
@@ -62,8 +84,8 @@ O caminho do relatório é impresso ao final. Exit: `0` relatório gerado;
 - repo não encontrado na VPS;
 - caminho `/root/` fixo nos scripts.
 
-WARNs (repo sujo, `~/.ssh` presente, ADC ausente, painel ≠ 200) são
-decisão caso a caso na revisão.
+WARNs (repo sujo, `~/.ssh` presente, usuário ausente, arquivos root em
+`data/`, painel sem 200 no localhost) são decisão caso a caso na revisão.
 
 ## Como anexar ao GPT
 

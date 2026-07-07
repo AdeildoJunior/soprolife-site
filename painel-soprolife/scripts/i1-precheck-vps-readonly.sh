@@ -68,7 +68,7 @@ echo "### [6] usuario soprolife"
 id soprolife 2>/dev/null || echo "(usuario soprolife nao existe)"
 getent passwd soprolife 2>/dev/null || true
 passwd -S soprolife 2>/dev/null || echo "(passwd -S indisponivel ou usuario ausente)"
-ls -la /var/lib/soprolife/.ssh/ 2>/dev/null || echo "(sem /var/lib/soprolife/.ssh)"
+ls -la /home/soprolife/.ssh/ 2>/dev/null || echo "(sem /home/soprolife/.ssh)"
 
 echo "### [7] repositorio"
 git -C "$R" status --short 2>/dev/null || echo "(repo nao encontrado em $R)"
@@ -86,7 +86,7 @@ ls -l  /root/.config/gcloud/application_default_credentials.json 2>/dev/null || 
 
 echo "### [10] venvs"
 ls -ld /root/.local/share/soprolife/venvs/google-sheets 2>/dev/null || echo "(venv do root ausente)"
-ls -ld /var/lib/soprolife/.local/share/soprolife/venvs/google-sheets 2>/dev/null || echo "(venv do soprolife ausente)"
+ls -ld /home/soprolife/.local/share/soprolife/venvs/google-sheets 2>/dev/null || echo "(venv do soprolife ausente)"
 
 echo "### [11] http painel (localhost da VPS)"
 curl -s -o /dev/null -w "http_code=%{http_code}" --max-time 8 http://127.0.0.1:8765/painel-soprolife/ 2>/dev/null || echo "http_code=000"
@@ -126,7 +126,8 @@ NOTES=""
 note() { NOTES="${NOTES}  $1: $2"$'\n'; }
 
 if printf '%s' "$SAFE_OUTPUT" | grep -q "(usuario soprolife nao existe)"; then
-  note "INFO" "usuario soprolife nao existe — criar na F1 (fase aprovada)"
+  note "WARN" "usuario soprolife NAO existe — INESPERADO (precheck real anterior mostrou existente); investigar antes de criar (F1 cria SO se ausente, com GPT)"
+  WARNS=$((WARNS+1))
 else
   if printf '%s' "$SAFE_OUTPUT" | grep -E '^uid=.*soprolife' | grep -qE '\((sudo|wheel|admin)\)'; then
     note "FAIL" "usuario soprolife em grupo administrativo (sudo/wheel/admin)"; FAILS=$((FAILS+1))
@@ -136,7 +137,7 @@ else
   if printf '%s' "$SAFE_OUTPUT" | grep -qE '^soprolife NP '; then
     note "FAIL" "senha do usuario NAO travada (NP) — travar antes de prosseguir"; FAILS=$((FAILS+1))
   fi
-  if ! printf '%s' "$SAFE_OUTPUT" | grep -q "(sem /var/lib/soprolife/.ssh)"; then
+  if ! printf '%s' "$SAFE_OUTPUT" | grep -q "(sem /home/soprolife/.ssh)"; then
     note "WARN" "existe ~soprolife/.ssh — revisar authorized_keys manualmente"; WARNS=$((WARNS+1))
   fi
 fi
@@ -149,16 +150,51 @@ else
   note "OK" "repo limpo"
 fi
 
-if printf '%s' "$SAFE_OUTPUT" | grep -q "^User=root"; then
-  note "INFO" "update roda como root hoje (motivo do I1)"
+# (a) service do update rodando como root — seções [3] delimitada
+if printf '%s' "$SAFE_OUTPUT" | sed -n '/### \[3\]/,/### \[4\]/p' | grep -q "^User=root"; then
+  note "INFO" "update-data roda como root hoje (motivo do I1 — sera trocado na F4)"
+elif printf '%s' "$SAFE_OUTPUT" | sed -n '/### \[3\]/,/### \[4\]/p' | grep -q "^User=soprolife"; then
+  note "OK" "update-data JA roda como soprolife (I1 concluido?)"
 fi
+
+# (g) painel ja roda como soprolife — seção [4]
+if printf '%s' "$SAFE_OUTPUT" | sed -n '/### \[4\]/,/### \[5\]/p' | grep -q "^User=soprolife"; then
+  note "OK" "painel ja roda como soprolife (mesmo usuario apos a migracao — chmod 700 em data-private e seguro)"
+else
+  note "WARN" "painel NAO confirma User=soprolife — reavaliar o modelo de permissao da F2"; WARNS=$((WARNS+1))
+fi
+
+# (b) timer ja enabled — seção [2]
+if printf '%s' "$SAFE_OUTPUT" | sed -n '/### \[2\]/,/### \[3\]/p' | grep 'soprolife-update-data.timer' | grep -q 'enabled'; then
+  note "INFO" "timer ja enabled — PAUSAR (systemctl stop) antes da troca na F4"
+fi
+
+# (c)(d)(e) ADC e venvs
 if printf '%s' "$SAFE_OUTPUT" | grep -q "(ADC ausente no root)"; then
   note "WARN" "ADC nao encontrado no HOME do root"; WARNS=$((WARNS+1))
+else
+  note "INFO" "ADC presente no root — F3 cria o ADC proprio do soprolife (nunca copiar sem GPT)"
 fi
+if ! printf '%s' "$SAFE_OUTPUT" | grep -q "(venv do root ausente)"; then
+  note "INFO" "venv do root presente — sera substituido pelo venv do soprolife (recriado, nunca copiado)"
+fi
+if printf '%s' "$SAFE_OUTPUT" | grep -q "(venv do soprolife ausente)"; then
+  note "INFO" "venv do soprolife ausente — esperado antes da F3"
+fi
+
+# (f) arquivos com dono root em data/ (painel roda como soprolife e NAO le 600 root)
+_root_data=$(printf '%s' "$SAFE_OUTPUT" | sed -n '/### \[8\]/,/### \[9\]/p' | grep -cE '^-[rwx-]{9}[.+]? +[0-9]+ +root +root ')
+if [ "${_root_data:-0}" -gt 0 ]; then
+  note "WARN" "${_root_data} arquivo(s) root:root em data/ — se 600, o painel (soprolife) NAO consegue le-los; corrigir de forma DIRIGIDA na F2 (listar antes)"
+  WARNS=$((WARNS+1))
+fi
+
+# (h) HTTP local: 000 pode ser normal se o painel binda so no IP Tailscale
 if printf '%s' "$SAFE_OUTPUT" | grep -q "http_code=200"; then
   note "OK" "painel HTTP 200 (localhost da VPS)"
 else
-  note "WARN" "painel nao respondeu 200 no localhost da VPS"; WARNS=$((WARNS+1))
+  note "WARN" "painel nao respondeu no localhost — ESPERADO se binda so no IP Tailscale; conferir manualmente http://<VPS_TAILSCALE>:8765/"
+  WARNS=$((WARNS+1))
 fi
 
 # Scan /root/ fixo: feito LOCALMENTE sobre a copia local dos scripts (mesmo

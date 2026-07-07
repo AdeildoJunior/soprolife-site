@@ -21,12 +21,19 @@ sem quebrar o pipeline que hoje funciona.
   - `soprolife-update-data.service` (disparado por timer) — roda
     `update-local-data.sh` (13 etapas);
   - `soprolife-update-data.timer` (enabled) — a cada 10 min, `Persistent=true`.
-- O unit de update versionado no repo roda como **`User=root` / `HOME=/root`**;
-  o usuário do serviço do painel precisa ser confirmado na janela (F0).
-- Existência/estado do usuário `soprolife` na VPS: **confirmar no
-  precheck (F0)** — não presumir; criação só ocorre na fase aprovada se
-  `id soprolife` falhar.
-- Dependências que hoje moram no HOME do root (a confirmar na F0):
+- **Precheck real executado — fatos confirmados na VPS:**
+  - `soprolife-painel.service` **JÁ roda como `User=soprolife`** — este
+    I1 é a migração do timer/update EXISTENTE, não criação do zero;
+  - `soprolife-update-data.service` roda como **`User=root`/`HOME=/root`**
+    (o alvo do I1); o timer já existe e está **enabled**;
+  - usuário `soprolife` **JÁ existe** (uid 1000, home `/home/soprolife`,
+    shell `/bin/bash`) — adotado como está: **sem useradd, sem usermod,
+    sem mudança de home/shell nesta I1**;
+  - ADC e venv Google estão no root; `data/` e `data-private/` têm donos
+    misturados root/soprolife, incluindo summaries `root:root 600` que o
+    painel (soprolife) não consegue ler;
+  - painel não responde no localhost (binda no IP Tailscale) — esperado.
+- Dependências que hoje moram no HOME do root (confirmado):
   - ADC: `~/.config/gcloud/application_default_credentials.json`;
   - configs: `~/.config/soprolife/painel/*.json` (chmod 600);
   - venv: `~/.local/share/soprolife/venvs/google-sheets/`.
@@ -42,14 +49,16 @@ sem quebrar o pipeline que hoje funciona.
 3. Um erro de script como root pode sobrescrever qualquer arquivo do
    sistema; sem root, o dano fica confinado ao escopo do painel.
 
-## Usuário recomendado
+## Usuário: o EXISTENTE `soprolife` (decisão pós-precheck)
 
-Usuário de SISTEMA `soprolife`: home `/var/lib/soprolife`, shell
-`/usr/sbin/nologin`, sem senha, sem sudo. **Criado SOMENTE se
-`id soprolife` falhar** (se já existir, validar shell/home/grupos no
-precheck e decidir com o GPT antes de adotar). Comandos que precisem
-rodar como esse usuário usam `sudo -u soprolife HOME=/var/lib/soprolife`
-ou `runuser -u soprolife --` — nunca shell interativo/de login.
+Usar o usuário que já existe (uid 1000, home `/home/soprolife`, shell
+`/bin/bash` — o mesmo que já roda o painel). **Nesta I1: nenhum useradd,
+nenhum usermod, nenhuma mudança de home/shell.** Criação só ocorreria se
+`id soprolife` falhasse (não é o caso). Comandos como o usuário usam
+`sudo -u soprolife HOME=/home/soprolife` — HOME sempre explícito, nunca
+shell de login. Migrar para usuário de sistema com `/var/lib/soprolife` +
+`nologin` fica registrado como **alternativa FUTURA** de endurecimento,
+apenas se surgir justificativa forte (hoje não há).
 
 ## Diretórios necessários e permissões recomendadas
 
@@ -58,9 +67,9 @@ ou `runuser -u soprolife --` — nunca shell interativo/de login.
 | `/opt/soprolife/soprolife-site` (repo) | `soprolife:soprolife` | padrão git | `git pull` pelo fluxo de deploy; `safe.directory` se o pull continuar sendo feito por outro usuário |
 | `painel-soprolife/data-private/` | `soprolife` | 700 (dir), 600 (arquivos) | dados reais + config do Command Center |
 | `painel-soprolife/data/*.local.json` | `soprolife` | **644** | summaries sem PII (M2) servidos ao navegador |
-| `/var/lib/soprolife/.config/gcloud/` | `soprolife` | 700/600 | ADC reautenticado como `soprolife` |
-| `/var/lib/soprolife/.config/soprolife/painel/` | `soprolife` | 700/600 | configs privadas dos conectores |
-| `/var/lib/soprolife/.local/share/soprolife/venvs/` | `soprolife` | padrão | venv recriado (não copiar o do root — caminhos absolutos no venv) |
+| `/home/soprolife/.config/gcloud/` | `soprolife` | 700/600 | ADC reautenticado como `soprolife` |
+| `/home/soprolife/.config/soprolife/painel/` | `soprolife` | 700/600 | configs privadas dos conectores |
+| `/home/soprolife/.local/share/soprolife/venvs/` | `soprolife` | padrão | venv recriado (não copiar o do root — caminhos absolutos no venv) |
 
 ## Scripts candidatos ao timer (os mesmos de hoje)
 
@@ -82,7 +91,7 @@ Wants=network-online.target
 Type=oneshot
 User=soprolife
 Group=soprolife
-Environment=HOME=/var/lib/soprolife
+Environment=HOME=/home/soprolife
 WorkingDirectory=/opt/soprolife/soprolife-site
 ExecStart=/bin/bash /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
 StandardOutput=journal
@@ -118,7 +127,7 @@ e se o `soprolife` já tem algo no HOME.
 **F1 — Preparar ambiente do usuário (sem tocar nos units):** copiar
 SOMENTE configs aprovadas, arquivo por arquivo (`install -m 600`, sem
 `cp -a` cego), de `/root/.config/soprolife/painel/` para
-`/var/lib/soprolife/.config/soprolife/painel/`;
+`/home/soprolife/.config/soprolife/painel/`;
 recriar venv como `soprolife` (`pip install -r requirements-google.txt`);
 **reautenticar ADC como `soprolife`** com escopos explícitos (Sheets, Drive,
 Search Console, GA4) + quota project — fluxo já validado na skill
@@ -159,10 +168,10 @@ systemctl cat soprolife-painel.service
 ls -la /opt/soprolife/soprolife-site/painel-soprolife/data-private/
 ls -la /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json
 # F1 (como root, preparando o usuário)
-install -d -m 700 -o soprolife -g soprolife /var/lib/soprolife/.config/soprolife/painel
+install -d -m 700 -o soprolife -g soprolife /home/soprolife/.config/soprolife/painel
 # ... cópias arquivo a arquivo com install -m 600; reauth ADC como soprolife
 # F2
-sudo -u soprolife HOME=/var/lib/soprolife /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
+sudo -u soprolife HOME=/home/soprolife /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
 # F3
 cp /etc/systemd/system/soprolife-update-data.service{,.bak.$(date +%Y%m%d-%H%M%S)}
 systemctl daemon-reload && systemctl start soprolife-update-data.service

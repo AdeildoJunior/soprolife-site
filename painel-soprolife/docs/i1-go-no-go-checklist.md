@@ -11,13 +11,15 @@
 | 1 | Repo LOCAL limpo, branch `painel-soprolife-v01` | saída de `i1-validate-local-before-vps.sh` = GO | |
 | 2 | Repo da VPS limpo e no commit esperado | seção [7] do relatório do precheck read-only | |
 | 3 | Precheck read-only executado, anexado e revisado | arquivo `i1-precheck-vps-readonly-*.txt` em `_REVISOES_GPT` com veredito GO condicional | |
-| 4 | Usuário `soprolife`: ausente OU seguro | seção [6] do precheck: se existe → sem grupo admin, senha travada, `~/.ssh` revisado manualmente | |
+| 4 | Usuário `soprolife` existente é seguro | seção [6] do precheck: sem grupo admin, senha travada, `~/.ssh` revisado manualmente (NÃO haverá criação — usuário já existe) | |
 | 5 | Nenhuma credencial exposta nos artefatos I1 | scan do `i1-validate-local-before-vps.sh` limpo + relatório do precheck sanitizado conferido a olho | |
-| 6 | Templates systemd revisados pelo GPT | veredito LIBERADO sobre `systemd/*.example` (User/Group/HOME/proteções/ReadWritePaths) | |
-| 7 | Estratégia ADC decidida | decisão registrada abaixo (escopos exatos + quota project + quem digita o device flow) | |
+| 6 | Templates systemd revisados pelo GPT | veredito LIBERADO sobre `systemd/*.example` (User/Group/HOME=/home/soprolife/proteções/ReadWritePaths) | |
+| 7 | **Estratégia ADC/venv do soprolife RESOLVIDA** | decisão registrada abaixo (escopos exatos + quota project + quem digita o device flow) — **sem isso é NO-GO** | |
 | 8 | Estratégia de posse do repo decidida | decisão registrada abaixo (`chown` vs `safe.directory`) | |
-| 9 | Plano de rollback impresso/aberto | `i1-execucao-assistida-f1-f5.md` (rollback por fase) acessível DURANTE a janela | |
-| 10 | Janela de manutenção definida | data/hora + usuário presente + duração estimada + decisão janela única vs dividida | |
+| 9 | **Plano dirigido para os arquivos `root:root 600` em `data/`** | listagem do passo (a) da F2 revisada pelo GPT — arquivos exatos a corrigir aprovados — **sem isso é NO-GO** | |
+| 10 | **Timer pausado ANTES da migração (compromisso da F4)** | primeiro comando da F4 é `systemctl stop soprolife-update-data.timer` — operador ciente — **sem isso é NO-GO** | |
+| 11 | **Rollback do service root pronto** | `.bak` datados planejados + sequência de restauração testada em leitura (rollback da F4) — **sem isso é NO-GO** | |
+| 12 | Janela de manutenção definida | data/hora + usuário presente + duração estimada + decisão janela única vs dividida | |
 
 ## Decisões a registrar (preencher na revisão com o GPT)
 

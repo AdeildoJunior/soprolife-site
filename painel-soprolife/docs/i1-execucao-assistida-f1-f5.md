@@ -1,175 +1,162 @@
-# I1 — Execução assistida F1–F5 (roteiro operacional da janela)
+# I1 — Execução assistida F1–F5 (migração do timer EXISTENTE root → soprolife)
 
 > ⚠️ **NÃO EXECUTAR NADA DESTE DOCUMENTO SEM: checklist GO/NO-GO completo
 > (i1-go-no-go-checklist.md) + veredito LIBERADO do GPT + usuário presente.**
 > Todos os comandos rodam NA VPS pelo operador humano, um bloco por vez,
 > com o rollback da fase aberto ao lado. Placeholders sempre.
 >
-> **Estratégia de usuário (decidida):** usuário de SISTEMA `soprolife`,
-> home `/var/lib/soprolife`, shell `/usr/sbin/nologin`. Nenhum passo
-> depende de shell interativo: tudo via `runuser -u soprolife --` ou
-> `sudo -u soprolife` com `HOME=/var/lib/soprolife` explícito.
->
-> Referências: visão geral em `i1-timer-sem-root-execucao.md`; precheck
-> (F0) já coberto por `scripts/i1-precheck-vps-readonly.sh`.
+> **Realidade confirmada pelo precheck (norte deste roteiro):**
+> - o `soprolife-painel.service` JÁ roda como `User=soprolife` — este I1
+>   migra APENAS o `soprolife-update-data.service`, que ainda roda como
+>   root; após a F4, timer e painel usam o MESMO usuário;
+> - o usuário `soprolife` JÁ EXISTE (uid 1000, home `/home/soprolife`,
+>   shell `/bin/bash`) — **nada de useradd/usermod/chsh nesta I1**;
+>   `/var/lib/soprolife` fica como alternativa FUTURA, se algum dia
+>   houver justificativa (não há hoje);
+> - o timer JÁ está enabled — será PAUSADO durante a troca;
+> - ADC e venv Google estão no root; `data/`/`data-private/` têm donos
+>   misturados, incluindo summaries `root:root 600` que o painel
+>   (rodando como soprolife) não consegue ler.
 
 ---
 
-## F1 — Usuário e diretórios
+## F1 — Confirmar usuário existente e preparar diretórios de config
 
-**Objetivo:** garantir usuário de sistema `soprolife` seguro e diretórios
-de config prontos, sem tocar em units.
+**Objetivo:** validar o usuário que JÁ existe (sem criar, sem alterar
+home/shell) e preparar seus diretórios de config.
 
 **Comandos propostos (⚠️ NÃO EXECUTAR sem GPT):**
 ```bash
-# criar SOMENTE se 'id soprolife' falhar (se já existir, NÃO recriar —
-# validar shell/home existentes e levar a divergência ao GPT):
-id soprolife 2>/dev/null || \
-  useradd --system --home-dir /var/lib/soprolife --create-home \
-          --shell /usr/sbin/nologin soprolife
-getent passwd soprolife            # conferir home e shell resultantes
-install -d -m 700 -o soprolife -g soprolife /var/lib/soprolife/.config
-install -d -m 700 -o soprolife -g soprolife /var/lib/soprolife/.config/soprolife/painel
-install -d -m 700 -o soprolife -g soprolife /var/lib/soprolife/.config/gcloud
+id soprolife && getent passwd soprolife       # deve existir; NÃO criar nada
+passwd -S soprolife                           # senha deve estar travada (L/LK)
+# NÃO rodar useradd/usermod/chsh — usuário atual é adotado como está.
+install -d -m 700 -o soprolife -g soprolife /home/soprolife/.config
+install -d -m 700 -o soprolife -g soprolife /home/soprolife/.config/soprolife/painel
+install -d -m 700 -o soprolife -g soprolife /home/soprolife/.config/gcloud
 ```
 
-**Checks de sucesso:** `getent passwd soprolife` mostra
-`/var/lib/soprolife` + `/usr/sbin/nologin`; usuário de sistema sem senha;
-`id` sem grupo sudo/wheel/admin; os 3 diretórios com dono soprolife e 700.
+**Checks de sucesso:** usuário existe, sem grupo sudo/wheel/admin, senha
+travada, `~/.ssh` já revisado manualmente (precheck); 3 diretórios com
+dono soprolife e 700.
 
-**Rollback da fase:** se o usuário foi criado NESTA janela e algo deu
-errado: `userdel -r soprolife` (SÓ se criado agora — NUNCA se pré-existia).
-Diretórios criados são inertes.
+**Rollback da fase:** nenhum (nada foi criado além de diretórios inertes).
 
-**⏸ PARADA GPT:** relatar `getent passwd` + `id` + `ls -ld` dos diretórios.
-Se o usuário pré-existia com home/shell diferentes, PARAR aqui e decidir
-com o GPT (migrar vs adotar o existente) antes de qualquer F2.
+**⏸ PARADA GPT:** `id` + `passwd -S` + `ls -ld` dos diretórios. Se a
+senha NÃO estiver travada ou houver grupo administrativo: PARAR — decisão
+GPT antes de qualquer F2 (travar senha é 1 comando, mas é mudança de
+estado do usuário e precisa de aprovação explícita).
 
 ---
 
-## F2 — Permissões mínimas dos dados do painel
+## F2 — Permissões mínimas e DIRIGIDAS (listar antes, corrigir só o listado)
 
-**Objetivo:** dar ao timer posse do que ele escreve SEM quebrar o
-`soprolife-painel.service`, que ainda não foi migrado.
+**Objetivo:** corrigir os donos misturados que o precheck encontrou —
+somente arquivos gerados do painel, um conjunto listado e aprovado.
+Como painel e (pós-F4) timer usam o MESMO usuário, `700` em
+`data-private/` é seguro.
 
-**Passo (a) — identificar o usuário REAL do painel (read-only):**
+**Passo (a) — LISTAR o estado atual (read-only; nada muda):**
 ```bash
-systemctl show soprolife-painel.service -p User -p Group
-ps -o user= -p "$(systemctl show soprolife-painel.service -p MainPID --value)" 2>/dev/null
+ls -ld /opt/soprolife/soprolife-site/painel-soprolife/data \
+       /opt/soprolife/soprolife-site/painel-soprolife/data-private
+ls -l  /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json
+ls -lR /opt/soprolife/soprolife-site/painel-soprolife/data-private | head -40
 ```
 
-**Passo (b) — decidir com o GPT o modelo de acesso a `data-private/`:**
-- **Painel roda como root** (provável hoje): root ignora permissões —
-  o timer pode ter posse exclusiva sem quebrar nada.
-- **Painel roda como usuário ≠ root e ≠ soprolife:** usar GRUPO
-  controlado compartilhado — nunca 700.
-- **Painel e timer com o MESMO usuário** (cenário futuro F6): aí sim
-  `chmod 700` é a opção correta.
+**Passo (b) — ⏸ GPT aprova a lista exata de arquivos a corrigir**
+(esperados: summaries `root:root`/600 em `data/` — que hoje o painel nem
+consegue ler — e itens de `data-private/` fora de soprolife).
 
-**Passo (c) — comandos por cenário (⚠️ NÃO EXECUTAR sem GPT; executar SÓ
-o bloco do cenário decidido):**
+**Passo (c) — corrigir SÓ o aprovado (⚠️ NÃO EXECUTAR sem GPT):**
 ```bash
-# CENÁRIO grupo compartilhado (painel com usuário próprio ≠ soprolife):
-groupadd --system soprolife-data 2>/dev/null || true
-usermod -aG soprolife-data <USUARIO_DO_PAINEL>
-chown -R soprolife:soprolife-data /opt/soprolife/soprolife-site/painel-soprolife/data-private
-chmod 750 /opt/soprolife/soprolife-site/painel-soprolife/data-private
-find /opt/soprolife/soprolife-site/painel-soprolife/data-private -maxdepth 1 -type f -name '*.json' -exec chmod 640 {} +
-
-# CENÁRIO painel como root (root lê independente de permissão):
+# somente dados gerados do painel — NUNCA chown -R no repo inteiro:
 chown -R soprolife:soprolife /opt/soprolife/soprolife-site/painel-soprolife/data-private
-# chmod 700 SÓ neste cenário ou quando painel+timer forem o mesmo usuário:
 chmod 700 /opt/soprolife/soprolife-site/painel-soprolife/data-private
-
-# summaries públicos (qualquer cenário — servidos ao navegador):
-chown soprolife:soprolife /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json 2>/dev/null || true
-chmod 644 /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json 2>/dev/null || true
 chown soprolife:soprolife /opt/soprolife/soprolife-site/painel-soprolife/data
+chown soprolife:soprolife /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json
+chmod 644 /opt/soprolife/soprolife-site/painel-soprolife/data/*.local.json
 ```
+`chown -R` do REPO INTEIRO segue **NÃO RECOMENDADO** (o deploy hoje faz
+pull como root); se o pull acusar dono, usar
+`git config --system --add safe.directory /opt/soprolife/soprolife-site`.
 
-**Posse do repo:** o caminho recomendado é
-`git config --system --add safe.directory /opt/soprolife/soprolife-site`
-(repo segue do dono atual; deploy inalterado).
-`chown -R soprolife:soprolife /opt/soprolife/soprolife-site` no repo
-INTEIRO é **NÃO RECOMENDADO** — muda o modelo de deploy e a posse de tudo;
-só com aprovação EXPLÍCITA do GPT registrada no checklist.
+**Checks de sucesso:** re-rodar o passo (a) — tudo soprolife; summaries
+644; painel continua respondendo no IP Tailscale
+(`http://<VPS_TAILSCALE>:8765/painel-soprolife/`) **imediatamente após**
+as mudanças, e as seções que dependiam de summaries root:600 passam a
+carregar.
 
-**Checks de sucesso:** `ls -ld data data-private` conforme o cenário;
-painel continua HTTP 200 **imediatamente após cada chown/chmod**
-(testar antes de prosseguir).
+**Rollback da fase:** a listagem do passo (a) é a foto do "antes" —
+reverter dono/permissão só do que foi tocado.
 
-**Rollback da fase:** reverter donos/permissões para a foto do precheck
-(seção [8] do relatório é o "antes").
-
-**⏸ PARADA GPT:** relatar saída do passo (a) + `ls -ld` antes/depois +
-HTTP do painel.
+**⏸ PARADA GPT:** listagem antes/depois + HTTP do painel.
 
 ---
 
-## F3 — Credenciais ADC e configs (sem cópia cega)
+## F3 — ADC e venv do usuário soprolife (sem cópia cega)
 
-**Objetivo:** o usuário `soprolife` autentica nas APIs Google por conta
-própria; configs copiadas UMA A UMA, só as aprovadas.
+**Objetivo:** ADC e venv próprios em `/home/soprolife` — hoje ambos só
+existem no root.
 
-**Passo (a) — listar o que existe (nomes/permissões, nunca conteúdo):**
+**Passo (a) — listar configs do root (nomes/permissões, nunca conteúdo):**
 ```bash
 ls -l /root/.config/soprolife/painel/
 ```
 
-**Passo (b) — GPT aprova a lista de arquivos a copiar** (esperados:
-`google-sheets.local.json`, `resumo-dashboard.json`/CSV se houver —
-qualquer arquivo inesperado fica para trás até ser explicado).
+**Passo (b) — ⏸ GPT aprova a lista de arquivos de config a copiar.**
 
-**Passo (c) — copiar SOMENTE os aprovados, arquivo por arquivo
-(⚠️ NÃO EXECUTAR sem GPT):**
+**Passo (c) — copiar SÓ os aprovados, arquivo por arquivo:**
 ```bash
 install -m 600 -o soprolife -g soprolife \
   /root/.config/soprolife/painel/<ARQUIVO_APROVADO> \
-  /var/lib/soprolife/.config/soprolife/painel/<ARQUIVO_APROVADO>
-# (repetir por arquivo aprovado — sem curingas, sem cp -a, sem cópia cega)
+  /home/soprolife/.config/soprolife/painel/<ARQUIVO_APROVADO>
+# (repetir por arquivo — sem curingas, sem cp -a, sem cópia cega)
 ```
 
 **Passo (d) — venv recriado (nunca copiado) e ADC próprio:**
 ```bash
-sudo -u soprolife HOME=/var/lib/soprolife bash -c '
-  python3 -m venv /var/lib/soprolife/.local/share/soprolife/venvs/google-sheets &&
-  /var/lib/soprolife/.local/share/soprolife/venvs/google-sheets/bin/pip install \
+sudo -u soprolife HOME=/home/soprolife bash -c '
+  python3 -m venv /home/soprolife/.local/share/soprolife/venvs/google-sheets &&
+  /home/soprolife/.local/share/soprolife/venvs/google-sheets/bin/pip install \
     -r /opt/soprolife/soprolife-site/painel-soprolife/requirements-google.txt'
-# ADC device flow (interativo no navegador da estação; sem shell de login):
-sudo -u soprolife HOME=/var/lib/soprolife gcloud auth application-default login \
+sudo -u soprolife HOME=/home/soprolife gcloud auth application-default login \
   --no-launch-browser --scopes=<ESCOPOS_DECIDIDOS_NO_CHECKLIST>
-sudo -u soprolife HOME=/var/lib/soprolife gcloud auth application-default \
+sudo -u soprolife HOME=/home/soprolife gcloud auth application-default \
   set-quota-project <PROJECT_ID>
 ```
 
 **REGRA DURA:** o ADC do root NUNCA é copiado — nem como atalho, nem
 "temporariamente" — sem aprovação EXPLÍCITA do GPT registrada por
-escrito. Se o device flow travar: adiar F3, encerrar a janela SEM
-instalar units (o timer root atual segue funcionando; nada quebrou).
+escrito. Se o device flow travar: adiar F3 e encerrar a janela SEM tocar
+nos units (o timer root atual segue funcionando; nada quebrou).
 
 **Checks de sucesso:**
-`sudo -u soprolife HOME=/var/lib/soprolife gcloud auth application-default print-access-token >/dev/null && echo ADC-OK`
-(nunca exibir o token); venv com dependências instaladas.
+`sudo -u soprolife HOME=/home/soprolife gcloud auth application-default print-access-token >/dev/null && echo ADC-OK`
+(nunca exibir o token); venv do soprolife existente com dependências.
 
 **Rollback da fase:** nenhum efeito em produção — artefatos ficam no home
-do soprolife para a próxima tentativa.
+para a próxima tentativa.
 
-**⏸ PARADA GPT:** relatar a lista do passo (a), o que foi copiado e os
-exit codes (nunca tokens).
+**⏸ PARADA GPT:** lista do passo (a), o que foi copiado, exit codes.
 
 ---
 
-## F4 — Instalar service/timer (ainda sem habilitar)
+## F4 — PAUSAR o timer e trocar o service root → soprolife
 
-**Objetivo:** trocar os units pela versão sem root, com backup, SEM
-entregar ao timer ainda.
+**Objetivo:** trocar o unit existente com o timer parado, com backup, sem
+janela de disparo no meio da troca.
 
 **Comandos propostos (⚠️ NÃO EXECUTAR sem GPT):**
 ```bash
-[ -f /etc/systemd/system/soprolife-update-data.service ] && \
-  cp /etc/systemd/system/soprolife-update-data.service{,.bak.$(date +%Y%m%d-%H%M%S)}
-[ -f /etc/systemd/system/soprolife-update-data.timer ] && \
-  cp /etc/systemd/system/soprolife-update-data.timer{,.bak.$(date +%Y%m%d-%H%M%S)}
+# 1. PAUSAR o timer (pré-condição do GO — sem disparo durante a troca):
+systemctl stop soprolife-update-data.timer
+systemctl list-timers 'soprolife-*' --no-pager   # não deve listar próximo disparo
+
+# 2. Backups datados (units EXISTEM — confirmado no precheck):
+cp /etc/systemd/system/soprolife-update-data.service{,.bak.$(date +%Y%m%d-%H%M%S)}
+cp /etc/systemd/system/soprolife-update-data.timer{,.bak.$(date +%Y%m%d-%H%M%S)}
+
+# 3. Instalar a partir da fonte versionada (.example) e recarregar:
 install -m 644 /opt/soprolife/soprolife-site/painel-soprolife/systemd/soprolife-update-data.service.example \
   /etc/systemd/system/soprolife-update-data.service
 install -m 644 /opt/soprolife/soprolife-site/painel-soprolife/systemd/soprolife-update-data.timer.example \
@@ -178,19 +165,21 @@ systemctl daemon-reload
 ```
 
 **Checks de sucesso:** `systemctl cat soprolife-update-data.service`
-mostra `User=soprolife`, `HOME=/var/lib/soprolife` e as proteções;
-`.bak` datados existem.
+mostra `User=soprolife`/`HOME=/home/soprolife`/proteções; `.bak` datados
+existem; timer parado (sem próximo disparo).
 
-**Rollback da fase:** restaurar os `.bak` + `systemctl daemon-reload`.
+**Rollback da fase:** restaurar os `.bak` + `systemctl daemon-reload` +
+`systemctl start soprolife-update-data.timer` → confirmar 1 execução
+`0/SUCCESS` como root (estado antigo de volta).
 
-**⏸ PARADA GPT:** colar o `systemctl cat` (units não têm segredo).
+**⏸ PARADA GPT:** colar o `systemctl cat` + estado do timer.
 
 ---
 
-## F5 — DUAS execuções manuais e SÓ DEPOIS habilitar o timer
+## F5 — DUAS execuções manuais e SÓ DEPOIS reativar o timer
 
-**Objetivo:** provar duas execuções completas e idempotentes sem root
-antes de entregar ao timer.
+**Objetivo:** provar duas execuções completas e idempotentes como
+soprolife antes de devolver o pipeline ao timer.
 
 **Passo (a) — teste manual, duas vezes (⚠️ NÃO EXECUTAR sem GPT):**
 ```bash
@@ -202,23 +191,22 @@ journalctl -u soprolife-update-data.service -n 80 --no-pager
 
 **Checks de sucesso (cada execução):** `status=0/SUCCESS`; 13/13 etapas
 no journal; `check-access.sh` exit 0 na VPS; summaries regenerados com
-dono soprolife e 644; painel com dado fresco
-(`http://<VPS_TAILSCALE>:8765/painel-soprolife/`); nenhuma escrita nova
-em `/root/`.
+dono soprolife e 644; painel com dado fresco no IP Tailscale; nenhuma
+escrita nova em `/root/`.
 
 **⏸ PARADA GPT (obrigatória):** journal das 2 execuções. **O timer só é
-habilitado com as 2/2 verdes E aprovação explícita do GPT.**
+reativado com as 2/2 verdes E aprovação explícita do GPT.**
 
-**Passo (b) — habilitar o timer (só após a parada acima):**
+**Passo (b) — reativar o timer (só após a parada acima):**
 ```bash
 systemctl enable --now soprolife-update-data.timer
 systemctl list-timers 'soprolife-*' --no-pager
 ```
 
-**Depois:** 2 ciclos reais do timer (≈20 min) verdes no journal;
-monitorar 24h (journal + `generatedAt` de um summary + painel) antes de
-considerar o I1 fechado. F6 (painel.service sem root) é etapa separada.
+**Depois:** 2 ciclos reais (≈20 min) verdes no journal; monitorar 24h
+(journal + `generatedAt` de um summary + painel). F6 — o painel já roda
+como soprolife, então NÃO há F6 de painel; o próximo endurecimento
+opcional é `ProtectSystem=strict` no service, etapa separada.
 
-**Rollback da fase:** rollback do F4 (units `.bak` + daemon-reload) +
-`systemctl enable --now soprolife-update-data.timer` no unit restaurado →
-confirmar 1 execução `0/SUCCESS` como root.
+**Rollback da fase:** rollback do F4 (units `.bak` + daemon-reload +
+start do timer restaurado) → confirmar 1 execução `0/SUCCESS` como root.

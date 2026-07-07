@@ -1,11 +1,13 @@
 # TEMPLATE (I1) — NÃO INSTALAR SEM REVISÃO GPT.
-# Substitui /etc/systemd/system/soprolife-update-data.service na fase F4
-# do plano (docs/i1-timer-sem-root-execucao.md). Mesma função do unit
-# atual, trocando root → soprolife + proteções básicas.
+# MIGRAÇÃO DE UNIT EXISTENTE: substitui o soprolife-update-data.service
+# que HOJE roda como User=root/HOME=/root, trocando para o usuário
+# soprolife JÁ EXISTENTE na VPS (home /home/soprolife — mesmo usuário do
+# soprolife-painel.service) + proteções básicas. Fase F4 do roteiro
+# docs/i1-execucao-assistida-f1-f5.md.
 #
-# Pré-requisitos ANTES de instalar (fases F0–F3 do doc de execução):
+# Pré-requisitos ANTES de instalar (fases F0–F3 do roteiro assistido):
 #   - ambiente do usuário soprolife preparado (ADC, configs, venv);
-#   - teste manual 2x como soprolife com 13/13 etapas OK (F3);
+#   - timer PAUSADO (systemctl stop) durante a troca;
 #   - backup datado do unit atual (skill soprolife-systemd-safe).
 
 [Unit]
@@ -17,7 +19,7 @@ Wants=network-online.target
 Type=oneshot
 User=soprolife
 Group=soprolife
-Environment=HOME=/var/lib/soprolife
+Environment=HOME=/home/soprolife
 WorkingDirectory=/opt/soprolife/soprolife-site
 ExecStart=/bin/bash /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
 StandardOutput=journal
@@ -35,7 +37,7 @@ ProtectSystem=full
 # tudo que o update-local-data.sh escreve hoje.
 ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/data
 ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/data-private
-ReadWritePaths=/var/lib/soprolife/.config
+ReadWritePaths=/home/soprolife/.config
 
 [Install]
 WantedBy=multi-user.target

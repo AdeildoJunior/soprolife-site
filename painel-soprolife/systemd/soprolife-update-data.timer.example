@@ -1,7 +1,8 @@
 # TEMPLATE (I1) — NÃO INSTALAR SEM REVISÃO GPT.
-# Template proposto para timer de atualização (a mudança do I1 é no
-# service, não aqui). Mantido como .example para os dois units serem
-# instalados juntos na F4 a partir da mesma origem versionada.
+# O timer JÁ EXISTE e está enabled na VPS (a mudança do I1 é no service).
+# Mantido como .example para os dois units serem instalados juntos na F4
+# a partir da mesma origem versionada; na janela, o timer é PAUSADO antes
+# da troca e re-habilitado só após os testes manuais da F5.
 
 [Unit]
 Description=SoproLife — Timer de atualização automática do painel
