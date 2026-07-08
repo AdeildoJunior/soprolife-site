@@ -381,6 +381,9 @@ async function init() {
 
     state.resumo = resumo;
     state.crm = crm;
+    // M5: lista CRUA de clínicas (etapas no vocabulário oficial da planilha)
+    // — o normalizado de state.crm traduz etapas para rótulos visuais.
+    state.crmClinicasRaw = Array.isArray(crm) ? crm : (crm?.clinicas || []);
     state.leads = leads;
     state.marketing = marketing;
     state.tarefas = tarefas;
@@ -393,6 +396,7 @@ async function init() {
     const crmLocal = await loadOptionalJson("./data/crm-clinicas.local.json");
     if (crmLocal && Array.isArray(crmLocal.clinicas)) {
       state.crm = crmLocal.clinicas.map(normalizeCrmRecord);
+      state.crmClinicasRaw = crmLocal.clinicas;
     }
 
     // Contatos B2B: resumo seguro (sem nome/telefone/email) > privado local (Tailscale) > nada.
@@ -534,6 +538,7 @@ async function init() {
     renderAutomations();
     renderSaudeOperacional();
     renderAcoesOperacionais();
+    renderB2BAcoes();
     renderAuditoria();
     renderLancamentos();
     bindEvents();
@@ -5923,6 +5928,87 @@ function renderAcoesOperacionais() {
       btn.textContent = aberto ? "Ver próximo passo" : "Ocultar próximo passo";
     });
   });
+}
+
+// ── Próximas Ações B2B/PCMSO (M5) — painel no Painel Geral ───────────────────
+// Consome estado JÁ carregado e gateado (leadsSummary, crm normalizado,
+// crmContatosB2B, followupClinicasSummary) via buildB2BActions/buildB2BStats
+// (js/b2b-actions.js). Sem fetch novo, sem PII.
+
+const B2B_PRIO = {
+  alta:  { rotulo: "Alta",  cls: "saude-critico" },
+  media: { rotulo: "Média", cls: "saude-atencao" },
+  baixa: { rotulo: "Baixa", cls: "saude-ok" },
+};
+
+function renderB2BAcoes() {
+  const panel = document.querySelector("#b2bPanel");
+  if (!panel) return;
+
+  const payloads = {
+    leads: state.leadsSummary?.leads || state.leads || [],
+    clinicas: state.crmClinicasRaw || [],
+    contatosB2B: state.crmContatosB2B || [],
+    followupStats: state.followupClinicasSummary?.clinicas || null,
+  };
+
+  // Sem NENHUMA fonte B2B carregada: painel oculto (nada a priorizar).
+  if (!payloads.leads.length && !payloads.clinicas.length &&
+      !payloads.contatosB2B.length && !payloads.followupStats) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  const stats = buildB2BStats(payloads);
+  const acoes = buildB2BActions(payloads);
+
+  const statsBox = panel.querySelector("#b2bStats");
+  if (statsBox) {
+    const item = (rotulo, valor) => `
+      <div class="b2b-stat">
+        <span>${escapeHtml(rotulo)}</span>
+        <strong>${valor === null ? "—" : valor}</strong>
+      </div>`;
+    statsBox.innerHTML =
+      item("Oportunidades B2B", stats.totalOportunidades) +
+      item("Precisam follow-up", stats.precisamFollowup) +
+      item("Em conversa", stats.emConversa) +
+      item("Aguardando retorno", stats.aguardandoRetorno) +
+      item("Convertidas", stats.convertidas) +
+      item("Sem próximo passo", stats.semProximoPasso);
+  }
+
+  const lista = panel.querySelector("#b2bLista");
+  if (!lista) return;
+
+  if (acoes.length === 0) {
+    lista.innerHTML = `
+      <div class="acoes-vazio">
+        <strong>Nenhuma ação comercial pendente.</strong>
+        <span>Os summaries atuais não indicam follow-up B2B em aberto.</span>
+      </div>`;
+    return;
+  }
+
+  lista.innerHTML = `
+    <ul class="acoes-lista">
+      ${acoes.map((acao) => {
+        const prio = B2B_PRIO[acao.prioridade] || B2B_PRIO.media;
+        return `
+          <li class="acoes-item ${prio.cls}">
+            <div class="acoes-topo">
+              <span class="badge ${prio.cls}">${prio.rotulo}</span>
+              <strong class="acoes-titulo">${escapeHtml(acao.titulo)}</strong>
+            </div>
+            <p class="acoes-acao">${escapeHtml(acao.motivo)}</p>
+            <div class="acoes-meta">
+              <span>Origem: ${escapeHtml(acao.origem)}</span>
+              <span class="b2b-passo"><b>Próximo passo:</b> ${escapeHtml(acao.proximoPasso)}</span>
+            </div>
+          </li>`;
+      }).join("")}
+    </ul>`;
 }
 
 // ── Auditoria M1 — card "Últimas alterações" (seção Automações) ───────────────

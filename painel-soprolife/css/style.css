@@ -6730,3 +6730,34 @@ th {
 
 /* hidden precisa vencer o display:block acima (UA stylesheet perde para classe) */
 .acoes-passo[hidden] { display: none; }
+
+/* ── Próximas Ações B2B/PCMSO (M5) — Painel Geral ────────────────────────── */
+/* Reusa .acoes-lista/.acoes-item/.acoes-vazio do M4; aqui só o grid de stats. */
+
+.b2b-panel { margin-top: 18px; }
+
+.b2b-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.b2b-stat {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.b2b-stat span   { color: var(--muted); font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+.b2b-stat strong { color: var(--navy); font-size: 1.15rem; }
+
+.b2b-passo { overflow-wrap: anywhere; }
+.b2b-passo b { color: var(--navy); }
+
+@media (max-width: 720px) {
+  .b2b-stats { grid-template-columns: 1fr 1fr; }
+}
