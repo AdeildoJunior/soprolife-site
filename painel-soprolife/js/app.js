@@ -533,6 +533,7 @@ async function init() {
     renderCustosInvestimentos();
     renderAutomations();
     renderSaudeOperacional();
+    renderAcoesOperacionais();
     renderAuditoria();
     renderLancamentos();
     bindEvents();
@@ -5855,6 +5856,73 @@ function renderSaudeOperacional() {
       banner.innerHTML = "";
     }
   }
+}
+
+// ── Ações Operacionais (M4) — painel na seção Automações ─────────────────────
+// Consome o MESMO estado da Saúde Operacional (state.saudeOperacional — real
+// ou demo, sem fetch extra) via buildOperationalActions (js/operational-actions.js).
+
+function renderAcoesOperacionais() {
+  const panel = document.querySelector("#acoesPanel");
+  if (!panel) return;
+
+  // Mesma regra do painel de Saúde: sem payload nenhum, fica oculto.
+  if (!state.saudeOperacional) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  const lista = panel.querySelector("#acoesLista");
+  if (!lista) return;
+
+  const acoes = buildOperationalActions(state.saudeOperacional);
+
+  if (acoes.length === 0) {
+    lista.innerHTML = `
+      <div class="acoes-vazio">
+        <strong>Nenhuma ação operacional pendente.</strong>
+        <span>A Saúde Operacional não trouxe alertas no último resumo carregado.</span>
+      </div>`;
+    return;
+  }
+
+  lista.innerHTML = `
+    <ul class="acoes-lista">
+      ${acoes.map((acao, i) => {
+        const nivel = saudeNivel(acao.nivel);
+        const quando = acao.geradoEm ? saudeFormataData(acao.geradoEm) : "";
+        return `
+          <li class="acoes-item ${nivel.cls}">
+            <div class="acoes-topo">
+              <span class="badge ${nivel.cls}">${nivel.rotulo}</span>
+              <strong class="acoes-titulo">${escapeHtml(acao.titulo)}</strong>
+            </div>
+            <p class="acoes-acao">${escapeHtml(acao.acao)}</p>
+            <div class="acoes-meta">
+              <span>Origem: ${escapeHtml(acao.origem)}</span>
+              <span>Status: <b>${escapeHtml(acao.status)}</b></span>
+              ${quando ? `<span>Gerado: ${escapeHtml(quando)}</span>` : ""}
+              <button type="button" class="acoes-toggle" data-acao-idx="${i}"
+                aria-expanded="false" aria-controls="acoesPasso${i}">Ver próximo passo</button>
+            </div>
+            <small class="acoes-passo" id="acoesPasso${i}" hidden>
+              <b>Próximo passo:</b> ${escapeHtml(acao.proximoPasso)}
+            </small>
+          </li>`;
+      }).join("")}
+    </ul>`;
+
+  lista.querySelectorAll(".acoes-toggle").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const alvo = document.getElementById(`acoesPasso${btn.dataset.acaoIdx}`);
+      if (!alvo) return;
+      const aberto = !alvo.hidden;
+      alvo.hidden = aberto;
+      btn.setAttribute("aria-expanded", String(!aberto));
+      btn.textContent = aberto ? "Ver próximo passo" : "Ocultar próximo passo";
+    });
+  });
 }
 
 // ── Auditoria M1 — card "Últimas alterações" (seção Automações) ───────────────
