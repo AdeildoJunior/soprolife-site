@@ -97,6 +97,36 @@ gerador vira AVISO (painel cai no demo).
 - Rodado na estação (fora do ciclo), o pipeline aparecerá "atenção/
   crítico" por idade — comportamento honesto, não bug.
 
+## v3 — Testes automatizados do gerador
+
+```bash
+python3 painel-soprolife/scripts/test-saude-operacional.py   # exit 0 = tudo OK
+```
+
+**O que cobrem (19 casos):** cenário feliz (flags do payload, geral=ok,
+10 indicadores); check-access via argumento (0 → ok; ≠0 → indicador e
+alerta críticos; ausente → "desconhecido", nunca inventado); JSON
+inválido → crítico; `containsPersonalData=true` numa fonte → crítico;
+fontes ausentes → atenção sem crash; frescor (recente → ok; 90 min →
+atenção; >24h → crítico com alerta "dados velhos"); allowlist estrita de
+campos em indicadores e alertas; `pii_guard` aceitando o payload final.
+
+**Como funcionam:** fixtures 100% SINTÉTICAS em `tempfile.mkdtemp`
+(removidas ao final), com mtimes definidos RELATIVOS ao agora via
+`os.utime` — sem horário fixo frágil, sem rede, sem Google, sem VPS,
+sem `data-private/`, sem credenciais. O gerador ganhou `--data-dir` e
+`--out` **exclusivamente para testes** — os defaults de produção
+continuam `painel-soprolife/data/` e
+`data/saude-operacional-summary.local.json`.
+
+**Regra:** os testes NUNCA usam dados reais — qualquer caso novo deve
+nascer com fixture sintética.
+
+**Limitações:** não cobrem o `--write` de produção nem a integração com
+o `update-local-data.sh` (cobertos pela bateria manual do check-access e
+pelo primeiro ciclo real pós-deploy); o indicador "pos_i1" depende dos
+docs I1 do repo real (os testes rodam da raiz do repo).
+
 ### Antes do deploy (revisão)
 
 Diff completo + este doc pelo GPT; na VPS, após o deploy, 1 ciclo do

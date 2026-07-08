@@ -38,8 +38,10 @@ from pathlib import Path
 # Guarda de PII compartilhada (M2) — mesma pasta deste script.
 import pii_guard
 
-DATA = Path("painel-soprolife/data")
-OUT = DATA / "saude-operacional-summary.local.json"
+# Defaults de produção — inalterados. --data-dir/--out existem para TESTES
+# (fixtures sintéticas em diretório temporário), nunca para mudar produção.
+DEFAULT_DATA = Path("painel-soprolife/data")
+DEFAULT_OUT = DEFAULT_DATA / "saude-operacional-summary.local.json"
 
 # Limiares de frescor (minutos) — constantes nomeadas, fáceis de ajustar.
 FRESCO_MIN = 30          # até aqui: ok
@@ -101,11 +103,11 @@ def _flags_ok(data: dict):
     return True, ""
 
 
-def coletar():
+def coletar(data_dir: Path = DEFAULT_DATA):
     """Lê metadados das fontes. Nunca falha destrutivamente."""
     estado = {}
     for nome, cfg in FONTES.items():
-        path = DATA / cfg["arquivo"]
+        path = Path(data_dir) / cfg["arquivo"]
         info = {"existe": path.exists(), "valido": None, "flags_ok": None,
                 "idade_min": None, "mtime": None, "data": None}
         if info["existe"]:
@@ -346,14 +348,19 @@ def main() -> int:
     group.add_argument("--write", action="store_true", help="Grava data/saude-operacional-summary.local.json")
     parser.add_argument("--check-access-exit", type=int, default=None,
                         help="Exit code de uma execução REAL do check-access.sh (opcional; sem ele o indicador fica 'desconhecido')")
+    parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA,
+                        help="Diretório das fontes (SÓ para testes com fixtures sintéticas; padrão: produção)")
+    parser.add_argument("--out", type=Path, default=None,
+                        help="Arquivo de saída (SÓ para testes; padrão: produção)")
     args = parser.parse_args()
     mode = "write" if args.write else "dry-run"
+    out_path = args.out if args.out is not None else DEFAULT_OUT
 
     print("SoproLife — Saúde Operacional (M3 v2)")
     print(f"mode: {mode}")
     print()
 
-    estado = coletar()
+    estado = coletar(args.data_dir)
     payload = construir(estado, args.check_access_exit)
 
     print("Validando payload (allowlist + pii_guard)...")
@@ -373,11 +380,11 @@ def main() -> int:
         print("next_step: use --write para gravar o resumo local.")
         return 0
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    OUT.chmod(0o644)  # servido ao navegador; sem PII por construção
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    out_path.chmod(0o644)  # servido ao navegador; sem PII por construção
     print()
-    print(f"Gravado: {OUT}  (chmod 644)")
+    print(f"Gravado: {out_path}  (chmod 644)")
     return 0
 
 
