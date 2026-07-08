@@ -156,6 +156,30 @@
           <small>O painel continua funcionando sem dados sensíveis.</small>
         </div>
 
+        <article class="panel cerebro-panel" id="cerebroPanel" hidden>
+          <div class="panel-header">
+            <div>
+              <h3>Cérebro Operacional</h3>
+              <span>Leitura executiva, prioridades e projeções seguras da operação.</span>
+            </div>
+            <span id="cerebroStatus" class="saude-status-chip saude-atencao">Demo seguro · Em construção</span>
+          </div>
+          <div class="cerebro-grid">
+            <div class="cerebro-col">
+              <h4>Top 3 prioridades</h4>
+              <ol id="cerebroTop3" class="cerebro-top3"></ol>
+              <h4>Briefing do dia</h4>
+              <div id="cerebroBriefing" class="cerebro-briefing"></div>
+            </div>
+            <div class="cerebro-col">
+              <h4>Projeções iniciais <small>(premissas explícitas — não usar para compromisso)</small></h4>
+              <div id="cerebroProjecoes" class="cerebro-projecoes"></div>
+              <h4>Próximos módulos planejados</h4>
+              <div id="cerebroModulos" class="cerebro-modulos"></div>
+            </div>
+          </div>
+        </article>
+
         <div id="cardsGrid" class="cards-sections"></div>
 
         <div class="grid-two">
@@ -723,6 +747,7 @@
 
   <script src="./js/operational-actions.js?v=2026070701"></script>
   <script src="./js/b2b-actions.js?v=2026070701"></script>
+  <script src="./js/operational-brain.js?v=2026070801"></script>
   <script src="./js/app.js?v=2026070702"></script>
 </body>
 </html>

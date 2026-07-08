@@ -6761,3 +6761,87 @@ th {
 @media (max-width: 720px) {
   .b2b-stats { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Cérebro Operacional (M8, esqueleto) — Painel Geral ──────────────────── */
+
+.cerebro-panel { margin: 16px 0 18px; }
+
+.cerebro-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+.cerebro-col h4 {
+  color: var(--navy);
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin: 14px 0 8px;
+}
+.cerebro-col h4:first-child { margin-top: 0; }
+.cerebro-col h4 small { text-transform: none; letter-spacing: 0; color: var(--muted); font-weight: 500; }
+
+.cerebro-top3 {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  counter-reset: prio;
+}
+.cerebro-top3 li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 12px;
+  counter-increment: prio;
+}
+.cerebro-top3 li::before {
+  content: counter(prio);
+  font-weight: 800;
+  color: var(--muted);
+}
+.cerebro-top3-titulo { color: var(--navy); font-weight: 600; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cerebro-top3 small { color: var(--muted); white-space: nowrap; }
+.cerebro-vazio { color: var(--muted); }
+
+.cerebro-briefing p { margin: 4px 0; color: var(--muted); font-size: .88rem; line-height: 1.55; }
+.cerebro-briefing b { color: var(--navy); }
+
+.cerebro-projecoes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.cerebro-proj {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cerebro-proj span   { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+.cerebro-proj strong { color: var(--navy); font-size: 1.05rem; }
+.cerebro-proj small  { color: var(--muted); }
+
+.cerebro-modulos { display: flex; flex-wrap: wrap; gap: 6px; }
+.cerebro-modulo {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: .76rem;
+  color: var(--navy);
+}
+
+@media (max-width: 900px) {
+  .cerebro-grid { grid-template-columns: 1fr; }
+  .cerebro-projecoes { grid-template-columns: 1fr 1fr; }
+}

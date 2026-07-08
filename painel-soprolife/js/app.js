@@ -29,6 +29,7 @@ const state = {
   parceriaPastore: null,
   auditoria: null,
   saudeOperacional: null,
+  cerebroDemo: null,
 };
 
 const slug = (text) =>
@@ -483,6 +484,12 @@ async function init() {
       state.auditoria = auditoriaData;
     }
 
+    // Cérebro Operacional (M8): demo commitável usado como fallback/rótulos.
+    const cerebroDemo = await loadOptionalJson("./data/cerebro-operacional.json");
+    if (cerebroDemo?.source?.safeToDisplay === true && cerebroDemo?.source?.containsPersonalData === false) {
+      state.cerebroDemo = cerebroDemo;
+    }
+
     // Saúde Operacional (M3): tenta o resumo REAL gerado na VPS (gitignored);
     // sem ele, cai no demonstrativo commitável; sem nenhum, o card fica oculto.
     const saudeReal = await loadOptionalJson("./data/saude-operacional-summary.local.json");
@@ -539,6 +546,7 @@ async function init() {
     renderSaudeOperacional();
     renderAcoesOperacionais();
     renderB2BAcoes();
+    renderCerebroOperacional();
     renderAuditoria();
     renderLancamentos();
     bindEvents();
@@ -5928,6 +5936,108 @@ function renderAcoesOperacionais() {
       btn.textContent = aberto ? "Ver próximo passo" : "Ocultar próximo passo";
     });
   });
+}
+
+// ── Cérebro Operacional (M8, esqueleto) — painel no Painel Geral ─────────────
+// Computa AO VIVO a partir do estado já carregado (via operational-brain.js);
+// quando não há nenhuma fonte, usa o demo commitável como vitrine.
+
+function renderCerebroOperacional() {
+  const panel = document.querySelector("#cerebroPanel");
+  if (!panel) return;
+
+  const payloads = {
+    saudeOperacional: state.saudeOperacional,
+    b2bStats: (state.crmClinicasRaw?.length || state.leadsSummary)
+      ? buildB2BStats({
+          leads: state.leadsSummary?.leads || state.leads || [],
+          clinicas: state.crmClinicasRaw || [],
+          contatosB2B: state.crmContatosB2B || [],
+          followupStats: state.followupClinicasSummary?.clinicas || null,
+        }) : null,
+    followupPacientes: state.followupSummary || null,
+    financeiro: state.financeiro_summary || null,
+    custos: state.custosInvestimentos || null,
+    marketing: state.marketingSeo || null,
+    auditoria: state.auditoria || null,
+    ultimosLancamentos: state.ultimosLancamentos || null,
+  };
+
+  const temFonteViva = Object.values(payloads).some((v) => v);
+  if (!temFonteViva && !state.cerebroDemo) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  const brainState = buildOperationalBrainState(payloads);
+  const acoes = {
+    acoesOperacionais: state.saudeOperacional ? buildOperationalActions(state.saudeOperacional) : [],
+    acoesB2B: buildB2BActions({
+      leads: payloads.b2bStats ? (state.leadsSummary?.leads || state.leads || []) : [],
+      clinicas: state.crmClinicasRaw || [],
+      contatosB2B: state.crmContatosB2B || [],
+      followupStats: state.followupClinicasSummary?.clinicas || null,
+    }),
+  };
+  const dq = buildDecisionQueue(brainState, acoes);
+  const briefing = buildDailyBriefing(brainState, dq);
+  const projecoes = buildProjectionSkeleton(brainState);
+  const demo = state.cerebroDemo;
+
+  const chip = panel.querySelector("#cerebroStatus");
+  if (chip) {
+    chip.textContent = temFonteViva
+      ? "Em construção · leitura ao vivo dos summaries seguros"
+      : (demo?.status || "Demo seguro · Em construção");
+  }
+
+  const top3Box = panel.querySelector("#cerebroTop3");
+  if (top3Box) {
+    const top3 = dq.top3.length ? dq.top3
+      : (demo?.prioridades_exemplo || []).map((p) => ({
+          titulo: p.titulo, nivel: p.nivel, origem: p.origem, score: "" }));
+    top3Box.innerHTML = top3.length
+      ? top3.map((p) => `
+          <li>
+            <span class="badge ${p.nivel === "alta" ? "saude-critico" : p.nivel === "baixa" ? "saude-ok" : "saude-atencao"}">${escapeHtml(String(p.nivel || ""))}</span>
+            <span class="cerebro-top3-titulo">${escapeHtml(String(p.titulo || ""))}</span>
+            <small>${escapeHtml(String(p.origem || ""))}</small>
+          </li>`).join("")
+      : `<li class="cerebro-vazio">Nenhuma prioridade pendente agora.</li>`;
+  }
+
+  const brBox = panel.querySelector("#cerebroBriefing");
+  if (brBox) {
+    const b = (briefing.fazerHoje.length || briefing.atrasado.length) ? briefing
+      : (demo?.briefing_exemplo || briefing);
+    const linha = (rotulo, itens) => (Array.isArray(itens) && itens.length)
+      ? `<p><b>${escapeHtml(rotulo)}</b> ${itens.map((t) => escapeHtml(String(t))).join(" · ")}</p>` : "";
+    brBox.innerHTML =
+      linha("Aconteceu:", b.aconteceu) +
+      linha("Mudou:", b.mudou) +
+      linha("Atrasado:", b.atrasado) +
+      linha("Fazer hoje:", b.fazerHoje) +
+      linha("Pode esperar:", b.podeEsperar) +
+      `<p><b>Maior retorno:</b> ${escapeHtml(String(b.maiorRetorno || "—"))}</p>`;
+  }
+
+  const projBox = panel.querySelector("#cerebroProjecoes");
+  if (projBox) {
+    projBox.innerHTML = projecoes.map((pr) => `
+      <div class="cerebro-proj" tabindex="0" data-tip="${escapeHtml(String(pr.premissa || ""))}"
+        aria-label="${escapeHtml(String(pr.label))}: ${pr.valorBase === null ? "sem dados" : pr.valorBase}. ${escapeHtml(String(pr.premissa || ""))}">
+        <span>${escapeHtml(String(pr.label))}</span>
+        <strong>${pr.valorBase === null ? "—" : escapeHtml(String(pr.valorBase))}</strong>
+        <small>${escapeHtml(String(pr.status))}</small>
+      </div>`).join("");
+  }
+
+  const modBox = panel.querySelector("#cerebroModulos");
+  if (modBox && demo?.proximos_modulos) {
+    modBox.innerHTML = demo.proximos_modulos
+      .map((m) => `<span class="cerebro-modulo">${escapeHtml(String(m))}</span>`).join("");
+  }
 }
 
 // ── Próximas Ações B2B/PCMSO (M5) — painel no Painel Geral ───────────────────

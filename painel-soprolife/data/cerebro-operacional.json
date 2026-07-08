@@ -1,0 +1,39 @@
+{
+  "source": {
+    "type": "cerebro_operacional_demo",
+    "safeToDisplay": true,
+    "containsPersonalData": false,
+    "containsHealthData": false,
+    "dadosReais": false,
+    "generatedAt": "2026-07-07T22:00:00-03:00",
+    "nota": "Dados DEMONSTRATIVOS do esqueleto M8. Exemplos genéricos, sem nomes reais de pessoas. Usado como fallback quando o estado ao vivo não está disponível."
+  },
+  "status": "Demo seguro · Em construção",
+  "prioridades_exemplo": [
+    { "titulo": "Cobrar retorno da proposta — Clínica Exemplo", "nivel": "alta", "origem": "CRM B2B" },
+    { "titulo": "Tratar follow-ups B2B atrasados", "nivel": "alta", "origem": "Follow-up Clínicas" },
+    { "titulo": "Definir próximo passo do lead LEAD-000", "nivel": "media", "origem": "Lead" }
+  ],
+  "briefing_exemplo": {
+    "aconteceu": ["3 eventos operacionais registrados hoje."],
+    "mudou": ["Saúde operacional: ok.", "1 parceria no status convertida."],
+    "atrasado": ["2 follow-ups B2B vencidos."],
+    "fazerHoje": ["Cobrar retorno da proposta — Clínica Exemplo"],
+    "podeEsperar": ["1 ação de prioridade baixa pode esperar."],
+    "maiorRetorno": "Cobrar retorno da proposta — Clínica Exemplo"
+  },
+  "projecoes_exemplo": [
+    { "id": "comercial_b2b", "label": "Comercial B2B", "status": "esqueleto", "valorBase": 5, "projecao30d": 1, "premissa": "20% de conversão demo sobre oportunidades ativas." },
+    { "id": "receita", "label": "Receita", "status": "esqueleto", "valorBase": 2500, "projecao30d": 2500, "premissa": "Repete a receita do mês corrente (demo)." },
+    { "id": "custos", "label": "Custos", "status": "esqueleto", "valorBase": 2000, "projecao30d": 2000, "premissa": "Custo mensal recorrente (demo)." }
+  ],
+  "proximos_modulos": [
+    "M9 — Briefing Diário real",
+    "M10 — Fila de decisão do dia",
+    "M11 — Projeções comerciais B2B",
+    "M12 — Projeções financeiras e ponto de equilíbrio",
+    "M13 — Motor de campanhas e follow-ups (texto manual)",
+    "M14 — Assistente de atualização de CRM",
+    "M15 — Painel executivo semanal"
+  ]
+}

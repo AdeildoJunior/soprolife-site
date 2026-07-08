@@ -38,10 +38,12 @@ secao "1/9 Sintaxe JavaScript"
 run "node --check js/app.js"                 node --check painel-soprolife/js/app.js
 run "node --check js/operational-actions.js" node --check painel-soprolife/js/operational-actions.js
 run "node --check js/b2b-actions.js"         node --check painel-soprolife/js/b2b-actions.js
+run "node --check js/operational-brain.js"   node --check painel-soprolife/js/operational-brain.js
 
 secao "2/9 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
 run "test-b2b-actions (M5)"         node painel-soprolife/scripts/test-b2b-actions.js
+run "test-operational-brain (M8)"   node painel-soprolife/scripts/test-operational-brain.js
 
 secao "3/9 Sintaxe Python"
 run "py_compile generate-saude-operacional" python3 -m py_compile painel-soprolife/scripts/generate-saude-operacional.py
@@ -58,6 +60,8 @@ run "generate --write --check-access-exit 0" \
 secao "6/9 JSONs demo commitáveis + summary de saúde"
 run "json.tool saude-operacional.json" \
   python3 -m json.tool painel-soprolife/data/saude-operacional.json
+run "json.tool cerebro-operacional.json" \
+  python3 -m json.tool painel-soprolife/data/cerebro-operacional.json
 run "json.tool saude-operacional-summary.local.json" \
   python3 -m json.tool painel-soprolife/data/saude-operacional-summary.local.json
 # Todos os demos commitáveis de data/ (exclui *.local.json, que são gerados):
