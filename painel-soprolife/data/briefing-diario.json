@@ -1,0 +1,30 @@
+{
+  "source": {
+    "type": "daily_briefing",
+    "safeToDisplay": true,
+    "containsPersonalData": false,
+    "containsHealthData": false,
+    "dadosReais": false,
+    "generatedAt": "2026-07-08T08:00:00-03:00",
+    "nota": "Briefing DEMONSTRATIVO do M9 — exemplos genéricos, sem nomes reais de pessoas. Fallback quando não há fontes vivas."
+  },
+  "status": "demo",
+  "titulo": "Briefing do dia — exemplo",
+  "resumoExecutivo": "Dia de atenção: 2 atrasos e 3 ações para hoje. Maior retorno agora: Cobrar retorno da proposta — Clínica Exemplo",
+  "aconteceu": ["3 evento(s) operacionais registrados hoje.", "Escritas do painel auditadas sem erros."],
+  "mudou": ["Saúde operacional: ok.", "1 parceria(s) no status convertida."],
+  "atrasado": ["2 follow-up(s) B2B vencido(s).", "1 oportunidade sem próximo passo."],
+  "fazerHoje": ["Cobrar retorno da proposta — Clínica Exemplo", "Tratar follow-ups B2B atrasados", "Definir próximo passo do lead LEAD-000"],
+  "podeEsperar": ["1 ação de prioridade baixa pode esperar."],
+  "maiorRetorno": "Cobrar retorno da proposta — Clínica Exemplo",
+  "riscos": [],
+  "porArea": {
+    "Comercial": ["Cobrar retorno da proposta — Clínica Exemplo"],
+    "CRM": ["Registrar próximos passos pendentes"],
+    "Pacientes": [],
+    "Financeiro": ["Revisar pendências de custos do mês"],
+    "Marketing": [],
+    "Operacao": [],
+    "Sistemas": []
+  }
+}

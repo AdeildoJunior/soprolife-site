@@ -25,9 +25,16 @@ dado; tudo sanitizado.
 - `podeEsperar`: ações de prioridade baixa (contagem).
 - `maiorRetorno`: a 1ª ação da fila (maior score).
 
-## Evolução (M9)
+## M9 — ENTREGUE (briefing real)
 
-Briefing REAL: comparação com o snapshot do dia anterior ("o que
-mudou" de verdade), persistência leve do último briefing (arquivo
-gitignored gerado no ciclo), e exibição no topo do painel logo após o
-login do dia.
+`js/daily-briefing.js` implementa o contrato completo (source + status
+ok/atenção/crítico/demo + titulo + resumoExecutivo + 6 seções + riscos +
+porArea com 7 áreas), computado ao vivo dos summaries seguros, com
+resumo executivo em destaque na UI do Cérebro. Ver
+`docs/m9-briefing-diario-real.md`.
+
+## Evolução (M10)
+
+Comparação REAL com o dia anterior ("o que mudou" via snapshot
+persistido) + persistência leve da fila (feito/pendente) — movidas para
+o M10 junto da fila de decisão do dia.

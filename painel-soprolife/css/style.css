@@ -6845,3 +6845,46 @@ th {
   .cerebro-grid { grid-template-columns: 1fr; }
   .cerebro-projecoes { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Briefing Diário Real (M9) — dentro do painel do Cérebro ─────────────── */
+
+.cerebro-resumo-exec {
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+.cerebro-resumo-exec.saude-ok      { border-left-color: #0d7a5f; background: #f2fbf8; color: #0d5c48; }
+.cerebro-resumo-exec.saude-atencao { border-left-color: #b5730a; background: #fffaf1; color: #7c5307; }
+.cerebro-resumo-exec.saude-critico { border-left-color: #b3261e; background: #fdf4f4; color: #7c1d17; }
+
+.cerebro-riscos {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #fdf4f4;
+  border: 1px solid #f3b8b4;
+  border-radius: 10px;
+  color: #7c1d17;
+  font-size: .85rem;
+  line-height: 1.5;
+}
+.cerebro-riscos b { color: #b3261e; }
+
+.cerebro-porarea {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: .82rem;
+  line-height: 1.7;
+}
+.cerebro-porarea b { color: var(--navy); }
+.cerebro-area {
+  display: inline-block;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin: 2px 4px 2px 0;
+}
+.cerebro-area i { font-style: normal; font-weight: 700; color: var(--navy); margin-right: 4px; }

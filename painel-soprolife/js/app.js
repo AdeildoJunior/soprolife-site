@@ -30,6 +30,7 @@ const state = {
   auditoria: null,
   saudeOperacional: null,
   cerebroDemo: null,
+  briefingDemo: null,
 };
 
 const slug = (text) =>
@@ -488,6 +489,12 @@ async function init() {
     const cerebroDemo = await loadOptionalJson("./data/cerebro-operacional.json");
     if (cerebroDemo?.source?.safeToDisplay === true && cerebroDemo?.source?.containsPersonalData === false) {
       state.cerebroDemo = cerebroDemo;
+    }
+
+    // Briefing Diário (M9): demo commitável usado só sem fontes vivas.
+    const briefingDemo = await loadOptionalJson("./data/briefing-diario.json");
+    if (briefingDemo?.source?.safeToDisplay === true && briefingDemo?.source?.containsPersonalData === false) {
+      state.briefingDemo = briefingDemo;
     }
 
     // Saúde Operacional (M3): tenta o resumo REAL gerado na VPS (gitignored);
@@ -5981,9 +5988,13 @@ function renderCerebroOperacional() {
     }),
   };
   const dq = buildDecisionQueue(brainState, acoes);
-  const briefing = buildDailyBriefing(brainState, dq);
+  // M9: briefing REAL (camada acima do M8) — shape completo com resumo
+  // executivo, riscos e por área. O demo entra só sem fontes vivas.
+  const briefingReal = buildDailyBriefingReal(brainState, dq, payloads);
+  const briefing = briefingReal;
   const projecoes = buildProjectionSkeleton(brainState);
   const demo = state.cerebroDemo;
+  const briefingDemo = state.briefingDemo;
 
   const chip = panel.querySelector("#cerebroStatus");
   if (chip) {
@@ -6007,10 +6018,20 @@ function renderCerebroOperacional() {
       : `<li class="cerebro-vazio">Nenhuma prioridade pendente agora.</li>`;
   }
 
+  // Briefing exibido: real quando há fontes vivas; demo commitável senão.
+  const b = briefing.status !== "demo" ? briefing : (briefingDemo || briefing);
+
+  const execBox = panel.querySelector("#cerebroResumoExec");
+  if (execBox) {
+    const nivelCls = b.status === "critico" ? "saude-critico"
+      : b.status === "ok" ? "saude-ok" : "saude-atencao";
+    execBox.hidden = false;
+    execBox.className = `cerebro-resumo-exec ${nivelCls}`;
+    execBox.innerHTML = `<strong>${escapeHtml(String(b.resumoExecutivo || "—"))}</strong>`;
+  }
+
   const brBox = panel.querySelector("#cerebroBriefing");
   if (brBox) {
-    const b = (briefing.fazerHoje.length || briefing.atrasado.length) ? briefing
-      : (demo?.briefing_exemplo || briefing);
     const linha = (rotulo, itens) => (Array.isArray(itens) && itens.length)
       ? `<p><b>${escapeHtml(rotulo)}</b> ${itens.map((t) => escapeHtml(String(t))).join(" · ")}</p>` : "";
     brBox.innerHTML =
@@ -6020,6 +6041,26 @@ function renderCerebroOperacional() {
       linha("Fazer hoje:", b.fazerHoje) +
       linha("Pode esperar:", b.podeEsperar) +
       `<p><b>Maior retorno:</b> ${escapeHtml(String(b.maiorRetorno || "—"))}</p>`;
+  }
+
+  const riscosBox = panel.querySelector("#cerebroRiscos");
+  if (riscosBox) {
+    const riscos = Array.isArray(b.riscos) ? b.riscos : [];
+    riscosBox.hidden = riscos.length === 0;
+    riscosBox.innerHTML = riscos.length
+      ? `<b>Riscos:</b> ${riscos.map((r) => escapeHtml(String(r))).join(" · ")}` : "";
+  }
+
+  const areaBox = panel.querySelector("#cerebroPorArea");
+  if (areaBox) {
+    const pa = b.porArea && typeof b.porArea === "object" ? b.porArea : {};
+    const comConteudo = Object.entries(pa).filter(([, v]) => Array.isArray(v) && v.length);
+    areaBox.hidden = comConteudo.length === 0;
+    areaBox.innerHTML = comConteudo.length
+      ? `<b>Por área:</b> ` + comConteudo.map(([area, itens]) =>
+          `<span class="cerebro-area"><i>${escapeHtml(area)}</i> ${escapeHtml(String(itens[0]))}</span>`
+        ).join(" ")
+      : "";
   }
 
   const projBox = panel.querySelector("#cerebroProjecoes");
