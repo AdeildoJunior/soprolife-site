@@ -6766,21 +6766,78 @@ th {
 
 .cerebro-panel { margin: 16px 0 18px; }
 
-.cerebro-grid {
+/* M9.1 — síntese executiva compacta no topo do painel */
+.cerebro-sintese {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 10px;
+}
+.cerebro-sintese-item {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  align-items: start;
+}
+.cerebro-sintese-item span {
+  color: var(--muted);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.cerebro-sintese-item strong {
+  color: var(--navy);
+  font-size: .95rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
-.cerebro-col h4 {
+/* M9.1 — áreas expansíveis (briefing completo e projeções) */
+.cerebro-detalhes {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+}
+.cerebro-detalhes summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 2px;
+  color: var(--teal-dark);
+  font-size: .85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.cerebro-detalhes summary::-webkit-details-marker { display: none; }
+.cerebro-detalhes summary::before {
+  content: "▸";
+  transition: transform .15s ease;
+  color: var(--muted);
+}
+.cerebro-detalhes[open] summary::before { transform: rotate(90deg); }
+.cerebro-detalhes summary:hover { color: var(--teal); }
+.cerebro-detalhes summary small { color: var(--muted); font-weight: 500; }
+.cerebro-toggle-aberto { display: none; }
+.cerebro-detalhes[open] .cerebro-toggle-aberto { display: inline; }
+.cerebro-detalhes[open] .cerebro-toggle-fechado { display: none; }
+
+.cerebro-detalhes-discreto summary { font-size: .8rem; color: var(--muted); }
+.cerebro-detalhes-discreto summary:hover { color: var(--teal-dark); }
+
+.cerebro-detalhes-body { padding: 2px 0 12px; }
+
+.cerebro-detalhes-body h4 {
   color: var(--navy);
   font-size: .82rem;
   text-transform: uppercase;
   letter-spacing: .05em;
   margin: 14px 0 8px;
 }
-.cerebro-col h4:first-child { margin-top: 0; }
-.cerebro-col h4 small { text-transform: none; letter-spacing: 0; color: var(--muted); font-weight: 500; }
+.cerebro-detalhes-body h4:first-child { margin-top: 0; }
 
 .cerebro-top3 {
   list-style: none;
@@ -6831,19 +6888,15 @@ th {
 .cerebro-proj strong { color: var(--navy); font-size: 1.05rem; }
 .cerebro-proj small  { color: var(--muted); }
 
-.cerebro-modulos { display: flex; flex-wrap: wrap; gap: 6px; }
-.cerebro-modulo {
-  background: var(--soft);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-size: .76rem;
-  color: var(--navy);
+@media (max-width: 900px) {
+  .cerebro-sintese { grid-template-columns: 1fr; }
+  .cerebro-projecoes { grid-template-columns: 1fr 1fr; }
 }
 
-@media (max-width: 900px) {
-  .cerebro-grid { grid-template-columns: 1fr; }
-  .cerebro-projecoes { grid-template-columns: 1fr 1fr; }
+@media (max-width: 540px) {
+  .cerebro-projecoes { grid-template-columns: 1fr; }
+  .cerebro-panel .panel-header { flex-direction: column; align-items: flex-start; }
+  .cerebro-panel .saude-status-chip { white-space: normal; line-height: 1.4; }
 }
 
 /* ── Briefing Diário Real (M9) — dentro do painel do Cérebro ─────────────── */

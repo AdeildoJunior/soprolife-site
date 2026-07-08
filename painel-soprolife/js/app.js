@@ -6030,6 +6030,12 @@ function renderCerebroOperacional() {
     execBox.innerHTML = `<strong>${escapeHtml(String(b.resumoExecutivo || "—"))}</strong>`;
   }
 
+  // M9.1: síntese compacta no topo — o detalhe fica no <details> colapsável.
+  const retornoBox = panel.querySelector("#cerebroMaiorRetorno");
+  if (retornoBox) retornoBox.textContent = String(b.maiorRetorno || "—");
+  const hojeBox = panel.querySelector("#cerebroAcoesHoje");
+  if (hojeBox) hojeBox.textContent = String(Array.isArray(b.fazerHoje) ? b.fazerHoje.length : 0);
+
   const brBox = panel.querySelector("#cerebroBriefing");
   if (brBox) {
     const linha = (rotulo, itens) => (Array.isArray(itens) && itens.length)
@@ -6072,12 +6078,6 @@ function renderCerebroOperacional() {
         <strong>${pr.valorBase === null ? "—" : escapeHtml(String(pr.valorBase))}</strong>
         <small>${escapeHtml(String(pr.status))}</small>
       </div>`).join("");
-  }
-
-  const modBox = panel.querySelector("#cerebroModulos");
-  if (modBox && demo?.proximos_modulos) {
-    modBox.innerHTML = demo.proximos_modulos
-      .map((m) => `<span class="cerebro-modulo">${escapeHtml(String(m))}</span>`).join("");
   }
 }
 

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css?v=2026070801" />
+  <link rel="stylesheet" href="./css/style.css?v=2026070802" />
   <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
   <script src="./js/vendor/chart.umd.min.js"></script>
 </head>
@@ -160,13 +160,27 @@
           <div class="panel-header">
             <div>
               <h3>Cérebro Operacional</h3>
-              <span>Leitura executiva, prioridades e projeções seguras da operação.</span>
+              <span>Síntese executiva da operação — detalhes no briefing completo.</span>
             </div>
             <span id="cerebroStatus" class="saude-status-chip saude-atencao">Demo seguro · Em construção</span>
           </div>
           <div id="cerebroResumoExec" class="cerebro-resumo-exec" hidden></div>
-          <div class="cerebro-grid">
-            <div class="cerebro-col">
+          <div class="cerebro-sintese">
+            <div class="cerebro-sintese-item">
+              <span>Maior retorno agora</span>
+              <strong id="cerebroMaiorRetorno">—</strong>
+            </div>
+            <div class="cerebro-sintese-item">
+              <span>Ações para hoje</span>
+              <strong id="cerebroAcoesHoje">0</strong>
+            </div>
+          </div>
+          <details id="cerebroDetalhes" class="cerebro-detalhes">
+            <summary>
+              <span class="cerebro-toggle-fechado">Ver briefing completo</span>
+              <span class="cerebro-toggle-aberto">Ocultar briefing completo</span>
+            </summary>
+            <div class="cerebro-detalhes-body">
               <h4>Top 3 prioridades</h4>
               <ol id="cerebroTop3" class="cerebro-top3"></ol>
               <h4>Briefing do dia</h4>
@@ -174,13 +188,17 @@
               <div id="cerebroRiscos" class="cerebro-riscos" hidden></div>
               <div id="cerebroPorArea" class="cerebro-porarea" hidden></div>
             </div>
-            <div class="cerebro-col">
-              <h4>Projeções iniciais <small>(premissas explícitas — não usar para compromisso)</small></h4>
+          </details>
+          <details id="cerebroProjecoesWrap" class="cerebro-detalhes cerebro-detalhes-discreto">
+            <summary>
+              <span class="cerebro-toggle-fechado">Ver projeções iniciais</span>
+              <span class="cerebro-toggle-aberto">Ocultar projeções iniciais</span>
+              <small>(premissas explícitas — não usar para compromisso)</small>
+            </summary>
+            <div class="cerebro-detalhes-body">
               <div id="cerebroProjecoes" class="cerebro-projecoes"></div>
-              <h4>Próximos módulos planejados</h4>
-              <div id="cerebroModulos" class="cerebro-modulos"></div>
             </div>
-          </div>
+          </details>
         </article>
 
         <div id="cardsGrid" class="cards-sections"></div>
@@ -752,6 +770,6 @@
   <script src="./js/b2b-actions.js?v=2026070701"></script>
   <script src="./js/operational-brain.js?v=2026070801"></script>
   <script src="./js/daily-briefing.js?v=2026070801"></script>
-  <script src="./js/app.js?v=2026070801"></script>
+  <script src="./js/app.js?v=2026070802"></script>
 </body>
 </html>
