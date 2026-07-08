@@ -22,8 +22,10 @@ etapa (escopo fechado)  →  checks  →  pacote de revisão  →  revisão GPT
 
 1. **Etapa**: executor segue soprolife-etapa-segura — diagnóstico,
    escopo fechado, sem "aproveitar que está mexendo".
-2. **Checks**: os da área tocada (py_compile, self-test do pii_guard,
-   node --check, bash -n, check-access.sh, teste visual se UI).
+2. **Checks**: `bash painel-soprolife/scripts/quality-gate-safe.sh`
+   (gate único — sintaxes, suítes M3/M4/M5, JSONs, check-access, guard
+   rails de staging; ver docs/m6-quality-gate-safe.md) + teste visual
+   se UI mudou. **Deploy só com o gate verde.**
 3. **Pacote**: soprolife-review-pack →
    `~/Documents/SoproLife/_REVISOES_GPT/<data>-<etapa>/` — sem secrets,
    sem dados privados, sem IP/usuário de VPS.
