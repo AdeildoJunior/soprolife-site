@@ -2020,7 +2020,7 @@ function renderEntradaDados(container) {
       </div>
 
       <div class="cc-submit-row">
-        <button type="submit" class="cc-btn-submit">Validar dados financeiros</button>
+        <button type="submit" class="cc-btn-submit">Salvar lançamento financeiro</button>
       </div>
       <div class="cc-financeiro-preview" hidden></div>
       <div class="cc-result" hidden></div>
@@ -2134,9 +2134,10 @@ function renderEntradaDados(container) {
 
   // ── Lógica de submit ─────────────────────────────────────────────────────
 
-  // M11 — a aba "Nova Espirometria" valida o payload financeiro localmente
-  // (sem rede) em vez de enviar ao Command Center: a integração com o Google
-  // Sheets para os campos de preço/pagamento fica para uma etapa futura.
+  // M11.2A — a aba "Nova Espirometria" valida o payload financeiro localmente
+  // (sem rede) e, só se ok=true, envia APENAS esse payload seguro ao Command
+  // Center (registrarEspirometriaFinanceiro) — nunca os dados de identificação
+  // do paciente (primeiro_nome, responsavel, telefone) do mesmo formData.
   // Status em que o valor recebido nunca deve aparecer preenchido na tela —
   // a função pura zera de qualquer forma, mas deixar o campo limpo evita o
   // operador achar que aquele valor foi mesmo recebido (M11.1.1).
@@ -2190,8 +2191,9 @@ function renderEntradaDados(container) {
     }
 
     const preview = panel.querySelector(".cc-financeiro-preview");
+    const btn = form.querySelector(".cc-btn-submit");
 
-    form.addEventListener("submit", (e) => {
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const formData = {};
       new FormData(form).forEach((val, key) => { formData[key] = val; });
@@ -2206,15 +2208,41 @@ function renderEntradaDados(container) {
         return;
       }
 
-      result.className = "cc-result cc-result-ok";
-      result.textContent = "Dados financeiros validados. Integração com Google Sheets será ativada na próxima etapa.";
-      result.hidden = false;
-
+      // Preview do payload financeiro seguro — sempre mostrado após validação
+      // ok, independente do resultado do envio ao Command Center abaixo.
       if (preview) {
         preview.hidden = false;
         preview.innerHTML = `
-          <p class="cc-financeiro-preview-title">Preview do lançamento financeiro (ainda não salvo)</p>
+          <p class="cc-financeiro-preview-title">Preview do lançamento financeiro</p>
           <pre class="cc-financeiro-preview-json">${escapeHtml(JSON.stringify(resultado.payload, null, 2))}</pre>`;
+      }
+
+      if (!cfg) {
+        result.className = "cc-result cc-result-err";
+        result.textContent = "Dados financeiros validados, mas o Command Center não está configurado para salvar no Google Sheets.";
+        result.hidden = false;
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Salvando…";
+      result.hidden = true;
+
+      // Envia SOMENTE o payload financeiro seguro (resultado.payload) — nunca
+      // o formData bruto, que pode conter primeiro_nome/responsavel/telefone
+      // dos campos de atendimento da mesma tela.
+      try {
+        await submitToCommandCenter("registrarEspirometriaFinanceiro", resultado.payload);
+        result.className = "cc-result cc-result-ok";
+        result.textContent = "Lançamento financeiro salvo no Google Sheets.";
+        result.hidden = false;
+      } catch (err) {
+        result.className = "cc-result cc-result-err";
+        result.textContent = "Erro: " + err.message;
+        result.hidden = false;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Salvar lançamento financeiro";
       }
     });
   }

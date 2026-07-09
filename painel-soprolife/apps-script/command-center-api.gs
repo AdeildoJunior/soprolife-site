@@ -39,7 +39,42 @@ var _SHEETS = {
   LOG_AUDITORIA:     "Log Auditoria",
   // Parceria Pastore — ver painel-soprolife/docs/parceria-pastore-planilha.md
   PARCERIA_PASTORE_ATENDIMENTOS: "Parceria Pastore - Atendimentos",
+  // M11.2A — lançamentos financeiros seguros da Nova Espirometria (Command
+  // Center). Ver _registrarEspirometriaFinanceiro.
+  FINANCEIRO_LANCAMENTOS: "Financeiro_Lancamentos",
 };
+
+// Cabeçalho da aba "Financeiro_Lancamentos" — só campos financeiros seguros,
+// nunca nome/telefone/CPF/e-mail/endereço/observação clínica do paciente
+// (ver _EF_CAMPOS_PROIBIDOS). Mesmo shape do payload de
+// buildEspirometriaFinanceiroPayload (js/espirometria-financeiro.js) + os
+// dois IDs de gravação (id_lancamento, id_atendimento).
+var _FINANCEIRO_LANCAMENTOS_CABECALHO = [
+  "id_lancamento", "id_atendimento", "criado_em", "data_exame", "tipo_movimento",
+  "servico", "local_atendimento", "valor_tabela", "valor_cobrado", "valor_recebido",
+  "desconto", "status_exame", "status_pagamento", "forma_pagamento", "origem_preco",
+  "observacao_financeira", "fonte",
+];
+
+// Mesmos enums fechados de js/espirometria-financeiro.js — duplicados de
+// propósito (cada arquivo é instalado/editado independentemente; ver nota
+// equivalente em _CRM_ETAPAS_OFICIAIS). O servidor NUNCA confia apenas na
+// validação do front-end.
+var _EF_STATUS_EXAME      = ["Aguardando", "Realizado", "Cancelado", "Remarcado"];
+var _EF_STATUS_PAGAMENTO  = ["Recebido", "Pendente", "Parcial", "Cortesia", "Cancelado"];
+var _EF_FORMA_PAGAMENTO   = ["Pix", "Dinheiro", "Cartão", "Outro"];
+var _EF_ORIGEM_PRECO      = ["Tabela", "Promoção", "Parceria", "Negociação", "PCMSO", "Cortesia"];
+var _EF_LOCAL_ATENDIMENTO = ["Domiciliar", "Clínica", "Empresa / PCMSO", "Parceiro", "Outro"];
+var _EF_VALOR_TABELA_PADRAO = 250;
+
+// Allowlist NEGATIVA (default-aberta ao contrário de _AUDIT_CAMPOS_PERMITIDOS):
+// nenhum destes campos pode aparecer no payload de registrarEspirometriaFinanceiro,
+// mesmo vazio — o lançamento financeiro é público internamente (planilha
+// financeira) e nunca deve carregar dado de identificação do paciente.
+var _EF_CAMPOS_PROIBIDOS = [
+  "nome", "primeiro_nome", "paciente", "responsavel", "telefone", "whatsapp",
+  "cpf", "email", "endereco", "token", "secret",
+];
 
 // Cabeçalho canônico da aba "Parceria Pastore - Atendimentos" — mesma ordem
 // de painel-soprolife/templates/parceria-pastore-atendimentos-template.csv.
@@ -225,6 +260,7 @@ function doPost(e) {
       case "dedupLeadsConvertidos":       return _dedupLeadsConvertidos(data);
       case "organizarAbasCommandCenter":  return _organizarAbasCommandCenter(data);
       case "registrarAtendimentoPastore": return _registrarAtendimentoPastore(data);
+      case "registrarEspirometriaFinanceiro": return _registrarEspirometriaFinanceiro(data);
       default:
         return _err("Ação desconhecida: " + action, 400);
     }
@@ -618,6 +654,195 @@ function _registrarAtendimentoPastore(data) {
   _auditAcao(auditRequestId, auditT0, "registrar_atendimento_pastore", "pastore", "linha-" + newRow, data, "ok");
 
   return _ok({ row: newRow, message: "Atendimento Pastore registrado com sucesso." });
+}
+
+// Valor monetário: vazio -> fallback (ou erro se obrigatório); qualquer coisa
+// que não vire número finito >= 0 -> erro. Mesma regra de
+// js/espirometria-financeiro.js (_efNum) — o servidor não confia no cliente.
+function _efServerNum(raw, opts) {
+  opts = opts || {};
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    if (opts.obrigatorio) return { erro: true };
+    return { valor: opts.fallback !== undefined ? opts.fallback : null };
+  }
+  var n = Number(String(raw).replace(",", "."));
+  if (!isFinite(n) || n < 0) return { erro: true };
+  return { valor: Math.round(n * 100) / 100 };
+}
+
+/**
+ * Registra (ou atualiza, via upsert por id_atendimento) um lançamento
+ * financeiro seguro da Nova Espirometria na aba "Financeiro_Lancamentos".
+ * Usado pelo botão "Salvar lançamento financeiro" do painel, depois que
+ * buildEspirometriaFinanceiroPayload (front-end) já validou o payload.
+ *
+ * Nunca confia apenas na validação do front-end: revalida aqui todos os
+ * campos obrigatórios e os enums fechados, e RECALCULA (nunca só aceita)
+ * desconto e valor_recebido a partir das mesmas regras de negócio de
+ * js/espirometria-financeiro.js — um payload adulterado no meio do caminho
+ * não pode fazer um exame Cancelado/Pendente/Cortesia virar receita.
+ *
+ * Rejeita de forma fechada (default-fechado) qualquer payload que contenha
+ * um dos campos de _EF_CAMPOS_PROIBIDOS, mesmo vazio — este lançamento é
+ * financeiro-only, nunca carrega identificação do paciente.
+ *
+ * data esperado: mesmo shape do payload de buildEspirometriaFinanceiroPayload
+ * (data_exame, status_exame, status_pagamento, valor_tabela, valor_cobrado,
+ * valor_recebido, forma_pagamento, origem_preco, local_atendimento,
+ * observacao_financeira, id_atendimento opcional) + servico/fonte fixos.
+ */
+function _registrarEspirometriaFinanceiro(data) {
+  data = data || {};
+
+  var camposProibidosPresentes = _EF_CAMPOS_PROIBIDOS.filter(function(campo) {
+    return Object.prototype.hasOwnProperty.call(data, campo);
+  });
+  if (camposProibidosPresentes.length > 0) {
+    return _err("Campo(s) não permitido(s) em lançamento financeiro: " + camposProibidosPresentes.join(", "), 400);
+  }
+
+  _required(data, ["data_exame", "status_exame", "status_pagamento", "valor_cobrado", "local_atendimento"]);
+
+  var statusExame = String(data.status_exame).trim();
+  if (_EF_STATUS_EXAME.indexOf(statusExame) < 0) {
+    return _err("status_exame inválido: " + statusExame, 400);
+  }
+
+  var statusPagamento = String(data.status_pagamento).trim();
+  if (_EF_STATUS_PAGAMENTO.indexOf(statusPagamento) < 0) {
+    return _err("status_pagamento inválido: " + statusPagamento, 400);
+  }
+
+  var localAtendimento = String(data.local_atendimento).trim();
+  if (_EF_LOCAL_ATENDIMENTO.indexOf(localAtendimento) < 0) {
+    return _err("local_atendimento inválido: " + localAtendimento, 400);
+  }
+
+  var formaPagamento = data.forma_pagamento ? String(data.forma_pagamento).trim() : "";
+  if (formaPagamento && _EF_FORMA_PAGAMENTO.indexOf(formaPagamento) < 0) {
+    return _err("forma_pagamento inválida: " + formaPagamento, 400);
+  }
+
+  var origemPreco = data.origem_preco ? String(data.origem_preco).trim() : "Tabela";
+  if (_EF_ORIGEM_PRECO.indexOf(origemPreco) < 0) {
+    return _err("origem_preco inválida: " + origemPreco, 400);
+  }
+
+  var valorTabela = _efServerNum(data.valor_tabela, { fallback: _EF_VALOR_TABELA_PADRAO });
+  if (valorTabela.erro) return _err("valor_tabela inválido.", 400);
+
+  var valorCobrado = _efServerNum(data.valor_cobrado, { obrigatorio: true });
+  if (valorCobrado.erro) return _err("valor_cobrado inválido.", 400);
+
+  var valorRecebidoInformado = _efServerNum(data.valor_recebido, { fallback: 0 });
+  if (valorRecebidoInformado.erro) return _err("valor_recebido inválido.", 400);
+
+  // Regras cruzadas por status de pagamento — mesma lógica de
+  // buildEspirometriaFinanceiroPayload (M11.1.1). Cancelado (por exame OU
+  // pagamento) pula as regras de Recebido/Parcial: o exame não aconteceu.
+  var cancelado = statusExame === "Cancelado" || statusPagamento === "Cancelado";
+  if (!cancelado) {
+    if (statusPagamento === "Recebido") {
+      if (!formaPagamento) return _err("forma_pagamento é obrigatória quando status_pagamento é Recebido.", 400);
+      if (valorRecebidoInformado.valor !== valorCobrado.valor) {
+        return _err("valor_recebido deve ser igual a valor_cobrado quando status_pagamento é Recebido.", 400);
+      }
+    } else if (statusPagamento === "Parcial") {
+      if (!formaPagamento) return _err("forma_pagamento é obrigatória quando status_pagamento é Parcial.", 400);
+      if (!(valorRecebidoInformado.valor > 0 && valorRecebidoInformado.valor < valorCobrado.valor)) {
+        return _err("valor_recebido deve ser maior que zero e menor que valor_cobrado quando status_pagamento é Parcial.", 400);
+      }
+    }
+  }
+
+  // Recalculado no servidor — nunca só aceita o valor_recebido do cliente.
+  // Pendente/Cortesia/Cancelado (exame ou pagamento) nunca contam como receita.
+  var semRecebimento = cancelado || statusPagamento === "Cortesia" || statusPagamento === "Pendente";
+  var valorRecebido  = semRecebimento ? 0 : valorRecebidoInformado.valor;
+  var desconto       = Math.max(0, Math.round((valorTabela.valor - valorCobrado.valor) * 100) / 100);
+
+  var idAtendimento        = data.id_atendimento ? String(data.id_atendimento).trim() : "";
+  var observacaoFinanceira = data.observacao_financeira ? String(data.observacao_financeira) : "";
+  var criadoEm             = data.criado_em ? String(data.criado_em) : new Date().toISOString();
+
+  var auditRequestId = Utilities.getUuid();
+  var auditT0        = Date.now();
+
+  var sheet = _getOrCreateSheet(_SHEETS.FINANCEIRO_LANCAMENTOS);
+  _ensureSheetHeader(sheet, _FINANCEIRO_LANCAMENTOS_CABECALHO);
+
+  // Upsert por id_atendimento (Etapa 8): se já existir lançamento para o
+  // mesmo atendimento, atualiza a linha em vez de duplicar.
+  var existente = idAtendimento ? _findRowByIdColumn(sheet, "id_atendimento", idAtendimento) : null;
+
+  var camposLinha = {
+    id_atendimento:         idAtendimento,
+    criado_em:              criadoEm,
+    data_exame:             String(data.data_exame).trim(),
+    tipo_movimento:         "receita",
+    servico:                "Espirometria",
+    local_atendimento:      localAtendimento,
+    valor_tabela:           valorTabela.valor,
+    valor_cobrado:          valorCobrado.valor,
+    valor_recebido:         valorRecebido,
+    desconto:               desconto,
+    status_exame:           statusExame,
+    status_pagamento:       statusPagamento,
+    forma_pagamento:        formaPagamento,
+    origem_preco:           origemPreco,
+    observacao_financeira:  observacaoFinanceira,
+    fonte:                  "nova_espirometria",
+  };
+
+  var idLancamento = "";
+  try {
+    if (existente) {
+      var idColIdx = existente.headers.indexOf("id_lancamento");
+      idLancamento = idColIdx >= 0 ? String(existente.rowData[idColIdx] || "").trim() : "";
+      if (!idLancamento) idLancamento = _nextId(sheet, "FIN");
+
+      var row = _buildRow(sheet, Object.assign({ id_lancamento: idLancamento }, camposLinha));
+      var updateFailures = [];
+      row.forEach(function(val, i) {
+        if (!_writeCellVerified(sheet, existente.rowIdx, i + 1, val)) updateFailures.push(existente.headers[i]);
+      });
+      if (updateFailures.length > 0) {
+        throw new Error("Falha ao gravar campos: " + updateFailures.join(", "));
+      }
+    } else {
+      idLancamento = _nextId(sheet, "FIN");
+      _appendRowSemValidacao(sheet, _buildRow(sheet, Object.assign({ id_lancamento: idLancamento }, camposLinha)));
+    }
+  } catch (e) {
+    _auditAcao(auditRequestId, auditT0, "registrar_espirometria_financeiro", "financeiro", idLancamento, data, "ERROR: falha na gravacao");
+    return _err("Erro ao gravar lançamento financeiro: " + e.message, 500);
+  }
+
+  // Auditoria mínima (Etapa 7): ação, status, id_lancamento, id_atendimento
+  // (se houver), valor_recebido, status_pagamento, timestamp — nunca
+  // observacao_financeira nem qualquer outro texto livre.
+  _logAudit({
+    requestId:    auditRequestId,
+    acao:         "registrar_espirometria_financeiro",
+    entidadeTipo: "financeiro",
+    entidadeId:   idLancamento,
+    origem:       data.audit_origem,
+    operador:     data.audit_operador,
+    trigger:      "web_app",
+    resultado:    "ok" + (idAtendimento ? " | id_atendimento=" + idAtendimento : "") +
+                  " | valor_recebido=" + valorRecebido + " | status_pagamento=" + statusPagamento,
+    durationMs:   Date.now() - auditT0,
+  });
+
+  _logEntry({
+    acao:   "registrarEspirometriaFinanceiro",
+    status: "OK",
+    aba:    _SHEETS.FINANCEIRO_LANCAMENTOS,
+    id:     idLancamento,
+    resumo: "Lançamento financeiro da espirometria registrado (" + statusPagamento + ").",
+  });
+
+  return _ok({ id: idLancamento, message: "Lançamento financeiro salvo no Google Sheets." });
 }
 
 /**

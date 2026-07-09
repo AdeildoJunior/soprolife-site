@@ -4,6 +4,7 @@
 // Uso: node painel-soprolife/scripts/test-espirometria-financeiro.js
 // Exit: 0 = todos passaram | 1 = houve falha.
 
+const fs   = require("fs");
 const path = require("path");
 const {
   buildEspirometriaFinanceiroPayload, EF_VALOR_TABELA_PADRAO, EF_LOCAL_ATENDIMENTO,
@@ -274,6 +275,52 @@ for (const forma of ["Pix", "Dinheiro", "Cartão", "Outro"]) {
   caso(`forma de pagamento "${forma}" é aceita em Recebido`,
        rForma.ok === true && rForma.payload.forma_pagamento === forma);
 }
+
+// 18. M11.2A — Command Center financeiro. Checagens estáticas de texto
+// (sem require do .gs — Apps Script não é um módulo Node válido, e sem rede/
+// Google Sheets nesta etapa): confirmam que a ação existe nos dois lados,
+// que a aba nova não carrega campo de paciente e que nenhum segredo/URL do
+// Apps Script vaza para o front-end.
+console.log();
+console.log("M11.2A — Command Center financeiro (checagens estáticas)");
+
+const appJsPath = path.resolve(__dirname, "../js/app.js");
+const gsPath    = path.resolve(__dirname, "../apps-script/command-center-api.gs");
+const appJsSrc  = fs.readFileSync(appJsPath, "utf8");
+const gsSrc     = fs.readFileSync(gsPath, "utf8");
+const efSrc     = fs.readFileSync(path.resolve(__dirname, "../js/espirometria-financeiro.js"), "utf8");
+
+caso("registrarEspirometriaFinanceiro existe no front-end (app.js)",
+     appJsSrc.includes("registrarEspirometriaFinanceiro"));
+caso("registrarEspirometriaFinanceiro existe no Apps Script (função)",
+     /function _registrarEspirometriaFinanceiro\s*\(/.test(gsSrc));
+caso("registrarEspirometriaFinanceiro está registrada no switch de ações do Apps Script",
+     /case "registrarEspirometriaFinanceiro":/.test(gsSrc));
+caso("Financeiro_Lancamentos aparece no Apps Script",
+     gsSrc.includes("Financeiro_Lancamentos"));
+
+const cabecalhoMatch = gsSrc.match(/_FINANCEIRO_LANCAMENTOS_CABECALHO\s*=\s*\[([\s\S]*?)\];/);
+caso("cabeçalho de Financeiro_Lancamentos encontrado no Apps Script", !!cabecalhoMatch);
+if (cabecalhoMatch) {
+  const CAMPOS_PROIBIDOS = [
+    "nome", "primeiro_nome", "paciente", "responsavel", "telefone", "whatsapp",
+    "cpf", "email", "endereco", "token", "secret",
+  ];
+  const cabecalhoHeaders = (cabecalhoMatch[1].match(/"([^"]+)"/g) || []).map((s) => s.slice(1, -1));
+  const vazamento = CAMPOS_PROIBIDOS.filter((c) => cabecalhoHeaders.includes(c));
+  caso("cabeçalho de Financeiro_Lancamentos não contém campos proibidos", vazamento.length === 0,
+       vazamento.join(", "));
+}
+
+caso("app.js não contém URL do Apps Script (script.google.com)",
+     !/script\.google\.com/.test(appJsSrc));
+caso("app.js não contém propriedade API_TOKEN hardcoded",
+     !/API_TOKEN/.test(appJsSrc));
+
+caso("espirometria-financeiro.js continua sem fetch",
+     !/\bfetch\s*\(/.test(efSrc));
+caso("espirometria-financeiro.js continua sem XMLHttpRequest",
+     !/XMLHttpRequest/.test(efSrc));
 
 console.log();
 if (falhas) { console.log(`RESULTADO: ${falhas} caso(s) FALHARAM.`); process.exit(1); }
