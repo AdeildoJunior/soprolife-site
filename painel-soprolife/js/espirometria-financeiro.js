@@ -88,15 +88,58 @@ function buildEspirometriaFinanceiroPayload(formData) {
     erros.push(f.local_atendimento ? "Local de atendimento inválido." : "Local de atendimento é obrigatório.");
   }
 
+  // Regras cruzadas por status de pagamento (M11.1.1) — só rodam se todos os
+  // campos base já são válidos individualmente, pra não empilhar um erro de
+  // regra de negócio em cima de um erro de campo (ex.: comparar recebido x
+  // cobrado quando cobrado já é inválido não ajudaria o operador). Exame
+  // Cancelado pula essas regras: o exame não aconteceu, então exigir forma
+  // de pagamento/igualdade de valores por causa de um status_pagamento
+  // esquecido em "Recebido" não faria sentido — o valor recebido é zerado
+  // de qualquer forma logo abaixo.
+  if (erros.length === 0 && statusExame.valor !== "Cancelado") {
+    const sp = statusPagamento.valor;
+    if (sp === "Recebido") {
+      if (!formaPagamento.valor) {
+        erros.push("Forma de pagamento é obrigatória quando o status do pagamento é Recebido.");
+      }
+      if (valorRecebido.valor <= 0) {
+        erros.push("Valor recebido deve ser maior que zero quando o status do pagamento é Recebido.");
+      } else if (valorRecebido.valor < valorCobrado.valor) {
+        erros.push('Valor recebido menor que o valor cobrado — use o status de pagamento "Parcial".');
+      } else if (valorRecebido.valor > valorCobrado.valor) {
+        erros.push("Valor recebido deve ser igual ao valor cobrado quando o status do pagamento é Recebido.");
+      }
+    } else if (sp === "Parcial") {
+      if (!formaPagamento.valor) {
+        erros.push("Forma de pagamento é obrigatória quando o status do pagamento é Parcial.");
+      }
+      if (valorRecebido.valor <= 0) {
+        erros.push("Valor recebido deve ser maior que zero quando o status do pagamento é Parcial.");
+      } else if (valorRecebido.valor >= valorCobrado.valor) {
+        erros.push("Valor recebido deve ser menor que o valor cobrado quando o status do pagamento é Parcial.");
+      }
+    }
+    // Pendente/Cortesia/Cancelado: forma de pagamento pode ficar vazia — o
+    // valor recebido é zerado abaixo independentemente do que foi digitado.
+  }
+
   if (erros.length > 0) return { ok: false, payload: null, erros };
 
-  // Regras de negócio (item 7 do escopo M11): cortesia e cancelamento nunca
-  // contam como receita recebida — zeram o valor recebido nesta camada,
-  // mesmo que algo tenha sido digitado no campo antes de mudar o status.
+  // Regras de negócio (M11 + M11.1.1): cortesia, cancelamento e pendência
+  // nunca contam como receita recebida — zeram o valor recebido nesta
+  // camada, mesmo que algo tenha sido digitado/preenchido por chip antes de
+  // mudar o status (ex.: clicar num valor sugerido e só depois trocar o
+  // status para Pendente).
   const cancelado = statusExame.valor === "Cancelado" || statusPagamento.valor === "Cancelado";
   const cortesia = statusPagamento.valor === "Cortesia";
-  const valorRecebidoFinal = (cortesia || cancelado) ? 0 : valorRecebido.valor;
+  const pendente = statusPagamento.valor === "Pendente";
+  const valorRecebidoFinal = (cortesia || cancelado || pendente) ? 0 : valorRecebido.valor;
 
+  // Desconto: mesma fórmula seguindo em todos os status (nunca negativo).
+  // Em Cortesia isso já resulta em desconto = valor_tabela quando o exame é
+  // cobrado como 0, ou a diferença tabela-cobrado nos demais casos — a
+  // lógica atual já é a mais segura (nunca negativa) e não precisa de um
+  // caso especial a mais.
   const desconto = Math.max(0, Math.round((valorTabela.valor - valorCobrado.valor) * 100) / 100);
 
   const payload = {

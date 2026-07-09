@@ -2137,9 +2137,15 @@ function renderEntradaDados(container) {
   // M11 — a aba "Nova Espirometria" valida o payload financeiro localmente
   // (sem rede) em vez de enviar ao Command Center: a integração com o Google
   // Sheets para os campos de preço/pagamento fica para uma etapa futura.
+  // Status em que o valor recebido nunca deve aparecer preenchido na tela —
+  // a função pura zera de qualquer forma, mas deixar o campo limpo evita o
+  // operador achar que aquele valor foi mesmo recebido (M11.1.1).
+  const EF_STATUS_SEM_RECEBIMENTO = ["Pendente", "Cortesia", "Cancelado"];
+
   function bindFormEspiFinanceiro(panel, form, result) {
-    const valorCobradoInput  = form.querySelector("#valor_cobrado");
-    const valorRecebidoInput = form.querySelector("#valor_recebido");
+    const valorCobradoInput    = form.querySelector("#valor_cobrado");
+    const valorRecebidoInput   = form.querySelector("#valor_recebido");
+    const statusPagamentoInput = form.querySelector("#status_pagamento");
 
     panel.querySelectorAll(".cc-price-chip").forEach((chip) => {
       chip.addEventListener("click", () => {
@@ -2153,14 +2159,35 @@ function renderEntradaDados(container) {
         chip.classList.add("active");
         valorCobradoInput.value = valor;
         valorCobradoInput.dispatchEvent(new Event("input", { bubbles: true }));
-        // Só copia para "recebido" se estiver vazio — nunca sobrescreve o
-        // que o operador já digitou manualmente (campo sempre editável).
-        if (!valorRecebidoInput.value.trim()) {
+        // Só copia para "recebido" se estiver vazio, o campo nunca é
+        // sobrescrito se já tiver algo digitado manualmente, e nunca copia
+        // quando o status atual é Pendente/Cortesia/Cancelado (não recebe).
+        const statusAtual = statusPagamentoInput ? statusPagamentoInput.value : "";
+        if (!EF_STATUS_SEM_RECEBIMENTO.includes(statusAtual) && !valorRecebidoInput.value.trim()) {
           valorRecebidoInput.value = valor;
           valorRecebidoInput.dispatchEvent(new Event("input", { bubbles: true }));
         }
       });
     });
+
+    // Mudar o status do pagamento ajusta "Valor recebido" para reduzir erro
+    // operacional (M11.1.1): Pendente/Cortesia/Cancelado -> limpa o campo
+    // (o valor final no payload é sempre 0, mas deixar visualmente limpo
+    // evita confundir com um recebimento real); Recebido com campo vazio ->
+    // preenche com o valor cobrado (já que ali os dois devem ser iguais);
+    // Parcial nunca mexe no que o operador já digitou manualmente.
+    if (statusPagamentoInput) {
+      statusPagamentoInput.addEventListener("change", () => {
+        const status = statusPagamentoInput.value;
+        if (EF_STATUS_SEM_RECEBIMENTO.includes(status)) {
+          valorRecebidoInput.value = "";
+          valorRecebidoInput.dispatchEvent(new Event("input", { bubbles: true }));
+        } else if (status === "Recebido" && !valorRecebidoInput.value.trim()) {
+          valorRecebidoInput.value = valorCobradoInput.value;
+          valorRecebidoInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      });
+    }
 
     const preview = panel.querySelector(".cc-financeiro-preview");
 

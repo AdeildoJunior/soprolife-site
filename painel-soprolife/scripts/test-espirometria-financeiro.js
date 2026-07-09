@@ -23,11 +23,13 @@ const CHAVES = [
 ];
 
 // Base válida reutilizada pelos casos — Realizado/Recebido, sem PII.
+// M11.1.1: Recebido exige forma_pagamento e valor_recebido == valor_cobrado.
 const base = () => ({
   data_exame: "2026-07-08",
   status_exame: "Realizado",
   status_pagamento: "Recebido",
   valor_cobrado: "250",
+  valor_recebido: "250",
   forma_pagamento: "Pix",
   origem_preco: "Tabela",
   local_atendimento: "Clínica",
@@ -45,25 +47,32 @@ caso("tipo_movimento fixo 'receita'", r1.payload.tipo_movimento === "receita");
 caso("servico fixo 'Espirometria'", r1.payload.servico === "Espirometria");
 caso("fonte fixa 'nova_espirometria'", r1.payload.fonte === "nova_espirometria");
 
-// 2. Sugestão R$ 230 (desconto sobre a tabela padrão)
-const r2 = buildEspirometriaFinanceiroPayload({ ...base(), valor_cobrado: "230" });
+// 2. Sugestão R$ 230 (desconto sobre a tabela padrão) — Recebido exige
+// valor_recebido == valor_cobrado, então ambos mudam juntos.
+const r2 = buildEspirometriaFinanceiroPayload({ ...base(), valor_cobrado: "230", valor_recebido: "230" });
 caso("sugestão 230 aceita", r2.ok === true && r2.payload.valor_cobrado === 230);
 caso("desconto 230 = 20", r2.payload.desconto === 20);
 
 // 3. Sugestão R$ 219 (promoção)
-const r3 = buildEspirometriaFinanceiroPayload({ ...base(), valor_cobrado: "219" });
+const r3 = buildEspirometriaFinanceiroPayload({ ...base(), valor_cobrado: "219", valor_recebido: "219" });
 caso("sugestão 219 aceita", r3.ok === true && r3.payload.valor_cobrado === 219);
 caso("desconto 219 = 31", r3.payload.desconto === 31);
 
 // 4. Valor manual livre (fora das sugestões, negociado)
-const r4 = buildEspirometriaFinanceiroPayload({ ...base(), valor_cobrado: "175.50", origem_preco: "Negociação" });
+const r4 = buildEspirometriaFinanceiroPayload({
+  ...base(), valor_cobrado: "175.50", valor_recebido: "175.50", origem_preco: "Negociação",
+});
 caso("valor manual livre aceito", r4.ok === true && r4.payload.valor_cobrado === 175.5);
 caso("origem do preço respeita o manual", r4.payload.origem_preco === "Negociação");
 
 // 5. Desconto calculado corretamente com valor_tabela custom
-const r5 = buildEspirometriaFinanceiroPayload({ ...base(), valor_tabela: "300", valor_cobrado: "300" });
+const r5 = buildEspirometriaFinanceiroPayload({
+  ...base(), valor_tabela: "300", valor_cobrado: "300", valor_recebido: "300",
+});
 caso("desconto zero quando cobrado = tabela", r5.payload.desconto === 0);
-const r5b = buildEspirometriaFinanceiroPayload({ ...base(), valor_tabela: "200", valor_cobrado: "230" });
+const r5b = buildEspirometriaFinanceiroPayload({
+  ...base(), valor_tabela: "200", valor_cobrado: "230", valor_recebido: "230",
+});
 caso("desconto nunca fica negativo (cobrado > tabela)", r5b.payload.desconto === 0);
 
 // 6. Cortesia zera valor recebido mesmo se algo foi digitado antes
@@ -178,6 +187,93 @@ caso("local de atendimento ausente do formData é rejeitado", rLocalAusente.ok =
 const rLocalInvalido = buildEspirometriaFinanceiroPayload({ ...base(), local_atendimento: "Sofá da sala" });
 caso("local de atendimento fora da lista é rejeitado", rLocalInvalido.ok === false &&
      /[Ll]ocal de atendimento inválido/.test(rLocalInvalido.erros.join(" ")));
+
+// 17. M11.1.1 — regras cruzadas por status de pagamento. O bug relatado no
+// teste visual (Recebido + forma_pagamento vazia validando com sucesso)
+// nunca mais deve passar.
+const rRecebidoSemForma = buildEspirometriaFinanceiroPayload({ ...base(), forma_pagamento: "" });
+caso("Recebido sem forma_pagamento é rejeitado",
+     rRecebidoSemForma.ok === false &&
+     /[Ff]orma de pagamento é obrigatória.*Recebido/.test(rRecebidoSemForma.erros.join(" ")));
+
+// Recebido com valor_recebido vazio: a função pura rejeita (mais segura do
+// que silenciosamente aceitar 0 como "recebido").
+const rRecebidoSemValor = buildEspirometriaFinanceiroPayload({ ...base(), valor_recebido: "" });
+caso("Recebido com valor_recebido vazio é rejeitado",
+     rRecebidoSemValor.ok === false &&
+     /maior que zero.*Recebido/.test(rRecebidoSemValor.erros.join(" ")));
+
+// Recebido com valor_recebido menor que o cobrado -> orienta usar Parcial.
+const rRecebidoParcialDisfarcado = buildEspirometriaFinanceiroPayload({
+  ...base(), valor_cobrado: "250", valor_recebido: "150",
+});
+caso("Recebido com valor_recebido menor que o cobrado é rejeitado",
+     rRecebidoParcialDisfarcado.ok === false &&
+     /use o status de pagamento "Parcial"/.test(rRecebidoParcialDisfarcado.erros.join(" ")));
+
+// Recebido com valor_recebido maior que o cobrado também é rejeitado
+// (a igualdade é obrigatória nos dois sentidos).
+const rRecebidoAcima = buildEspirometriaFinanceiroPayload({
+  ...base(), valor_cobrado: "250", valor_recebido: "300",
+});
+caso("Recebido com valor_recebido maior que o cobrado é rejeitado", rRecebidoAcima.ok === false);
+
+// Parcial sem forma_pagamento é rejeitado.
+const rParcialSemForma = buildEspirometriaFinanceiroPayload({
+  ...base(), status_pagamento: "Parcial", valor_recebido: "100", forma_pagamento: "",
+});
+caso("Parcial sem forma_pagamento é rejeitado",
+     rParcialSemForma.ok === false &&
+     /[Ff]orma de pagamento é obrigatória.*Parcial/.test(rParcialSemForma.erros.join(" ")));
+
+// Parcial com valor_recebido igual ao cobrado é rejeitado (não é parcial,
+// é recebido — usar o status "Recebido" nesse caso).
+const rParcialIgualCobrado = buildEspirometriaFinanceiroPayload({
+  ...base(), status_pagamento: "Parcial", valor_cobrado: "250", valor_recebido: "250",
+});
+caso("Parcial com valor_recebido igual ao cobrado é rejeitado", rParcialIgualCobrado.ok === false);
+
+// Parcial válido: recebido > 0 e menor que o cobrado, com forma de pagamento.
+const rParcialValido = buildEspirometriaFinanceiroPayload({
+  ...base(), status_pagamento: "Parcial", valor_cobrado: "250", valor_recebido: "100",
+});
+caso("Parcial válido é aceito", rParcialValido.ok === true && rParcialValido.payload.valor_recebido === 100);
+
+// Pendente sempre gera valor_recebido 0 no payload, mesmo se um valor tiver
+// sido preenchido antes (ex.: por chip) e mesmo sem forma_pagamento.
+const rPendenteComValorPreenchido = buildEspirometriaFinanceiroPayload({
+  ...base(), status_pagamento: "Pendente", valor_recebido: "250", forma_pagamento: "",
+});
+caso("Pendente gera valor_recebido 0 no payload mesmo preenchido",
+     rPendenteComValorPreenchido.ok === true && rPendenteComValorPreenchido.payload.valor_recebido === 0);
+
+// Cortesia sempre gera valor_recebido 0 no payload, mesmo sem forma_pagamento.
+const rCortesiaSemForma = buildEspirometriaFinanceiroPayload({
+  ...base(), status_pagamento: "Cortesia", valor_recebido: "250", forma_pagamento: "",
+});
+caso("Cortesia gera valor_recebido 0 no payload mesmo sem forma de pagamento",
+     rCortesiaSemForma.ok === true && rCortesiaSemForma.payload.valor_recebido === 0);
+
+// Cancelado (por status_exame OU status_pagamento) sempre gera valor_recebido
+// 0 no payload, mesmo sem forma_pagamento.
+const rCanceladoExameSemForma = buildEspirometriaFinanceiroPayload({
+  ...base(), status_exame: "Cancelado", valor_recebido: "250", forma_pagamento: "",
+});
+caso("Cancelado (status_exame) gera valor_recebido 0 mesmo sem forma de pagamento",
+     rCanceladoExameSemForma.ok === true && rCanceladoExameSemForma.payload.valor_recebido === 0);
+const rCanceladoPagtoSemForma = buildEspirometriaFinanceiroPayload({
+  ...base(), status_pagamento: "Cancelado", valor_recebido: "250", forma_pagamento: "",
+});
+caso("Cancelado (status_pagamento) gera valor_recebido 0 mesmo sem forma de pagamento",
+     rCanceladoPagtoSemForma.ok === true && rCanceladoPagtoSemForma.payload.valor_recebido === 0);
+
+// Forma de pagamento continua aceita para as 4 opções da lista, tanto em
+// Recebido (igual ao cobrado) quanto em Parcial (menor que o cobrado).
+for (const forma of ["Pix", "Dinheiro", "Cartão", "Outro"]) {
+  const rForma = buildEspirometriaFinanceiroPayload({ ...base(), forma_pagamento: forma });
+  caso(`forma de pagamento "${forma}" é aceita em Recebido`,
+       rForma.ok === true && rForma.payload.forma_pagamento === forma);
+}
 
 console.log();
 if (falhas) { console.log(`RESULTADO: ${falhas} caso(s) FALHARAM.`); process.exit(1); }
