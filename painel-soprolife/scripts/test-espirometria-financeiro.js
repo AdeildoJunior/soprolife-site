@@ -158,6 +158,20 @@ caso("id_atendimento é preservado quando informado", rComId.payload.id_atendime
 const rSemId = buildEspirometriaFinanceiroPayload(base());
 caso("id_atendimento é null quando não informado", rSemId.payload.id_atendimento === null);
 
+// M11.2B — id_atendimento no formato gerado pelo painel (data+hora+sufixo)
+// não pode ser confundido com telefone pelo sanitizador de texto livre e
+// precisa ser preservado igualzinho, pro upsert no Apps Script funcionar.
+const rComIdGerado = buildEspirometriaFinanceiroPayload({
+  ...base(), id_atendimento: "ESP-20260709-143055-ABC123",
+});
+caso("id_atendimento no formato ESP-AAAAMMDD-HHMMSS-XXXXXX é preservado",
+     rComIdGerado.payload.id_atendimento === "ESP-20260709-143055-ABC123");
+const rComIdSuspeito = buildEspirometriaFinanceiroPayload({
+  ...base(), id_atendimento: "id com espaço e (21) 99999-8888",
+});
+caso("id_atendimento fora do formato seguro vira null (não vaza texto livre)",
+     rComIdSuspeito.payload.id_atendimento === null);
+
 // 16. Ajuste M11.1 — local_atendimento é campo PRÓPRIO, nunca derivado de
 // "servico". servico continua fixo "Espirometria" independente do local.
 for (const local of EF_LOCAL_ATENDIMENTO) {
@@ -321,6 +335,22 @@ caso("espirometria-financeiro.js continua sem fetch",
      !/\bfetch\s*\(/.test(efSrc));
 caso("espirometria-financeiro.js continua sem XMLHttpRequest",
      !/XMLHttpRequest/.test(efSrc));
+
+// M11.2B — ajustes finos pós-teste real: origem_preco automática por chip,
+// id_atendimento gerado no front (hidden input estável por formulário) e
+// upsert seguro no Apps Script. Checagens estáticas de texto (sem DOM).
+console.log();
+console.log("M11.2B — ajustes finos pós-teste real (checagens estáticas)");
+
+caso("app.js gera id_atendimento para a Nova Espirometria",
+     /function gerarIdAtendimentoEspi\s*\(/.test(appJsSrc) &&
+     appJsSrc.includes('id="id_atendimento" name="id_atendimento"'));
+caso("app.js mapeia R$219 para origem_preco Promoção",
+     /219:\s*"Promoção"/.test(appJsSrc));
+caso("app.js mapeia R$250 para origem_preco Tabela",
+     /250:\s*"Tabela"/.test(appJsSrc));
+caso("Apps Script continua com Financeiro_Lancamentos (upsert por id_atendimento)",
+     gsSrc.includes("Financeiro_Lancamentos") && gsSrc.includes('"id_atendimento"'));
 
 console.log();
 if (falhas) { console.log(`RESULTADO: ${falhas} caso(s) FALHARAM.`); process.exit(1); }

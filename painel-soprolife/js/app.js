@@ -1974,8 +1974,26 @@ function renderEntradaDados(container) {
     { valor: 219, rotulo: "R$ 219,00", motivo: "Promoção" },
     { valor: 200, rotulo: "R$ 200,00", motivo: "Condição especial" },
   ];
+  // M11.2B — clicar num chip de preço também ajusta "Origem do preço" pro
+  // motivo real daquele valor (R$219 é promoção, não tabela). O operador
+  // ainda pode trocar manualmente depois — só o clique no chip preenche.
+  const EF_ORIGEM_PRECO_POR_VALOR = { 250: "Tabela", 230: "Negociação", 219: "Promoção", 200: "Negociação" };
+
+  // M11.2B — ID técnico sem dado pessoal, gerado uma vez por renderização da
+  // aba "Nova Espirometria" e mantido em hidden input: reenviar o mesmo
+  // formulário (ex.: clique duplo em "Salvar") manda sempre o mesmo ID,
+  // permitindo upsert no Apps Script em vez de duplicar o lançamento.
+  function gerarIdAtendimentoEspi() {
+    const agora = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const data = `${agora.getFullYear()}${pad(agora.getMonth() + 1)}${pad(agora.getDate())}`;
+    const hora = `${pad(agora.getHours())}${pad(agora.getMinutes())}${pad(agora.getSeconds())}`;
+    const sufixo = Math.random().toString(36).slice(2, 8).toUpperCase();
+    return `ESP-${data}-${hora}-${sufixo}`;
+  }
 
   function buildFormEspi() {
+    const idAtendimento = gerarIdAtendimentoEspi();
     const camposAtendimento = [
       field({ id: "primeiro_nome",          label: "Primeiro nome",            required: true }),
       field({ id: "responsavel",            label: "Responsável",              required: true }),
@@ -2010,6 +2028,7 @@ function renderEntradaDados(container) {
     // seção própria com título e chips — as demais abas continuam com
     // formWrapper sem alteração.
     return `<form class="cc-form" novalidate>
+      <input type="hidden" id="id_atendimento" name="id_atendimento" value="${escapeHtml(idAtendimento)}">
       <h4 class="cc-form-title">Nova Espirometria</h4>
       <div class="cc-form-grid">${camposAtendimento}</div>
 
@@ -2147,12 +2166,16 @@ function renderEntradaDados(container) {
     const valorCobradoInput    = form.querySelector("#valor_cobrado");
     const valorRecebidoInput   = form.querySelector("#valor_recebido");
     const statusPagamentoInput = form.querySelector("#status_pagamento");
+    const origemPrecoInput     = form.querySelector("#origem_preco");
 
     panel.querySelectorAll(".cc-price-chip").forEach((chip) => {
       chip.addEventListener("click", () => {
         panel.querySelectorAll(".cc-price-chip").forEach((c) => c.classList.remove("active"));
         const valor = chip.dataset.valor;
         if (valor === "outro") {
+          // Valor livre também é negociação — o operador ainda pode trocar
+          // a origem manualmente depois de digitar.
+          if (origemPrecoInput) origemPrecoInput.value = "Negociação";
           valorCobradoInput.focus();
           valorCobradoInput.select();
           return;
@@ -2160,6 +2183,9 @@ function renderEntradaDados(container) {
         chip.classList.add("active");
         valorCobradoInput.value = valor;
         valorCobradoInput.dispatchEvent(new Event("input", { bubbles: true }));
+        if (origemPrecoInput) {
+          origemPrecoInput.value = EF_ORIGEM_PRECO_POR_VALOR[Number(valor)] || "Negociação";
+        }
         // Só copia para "recebido" se estiver vazio, o campo nunca é
         // sobrescrito se já tiver algo digitado manualmente, e nunca copia
         // quando o status atual é Pendente/Cortesia/Cancelado (não recebe).

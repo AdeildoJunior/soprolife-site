@@ -26,6 +26,19 @@ const EF_LOCAL_ATENDIMENTO = ["Domiciliar", "Clínica", "Empresa / PCMSO", "Parc
 
 function _efObj(v) { return (v && typeof v === "object" && !Array.isArray(v)) ? v : {}; }
 
+// id_atendimento é um ID técnico gerado pelo próprio painel (M11.2B, ex.:
+// ESP-20260709-143055-ABC123) — nunca texto digitado por humano — por isso
+// usa checagem de formato fechada em vez do sanitizador de texto livre
+// (acoesTextoSeguro). O sanitizador existe para bloquear PII digitada à mão
+// e dá falso positivo nesse formato: o trecho de data+hora bate com a regex
+// de telefone BR (ex. "0260709-1430" dentro de "ESP-20260709-143055-..."),
+// o que substituiria o ID pelo texto genérico e quebraria o upsert.
+const EF_ID_ATENDIMENTO_RX = /^[A-Za-z0-9-]{1,64}$/;
+function _efIdAtendimento(raw) {
+  const v = (raw === undefined || raw === null) ? "" : String(raw).trim();
+  return EF_ID_ATENDIMENTO_RX.test(v) ? v : null;
+}
+
 // Valor monetário: vazio -> fallback (ou erro se obrigatório); qualquer
 // coisa que não vire número finito >= 0 -> erro (nunca aceita valor negativo
 // ou lixo tipo "abc").
@@ -143,7 +156,7 @@ function buildEspirometriaFinanceiroPayload(formData) {
   const desconto = Math.max(0, Math.round((valorTabela.valor - valorCobrado.valor) * 100) / 100);
 
   const payload = {
-    id_atendimento: _efSan(f.id_atendimento, null),
+    id_atendimento: _efIdAtendimento(f.id_atendimento),
     criado_em: new Date().toISOString(),
     data_exame: dataExame,
     tipo_movimento: "receita",
