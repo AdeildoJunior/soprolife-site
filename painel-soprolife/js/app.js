@@ -1914,23 +1914,26 @@ function renderEntradaDados(container) {
 
   // ── Helpers de renderização ───────────────────────────────────────────────
 
-  function field({ id, label, type = "text", options, required, placeholder, hint }) {
+  function field({ id, label, type = "text", options, required, placeholder, hint, value, step }) {
     const req = required ? " *" : "";
     const hintHtml = hint ? `<span class="cc-field-hint">${hint}</span>` : "";
     if (type === "select" && options) {
       const opts = options.map((o) => {
         const val = typeof o === "string" ? o : o.value;
         const lbl = typeof o === "string" ? o : o.label;
-        return `<option value="${escapeHtml(val)}">${escapeHtml(lbl)}</option>`;
+        const selected = value !== undefined && value === val ? " selected" : "";
+        return `<option value="${escapeHtml(val)}"${selected}>${escapeHtml(lbl)}</option>`;
       }).join("");
       return `<div class="cc-field-group">
         <label class="cc-label" for="${id}">${label}${req}${hintHtml}</label>
         <select id="${id}" name="${id}" class="cc-select"${required ? " required" : ""}><option value="">—</option>${opts}</select>
       </div>`;
     }
+    const valAttr = value !== undefined && value !== null ? ` value="${escapeHtml(String(value))}"` : "";
+    const stepAttr = step ? ` step="${escapeHtml(String(step))}"` : "";
     return `<div class="cc-field-group">
       <label class="cc-label" for="${id}">${label}${req}${hintHtml}</label>
-      <input id="${id}" name="${id}" type="${type}" class="cc-input"${required ? " required" : ""}${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}>
+      <input id="${id}" name="${id}" type="${type}" class="cc-input"${required ? " required" : ""}${valAttr}${stepAttr}${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}>
     </div>`;
   }
 
@@ -1959,19 +1962,69 @@ function renderEntradaDados(container) {
     ].join(""));
   }
 
+  // M11 — valor real do exame nasce aqui, na própria tela do atendimento, em
+  // vez de um total manual digitado depois no financeiro (ver escopo M11).
+  const EF_STATUS_PAGAMENTO_OPTS = ["Recebido", "Pendente", "Parcial", "Cortesia", "Cancelado"];
+  const EF_FORMA_PAGAMENTO_OPTS  = ["Pix", "Dinheiro", "Cartão", "Outro"];
+  const EF_ORIGEM_PRECO_OPTS     = ["Tabela", "Promoção", "Parceria", "Negociação", "PCMSO", "Cortesia"];
+  const EF_LOCAL_ATENDIMENTO_OPTS = ["Domiciliar", "Clínica", "Empresa / PCMSO", "Parceiro", "Outro"];
+  const EF_SUGESTOES = [
+    { valor: 250, rotulo: "R$ 250,00", motivo: "Valor padrão" },
+    { valor: 230, rotulo: "R$ 230,00", motivo: "Desconto" },
+    { valor: 219, rotulo: "R$ 219,00", motivo: "Promoção" },
+    { valor: 200, rotulo: "R$ 200,00", motivo: "Condição especial" },
+  ];
+
   function buildFormEspi() {
-    return formWrapper("Nova Espirometria", [
+    const camposAtendimento = [
       field({ id: "primeiro_nome",          label: "Primeiro nome",            required: true }),
       field({ id: "responsavel",            label: "Responsável",              required: true }),
       field({ id: "telefone",               label: "Telefone / WhatsApp",      type: "tel" }),
       field({ id: "servico",                label: "Serviço",                  placeholder: "Espirometria" }),
       field({ id: "origem",                 label: "Origem",                   placeholder: "Indicação médica, PCMSO..." }),
       field({ id: "status_exame",           label: "Status do exame",          type: "select", options: ["Aguardando", "Realizado", "Cancelado", "Remarcado"] }),
-      field({ id: "data_exame",             label: "Data do exame",            type: "date" }),
+      field({ id: "data_exame",             label: "Data do exame",            type: "date", required: true }),
       field({ id: "proximo_contato",        label: "Próximo contato",          type: "date" }),
       field({ id: "motivo_proximo_contato", label: "Motivo do próximo contato" }),
       field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts }),
-    ].join(""));
+    ].join("");
+
+    const camposFinanceiro = [
+      field({ id: "local_atendimento",      label: "Local de atendimento", type: "select", options: EF_LOCAL_ATENDIMENTO_OPTS, required: true }),
+      field({ id: "valor_tabela",          label: "Valor tabela",        type: "number", step: "0.01", value: EF_VALOR_TABELA_PADRAO }),
+      field({ id: "valor_cobrado",         label: "Valor cobrado",       type: "number", step: "0.01", required: true }),
+      field({ id: "valor_recebido",        label: "Valor recebido",      type: "number", step: "0.01" }),
+      field({ id: "status_pagamento",      label: "Status do pagamento", type: "select", options: EF_STATUS_PAGAMENTO_OPTS, required: true }),
+      field({ id: "forma_pagamento",       label: "Forma de pagamento",  type: "select", options: EF_FORMA_PAGAMENTO_OPTS }),
+      field({ id: "origem_preco",          label: "Origem do preço",     type: "select", options: EF_ORIGEM_PRECO_OPTS, value: "Tabela" }),
+      field({ id: "observacao_financeira", label: "Observação financeira" }),
+    ].join("");
+
+    const chipsHtml = EF_SUGESTOES.map((s) => `
+      <button type="button" class="cc-price-chip" data-valor="${s.valor}">
+        ${escapeHtml(s.rotulo)}<small>${escapeHtml(s.motivo)}</small>
+      </button>`).join("") + `
+      <button type="button" class="cc-price-chip cc-price-chip-outro" data-valor="outro">Outro valor</button>`;
+
+    // Não usa formWrapper (fields planos) porque esta aba precisa de uma
+    // seção própria com título e chips — as demais abas continuam com
+    // formWrapper sem alteração.
+    return `<form class="cc-form" novalidate>
+      <h4 class="cc-form-title">Nova Espirometria</h4>
+      <div class="cc-form-grid">${camposAtendimento}</div>
+
+      <div class="cc-form-section">
+        <p class="cc-form-section-title">Preço e pagamento</p>
+        <div class="cc-price-chips" role="group" aria-label="Sugestões rápidas de valor">${chipsHtml}</div>
+        <div class="cc-form-grid">${camposFinanceiro}</div>
+      </div>
+
+      <div class="cc-submit-row">
+        <button type="submit" class="cc-btn-submit">Validar dados financeiros</button>
+      </div>
+      <div class="cc-financeiro-preview" hidden></div>
+      <div class="cc-result" hidden></div>
+    </form>`;
   }
 
   function buildFormConsulta() {
@@ -2081,11 +2134,74 @@ function renderEntradaDados(container) {
 
   // ── Lógica de submit ─────────────────────────────────────────────────────
 
+  // M11 — a aba "Nova Espirometria" valida o payload financeiro localmente
+  // (sem rede) em vez de enviar ao Command Center: a integração com o Google
+  // Sheets para os campos de preço/pagamento fica para uma etapa futura.
+  function bindFormEspiFinanceiro(panel, form, result) {
+    const valorCobradoInput  = form.querySelector("#valor_cobrado");
+    const valorRecebidoInput = form.querySelector("#valor_recebido");
+
+    panel.querySelectorAll(".cc-price-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        panel.querySelectorAll(".cc-price-chip").forEach((c) => c.classList.remove("active"));
+        const valor = chip.dataset.valor;
+        if (valor === "outro") {
+          valorCobradoInput.focus();
+          valorCobradoInput.select();
+          return;
+        }
+        chip.classList.add("active");
+        valorCobradoInput.value = valor;
+        valorCobradoInput.dispatchEvent(new Event("input", { bubbles: true }));
+        // Só copia para "recebido" se estiver vazio — nunca sobrescreve o
+        // que o operador já digitou manualmente (campo sempre editável).
+        if (!valorRecebidoInput.value.trim()) {
+          valorRecebidoInput.value = valor;
+          valorRecebidoInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      });
+    });
+
+    const preview = panel.querySelector(".cc-financeiro-preview");
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const formData = {};
+      new FormData(form).forEach((val, key) => { formData[key] = val; });
+
+      const resultado = buildEspirometriaFinanceiroPayload(formData);
+
+      if (!resultado.ok) {
+        result.className = "cc-result cc-result-err";
+        result.textContent = "Corrija antes de continuar: " + resultado.erros.join(" ");
+        result.hidden = false;
+        if (preview) preview.hidden = true;
+        return;
+      }
+
+      result.className = "cc-result cc-result-ok";
+      result.textContent = "Dados financeiros validados. Integração com Google Sheets será ativada na próxima etapa.";
+      result.hidden = false;
+
+      if (preview) {
+        preview.hidden = false;
+        preview.innerHTML = `
+          <p class="cc-financeiro-preview-title">Preview do lançamento financeiro (ainda não salvo)</p>
+          <pre class="cc-financeiro-preview-json">${escapeHtml(JSON.stringify(resultado.payload, null, 2))}</pre>`;
+      }
+    });
+  }
+
   function bindForm(panel, tabName) {
     const form   = panel.querySelector(".cc-form");
     const result = panel.querySelector(".cc-result");
     const btn    = panel.querySelector(".cc-btn-submit");
     if (!form) return;
+
+    if (tabName === "espi") {
+      bindFormEspiFinanceiro(panel, form, result);
+      return;
+    }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();

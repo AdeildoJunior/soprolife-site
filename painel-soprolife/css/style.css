@@ -2840,10 +2840,85 @@ td { font-size: .94rem; }
   padding: .5rem 0;
 }
 
+/* Seção "Preço e pagamento" (M11) — dentro da aba Nova Espirometria */
+.cc-form-section {
+  margin-top: 1.4rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--line);
+}
+.cc-form-section-title {
+  margin: 0 0 .7rem;
+  font-size: .82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--navy);
+}
+
+.cc-price-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-bottom: 1rem;
+}
+.cc-price-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: var(--soft);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  padding: .45rem .85rem;
+  font-size: .85rem;
+  font-weight: 700;
+  color: var(--navy);
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.cc-price-chip small {
+  font-size: .68rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--muted);
+}
+.cc-price-chip:hover  { border-color: var(--teal); }
+.cc-price-chip.active { border-color: var(--teal); background: #e3f6f1; color: var(--teal-dark); }
+.cc-price-chip-outro  { font-weight: 600; color: var(--muted); }
+
+.cc-financeiro-preview {
+  margin-top: 1rem;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: .9rem 1rem;
+}
+.cc-financeiro-preview-title {
+  margin: 0 0 .5rem;
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  color: var(--muted);
+}
+.cc-financeiro-preview-json {
+  margin: 0;
+  font-size: .78rem;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
 @media (max-width: 700px) {
   .cc-form-grid { grid-template-columns: 1fr; }
   .cc-tabs { gap: .3rem; }
   .cc-tab  { font-size: .76rem; padding: .4rem .8rem; }
+  .cc-price-chips { gap: .4rem; }
+  .cc-price-chip { flex: 1 1 calc(50% - .4rem); }
 }
 
 
