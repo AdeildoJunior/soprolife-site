@@ -40,12 +40,14 @@ run "node --check js/operational-actions.js" node --check painel-soprolife/js/op
 run "node --check js/b2b-actions.js"         node --check painel-soprolife/js/b2b-actions.js
 run "node --check js/operational-brain.js"   node --check painel-soprolife/js/operational-brain.js
 run "node --check js/daily-briefing.js"      node --check painel-soprolife/js/daily-briefing.js
+run "node --check js/today-actions.js"       node --check painel-soprolife/js/today-actions.js
 
 secao "2/9 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
 run "test-b2b-actions (M5)"         node painel-soprolife/scripts/test-b2b-actions.js
 run "test-operational-brain (M8)"   node painel-soprolife/scripts/test-operational-brain.js
 run "test-daily-briefing (M9)"      node painel-soprolife/scripts/test-daily-briefing.js
+run "test-today-actions (M10)"      node painel-soprolife/scripts/test-today-actions.js
 
 secao "3/9 Sintaxe Python"
 run "py_compile generate-saude-operacional" python3 -m py_compile painel-soprolife/scripts/generate-saude-operacional.py

@@ -6762,11 +6762,74 @@ th {
   .b2b-stats { grid-template-columns: 1fr 1fr; }
 }
 
-/* ── Cérebro Operacional (M8, esqueleto) — Painel Geral ──────────────────── */
+/* ── Hub do Painel Geral (M10.1 — UX estilo BlueDox) ─────────────────────── */
+/* Cérebro Operacional + "Hoje eu tenho que fazer o quê?" lado a lado como
+   dois cards de entrada compactos — altura uniforme, detalhe completo só
+   dentro de <details> fechados por padrão (.hub-details). */
 
-.cerebro-panel { margin: 16px 0 18px; }
+.hub-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin: 0 0 18px;
+  align-items: stretch;
+}
+.hub-card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
 
-/* M9.1 — síntese executiva compacta no topo do painel */
+@media (max-width: 900px) {
+  .hub-grid { grid-template-columns: 1fr; }
+}
+
+/* Áreas expansíveis compartilhadas por Cérebro e "Hoje" — fechadas por padrão */
+.hub-details {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+}
+.hub-details summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 2px;
+  color: var(--teal-dark);
+  font-size: .85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.hub-details summary::-webkit-details-marker { display: none; }
+.hub-details summary::before {
+  content: "▸";
+  transition: transform .15s ease;
+  color: var(--muted);
+}
+.hub-details[open] summary::before { transform: rotate(90deg); }
+.hub-details summary:hover { color: var(--teal); }
+.hub-details summary small { color: var(--muted); font-weight: 500; }
+.cerebro-toggle-aberto { display: none; }
+.hub-details[open] .cerebro-toggle-aberto { display: inline; }
+.hub-details[open] .cerebro-toggle-fechado { display: none; }
+
+.cerebro-detalhes-body { padding: 2px 0 12px; }
+
+.cerebro-detalhes-body h4 {
+  color: var(--navy);
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin: 14px 0 8px;
+}
+.cerebro-detalhes-body h4:first-child { margin-top: 0; }
+.cerebro-detalhes-body h4 small { text-transform: none; letter-spacing: normal; font-weight: 500; }
+
+/* ── Cérebro Operacional (M8/M9) — card compacto do hub ──────────────────── */
+
+.cerebro-panel { margin: 0; }
+
+/* M9.1 — síntese executiva compacta no topo do card */
 .cerebro-sintese {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
@@ -6795,49 +6858,6 @@ th {
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
-
-/* M9.1 — áreas expansíveis (briefing completo e projeções) */
-.cerebro-detalhes {
-  border-top: 1px solid var(--line);
-  margin-top: 12px;
-}
-.cerebro-detalhes summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 10px 2px;
-  color: var(--teal-dark);
-  font-size: .85rem;
-  font-weight: 600;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.cerebro-detalhes summary::-webkit-details-marker { display: none; }
-.cerebro-detalhes summary::before {
-  content: "▸";
-  transition: transform .15s ease;
-  color: var(--muted);
-}
-.cerebro-detalhes[open] summary::before { transform: rotate(90deg); }
-.cerebro-detalhes summary:hover { color: var(--teal); }
-.cerebro-detalhes summary small { color: var(--muted); font-weight: 500; }
-.cerebro-toggle-aberto { display: none; }
-.cerebro-detalhes[open] .cerebro-toggle-aberto { display: inline; }
-.cerebro-detalhes[open] .cerebro-toggle-fechado { display: none; }
-
-.cerebro-detalhes-discreto summary { font-size: .8rem; color: var(--muted); }
-.cerebro-detalhes-discreto summary:hover { color: var(--teal-dark); }
-
-.cerebro-detalhes-body { padding: 2px 0 12px; }
-
-.cerebro-detalhes-body h4 {
-  color: var(--navy);
-  font-size: .82rem;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  margin: 14px 0 8px;
-}
-.cerebro-detalhes-body h4:first-child { margin-top: 0; }
 
 .cerebro-top3 {
   list-style: none;
@@ -6941,3 +6961,99 @@ th {
   margin: 2px 4px 2px 0;
 }
 .cerebro-area i { font-style: normal; font-weight: 700; color: var(--navy); margin-right: 4px; }
+
+/* ── "Hoje eu tenho que fazer o quê?" (M10.1) — card compacto do hub ─────── */
+/* Só a ação nº1 (badge + título) e o total ficam sempre visíveis; a fila
+   inteira (nº1 incluído, com motivo/origem/próximo passo) mora dentro do
+   <details> "Ver fila completa" (.hub-details), fechado por padrão. */
+
+.hoje-panel { margin: 0; }
+
+.hoje-acao-principal {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-left-color: var(--teal);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.hoje-acao-principal.saude-critico { border-left-color: #b3261e; }
+.hoje-acao-principal.saude-atencao { border-left-color: #b5730a; }
+.hoje-acao-principal.saude-ok      { border-left-color: #0d7a5f; }
+
+.hoje-acao-titulo {
+  color: var(--navy);
+  font-size: .95rem;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.hoje-acao-sub { color: var(--muted); font-size: .84rem; }
+
+/* Linha de resumo: total na fila + link para abrir a fila completa */
+.hoje-resumo-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.hoje-total-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.hoje-fila-wrap {
+  flex: 1 1 100%;
+  border-top: none;
+  margin-top: 0;
+}
+.hoje-resumo-linha .hoje-fila-wrap summary { padding: 6px 2px; }
+
+/* Fila completa — mesma linguagem visual do Top 3 do Cérebro, com o motivo,
+   a origem e o próximo passo de cada ação (inclusive a nº 1). */
+.hoje-proximas {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hoje-proximas li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.hoje-fila-num { font-weight: 800; color: var(--muted); flex: 0 0 auto; }
+.hoje-fila-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.hoje-proxima-titulo { color: var(--navy); font-weight: 600; overflow-wrap: anywhere; }
+.hoje-fila-item-meta { color: var(--muted); font-size: .82rem; }
+.hoje-fila-item-passo { color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.hoje-fila-item-passo b { color: var(--navy); }
+
+@media (max-width: 540px) {
+  .hoje-panel .panel-header { flex-direction: column; align-items: flex-start; }
+  .hoje-panel .saude-status-chip { white-space: normal; line-height: 1.4; }
+}

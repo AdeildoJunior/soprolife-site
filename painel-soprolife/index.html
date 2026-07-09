@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css?v=2026070802" />
+  <link rel="stylesheet" href="./css/style.css?v=2026070804" />
   <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
   <script src="./js/vendor/chart.umd.min.js"></script>
 </head>
@@ -156,50 +156,69 @@
           <small>O painel continua funcionando sem dados sensíveis.</small>
         </div>
 
-        <article class="panel cerebro-panel" id="cerebroPanel" hidden>
-          <div class="panel-header">
-            <div>
-              <h3>Cérebro Operacional</h3>
-              <span>Síntese executiva da operação — detalhes no briefing completo.</span>
+        <div class="hub-grid">
+          <article class="panel hub-card cerebro-panel" id="cerebroPanel" hidden>
+            <div class="panel-header">
+              <div>
+                <h3>Cérebro Operacional</h3>
+                <span>Prioridade e briefing do dia</span>
+              </div>
+              <span id="cerebroStatus" class="saude-status-chip saude-atencao">—</span>
             </div>
-            <span id="cerebroStatus" class="saude-status-chip saude-atencao">Demo seguro · Em construção</span>
-          </div>
-          <div id="cerebroResumoExec" class="cerebro-resumo-exec" hidden></div>
-          <div class="cerebro-sintese">
-            <div class="cerebro-sintese-item">
-              <span>Maior retorno agora</span>
-              <strong id="cerebroMaiorRetorno">—</strong>
+            <div id="cerebroResumoExec" class="cerebro-resumo-exec" hidden></div>
+            <div class="cerebro-sintese">
+              <div class="cerebro-sintese-item">
+                <span>Maior retorno agora</span>
+                <strong id="cerebroMaiorRetorno">—</strong>
+              </div>
+              <div class="cerebro-sintese-item">
+                <span>Ações para hoje</span>
+                <strong id="cerebroAcoesHoje">0</strong>
+              </div>
             </div>
-            <div class="cerebro-sintese-item">
-              <span>Ações para hoje</span>
-              <strong id="cerebroAcoesHoje">0</strong>
+            <details id="cerebroDetalhes" class="hub-details">
+              <summary>
+                <span class="cerebro-toggle-fechado">Ver briefing completo</span>
+                <span class="cerebro-toggle-aberto">Ocultar briefing completo</span>
+              </summary>
+              <div class="cerebro-detalhes-body">
+                <h4>Top 3 prioridades</h4>
+                <ol id="cerebroTop3" class="cerebro-top3"></ol>
+                <h4>Briefing do dia</h4>
+                <div id="cerebroBriefing" class="cerebro-briefing"></div>
+                <div id="cerebroRiscos" class="cerebro-riscos" hidden></div>
+                <div id="cerebroPorArea" class="cerebro-porarea" hidden></div>
+                <h4>Projeções iniciais <small>(premissas explícitas — não usar para compromisso)</small></h4>
+                <div id="cerebroProjecoes" class="cerebro-projecoes"></div>
+              </div>
+            </details>
+          </article>
+
+          <article class="panel hub-card hoje-panel" id="hojePanel" hidden>
+            <div class="panel-header">
+              <div>
+                <h3>Hoje eu tenho que fazer o quê?</h3>
+                <span tabindex="0" class="has-tip"
+                  data-tip="Fila única do dia calculada do Cérebro Operacional, do Briefing Diário e da fila de decisão — a ação nº 1 é a de maior prioridade agora."
+                  aria-label="Hoje eu tenho que fazer o quê: fila única do dia calculada dos summaries seguros.">Fila do dia</span>
+              </div>
+              <span id="hojeStatus" class="saude-status-chip saude-atencao">Calculando…</span>
             </div>
-          </div>
-          <details id="cerebroDetalhes" class="cerebro-detalhes">
-            <summary>
-              <span class="cerebro-toggle-fechado">Ver briefing completo</span>
-              <span class="cerebro-toggle-aberto">Ocultar briefing completo</span>
-            </summary>
-            <div class="cerebro-detalhes-body">
-              <h4>Top 3 prioridades</h4>
-              <ol id="cerebroTop3" class="cerebro-top3"></ol>
-              <h4>Briefing do dia</h4>
-              <div id="cerebroBriefing" class="cerebro-briefing"></div>
-              <div id="cerebroRiscos" class="cerebro-riscos" hidden></div>
-              <div id="cerebroPorArea" class="cerebro-porarea" hidden></div>
+            <div id="hojeAcaoPrincipal" class="hoje-acao-principal"></div>
+            <div class="hoje-resumo-linha">
+              <span id="hojeTotalChip" class="hoje-total-chip" hidden>0 ações na fila</span>
+              <details id="hojeFilaWrap" class="hub-details hoje-fila-wrap" hidden>
+                <summary>
+                  <span class="cerebro-toggle-fechado">Ver fila completa</span>
+                  <span class="cerebro-toggle-aberto">Ocultar fila completa</span>
+                </summary>
+                <div class="cerebro-detalhes-body">
+                  <ol id="hojeFila" class="hoje-proximas"></ol>
+                </div>
+              </details>
             </div>
-          </details>
-          <details id="cerebroProjecoesWrap" class="cerebro-detalhes cerebro-detalhes-discreto">
-            <summary>
-              <span class="cerebro-toggle-fechado">Ver projeções iniciais</span>
-              <span class="cerebro-toggle-aberto">Ocultar projeções iniciais</span>
-              <small>(premissas explícitas — não usar para compromisso)</small>
-            </summary>
-            <div class="cerebro-detalhes-body">
-              <div id="cerebroProjecoes" class="cerebro-projecoes"></div>
-            </div>
-          </details>
-        </article>
+          </article>
+        </div>
 
         <div id="cardsGrid" class="cards-sections"></div>
 
@@ -770,6 +789,7 @@
   <script src="./js/b2b-actions.js?v=2026070701"></script>
   <script src="./js/operational-brain.js?v=2026070801"></script>
   <script src="./js/daily-briefing.js?v=2026070801"></script>
-  <script src="./js/app.js?v=2026070802"></script>
+  <script src="./js/today-actions.js?v=2026070803"></script>
+  <script src="./js/app.js?v=2026070804"></script>
 </body>
 </html>

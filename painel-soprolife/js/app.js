@@ -554,6 +554,7 @@ async function init() {
     renderAcoesOperacionais();
     renderB2BAcoes();
     renderCerebroOperacional();
+    renderHojeAcoes();
     renderAuditoria();
     renderLancamentos();
     bindEvents();
@@ -5973,6 +5974,7 @@ function renderCerebroOperacional() {
   const temFonteViva = Object.values(payloads).some((v) => v);
   if (!temFonteViva && !state.cerebroDemo) {
     panel.hidden = true;
+    state.cerebroLive = null;
     return;
   }
   panel.hidden = false;
@@ -5998,9 +6000,7 @@ function renderCerebroOperacional() {
 
   const chip = panel.querySelector("#cerebroStatus");
   if (chip) {
-    chip.textContent = temFonteViva
-      ? "Em construção · leitura ao vivo dos summaries seguros"
-      : (demo?.status || "Demo seguro · Em construção");
+    chip.textContent = temFonteViva ? "Ao vivo" : "Demo seguro";
   }
 
   const top3Box = panel.querySelector("#cerebroTop3");
@@ -6020,6 +6020,10 @@ function renderCerebroOperacional() {
 
   // Briefing exibido: real quando há fontes vivas; demo commitável senão.
   const b = briefing.status !== "demo" ? briefing : (briefingDemo || briefing);
+
+  // M10: expõe o cálculo do dia para o card "Hoje eu tenho que fazer o quê?"
+  // (renderHojeAcoes) — mesmo estado, sem recomputar nem buscar nada novo.
+  state.cerebroLive = { brainState, decisionQueue: dq, briefing: b };
 
   const execBox = panel.querySelector("#cerebroResumoExec");
   if (execBox) {
@@ -6079,6 +6083,96 @@ function renderCerebroOperacional() {
         <small>${escapeHtml(String(pr.status))}</small>
       </div>`).join("");
   }
+}
+
+// ── "Hoje eu tenho que fazer o quê?" (M10 / M10.1) — card compacto no hub ────
+// Consome o cálculo JÁ feito pelo Cérebro Operacional (state.cerebroLive) via
+// buildTodayQueue (js/today-actions.js). Sem fetch novo, sem persistência —
+// marcar feito/pendente fica para etapa futura.
+// M10.1 (UX BlueDox): só a ação nº1 + status + total ficam sempre visíveis;
+// a fila inteira (nº1 incluído, com motivo/origem/próximo passo) mora dentro
+// de um <details> fechado por padrão — "Ver fila completa".
+
+const HOJE_NIVEIS = {
+  critico: { rotulo: "Crítico", cls: "saude-critico" },
+  alta:    { rotulo: "Alta",    cls: "saude-critico" },
+  media:   { rotulo: "Média",   cls: "saude-atencao" },
+  baixa:   { rotulo: "Baixa",   cls: "saude-ok" },
+};
+
+const HOJE_STATUS_CHIP = {
+  critico: { texto: "Dia crítico",  cls: "saude-critico" },
+  atencao: { texto: "Ao vivo",      cls: "saude-atencao" },
+  ok:      { texto: "Em dia",       cls: "saude-ok" },
+  demo:    { texto: "Demo seguro",  cls: "saude-atencao" },
+  vazio:   { texto: "Sem pendência", cls: "saude-ok" },
+};
+
+function renderHojeAcoes() {
+  const panel = document.querySelector("#hojePanel");
+  if (!panel) return;
+
+  // Mesma regra do Cérebro: sem cálculo do dia (nem demo), o card fica oculto.
+  if (!state.cerebroLive) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+
+  const hoje = buildTodayQueue(state.cerebroLive);
+
+  const chip = panel.querySelector("#hojeStatus");
+  if (chip) {
+    const info = HOJE_STATUS_CHIP[hoje.status] || HOJE_STATUS_CHIP.vazio;
+    chip.textContent = info.texto;
+    chip.className = `saude-status-chip ${info.cls}`;
+  }
+
+  const principalBox = panel.querySelector("#hojeAcaoPrincipal");
+  const totalChip = panel.querySelector("#hojeTotalChip");
+  const filaWrap = panel.querySelector("#hojeFilaWrap");
+  const filaLista = panel.querySelector("#hojeFila");
+  if (!principalBox || !totalChip || !filaWrap || !filaLista) return;
+
+  const p = hoje.acaoPrincipal;
+  if (!p) {
+    principalBox.className = "hoje-acao-principal saude-ok";
+    principalBox.innerHTML = `
+      <strong class="hoje-acao-titulo">Nada urgente na fila de hoje.</strong>
+      <span class="hoje-acao-sub">Seguir a rotina planejada.</span>`;
+    totalChip.hidden = true;
+    filaWrap.hidden = true;
+    filaLista.innerHTML = "";
+    return;
+  }
+
+  // Linha sempre visível: só o essencial (nível + título da ação nº 1).
+  const nivelP = HOJE_NIVEIS[p.nivel] || HOJE_NIVEIS.media;
+  principalBox.className = `hoje-acao-principal ${nivelP.cls}`;
+  principalBox.innerHTML = `
+    <span class="badge ${nivelP.cls}">${nivelP.rotulo}</span>
+    <strong class="hoje-acao-titulo">${escapeHtml(p.titulo)}</strong>`;
+
+  totalChip.hidden = false;
+  totalChip.textContent = `${hoje.totalFila} ${hoje.totalFila === 1 ? "ação" : "ações"} na fila`;
+
+  // Fila completa (nº1 + próximas, com motivo/origem/próximo passo) só
+  // aparece se o usuário abrir o <details> — fechado por padrão.
+  filaWrap.hidden = false;
+  filaLista.innerHTML = [p, ...hoje.proximas].map((a) => {
+    const nivel = HOJE_NIVEIS[a.nivel] || HOJE_NIVEIS.media;
+    return `
+      <li>
+        <span class="hoje-fila-num" aria-hidden="true">${a.ordem}</span>
+        <span class="badge ${nivel.cls}">${nivel.rotulo}</span>
+        <div class="hoje-fila-item-body">
+          <strong class="hoje-proxima-titulo">${escapeHtml(a.titulo)}</strong>
+          <span class="hoje-fila-item-meta">${escapeHtml(a.motivo)} · Origem: ${escapeHtml(a.origem)}</span>
+          ${a.proximoPasso && a.proximoPasso !== "—"
+            ? `<span class="hoje-fila-item-passo"><b>Próximo passo:</b> ${escapeHtml(a.proximoPasso)}</span>` : ""}
+        </div>
+      </li>`;
+  }).join("");
 }
 
 // ── Próximas Ações B2B/PCMSO (M5) — painel no Painel Geral ───────────────────
