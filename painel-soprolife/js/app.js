@@ -1899,9 +1899,19 @@ function renderEntradaDados(container) {
   // ── Opções de select — declaradas ANTES de qualquer chamada que as use ────
   // (const não é hoisted; declarar aqui evita TDZ quando showTab é chamado)
   const consentOpts = ["Sim", "Não", "Não informado"];
-  const canalOpts   = ["Indicação", "WhatsApp", "Instagram", "Google", "Ligação", "Presencial", "Outro"];
   const prioOpts    = ["Alta", "Normal", "Baixa"];
   const etapaOpts   = [...CRM_ETAPAS_ATIVAS, ...CRM_ETAPAS_TERMINAIS];
+  // M12.1 — lista padronizada de origem/canal, reaproveitada em Lead,
+  // Paciente (campo "canal"), Consulta e Clínica B2B, para reduzir a
+  // quantidade de listas ligeiramente diferentes mapeadas na M12.0.
+  // Não usada na Nova Espirometria (fora de escopo desta etapa — a
+  // aba já tem sua própria lista EF_ORIGEM_DETALHADA_OPTS, intocada).
+  const origemCanalOpts = [
+    "Google", "Instagram", "WhatsApp", "Site SoproLife", "Indicação médica",
+    "Indicação de paciente", "Clínica parceira", "Empresa / PCMSO",
+    "LinkedIn", "Tráfego pago", "Retorno / recorrente", "Presencial",
+    "Ligação", "Outro",
+  ];
 
   const ACTION_MAP = {
     lead:      "createLead",
@@ -1937,11 +1947,24 @@ function renderEntradaDados(container) {
     </div>`;
   }
 
-  function formWrapper(title, fields) {
+  // M12.1 — opts opcional para reaproveitar em mais abas o padrão de
+  // microcopy + seção "Dados opcionais / CRM" criado na Nova Espirometria
+  // (M11.2C), sem obrigar as chamadas existentes a mudar (2º/3º argumentos
+  // continuam opcionais, retrocompatível).
+  function formWrapper(title, fields, opts = {}) {
+    const { microcopy, secondaryTitle = "Dados opcionais / CRM", secondaryFields } = opts;
     const disabledAttr = !cfg ? " disabled title='Configure o arquivo de conexão primeiro.'" : "";
+    const microcopyHtml = microcopy ? `<p class="cc-form-microcopy">${escapeHtml(microcopy)}</p>` : "";
+    const secondaryHtml = secondaryFields ? `
+      <div class="cc-form-section cc-form-section-secondary">
+        <p class="cc-form-section-title cc-form-section-title-secondary">${escapeHtml(secondaryTitle)}</p>
+        <div class="cc-form-grid">${secondaryFields}</div>
+      </div>` : "";
     return `<form class="cc-form" novalidate>
       <h4 class="cc-form-title">${title}</h4>
+      ${microcopyHtml}
       <div class="cc-form-grid">${fields}</div>
+      ${secondaryHtml}
       <div class="cc-submit-row">
         <button type="submit" class="cc-btn-submit"${disabledAttr}>Salvar no Google Sheets</button>
       </div>
@@ -1952,14 +1975,22 @@ function renderEntradaDados(container) {
   // ── Construtores de formulário ────────────────────────────────────────────
 
   function buildFormPaciente() {
+    // M12.1 — "origem" aqui alimenta a coluna ultimo_servico no Apps Script
+    // (_createPaciente: ultimo_servico = data.origem), não um canal de
+    // aquisição — por isso continua texto livre (virar select padronizado
+    // quebraria a semântica), só ganhou o pré-preenchimento "Espirometria".
+    // "canal" é o campo que representa origem/canal de fato — esse sim usa
+    // a lista padronizada.
     return formWrapper("Novo Paciente", [
       field({ id: "primeiro_nome",          label: "Primeiro nome",            required: true }),
-      field({ id: "responsavel",            label: "Responsável",              required: true }),
+      field({ id: "responsavel",            label: "Responsável",              type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
       field({ id: "telefone",               label: "Telefone / WhatsApp",      type: "tel", placeholder: "(11) 99999-9999" }),
-      field({ id: "canal",                  label: "Canal",                    type: "select", options: canalOpts }),
-      field({ id: "origem",                 label: "Origem / serviço",         placeholder: "Espirometria, Teleconsulta..." }),
-      field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts }),
-    ].join(""));
+      field({ id: "canal",                  label: "Canal",                    type: "select", options: origemCanalOpts, value: "Google" }),
+      field({ id: "origem",                 label: "Origem / serviço",         placeholder: "Espirometria, Teleconsulta...", value: "Espirometria" }),
+      field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts, value: "Sim" }),
+    ].join(""), {
+      microcopy: "Digite nome e telefone. Os demais campos já vêm sugeridos e podem ser alterados.",
+    });
   }
 
   // M11 — valor real do exame nasce aqui, na própria tela do atendimento, em
@@ -2087,47 +2118,67 @@ function renderEntradaDados(container) {
   }
 
   function buildFormConsulta() {
-    return formWrapper("Nova Consulta", [
+    // M12.1 — "medica" continua texto livre: não existe hoje nenhuma lista
+    // de profissionais no código para virar select sem inventar dados.
+    const camposConsulta = [
       field({ id: "primeiro_nome",          label: "Primeiro nome",            required: true }),
-      field({ id: "responsavel",            label: "Responsável",              required: true }),
+      field({ id: "responsavel",            label: "Responsável",              type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
       field({ id: "telefone",               label: "Telefone / WhatsApp",      type: "tel" }),
-      field({ id: "origem",                 label: "Origem" }),
-      field({ id: "tipo_consulta",          label: "Tipo de consulta",         type: "select", options: ["Teleatendimento", "Domiciliar", "Presencial", "Retorno"] }),
-      field({ id: "status",                 label: "Status",                   type: "select", options: ["Agendada", "Realizada", "Cancelada", "Remarcada"] }),
+      field({ id: "origem",                 label: "Origem",                   type: "select", options: origemCanalOpts, value: "Google" }),
+      field({ id: "tipo_consulta",          label: "Tipo de consulta",         type: "select", options: ["Teleatendimento", "Domiciliar", "Presencial", "Retorno"], value: "Teleatendimento" }),
+      field({ id: "status",                 label: "Status",                   type: "select", options: ["Agendada", "Realizada", "Cancelada", "Remarcada"], value: "Agendada" }),
       field({ id: "medica",                 label: "Médica / profissional" }),
-      field({ id: "data_consulta",          label: "Data da consulta",         type: "date" }),
-      field({ id: "proximo_contato",        label: "Próximo contato",          type: "date" }),
+      field({ id: "data_consulta",          label: "Data da consulta",         type: "date", value: hojeISO() }),
+      field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts, value: "Sim" }),
+    ].join("");
+
+    const camposConsultaOpcionais = [
+      field({ id: "proximo_contato",        label: "Próximo contato",          type: "date", hint: "Opcional" }),
       field({ id: "motivo_proximo_contato", label: "Motivo do próximo contato" }),
-      field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts }),
-    ].join(""));
+    ].join("");
+
+    return formWrapper("Nova Consulta", camposConsulta, { secondaryFields: camposConsultaOpcionais });
   }
 
   function buildFormClinica() {
+    // M12.1 — "Medicina do Trabalho" não existe em tipo_clinica; mantida a
+    // primeira opção existente ("Clínica") como default, conforme reportado
+    // no relatório desta etapa, em vez de inventar uma opção nova na lista.
     return formWrapper("Nova Clínica B2B", [
       field({ id: "nome_clinica",       label: "Nome da clínica / empresa",   required: true }),
-      field({ id: "status",             label: "Status",                      required: true, type: "select", options: etapaOpts }),
-      field({ id: "tipo_clinica",       label: "Tipo",                        type: "select", options: ["Clínica", "Consultório", "Hospital", "Empresa/PCMSO", "Laboratório", "Outro"] }),
+      field({ id: "status",             label: "Status",                      required: true, type: "select", options: etapaOpts, value: "Não abordada" }),
+      field({ id: "tipo_clinica",       label: "Tipo",                        type: "select", options: ["Clínica", "Consultório", "Hospital", "Empresa/PCMSO", "Laboratório", "Outro"], value: "Clínica" }),
       field({ id: "bairro",             label: "Bairro" }),
       field({ id: "regiao",             label: "Região" }),
       field({ id: "telefone_whatsapp",  label: "Telefone / WhatsApp",         type: "tel" }),
-      field({ id: "origem",             label: "Origem da lista" }),
-      field({ id: "interesse",          label: "Interesse" }),
-      field({ id: "proximo_passo",      label: "Próximo passo" }),
-      field({ id: "data_proximo_passo", label: "Data do próximo passo",       type: "date" }),
-      field({ id: "responsavel",        label: "Responsável" }),
-      field({ id: "prioridade",         label: "Prioridade",                  type: "select", options: prioOpts }),
-    ].join(""));
+      field({ id: "origem",             label: "Origem da lista",             type: "select", options: origemCanalOpts, value: "Google" }),
+      field({ id: "interesse",          label: "Interesse",                   value: "Espirometria ocupacional / PCMSO" }),
+      field({ id: "responsavel",        label: "Responsável",                 type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo" }),
+      field({ id: "prioridade",         label: "Prioridade",                  type: "select", options: prioOpts, value: "Normal" }),
+    ].join(""), {
+      secondaryFields: [
+        field({ id: "proximo_passo",      label: "Próximo passo" }),
+        field({ id: "data_proximo_passo", label: "Data do próximo passo",       type: "date", hint: "Opcional" }),
+      ].join(""),
+    });
   }
 
   function buildFormInteracao() {
+    // M12.1 — nem "Contato realizado" nem "Em negociação" existem literalmente
+    // em etapaOpts (CRM_ETAPAS_ATIVAS/TERMINAIS); "Em conversa" é a etapa
+    // existente mais próxima do sentido de "acabei de registrar um contato",
+    // reportada no relatório desta etapa.
     return formWrapper("Registrar Contato com Clínica", [
       field({ id: "nome_clinica",      label: "Nome da clínica",             required: true, hint: " — deve corresponder ao nome no CRM" }),
-      field({ id: "etapa",             label: "Nova etapa",                  required: true, type: "select", options: etapaOpts }),
-      field({ id: "proxima_acao",      label: "Próxima ação" }),
-      field({ id: "data_proxima_acao", label: "Data da próxima ação",        type: "date" }),
-      field({ id: "prioridade",        label: "Prioridade",                  type: "select", options: prioOpts }),
-      field({ id: "responsavel",       label: "Responsável",                 required: true }),
-    ].join(""));
+      field({ id: "etapa",             label: "Nova etapa",                  required: true, type: "select", options: etapaOpts, value: "Em conversa" }),
+      field({ id: "prioridade",        label: "Prioridade",                  type: "select", options: prioOpts, value: "Normal" }),
+      field({ id: "responsavel",       label: "Responsável",                 type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
+    ].join(""), {
+      secondaryFields: [
+        field({ id: "proxima_acao",      label: "Próxima ação" }),
+        field({ id: "data_proxima_acao", label: "Data da próxima ação",        type: "date", hint: "Opcional" }),
+      ].join(""),
+    });
   }
 
   function buildFormLead() {
@@ -2139,30 +2190,25 @@ function renderEntradaDados(container) {
       "Clínicas",
       "PCMSO / empresa",
     ];
-    const origemLeadOpts = [
-      "Google",
-      "WhatsApp",
-      "Instagram",
-      "Site",
-      "Painel VPS",
-      "Indicação",
-      "Clínica parceira",
-      "Tráfego pago",
-      "Painel VPS",
-      "Outro",
-    ];
+    // M12.1 — troca a lista local (que tinha "Painel VPS" duplicado) pela
+    // lista padronizada de origem/canal, reaproveitada em mais abas.
     const etapaLeadOpts = LEAD_ETAPA_OPTIONS;
-    return formWrapper("Novo Lead", [
+    const camposLead = [
       field({ id: "nome",              label: "Nome",                required: true }),
       field({ id: "telefone_whatsapp", label: "Telefone / WhatsApp", type: "tel", placeholder: "(21) 99999-9999" }),
-      field({ id: "servico_interesse", label: "Serviço de interesse", type: "select", options: servicoOpts }),
-      field({ id: "origem",            label: "Origem",              type: "select", options: origemLeadOpts }),
-      field({ id: "etapa",             label: "Etapa",               type: "select", options: etapaLeadOpts }),
-      field({ id: "responsavel",       label: "Responsável",         required: true }),
+      field({ id: "servico_interesse", label: "Serviço de interesse", type: "select", options: servicoOpts, value: "Espirometria" }),
+      field({ id: "origem",            label: "Origem",              type: "select", options: origemCanalOpts, value: "Google" }),
+      field({ id: "etapa",             label: "Etapa",               type: "select", options: etapaLeadOpts, value: "Novo contato" }),
+      field({ id: "responsavel",       label: "Responsável",         type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
+    ].join("");
+
+    const camposLeadOpcionais = [
       field({ id: "proxima_acao",      label: "Próxima ação" }),
-      field({ id: "data_proxima_acao", label: "Data da próxima ação", type: "date" }),
+      field({ id: "data_proxima_acao", label: "Data da próxima ação", type: "date", hint: "Opcional" }),
       field({ id: "observacao",        label: "Observação" }),
-    ].join(""));
+    ].join("");
+
+    return formWrapper("Novo Lead", camposLead, { secondaryFields: camposLeadOpcionais });
   }
 
   const tabs = {
