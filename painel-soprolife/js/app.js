@@ -2248,6 +2248,37 @@ function renderEntradaDados(container) {
   // operador achar que aquele valor foi mesmo recebido (M11.1.1).
   const EF_STATUS_SEM_RECEBIMENTO = ["Pendente", "Cortesia", "Cancelado"];
 
+  // M12.2A — payload operacional aceito por _createEspirometria (Apps
+  // Script), espelhando exatamente _HEADERS_ESPI (sync-crm-pacientes.gs):
+  // exame_id, data_entrada, primeiro_nome, telefone, servico, origem,
+  // status_exame, data_exame, proximo_contato, motivo_proximo_contato,
+  // canal, responsavel, consentimento_whatsapp. exame_id/data_entrada são
+  // gerados no Apps Script; "canal" não tem campo próprio nesta tela (fica
+  // de fora, como já era antes do M12.2A). observacao/observacao_financeira
+  // NÃO fazem parte deste contrato — não enviadas, pra não depender de
+  // mudança no Apps Script (evitada nesta etapa por não ser indispensável).
+  //
+  // M12.2B — id_atendimento (hidden input já gerado por formulário, mesmo
+  // valor reaproveitado pelo financeiro) também vai no payload operacional.
+  // O Apps Script decide se usa esse valor como exame_id (upsert) ou cai no
+  // _nextId antigo — a validação de formato fica só no back-end (mesma
+  // fonte de verdade que já valida o campo no financeiro).
+  function buildEspirometriaOperacionalPayload(formData) {
+    return {
+      id_atendimento:         formData.id_atendimento          || "",
+      primeiro_nome:          formData.primeiro_nome          || "",
+      responsavel:            formData.responsavel            || "",
+      telefone:               formData.telefone                || "",
+      servico:                "Espirometria",
+      origem:                 formData.origem                  || "",
+      status_exame:           formData.status_exame            || "",
+      data_exame:             formData.data_exame              || "",
+      proximo_contato:        formData.proximo_contato         || "",
+      motivo_proximo_contato: formData.motivo_proximo_contato  || "",
+      consentimento_whatsapp: formData.consentimento_whatsapp  || "",
+    };
+  }
+
   function bindFormEspiFinanceiro(panel, form, result) {
     const valorCobradoInput    = form.querySelector("#valor_cobrado");
     const valorRecebidoInput   = form.querySelector("#valor_recebido");
@@ -2340,17 +2371,51 @@ function renderEntradaDados(container) {
       btn.textContent = "Salvando…";
       result.hidden = true;
 
-      // Envia SOMENTE o payload financeiro seguro (resultado.payload) — nunca
-      // o formData bruto, que pode conter primeiro_nome/responsavel/telefone
-      // dos campos de atendimento da mesma tela.
+      // M12.2A — dual-save independente: tenta primeiro o registro
+      // operacional em CRM Espirometria (createEspirometria, com
+      // identidade do paciente) e depois o lançamento financeiro seguro
+      // (registrarEspirometriaFinanceiro — envia SOMENTE resultado.payload,
+      // nunca o formData bruto, que tem primeiro_nome/responsavel/telefone).
+      // As duas chamadas são independentes: a falha de uma não cancela a
+      // outra, pra não regredir o fluxo financeiro já validado em produção
+      // (M11.2C) por causa de uma falha no CRM operacional, que é novo
+      // nesta etapa. btn.disabled acima já evita reenvio duplicado por
+      // duplo clique; id_atendimento permanece o mesmo hidden input gerado
+      // uma vez por render do formulário (upsert no financeiro).
       try {
-        await submitToCommandCenter("registrarEspirometriaFinanceiro", resultado.payload);
-        result.className = "cc-result cc-result-ok";
-        result.textContent = "Lançamento financeiro salvo no Google Sheets.";
-        result.hidden = false;
-      } catch (err) {
-        result.className = "cc-result cc-result-err";
-        result.textContent = "Erro: " + err.message;
+        const payloadOperacional = buildEspirometriaOperacionalPayload(formData);
+
+        let crmOk = false;
+        let crmErro = null;
+        try {
+          await submitToCommandCenter(ACTION_MAP.espi, payloadOperacional);
+          crmOk = true;
+        } catch (err) {
+          crmErro = err.message;
+        }
+
+        let finOk = false;
+        let finErro = null;
+        try {
+          await submitToCommandCenter("registrarEspirometriaFinanceiro", resultado.payload);
+          finOk = true;
+        } catch (err) {
+          finErro = err.message;
+        }
+
+        if (crmOk && finOk) {
+          result.className = "cc-result cc-result-ok";
+          result.textContent = "Espirometria salva no CRM e lançamento financeiro salvo no Google Sheets.";
+        } else if (crmOk && !finOk) {
+          result.className = "cc-result cc-result-err";
+          result.textContent = "Falha parcial: espirometria salva no CRM, mas o lançamento financeiro FALHOU — " + finErro;
+        } else if (!crmOk && finOk) {
+          result.className = "cc-result cc-result-err";
+          result.textContent = "Falha parcial: lançamento financeiro salvo no Google Sheets, mas o registro no CRM Espirometria FALHOU — " + crmErro;
+        } else {
+          result.className = "cc-result cc-result-err";
+          result.textContent = "Falha ao salvar nos dois destinos — CRM: " + crmErro + " | Financeiro: " + finErro;
+        }
         result.hidden = false;
       } finally {
         btn.disabled = false;

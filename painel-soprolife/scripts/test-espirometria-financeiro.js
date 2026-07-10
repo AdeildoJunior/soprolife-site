@@ -397,6 +397,106 @@ caso("espirometria-financeiro.js continua sem fetch (M11.2C.1 não mexeu no arqu
 caso("espirometria-financeiro.js continua sem XMLHttpRequest (M11.2C.1 não mexeu no arquivo)",
      !/XMLHttpRequest/.test(efSrc));
 
+// M12.2A — Nova Espirometria também grava registro operacional em CRM
+// Espirometria. bindFormEspiFinanceiro() agora faz dual-save: chama
+// createEspirometria (ACTION_MAP.espi) com o payload operacional e, na
+// sequência, registrarEspirometriaFinanceiro com resultado.payload (nunca
+// o formData bruto). Checagens estáticas de texto sobre app.js e sobre o
+// Apps Script — não faz chamada real ao Google Sheets.
+console.log();
+console.log("M12.2A — Espirometria também grava registro operacional no CRM (checagens estáticas)");
+
+const bindFormEspiSrc = (() => {
+  const inicio = appJsSrc.indexOf("function bindFormEspiFinanceiro(");
+  const fim    = appJsSrc.indexOf("function bindForm(panel, tabName)", inicio);
+  return fim > inicio ? appJsSrc.slice(inicio, fim) : "";
+})();
+
+caso("app.js chama createEspirometria (via ACTION_MAP.espi) dentro do fluxo da Nova Espirometria",
+     /submitToCommandCenter\(ACTION_MAP\.espi,\s*payloadOperacional\)/.test(bindFormEspiSrc));
+caso("app.js continua chamando registrarEspirometriaFinanceiro dentro do mesmo fluxo",
+     /submitToCommandCenter\("registrarEspirometriaFinanceiro",\s*resultado\.payload\)/.test(bindFormEspiSrc));
+caso("registrarEspirometriaFinanceiro recebe resultado.payload — não o formData bruto",
+     bindFormEspiSrc.includes('submitToCommandCenter("registrarEspirometriaFinanceiro", resultado.payload)') &&
+     !/submitToCommandCenter\("registrarEspirometriaFinanceiro",\s*formData\)/.test(bindFormEspiSrc));
+caso("payload operacional não inclui campos financeiros (valor_cobrado/valor_recebido/status_pagamento)",
+     (() => {
+       const inicio = appJsSrc.indexOf("function buildEspirometriaOperacionalPayload(");
+       const fim    = appJsSrc.indexOf("function bindFormEspiFinanceiro(", inicio);
+       const trecho = fim > inicio ? appJsSrc.slice(inicio, fim) : "";
+       return trecho.length > 0 &&
+         !trecho.includes("valor_cobrado") && !trecho.includes("valor_recebido") &&
+         !trecho.includes("status_pagamento");
+     })());
+
+caso("createEspirometria existe no Apps Script (função)",
+     /function _createEspirometria\s*\(/.test(gsSrc));
+caso("createEspirometria está registrada no switch de ações do Apps Script",
+     /case "createEspirometria":/.test(gsSrc));
+caso("buildEspirometriaFinanceiroPayload continua sem fetch (M12.2A não mexeu no arquivo financeiro)",
+     !/\bfetch\s*\(/.test(efSrc));
+caso("buildEspirometriaFinanceiroPayload continua sem XMLHttpRequest (M12.2A não mexeu no arquivo financeiro)",
+     !/XMLHttpRequest/.test(efSrc));
+caso("app.js continua sem URL do Apps Script (script.google.com) após o M12.2A",
+     !/script\.google\.com/.test(appJsSrc));
+
+// M12.2B — Upsert/idempotência no CRM Espirometria. id_atendimento (mesmo
+// hidden input técnico já usado pelo financeiro) passa a viajar também no
+// payload operacional, e _createEspirometria usa esse valor como exame_id
+// quando o formato é seguro, procurando a linha existente antes de decidir
+// entre criar ou atualizar — evita duplicar linha em reenvio (duplo clique
+// ou reenvio manual após falha parcial). Checagens estáticas de texto sobre
+// app.js e command-center-api.gs — sem chamada real ao Google Sheets.
+console.log();
+console.log("M12.2B — Upsert/idempotência no CRM Espirometria (checagens estáticas)");
+
+const buildOperacionalSrc = (() => {
+  const inicio = appJsSrc.indexOf("function buildEspirometriaOperacionalPayload(");
+  const fim    = appJsSrc.indexOf("function bindFormEspiFinanceiro(", inicio);
+  return fim > inicio ? appJsSrc.slice(inicio, fim) : "";
+})();
+caso("payload operacional (buildEspirometriaOperacionalPayload) inclui id_atendimento",
+     /id_atendimento:\s*formData\.id_atendimento/.test(buildOperacionalSrc));
+
+const createEspiGsSrc = (() => {
+  const inicio = gsSrc.indexOf("function _createEspirometria(");
+  const fim    = gsSrc.indexOf("function _createConsulta(", inicio);
+  return fim > inicio ? gsSrc.slice(inicio, fim) : "";
+})();
+caso("_createEspirometria lê data.id_atendimento", createEspiGsSrc.includes("data.id_atendimento"));
+caso("_createEspirometria valida o formato do id_atendimento antes de usar (regex fechada)",
+     /_ESPI_ID_ATENDIMENTO_RX\s*=\s*\/\^\[A-Za-z0-9-\]\{1,64\}\$\//.test(gsSrc) &&
+     createEspiGsSrc.includes("_espiIdAtendimentoSeguro(data.id_atendimento)"));
+caso("_createEspirometria usa o id_atendimento seguro como exame_id",
+     /var id = existente \? idAtendimentoSeguro : \(idAtendimentoSeguro \|\| _nextId\(sheet, "ESP"\)\)/.test(createEspiGsSrc));
+caso("_createEspirometria busca linha existente por exame_id antes de decidir criar/atualizar (upsert)",
+     /_findRowByIdColumn\(sheet,\s*"exame_id",\s*idAtendimentoSeguro\)/.test(createEspiGsSrc));
+caso("_createEspirometria atualiza a linha existente em vez de duplicar quando encontrada",
+     /if\s*\(existente\)\s*\{[\s\S]*?_writeCellVerified/.test(createEspiGsSrc));
+caso("_createEspirometria continua criando linha nova quando não há id_atendimento/linha existente",
+     createEspiGsSrc.includes("_appendRowSemValidacao(sheet, _buildRow(sheet, camposLinha))"));
+caso("_createEspirometria não cria coluna nova — reaproveita exame_id já existente no cabeçalho",
+     !createEspiGsSrc.includes("_ensureExtraColumns") && !createEspiGsSrc.includes("_ensureSheetHeader"));
+
+const registrarFinanceiroGsSrc = (() => {
+  const inicio = gsSrc.indexOf("function _registrarEspirometriaFinanceiro(");
+  const fim    = gsSrc.indexOf("\nfunction _updateLeadStage(", inicio);
+  return fim > inicio ? gsSrc.slice(inicio, fim) : "";
+})();
+caso("registrarEspirometriaFinanceiro continua inalterado pelo M12.2B (sem marcas do upsert de exame_id)",
+     registrarFinanceiroGsSrc.length > 0 &&
+     !registrarFinanceiroGsSrc.includes("_espiIdAtendimentoSeguro") &&
+     !registrarFinanceiroGsSrc.includes("exame_id"));
+
+caso("app.js continua enviando resultado.payload (não FormData bruto) para registrarEspirometriaFinanceiro após o M12.2B",
+     bindFormEspiSrc.includes('submitToCommandCenter("registrarEspirometriaFinanceiro", resultado.payload)'));
+caso("app.js continua sem script.google.com hardcoded após o M12.2B",
+     !/script\.google\.com/.test(appJsSrc));
+caso("espirometria-financeiro.js continua sem fetch após o M12.2B",
+     !/\bfetch\s*\(/.test(efSrc));
+caso("espirometria-financeiro.js continua sem XMLHttpRequest após o M12.2B",
+     !/XMLHttpRequest/.test(efSrc));
+
 console.log();
 if (falhas) { console.log(`RESULTADO: ${falhas} caso(s) FALHARAM.`); process.exit(1); }
 console.log("RESULTADO: todos os casos passaram.");

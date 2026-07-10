@@ -340,6 +340,20 @@ function _createPaciente(data) {
   return _ok({ id: id, message: "Paciente criado com sucesso." });
 }
 
+// M12.2B — id_atendimento técnico (gerado no front, hidden input estável
+// por formulário, mesmo valor já reaproveitado por registrarEspirometria-
+// Financeiro) pode virar o próprio exame_id, permitindo upsert idempotente:
+// reenviar o mesmo formulário (duplo clique, ou reenvio manual após falha
+// parcial) atualiza a linha existente em vez de duplicar. Formato fechado
+// simples — mesma regra do validador client-side (espirometria-
+// financeiro.js, EF_ID_ATENDIMENTO_RX) — nunca aceita texto livre como
+// nome de coluna/valor de célula.
+var _ESPI_ID_ATENDIMENTO_RX = /^[A-Za-z0-9-]{1,64}$/;
+function _espiIdAtendimentoSeguro(raw) {
+  var v = (raw === undefined || raw === null) ? "" : String(raw).trim();
+  return _ESPI_ID_ATENDIMENTO_RX.test(v) ? v : "";
+}
+
 function _createEspirometria(data) {
   _required(data, ["primeiro_nome", "responsavel"]);
 
@@ -347,33 +361,68 @@ function _createEspirometria(data) {
   var auditT0        = Date.now();
 
   var sheet   = _getOrCreateSheet(_SHEETS.ESPIROMETRIA);
-  var id      = _nextId(sheet, "ESP");
   var consent = _normalizeConsent(data.consentimento_whatsapp);
 
+  // Se id_atendimento vier num formato seguro, procura uma linha existente
+  // com esse mesmo exame_id antes de decidir criar ou atualizar. Reaproveita
+  // a coluna exame_id já existente — nenhuma coluna nova é criada. Se o
+  // valor vier ausente/inválido, cai no comportamento antigo (_nextId),
+  // exatamente como antes do M12.2B.
+  var idAtendimentoSeguro = _espiIdAtendimentoSeguro(data.id_atendimento);
+  var existente = idAtendimentoSeguro ? _findRowByIdColumn(sheet, "exame_id", idAtendimentoSeguro) : null;
+  var id = existente ? idAtendimentoSeguro : (idAtendimentoSeguro || _nextId(sheet, "ESP"));
+
+  var camposLinha = {
+    exame_id:               id,
+    data_entrada:           _nowBr(),
+    primeiro_nome:          data.primeiro_nome              || "",
+    telefone:               data.telefone                   || "",
+    servico:                data.servico                    || "Espirometria",
+    origem:                 data.origem                     || "",
+    status_exame:           data.status_exame               || "Aguardando",
+    data_exame:             data.data_exame                 || "",
+    proximo_contato:        data.proximo_contato            || "",
+    motivo_proximo_contato: data.motivo_proximo_contato     || "",
+    canal:                  data.canal                      || "",
+    responsavel:            data.responsavel                || "",
+    consentimento_whatsapp: consent,
+  };
+
+  var atualizado = false;
   try {
-    _appendRowSemValidacao(sheet, _buildRow(sheet, {
-      exame_id:               id,
-      data_entrada:           _nowBr(),
-      primeiro_nome:          data.primeiro_nome              || "",
-      telefone:               data.telefone                   || "",
-      servico:                data.servico                    || "Espirometria",
-      origem:                 data.origem                     || "",
-      status_exame:           data.status_exame               || "Aguardando",
-      data_exame:             data.data_exame                 || "",
-      proximo_contato:        data.proximo_contato            || "",
-      motivo_proximo_contato: data.motivo_proximo_contato     || "",
-      canal:                  data.canal                      || "",
-      responsavel:            data.responsavel                || "",
-      consentimento_whatsapp: consent,
-    }));
+    if (existente) {
+      var row = _buildRow(sheet, camposLinha);
+      var updateFailures = [];
+      row.forEach(function(val, i) {
+        if (!_writeCellVerified(sheet, existente.rowIdx, i + 1, val)) updateFailures.push(existente.headers[i]);
+      });
+      if (updateFailures.length > 0) {
+        throw new Error("Falha ao gravar campos: " + updateFailures.join(", "));
+      }
+      atualizado = true;
+    } else {
+      _appendRowSemValidacao(sheet, _buildRow(sheet, camposLinha));
+    }
   } catch (e) {
     _auditAcao(auditRequestId, auditT0, "create_espirometria", "espirometria", id, data, "ERROR: falha na gravacao");
     throw e;
   }
 
-  _logEntry({ acao: "createEspirometria", status: "OK", aba: _SHEETS.ESPIROMETRIA, id: id, resumo: "Espirometria registrada." });
-  _auditAcao(auditRequestId, auditT0, "create_espirometria", "espirometria", id, data, "ok");
-  return _ok({ id: id, message: "Espirometria registrada com sucesso." });
+  _logEntry({
+    acao:   "createEspirometria",
+    status: "OK",
+    aba:    _SHEETS.ESPIROMETRIA,
+    id:     id,
+    resumo: atualizado ? "Espirometria atualizada (upsert)." : "Espirometria registrada.",
+  });
+  _auditAcao(auditRequestId, auditT0, "create_espirometria", "espirometria", id, data, atualizado ? "ok: update" : "ok: insert");
+  return _ok({
+    id:        id,
+    exame_id:  id,
+    created:   !atualizado,
+    updated:   atualizado,
+    message:   atualizado ? "Espirometria atualizada com sucesso." : "Espirometria registrada com sucesso.",
+  });
 }
 
 function _createConsulta(data) {
