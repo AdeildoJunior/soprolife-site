@@ -7147,3 +7147,1138 @@ th {
   .hoje-panel .panel-header { flex-direction: column; align-items: flex-start; }
   .hoje-panel .saude-status-chip { white-space: normal; line-height: 1.4; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   M13.4 — PAINEL GERAL PREMIUM (camada final)
+   Régua única do relatório M13.3B: gap 16px, stack 24px, radius 12/16px,
+   sombra por camada, KPIs direto na grade (sem caixa externa), hero em
+   faixa executiva e hub (Cérebro/Hoje) com linhas em vez de caixas.
+   Camada final por design: sobrescreve v1–v4 sem removê-las — a remoção
+   dos blocos antigos é escopo da M13.7 (consolidação sem mudança visual).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --gap: 16px;
+  --stack: 24px;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --shadow-1: 0 1px 2px rgba(12, 31, 61, .05);
+  --shadow-2: 0 4px 16px rgba(12, 31, 61, .08);
+  --shadow-3: 0 16px 48px rgba(12, 31, 61, .18);
+}
+
+/* ── Shell: fundo plano, sem textura de pontos nem gradiente ─────────────── */
+.app-shell { background: var(--bg); }
+
+.main {
+  background-color: var(--bg);
+  background-image: none;
+}
+
+/* ── Topbar: sem borda-gradiente; título único da página ─────────────────── */
+.topbar {
+  border: 1px solid rgba(219, 229, 239, .55);
+  border-image: none;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--gap);
+}
+
+/* ── Hero: faixa executiva baixa — título + 1 frase | strip de status ────── */
+.hero {
+  background:
+    radial-gradient(ellipse 55% 120% at 96% 10%, rgba(23, 181, 165, .20) 0%, transparent 60%),
+    linear-gradient(128deg, #0d2544 0%, #0a1e36 55%, #071829 100%);
+  background-size: auto;
+  border-radius: var(--radius-lg);
+  padding: 20px 28px;
+  margin-bottom: var(--gap);
+  gap: 32px;
+  align-items: center;
+  box-shadow: var(--shadow-1);
+}
+
+.hero h2 {
+  font-size: 1.3rem !important;
+  margin: 0 0 4px !important;
+}
+
+.hero-sub {
+  margin: 0 !important;
+  font-size: .82rem !important;
+  max-width: 560px;
+  line-height: 1.5;
+}
+
+.hero-status-panel {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+
+.hero-stat {
+  padding: 2px 24px;
+  border-left: 1px solid rgba(255, 255, 255, .14);
+}
+
+.hero-stat:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+
+.hero-stat:last-child { padding-right: 0; }
+
+/* ── Fonte dos dados: strip mínima em vez de card solto ──────────────────── */
+.data-freshness {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 2px 2px 12px;
+  margin-bottom: var(--stack);
+  justify-content: flex-start;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.data-freshness .freshness-meta {
+  flex-direction: row;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.data-freshness > span:not(.freshness-badge),
+.data-freshness .freshness-meta > span {
+  font-size: .70rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
+}
+
+.data-freshness strong {
+  font-size: .8rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.data-freshness small {
+  font-size: .74rem;
+  color: var(--muted);
+  margin-left: 0;
+}
+
+.data-freshness .freshness-badge {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(29, 183, 166, .30);
+  color: var(--teal-dark);
+  font-size: .68rem;
+  padding: 3px 10px;
+}
+
+/* ── Grupos de indicadores: header de linha, sem caixa externa ───────────── */
+.cards-sections { margin-bottom: var(--stack); }
+
+.cards-section {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  margin-bottom: 18px;
+}
+
+.cards-section:last-child { margin-bottom: 0; }
+
+.cards-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 10px;
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 10px;
+}
+
+.cards-section-header h3 {
+  font-size: .70rem !important;
+  font-weight: 700 !important;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+  color: var(--muted) !important;
+  flex-shrink: 0;
+}
+
+.cards-section-sub {
+  font-size: .70rem;
+  color: var(--muted-light);
+  flex-shrink: 0;
+}
+
+/* Regra hairline preenchendo o resto da linha do header do grupo */
+.cards-section-header::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+  align-self: center;
+}
+
+.cards-section-icon { display: none; }
+
+/* ── KPI card único: borda hairline + sombra suave, sem molduras extras ──── */
+.cards-group {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--gap);
+}
+
+.cards-sections .metric-card,
+.kpi-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  min-height: 104px;
+  justify-content: space-between;
+  box-shadow: var(--shadow-1);
+}
+
+/* Sem listra decorativa no topo do card */
+.kpi-card::before { display: none; }
+
+.cards-sections .metric-card:hover,
+.kpi-card:hover {
+  transform: none;
+  box-shadow: var(--shadow-2);
+  border-color: var(--line);
+}
+
+.kpi-card:focus {
+  transform: none;
+  box-shadow: var(--shadow-2);
+}
+
+.kpi-value {
+  font-size: clamp(1.05rem, 17cqw, 1.75rem) !important;
+}
+
+/* ── Hub: Cérebro Operacional + Hoje — linhas em vez de caixas ───────────── */
+.hub-grid {
+  gap: var(--gap);
+  margin-bottom: var(--stack);
+}
+
+/* Resumo executivo: banner fino (mantém a cor de status, menos moldura) */
+.cerebro-resumo-exec {
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  margin-bottom: 10px;
+  font-size: .88rem;
+}
+
+/* Síntese: linhas com divisor hairline — label à esquerda, valor à direita */
+.cerebro-sintese {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.cerebro-sintese-item {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-light);
+  padding: 9px 2px;
+}
+
+.cerebro-sintese-item span { flex-shrink: 0; }
+
+.cerebro-sintese-item strong {
+  font-size: .88rem;
+  text-align: right;
+}
+
+/* Top 3 do Cérebro: lista limpa com número em círculo e divisores */
+.cerebro-top3 { gap: 0; }
+
+.cerebro-top3 li {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-light);
+  padding: 9px 2px;
+  align-items: flex-start;
+}
+
+.cerebro-top3 li:last-child { border-bottom: none; }
+
+.cerebro-top3 li::before {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--line-light);
+  color: var(--muted);
+  font-size: .70rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Projeções: células planas com divisor superior */
+.cerebro-proj {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--line-light);
+  padding: 8px 2px;
+}
+
+/* Ação principal do dia: linha destacada — o badge já sinaliza o nível */
+.hoje-acao-principal {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-light);
+  padding: 10px 2px;
+}
+
+.hoje-total-chip {
+  background: var(--line-light);
+  border: none;
+}
+
+/* Fila do dia: linhas com número em círculo e divisores */
+.hoje-proximas { gap: 0; }
+
+.hoje-proximas li {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-light);
+  padding: 10px 2px;
+}
+
+.hoje-proximas li:last-child { border-bottom: none; }
+
+.hoje-fila-num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--line-light);
+  color: var(--muted);
+  font-size: .70rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Detalhes colapsáveis: link discreto no rodapé do card */
+.hub-details {
+  border-top: none;
+  margin-top: 8px;
+}
+
+.hub-details summary {
+  padding: 8px 2px;
+  font-size: .82rem;
+}
+
+/* ── Panels: header limpo, sem fundo próprio nem marcador colorido ───────── */
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.panel:hover { box-shadow: var(--shadow-1); }
+
+.panel-header {
+  background: transparent;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--line-light);
+  margin-bottom: 16px;
+}
+
+.panel-header h3::before { display: none; }
+
+/* ── Gráficos: coluna 2fr/1fr e altura fixa alinhada ─────────────────────── */
+.grid-two {
+  grid-template-columns: 2fr 1fr;
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+
+.chart-box {
+  position: relative;
+  height: 280px;
+}
+
+.chart-box > canvas { max-height: none; }
+
+/* ── Próximas ações: itens como linhas ───────────────────────────────────── */
+.task-list { gap: 0; }
+
+.task {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-light);
+  padding: 10px 2px;
+}
+
+.task:last-child { border-bottom: none; }
+
+/* ── B2B/PCMSO: stats como chips-resumo, itens como linhas ───────────────── */
+.b2b-panel { margin-top: var(--gap); }
+
+.b2b-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.b2b-stat {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 7px;
+  background: var(--line-light);
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+
+.b2b-stat span { font-size: .68rem; }
+.b2b-stat strong { font-size: .85rem; }
+
+#b2bPanel .acoes-lista { gap: 4px; }
+
+#b2bPanel .acoes-item {
+  background: transparent;
+  border: none;
+  border-left: 3px solid var(--line);
+  border-radius: 0;
+  padding: 10px 0 10px 12px;
+}
+
+#b2bPanel .acoes-item.saude-atencao      { border-left-color: #b5730a; }
+#b2bPanel .acoes-item.saude-critico      { border-left-color: #b3261e; }
+#b2bPanel .acoes-item.saude-ok           { border-left-color: #0d7a5f; }
+#b2bPanel .acoes-item.saude-desconhecido { border-left-color: #8195a8; }
+
+/* ── Banner crítico: faixa fina ──────────────────────────────────────────── */
+.saude-banner-critico {
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--gap);
+}
+
+/* ── Nota da aba Lançamentos (substitui o style inline removido do HTML) ─── */
+#lancamentos .crm-safe-note { margin-top: 1rem; }
+
+/* ── Responsivo da camada M13.4 (reafirma quebras sobrescritas acima) ────── */
+@media (max-width: 1180px) {
+  .grid-two { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 18px 20px;
+  }
+
+  .hero-status-panel {
+    flex-wrap: wrap;
+    gap: 10px 0;
+  }
+
+  .hero-stat { padding: 2px 18px; }
+  .hero-stat:first-child { padding-left: 0; }
+}
+
+@media (max-width: 720px) {
+  .cards-group { grid-template-columns: repeat(2, 1fr); }
+  .chart-box { height: 240px; }
+}
+
+@media (max-width: 480px) {
+  .cards-group { grid-template-columns: 1fr; }
+}
+
+/* ── Hub de navegação do Painel Geral (M13.4B) ────────────────────────────
+   Cards de acesso às áreas — ícone em caixa suave, nome e descrição de uma
+   linha, centralizados. Padrão genérico de admin dashboard premium: a home
+   navega; os números detalhados moram em cada área. */
+.nav-hub {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
+  gap: var(--gap);
+  margin-bottom: var(--stack);
+}
+
+.nav-hub-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: center;
+  gap: 3px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  padding: 20px 14px 16px;
+  min-height: 130px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: box-shadow var(--ease), border-color var(--ease), transform var(--ease);
+}
+
+.nav-hub-card:hover,
+.nav-hub-card:focus-visible {
+  border-color: rgba(23, 181, 165, .45);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-2px);
+}
+
+.nav-hub-card:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.nav-hub-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--teal-soft, #e8f7f6);
+  color: var(--teal-dark);
+  display: grid;
+  place-items: center;
+  margin-bottom: 7px;
+  flex-shrink: 0;
+}
+
+.nav-hub-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.nav-hub-card strong {
+  font-size: .855rem;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -.01em;
+  line-height: 1.25;
+}
+
+.nav-hub-desc {
+  font-size: .72rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+@media (max-width: 720px) {
+  .nav-hub { grid-template-columns: repeat(2, 1fr); }
+  .nav-hub-card { min-height: 116px; padding: 16px 10px 13px; }
+}
+
+@media (max-width: 380px) {
+  .nav-hub { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   M13.5 — PADRONIZAÇÃO PREMIUM DAS SUBPÁGINAS (camada final)
+   Padrão único em todas as seções: cards no topo → gráficos → dados
+   escritos no fundo, com visual limpo (borda hairline + sombra suave,
+   radius 12/16, sem gradientes decorativos, listas com divisores).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Títulos de seção: sem selo lateral colorido ─────────────────────────── */
+.section-title,
+.section-heading {
+  padding-left: 0;
+}
+
+.section-title::before,
+.section-heading::before {
+  display: none;
+}
+
+/* ── Grades de stats: mesma régua em todas as páginas ────────────────────── */
+.crm-stats,
+.lead-stats,
+.marketing-stats,
+.finance-stats,
+.document-stats,
+.automation-stats,
+.lancamentos-stats,
+.ci-stats,
+.parceria-stats {
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+
+/* ── Stat cards unificados: sem círculo decorativo, proporção contida ────── */
+.stat-card {
+  border-radius: var(--radius-md) !important;
+  padding: 14px 16px !important;
+  box-shadow: var(--shadow-1) !important;
+}
+
+.stat-card::before { display: none; }
+
+.stat-card > strong { font-size: 1.45rem !important; }
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2) !important;
+}
+
+/* ── CRM Hub: cards de módulo compactos (antes gigantes) ─────────────────── */
+.crm-hub-grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+
+.crm-module-card {
+  padding: 18px 18px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
+}
+
+.crm-module-card::before { display: none; }
+
+.crm-module-card:hover,
+.crm-module-card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+  border-color: rgba(23, 181, 165, .45);
+}
+
+.crm-module-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 1.2rem;
+  margin-bottom: 12px;
+}
+
+.crm-module-card:hover .crm-module-icon { transform: none; }
+
+.crm-module-title {
+  font-size: .95rem;
+  margin-bottom: 3px;
+}
+
+.crm-module-subtitle {
+  font-size: .76rem;
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+
+.crm-module-stats {
+  gap: 14px;
+  padding-top: 10px;
+  margin-bottom: 8px;
+}
+
+.crm-module-stats-empty {
+  padding-top: 10px;
+  margin-bottom: 8px;
+}
+
+.crm-module-stat strong { font-size: 1.05rem; }
+.crm-module-stat span { font-size: .60rem; }
+
+.crm-module-cta {
+  font-size: .76rem;
+  padding-top: 4px;
+}
+
+/* CRM Pacientes — submódulos na mesma régua */
+.crm-submodule-grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--gap);
+}
+
+.crm-submodule-card {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+}
+
+/* ── Pipelines (funil CRM e etapas de leads): cards limpos ───────────────── */
+.funnel-step,
+.lead-stage {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  min-height: 108px;
+  padding: 14px;
+  box-shadow: var(--shadow-1);
+}
+
+.lead-stage::before { width: 3px; }
+
+.funnel-step::after { opacity: .55; }
+
+.crm-funnel-visual,
+.lead-pipeline {
+  gap: var(--gap);
+}
+
+/* ── Marketing & SEO: KPIs e grids na régua única ────────────────────────── */
+.mkt-kpi-card {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
+  padding: 14px 16px;
+}
+
+.mkt-kpi-card::before { display: none; }
+
+.mkt-kpi-card:hover {
+  transform: none;
+  box-shadow: var(--shadow-2);
+}
+
+.mkt-main-grid {
+  grid-template-columns: 2fr 1fr;
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+
+.mkt-bottom-grid {
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+
+.mkt-insight {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+}
+
+.mkt-insight:hover {
+  transform: none;
+  box-shadow: var(--shadow-2);
+}
+
+/* ── Tarefas: colunas com listas limpas (divisores em vez de caixas) ─────── */
+.task-board-list { gap: 0; }
+
+.task-board-card {
+  background: transparent;
+  border: none !important;
+  border-bottom: 1px solid var(--line-light) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 11px 2px;
+}
+
+.task-board-card:last-child { border-bottom: none !important; }
+
+.task-board-card:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Follow-ups (clínicas e pacientes): card externo leve, itens em linhas ─ */
+.followup-card {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  box-shadow: var(--shadow-1);
+}
+
+.followup-list { gap: 0; }
+
+.followup-item {
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-light);
+  padding: 8px 2px;
+}
+
+.followup-item:last-child { border-bottom: none; }
+
+.fp-card,
+.fpc {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  box-shadow: var(--shadow-1);
+}
+
+.fp-list { gap: 0; }
+
+.fp-item {
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-light);
+  padding: .5rem .15rem;
+}
+
+.fp-item:last-child { border-bottom: none; }
+
+.fp-prev-list { gap: 0; }
+
+.fp-prev-item {
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-light);
+  padding: .55rem .15rem;
+}
+
+.fp-prev-item:last-child { border-bottom: none; }
+
+/* ── Documentos: cards proporcionais ─────────────────────────────────────── */
+.document-grid { gap: var(--gap); }
+
+.document-card {
+  background: #fff;
+  border-radius: var(--radius-md);
+  min-height: 0;
+  box-shadow: var(--shadow-1);
+}
+
+.document-card::before { width: 3px; }
+
+.document-equip-field {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line-light);
+  border-radius: 0;
+  padding: 9px 2px;
+}
+
+.document-equip-fields { gap: 0; }
+
+/* ── Automações: sem gradientes decorativos, mesma elevação ──────────────── */
+.automation-alert,
+.runtime-status-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: 14px 18px;
+}
+
+.automation-source-card,
+.automation-phase {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+}
+
+.automation-grid { gap: var(--gap); }
+.automation-layout { gap: var(--gap); }
+
+/* ── Tabelas: cabeçalho plano e leve em todas as páginas ─────────────────── */
+thead { background: transparent; }
+
+th {
+  background: transparent !important;
+  opacity: 1;
+  color: var(--muted) !important;
+}
+
+/* ── Tabs Parcerias: mesmo trilho pill das outras abas ───────────────────── */
+.parceria-tabs {
+  background: rgba(12, 31, 61, .05);
+  border: 1px solid rgba(219, 229, 239, .6);
+  border-bottom: 1px solid rgba(219, 229, 239, .6);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  gap: 3px;
+}
+
+.parceria-tab {
+  border-bottom: none;
+  margin-bottom: 0;
+  border-radius: 9px;
+  font-size: .79rem;
+  font-weight: 600;
+  padding: 7px 14px;
+}
+
+.parceria-tab.active {
+  background: #fff;
+  color: var(--navy);
+  font-weight: 700;
+  border-bottom: none;
+  box-shadow: 0 1px 6px rgba(12, 31, 61, .10);
+}
+
+.parceria-tab:hover:not(.active) { background: rgba(255, 255, 255, .7); }
+
+/* ── Entrada de Dados: card do formulário e chips na régua ───────────────── */
+.cc-tab-content {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: 22px 24px;
+}
+
+.cc-input,
+.cc-select {
+  border-width: 1px;
+  border-radius: 10px;
+}
+
+.cc-price-chip {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 7px;
+  border-width: 1px;
+  border-radius: 10px;
+  padding: .55rem .9rem;
+}
+
+.cc-price-chip small {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Seção secundária sem "cara de desabilitada" — só o título fica discreto */
+.cc-form-section-secondary { opacity: 1; }
+
+/* ── Notas informativas no fundo das páginas ─────────────────────────────── */
+.leads-concept-note {
+  margin-top: var(--gap);
+  margin-bottom: 0;
+}
+
+/* ── Estados de foco consistentes nos cards clicáveis ────────────────────── */
+.crm-module-card:focus-visible,
+.crm-submodule-card:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   M13.5B — Ajustes de ordem e despoluição (Painel Geral, CRM Hub, Automações)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── CRM Hub: header da seção Relatórios (abaixo dos cards de módulo) ────── */
+.crm-hub-report-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: var(--stack) 0 var(--gap);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.crm-hub-report-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--navy);
+  margin: 0 0 2px;
+}
+
+.crm-hub-report-header > div > span {
+  font-size: .78rem;
+  color: var(--muted);
+}
+
+.crm-hub-report-header .crm-report-filters {
+  margin-bottom: 0;
+  align-items: flex-end;
+}
+
+/* Gráficos dos relatórios: altura alinhada entre os pares */
+#crmReportChartsGrid .panel canvas {
+  height: 250px !important;
+  max-height: 250px;
+}
+
+#crmReportStats { margin-top: var(--gap); }
+
+/* ── Automações: aviso explicativo vira nota de rodapé discreta ──────────── */
+.automation-alert {
+  background: #f8fcfb;
+  border: 1px solid rgba(29, 183, 166, .18);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  padding: 12px 16px;
+  margin: var(--gap) 0 0;
+}
+
+.automation-alert strong { font-size: .84rem; }
+.automation-alert span { font-size: .8rem; }
+
+/* Runtime status: faixa compacta logo abaixo dos stats */
+.runtime-status-wrap { margin-bottom: var(--gap); }
+
+.runtime-status-card { padding: 12px 16px; }
+
+.runtime-status-card strong {
+  font-size: .92rem;
+  margin-bottom: 2px;
+}
+
+.runtime-status-card p {
+  font-size: .8rem;
+}
+
+/* Painéis da seção Automações no mesmo ritmo vertical */
+.saude-panel,
+.acoes-panel,
+.auditoria-panel {
+  margin-bottom: var(--gap);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   M13.5C — Stat cards pequenos no padrão do Painel Geral (todas as páginas)
+   + despoluição da página Automações
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Grades de stats: mesma malha dos KPIs do Painel Geral ───────────────── */
+.crm-stats,
+.lead-stats,
+.marketing-stats,
+.finance-stats,
+.document-stats,
+.automation-stats,
+.lancamentos-stats,
+.ci-stats,
+.parceria-stats,
+.auditoria-stats {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+/* ── Stat card compacto: proporção idêntica ao KPI do Painel Geral ───────── */
+.stat-card {
+  border-left: 1px solid var(--line) !important;
+  padding: 13px 15px !important;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+.stat-card > span:first-child {
+  font-size: .70rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.stat-card > strong {
+  font-size: 1.4rem !important;
+  line-height: 1.15 !important;
+}
+
+/* Hint vira texto discreto (sem pill), como nos KPIs do Painel Geral */
+.stat-card > small {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  margin-top: 3px !important;
+  font-size: .68rem !important;
+  font-weight: 500 !important;
+  color: var(--muted-light) !important;
+  line-height: 1.35;
+}
+
+/* ── Automações: saúde, fontes e fases compactas ─────────────────────────── */
+.saude-grid {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.saude-card {
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.saude-card-label { font-size: .66rem; }
+.saude-card-status { font-size: .92rem; }
+.saude-card-detalhe { font-size: .74rem; }
+
+.saude-meta {
+  font-size: .78rem;
+  gap: 6px 18px;
+  margin-bottom: 12px;
+}
+
+.saude-alerta {
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.saude-alerta-body strong { font-size: .88rem; }
+.saude-alerta-body p { font-size: .8rem; margin: 3px 0 4px; }
+.saude-alerta-body small { font-size: .74rem; }
+
+.acoes-item { padding: 10px 12px; border-radius: 10px; }
+.acoes-titulo { font-size: .88rem; }
+.acoes-acao { font-size: .84rem; margin: 4px 0 6px; }
+.acoes-meta { font-size: .74rem; }
+
+.auditoria-event { padding: 8px 2px; }
+.auditoria-event-body strong { font-size: .86rem; }
+.auditoria-event-time { font-size: .74rem; min-width: 104px; }
+
+.automation-source-card { padding: 13px 14px; }
+
+.automation-source-top { margin-bottom: 5px; }
+.automation-source-top strong { font-size: .875rem; }
+
+.automation-source-card p {
+  font-size: .76rem;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.automation-source-footer { gap: 5px; }
+.automation-source-footer small { font-size: .70rem; }
+
+.priority {
+  padding: 3px 8px;
+  font-size: .68rem;
+}
+
+.automation-phase {
+  padding: 11px 13px;
+  grid-template-columns: 60px 1fr;
+  gap: 10px;
+}
+
+.automation-phase > span { font-size: .68rem; padding: 4px 6px; }
+.automation-phase strong { font-size: .86rem; margin-bottom: 3px; }
+.automation-phase p { font-size: .78rem; }
+
+.automation-grid { gap: 10px; }
+.automation-timeline { gap: 10px; }
+
+/* Badges dentro dos cards de fonte: menores */
+.automation-source-card .badge {
+  font-size: .68rem;
+  padding: 4px 8px;
+}

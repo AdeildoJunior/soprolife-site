@@ -783,7 +783,6 @@ function renderCards() {
     sections.push(`
       <section class="cards-section">
         <div class="cards-section-header">
-          ${group.icon ? `<span class="cards-section-icon">${group.icon}</span>` : ""}
           <h3>${group.title}</h3>
           ${group.subtitle ? `<span class="cards-section-sub">${group.subtitle}</span>` : ""}
         </div>
@@ -1039,7 +1038,7 @@ function getCrmCardValue(key) {
   return card != null ? card.value : "—";
 }
 
-function crmModuleCard({ icon, title, subtitle, view, stats }) {
+function crmModuleCard({ icon, title, subtitle, view, stats, emptyLabel = "Em breve" }) {
   const statsHtml = stats.length > 0
     ? `<div class="crm-module-stats">${stats.map((s) => `
         <div class="crm-module-stat">
@@ -1047,7 +1046,7 @@ function crmModuleCard({ icon, title, subtitle, view, stats }) {
           <span>${s.label}</span>
         </div>
       `).join("")}</div>`
-    : `<div class="crm-module-stats crm-module-stats-empty"><span>Em breve</span></div>`;
+    : `<div class="crm-module-stats crm-module-stats-empty"><span>${emptyLabel}</span></div>`;
 
   return `
     <article class="crm-module-card" data-crm-view="${view}" tabindex="0" role="button">
@@ -1107,6 +1106,13 @@ function renderCrmHub(container) {
     </div>
   ` : "";
 
+  // Relatórios CRM agora moram no próprio hub (abaixo dos cards) — mesmos
+  // filtros e containers da antiga subview "relatorios".
+  if (!state.crmReportFilters) {
+    state.crmReportFilters = { periodo: "Todos", tipo: "Todos", origem: "Todas" };
+  }
+  const f = state.crmReportFilters;
+
   container.innerHTML = `
     <div class="crm-hub-header">
       <p class="eyebrow">Relacionamento</p>
@@ -1115,6 +1121,14 @@ function renderCrmHub(container) {
     </div>
     ${marcoHtml}
     <div class="crm-hub-grid">
+      ${crmModuleCard({
+        icon: "📝",
+        title: "Entrada de Dados",
+        subtitle: "Cadastrar pacientes, exames, consultas e clínicas",
+        view: "entrada-dados",
+        stats: [],
+        emptyLabel: "Formulários prontos para uso"
+      })}
       ${crmModuleCard({
         icon: "🏥",
         title: "Clínicas e Parceiros",
@@ -1145,26 +1159,61 @@ function renderCrmHub(container) {
         ]
       })}
       ${crmModuleCard({
-        icon: "📊",
-        title: "Relatórios CRM",
-        subtitle: "Indicadores consolidados de relacionamento",
-        view: "relatorios",
-        stats: []
-      })}
-      ${crmModuleCard({
         icon: "⚡",
         title: "Automações CRM",
         subtitle: "Lembretes, reativação e tarefas automáticas",
         view: "automacoes-crm",
         stats: []
       })}
-      ${crmModuleCard({
-        icon: "📝",
-        title: "Entrada de Dados",
-        subtitle: "Cadastrar pacientes, exames, consultas e clínicas",
-        view: "entrada-dados",
-        stats: []
-      })}
+    </div>
+
+    <div class="crm-hub-report-header">
+      <div>
+        <h3>Relatórios CRM</h3>
+        <span>Indicadores consolidados de relacionamento</span>
+      </div>
+      <div class="crm-report-filters">
+        <label>Período
+          <select id="crmReportPeriodo" class="crm-filter-select">
+            <option value="Todos"${f.periodo === "Todos" ? " selected" : ""}>Todos</option>
+            <option value="7d"${f.periodo === "7d" ? " selected" : ""}>Últimos 7 dias</option>
+            <option value="30d"${f.periodo === "30d" ? " selected" : ""}>Últimos 30 dias</option>
+            <option value="mesAtual"${f.periodo === "mesAtual" ? " selected" : ""}>Mês atual</option>
+          </select>
+        </label>
+        <label>Tipo
+          <select id="crmReportTipo" class="crm-filter-select">
+            <option value="Todos"${f.tipo === "Todos" ? " selected" : ""}>Todos</option>
+            <option value="Pacientes"${f.tipo === "Pacientes" ? " selected" : ""}>Pacientes</option>
+            <option value="B2B"${f.tipo === "B2B" ? " selected" : ""}>B2B / Clínicas</option>
+          </select>
+        </label>
+        <label>Origem
+          <select id="crmReportOrigem" class="crm-filter-select">
+            <option value="Todas"${f.origem === "Todas" ? " selected" : ""}>Todas</option>
+            <option value="Google"${f.origem === "Google" ? " selected" : ""}>Google</option>
+            <option value="Site"${f.origem === "Site" ? " selected" : ""}>Site</option>
+            <option value="Indicação"${f.origem === "Indicação" ? " selected" : ""}>Indicação</option>
+            <option value="Outro"${f.origem === "Outro" ? " selected" : ""}>Outro</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div id="crmReportChartsGrid"></div>
+    <div id="crmReportStats" class="crm-stats"></div>
+
+    <article class="panel">
+      <div class="panel-header">
+        <h3>Leituras rápidas</h3>
+        <span>Insights automáticos com base nos dados atuais</span>
+      </div>
+      <div id="crmReportInsights" class="crm-report-insights"></div>
+    </article>
+
+    <div class="crm-safe-note">
+      <span>📊</span>
+      <p><strong>Dados agregados do CRM.</strong> Atualizado a partir dos arquivos locais seguros. Sem dados pessoais exibidos nesta visão.</p>
     </div>
   `;
 
@@ -1180,6 +1229,19 @@ function renderCrmHub(container) {
       }
     });
   });
+
+  const filterIdToKey = { crmReportPeriodo: "periodo", crmReportTipo: "tipo", crmReportOrigem: "origem" };
+  Object.keys(filterIdToKey).forEach((id) => {
+    const select = container.querySelector(`#${id}`);
+    if (select) {
+      select.addEventListener("change", (e) => {
+        state.crmReportFilters[filterIdToKey[id]] = e.target.value;
+        renderCrmReportBody();
+      });
+    }
+  });
+
+  renderCrmReportBody();
 }
 
 function renderCrmClinicas(container) {
@@ -4566,6 +4628,15 @@ function bindEvents() {
         state.crmView = "hub";
         renderCrmView();
       }
+    });
+  });
+
+  // Hub de navegação do Painel Geral (M13.4B): cada card dispara o clique do
+  // item correspondente da sidebar — mesma troca de seção, sem lógica nova.
+  document.querySelectorAll(".nav-hub-card[data-section]").forEach((card) => {
+    card.addEventListener("click", () => {
+      const navItem = document.querySelector(`.nav-item[data-section="${card.dataset.section}"]`);
+      if (navItem) navItem.click();
     });
   });
 
