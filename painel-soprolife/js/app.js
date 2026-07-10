@@ -1914,7 +1914,7 @@ function renderEntradaDados(container) {
 
   // ── Helpers de renderização ───────────────────────────────────────────────
 
-  function field({ id, label, type = "text", options, required, placeholder, hint, value, step }) {
+  function field({ id, label, type = "text", options, required, placeholder, hint, value, step, disabled }) {
     const req = required ? " *" : "";
     const hintHtml = hint ? `<span class="cc-field-hint">${hint}</span>` : "";
     if (type === "select" && options) {
@@ -1933,7 +1933,7 @@ function renderEntradaDados(container) {
     const stepAttr = step ? ` step="${escapeHtml(String(step))}"` : "";
     return `<div class="cc-field-group">
       <label class="cc-label" for="${id}">${label}${req}${hintHtml}</label>
-      <input id="${id}" name="${id}" type="${type}" class="cc-input"${required ? " required" : ""}${valAttr}${stepAttr}${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}>
+      <input id="${id}" name="${id}" type="${type}" class="cc-input"${required ? " required" : ""}${disabled ? " disabled" : ""}${valAttr}${stepAttr}${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}>
     </div>`;
   }
 
@@ -1968,16 +1968,44 @@ function renderEntradaDados(container) {
   const EF_FORMA_PAGAMENTO_OPTS  = ["Pix", "Dinheiro", "Cartão", "Outro"];
   const EF_ORIGEM_PRECO_OPTS     = ["Tabela", "Promoção", "Parceria", "Negociação", "PCMSO", "Cortesia"];
   const EF_LOCAL_ATENDIMENTO_OPTS = ["Domiciliar", "Clínica", "Empresa / PCMSO", "Parceiro", "Outro"];
+  const EF_RESPONSAVEL_OPTS = ["Adeildo", "Luiz Faustino"];
+  // M11.2C.1 — opções fechadas para os campos secundários de "Dados
+  // opcionais / CRM", trocando texto livre por escolha rápida sempre que
+  // fizer sentido (não entram no payload financeiro).
+  const EF_ORIGEM_DETALHADA_OPTS = [
+    "Google", "Instagram", "WhatsApp", "Site SoproLife", "Indicação médica",
+    "Indicação de paciente", "Clínica parceira", "Empresa / PCMSO",
+    "LinkedIn", "Tráfego pago", "Retorno / recorrente", "Outro",
+  ];
+  const EF_MOTIVO_PROXIMO_CONTATO_OPTS = [
+    "Não definido", "Confirmar agendamento", "Enviar preparo",
+    "Solicitar pedido médico", "Confirmar pagamento", "Enviar localização",
+    "Retomar interesse", "Pós-exame / laudo", "Parceria B2B", "Outro",
+  ];
+  // M11.2C — faixa de R$250 a R$200 em passos de R$10, do valor cheio até a
+  // condição mais especial. Os rótulos abaixo do valor refletem o motivo
+  // real de cada faixa (ver EF_ORIGEM_PRECO_POR_VALOR).
   const EF_SUGESTOES = [
-    { valor: 250, rotulo: "R$ 250,00", motivo: "Valor padrão" },
+    { valor: 250, rotulo: "R$ 250,00", motivo: "Tabela" },
+    { valor: 240, rotulo: "R$ 240,00", motivo: "Desconto" },
     { valor: 230, rotulo: "R$ 230,00", motivo: "Desconto" },
-    { valor: 219, rotulo: "R$ 219,00", motivo: "Promoção" },
+    { valor: 220, rotulo: "R$ 220,00", motivo: "Promoção" },
+    { valor: 210, rotulo: "R$ 210,00", motivo: "Condição especial" },
     { valor: 200, rotulo: "R$ 200,00", motivo: "Condição especial" },
   ];
   // M11.2B — clicar num chip de preço também ajusta "Origem do preço" pro
-  // motivo real daquele valor (R$219 é promoção, não tabela). O operador
-  // ainda pode trocar manualmente depois — só o clique no chip preenche.
-  const EF_ORIGEM_PRECO_POR_VALOR = { 250: "Tabela", 230: "Negociação", 219: "Promoção", 200: "Negociação" };
+  // motivo real daquele valor. O operador ainda pode trocar manualmente
+  // depois — só o clique no chip preenche.
+  const EF_ORIGEM_PRECO_POR_VALOR = { 250: "Tabela", 240: "Negociação", 230: "Negociação", 220: "Promoção", 210: "Negociação", 200: "Negociação" };
+
+  // M11.2C — data do exame nasce pré-preenchida com o dia de hoje (o
+  // operador continua podendo alterar); mesmo formato aceito pelo <input
+  // type="date">, reaproveitando o padStart já usado no ID de atendimento.
+  function hojeISO() {
+    const agora = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${agora.getFullYear()}-${pad(agora.getMonth() + 1)}-${pad(agora.getDate())}`;
+  }
 
   // M11.2B — ID técnico sem dado pessoal, gerado uma vez por renderização da
   // aba "Nova Espirometria" e mantido em hidden input: reenviar o mesmo
@@ -1996,26 +2024,32 @@ function renderEntradaDados(container) {
     const idAtendimento = gerarIdAtendimentoEspi();
     const camposAtendimento = [
       field({ id: "primeiro_nome",          label: "Primeiro nome",            required: true }),
-      field({ id: "responsavel",            label: "Responsável",              required: true }),
+      field({ id: "responsavel",            label: "Responsável",              type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
       field({ id: "telefone",               label: "Telefone / WhatsApp",      type: "tel" }),
-      field({ id: "servico",                label: "Serviço",                  placeholder: "Espirometria" }),
-      field({ id: "origem",                 label: "Origem",                   placeholder: "Indicação médica, PCMSO..." }),
-      field({ id: "status_exame",           label: "Status do exame",          type: "select", options: ["Aguardando", "Realizado", "Cancelado", "Remarcado"] }),
-      field({ id: "data_exame",             label: "Data do exame",            type: "date", required: true }),
-      field({ id: "proximo_contato",        label: "Próximo contato",          type: "date" }),
-      field({ id: "motivo_proximo_contato", label: "Motivo do próximo contato" }),
-      field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts }),
+      field({ id: "servico",                label: "Serviço",                  value: "Espirometria", disabled: true }),
+      field({ id: "status_exame",           label: "Status do exame",          type: "select", options: ["Aguardando", "Realizado", "Cancelado", "Remarcado"], value: "Realizado", required: true }),
+      field({ id: "data_exame",             label: "Data do exame",            type: "date", value: hojeISO(), required: true }),
+      field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts, value: "Sim" }),
     ].join("");
 
     const camposFinanceiro = [
-      field({ id: "local_atendimento",      label: "Local de atendimento", type: "select", options: EF_LOCAL_ATENDIMENTO_OPTS, required: true }),
+      field({ id: "local_atendimento",      label: "Local de atendimento", type: "select", options: EF_LOCAL_ATENDIMENTO_OPTS, value: "Domiciliar", required: true }),
       field({ id: "valor_tabela",          label: "Valor tabela",        type: "number", step: "0.01", value: EF_VALOR_TABELA_PADRAO }),
       field({ id: "valor_cobrado",         label: "Valor cobrado",       type: "number", step: "0.01", required: true }),
       field({ id: "valor_recebido",        label: "Valor recebido",      type: "number", step: "0.01" }),
-      field({ id: "status_pagamento",      label: "Status do pagamento", type: "select", options: EF_STATUS_PAGAMENTO_OPTS, required: true }),
-      field({ id: "forma_pagamento",       label: "Forma de pagamento",  type: "select", options: EF_FORMA_PAGAMENTO_OPTS }),
+      field({ id: "status_pagamento",      label: "Status do pagamento", type: "select", options: EF_STATUS_PAGAMENTO_OPTS, value: "Recebido", required: true }),
+      field({ id: "forma_pagamento",       label: "Forma de pagamento",  type: "select", options: EF_FORMA_PAGAMENTO_OPTS, value: "Pix" }),
       field({ id: "origem_preco",          label: "Origem do preço",     type: "select", options: EF_ORIGEM_PRECO_OPTS, value: "Tabela" }),
-      field({ id: "observacao_financeira", label: "Observação financeira" }),
+    ].join("");
+
+    // M11.2C — campos de CRM secundários (não entram no payload financeiro)
+    // ficam numa seção separada abaixo, pra não competir com o fluxo
+    // principal de nome + telefone + preço/pagamento.
+    const camposCrmOpcionais = [
+      field({ id: "origem",                 label: "Origem detalhada",         type: "select", options: EF_ORIGEM_DETALHADA_OPTS, value: "Google" }),
+      field({ id: "proximo_contato",        label: "Próximo contato",          type: "date", hint: "Opcional" }),
+      field({ id: "motivo_proximo_contato", label: "Motivo do próximo contato", type: "select", options: EF_MOTIVO_PROXIMO_CONTATO_OPTS, value: "Não definido" }),
+      field({ id: "observacao_financeira",  label: "Observação" }),
     ].join("");
 
     const chipsHtml = EF_SUGESTOES.map((s) => `
@@ -2030,12 +2064,18 @@ function renderEntradaDados(container) {
     return `<form class="cc-form" novalidate>
       <input type="hidden" id="id_atendimento" name="id_atendimento" value="${escapeHtml(idAtendimento)}">
       <h4 class="cc-form-title">Nova Espirometria</h4>
+      <p class="cc-form-microcopy">Digite apenas nome e telefone. Os demais campos já vêm sugeridos e podem ser alterados.</p>
       <div class="cc-form-grid">${camposAtendimento}</div>
 
       <div class="cc-form-section">
         <p class="cc-form-section-title">Preço e pagamento</p>
         <div class="cc-price-chips" role="group" aria-label="Sugestões rápidas de valor">${chipsHtml}</div>
         <div class="cc-form-grid">${camposFinanceiro}</div>
+      </div>
+
+      <div class="cc-form-section cc-form-section-secondary">
+        <p class="cc-form-section-title cc-form-section-title-secondary">Dados opcionais / CRM</p>
+        <div class="cc-form-grid">${camposCrmOpcionais}</div>
       </div>
 
       <div class="cc-submit-row">

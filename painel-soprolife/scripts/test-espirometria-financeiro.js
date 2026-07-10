@@ -345,12 +345,57 @@ console.log("M11.2B — ajustes finos pós-teste real (checagens estáticas)");
 caso("app.js gera id_atendimento para a Nova Espirometria",
      /function gerarIdAtendimentoEspi\s*\(/.test(appJsSrc) &&
      appJsSrc.includes('id="id_atendimento" name="id_atendimento"'));
-caso("app.js mapeia R$219 para origem_preco Promoção",
-     /219:\s*"Promoção"/.test(appJsSrc));
 caso("app.js mapeia R$250 para origem_preco Tabela",
      /250:\s*"Tabela"/.test(appJsSrc));
 caso("Apps Script continua com Financeiro_Lancamentos (upsert por id_atendimento)",
      gsSrc.includes("Financeiro_Lancamentos") && gsSrc.includes('"id_atendimento"'));
+
+// M11.2C — Nova Espirometria enxuta e pré-preenchida. Checagens estáticas de
+// texto sobre app.js (sem DOM): responsável virou select fechado, chips vão
+// de R$250 a R$200 de 10 em 10, R$220 mapeia para Promoção, e os defaults
+// (status_pagamento Recebido / forma_pagamento Pix) favorecem o caminho mais
+// comum do operador.
+console.log();
+console.log("M11.2C — Nova Espirometria enxuta e pré-preenchida (checagens estáticas)");
+
+caso('Responsável contém "Adeildo"', /EF_RESPONSAVEL_OPTS\s*=\s*\[[^\]]*"Adeildo"/.test(appJsSrc));
+caso('Responsável contém "Luiz Faustino"', /EF_RESPONSAVEL_OPTS\s*=\s*\[[^\]]*"Luiz Faustino"/.test(appJsSrc));
+
+for (const valor of [250, 240, 230, 220, 210, 200]) {
+  caso(`chip de preço contém valor ${valor}`, new RegExp(`valor:\\s*${valor}\\b`).test(appJsSrc));
+}
+caso('chip "Outro valor" continua presente', appJsSrc.includes("Outro valor"));
+
+caso("app.js mapeia R$220 para origem_preco Promoção",
+     /220:\s*"Promoção"/.test(appJsSrc));
+
+caso('status_pagamento da Nova Espirometria vem pré-preenchido com "Recebido"',
+     /id:\s*"status_pagamento".*value:\s*"Recebido"/.test(appJsSrc));
+caso('forma_pagamento da Nova Espirometria vem pré-preenchida com "Pix"',
+     /id:\s*"forma_pagamento".*value:\s*"Pix"/.test(appJsSrc));
+
+caso("id_atendimento continua existindo no payload financeiro", CHAVES.includes("id_atendimento"));
+
+// M11.2C.1 — "Dados opcionais / CRM": Origem detalhada e Motivo do próximo
+// contato viram select de opções fechadas em vez de texto livre. Checagens
+// estáticas simples de texto sobre app.js (sem DOM) — não mexe no payload
+// financeiro nem em espirometria-financeiro.js.
+console.log();
+console.log("M11.2C.1 — Opções prontas em Dados opcionais / CRM (checagens estáticas)");
+
+caso('app.js contém "Google" (Origem detalhada)', appJsSrc.includes("Google"));
+caso('app.js contém "Instagram" (Origem detalhada)', appJsSrc.includes("Instagram"));
+caso('app.js contém "WhatsApp" (Origem detalhada)', appJsSrc.includes("WhatsApp"));
+caso('app.js contém "Indicação médica" (Origem detalhada)', appJsSrc.includes("Indicação médica"));
+caso('app.js contém "Empresa / PCMSO" (Origem detalhada)', appJsSrc.includes("Empresa / PCMSO"));
+caso('app.js contém "Confirmar agendamento" (Motivo do próximo contato)', appJsSrc.includes("Confirmar agendamento"));
+caso('app.js contém "Enviar preparo" (Motivo do próximo contato)', appJsSrc.includes("Enviar preparo"));
+caso('app.js contém "Solicitar pedido médico" (Motivo do próximo contato)', appJsSrc.includes("Solicitar pedido médico"));
+
+caso("espirometria-financeiro.js continua sem fetch (M11.2C.1 não mexeu no arquivo)",
+     !/\bfetch\s*\(/.test(efSrc));
+caso("espirometria-financeiro.js continua sem XMLHttpRequest (M11.2C.1 não mexeu no arquivo)",
+     !/XMLHttpRequest/.test(efSrc));
 
 console.log();
 if (falhas) { console.log(`RESULTADO: ${falhas} caso(s) FALHARAM.`); process.exit(1); }

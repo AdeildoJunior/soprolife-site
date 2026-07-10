@@ -2764,6 +2764,11 @@ td { font-size: .94rem; }
   font-weight: 700;
   color: var(--navy);
 }
+.cc-form-microcopy {
+  margin: -.6rem 0 1.1rem;
+  font-size: .8rem;
+  color: var(--muted);
+}
 .cc-form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2802,6 +2807,7 @@ td { font-size: .94rem; }
 .cc-input:focus,
 .cc-select:focus  { outline: none; border-color: var(--teal); }
 .cc-input:invalid { border-color: var(--danger); }
+.cc-input:disabled { color: var(--muted); cursor: not-allowed; opacity: .75; }
 
 /* Submit row */
 .cc-submit-row {
@@ -2853,6 +2859,15 @@ td { font-size: .94rem; }
   text-transform: uppercase;
   letter-spacing: .04em;
   color: var(--navy);
+}
+
+/* Seção "Dados opcionais / CRM" (M11.2C) — mesma estrutura da seção de
+   preço, mas com peso visual reduzido pra não competir com o fluxo
+   principal (nome, telefone, preço e pagamento). */
+.cc-form-section-secondary { opacity: .8; }
+.cc-form-section-title-secondary {
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .cc-price-chips {
