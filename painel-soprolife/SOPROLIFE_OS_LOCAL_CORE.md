@@ -77,7 +77,6 @@ painel-soprolife/
     ├── crm-clinicas.json    (fictício, público)
     ├── leads.json           (fictício, público)
     ├── marketing.json       (fictício, público)
-    ├── financeiro.json      (fictício, público)
     ├── tarefas.json         (fictício, público)
     ├── documentos.json      (fictício, público)
     └── automacoes.json      (fictício, público)

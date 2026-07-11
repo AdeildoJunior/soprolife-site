@@ -19,7 +19,7 @@ Todos opcionais/nuláveis (fonte ausente degrada, não quebra):
 | `b2bStats` | M5 `buildB2BStats()` | totalOportunidades, precisamFollowup, convertidas… |
 | `resumoDashboard` | resumo-dashboard | contagens numéricas (totalLeads etc.) |
 | `followupPacientes` | followup-pacientes-summary | espirometria/consultas: hoje, atrasados… |
-| `financeiro` | financeiro-summary | receita_exames, saldo_operacional, total_entradas_mes_atual |
+| `financeiro` | financeiro-summary (gerado da aba Financeiro_Lancamentos — fonte financeira única, M14.2) | receita_exames, total_entradas_mes_atual, saldo_operacional (null — não derivável da fonte) |
 | `custos` | custos-investimentos-summary | total_mensal_atual, pendencias_cadastro |
 | `marketing` | marketing-seo.meta | sources.searchConsole/ga4 |
 | `auditoria` | auditoria-summary | stats.total_eventos, stats.erros |

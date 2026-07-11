@@ -866,12 +866,23 @@ PY
 
 validate_financeiro() {
   echo
-  echo "Verificando dados financeiros..."
+  echo "Verificando dados financeiros (fonte única: Financeiro_Lancamentos)..."
 
-  local private_file="painel-soprolife/data-private/financeiro.local.json"
+  local private_file="painel-soprolife/data-private/financeiro-lancamentos.local.json"
+  local legacy_private="painel-soprolife/data-private/financeiro.local.json"
   local summary_file="painel-soprolife/data/financeiro-summary.local.json"
 
-  # Arquivo privado
+  # Arquivo privado da fase antiga (aba "Financeiro", removida) — se ainda
+  # existir localmente, só valida que continua gitignored.
+  if [ -f "$legacy_private" ]; then
+    if git check-ignore -q "$legacy_private" 2>/dev/null; then
+      echo "  INFO (legado, gitignored): $legacy_private — pode ser arquivado/removido."
+    else
+      echo "  ERRO CRÍTICO: $legacy_private NÃO está gitignored — dados financeiros podem vazar!"
+    fi
+  fi
+
+  # Arquivo privado oficial (gerado por read-financeiro-lancamentos-adc.py)
   if [ -f "$private_file" ]; then
     if git check-ignore -q "$private_file" 2>/dev/null; then
       echo "  OK (gitignored): $private_file"
@@ -884,23 +895,27 @@ validate_financeiro() {
 from pathlib import Path
 import json, re, sys
 
-path = Path("painel-soprolife/data-private/financeiro.local.json")
+path = Path("painel-soprolife/data-private/financeiro-lancamentos.local.json")
 try:
     data = json.loads(path.read_text(encoding="utf-8"))
 except Exception as exc:
     print(f"  ERRO ao ler financeiro privado: {exc}")
     sys.exit(1)
 
-entradas = data.get("entradas", [])
+registros = data.get("registros", [])
 
+# A aba financeira nunca carrega identificação de paciente nem dado bancário
+# (o Apps Script rejeita na escrita; o leitor bloqueia na leitura) — aqui é a
+# terceira linha de defesa.
 BLOCKED = {
-    "cpf", "rg", "nome_pagador", "nome_completo", "numero_conta",
+    "cpf", "rg", "nome", "paciente", "paciente_nome", "nome_pagador",
+    "nome_completo", "telefone", "whatsapp", "email", "numero_conta",
     "agencia", "banco", "pix_key_real", "chave_pix", "senha", "token",
 }
 _CPF_RE = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
 
 errors = 0
-for i, rec in enumerate(entradas, start=1):
+for i, rec in enumerate(registros, start=1):
     for k in rec.keys():
         if k.lower() in BLOCKED:
             print(f"  ERRO: campo proibido '{k}' no lançamento {i}.")
@@ -911,14 +926,14 @@ for i, rec in enumerate(entradas, start=1):
         errors += 1
 
 if errors == 0:
-    print(f"  OK: {len(entradas)} lançamentos. Nenhum dado bancário identificador.")
+    print(f"  OK: {len(registros)} lançamentos. Nenhum dado pessoal/bancário identificador.")
 else:
     print(f"  {errors} erros encontrados.")
     sys.exit(1)
 PY
   else
     echo "  INFO: $private_file não existe ainda."
-    echo "        Crie com os lançamentos reais (sem nome de pagador, CPF ou dado bancário)."
+    echo "        Gere com: painel-soprolife/scripts/read-financeiro-lancamentos-adc.py --write"
   fi
 
   # Resumo público
@@ -972,20 +987,25 @@ if _FONE_RE.search(text):
 if errors == 0:
     total = data.get("total_lancamentos", 0)
     receita = data.get("receita_exames", 0)
-    saldo = data.get("saldo_operacional", 0)
-    print(f"  OK: resumo financeiro seguro — {total} lanç., receita_exames=R${receita:.2f}, saldo=R${saldo:.2f}.")
+    # saldo_operacional é null por contrato no resumo novo (não derivável da
+    # fonte oficial) — formata como "—" em vez de quebrar ou inventar 0.
+    saldo = data.get("saldo_operacional")
+    saldo_txt = f"R${saldo:.2f}" if isinstance(saldo, (int, float)) else "—"
+    fonte = data.get("source", {}).get("official_source", "resumo local")
+    print(f"  OK: resumo financeiro seguro — {total} lanç., receita_exames=R${receita:.2f}, saldo={saldo_txt} (fonte: {fonte}).")
 else:
     print(f"  {errors} erros encontrados.")
     sys.exit(1)
 PY
 
-    # Guarda de PII compartilhada (M2) — arquivo mantido à mão, sem gerador:
-    # a validação acontece aqui, na leitura, com ruleset registrado no módulo.
+    # Guarda de PII compartilhada (M2) — desde a M14.2 o arquivo é gerado por
+    # read-financeiro-lancamentos-adc.py (que já valida na geração); esta
+    # validação na leitura continua como redundância.
     python3 painel-soprolife/scripts/pii_guard.py \
       --check-file "$summary_file" --ruleset financeiro-summary | sed 's/^/  /'
   else
     echo "  INFO: $summary_file não existe ainda."
-    echo "        Crie com valores agregados (sem nomes de pagadores)."
+    echo "        Gere com: painel-soprolife/scripts/read-financeiro-lancamentos-adc.py --write"
   fi
 }
 

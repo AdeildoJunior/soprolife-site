@@ -39,11 +39,11 @@ fi
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
 
-echo "1/14 - Atualizando status seguro da fonte Google Sheets..."
+echo "1/15 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
 
 echo
-echo "2/14 - Atualizando resumo seguro..."
+echo "2/15 - Atualizando resumo seguro..."
 
 if [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC"
@@ -84,7 +84,7 @@ else
 fi
 
 echo
-echo "3/14 - Atualizando CRM Clínicas seguro..."
+echo "3/15 - Atualizando CRM Clínicas seguro..."
 
 if [ "$_sheets_available" = true ] && [ -f "$_CRM_SCRIPT" ]; then
   echo "Fonte: Google Sheets via ADC (aba CRM Clinicas)"
@@ -104,7 +104,7 @@ else
 fi
 
 echo
-echo "4/14 - Atualizando follow-up B2B de clínicas..."
+echo "4/15 - Atualizando follow-up B2B de clínicas..."
 
 _FOLLOWUP_CLINICAS_SCRIPT="painel-soprolife/scripts/generate-followup-clinicas.py"
 
@@ -132,7 +132,7 @@ else
 fi
 
 echo
-echo "5/14 - Atualizando Marketing & SEO..."
+echo "5/15 - Atualizando Marketing & SEO..."
 
 if [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "Marketing & SEO não configurado — usando dados demonstrativos."
@@ -156,7 +156,7 @@ else
 fi
 
 echo
-echo "6/14 - Atualizando Leads..."
+echo "6/15 - Atualizando Leads..."
 
 _LEADS_SCRIPT="painel-soprolife/scripts/read-leads-sheets.py"
 
@@ -183,7 +183,7 @@ else
 fi
 
 echo
-echo "7/14 - Atualizando CRM Contatos B2B..."
+echo "7/15 - Atualizando CRM Contatos B2B..."
 
 _CONTATOS_B2B_SCRIPT="painel-soprolife/scripts/read-crm-contatos-b2b-adc.py"
 
@@ -211,7 +211,7 @@ else
 fi
 
 echo
-echo "8/14 - Atualizando follow-up de pacientes..."
+echo "8/15 - Atualizando follow-up de pacientes..."
 
 _FOLLOWUP_SCRIPT="painel-soprolife/scripts/generate-followup-pacientes.py"
 
@@ -236,7 +236,34 @@ else
 fi
 
 echo
-echo "9/14 - Atualizando timeline de últimos lançamentos..."
+echo "9/15 - Atualizando Financeiro (fonte única: Financeiro_Lancamentos)..."
+
+_FINANCEIRO_SCRIPT="painel-soprolife/scripts/read-financeiro-lancamentos-adc.py"
+
+if [ -f "$_FINANCEIRO_SCRIPT" ] && [ "$_sheets_available" = true ]; then
+  echo "Fonte: Google Sheets via ADC (aba Financeiro_Lancamentos)"
+  echo
+  if ! "$_VENV_PYTHON" "$_FINANCEIRO_SCRIPT" --write 2>&1; then
+    echo
+    echo "AVISO: falha ao ler a aba Financeiro_Lancamentos."
+    echo "  Isso é esperado se a aba ainda não existe (é criada pelo Apps Script"
+    echo "  na primeira gravação da Nova Espirometria)."
+    echo "  Diagnóstico: $_VENV_PYTHON $_FINANCEIRO_SCRIPT --show-structure"
+  else
+    echo "Financeiro atualizado."
+    echo "  Privado:  painel-soprolife/data-private/financeiro-lancamentos.local.json"
+    echo "  Resumo:   painel-soprolife/data/financeiro-summary.local.json"
+  fi
+else
+  if [ ! -f "$_FINANCEIRO_SCRIPT" ]; then
+    echo "Script do Financeiro não encontrado — resumo financeiro não será atualizado."
+  else
+    echo "Google Sheets ADC não disponível — resumo financeiro não será atualizado."
+  fi
+fi
+
+echo
+echo "10/15 - Atualizando timeline de últimos lançamentos..."
 
 _LANCAMENTOS_SCRIPT="painel-soprolife/scripts/generate-ultimos-lancamentos.py"
 
@@ -254,7 +281,7 @@ else
 fi
 
 echo
-echo "10/14 - Atualizando Parceria Pastore..."
+echo "11/15 - Atualizando Parceria Pastore..."
 
 if [ -f "$_PARCERIA_PASTORE_SCRIPT" ] && [ "$_sheets_available" = true ]; then
   echo "Fonte: Google Sheets via ADC (Atendimentos + Custos + Config)"
@@ -280,7 +307,7 @@ else
 fi
 
 echo
-echo "11/14 - Atualizando resumo de auditoria (Log Auditoria)..."
+echo "12/15 - Atualizando resumo de auditoria (Log Auditoria)..."
 
 _AUDITORIA_SCRIPT="painel-soprolife/scripts/read-auditoria-adc.py"
 
@@ -306,14 +333,14 @@ else
 fi
 
 echo
-echo "12/14 - Verificando segurança..."
+echo "13/15 - Verificando segurança..."
 # Captura o exit sem abortar: o resultado alimenta a Saúde Operacional e a
 # falha continua derrubando o update ao final (mesma semântica de antes).
 _CHECK_ACCESS_EXIT=0
 painel-soprolife/scripts/check-access.sh || _CHECK_ACCESS_EXIT=$?
 
 echo
-echo "13/14 - Gerando Saúde Operacional (M3)..."
+echo "14/15 - Gerando Saúde Operacional (M3)..."
 
 _SAUDE_SCRIPT="painel-soprolife/scripts/generate-saude-operacional.py"
 
@@ -337,7 +364,7 @@ if [ "$_CHECK_ACCESS_EXIT" -ne 0 ]; then
 fi
 
 echo
-echo "14/14 - Concluído."
+echo "15/15 - Concluído."
 echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"

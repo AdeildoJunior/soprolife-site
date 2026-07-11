@@ -4881,39 +4881,70 @@ function renderFinance() {
   );
 
   if (hasRealData) {
+    // Fonte financeira única (M14.2): todos os valores vêm da aba
+    // "Financeiro_Lancamentos" via read-financeiro-lancamentos-adc.py.
+    // O CRM Espirometria é operacional — nunca origem de valor monetário.
+    const totais = (summary.totais && typeof summary.totais === "object") ? summary.totais : null;
+    const periodo = (summary.periodo && typeof summary.periodo === "object") ? summary.periodo : null;
+
     const safeLabel = document.querySelector("#financeiro .safe-label");
-    if (safeLabel) safeLabel.textContent = "Dados reais — jun/2026";
+    if (safeLabel) {
+      const faixa = periodo?.de && periodo?.ate
+        ? ` · ${formatDateBr(periodo.de)} → ${formatDateBr(periodo.ate)}`
+        : "";
+      safeLabel.textContent = `Dados reais — Financeiro_Lancamentos${faixa}`;
+    }
 
     const nExames = Number(summary.espirometrias_pagas) || 0;
     const baseExame = Number(summary.valor_base_exame) || 0;
-    const difTotal = Number(summary.diferenca_acima_base) || 0;
-    const difPorExame = nExames > 0 ? difTotal / nExames : 0;
+    const saldo = summary.saldo_operacional;
 
-    statsContainer.innerHTML = [
-      { key: "financeSaldoConta",          label: "Saldo em conta",              value: fmtBRL(summary.saldo_operacional),              hint: "total atual na conta" },
-      { key: "receitaEspirometrias",       label: "Receita das 9 espirometrias", value: fmtBRL(summary.receita_exames),                 hint: `${nExames} exames pagos oficiais` },
-      { key: "financeTicketMedio",         label: "Ticket médio real",           value: fmtBRL(summary.ticket_medio_real),              hint: `base ${fmtBRL(baseExame)} / +${fmtBRL(difPorExame)} por exame` },
-      { key: "financeParceriaExcepcional", label: "Parceria / excepcional",      value: fmtBRL(summary.receita_parceria_excepcional),   hint: "Pix espontâneo, fora do padrão" },
-      { key: "financeConsultas",           label: "Consultas",                   value: "R$ 0,00",                                      hint: "fase estratégica/parceria" },
-      { key: "financeEntradasRecentes",    label: "Entradas recentes",           value: `${summary.total_lancamentos} lançamentos`,     hint: `${fmtBRL(summary.total_entradas_mes_atual)} destacados no extrato` }
-    ].map((item) => statCardHtml("finance-stat-card", item)).join("");
+    const cards = [
+      { key: "receitaEspirometrias", label: "Receita recebida",  value: fmtBRL(summary.receita_exames),    hint: `${nExames} exame(s) pago(s) — Financeiro_Lancamentos` },
+      { key: "financeTicketMedio",   label: "Ticket médio real", value: summary.ticket_medio_real != null ? fmtBRL(summary.ticket_medio_real) : "—", hint: baseExame > 0 ? `valor de tabela ${fmtBRL(baseExame)}` : "por exame pago" },
+    ];
+    if (totais) {
+      cards.push(
+        { key: "financeReceitaPendente",    label: "Receita pendente",      value: fmtBRL(totais.receita_pendente),     hint: "a receber (Pendente/Parcial)" },
+        { key: "financeDescontos",          label: "Descontos concedidos",  value: fmtBRL(totais.descontos_concedidos), hint: `${totais.cortesias || 0} cortesia(s) · ${totais.cancelados || 0} cancelado(s)` }
+      );
+    }
+    cards.push({ key: "financeEntradasRecentes", label: "Entradas no mês", value: fmtBRL(summary.total_entradas_mes_atual), hint: `${summary.total_lancamentos} lançamento(s) válidos no total` });
+    // Saldo bancário não vem da fonte oficial — só aparece se um valor
+    // numérico real existir (nunca R$ 0,00 inventado, nunca "—" gratuito).
+    if (typeof saldo === "number" && Number.isFinite(saldo)) {
+      cards.push({ key: "financeSaldoConta", label: "Saldo em conta", value: fmtBRL(saldo), hint: "registro manual — fora da fonte oficial" });
+    }
+
+    statsContainer.innerHTML = cards.map((item) => statCardHtml("finance-stat-card", item)).join("");
 
     if (financeNote) {
-      financeNote.innerHTML = [
-        `Receita oficial calculada sobre ${nExames} espirometrias pagas no CRM Espirometria.`,
-        `Valor base atual do exame residencial: ${fmtBRL(baseExame)}.`,
-        `Ticket médio acima do valor base por pequenos pagamentos acima de ${fmtBRL(baseExame)}.`,
-        `${fmtBRL(Number(summary.receita_parceria_excepcional) || 0)} classificados como parceria/entrada excepcional, fora do preço padrão.`,
-        "Consultas em fase estratégica/parceria, sem cobrança no momento."
-      ].join("<br>");
+      const linhas = [
+        "Fonte oficial dos valores: aba <strong>Financeiro_Lancamentos</strong> — um lançamento por exame, atualizado por id_atendimento.",
+        "O CRM Espirometria guarda apenas o histórico operacional do exame; nenhum valor monetário é derivado dele.",
+      ];
+      if (totais) {
+        if (Number(totais.linhas_invalidas) > 0) {
+          linhas.push(`${totais.linhas_invalidas} linha(s) com valor/status inválido ficaram fora das somas — revisar na planilha.`);
+        }
+        if (Number(totais.linhas_inconsistentes) > 0) {
+          linhas.push(`${totais.linhas_inconsistentes} lançamento(s) com valor recebido diferente do esperado para o status — revisar na planilha.`);
+        }
+        if (Number(totais.duplicados_ignorados) > 0) {
+          linhas.push(`${totais.duplicados_ignorados} linha(s) duplicadas por id_atendimento foram deduplicadas (a mais recente vale).`);
+        }
+      } else {
+        linhas.push("Resumo em formato antigo — regenere com: painel-soprolife/scripts/read-financeiro-lancamentos-adc.py --write");
+      }
+      financeNote.innerHTML = linhas.join("<br>");
       financeNote.removeAttribute("hidden");
     }
 
-    table.innerHTML = summary.lancamentos_agregados.map((item) => `
+    table.innerHTML = (summary.lancamentos_agregados || []).map((item) => `
       <tr>
         <td><strong>${escapeHtml(item.descricao)}</strong></td>
         <td>${escapeHtml(item.servico)}</td>
-        <td>—</td>
+        <td>${escapeHtml(item.local || "—")}</td>
         <td><strong>${fmtBRL(item.valor)}</strong></td>
         <td><span class="badge ${slug(item.status)}">${escapeHtml(item.status)}</span></td>
         <td>${escapeHtml(item.data)}</td>
@@ -4921,22 +4952,30 @@ function renderFinance() {
     `).join("");
 
     // Atualiza títulos dos painéis de gráficos para refletir os dados reais
+    const porServico = summary.por_servico || [];
+    // Novo schema traz receita por local de atendimento; o resumo antigo
+    // tinha "por_origem" — aceita os dois sem quebrar.
+    const porLocal = (summary.por_local || summary.por_origem || []).map((i) => ({
+      label: i.local || i.origem || "—",
+      valor: i.valor,
+    }));
+
     if (serviceCanvas) {
       const servicePanel = serviceCanvas.closest(".panel")?.querySelector(".panel-header");
       if (servicePanel) {
         const h3 = servicePanel.querySelector("h3");
         const span = servicePanel.querySelector("span");
-        if (h3) h3.textContent = "Receita por categoria";
-        if (span) span.textContent = "Espirometrias oficiais, parceria/excepcional e consultas";
+        if (h3) h3.textContent = "Receita por serviço";
+        if (span) span.textContent = "Receita recebida — fonte Financeiro_Lancamentos";
       }
       createChart("serviceRevenue", "#serviceRevenueChart", {
         type: "bar",
         data: {
-          labels: summary.por_servico.map((i) => i.servico),
+          labels: porServico.map((i) => i.servico),
           datasets: [{
             label: "Receita (R$)",
-            data: summary.por_servico.map((i) => i.valor),
-            backgroundColor: CHART_COLORS.slice(0, summary.por_servico.length),
+            data: porServico.map((i) => i.valor),
+            backgroundColor: CHART_COLORS.slice(0, porServico.length),
             borderRadius: 14,
             borderSkipped: false,
           }]
@@ -4961,20 +5000,20 @@ function renderFinance() {
       });
     }
 
-    if (originCanvas && summary.por_origem.length > 0) {
+    if (originCanvas && porLocal.length > 0) {
       const originPanel = originCanvas.closest(".panel")?.querySelector(".panel-header");
       if (originPanel) {
         const h3 = originPanel.querySelector("h3");
         const span = originPanel.querySelector("span");
-        if (h3) h3.textContent = "Distribuição de receita";
-        if (span) span.textContent = "Espirometrias oficiais vs parceria/excepcional";
+        if (h3) h3.textContent = "Receita por local de atendimento";
+        if (span) span.textContent = "Domiciliar, clínica, empresa/PCMSO e parceiros";
       }
       createChart("originRevenue", "#originRevenueChart", {
         type: "doughnut",
         data: {
-          labels: summary.por_origem.map((i) => i.origem),
+          labels: porLocal.map((i) => i.label),
           datasets: [{
-            data: summary.por_origem.map((i) => i.valor),
+            data: porLocal.map((i) => i.valor),
             backgroundColor: CHART_COLORS,
             borderWidth: 3,
             borderColor: "#f3f7fb",
@@ -4996,7 +5035,7 @@ function renderFinance() {
     // Gráfico de entradas recentes destacadas
     const entradasCanvas = document.querySelector("#financeEntradasChart");
     const entradasPanel = document.querySelector("#financeEntradasPanel");
-    if (entradasCanvas && entradasPanel && summary.lancamentos_agregados.length > 0) {
+    if (entradasCanvas && entradasPanel && (summary.lancamentos_agregados || []).length > 0) {
       const entradasHeader = entradasPanel.querySelector(".panel-header span");
       if (entradasHeader) entradasHeader.textContent = "Lançamentos recentes visíveis no extrato — não representam o total da operação";
       entradasPanel.removeAttribute("hidden");
@@ -5042,7 +5081,7 @@ function renderFinance() {
     });
 
     if (financeNote) {
-      financeNote.textContent = "Resumo financeiro local não encontrado. Gere o arquivo data/financeiro-summary.local.json para exibir dados reais.";
+      financeNote.textContent = "Resumo financeiro local não encontrado. Gere com: painel-soprolife/scripts/read-financeiro-lancamentos-adc.py --write (fonte: aba Financeiro_Lancamentos).";
       financeNote.removeAttribute("hidden");
     }
 

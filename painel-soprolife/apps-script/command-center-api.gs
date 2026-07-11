@@ -209,7 +209,9 @@ var _ABAS_OPERACIONAIS = [
   _SHEETS.ESPIROMETRIA,
   _SHEETS.FOLLOWUP_WA,
   "Tarefas",
-  "Financeiro",
+  // M14.2: a antiga aba "Financeiro" foi removida da planilha — a aba
+  // financeira oficial é Financeiro_Lancamentos (fonte financeira única).
+  _SHEETS.FINANCEIRO_LANCAMENTOS,
   "Marketing Conteúdo",
 ];
 

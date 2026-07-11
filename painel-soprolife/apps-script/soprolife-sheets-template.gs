@@ -101,10 +101,12 @@ function setupSoproLifeSheetsLite() {
       "tarefa_id", "area", "titulo", "prioridade", "status",
       "responsavel", "prazo", "origem", "observacao"
     ],
-    "Financeiro": [
-      "lancamento_id", "data", "tipo", "categoria", "servico", "origem",
-      "valor_estimado", "valor_recebido", "status", "forma_pagamento", "observacao_anonima"
-    ],
+    // A aba financeira NÃO entra neste mapa de propósito (M14.2):
+    // 1) a antiga aba "Financeiro" foi removida da planilha e não deve ser
+    //    recriada por nenhum fluxo;
+    // 2) a aba oficial "Financeiro_Lancamentos" é criada e gerenciada pelo
+    //    command-center-api.gs (upsert por id_atendimento) e este setup faz
+    //    clearContents() — rodá-lo com a aba no mapa apagaria dados reais.
     "Marketing Conteudo": [
       "conteudo_id", "canal", "tema", "formato", "etapa",
       "data_planejada", "data_publicacao", "cta", "status", "metrica_agregada", "observacao"
@@ -197,15 +199,25 @@ function setupValidacoesSoproLife() {
   dropdown("Tarefas", "F", ["Adeildo", "Raquel", "Médica", "Administrativo", "A definir"]);
   dateColumn("Tarefas", "G");
 
-  dropdown("Financeiro", "C", ["Receita", "Despesa", "Previsão"]);
-  dropdown("Financeiro", "D", ["Espirometria", "Teleconsulta", "Consulta", "Parceria", "Marketing", "Operacional", "Documento", "Outro"]);
-  dropdown("Financeiro", "E", ["Espirometria", "Teleconsulta", "Consulta pneumologia", "Espirometria domiciliar", "Outro"]);
-  dropdown("Financeiro", "F", ["Paciente", "Clínica parceira", "Empresa", "Campanha", "Outro"]);
-  dropdown("Financeiro", "I", ["Previsto", "Pendente", "Recebido", "Cancelado"]);
-  dropdown("Financeiro", "J", ["PIX", "Cartão", "Dinheiro", "Transferência", "Boleto", "Outro"]);
-  dateColumn("Financeiro", "B");
-  moneyColumn("Financeiro", "G");
-  moneyColumn("Financeiro", "H");
+  // Financeiro_Lancamentos (fonte financeira única — M14.2): validações e
+  // formatos NÃO-destrutivos sobre o cabeçalho oficial de 17 colunas criado
+  // pelo command-center-api.gs. dropdown/dateColumn/moneyColumn pulam a aba
+  // se ela ainda não existir — nada aqui cria ou limpa a aba.
+  // Colunas: A id_lancamento | B id_atendimento | C criado_em | D data_exame |
+  // E tipo_movimento | F servico | G local_atendimento | H valor_tabela |
+  // I valor_cobrado | J valor_recebido | K desconto | L status_exame |
+  // M status_pagamento | N forma_pagamento | O origem_preco |
+  // P observacao_financeira | Q fonte. Enums = js/espirometria-financeiro.js.
+  dropdown("Financeiro_Lancamentos", "G", ["Domiciliar", "Clínica", "Empresa / PCMSO", "Parceiro", "Outro"]);
+  dropdown("Financeiro_Lancamentos", "L", ["Aguardando", "Realizado", "Cancelado", "Remarcado"]);
+  dropdown("Financeiro_Lancamentos", "M", ["Recebido", "Pendente", "Parcial", "Cortesia", "Cancelado"]);
+  dropdown("Financeiro_Lancamentos", "N", ["Pix", "Dinheiro", "Cartão", "Outro"]);
+  dropdown("Financeiro_Lancamentos", "O", ["Tabela", "Promoção", "Parceria", "Negociação", "PCMSO", "Cortesia"]);
+  dateColumn("Financeiro_Lancamentos", "D");
+  moneyColumn("Financeiro_Lancamentos", "H");
+  moneyColumn("Financeiro_Lancamentos", "I");
+  moneyColumn("Financeiro_Lancamentos", "J");
+  moneyColumn("Financeiro_Lancamentos", "K");
 
   dropdown("Marketing Conteudo", "B", ["Instagram", "LinkedIn", "Google Perfil", "Site", "WhatsApp", "E-mail", "Outro"]);
   dropdown("Marketing Conteudo", "D", ["Post único", "Carrossel", "Reels", "Story", "Artigo", "Página", "Campanha"]);
@@ -246,18 +258,40 @@ function atualizarResumoDashboardSoproLife() {
     return rows.filter(row => row[colIndex] === value).length;
   }
 
-  function sumByCondition(rows, conditionCol, conditionValue, valueCol) {
-    return rows
-      .filter(row => row[conditionCol] === conditionValue)
-      .reduce((total, row) => total + (Number(row[valueCol]) || 0), 0);
-  }
-
   const leads = getSheetRows("Leads");
   const crm = getSheetRows("CRM Clinicas");
   const tarefas = getSheetRows("Tarefas");
-  const financeiro = getSheetRows("Financeiro");
+  // Fonte financeira única (M14.2): leitura READ-ONLY da aba oficial —
+  // getSheetRows retorna [] se a aba ainda não existir, nunca a cria.
+  // Colunas (0-based): 8 valor_cobrado | 9 valor_recebido | 11 status_exame |
+  // 12 status_pagamento. Mesmas regras defensivas do gerador Python
+  // (read-financeiro-lancamentos-adc.py): Pendente/Cortesia/Cancelado nunca
+  // contam como receita recebida.
+  const financeiroLanc = getSheetRows("Financeiro_Lancamentos");
   const marketing = getSheetRows("Marketing Conteudo");
   const agenda = getSheetRows("Agenda Operacional");
+
+  function financeiroReceitas(rows) {
+    let recebida = 0;
+    let prevista = 0;
+    rows.forEach(row => {
+      const statusExame = String(row[11] || "").trim();
+      const statusPag = String(row[12] || "").trim();
+      const cobrado = Number(row[8]) || 0;
+      const recebido = Number(row[9]) || 0;
+      if (statusExame === "Cancelado" || statusPag === "Cancelado" || statusPag === "Cortesia") return;
+      if (statusPag === "Recebido") {
+        recebida += recebido;
+      } else if (statusPag === "Parcial") {
+        recebida += recebido;
+        prevista += Math.max(0, cobrado - recebido);
+      } else if (statusPag === "Pendente") {
+        prevista += cobrado;
+      }
+    });
+    return { recebida: recebida, prevista: prevista };
+  }
+  const receitas = financeiroReceitas(financeiroLanc);
 
   let sheet = ss.getSheetByName("Resumo Dashboard");
   if (!sheet) sheet = ss.insertSheet("Resumo Dashboard");
@@ -276,8 +310,8 @@ function atualizarResumoDashboardSoproLife() {
     ["CRM", "Clínicas perdidas/arquivadas", countByColumn(crm, 5, "Sem interesse") + countByColumn(crm, 5, "Não contatar / bloqueou") + countByColumn(crm, 5, "Sem canal válido") + countByColumn(crm, 5, "Arquivada"), "CRM etapa", "Etapas terminais negativas — fora do funil ativo"],
     ["Tarefas", "Tarefas pendentes", countByColumn(tarefas, 4, "Pendente"), "Tarefas status", "Tarefas pendentes"],
     ["Tarefas", "Tarefas em andamento", countByColumn(tarefas, 4, "Em andamento"), "Tarefas status", "Tarefas em andamento"],
-    ["Financeiro", "Receita prevista", sumByCondition(financeiro, 2, "Receita", 6), "Financeiro", "Soma de receitas estimadas"],
-    ["Financeiro", "Receita recebida", sumByCondition(financeiro, 8, "Recebido", 7), "Financeiro", "Soma de valores recebidos"],
+    ["Financeiro", "Receita prevista", receitas.prevista, "Financeiro_Lancamentos", "A receber: Pendente + restante de Parcial"],
+    ["Financeiro", "Receita recebida", receitas.recebida, "Financeiro_Lancamentos", "Soma de valor_recebido (Recebido/Parcial)"],
     ["Marketing", "Conteúdos planejados", countByColumn(marketing, 8, "Planejado"), "Marketing status", "Conteúdos planejados"],
     ["Agenda", "Eventos agendados", countByColumn(agenda, 6, "Agendado"), "Agenda status", "Eventos agendados"]
   ];
@@ -321,7 +355,7 @@ function onEdit(e) {
     "Leads",
     "CRM Clinicas",
     "Tarefas",
-    "Financeiro",
+    "Financeiro_Lancamentos",
     "Marketing Conteudo",
     "Agenda Operacional"
   ];

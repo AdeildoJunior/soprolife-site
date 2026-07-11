@@ -55,9 +55,12 @@ run "test-entrada-dados-ux (M12.1)"      node painel-soprolife/scripts/test-entr
 secao "3/9 Sintaxe Python"
 run "py_compile generate-saude-operacional" python3 -m py_compile painel-soprolife/scripts/generate-saude-operacional.py
 run "py_compile test-saude-operacional"     python3 -m py_compile painel-soprolife/scripts/test-saude-operacional.py
+run "py_compile read-financeiro-lancamentos" python3 -m py_compile painel-soprolife/scripts/read-financeiro-lancamentos-adc.py
+run "py_compile test-financeiro-summary"    python3 -m py_compile painel-soprolife/scripts/test-financeiro-summary.py
 
-secao "4/9 Testes Python (M3)"
+secao "4/9 Testes Python (M3 + M14.2)"
 run "test-saude-operacional (M3)" python3 painel-soprolife/scripts/test-saude-operacional.py
+run "test-financeiro-summary (M14.2)" python3 painel-soprolife/scripts/test-financeiro-summary.py
 
 secao "5/9 Geração segura da Saúde Operacional"
 # Escreve apenas o summary gitignored; sem rede, sem ADC, sem data-private.

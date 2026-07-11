@@ -195,16 +195,24 @@ def ensure_summary_safe(payload, rules=None, context="") -> None:
 
 
 # ---------------------------------------------------------------------------
-# Rulesets para summaries SEM gerador (mantidos à mão) — usados via
-# `--check-file <path> --ruleset <nome>` pelo check-access.sh.
+# Rulesets usados via `--check-file <path> --ruleset <nome>` pelo
+# check-access.sh — redundância de leitura para summaries mantidos à mão
+# (custos-investimentos-summary) ou gerados por script (financeiro-summary).
 # Chaves de exceção são campos CURTOS estruturados já existentes nesses
 # arquivos; os valores continuam passando por todos os scans.
 # ---------------------------------------------------------------------------
 
 _FILE_RULESETS = {
+    # Desde a M14.2 o financeiro-summary é GERADO por
+    # read-financeiro-lancamentos-adc.py a partir da aba Financeiro_Lancamentos
+    # (fonte financeira única); o gerador valida na escrita e este ruleset é a
+    # redundância na leitura (check-access.sh). Rótulos vêm de enums fechados;
+    # "descricao" é template "Serviço — Local". alerta_nota/consultas_nota são
+    # do formato antigo, mantidas até o resumo ser regenerado em todo ambiente.
     "financeiro-summary": {
         "campos_pessoa": [],
-        "campos_institucionais": ["origem", "servico"],
+        "campos_institucionais": ["origem", "servico", "local", "forma", "status",
+                                  "mes", "type", "official_source", "generator"],
         "chaves_permitidas_excecao": ["descricao", "alerta_nota", "consultas_nota", "nota"],
     },
     "custos-investimentos-summary": {
