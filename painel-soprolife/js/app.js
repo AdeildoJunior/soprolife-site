@@ -591,22 +591,12 @@ const CARD_GROUPS = [
     ]
   },
   {
-    title: "Financeiro",
-    subtitle: "Receita prevista e realizada",
-    icon: "💰",
-    keys: ["receitaPrevista", "receitaRecebida"]
-  },
-  {
-    title: "Marketing",
-    subtitle: "Produção de conteúdo",
-    icon: "📣",
-    keys: ["conteudosPlanejados"]
-  },
-  {
-    title: "Operação",
-    subtitle: "Tarefas e agenda",
-    icon: "⚙️",
-    keys: ["tarefasPendentes", "eventosAgendados"]
+    // Financeiro, marketing e operação têm poucos cards cada — juntos numa
+    // única linha o Painel Geral não fica com três faixas quase vazias.
+    title: "Gestão",
+    subtitle: "Financeiro, marketing e operação",
+    icon: "🗂️",
+    keys: ["receitaPrevista", "receitaRecebida", "conteudosPlanejados", "tarefasPendentes", "eventosAgendados"]
   }
 ];
 
