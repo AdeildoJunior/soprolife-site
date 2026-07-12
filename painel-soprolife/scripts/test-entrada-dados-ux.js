@@ -101,8 +101,10 @@ caso("Novo Paciente: microcopy de nome/telefone presente",
 // ── C) Nova Consulta ─────────────────────────────────────────────────────
 console.log();
 console.log("C) Nova Consulta");
-caso("Nova Consulta: data_consulta usa hojeISO() como default",
-     /id:\s*"data_consulta"[^}]*value:\s*hojeISO\(\)/.test(consultaSrc));
+// M14.3A (2ª rodada): data clínica NUNCA nasce preenchida com hoje — a
+// ausência não pode virar fato diário sem decisão do operador (ALTO-04).
+caso("Nova Consulta: data_consulta NÃO usa hojeISO() como default",
+     !/id:\s*"data_consulta"[^}]*value:\s*hojeISO\(\)/.test(consultaSrc));
 caso('Nova Consulta: consentimento_whatsapp tem default "Sim"',
      /id:\s*"consentimento_whatsapp"[^}]*value:\s*"Sim"/.test(consultaSrc));
 caso('Nova Consulta: campo origem usa select padronizado com default "Google"',

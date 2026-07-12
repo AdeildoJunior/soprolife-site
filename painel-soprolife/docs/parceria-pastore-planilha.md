@@ -138,7 +138,7 @@ Agregado (para o summary), sempre filtrando `status = "Realizado"` (nunca somar 
 - `ocupacao_agenda_pct` = `exames_realizados_no_período / (capacidade_estimada_por_turno × nº de turnos no período) * 100` — só se `capacidade_estimada_por_turno` estiver definida na Config; senão `null`
 - `producao_por_data` = contagem de exames realizados agrupada por `data_atendimento`
 - `financeiro_por_periodo` = soma de receita/custo/resultado agrupada por semana ou mês
-- `pacientes_pastore.total_atendidos` = pacientes **distintos** (deduplicados por telefone normalizado; se não houver telefone, por nome normalizado — mesma regra de `sincronizarCRMPacientesSoproLife` em `PLANILHAS_PRIVADAS.md`), nunca contagem de linhas de exame
+- `pacientes_pastore.total_atendidos` = pacientes **distintos** para fins de AGREGADO estatístico do summary (aproximação por telefone normalizado). ATENÇÃO (M14.3A): telefone/nome NUNCA é prova de identidade — no modelo canônico o vínculo de pessoa é por `paciente_id` com decisão humana; a antiga regra do sincronizador foi BLOQUEADA.
 - `pacientes_pastore.recorrentes` = pacientes distintos com mais de um atendimento
 - `pacientes_pastore.followup_pendente` = contagem de `followup_status = "pendente"`
 - `pacientes_pastore.distribuicao_tipo_exame` = contagem por `broncodilatador` (sem/com)

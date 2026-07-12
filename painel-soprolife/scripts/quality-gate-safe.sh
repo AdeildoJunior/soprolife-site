@@ -34,7 +34,7 @@ run() {
 
 echo "══ SoproLife Quality Gate (seguro/offline) — $(date '+%d/%m/%Y %H:%M') ══"
 
-secao "1/9 Sintaxe JavaScript"
+secao "1/10 Sintaxe JavaScript"
 run "node --check js/app.js"                 node --check painel-soprolife/js/app.js
 run "node --check js/operational-actions.js" node --check painel-soprolife/js/operational-actions.js
 run "node --check js/b2b-actions.js"         node --check painel-soprolife/js/b2b-actions.js
@@ -43,7 +43,7 @@ run "node --check js/daily-briefing.js"      node --check painel-soprolife/js/da
 run "node --check js/today-actions.js"       node --check painel-soprolife/js/today-actions.js
 run "node --check js/espirometria-financeiro.js" node --check painel-soprolife/js/espirometria-financeiro.js
 
-secao "2/9 Testes JS (M4 e M5)"
+secao "2/10 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
 run "test-b2b-actions (M5)"         node painel-soprolife/scripts/test-b2b-actions.js
 run "test-operational-brain (M8)"   node painel-soprolife/scripts/test-operational-brain.js
@@ -52,22 +52,22 @@ run "test-today-actions (M10)"      node painel-soprolife/scripts/test-today-act
 run "test-espirometria-financeiro (M11)" node painel-soprolife/scripts/test-espirometria-financeiro.js
 run "test-entrada-dados-ux (M12.1)"      node painel-soprolife/scripts/test-entrada-dados-ux.js
 
-secao "3/9 Sintaxe Python"
+secao "3/10 Sintaxe Python"
 run "py_compile generate-saude-operacional" python3 -m py_compile painel-soprolife/scripts/generate-saude-operacional.py
 run "py_compile test-saude-operacional"     python3 -m py_compile painel-soprolife/scripts/test-saude-operacional.py
 run "py_compile read-financeiro-lancamentos" python3 -m py_compile painel-soprolife/scripts/read-financeiro-lancamentos-adc.py
 run "py_compile test-financeiro-summary"    python3 -m py_compile painel-soprolife/scripts/test-financeiro-summary.py
 
-secao "4/9 Testes Python (M3 + M14.2)"
+secao "4/10 Testes Python (M3 + M14.2)"
 run "test-saude-operacional (M3)" python3 painel-soprolife/scripts/test-saude-operacional.py
 run "test-financeiro-summary (M14.2)" python3 painel-soprolife/scripts/test-financeiro-summary.py
 
-secao "5/9 Geração segura da Saúde Operacional"
+secao "5/10 Geração segura da Saúde Operacional"
 # Escreve apenas o summary gitignored; sem rede, sem ADC, sem data-private.
 run "generate --write --check-access-exit 0" \
   python3 painel-soprolife/scripts/generate-saude-operacional.py --write --check-access-exit 0
 
-secao "6/9 JSONs demo commitáveis + summary de saúde"
+secao "6/10 JSONs demo commitáveis + summary de saúde"
 run "json.tool saude-operacional.json" \
   python3 -m json.tool painel-soprolife/data/saude-operacional.json
 run "json.tool cerebro-operacional.json" \
@@ -87,10 +87,19 @@ done < <(find painel-soprolife/data -maxdepth 1 -name '*.json' ! -name '*.local.
 printf '  %-55s' "demais demos commitáveis (data/*.json)"
 if [ "$DEMO_JSON_FALHOU" -eq 0 ]; then echo "OK"; else echo "FALHOU"; FAILS=$((FAILS + 1)); fi
 
-secao "7/9 check-access.sh (auditoria de segurança completa)"
+secao "7/10 check-access.sh (auditoria de segurança completa)"
 run "check-access.sh" bash painel-soprolife/scripts/check-access.sh
 
-secao "8/9 Git — whitespace e guard rails de staging"
+secao "8/10 M14.3A — contratos, guardas estáticas e reconciliação"
+run "test-guardas-estaticas (anti-regressão M14.3A)" python3 painel-soprolife/scripts/test-guardas-estaticas.py
+run "test-contratos (fail-closed/patch/idempotência)" node painel-soprolife/scripts/test-contratos.js
+run "test-writers-comportamentais (writers REAIS c/ mocks)" node painel-soprolife/scripts/test-writers-comportamentais.js
+run "test-normalizacao (datas/IDs/enums)" python3 painel-soprolife/scripts/test-normalizacao.py
+run "test-reconciliar-historico (estados/privacidade)" python3 painel-soprolife/scripts/test-reconciliar-historico.py
+run "test-manual-abas (manifesto → .gs em dia)" python3 painel-soprolife/scripts/test-manual-abas.py
+run "generate-manual-abas --check" python3 painel-soprolife/scripts/generate-manual-abas-gs.py --check
+
+secao "9/10 Git — whitespace e guard rails de staging"
 run "git diff --check" git diff --check
 
 STAGED=$(git diff --cached --name-only)
@@ -118,7 +127,7 @@ else
   fi
 fi
 
-secao "9/9 Arquivos modificados (informativo — não bloqueia)"
+secao "10/10 Arquivos modificados (informativo — não bloqueia)"
 _ST=$(git status --short)
 if [ -z "$_ST" ]; then
   echo "  working tree limpo"

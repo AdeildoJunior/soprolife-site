@@ -87,6 +87,30 @@ bash painel-soprolife/scripts/check-access.sh                  # privacidade (in
 bash painel-soprolife/scripts/quality-gate-safe.sh             # gate completo
 ```
 
+## Cardinalidade — ledger 1:N (M14.3A)
+
+O contrato (`core/contracts/registros-schemas.json`) define: um atendimento
+pode ter **N movimentos** financeiros; no máximo **uma receita principal
+ativa**; ajustes/complementos/estornos são append-only e referenciam o
+movimento original. Duplicata é conflito visível (a reconciliação a
+reporta) — **não** existe "última linha vence" como solução de negócio.
+O gerador do summary (M14.2) segue deduplicando defensivamente para
+exibição, mas o modelo de dados não impõe 1:1; o ledger completo é M14.3B.
+A escrita atual cuida apenas da receita principal, com upsert em PATCH
+seletivo por id_atendimento.
+
+## Backfill histórico e lançamentos órfãos (M14.3)
+
+- Existem exames históricos em CRM Espirometria **sem** lançamento em
+  Financeiro_Lancamentos: eles precisam de **backfill futuro** com valores
+  reais confirmados pelo usuário — nunca inventar valor ausente.
+- Lançamentos sem vínculo por `id_atendimento` são **órfãos a
+  reconciliar**: vínculo assistido por data/valor, com confirmação humana;
+  **nunca apagar automaticamente**.
+- Diagnóstico e plano (somente leitura):
+  `python3 painel-soprolife/scripts/reconciliar-historico.py --from-adc --dry-run`
+  — ver `docs/arquitetura-canonica-abas.md`.
+
 ## Histórico
 
 - **M11–M12.2**: escrita dupla Nova Espirometria → CRM Espirometria (operacional)

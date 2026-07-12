@@ -1,0 +1,1222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Manifesto canônico das abas — planilha 'SoproLife - Painel Interno - Dados Privados' (M14.3)",
+  "descricao": "Fonte única de verdade sobre cada aba do Google Sheets: o que é, quem grava, quem lê, relação com o Centro de Comando, dados sensíveis e matriz de simplificação. Este arquivo alimenta o gerador do Manual das Abas (scripts/generate-manual-abas-gs.py → apps-script/manual-das-abas.gs). Nunca contém dado real — apenas metadados estruturais.",
+  "versao": "1.2.0",
+  "tipos_validos": [
+    "cadastro",
+    "fonte_operacional",
+    "fonte_financeira",
+    "configuracao",
+    "resumo",
+    "relatorio",
+    "log",
+    "staging",
+    "backup",
+    "legado",
+    "arquivo"
+  ],
+  "status_validos": [
+    "operacional",
+    "apoio",
+    "transicao",
+    "legado",
+    "arquivo",
+    "removida"
+  ],
+  "recomendacoes_validas": [
+    "manter_visivel",
+    "ocultar_usuarios_comuns",
+    "manter_como_configuracao",
+    "manter_como_log",
+    "manter_como_fonte",
+    "transformar_em_visao",
+    "consolidar",
+    "arquivar",
+    "excluir_futuramente",
+    "nunca_excluir",
+    "nunca_recriar"
+  ],
+  "cadeia_de_dados": [
+    "1. Google Sheets (abas privadas desta planilha) — onde o dado real mora.",
+    "2. Apps Script (command-center-api.gs + contratos-canonicos.gs) — recebe as escritas do painel via Web App com token; valida contra contratos versionados FAIL-CLOSED, faz upsert com patch seletivo e audita. IDs novos são emitidos pelo servidor (UUID).",
+    "3. Geradores locais (scripts/read-*-adc.py, generate-*.py) — leem as abas via ADC somente-leitura e produzem arquivos locais.",
+    "4. Arquivos .local.json — data-private/*.local.json (completos, chmod 600, nunca no git) e data/*-summary.local.json (só agregados seguros, chmod 644).",
+    "5. Centro de Comando / Painel SoproLife — o navegador só carrega os summaries seguros; escrita volta pelo proxy local → Apps Script.",
+    "6. update-local-data.sh orquestra os passos 3–4 (local e na VPS via timer soprolife-update-data)."
+  ],
+  "abas": [
+    {
+      "nome": "CRM Pacientes",
+      "descricao_simples": "Uma linha por PESSOA. Carteira-mãe de quem já realizou pelo menos um atendimento.",
+      "finalidade": "Representar o relacionamento com o paciente (não um atendimento): identificação mínima, contato privado, último serviço, próximo contato, consentimento.",
+      "tipo": "cadastro",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "crm",
+      "pagina_painel": "CRM → Pacientes / Follow-up de pacientes",
+      "quem_grava": [
+        "Apps Script createPaciente (Nova entrada do painel — só ADICIONA linha, fail-closed)"
+      ],
+      "apps_script": [
+        "command-center-api.gs",
+        "contratos-canonicos.gs",
+        "sync-crm-pacientes.gs (BLOQUEADO — lança erro; nunca executar)",
+        "converter-lead-em-paciente.gs (BLOQUEADO — conversão automática desativada até a M14.3B)"
+      ],
+      "leitores_locais": [
+        "scripts/generate-followup-pacientes.py",
+        "scripts/inspect-crm-pacientes.py"
+      ],
+      "atualizacao": "automática (painel/conversão) + manual pontual — consolidação em massa BLOQUEADA",
+      "frequencia": "por atendimento novo",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios + Apps Script",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "CRÍTICO — perda da carteira de pacientes; não excluir nunca.",
+      "dependencias": [
+        "CRM Espirometria e CRM Consultas vinculam via paciente_id (colunas v2 — M14.3B)",
+        "Follow-up de pacientes no painel lê daqui"
+      ],
+      "seguranca": "Contém telefone (privado). Nunca CPF, laudo, diagnóstico ou pedido médico. Nome/telefone jamais saem para arquivos commitáveis.",
+      "recomendacao": "nunca_excluir",
+      "colunas_canonicas": [
+        "paciente_id",
+        "data_cadastro",
+        "primeiro_nome",
+        "telefone",
+        "ultimo_servico",
+        "status_relacionamento",
+        "proximo_contato",
+        "motivo_proximo_contato",
+        "canal",
+        "responsavel",
+        "consentimento_whatsapp",
+        "observacao_privada_minima"
+      ],
+      "colunas_propostas": [
+        "data_cadastro_precisao",
+        "id_legado"
+      ],
+      "observacoes": "MESTRE PERSISTENTE (M14.3A): nenhuma reescrita integral, nenhuma linha eliminada, nenhum ID recalculado. O sincronizador antigo (clearContents + dedupe por telefone/primeiro nome) está BLOQUEADO — nome sozinho nunca vincula; telefone gera apenas candidato; telefone compartilhado = ambiguous; candidato não confirmado = pending; sem dados = unmatchable. Cobertura auditada em modo read-only por reconciliar-historico.py; migração incremental real é a M14.3B (backup + autorização)."
+    },
+    {
+      "nome": "CRM Espirometria",
+      "descricao_simples": "Uma linha por EXAME de espirometria realmente realizado — o histórico central de exames, de todas as origens.",
+      "finalidade": "Registrar cada exame (SoproLife direta, domiciliar, coworking/clínica, empresa/PCMSO, parceria Pastore ou outros) num único histórico operacional.",
+      "tipo": "fonte_operacional",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "lancamentos",
+      "pagina_painel": "Entrada de Dados → Nova Espirometria (grava); CRM → follow-up de pacientes (lê)",
+      "quem_grava": [
+        "Apps Script createEspirometria (fail-closed; ID do servidor; idempotência por chave separada: replay ou conflito 409 — nunca patch de reenvio)"
+      ],
+      "apps_script": [
+        "command-center-api.gs",
+        "contratos-canonicos.gs"
+      ],
+      "leitores_locais": [
+        "scripts/generate-followup-pacientes.py",
+        "scripts/inspect-crm-pacientes.py"
+      ],
+      "atualizacao": "automática (painel) + manual pontual",
+      "frequencia": "por exame",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios + Apps Script",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "CRÍTICO — histórico real de exames da empresa; não excluir nunca.",
+      "dependencias": [
+        "vínculo com CRM Pacientes via paciente_id (coluna v2 — M14.3B)",
+        "compartilha id_atendimento com Financeiro_Lancamentos"
+      ],
+      "seguranca": "Fonte OPERACIONAL: nunca usar para calcular valores (fonte monetária é Financeiro_Lancamentos). Todos os registros existentes são exames REAIS — ID antigo (ESP-NNNN, ESM-*), data incompleta ou ausência de lançamento financeiro NÃO tornam um registro teste.",
+      "recomendacao": "nunca_excluir",
+      "colunas_canonicas": [
+        "exame_id",
+        "data_entrada",
+        "primeiro_nome",
+        "telefone",
+        "servico",
+        "origem",
+        "status_exame",
+        "data_exame",
+        "proximo_contato",
+        "motivo_proximo_contato",
+        "canal",
+        "responsavel",
+        "consentimento_whatsapp"
+      ],
+      "colunas_propostas": [
+        "paciente_id",
+        "id_legado",
+        "data_exame_precisao",
+        "local_atendimento",
+        "parceiro",
+        "unidade",
+        "modalidade",
+        "idempotency_key (técnica, sob demanda)",
+        "idempotency_fingerprint (técnica, sob demanda)"
+      ],
+      "observacoes": "exame_id é SEMPRE UUID do servidor (M14.3A 2ª rodada); a chave do navegador vai para a coluna técnica idempotency_key (criada sob demanda) e serve só para replay/409. Exames Pastore devem entrar AQUI (local=Parceiro) — a aba Pastore-Atendimentos é staging isolado. Datas com validação valor+precisão (impossível = erro; mês/ano preserva precisão; vazio nunca vira hoje)."
+    },
+    {
+      "nome": "CRM Consultas",
+      "descricao_simples": "Uma linha por CONSULTA/teleconsulta realizada.",
+      "finalidade": "Histórico de consultas médicas. Hoje contém 1 consulta real — e isso está correto.",
+      "tipo": "fonte_operacional",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "lancamentos",
+      "pagina_painel": "Entrada de Dados → Nova Consulta; CRM → follow-up",
+      "quem_grava": [
+        "Apps Script createConsulta (fail-closed; mesma idempotência da espirometria)"
+      ],
+      "apps_script": [
+        "command-center-api.gs",
+        "contratos-canonicos.gs"
+      ],
+      "leitores_locais": [
+        "scripts/generate-followup-pacientes.py",
+        "scripts/inspect-crm-pacientes.py"
+      ],
+      "atualizacao": "automática (painel) + manual pontual",
+      "frequencia": "por consulta",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios + Apps Script",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "CRÍTICO — histórico real de consultas.",
+      "dependencias": [
+        "vínculo com CRM Pacientes via paciente_id (coluna v2 — M14.3B)"
+      ],
+      "seguranca": "Nunca registrar diagnóstico/conteúdo clínico — apenas logística do atendimento.",
+      "recomendacao": "nunca_excluir",
+      "colunas_canonicas": [
+        "consulta_id",
+        "data_entrada",
+        "primeiro_nome",
+        "telefone",
+        "origem",
+        "tipo_consulta",
+        "status",
+        "medica",
+        "data_consulta",
+        "proximo_contato",
+        "motivo_proximo_contato",
+        "canal",
+        "responsavel",
+        "consentimento_whatsapp"
+      ],
+      "colunas_propostas": [
+        "paciente_id",
+        "id_legado",
+        "data_consulta_precisao",
+        "modalidade",
+        "idempotency_key (técnica, sob demanda)",
+        "idempotency_fingerprint (técnica, sob demanda)"
+      ],
+      "observacoes": "consulta_id sequencial (CON-NNNN); canônico futuro CON-AAAAMMDD-HHMMSS-XXXXXX."
+    },
+    {
+      "nome": "Financeiro_Lancamentos",
+      "descricao_simples": "FONTE FINANCEIRA ÚNICA: uma linha financeira por atendimento, sem identificação de paciente.",
+      "finalidade": "Guardar valores (tabela/cobrado/recebido/desconto), status de pagamento, forma e origem do preço — vinculados ao exame por id_atendimento.",
+      "tipo": "fonte_financeira",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "financeiro",
+      "pagina_painel": "Financeiro; Painel Geral (card de receita); Cérebro Operacional; timeline",
+      "quem_grava": [
+        "Apps Script registrarEspirometriaFinanceiro (id_atendimento OBRIGATÓRIO — nenhum órfão novo pela API; patch por presença; sem defaults monetários inventados)"
+      ],
+      "apps_script": [
+        "command-center-api.gs",
+        "contratos-canonicos.gs"
+      ],
+      "leitores_locais": [
+        "scripts/read-financeiro-lancamentos-adc.py",
+        "scripts/generate-ultimos-lancamentos.py",
+        "scripts/generate-saude-operacional.py"
+      ],
+      "atualizacao": "automática (painel)",
+      "frequencia": "por atendimento",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": true,
+      "apenas_agregados": false,
+      "quem_edita": "sócios + Apps Script (a escrita REJEITA campos de pessoa — _EF_CAMPOS_PROIBIDOS)",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "CRÍTICO — única fonte monetária oficial do painel.",
+      "dependencias": [
+        "compartilha id_atendimento com CRM Espirometria",
+        "summary financeiro do painel deriva 100% daqui"
+      ],
+      "seguranca": "Nunca nome/telefone/CPF/e-mail/endereço do paciente ou pagador. Observação financeira é texto livre sanitizado e fica só no arquivo privado local. Valores ausentes ficam ausentes — nunca inventar.",
+      "recomendacao": "nunca_excluir",
+      "colunas_canonicas": [
+        "id_lancamento",
+        "id_atendimento",
+        "criado_em",
+        "data_exame",
+        "tipo_movimento",
+        "servico",
+        "local_atendimento",
+        "valor_tabela",
+        "valor_cobrado",
+        "valor_recebido",
+        "desconto",
+        "status_exame",
+        "status_pagamento",
+        "forma_pagamento",
+        "origem_preco",
+        "observacao_financeira",
+        "fonte"
+      ],
+      "colunas_propostas": [
+        "data_recebimento",
+        "data_exame_precisao",
+        "estado_reconciliacao",
+        "papel_movimento",
+        "movimento_referencia"
+      ],
+      "observacoes": "Cardinalidade (M14.3A, registros-schemas.json): um atendimento pode ter N movimentos; no máximo UMA receita principal ativa; ajustes/complementos/estornos são append-only e referenciam o movimento original — duplicata é CONFLITO visível, nunca 'última linha vence' silencioso (ledger completo na M14.3B). Hoje há exames históricos sem lançamento (backfill futuro com valores reais, nunca inventados) e 3 lançamentos de 09/07/2026 órfãos a reconciliar — nunca apagar automaticamente. Ver reconciliar-historico.py."
+    },
+    {
+      "nome": "Leads",
+      "descricao_simples": "Contatos interessados ANTES do primeiro atendimento (funil de entrada).",
+      "finalidade": "Registrar interesse, etapa do funil e próxima ação. Lead vira paciente ao realizar o primeiro atendimento; lead B2B vira clínica/parceiro.",
+      "tipo": "cadastro",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "leads",
+      "pagina_painel": "Leads e Agendamentos",
+      "quem_grava": [
+        "Apps Script createLead / updateLeadStage / vincularLeadAClinica",
+        "edição manual"
+      ],
+      "apps_script": [
+        "command-center-api.gs",
+        "converter-lead-em-paciente.gs (BLOQUEADO)",
+        "organizar-leads-operacionais.gs (BLOQUEADO — migração destrutiva → M14.3B)",
+        "limpar-leads-e-manual-abas.gs (aditivo: dropdowns/notas/Manual, sem remoção de linhas)"
+      ],
+      "leitores_locais": [
+        "scripts/read-leads-sheets.py"
+      ],
+      "atualizacao": "automática (painel) + manual",
+      "frequencia": "por contato novo",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios + Apps Script",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "ALTO — funil comercial ativo.",
+      "dependencias": [
+        "conversão cria linhas em CRM Pacientes/Espirometria/Consultas e move para Leads Convertidos"
+      ],
+      "seguranca": "telefone_whatsapp e observacao são privados; nunca em arquivos commitáveis.",
+      "recomendacao": "manter_visivel",
+      "colunas_canonicas": [
+        "lead_id",
+        "data_contato",
+        "nome",
+        "telefone_whatsapp",
+        "servico_interesse",
+        "origem",
+        "canal",
+        "bairro_regiao",
+        "tem_pedido_medico",
+        "etapa",
+        "responsavel",
+        "proxima_acao",
+        "data_proxima_acao",
+        "observacao"
+      ],
+      "colunas_propostas": [
+        "tipo_lead",
+        "entidade_destino",
+        "entidade_id",
+        "data_conversao",
+        "status_operacional"
+      ],
+      "observacoes": "As colunas propostas B2B já são criadas sob demanda por vincularLeadAClinica (_LEAD_COLUNAS_EXTRA_B2B). Conversão automática de leads BLOQUEADA (M14.3A 2ª rodada): registrar atendimento pela tela do painel e atualizar a etapa; conversão canônica na M14.3B."
+    },
+    {
+      "nome": "CRM Clinicas",
+      "descricao_simples": "Pipeline B2B: uma linha por clínica/consultório/empresa em relacionamento comercial.",
+      "finalidade": "Controlar etapa comercial, próxima ação e prioridade das parcerias institucionais.",
+      "tipo": "cadastro",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "crm",
+      "pagina_painel": "CRM → Clínicas e Parceiros",
+      "quem_grava": [
+        "Apps Script createClinicaB2B / registrarInteracaoClinica / updateCrmClinicaEtapa"
+      ],
+      "apps_script": [
+        "command-center-api.gs"
+      ],
+      "leitores_locais": [
+        "scripts/read-crm-clinicas-adc.py",
+        "scripts/generate-followup-clinicas.py",
+        "scripts/promote-pcmso-to-crm.py"
+      ],
+      "atualizacao": "automática (painel) + manual",
+      "frequencia": "por interação",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios + Apps Script",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "ALTO — relacionamento comercial B2B.",
+      "dependencias": [
+        "Base Prospecção B2B PCMSO promove entradas para cá",
+        "CRM Contatos B2B referencia clinica_id"
+      ],
+      "seguranca": "Dados institucionais (não PII de paciente); mesmo assim não expor observações em arquivos públicos.",
+      "recomendacao": "manter_visivel",
+      "colunas_canonicas": [
+        "clinica_id",
+        "nome_clinica",
+        "bairro",
+        "regiao",
+        "tipo_clinica",
+        "etapa",
+        "ultima_interacao",
+        "proxima_acao",
+        "data_proxima_acao",
+        "responsavel",
+        "prioridade",
+        "observacao"
+      ],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "CRM Contatos B2B",
+      "descricao_simples": "Pessoas de contato dentro das clínicas/empresas parceiras.",
+      "finalidade": "Separar a PESSOA (contato) da ENTIDADE (clínica) no funil B2B.",
+      "tipo": "cadastro",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "crm",
+      "pagina_painel": "CRM → Contatos B2B",
+      "quem_grava": [
+        "Apps Script vincularLeadAClinica (_upsertContatoB2B)"
+      ],
+      "apps_script": [
+        "command-center-api.gs"
+      ],
+      "leitores_locais": [
+        "scripts/read-crm-contatos-b2b-adc.py"
+      ],
+      "atualizacao": "automática (painel)",
+      "frequencia": "por vínculo de lead B2B",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios + Apps Script",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "ALTO — contatos comerciais reais.",
+      "dependencias": [
+        "clinica_id aponta para CRM Clinicas"
+      ],
+      "seguranca": "Telefone/e-mail de contato profissional: privado, nunca em arquivo commitável.",
+      "recomendacao": "manter_visivel",
+      "colunas_canonicas": [
+        "contato_id",
+        "clinica_id",
+        "nome_contato",
+        "cargo",
+        "telefone_whatsapp",
+        "email",
+        "papel",
+        "status_relacionamento",
+        "ultima_interacao",
+        "proxima_acao",
+        "data_proxima_acao",
+        "responsavel",
+        "observacao"
+      ],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "Base Prospecção B2B PCMSO",
+      "descricao_simples": "Lista bruta de alvos B2B/PCMSO ainda em prospecção.",
+      "finalidade": "Funil de entrada B2B: empresas/clínicas mapeadas antes de responderem. Quando avançam, são promovidas ao CRM Clinicas.",
+      "tipo": "staging",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "crm",
+      "pagina_painel": "CRM → prospecção B2B (ações)",
+      "quem_grava": [
+        "Apps Script createClinicaB2B (escrita dupla)",
+        "espelhamento de etapa (updateCrmClinicaEtapa)",
+        "manual"
+      ],
+      "apps_script": [
+        "command-center-api.gs",
+        "soprolife-sheets-template.gs (coluna Etapa)"
+      ],
+      "leitores_locais": [
+        "scripts/generate-followup-clinicas.py",
+        "scripts/promote-pcmso-to-crm.py"
+      ],
+      "atualizacao": "manual + automática parcial",
+      "frequencia": "por campanha de prospecção",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios",
+      "pode_ocultar": false,
+      "pode_arquivar": true,
+      "pode_excluir": false,
+      "risco_exclusao": "MÉDIO — lista de prospecção reconstituível, mas com histórico de status.",
+      "dependencias": [
+        "promoção alimenta CRM Clinicas"
+      ],
+      "seguranca": "Dados institucionais públicos (nome, bairro, telefone comercial).",
+      "recomendacao": "manter_como_fonte",
+      "colunas_canonicas": [
+        "Nome da clínica/empresa",
+        "Tipo",
+        "Bairro/Região",
+        "Telefone/WhatsApp",
+        "Pessoa de contato",
+        "Origem da lista",
+        "Status",
+        "Interesse",
+        "Próximo passo",
+        "Data do próximo passo",
+        "Observações",
+        "Etapa"
+      ],
+      "colunas_propostas": [],
+      "observacoes": "Cabeçalho humano (não snake_case) — legado aceito; a promoção ao CRM normaliza."
+    },
+    {
+      "nome": "Follow-up WhatsApp",
+      "descricao_simples": "Fila de mensagens/contatos futuros — ações, não cadastro.",
+      "finalidade": "Agendar retornos, confirmações e reengajamento com consentimento registrado.",
+      "tipo": "fonte_operacional",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "crm",
+      "pagina_painel": "CRM → follow-up",
+      "quem_grava": [
+        "Apps Script registrarInteracaoPaciente",
+        "conversão de lead"
+      ],
+      "apps_script": [
+        "command-center-api.gs",
+        "converter-lead-em-paciente.gs"
+      ],
+      "leitores_locais": [
+        "scripts/inspect-crm-pacientes.py"
+      ],
+      "atualizacao": "automática (painel)",
+      "frequencia": "por follow-up",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios + Apps Script",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "MÉDIO — fila operacional ativa.",
+      "dependencias": [
+        "referencia pacientes por nome/telefone (proposta futura: paciente_id)"
+      ],
+      "seguranca": "Nunca enviar mensagem sem consentimento registrado.",
+      "recomendacao": "manter_visivel",
+      "colunas_canonicas": [
+        "followup_id",
+        "data_criacao",
+        "primeiro_nome",
+        "telefone",
+        "tipo_mensagem",
+        "data_prevista",
+        "status",
+        "canal",
+        "responsavel",
+        "template_usado",
+        "consentimento"
+      ],
+      "colunas_propostas": [
+        "paciente_id"
+      ]
+    },
+    {
+      "nome": "Tarefas",
+      "descricao_simples": "Pendências operacionais, comerciais, marketing e documentos.",
+      "finalidade": "Visão única de tarefas com prioridade, responsável e prazo.",
+      "tipo": "fonte_operacional",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "tarefas",
+      "pagina_painel": "Tarefas",
+      "quem_grava": [
+        "manual"
+      ],
+      "apps_script": [
+        "soprolife-sheets-template.gs (estrutura)"
+      ],
+      "leitores_locais": [
+        "scripts/read-sheets-summary-adc.py (agregados via Resumo Dashboard)"
+      ],
+      "atualizacao": "manual",
+      "frequencia": "diária",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "MÉDIO — organização do dia a dia.",
+      "dependencias": [],
+      "seguranca": "Não citar paciente identificável em título/observação de tarefa.",
+      "recomendacao": "manter_visivel",
+      "colunas_canonicas": [
+        "tarefa_id",
+        "area",
+        "titulo",
+        "prioridade",
+        "status",
+        "responsavel",
+        "prazo",
+        "origem",
+        "observacao"
+      ],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "Marketing Conteúdo",
+      "descricao_simples": "Calendário editorial: posts, campanhas, SEO.",
+      "finalidade": "Planejar e acompanhar conteúdo por canal, com datas e status.",
+      "tipo": "fonte_operacional",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "marketing",
+      "pagina_painel": "Marketing & SEO",
+      "quem_grava": [
+        "manual"
+      ],
+      "apps_script": [
+        "soprolife-sheets-template.gs"
+      ],
+      "leitores_locais": [
+        "scripts/read-marketing-seo-adc.py",
+        "scripts/read-sheets-summary-adc.py"
+      ],
+      "atualizacao": "manual",
+      "frequencia": "semanal",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "BAIXO-MÉDIO — histórico editorial.",
+      "dependencias": [],
+      "seguranca": "Sem dados pessoais.",
+      "recomendacao": "manter_visivel",
+      "colunas_canonicas": [
+        "conteudo_id",
+        "canal",
+        "tema",
+        "formato",
+        "etapa",
+        "data_planejada",
+        "data_publicacao",
+        "cta",
+        "status",
+        "metrica_agregada",
+        "observacao"
+      ],
+      "colunas_propostas": [],
+      "observacoes": "O nome da aba aparece como 'Marketing Conteúdo' (_ABAS_OPERACIONAIS) e 'Marketing Conteudo' (resumo do template) em pontos diferentes do código — padronizar para o nome REAL da aba na planilha ao revisar; divergência de acento quebra getSheetByName."
+    },
+    {
+      "nome": "Agenda Operacional",
+      "descricao_simples": "Agenda de exames, consultas, reuniões e visitas — sem dado sensível.",
+      "finalidade": "Organizar a rotina da equipe; dados clínicos ficam nos CRMs.",
+      "tipo": "fonte_operacional",
+      "fonte": "oficial",
+      "status": "apoio",
+      "secao_command_center": "overview",
+      "pagina_painel": "Painel Geral (indiretamente, via resumo)",
+      "quem_grava": [
+        "manual"
+      ],
+      "apps_script": [
+        "soprolife-sheets-template.gs"
+      ],
+      "leitores_locais": [
+        "scripts/read-sheets-summary-adc.py (via Resumo Dashboard)"
+      ],
+      "atualizacao": "manual",
+      "frequencia": "diária",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "sócios",
+      "pode_ocultar": false,
+      "pode_arquivar": true,
+      "pode_excluir": false,
+      "risco_exclusao": "BAIXO — agenda também existe no Google Calendar.",
+      "dependencias": [],
+      "seguranca": "Usar primeiro nome ou código de evento; nunca nome completo de paciente.",
+      "recomendacao": "manter_visivel",
+      "colunas_canonicas": [
+        "evento_id",
+        "data",
+        "hora",
+        "tipo_evento",
+        "local",
+        "responsavel",
+        "status",
+        "observacao_anonima"
+      ],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "Parceria Pastore - Atendimentos",
+      "descricao_simples": "STAGING/fila operacional dos atendimentos captados via parceria Pastore.",
+      "finalidade": "Captura rápida no formato do acordo comercial (repasse, custos por exame). O registro CANÔNICO do exame deve existir em CRM Espirometria (local_atendimento=Parceiro, parceiro=Pastore) e o financeiro em Financeiro_Lancamentos.",
+      "tipo": "staging",
+      "fonte": "oficial",
+      "status": "transicao",
+      "secao_command_center": "parcerias-pastore",
+      "pagina_painel": "Parcerias → Pastore",
+      "quem_grava": [
+        "Apps Script _registrarAtendimentoPastore (pastore-staging.gs — writer ISOLADO, marcado staging/não canônico)"
+      ],
+      "apps_script": [
+        "pastore-staging.gs",
+        "command-center-api.gs (roteia com guarda fail-closed)"
+      ],
+      "leitores_locais": [
+        "scripts/read-parcerias-pastore-adc.py"
+      ],
+      "atualizacao": "automática (painel) + manual",
+      "frequencia": "por turno de atendimento (terças/sábados)",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": true,
+      "apenas_agregados": false,
+      "quem_edita": "sócios + Apps Script",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "CRÍTICO enquanto for a única fonte dos atendimentos Pastore — os exames reais registrados aqui ainda NÃO estão no histórico central.",
+      "dependencias": [
+        "Parceria Pastore - Config (preços/repasse)",
+        "summary do painel Parcerias"
+      ],
+      "seguranca": "paciente_nome e paciente_whatsapp nunca saem da planilha/data-private. Valores por linha nunca viram summary.",
+      "recomendacao": "transformar_em_visao",
+      "colunas_canonicas": [
+        "data_atendimento",
+        "unidade",
+        "dia_semana",
+        "horario_inicio",
+        "horario_fim",
+        "origem",
+        "paciente_nome",
+        "paciente_whatsapp",
+        "tipo_exame",
+        "broncodilatador",
+        "valor_cobrado",
+        "forma_pagamento",
+        "recebido_por",
+        "repasse_pastore",
+        "custo_insumo",
+        "custo_deslocamento",
+        "custo_profissional",
+        "outros_custos",
+        "receita_bruta",
+        "custo_total",
+        "resultado_liquido",
+        "status",
+        "followup_status",
+        "consentimento_contato_futuro",
+        "observacao_privada_minima"
+      ],
+      "colunas_propostas": [
+        "id_atendimento",
+        "estado_reconciliacao"
+      ],
+      "observacoes": "Decisão M14.3A: writer isolado em pastore-staging.gs para deixar a fronteira explícita — esta aba NÃO é base canônica de pessoas nem de valores (Config não é prova de preço real). O modal do painel sinaliza 'staging/não canônico'. Alvo M14.3B: cada atendimento gera id_atendimento + linha canônica em CRM Espirometria + lançamento em Financeiro_Lancamentos (outbox idempotente); migração dos registros existentes só com autorização, via reconciliar-historico.py."
+    },
+    {
+      "nome": "Parceria Pastore - Custos",
+      "descricao_simples": "Custos da parceria não amarrados a um atendimento específico.",
+      "finalidade": "Custo fixo mensal, deslocamento de dia inteiro, insumo em lote.",
+      "tipo": "fonte_financeira",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "parcerias-pastore",
+      "pagina_painel": "Parcerias → Pastore (financeiro)",
+      "quem_grava": [
+        "manual"
+      ],
+      "apps_script": [],
+      "leitores_locais": [
+        "scripts/read-parcerias-pastore-adc.py"
+      ],
+      "atualizacao": "manual",
+      "frequencia": "por custo",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": true,
+      "apenas_agregados": false,
+      "quem_edita": "sócios",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "ALTO — custos reais da parceria.",
+      "dependencias": [
+        "summary Pastore"
+      ],
+      "seguranca": "Valores por linha só agregados no summary.",
+      "recomendacao": "manter_como_fonte",
+      "colunas_canonicas": [
+        "data",
+        "unidade",
+        "tipo_custo",
+        "descricao",
+        "valor",
+        "pago_por",
+        "recorrente",
+        "observacao_privada_minima"
+      ],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "Parceria Pastore - Config",
+      "descricao_simples": "Parâmetros da parceria: agenda, capacidade, preços e repasse.",
+      "finalidade": "Fonte de verdade da agenda e dos parâmetros comerciais da parceria.",
+      "tipo": "configuracao",
+      "fonte": "oficial",
+      "status": "operacional",
+      "secao_command_center": "parcerias-pastore",
+      "pagina_painel": "Parcerias → Pastore (agenda/ocupação)",
+      "quem_grava": [
+        "manual"
+      ],
+      "apps_script": [],
+      "leitores_locais": [
+        "scripts/read-parcerias-pastore-adc.py"
+      ],
+      "atualizacao": "manual",
+      "frequencia": "rara (mudança de acordo)",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": true,
+      "apenas_agregados": false,
+      "quem_edita": "sócios",
+      "pode_ocultar": true,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "ALTO — acordo comercial; sem ela ocupação/margem não calculam.",
+      "dependencias": [
+        "summary Pastore usa capacidade para ocupação"
+      ],
+      "seguranca": "Valores de acordo comercial são sensíveis — não expor fora do painel privado.",
+      "recomendacao": "manter_como_configuracao",
+      "colunas_canonicas": [
+        "unidade",
+        "status",
+        "dia_semana",
+        "horario_inicio",
+        "horario_fim",
+        "capacidade_estimada_por_turno",
+        "valor_exame_sem_bd",
+        "valor_exame_com_bd",
+        "repasse_pastore_tipo",
+        "repasse_pastore_valor",
+        "custo_insumo_padrao",
+        "custo_deslocamento_padrao",
+        "custo_profissional_padrao",
+        "observacao"
+      ],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "Resumo Dashboard",
+      "descricao_simples": "Agregados gerados automaticamente para leitura do painel.",
+      "finalidade": "Métricas consolidadas (contagens por aba) em formato chave/valor para o conector de resumo.",
+      "tipo": "resumo",
+      "fonte": "derivada",
+      "status": "apoio",
+      "secao_command_center": "overview",
+      "pagina_painel": "Painel Geral",
+      "quem_grava": [
+        "Apps Script atualizarResumoDashboardSoproLife (gatilho/menu)"
+      ],
+      "apps_script": [
+        "soprolife-sheets-template.gs",
+        "core/apps-script/resumo-dashboard-auto.gs"
+      ],
+      "leitores_locais": [
+        "scripts/read-sheets-summary-adc.py"
+      ],
+      "atualizacao": "automática (gatilho onEdit + menu)",
+      "frequencia": "a cada edição monitorada",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": true,
+      "quem_edita": "somente Apps Script (não editar à mão)",
+      "pode_ocultar": true,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "BAIXO — é derivada; o Apps Script recria. Excluir só quebra até a próxima geração.",
+      "dependencias": [
+        "deriva de Leads/CRM Clinicas/Tarefas/Financeiro_Lancamentos/Marketing/Agenda"
+      ],
+      "seguranca": "Só agregados.",
+      "recomendacao": "ocultar_usuarios_comuns",
+      "colunas_canonicas": [
+        "chave",
+        "valor",
+        "atualizado_em"
+      ],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "Log Centro Comando",
+      "descricao_simples": "Histórico das ações do Command Center (o que rodou, quando, resultado).",
+      "finalidade": "Rastreabilidade das automações e escritas do painel.",
+      "tipo": "log",
+      "fonte": "derivada",
+      "status": "apoio",
+      "secao_command_center": "automacoes",
+      "pagina_painel": "Automações (indiretamente)",
+      "quem_grava": [
+        "Apps Script _logEntry (todas as ações)"
+      ],
+      "apps_script": [
+        "command-center-api.gs"
+      ],
+      "leitores_locais": [],
+      "atualizacao": "automática",
+      "frequencia": "por ação",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "somente Apps Script (append-only)",
+      "pode_ocultar": true,
+      "pode_arquivar": true,
+      "pode_excluir": false,
+      "risco_exclusao": "MÉDIO — perde trilha de auditoria operacional.",
+      "dependencias": [],
+      "seguranca": "Telefone e observações nunca entram no log (regra de _logEntry).",
+      "recomendacao": "manter_como_log",
+      "colunas_canonicas": [
+        "timestamp",
+        "acao",
+        "status",
+        "aba",
+        "id",
+        "executor",
+        "resumo"
+      ],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "Log Auditoria",
+      "descricao_simples": "Trilha append-only das escritas (M1), com request_id, campo alterado e duração.",
+      "finalidade": "Auditoria fina das mutações: quem/o quê/quando/resultado, sem valores privados.",
+      "tipo": "log",
+      "fonte": "derivada",
+      "status": "apoio",
+      "secao_command_center": "automacoes",
+      "pagina_painel": "Automações → resumo de auditoria",
+      "quem_grava": [
+        "Apps Script _logAudit/_auditAcao"
+      ],
+      "apps_script": [
+        "command-center-api.gs"
+      ],
+      "leitores_locais": [
+        "scripts/read-auditoria-adc.py"
+      ],
+      "atualizacao": "automática",
+      "frequencia": "por escrita",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "somente Apps Script (append-only)",
+      "pode_ocultar": true,
+      "pode_arquivar": true,
+      "pode_excluir": false,
+      "risco_exclusao": "MÉDIO — perde trilha de auditoria técnica.",
+      "dependencias": [],
+      "seguranca": "Campos privados viram '[campo privado]' (_AUDIT_VALOR_PRIVADO).",
+      "recomendacao": "manter_como_log",
+      "colunas_canonicas": [],
+      "colunas_propostas": [],
+      "observacoes": "Cabeçalho definido em _LOG_AUDITORIA_CABECALHO (command-center-api.gs)."
+    },
+    {
+      "nome": "Leads Convertidos",
+      "descricao_simples": "Arquivo dos leads já convertidos em paciente/clínica (saem da aba Leads).",
+      "finalidade": "Preservar o histórico do funil sem poluir a lista ativa.",
+      "tipo": "arquivo",
+      "fonte": "derivada",
+      "status": "apoio",
+      "secao_command_center": "leads",
+      "pagina_painel": "—",
+      "quem_grava": [
+        "(histórico) converter-lead-em-paciente.gs — hoje BLOQUEADO; dedupLeadsConvertidos só emite relatório (exclusão bloqueada)"
+      ],
+      "apps_script": [
+        "converter-lead-em-paciente.gs",
+        "command-center-api.gs"
+      ],
+      "leitores_locais": [],
+      "atualizacao": "automática",
+      "frequencia": "por conversão",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "somente Apps Script",
+      "pode_ocultar": true,
+      "pode_arquivar": true,
+      "pode_excluir": false,
+      "risco_exclusao": "MÉDIO — histórico de conversões.",
+      "dependencias": [
+        "origem: aba Leads"
+      ],
+      "seguranca": "Mesmas regras de Leads.",
+      "recomendacao": "ocultar_usuarios_comuns",
+      "colunas_canonicas": [
+        "lead_id",
+        "data_contato",
+        "nome",
+        "telefone_whatsapp",
+        "servico_interesse",
+        "origem",
+        "etapa",
+        "responsavel",
+        "proxima_acao",
+        "data_proxima_acao",
+        "observacao"
+      ],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "Log Conversões Leads",
+      "descricao_simples": "Log específico das conversões de lead (o que foi criado onde).",
+      "finalidade": "Rastrear cada conversão: destinos criados e resultado.",
+      "tipo": "log",
+      "fonte": "derivada",
+      "status": "apoio",
+      "secao_command_center": "leads",
+      "pagina_painel": "—",
+      "quem_grava": [
+        "converter-lead-em-paciente.gs",
+        "command-center-api.gs (_logConversaoLeads)"
+      ],
+      "apps_script": [
+        "converter-lead-em-paciente.gs",
+        "command-center-api.gs"
+      ],
+      "leitores_locais": [],
+      "atualizacao": "automática",
+      "frequencia": "por conversão",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "somente Apps Script (append-only)",
+      "pode_ocultar": true,
+      "pode_arquivar": true,
+      "pode_excluir": false,
+      "risco_exclusao": "BAIXO-MÉDIO — trilha de conversões.",
+      "dependencias": [],
+      "seguranca": "Contém nome do lead — manter oculta.",
+      "recomendacao": "manter_como_log",
+      "colunas_canonicas": [
+        "data_hora",
+        "lead_id",
+        "nome",
+        "etapa",
+        "destinos_criados",
+        "resultado",
+        "followup_status"
+      ],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "Manual das Abas",
+      "descricao_simples": "Documentação viva da planilha — gerada a partir deste manifesto.",
+      "finalidade": "Explicar cada aba e sua relação com o Centro de Comando, em linguagem simples.",
+      "tipo": "relatorio",
+      "fonte": "derivada",
+      "status": "apoio",
+      "secao_command_center": "automacoes",
+      "pagina_painel": "—",
+      "quem_grava": [
+        "apps-script/manual-das-abas.gs (atualizarManualDasAbasSoproLife)"
+      ],
+      "apps_script": [
+        "manual-das-abas.gs",
+        "limpar-leads-e-manual-abas.gs (delega; SEM fallback — falha se o gerado não estiver instalado)"
+      ],
+      "leitores_locais": [
+        "scripts/generate-manual-abas-gs.py (gera o .gs a partir deste manifesto)"
+      ],
+      "atualizacao": "manual (executar a função no Apps Script)",
+      "frequencia": "a cada mudança de arquitetura",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": true,
+      "quem_edita": "somente Apps Script (regenerada por completo)",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": true,
+      "risco_exclusao": "NENHUM — é regenerada pela função do Apps Script.",
+      "dependencias": [
+        "core/contracts/abas-manifest.json é a fonte"
+      ],
+      "seguranca": "Só metadados.",
+      "recomendacao": "manter_visivel",
+      "colunas_canonicas": [],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "_Backup_Leads_Demo_*",
+      "descricao_simples": "Backups automáticos da aba Leads criados antes da limpeza de dados demo (padrão _Backup_Leads_Demo_YYYYMMDD_HHMM).",
+      "finalidade": "Rede de segurança da execução de organizarLeadsEManualPlanilhasSoproLife.",
+      "tipo": "backup",
+      "fonte": "derivada",
+      "status": "arquivo",
+      "secao_command_center": "leads",
+      "pagina_painel": "—",
+      "quem_grava": [
+        "limpar-leads-e-manual-abas.gs (_criarBackupLeads)"
+      ],
+      "apps_script": [
+        "limpar-leads-e-manual-abas.gs"
+      ],
+      "leitores_locais": [],
+      "atualizacao": "automática (uma por execução)",
+      "frequencia": "por execução da limpeza",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "ninguém (snapshot)",
+      "pode_ocultar": true,
+      "pode_arquivar": true,
+      "pode_excluir": true,
+      "risco_exclusao": "BAIXO após conferência humana de que a aba Leads atual está íntegra — manter as 2 mais recentes, excluir as demais SOMENTE por decisão humana.",
+      "dependencias": [],
+      "seguranca": "Snapshot completo de Leads (contém telefones) — manter oculto.",
+      "recomendacao": "ocultar_usuarios_comuns",
+      "colunas_canonicas": [],
+      "colunas_propostas": [],
+      "observacoes": "Nenhuma exclusão automática — a matriz recomenda revisão humana com data marcada."
+    },
+    {
+      "nome": "_Backup_Leads_Operacional_*",
+      "descricao_simples": "Backups automáticos da aba Leads criados pela migração de cabeçalho (padrão _Backup_Leads_Operacional_YYYYMMDD_HHMM).",
+      "finalidade": "Rede de segurança da execução de organizarLeadsOperacionaisSoproLife.",
+      "tipo": "backup",
+      "fonte": "derivada",
+      "status": "arquivo",
+      "secao_command_center": "leads",
+      "pagina_painel": "—",
+      "quem_grava": [
+        "organizar-leads-operacionais.gs"
+      ],
+      "apps_script": [
+        "organizar-leads-operacionais.gs"
+      ],
+      "leitores_locais": [],
+      "atualizacao": "automática (uma por execução)",
+      "frequencia": "por execução da migração",
+      "dados_pessoais": true,
+      "dados_clinicos": false,
+      "dados_financeiros": false,
+      "apenas_agregados": false,
+      "quem_edita": "ninguém (snapshot)",
+      "pode_ocultar": true,
+      "pode_arquivar": true,
+      "pode_excluir": true,
+      "risco_exclusao": "BAIXO após conferência humana — mesma regra dos backups demo.",
+      "dependencias": [],
+      "seguranca": "Snapshot completo de Leads — manter oculto.",
+      "recomendacao": "ocultar_usuarios_comuns",
+      "colunas_canonicas": [],
+      "colunas_propostas": []
+    },
+    {
+      "nome": "Financeiro",
+      "descricao_simples": "ABA REMOVIDA (M14.x) — antiga aba financeira manual.",
+      "finalidade": "Substituída integralmente por Financeiro_Lancamentos (fonte financeira única).",
+      "tipo": "legado",
+      "fonte": "oficial",
+      "status": "removida",
+      "secao_command_center": "financeiro",
+      "pagina_painel": "—",
+      "quem_grava": [],
+      "apps_script": [],
+      "leitores_locais": [],
+      "atualizacao": "—",
+      "frequencia": "—",
+      "dados_pessoais": false,
+      "dados_clinicos": false,
+      "dados_financeiros": true,
+      "apenas_agregados": false,
+      "quem_edita": "—",
+      "pode_ocultar": false,
+      "pode_arquivar": false,
+      "pode_excluir": false,
+      "risco_exclusao": "—",
+      "dependencias": [],
+      "seguranca": "NUNCA RECRIAR esta aba — nenhum template/setup/fluxo pode reintroduzi-la (ver soprolife-sheets-template.gs e docs/financeiro-fonte-unica.md).",
+      "recomendacao": "nunca_recriar",
+      "colunas_canonicas": [],
+      "colunas_propostas": []
+    }
+  ]
+}

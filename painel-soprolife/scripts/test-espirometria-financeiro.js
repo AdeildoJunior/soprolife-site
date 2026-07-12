@@ -16,8 +16,10 @@ function caso(nome, cond, det = "") {
   else { falhas += 1; console.log(`  FAIL: ${nome}${det ? " — " + det : ""}`); }
 }
 
+// M14.3A (correção final) — criado_em NÃO faz parte do payload do cliente:
+// é autoridade exclusiva do servidor no insert (ver _registrarEspirometriaFinanceiro).
 const CHAVES = [
-  "id_atendimento", "criado_em", "data_exame", "tipo_movimento", "servico",
+  "id_atendimento", "data_exame", "tipo_movimento", "servico",
   "local_atendimento", "valor_tabela", "valor_cobrado", "valor_recebido",
   "desconto", "status_exame", "status_pagamento", "forma_pagamento",
   "origem_preco", "observacao_financeira", "fonte",
@@ -38,24 +40,29 @@ const base = () => ({
 
 console.log("M11 — testes do Valor real da espirometria (fixtures sintéticas)");
 
-// 1. Valor padrão R$ 250 (valor_tabela não informado -> cai no padrão)
+// 1. M14.3A (2ª rodada): AUSÊNCIA PERMANECE AUSENTE — valor_tabela não
+// informado NÃO vira 250; o payload simplesmente omite tabela e desconto.
 const r1 = buildEspirometriaFinanceiroPayload(base());
 caso("payload válido ok=true", r1.ok === true);
-caso("valor_tabela padrão é 250 quando não informado", r1.payload.valor_tabela === EF_VALOR_TABELA_PADRAO);
-caso("shape tem exatamente as chaves do contrato",
-     JSON.stringify(Object.keys(r1.payload).sort()) === JSON.stringify([...CHAVES].sort()));
+caso("valor_tabela ausente permanece ausente (nunca vira 250)",
+     !Object.prototype.hasOwnProperty.call(r1.payload, "valor_tabela"));
+caso("desconto não é derivado sem valor_tabela",
+     !Object.prototype.hasOwnProperty.call(r1.payload, "desconto"));
+const CHAVES_SEM_TABELA = [...CHAVES].filter((c) => c !== "valor_tabela" && c !== "desconto");
+caso("shape tem exatamente as chaves do contrato (sem os ausentes)",
+     JSON.stringify(Object.keys(r1.payload).sort()) === JSON.stringify(CHAVES_SEM_TABELA.sort()));
 caso("tipo_movimento fixo 'receita'", r1.payload.tipo_movimento === "receita");
 caso("servico fixo 'Espirometria'", r1.payload.servico === "Espirometria");
 caso("fonte fixa 'nova_espirometria'", r1.payload.fonte === "nova_espirometria");
 
 // 2. Sugestão R$ 230 (desconto sobre a tabela padrão) — Recebido exige
 // valor_recebido == valor_cobrado, então ambos mudam juntos.
-const r2 = buildEspirometriaFinanceiroPayload({ ...base(), valor_cobrado: "230", valor_recebido: "230" });
+const r2 = buildEspirometriaFinanceiroPayload({ ...base(), valor_tabela: "250", valor_cobrado: "230", valor_recebido: "230" });
 caso("sugestão 230 aceita", r2.ok === true && r2.payload.valor_cobrado === 230);
 caso("desconto 230 = 20", r2.payload.desconto === 20);
 
 // 3. Sugestão R$ 219 (promoção)
-const r3 = buildEspirometriaFinanceiroPayload({ ...base(), valor_cobrado: "219", valor_recebido: "219" });
+const r3 = buildEspirometriaFinanceiroPayload({ ...base(), valor_tabela: "250", valor_cobrado: "219", valor_recebido: "219" });
 caso("sugestão 219 aceita", r3.ok === true && r3.payload.valor_cobrado === 219);
 caso("desconto 219 = 31", r3.payload.desconto === 31);
 
@@ -143,8 +150,8 @@ caso("nome do paciente não entra no payload", !brutoPaciente.includes("Maria"))
 caso("responsável não entra no payload", !brutoPaciente.includes("João"));
 caso("telefone do paciente não entra no payload", !brutoPaciente.includes("98888-7777"));
 caso("campo extra é ignorado", !brutoPaciente.includes("algo que não deveria aparecer"));
-caso("shape continua fixo mesmo com campos extras no formData",
-     JSON.stringify(Object.keys(rComPaciente.payload).sort()) === JSON.stringify([...CHAVES].sort()));
+caso("shape continua fechado mesmo com campos extras no formData",
+     JSON.stringify(Object.keys(rComPaciente.payload).sort()) === JSON.stringify(CHAVES_SEM_TABELA.sort()));
 
 // 14. Nulos/indefinidos não quebram
 const rNulo = buildEspirometriaFinanceiroPayload(null);
@@ -211,12 +218,16 @@ caso("Recebido sem forma_pagamento é rejeitado",
      rRecebidoSemForma.ok === false &&
      /[Ff]orma de pagamento é obrigatória.*Recebido/.test(rRecebidoSemForma.erros.join(" ")));
 
-// Recebido com valor_recebido vazio: a função pura rejeita (mais segura do
-// que silenciosamente aceitar 0 como "recebido").
+// Recebido com valor_recebido vazio: rejeitado com mensagem de
+// obrigatoriedade (nunca 0 silencioso — M14.3A 2ª rodada).
 const rRecebidoSemValor = buildEspirometriaFinanceiroPayload({ ...base(), valor_recebido: "" });
 caso("Recebido com valor_recebido vazio é rejeitado",
      rRecebidoSemValor.ok === false &&
-     /maior que zero.*Recebido/.test(rRecebidoSemValor.erros.join(" ")));
+     /obrigatório.*Recebido/.test(rRecebidoSemValor.erros.join(" ")));
+// origem_preco vazia não vira "Tabela"
+const rSemOrigem = buildEspirometriaFinanceiroPayload({ ...base(), origem_preco: "" });
+caso("origem_preco vazia permanece ausente (nunca vira Tabela)",
+     rSemOrigem.ok === true && !Object.prototype.hasOwnProperty.call(rSemOrigem.payload, "origem_preco"));
 
 // Recebido com valor_recebido menor que o cobrado -> orienta usar Parcial.
 const rRecebidoParcialDisfarcado = buildEspirometriaFinanceiroPayload({
@@ -352,9 +363,9 @@ caso("Apps Script continua com Financeiro_Lancamentos (upsert por id_atendimento
 
 // M11.2C — Nova Espirometria enxuta e pré-preenchida. Checagens estáticas de
 // texto sobre app.js (sem DOM): responsável virou select fechado, chips vão
-// de R$250 a R$200 de 10 em 10, R$220 mapeia para Promoção, e os defaults
-// (status_pagamento Recebido / forma_pagamento Pix) favorecem o caminho mais
-// comum do operador.
+// de R$250 a R$200 de 10 em 10, R$220 mapeia para Promoção. M14.3A (correção
+// final) removeu os defaults factuais de status_pagamento/forma_pagamento —
+// ver seção dedicada mais abaixo.
 console.log();
 console.log("M11.2C — Nova Espirometria enxuta e pré-preenchida (checagens estáticas)");
 
@@ -369,10 +380,10 @@ caso('chip "Outro valor" continua presente', appJsSrc.includes("Outro valor"));
 caso("app.js mapeia R$220 para origem_preco Promoção",
      /220:\s*"Promoção"/.test(appJsSrc));
 
-caso('status_pagamento da Nova Espirometria vem pré-preenchido com "Recebido"',
-     /id:\s*"status_pagamento".*value:\s*"Recebido"/.test(appJsSrc));
-caso('forma_pagamento da Nova Espirometria vem pré-preenchida com "Pix"',
-     /id:\s*"forma_pagamento".*value:\s*"Pix"/.test(appJsSrc));
+// M14.3A (correção final) — status_pagamento/forma_pagamento NÃO vêm mais
+// pré-preenchidos: o operador escolhe explicitamente (ver seção dedicada
+// "defaults factuais removidos da UI" mais abaixo, que confirma a ausência
+// desses valores).
 
 caso("id_atendimento continua existindo no payload financeiro", CHAVES.includes("id_atendimento"));
 
@@ -464,29 +475,49 @@ const createEspiGsSrc = (() => {
   return fim > inicio ? gsSrc.slice(inicio, fim) : "";
 })();
 caso("_createEspirometria lê data.id_atendimento", createEspiGsSrc.includes("data.id_atendimento"));
-caso("_createEspirometria valida o formato do id_atendimento antes de usar (regex fechada)",
-     /_ESPI_ID_ATENDIMENTO_RX\s*=\s*\/\^\[A-Za-z0-9-\]\{1,64\}\$\//.test(gsSrc) &&
-     createEspiGsSrc.includes("_espiIdAtendimentoSeguro(data.id_atendimento)"));
-caso("_createEspirometria usa o id_atendimento seguro como exame_id",
-     /var id = existente \? idAtendimentoSeguro : \(idAtendimentoSeguro \|\| _nextId\(sheet, "ESP"\)\)/.test(createEspiGsSrc));
-caso("_createEspirometria busca linha existente por exame_id antes de decidir criar/atualizar (upsert)",
-     /_findRowByIdColumn\(sheet,\s*"exame_id",\s*idAtendimentoSeguro\)/.test(createEspiGsSrc));
-caso("_createEspirometria atualiza a linha existente em vez de duplicar quando encontrada",
-     /if\s*\(existente\)\s*\{[\s\S]*?_writeCellVerified/.test(createEspiGsSrc));
-caso("_createEspirometria continua criando linha nova quando não há id_atendimento/linha existente",
-     createEspiGsSrc.includes("_appendRowSemValidacao(sheet, _buildRow(sheet, camposLinha))"));
-caso("_createEspirometria não cria coluna nova — reaproveita exame_id já existente no cabeçalho",
-     !createEspiGsSrc.includes("_ensureExtraColumns") && !createEspiGsSrc.includes("_ensureSheetHeader"));
+// M14.3A (2ª rodada) — identidade e idempotência SEPARADAS: o ID canônico é
+// sempre UUID do servidor; a chave do cliente vai para coluna técnica e só
+// serve para replay/conflito (mesma chave+payload = replay; payload
+// diferente = 409); busca+validação+insert rodam sob LockService.
+const contratosGsSrc = fs.readFileSync(
+  path.join(__dirname, "..", "apps-script", "contratos-canonicos.gs"), "utf8");
+const helperIdemSrc = (() => {
+  const inicio = gsSrc.indexOf("function _inserirEventoClinicoIdempotente(");
+  const fim    = gsSrc.indexOf("function _createEspirometria(", inicio);
+  return fim > inicio ? gsSrc.slice(inicio, fim) : "";
+})();
+caso("chave validada por AÇÃO (prefixo+formato fechado, nunca texto livre)",
+     helperIdemSrc.includes("ctChaveIdempotenciaAcao(opts.chaveBruta") &&
+     /\\d\{8\}-\\d\{6\}-\[A-Z0-9\]\{4,8\}/.test(contratosGsSrc));
+caso("ID canônico é SEMPRE do servidor (UUID); chave vai para coluna técnica",
+     helperIdemSrc.includes("ctNovoIdServidor(contrato.prefixo") &&
+     helperIdemSrc.includes("campos.idempotency_key = chave"));
+caso("busca linha existente pela chave (com fallback legado no id)",
+     helperIdemSrc.includes('_findRowByIdColumn(sheet, "idempotency_key", chave)') &&
+     helperIdemSrc.includes("_findRowByIdColumn(sheet, opts.idCol, chave)"));
+caso("mesma chave + payload diferente = conflito 409 (nunca patch)",
+     helperIdemSrc.includes("409") && helperIdemSrc.includes("fingerprint"));
+caso("mesma chave + mesmo payload = replay sem regravar",
+     helperIdemSrc.includes("replayed: true"));
+caso("busca+validação+insert sob LockService",
+     helperIdemSrc.includes("_lockScriptOuErro()") && gsSrc.includes("LockService.getScriptLock()"));
+caso("insert só depois de validação completa (fail-closed via contrato)",
+     helperIdemSrc.includes("ctPlanejarUpsert(opts.contrato") &&
+     helperIdemSrc.includes("ctCamposPresentes(opts.contrato"));
+caso("colunas técnicas de idempotência criadas sob demanda, só após validar",
+     helperIdemSrc.includes("_ensureExtraColumns(sheet, contrato.colunas_tecnicas)"));
 
 const registrarFinanceiroGsSrc = (() => {
   const inicio = gsSrc.indexOf("function _registrarEspirometriaFinanceiro(");
   const fim    = gsSrc.indexOf("\nfunction _updateLeadStage(", inicio);
   return fim > inicio ? gsSrc.slice(inicio, fim) : "";
 })();
-caso("registrarEspirometriaFinanceiro continua inalterado pelo M12.2B (sem marcas do upsert de exame_id)",
-     registrarFinanceiroGsSrc.length > 0 &&
-     !registrarFinanceiroGsSrc.includes("_espiIdAtendimentoSeguro") &&
-     !registrarFinanceiroGsSrc.includes("exame_id"));
+caso("financeiro: id_atendimento obrigatório (nenhum órfão novo pela API)",
+     registrarFinanceiroGsSrc.includes("id_atendimento é obrigatório"));
+caso("financeiro: ausência não vira 250/Tabela/0 (defaults removidos)",
+     !registrarFinanceiroGsSrc.includes("_EF_VALOR_TABELA_PADRAO") &&
+     !/origem_preco\).trim\(\) : "Tabela"/.test(registrarFinanceiroGsSrc) &&
+     registrarFinanceiroGsSrc.includes("REGRA FORMAL DE ZERO"));
 
 caso("app.js continua enviando resultado.payload (não FormData bruto) para registrarEspirometriaFinanceiro após o M12.2B",
      bindFormEspiSrc.includes('submitToCommandCenter("registrarEspirometriaFinanceiro", resultado.payload)'));
@@ -496,6 +527,36 @@ caso("espirometria-financeiro.js continua sem fetch após o M12.2B",
      !/\bfetch\s*\(/.test(efSrc));
 caso("espirometria-financeiro.js continua sem XMLHttpRequest após o M12.2B",
      !/XMLHttpRequest/.test(efSrc));
+
+// M14.3A (correção final) — nenhum campo financeiro/Pastore pode vir
+// pré-selecionado como fato: o operador precisa escolher explicitamente.
+console.log();
+console.log("M14.3A (correção final) — defaults factuais removidos da UI");
+const camposFinanceiroSrc = (() => {
+  const inicio = appJsSrc.indexOf("const camposFinanceiro = [");
+  const fim    = appJsSrc.indexOf("].join(\"\");", inicio);
+  return fim > inicio ? appJsSrc.slice(inicio, fim) : "";
+})();
+caso("valor_tabela usa placeholder (sugestão visual), não value=250",
+     camposFinanceiroSrc.includes('placeholder: String(EF_VALOR_TABELA_PADRAO)') &&
+     !/id: "valor_tabela"[^}]*value:/.test(camposFinanceiroSrc));
+caso("status_pagamento não vem pré-selecionado como 'Recebido'",
+     !/id: "status_pagamento"[^}]*value:\s*"Recebido"/.test(camposFinanceiroSrc));
+caso("forma_pagamento não vem pré-selecionado como 'Pix'",
+     !/id: "forma_pagamento"[^}]*value:\s*"Pix"/.test(camposFinanceiroSrc));
+caso("origem_preco não vem pré-selecionado como 'Tabela'",
+     !/id: "origem_preco"[^}]*value:\s*"Tabela"/.test(camposFinanceiroSrc));
+
+const pastoreStatusFieldSrc = (() => {
+  const m = appJsSrc.match(/\$\{f\(\{ id: "status", label: "Status"[^}]*\}\)\}/);
+  return m ? m[0] : "";
+})();
+caso("modal Pastore: campo 'status' encontrado no código", pastoreStatusFieldSrc.length > 0);
+caso("modal Pastore: status não vem pré-selecionado como 'Realizado'",
+     !/value:\s*"Realizado"/.test(pastoreStatusFieldSrc));
+caso("helper f() do modal Pastore sempre inclui opção em branco no select (evita default do navegador)",
+     /<select id="pa_\$\{id\}"[^>]*>\$\{opts\}<\/select>/.test(appJsSrc) === false &&
+     appJsSrc.includes('<option value="">—</option>${opts}</select>'));
 
 console.log();
 if (falhas) { console.log(`RESULTADO: ${falhas} caso(s) FALHARAM.`); process.exit(1); }

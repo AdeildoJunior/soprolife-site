@@ -2081,19 +2081,38 @@ function renderEntradaDados(container) {
   // depois — só o clique no chip preenche.
   const EF_ORIGEM_PRECO_POR_VALOR = { 250: "Tabela", 240: "Negociação", 230: "Negociação", 220: "Promoção", 210: "Negociação", 200: "Negociação" };
 
-  // M11.2C — data do exame nasce pré-preenchida com o dia de hoje (o
-  // operador continua podendo alterar); mesmo formato aceito pelo <input
-  // type="date">, reaproveitando o padStart já usado no ID de atendimento.
+  // M14.3A (2ª rodada) — datas CLÍNICAS (exame/consulta) NÃO nascem mais
+  // pré-preenchidas com hoje: ausência de data não pode virar "hoje" sem
+  // decisão consciente do operador (auditoria ALTO-04). hojeISO() continua
+  // disponível para o botão explícito "usar hoje" ao lado do campo.
   function hojeISO() {
     const agora = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     return `${agora.getFullYear()}-${pad(agora.getMonth() + 1)}-${pad(agora.getDate())}`;
   }
 
-  // M11.2B — ID técnico sem dado pessoal, gerado uma vez por renderização da
-  // aba "Nova Espirometria" e mantido em hidden input: reenviar o mesmo
-  // formulário (ex.: clique duplo em "Salvar") manda sempre o mesmo ID,
-  // permitindo upsert no Apps Script em vez de duplicar o lançamento.
+  // M14.3A (2ª rodada) — CHAVE DE IDEMPOTÊNCIA (não é mais o ID do registro):
+  // o servidor emite o ID canônico (UUID); esta chave só garante que clique
+  // duplo/retry/refresh não dupliquem. Ela fica em sessionStorage até o
+  // formulário ser CONCLUÍDO com sucesso (refresh preserva a mesma chave);
+  // o timestamp embutido é o instante técnico de criação, nunca a data do
+  // exame. Mesma chave com payload DIFERENTE é recusada pelo servidor (409).
+  const EF_IDEM_STORAGE_KEY = "cc-espirometria-idempotency-key";
+
+  function obterIdempotencyKeyEspi() {
+    try {
+      const salva = sessionStorage.getItem(EF_IDEM_STORAGE_KEY);
+      if (salva) return salva;
+    } catch (e) { /* sessionStorage indisponível: chave só desta renderização */ }
+    const nova = gerarIdAtendimentoEspi();
+    try { sessionStorage.setItem(EF_IDEM_STORAGE_KEY, nova); } catch (e) { /* idem */ }
+    return nova;
+  }
+
+  function concluirIdempotencyKeyEspi() {
+    try { sessionStorage.removeItem(EF_IDEM_STORAGE_KEY); } catch (e) { /* sem storage */ }
+  }
+
   function gerarIdAtendimentoEspi() {
     const agora = new Date();
     const pad = (n) => String(n).padStart(2, "0");
@@ -2104,25 +2123,31 @@ function renderEntradaDados(container) {
   }
 
   function buildFormEspi() {
-    const idAtendimento = gerarIdAtendimentoEspi();
+    const idAtendimento = obterIdempotencyKeyEspi();
     const camposAtendimento = [
       field({ id: "primeiro_nome",          label: "Primeiro nome",            required: true }),
       field({ id: "responsavel",            label: "Responsável",              type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
       field({ id: "telefone",               label: "Telefone / WhatsApp",      type: "tel" }),
       field({ id: "servico",                label: "Serviço",                  value: "Espirometria", disabled: true }),
       field({ id: "status_exame",           label: "Status do exame",          type: "select", options: ["Aguardando", "Realizado", "Cancelado", "Remarcado"], value: "Realizado", required: true }),
-      field({ id: "data_exame",             label: "Data do exame",            type: "date", value: hojeISO(), required: true }),
+      field({ id: "data_exame",             label: "Data do exame",            type: "date", required: true, hint: "Informe a data real do exame — não é preenchida automaticamente" }),
       field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts, value: "Sim" }),
     ].join("");
 
+    // M14.3A (correção final) — nenhum campo financeiro vem pré-selecionado
+    // como fato: valor_tabela usa placeholder (sugestão visual que só entra
+    // no payload se o operador digitar) e os selects começam em "—" (vazio),
+    // exigindo escolha explícita — nunca aceitação passiva de Recebido/Pix/
+    // Tabela. status_pagamento continua required: o próprio HTML bloqueia o
+    // envio até uma escolha real ser feita.
     const camposFinanceiro = [
       field({ id: "local_atendimento",      label: "Local de atendimento", type: "select", options: EF_LOCAL_ATENDIMENTO_OPTS, value: "Domiciliar", required: true }),
-      field({ id: "valor_tabela",          label: "Valor tabela",        type: "number", step: "0.01", value: EF_VALOR_TABELA_PADRAO }),
+      field({ id: "valor_tabela",          label: "Valor tabela",        type: "number", step: "0.01", placeholder: String(EF_VALOR_TABELA_PADRAO) }),
       field({ id: "valor_cobrado",         label: "Valor cobrado",       type: "number", step: "0.01", required: true }),
       field({ id: "valor_recebido",        label: "Valor recebido",      type: "number", step: "0.01" }),
-      field({ id: "status_pagamento",      label: "Status do pagamento", type: "select", options: EF_STATUS_PAGAMENTO_OPTS, value: "Recebido", required: true }),
-      field({ id: "forma_pagamento",       label: "Forma de pagamento",  type: "select", options: EF_FORMA_PAGAMENTO_OPTS, value: "Pix" }),
-      field({ id: "origem_preco",          label: "Origem do preço",     type: "select", options: EF_ORIGEM_PRECO_OPTS, value: "Tabela" }),
+      field({ id: "status_pagamento",      label: "Status do pagamento", type: "select", options: EF_STATUS_PAGAMENTO_OPTS, required: true }),
+      field({ id: "forma_pagamento",       label: "Forma de pagamento",  type: "select", options: EF_FORMA_PAGAMENTO_OPTS }),
+      field({ id: "origem_preco",          label: "Origem do preço",     type: "select", options: EF_ORIGEM_PRECO_OPTS }),
     ].join("");
 
     // M11.2C — campos de CRM secundários (não entram no payload financeiro)
@@ -2180,7 +2205,7 @@ function renderEntradaDados(container) {
       field({ id: "tipo_consulta",          label: "Tipo de consulta",         type: "select", options: ["Teleatendimento", "Domiciliar", "Presencial", "Retorno"], value: "Teleatendimento" }),
       field({ id: "status",                 label: "Status",                   type: "select", options: ["Agendada", "Realizada", "Cancelada", "Remarcada"], value: "Agendada" }),
       field({ id: "medica",                 label: "Médica / profissional" }),
-      field({ id: "data_consulta",          label: "Data da consulta",         type: "date", value: hojeISO() }),
+      field({ id: "data_consulta",          label: "Data da consulta",         type: "date", hint: "Informe a data real — não é preenchida automaticamente" }),
       field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts, value: "Sim" }),
     ].join("");
 
@@ -2310,11 +2335,10 @@ function renderEntradaDados(container) {
   // NÃO fazem parte deste contrato — não enviadas, pra não depender de
   // mudança no Apps Script (evitada nesta etapa por não ser indispensável).
   //
-  // M12.2B — id_atendimento (hidden input já gerado por formulário, mesmo
-  // valor reaproveitado pelo financeiro) também vai no payload operacional.
-  // O Apps Script decide se usa esse valor como exame_id (upsert) ou cai no
-  // _nextId antigo — a validação de formato fica só no back-end (mesma
-  // fonte de verdade que já valida o campo no financeiro).
+  // M14.3A — id_atendimento é a CHAVE DE IDEMPOTÊNCIA compartilhada pelos
+  // dois envios (operacional + financeiro). O servidor emite o ID canônico
+  // (UUID) e valida a chave por ação; reuso da chave com payload diferente
+  // é recusado (409).
   function buildEspirometriaOperacionalPayload(formData) {
     return {
       id_atendimento:         formData.id_atendimento          || "",
@@ -2328,6 +2352,14 @@ function renderEntradaDados(container) {
       proximo_contato:        formData.proximo_contato         || "",
       motivo_proximo_contato: formData.motivo_proximo_contato  || "",
       consentimento_whatsapp: formData.consentimento_whatsapp  || "",
+      // M14.3A — o registro operacional NÃO envia local_atendimento por
+      // enquanto, de propósito: o Apps Script agora é FAIL-CLOSED (campo
+      // solicitado sem coluna correspondente = erro, nunca descarte
+      // silencioso) e a coluna ainda não existe em CRM Espirometria.
+      // Quando a M14.3B criar as colunas canônicas (paciente_id,
+      // local_atendimento, parceiro, unidade, modalidade,
+      // data_exame_precisao), basta incluir os campos aqui — o servidor
+      // já valida e persiste (ver contratos-canonicos.gs).
     };
   }
 
@@ -2456,6 +2488,10 @@ function renderEntradaDados(container) {
         }
 
         if (crmOk && finOk) {
+          // Formulário concluído: a chave de idempotência é descartada — o
+          // próximo registro ganha chave nova (reuso com payload diferente
+          // seria recusado pelo servidor com 409).
+          concluirIdempotencyKeyEspi();
           result.className = "cc-result cc-result-ok";
           result.textContent = "Espirometria salva no CRM e lançamento financeiro salvo no Google Sheets.";
         } else if (crmOk && !finOk) {
@@ -5481,15 +5517,19 @@ function openNovoAtendimentoPastoreModal(triggerBtn) {
   const consentOpts = ["A definir", "Sim", "Não"];
   const pagamentoOpts = ["Pix", "Cartão", "Dinheiro", "Faturado Pastore", "Outro"];
 
-  function f({ id, label, type = "text", options, required, value, placeholder, step }) {
+  function f({ id, label, type = "text", options, required, value, placeholder, step, hint }) {
     const req = required ? " *" : "";
     if (type === "select" && options) {
       const opts = options.map((o) =>
         `<option value="${escapeHtml(o)}"${o === value ? " selected" : ""}>${escapeHtml(o)}</option>`
       ).join("");
+      // M14.3A (correção final) — sem esta opção em branco, o navegador
+      // mostra o primeiro item da lista como selecionado mesmo quando não
+      // há "value" correspondente (era assim que "status" acabava exibindo
+      // "Realizado" como se o operador tivesse escolhido).
       return `<div class="cc-field-group">
         <label class="cc-label" for="pa_${id}">${label}${req}</label>
-        <select id="pa_${id}" name="${id}" class="cc-select"${required ? " required" : ""}>${opts}</select>
+        <select id="pa_${id}" name="${id}" class="cc-select"${required ? " required" : ""}><option value="">—</option>${opts}</select>
       </div>`;
     }
     if (type === "textarea") {
@@ -5500,9 +5540,11 @@ function openNovoAtendimentoPastoreModal(triggerBtn) {
     }
     const valAttr = value !== undefined && value !== null ? ` value="${escapeHtml(String(value))}"` : "";
     const stepAttr = step ? ` step="${step}"` : "";
+    const hintHtml = hint ? `<small class="muted">${escapeHtml(hint)}</small>` : "";
     return `<div class="cc-field-group">
       <label class="cc-label" for="pa_${id}">${label}${req}</label>
       <input id="pa_${id}" name="${id}" type="${type}" class="cc-input"${required ? " required" : ""}${valAttr}${stepAttr}${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}>
+      ${hintHtml}
     </div>`;
   }
 
@@ -5514,6 +5556,11 @@ function openNovoAtendimentoPastoreModal(triggerBtn) {
         <div>
           <p class="eyebrow">Parceria Pastore</p>
           <h4 id="pastoreAtendTitle">Novo atendimento</h4>
+          <p class="muted" style="margin:4px 0 0; font-size:0.78rem;">
+            Registro de STAGING da parceria — ainda não entra no histórico
+            central (CRM Espirometria) nem no financeiro oficial; a
+            integração é a etapa M14.3B.
+          </p>
         </div>
         <button type="button" class="pastore-atend-close" aria-label="Fechar">✕</button>
       </div>
@@ -5522,7 +5569,7 @@ function openNovoAtendimentoPastoreModal(triggerBtn) {
         <div class="pastore-atend-section">
           <p class="pastore-atend-section-title">Atendimento</p>
           <div class="pastore-atend-grid">
-            ${f({ id: "data_atendimento", label: "Data", type: "date", required: true, value: hoje })}
+            ${f({ id: "data_atendimento", label: "Data", type: "date", required: true, hint: "Informe a data real do atendimento" })}
             ${f({ id: "unidade", label: "Unidade", value: "Pastore Ipanema" })}
             ${f({ id: "dia_semana", label: "Dia da semana", type: "select", options: diasOpts, value: diaSemanaHoje })}
             ${f({ id: "horario_inicio", label: "Horário início", type: "time", value: "08:00" })}
@@ -5547,18 +5594,18 @@ function openNovoAtendimentoPastoreModal(triggerBtn) {
             ${f({ id: "valor_cobrado", label: "Valor cobrado", type: "number", step: "0.01" })}
             ${f({ id: "forma_pagamento", label: "Forma pagamento", type: "select", options: pagamentoOpts, value: "" })}
             ${f({ id: "recebido_por", label: "Recebido por", value: "SoproLife" })}
-            ${f({ id: "repasse_pastore", label: "Repasse Pastore", type: "number", step: "0.01", value: 0 })}
+            ${f({ id: "repasse_pastore", label: "Repasse Pastore", type: "number", step: "0.01", placeholder: "em branco = não informado" })}
             ${f({ id: "custo_insumo", label: "Custo insumo", type: "number", step: "0.01" })}
-            ${f({ id: "custo_deslocamento", label: "Custo desloc.", type: "number", step: "0.01", value: 0 })}
-            ${f({ id: "custo_profissional", label: "Custo profissional", type: "number", step: "0.01", value: 0 })}
-            ${f({ id: "outros_custos", label: "Outros custos", type: "number", step: "0.01", value: 0 })}
+            ${f({ id: "custo_deslocamento", label: "Custo desloc.", type: "number", step: "0.01", placeholder: "em branco = não informado" })}
+            ${f({ id: "custo_profissional", label: "Custo profissional", type: "number", step: "0.01", placeholder: "em branco = não informado" })}
+            ${f({ id: "outros_custos", label: "Outros custos", type: "number", step: "0.01", placeholder: "em branco = não informado" })}
           </div>
         </div>
 
         <div class="pastore-atend-section">
           <p class="pastore-atend-section-title">Follow-up</p>
           <div class="pastore-atend-grid">
-            ${f({ id: "status", label: "Status", type: "select", options: statusOpts, value: "Realizado" })}
+            ${f({ id: "status", label: "Status", type: "select", options: statusOpts, required: true })}
             ${f({ id: "followup_status", label: "Follow-up", type: "select", options: followupOpts, value: "A definir" })}
             ${f({ id: "consentimento_contato_futuro", label: "Consentimento contato futuro", type: "select", options: consentOpts, value: "A definir" })}
           </div>

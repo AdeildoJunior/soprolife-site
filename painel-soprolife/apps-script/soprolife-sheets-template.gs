@@ -44,9 +44,9 @@ function _colLetter(colIndex1Based) {
  * linha existente — apenas acrescenta uma coluna nova ao final com dropdown
  * de validação. Idempotente: rodar de novo não duplica a coluna.
  *
- * Não faz parte de setupSoproLifeSheetsLite() de propósito: aquela função
- * limpa (clearContents) as abas que gerencia, o que apagaria dados reais de
- * prospecção já existentes nesta aba.
+ * Não faz parte de setupSoproLifeSheetsLite() de propósito: mantém a
+ * fronteira entre instalação de estrutura e manutenção incremental de uma
+ * aba que já contém dados reais de prospecção.
  */
 function adicionarColunaEtapaPcmso() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -105,8 +105,8 @@ function setupSoproLifeSheetsLite() {
     // 1) a antiga aba "Financeiro" foi removida da planilha e não deve ser
     //    recriada por nenhum fluxo;
     // 2) a aba oficial "Financeiro_Lancamentos" é criada e gerenciada pelo
-    //    command-center-api.gs (upsert por id_atendimento) e este setup faz
-    //    clearContents() — rodá-lo com a aba no mapa apagaria dados reais.
+    //    command-center-api.gs (upsert por id_atendimento) — a fonte
+    //    financeira única tem um dono só.
     "Marketing Conteudo": [
       "conteudo_id", "canal", "tema", "formato", "etapa",
       "data_planejada", "data_publicacao", "cta", "status", "metrica_agregada", "observacao"
@@ -124,12 +124,21 @@ function setupSoproLifeSheetsLite() {
     ]
   };
 
+  // M14.3A — instalador com FRONTEIRA SEGURA: só cria abas que não existem e
+  // só escreve cabeçalho em aba VAZIA. Aba existente com qualquer dado é
+  // pulada com log — este setup nunca limpa (o clearContents/clearFormats
+  // antigo apagaria dados reais) e nunca exclui aba (nem as padrão
+  // "Página1"/"Sheet1": remoção de aba é sempre ação humana).
+  const puladas = [];
   Object.entries(sheets).forEach(([name, headers]) => {
     let sheet = ss.getSheetByName(name);
-    if (!sheet) sheet = ss.insertSheet(name);
-
-    sheet.clearContents();
-    sheet.clearFormats();
+    if (!sheet) {
+      sheet = ss.insertSheet(name);
+    } else if (sheet.getLastRow() > 0) {
+      puladas.push(name);
+      Logger.log(`Aba "${name}" já tem conteúdo — pulada (setup nunca limpa dados).`);
+      return;
+    }
 
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(1, 1, 1, headers.length)
@@ -141,13 +150,15 @@ function setupSoproLifeSheetsLite() {
   });
 
   ["Página1", "Sheet1"].forEach((defaultName) => {
-    const defaultSheet = ss.getSheetByName(defaultName);
-    if (defaultSheet && ss.getSheets().length > 1) {
-      ss.deleteSheet(defaultSheet);
+    if (ss.getSheetByName(defaultName)) {
+      Logger.log(`Aba padrão "${defaultName}" existe — remova manualmente se quiser (o setup não exclui abas).`);
     }
   });
 
-  Logger.log("Planilha mestre da SoproLife criada com sucesso.");
+  Logger.log(
+    "Setup concluído sem tocar em dados existentes." +
+    (puladas.length ? " Abas puladas por já terem conteúdo: " + puladas.join(", ") : "")
+  );
 }
 
 function setupValidacoesSoproLife() {

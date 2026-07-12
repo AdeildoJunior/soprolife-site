@@ -2,8 +2,11 @@
  * limpar-leads-e-manual-abas.gs
  * Versão: 1.2  |  SoproLife Command Center
  *
- * Limpa dados demonstrativos da aba Leads, padroniza dropdowns
- * e cria/atualiza a aba "Manual das Abas" com documentação operacional.
+ * Padroniza dropdowns da aba Leads, adiciona notas de cabeçalho e atualiza a
+ * aba "Manual das Abas" (delegando ao gerador do manifesto). Fluxo ADITIVO:
+ * desde a M14.3A (2ª rodada) NENHUMA linha é removida automaticamente — a
+ * antiga limpeza de "dados demonstrativos" (deleteRow por substring) foi
+ * removida por risco de falso positivo; exclusão é decisão humana com backup.
  *
  * SEGURANÇA — o que NÃO está neste arquivo:
  *   - ID ou URL da planilha real
@@ -115,9 +118,13 @@ function organizarLeadsEManualPlanilhasSoproLife() {
   var nomeBackup = _criarBackupLeads(ss, abaLeads);
   Logger.log("Backup criado: " + nomeBackup);
 
-  // 3. Remover linhas demonstrativas/fake
-  var removidas = _removerLinhasDemonstrativas(abaLeads);
-  Logger.log("Linhas demonstrativas removidas: " + removidas);
+  // 3. M14.3A (2ª rodada) — a remoção automática de linhas "demonstrativas"
+  // foi REMOVIDA: deleteRow por substring em qualquer célula podia excluir
+  // linha real por falso positivo (ex.: observação contendo a palavra
+  // "teste"). Exclusão de linha é decisão humana, caso a caso, com backup
+  // validado. Esta função hoje é ADITIVA: dropdowns, notas e Manual.
+  var removidas = 0;
+  Logger.log("Linhas demonstrativas: remoção automática BLOQUEADA (revisão humana).");
 
   // 4. Padronizar dropdowns da aba Leads
   _padronizarDropdownsLeads(ss);
@@ -136,7 +143,7 @@ function organizarLeadsEManualPlanilhasSoproLife() {
   var msg =
     "organizarLeadsEManualPlanilhasSoproLife concluído.\n\n" +
     "Backup criado: " + nomeBackup + "\n" +
-    "Linhas demonstrativas removidas: " + removidas + "\n" +
+    "Linhas demo: remoção automática bloqueada (M14.3A — revisão humana)\n" +
     "Dropdowns padronizados: servico_interesse, etapa, canal, origem\n" +
     "Manual das Abas: criado/atualizado.";
 
@@ -157,59 +164,23 @@ function organizarLeadsEManualPlanilhasSoproLife() {
 function _criarBackupLeads(ss, abaLeads) {
   var agora = new Date();
   var yyyymmdd = Utilities.formatDate(agora, "America/Sao_Paulo", "yyyyMMdd");
-  var hhmm     = Utilities.formatDate(agora, "America/Sao_Paulo", "HHmm");
-  var nomeBackup = "_Backup_Leads_Demo_" + yyyymmdd + "_" + hhmm;
+  var hhmmss   = Utilities.formatDate(agora, "America/Sao_Paulo", "HHmmss");
+  // M14.3A — nome realmente único (segundos + fragmento de UUID): duas
+  // execuções no mesmo minuto geram backups DISTINTOS. Nenhum backup é
+  // excluído automaticamente — retenção/limpeza é sempre ação humana
+  // separada, nunca durante a criação de um backup novo.
+  var sufixo = Utilities.getUuid().slice(0, 8);
+  var nomeBackup = "_Backup_Leads_Demo_" + yyyymmdd + "_" + hhmmss + "_" + sufixo;
 
-  // Remover backup anterior com mesmo nome se já existir (raro, mas seguro)
-  var existente = ss.getSheetByName(nomeBackup);
-  if (existente) ss.deleteSheet(existente);
+  if (ss.getSheetByName(nomeBackup)) {
+    // Estatisticamente impossível; se acontecer, parar é mais seguro que apagar.
+    throw new Error("Backup com nome já existente: " + nomeBackup + " — nada foi apagado.");
+  }
 
   // copyTo() insere a cópia no final da planilha por padrão
   abaLeads.copyTo(ss).setName(nomeBackup);
 
   return nomeBackup;
-}
-
-// ── Remoção de linhas demonstrativas ─────────────────────────────────────────
-
-/**
- * Remove linhas da aba Leads que contenham qualquer termo demonstrativo
- * em qualquer coluna. Preserva a linha de cabeçalho (linha 1).
- * Percorre de baixo para cima para evitar desalinhamento de índices.
- * Retorna o número de linhas removidas.
- */
-function _removerLinhasDemonstrativas(sheet) {
-  var ultimaLinha = sheet.getLastRow();
-  if (ultimaLinha < 2) return 0;
-
-  var ultimaCol = sheet.getLastColumn();
-  if (ultimaCol < 1) return 0;
-
-  var dados = sheet.getRange(2, 1, ultimaLinha - 1, ultimaCol).getValues();
-  var removidas = 0;
-
-  // Percorrer de baixo para cima
-  for (var i = dados.length - 1; i >= 0; i--) {
-    if (_linhaEhDemonstrativa(dados[i])) {
-      sheet.deleteRow(i + 2); // +2: offset do índice 0 + linha de cabeçalho
-      removidas++;
-    }
-  }
-
-  return removidas;
-}
-
-/**
- * Retorna true se qualquer célula da linha contiver um termo demonstrativo.
- */
-function _linhaEhDemonstrativa(row) {
-  return row.some(function(celula) {
-    var texto = String(celula || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-    return _TERMOS_DEMO.some(function(termo) {
-      var termoNorm = termo.normalize("NFD").replace(/[̀-ͯ]/g, "");
-      return texto.indexOf(termoNorm) >= 0;
-    });
-  });
 }
 
 // ── Dropdowns ─────────────────────────────────────────────────────────────────
@@ -261,214 +232,30 @@ function _adicionarNotasCabecalhosLeads(sheet) {
 // ── Manual das Abas ───────────────────────────────────────────────────────────
 
 /**
- * Cria ou substitui a aba "Manual das Abas" com documentação operacional
- * de todas as abas da planilha SoproLife.
+ * Cria ou atualiza a aba "Manual das Abas".
+ *
+ * M14.3A — o Manual é gerado EXCLUSIVAMENTE a partir do manifesto canônico
+ * (core/contracts/abas-manifest.json → generate-manual-abas-gs.py →
+ * manual-das-abas.gs). O conteúdo legado que vivia aqui foi REMOVIDO: estava
+ * desatualizado (citava a aba "Financeiro", removida na M14.x, e a antiga
+ * deduplicação por nome) e gerar documentação sabidamente falsa com mensagem
+ * de sucesso é pior do que falhar.
+ *
+ * Sem manual-das-abas.gs instalado, esta função LANÇA ERRO dizendo
+ * exatamente qual arquivo instalar — nunca gera fallback.
  */
 function _criarOuAtualizarManualAbas(ss) {
-  var sheet = ss.getSheetByName(_MANUAL_ABA);
-  if (!sheet) {
-    sheet = ss.insertSheet(_MANUAL_ABA);
-  } else {
-    sheet.clear();
+  if (typeof atualizarManualDasAbasSoproLife !== "function") {
+    throw new Error(
+      "Manual das Abas NÃO gerado: o arquivo apps-script/manual-das-abas.gs " +
+      "não está instalado neste projeto Apps Script. Gere-o com " +
+      "python3 painel-soprolife/scripts/generate-manual-abas-gs.py, cole no " +
+      "editor do Apps Script e execute novamente. (O conteúdo legado foi " +
+      "removido na M14.3A por estar desatualizado — não existe fallback.)"
+    );
   }
-
-  var linhas = _conteudoManualAbas();
-
-  sheet.getRange(1, 1, linhas.length, linhas[0].length).setValues(linhas);
-
-  // Formatação do cabeçalho principal (linha 1)
-  sheet.getRange(1, 1, 1, linhas[0].length)
-    .setFontWeight("bold")
-    .setFontSize(12)
-    .setFontColor("#ffffff")
-    .setBackground("#08243d");
-
-  // Destaque nas linhas de título de seção (coluna A começa com "▶")
-  var nLinhas = linhas.length;
-  for (var i = 0; i < nLinhas; i++) {
-    var val = String(linhas[i][0]);
-    if (val.indexOf("▶") === 0) {
-      sheet.getRange(i + 1, 1, 1, linhas[i].length)
-        .setFontWeight("bold")
-        .setFontColor("#ffffff")
-        .setBackground("#0b6e9e");
-    }
-  }
-
-  sheet.setColumnWidth(1, 220);
-  sheet.setColumnWidth(2, 520);
-  sheet.setFrozenRows(1);
-  sheet.autoResizeRows(1, nLinhas);
-
-  SpreadsheetApp.flush();
-  Logger.log("Aba '" + _MANUAL_ABA + "' escrita com " + nLinhas + " linha(s).");
-}
-
-/**
- * Retorna o conteúdo do Manual das Abas como array de arrays [coluna A, coluna B].
- * Coluna A = nome/rótulo, Coluna B = descrição detalhada.
- */
-function _conteudoManualAbas() {
-  return [
-    // Cabeçalho da aba
-    ["Aba / Campo", "Descrição e Regras Operacionais"],
-
-    // ── LEADS ──────────────────────────────────────────────────────────────
-    ["▶ Leads", "Contatos recebidos que ainda NÃO se tornaram pacientes. Pré-atendimento / funil de interesse."],
-    ["  Finalidade", "Registrar todo contato externo que demonstrou interesse em algum serviço da SoproLife, independente de já ter agendado ou não."],
-    ["  Regra principal",
-      "Um lead só migra para CRM Pacientes quando realizar o primeiro atendimento (espirometria, consulta, etc.). " +
-      "Enquanto não atendido, permanece aqui como lead."],
-    ["  Etapas do funil",
-      "Novo contato → Em conversa → Agendado → Convertido em paciente.\n" +
-      "Use 'Não respondeu' para inativos e 'Desistiu' para contatos descartados."],
-    ["  O que NÃO inserir",
-      "CPF, telefone real de paciente, pedido médico, laudo, resultado de exame ou qualquer dado clínico identificável. " +
-      "A coluna observacao_anonima deve conter apenas anotações genéricas."],
-
-    // ── CRM PACIENTES ───────────────────────────────────────────────────────
-    ["▶ CRM Pacientes", "Carteira-mãe de pacientes que já realizaram pelo menos um atendimento com a SoproLife."],
-    ["  Finalidade",
-      "Uma linha por pessoa. Representa o relacionamento geral com o paciente, " +
-      "não um atendimento específico. É o ponto central de gestão da carteira ativa."],
-    ["  Regra principal",
-      "Alimentada automaticamente pela função sincronizarCRMPacientesSoproLife(), " +
-      "que consolida dados de CRM Espirometria e CRM Consultas. " +
-      "Não editar manualmente a menos que necessário."],
-    ["  Chave de deduplicação",
-      "1. Telefone normalizado (sem espaços/símbolos) tem prioridade.\n" +
-      "2. Se não houver telefone, o primeiro_nome normalizado é usado.\n" +
-      "3. Dois registros com a mesma chave = mesmo paciente."],
-    ["  O que NÃO inserir",
-      "Diagnósticos, laudos, resultados de exames ou qualquer dado clínico sensível. " +
-      "Use apenas dados de relacionamento e logística de atendimento."],
-
-    // ── CRM ESPIROMETRIA ────────────────────────────────────────────────────
-    ["▶ CRM Espirometria", "Histórico de exames de espirometria realizados. Uma linha por exame."],
-    ["  Finalidade",
-      "Registrar cada exame de espirometria individualmente, seja presencial ou domiciliar. " +
-      "Alimenta automaticamente o CRM Pacientes via sincronização."],
-    ["  Regra principal",
-      "Cada linha representa um exame, não um paciente. " +
-      "O mesmo paciente pode ter múltiplas linhas se fez vários exames."],
-    ["  Campos importantes",
-      "exame_id, data_exame, servico (Espirometria / Espirometria domiciliar), " +
-      "status_exame, proximo_contato, motivo_proximo_contato."],
-
-    // ── CRM CONSULTAS ───────────────────────────────────────────────────────
-    ["▶ CRM Consultas", "Histórico de consultas e teleconsultas realizadas. Uma linha por consulta."],
-    ["  Finalidade",
-      "Registrar cada consulta médica ou teleconsulta individualmente. " +
-      "Alimenta automaticamente o CRM Pacientes via sincronização."],
-    ["  Regra principal",
-      "Cada linha representa uma consulta, não um paciente. " +
-      "Um paciente pode ter múltiplas consultas ao longo do tempo."],
-    ["  Campos importantes",
-      "consulta_id, data_consulta, tipo_consulta, status, medica, " +
-      "proximo_contato, motivo_proximo_contato."],
-
-    // ── FOLLOW-UP WHATSAPP ─────────────────────────────────────────────────
-    ["▶ Follow-up WhatsApp", "Fila de mensagens e contatos futuros a serem enviados via WhatsApp."],
-    ["  Finalidade",
-      "Organizar a agenda de follow-ups ativos: retornos pendentes, confirmações de agendamento, " +
-      "pós-atendimento e reengajamento de inativos."],
-    ["  Regra principal",
-      "Diferente do CRM Pacientes, esta aba é uma fila de ações futuras, não um cadastro permanente. " +
-      "Cada linha representa uma mensagem ou contato planejado, com data prevista e status."],
-    ["  Campos importantes",
-      "followup_id, data_prevista, tipo_mensagem, status (Pendente / Enviado / Cancelado), " +
-      "template_usado, consentimento."],
-    ["  Privacidade",
-      "Manter consentimento_whatsapp atualizado para cada contato. " +
-      "Não enviar mensagens sem consentimento explícito registrado."],
-
-    // ── CRM CLINICAS ────────────────────────────────────────────────────────
-    ["▶ CRM Clinicas", "Gestão de relacionamento com clínicas, consultórios e parceiros comerciais."],
-    ["  Finalidade",
-      "Controlar o pipeline B2B com clínicas e consultórios: abordagem, negociação, proposta e parceria ativa. " +
-      "Diferente dos leads de pacientes, aqui o foco é institucional."],
-    ["  Etapas",
-      "Prospectar → Abordada → Respondeu → Reunião → Proposta → Parceira → Sem resposta → Pausada."],
-    ["  Campos importantes",
-      "clinica_id, nome_clinica, bairro, regiao, tipo_clinica, etapa, " +
-      "ultima_interacao, proxima_acao, prioridade."],
-
-    // ── BASE PROSPECÇÃO B2B PCMSO ──────────────────────────────────────────
-    ["▶ Base Prospecção B2B PCMSO",
-      "Lista de clínicas e empresas ainda em prospecção para PCMSO e medicina do trabalho."],
-    ["  Finalidade",
-      "Registrar potenciais parceiros/clientes empresariais que ainda não foram abordados ou estão em fase inicial de contato. " +
-      "Diferente do CRM Clinicas, aqui estão os alvos que ainda não responderam nem confirmaram interesse."],
-    ["  Regra principal",
-      "Quando uma empresa responde e avança na negociação, migrar para CRM Clinicas. " +
-      "Esta aba funciona como funil de entrada B2B."],
-
-    // ── TAREFAS ─────────────────────────────────────────────────────────────
-    ["▶ Tarefas", "Lista de pendências operacionais, comerciais, de marketing e documentos."],
-    ["  Finalidade",
-      "Centralizar todas as tarefas da equipe SoproLife em uma única visão, " +
-      "com prioridade, responsável e prazo."],
-    ["  Áreas",
-      "Operação, Comercial, Marketing, SEO, Documentos, Financeiro, Tecnologia, Atendimento."],
-    ["  Status",
-      "Pendente → Em andamento → Concluída. Use 'Aguardando' para dependências externas " +
-      "e 'Cancelada' para tarefas descartadas."],
-
-    // ── FINANCEIRO ──────────────────────────────────────────────────────────
-    ["▶ Financeiro", "Registro de receitas, despesas, pendências e previsões financeiras."],
-    ["  Finalidade",
-      "Acompanhar o fluxo financeiro da operação: o que foi recebido, o que está pendente " +
-      "e o que está previsto para entrar."],
-    ["  Tipos",
-      "Receita (valor gerado), Despesa (custo operacional), Previsão (estimativa futura)."],
-    ["  Privacidade",
-      "Não identificar pacientes por pagamento. Usar categorias agregadas. " +
-      "Campo observacao_anonima para notas sem dados identificáveis."],
-
-    // ── RESUMO DASHBOARD ────────────────────────────────────────────────────
-    ["▶ Resumo Dashboard", "Aba gerada automaticamente com indicadores consolidados para o painel."],
-    ["  Finalidade",
-      "Agregar métricas de todas as abas operacionais em um formato leve para leitura pelo Painel SoproLife. " +
-      "Não editar manualmente."],
-    ["  Como atualizar",
-      "Executar a função atualizarResumoDashboardSoproLife() ou usar o menu SoproLife → Atualizar Resumo Dashboard. " +
-      "Também atualiza automaticamente via gatilho onEdit nas abas monitoradas."],
-
-    // ── MARKETING CONTEUDO ─────────────────────────────────────────────────
-    ["▶ Marketing Conteudo", "Planejamento e controle de posts, campanhas, SEO e publicações."],
-    ["  Finalidade",
-      "Organizar o calendário editorial da SoproLife: temas, formatos, datas planejadas " +
-      "e datas de publicação em cada canal."],
-    ["  Canais",
-      "Instagram, LinkedIn, Google Perfil, Site (blog/SEO), WhatsApp (broadcast), E-mail."],
-    ["  Status",
-      "Ideia → Roteiro → Arte → Revisão → Agendado → Publicado."],
-
-    // ── AGENDA OPERACIONAL ─────────────────────────────────────────────────
-    ["▶ Agenda Operacional", "Registro de exames, consultas, reuniões e visitas da operação."],
-    ["  Finalidade",
-      "Organizar a agenda diária/semanal da equipe: atendimentos, visitas comerciais, " +
-      "reuniões com parceiros e tarefas presenciais."],
-    ["  Privacidade",
-      "Não inserir nome completo de pacientes. Usar primeiro nome ou código de evento. " +
-      "Dados clínicos ficam em CRM Espirometria / CRM Consultas."],
-    ["  Status",
-      "Agendado → Confirmado → Realizado → Remarcar → Cancelado."],
-
-    // ── LOG CENTRO COMANDO ──────────────────────────────────────────────────
-    ["▶ Log Centro Comando", "Histórico de automações, sincronizações e ações do SoproLife Command Center."],
-    ["  Finalidade",
-      "Registrar cada execução automática: quando rodou, o que fez, quantos registros processou " +
-      "e se houve erros. Permite auditoria e rastreabilidade."],
-    ["  Regra principal",
-      "Aba somente para leitura após preenchimento automático. " +
-      "Não editar manualmente exceto para adicionar observações de suporte."],
-
-    // ── RODAPÉ ──────────────────────────────────────────────────────────────
-    ["", ""],
-    ["Gerado por", "organizarLeadsEManualPlanilhasSoproLife()  |  SoproLife Command Center"],
-    ["Atualizado em", Utilities.formatDate(new Date(), "America/Sao_Paulo", "dd/MM/yyyy HH:mm")],
-  ];
+  Logger.log("Manual das Abas: delegando para atualizarManualDasAbasSoproLife() (manifesto M14.3).");
+  atualizarManualDasAbasSoproLife();
 }
 
 // ── Alerta seguro ─────────────────────────────────────────────────────────────
@@ -496,6 +283,6 @@ function mostrarAlertaSeguroSoproLife(mensagem) {
 function onOpen_limparLeads() {
   SpreadsheetApp.getUi()
     .createMenu("SoproLife")
-    .addItem("Limpar Leads demo + Manual das Abas", "organizarLeadsEManualPlanilhasSoproLife")
+    .addItem("Padronizar Leads + Manual das Abas (aditivo)", "organizarLeadsEManualPlanilhasSoproLife")
     .addToUi();
 }

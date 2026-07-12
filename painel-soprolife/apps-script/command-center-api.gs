@@ -76,22 +76,6 @@ var _EF_CAMPOS_PROIBIDOS = [
   "cpf", "email", "endereco", "token", "secret",
 ];
 
-// Cabeçalho canônico da aba "Parceria Pastore - Atendimentos" — mesma ordem
-// de painel-soprolife/templates/parceria-pastore-atendimentos-template.csv.
-// Colunas S/T/U (receita_bruta, custo_total, resultado_liquido) são
-// calculadas por FÓRMULA na planilha real, nunca escritas por esta ação —
-// ver _registrarAtendimentoPastore e _ensureFormulaColumns.
-var _PARCERIA_PASTORE_ATENDIMENTOS_CABECALHO = [
-  "data_atendimento", "unidade", "dia_semana", "horario_inicio", "horario_fim",
-  "origem", "paciente_nome", "paciente_whatsapp", "tipo_exame", "broncodilatador",
-  "valor_cobrado", "forma_pagamento", "recebido_por", "repasse_pastore",
-  "custo_insumo", "custo_deslocamento", "custo_profissional", "outros_custos",
-  "receita_bruta", "custo_total", "resultado_liquido", "status", "followup_status",
-  "consentimento_contato_futuro", "observacao_privada_minima",
-];
-
-// S=19, T=20, U=21 — ver cabeçalho acima.
-var _PARCERIA_PASTORE_FORMULA_COLS = [19, 20, 21];
 
 // Etapas que disparam a conversão automática do lead para os CRMs de
 // atendimento (mesma lista usada pelo gatilho onEdit em converter-lead-em-paciente.gs).
@@ -261,7 +245,14 @@ function doPost(e) {
       case "vincularLeadAClinica":        return _vincularLeadAClinica(data);
       case "dedupLeadsConvertidos":       return _dedupLeadsConvertidos(data);
       case "organizarAbasCommandCenter":  return _organizarAbasCommandCenter(data);
-      case "registrarAtendimentoPastore": return _registrarAtendimentoPastore(data);
+      case "registrarAtendimentoPastore":
+        // Writer de STAGING isolado em pastore-staging.gs (M14.3A) — a aba
+        // Pastore não é base canônica de pessoas nem de valores. Sem o
+        // arquivo instalado, a ação falha explicitamente (fail-closed).
+        if (typeof _registrarAtendimentoPastore !== "function") {
+          return _err("pastore-staging.gs não está instalado neste projeto — ação indisponível.", 500);
+        }
+        return _registrarAtendimentoPastore(data);
       case "registrarEspirometriaFinanceiro": return _registrarEspirometriaFinanceiro(data);
       default:
         return _err("Ação desconhecida: " + action, 400);
@@ -281,7 +272,8 @@ function _createLead(data) {
   var auditT0        = Date.now();
 
   var sheet = _getOrCreateSheet(_SHEETS.LEADS);
-  var id    = _nextId(sheet, "LEAD");
+  // M14.3A — ID emitido pelo servidor (UUID opaco); nunca lastRow/contador.
+  var id    = ctNovoIdServidor("LEAD", Utilities.getUuid());
 
   try {
     _appendRowSemValidacao(sheet, _buildRow(sheet, {
@@ -310,28 +302,47 @@ function _createLead(data) {
 
 function _createPaciente(data) {
   _required(data, ["primeiro_nome", "responsavel"]);
+  if (!_ctDisponivel()) return _err(_ERRO_CONTRATOS_AUSENTES, 500);
 
   var auditRequestId = Utilities.getUuid();
   var auditT0        = Date.now();
 
   var sheet   = _getOrCreateSheet(_SHEETS.PACIENTES);
-  var id      = _nextId(sheet, "PAC");
+  // M14.3A — CRM Pacientes é MESTRE PERSISTENTE: esta ação só ADICIONA uma
+  // linha; nunca reescreve, deduplica ou funde cadastros (nome nunca vincula;
+  // telefone é no máximo candidato — decisões de fusão são humanas, fora
+  // desta API). ID emitido pelo servidor (UUID opaco).
+  var id      = ctNovoIdServidor("PAC", Utilities.getUuid());
   var consent = _normalizeConsent(data.consentimento_whatsapp);
 
+  var campos = {
+    paciente_id:            id,
+    data_cadastro:          _nowBr(),
+    primeiro_nome:          data.primeiro_nome              || "",
+    telefone:               data.telefone                   || "",
+    // M14.3 — aceita ultimo_servico explícito; mantém o fallback histórico
+    // (origem) para não mudar o comportamento de chamadas antigas.
+    ultimo_servico:         data.ultimo_servico || data.origem || "",
+    status_relacionamento:  data.status_relacionamento      || "Ativo",
+    proximo_contato:        data.proximo_contato            || "",
+    motivo_proximo_contato: "",
+    canal:                  data.canal                      || "",
+    responsavel:            data.responsavel                || "",
+    consentimento_whatsapp: consent,
+  };
+  if (data.id_legado) campos.id_legado = String(data.id_legado).trim();
+  if (data.data_cadastro_precisao) campos.data_cadastro_precisao = String(data.data_cadastro_precisao).trim();
+
+  var solicitados = _camposSolicitados(data, CT_REGISTROS.crm_pacientes.canonicos_opcionais);
+  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var plano = ctPlanejarUpsert("crm_pacientes", headers, campos, solicitados, null);
+  if (!plano.ok) {
+    _auditAcao(auditRequestId, auditT0, "create_paciente", "paciente", id, data, "ERROR: contrato/cabecalho");
+    return _err(plano.erro, 422);
+  }
+
   try {
-    _appendRowSemValidacao(sheet, _buildRow(sheet, {
-      paciente_id:            id,
-      data_cadastro:          _nowBr(),
-      primeiro_nome:          data.primeiro_nome              || "",
-      telefone:               data.telefone                   || "",
-      ultimo_servico:         data.origem                     || "",
-      status_relacionamento:  "Ativo",
-      proximo_contato:        data.proximo_contato            || "",
-      motivo_proximo_contato: "",
-      canal:                  data.canal                      || "",
-      responsavel:            data.responsavel                || "",
-      consentimento_whatsapp: consent,
-    }));
+    _aplicarPlanoUpsert(sheet, plano, -1);
   } catch (e) {
     _auditAcao(auditRequestId, auditT0, "create_paciente", "paciente", id, data, "ERROR: falha na gravacao");
     throw e;
@@ -339,129 +350,329 @@ function _createPaciente(data) {
 
   _logEntry({ acao: "createPaciente", status: "OK", aba: _SHEETS.PACIENTES, id: id, resumo: "Paciente cadastrado." });
   _auditAcao(auditRequestId, auditT0, "create_paciente", "paciente", id, data, "ok");
-  return _ok({ id: id, message: "Paciente criado com sucesso." });
+  return _ok({
+    id:                 id,
+    campos_persistidos: plano.persistidos,
+    campos_ignorados:   plano.ignorados,
+    contrato_versao:    plano.contrato_versao,
+    versao_cabecalho:   plano.versao_cabecalho,
+    message:            "Paciente criado com sucesso.",
+  });
 }
 
-// M12.2B — id_atendimento técnico (gerado no front, hidden input estável
-// por formulário, mesmo valor já reaproveitado por registrarEspirometria-
-// Financeiro) pode virar o próprio exame_id, permitindo upsert idempotente:
-// reenviar o mesmo formulário (duplo clique, ou reenvio manual após falha
-// parcial) atualiza a linha existente em vez de duplicar. Formato fechado
-// simples — mesma regra do validador client-side (espirometria-
-// financeiro.js, EF_ID_ATENDIMENTO_RX) — nunca aceita texto livre como
-// nome de coluna/valor de célula.
-var _ESPI_ID_ATENDIMENTO_RX = /^[A-Za-z0-9-]{1,64}$/;
-function _espiIdAtendimentoSeguro(raw) {
-  var v = (raw === undefined || raw === null) ? "" : String(raw).trim();
-  return _ESPI_ID_ATENDIMENTO_RX.test(v) ? v : "";
+// ── Writers fail-closed sobre os contratos executáveis (M14.3A) ─────────────
+// As funções ct* vêm de contratos-canonicos.gs (mesmo projeto Apps Script).
+// Sem ele instalado, TODA gravação falha explicitamente — nunca sucesso
+// silencioso com contrato ausente.
+
+function _ctDisponivel() {
+  return typeof ctPlanejarUpsert === "function" &&
+         typeof ctValidarDataComPrecisao === "function" &&
+         typeof ctNovoIdServidor === "function";
+}
+
+var _ERRO_CONTRATOS_AUSENTES =
+  "contratos-canonicos.gs não está instalado neste projeto Apps Script — " +
+  "gravação bloqueada (fail-closed). Instale o arquivo e tente de novo.";
+
+// Campos canônicos que o CLIENTE pediu com valor não vazio — se a coluna não
+// existir na aba, a gravação falha com a lista das colunas ausentes.
+function _camposSolicitados(data, canonicos) {
+  return canonicos.filter(function(c) {
+    return data[c] !== undefined && data[c] !== null && String(data[c]).trim() !== "";
+  });
+}
+
+// Aplica um plano de ctPlanejarUpsert: insert = linha nova (escrita agrupada
+// única via setValues); patch = escreve as células planejadas (colunas fora
+// do payload, fórmulas e colunas desconhecidas ficam intocadas).
+//
+// AVISO HONESTO DE ATOMICIDADE (M14.3A, correção final): o INSERT é uma única
+// chamada setValues — na prática atômico (ou a linha inteira entra, ou a
+// chamada falha e nada é gravado). O PATCH não é: o Google Sheets não oferece
+// transação nativa entre células/colunas não contíguas, e reescrever a linha
+// inteira apagaria fórmulas de colunas vizinhas não solicitadas pelo payload
+// — por isso cada célula do patch é gravada e verificada (lida de volta) uma
+// a uma. Se uma célula no meio da lista falhar (ex.: validação de dropdown da
+// planilha), as anteriores JÁ ficam persistidas: não existe rollback
+// automático nesta fase. TODA validação de contrato/cabeçalho já aconteceu
+// antes desta função (ver ctPlanejarUpsert) — o que resta é o risco residual,
+// documentado aqui, de a própria planilha rejeitar uma célula específica no
+// meio da sequência. O erro nunca é silencioso: relata exatamente o que
+// persistiu (camposGravadosParcialmente) e o que falhou (camposComFalha),
+// para compensação manual ou automatizada na M14.3B.
+function _aplicarPlanoUpsert(sheet, plano, rowIdxExistente) {
+  if (plano.modo === "insert") {
+    _appendRowSemValidacao(sheet, plano.linha);
+    return;
+  }
+  var gravadas = [];
+  var failures = [];
+  plano.celulas.forEach(function(c) {
+    if (_writeCellVerified(sheet, rowIdxExistente, c.indice + 1, c.valor)) {
+      gravadas.push(c.coluna);
+    } else {
+      failures.push(c.coluna);
+    }
+  });
+  if (failures.length > 0) {
+    var erro = new Error(
+      "Falha ao gravar campos: " + failures.join(", ") +
+      (gravadas.length ? " | ATENÇÃO — já persistidos nesta tentativa (revisar linha " +
+        rowIdxExistente + "): " + gravadas.join(", ") : "") +
+      " | sem rollback automático nesta fase (M14.3A) — compensação manual ou M14.3B.");
+    erro.camposGravadosParcialmente = gravadas;
+    erro.camposComFalha = failures;
+    throw erro;
+  }
+}
+
+// M14.3A (2ª rodada) — helpers dos writers de eventos clínicos.
+//
+// IDENTIDADE × IDEMPOTÊNCIA: o ID canônico (exame_id/consulta_id) é SEMPRE
+// UUID emitido pelo servidor. A chave de idempotência do cliente (quando
+// enviada) vai para a coluna técnica idempotency_key (criada sob demanda) e
+// serve apenas para replay/conflito:
+//   mesma chave + mesmo payload   → replay (mesmo resultado, nada regravado);
+//   mesma chave + payload difere  → conflito 409 (nada gravado);
+//   sem chave                     → insert simples.
+// Não existe caminho de PATCH nesses writers: corrigir um evento já gravado
+// será uma ação explícita futura (M14.3B), nunca um reenvio de formulário.
+//
+// LOCK: busca + validação + escrita rodam sob LockService — duas requisições
+// simultâneas com a mesma chave convergem para UMA linha.
+
+function _lockScriptOuErro() {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+    return lock;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Insere um evento clínico (espirometria/consulta) com semântica de
+// idempotência. Retorna o objeto de resposta (_ok/_err) pronto.
+function _inserirEventoClinicoIdempotente(opts) {
+  var contrato = CT_REGISTROS[opts.contrato];
+
+  var chaveRes = ctChaveIdempotenciaAcao(opts.chaveBruta, contrato.prefixo);
+  if (!chaveRes.ok) return _err(chaveRes.erro, 400);
+  var chave = chaveRes.chave;
+
+  var lock = _lockScriptOuErro();
+  if (!lock) return _err("Sistema ocupado (lock não obtido) — tente novamente.", 503);
+
+  try {
+    // M14.3A (correção final) — operação diária NUNCA cria aba nem cabeçalho.
+    // Aba ausente é erro fail-closed (nada foi gravado); instalação de
+    // estrutura é ação explícita separada (fora deste writer).
+    var sheet = _getSheetSemCriar(opts.aba);
+    if (!sheet) {
+      return _err(
+        "Aba '" + opts.aba + "' não existe. A operação diária não cria abas " +
+        "automaticamente (fail-closed) — use o instalador explícito para " +
+        "configurar a estrutura antes de registrar " + opts.rotulo.toLowerCase() +
+        ". Nada foi gravado.", 422);
+    }
+
+    var headers = sheet.getLastRow() === 0
+      ? []
+      : sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+    var cab = ctValidarCabecalho(opts.contrato, headers);
+    if (!cab.ok) return _err(cab.erro, 422);
+
+    // Fail-closed TOTAL: qualquer campo presente no payload (v1 ou v2) sem
+    // coluna correspondente → erro ANTES de qualquer escrita (inclusive antes
+    // da criação das colunas técnicas de idempotência).
+    var presentes = ctCamposPresentes(opts.contrato, opts.payloadOriginal);
+    var fingerprint = ctFingerprintPayload(opts.camposNegocio);
+
+    var preCheck = ctPlanejarEscrita(opts.contrato, headers, opts.camposNegocio, presentes);
+    if (!preCheck.ok) return _err(preCheck.erro, 422);
+
+    if (chave) {
+      // Replay/conflito: procura pela coluna técnica e, para linhas gravadas
+      // antes da M14.3A (chave era o próprio id), pela coluna de id.
+      var existente = _findRowByIdColumn(sheet, "idempotency_key", chave) ||
+                      _findRowByIdColumn(sheet, opts.idCol, chave);
+      if (existente) {
+        var fpIdx = existente.headers.indexOf("idempotency_fingerprint");
+        var fpArmazenado = fpIdx >= 0 ? String(existente.rowData[fpIdx] || "").trim() : "";
+        var fpLinha = fpArmazenado ||
+          ctFingerprintDaLinha(existente.headers, existente.rowData, Object.keys(opts.camposNegocio).sort());
+        if (fpLinha !== fingerprint) {
+          return _err(
+            "Conflito de idempotência (409): esta chave já foi usada com um payload DIFERENTE. " +
+            "Nada foi gravado. Para registrar outro evento, gere uma nova chave; para corrigir um " +
+            "registro existente, use a ação de edição explícita (M14.3B).", 409);
+        }
+        var idIdx = existente.headers.indexOf(opts.idCol);
+        var idExistente = idIdx >= 0 ? String(existente.rowData[idIdx] || "").trim() : "";
+        return _ok({
+          id: idExistente, replayed: true, created: false, updated: false,
+          campos_persistidos: [], campos_ignorados: [],
+          contrato_versao: CT_CONTRATOS_VERSAO, versao_cabecalho: cab.versao,
+          message: opts.rotulo + " já registrada com esta chave — reenvio idempotente, nada regravado.",
+        });
+      }
+      // Colunas técnicas criadas sob demanda SÓ depois de validar o payload
+      // (nenhuma mutação antes da validação completa).
+      headers = _ensureExtraColumns(sheet, contrato.colunas_tecnicas);
+    }
+
+    var id = ctNovoIdServidor(contrato.prefixo, Utilities.getUuid());
+    var campos = {};
+    Object.keys(opts.camposNegocio).forEach(function(k) { campos[k] = opts.camposNegocio[k]; });
+    campos[opts.idCol] = id;
+    campos.data_entrada = _nowBr();
+    if (chave) {
+      campos.idempotency_key = chave;
+      campos.idempotency_fingerprint = fingerprint;
+    }
+
+    var solicitados = presentes.concat(chave ? contrato.colunas_tecnicas : []);
+    var plano = ctPlanejarUpsert(opts.contrato, headers, campos, solicitados, null);
+    if (!plano.ok) return _err(plano.erro, 422);
+
+    _aplicarPlanoUpsert(sheet, plano, -1);
+
+    return _ok({
+      id: id, created: true, updated: false, replayed: false,
+      campos_persistidos: plano.persistidos, campos_ignorados: plano.ignorados,
+      contrato_versao: plano.contrato_versao, versao_cabecalho: plano.versao_cabecalho,
+      message: opts.rotulo + " registrada com sucesso.",
+    });
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function _createEspirometria(data) {
   _required(data, ["primeiro_nome", "responsavel"]);
+  if (!_ctDisponivel()) return _err(_ERRO_CONTRATOS_AUSENTES, 500);
 
   var auditRequestId = Utilities.getUuid();
   var auditT0        = Date.now();
 
-  var sheet   = _getOrCreateSheet(_SHEETS.ESPIROMETRIA);
-  var consent = _normalizeConsent(data.consentimento_whatsapp);
+  // Validação COMPLETA do payload antes de qualquer acesso/mutação de aba.
+  // Datas: valor + precisão juntos — mês/ano nunca vira dia; vazio nunca
+  // vira hoje; inválido/incoerente é erro explícito.
+  var dataExame = ctValidarDataComPrecisao(data.data_exame, data.data_exame_precisao);
+  if (!dataExame.ok) return _err("data_exame: " + dataExame.erro, 400);
 
-  // Se id_atendimento vier num formato seguro, procura uma linha existente
-  // com esse mesmo exame_id antes de decidir criar ou atualizar. Reaproveita
-  // a coluna exame_id já existente — nenhuma coluna nova é criada. Se o
-  // valor vier ausente/inválido, cai no comportamento antigo (_nextId),
-  // exatamente como antes do M12.2B.
-  var idAtendimentoSeguro = _espiIdAtendimentoSeguro(data.id_atendimento);
-  var existente = idAtendimentoSeguro ? _findRowByIdColumn(sheet, "exame_id", idAtendimentoSeguro) : null;
-  var id = existente ? idAtendimentoSeguro : (idAtendimentoSeguro || _nextId(sheet, "ESP"));
-
-  var camposLinha = {
-    exame_id:               id,
-    data_entrada:           _nowBr(),
-    primeiro_nome:          data.primeiro_nome              || "",
-    telefone:               data.telefone                   || "",
-    servico:                data.servico                    || "Espirometria",
-    origem:                 data.origem                     || "",
-    status_exame:           data.status_exame               || "Aguardando",
-    data_exame:             data.data_exame                 || "",
-    proximo_contato:        data.proximo_contato            || "",
-    motivo_proximo_contato: data.motivo_proximo_contato     || "",
-    canal:                  data.canal                      || "",
-    responsavel:            data.responsavel                || "",
-    consentimento_whatsapp: consent,
-  };
-
-  var atualizado = false;
-  try {
-    if (existente) {
-      var row = _buildRow(sheet, camposLinha);
-      var updateFailures = [];
-      row.forEach(function(val, i) {
-        if (!_writeCellVerified(sheet, existente.rowIdx, i + 1, val)) updateFailures.push(existente.headers[i]);
-      });
-      if (updateFailures.length > 0) {
-        throw new Error("Falha ao gravar campos: " + updateFailures.join(", "));
-      }
-      atualizado = true;
-    } else {
-      _appendRowSemValidacao(sheet, _buildRow(sheet, camposLinha));
-    }
-  } catch (e) {
-    _auditAcao(auditRequestId, auditT0, "create_espirometria", "espirometria", id, data, "ERROR: falha na gravacao");
-    throw e;
+  if (Object.prototype.hasOwnProperty.call(data, "local_atendimento") &&
+      String(data.local_atendimento || "").trim() &&
+      _EF_LOCAL_ATENDIMENTO.indexOf(String(data.local_atendimento).trim()) < 0) {
+    return _err("local_atendimento inválido: " + String(data.local_atendimento).trim(), 400);
   }
 
+  // Campos de negócio: SÓ o que o payload realmente enviou (own property).
+  // Defaults de INSERT ficam explícitos e mínimos: servico/status quando o
+  // cliente não mandou (registro novo precisa deles); nada é inventado em
+  // cima de dado existente porque este writer nunca faz patch.
+  var camposNegocio = {};
+  ["primeiro_nome", "telefone", "servico", "origem", "status_exame",
+   "proximo_contato", "motivo_proximo_contato", "canal", "responsavel",
+   "paciente_id", "id_legado", "local_atendimento", "parceiro", "unidade",
+   "modalidade"].forEach(function(c) {
+    if (Object.prototype.hasOwnProperty.call(data, c)) {
+      camposNegocio[c] = String(data[c] === null || data[c] === undefined ? "" : data[c]).trim();
+    }
+  });
+  if (Object.prototype.hasOwnProperty.call(data, "data_exame")) {
+    camposNegocio.data_exame = dataExame.valor;
+    if (dataExame.precisao !== "desconhecida") camposNegocio.data_exame_precisao = dataExame.precisao;
+  }
+  if (Object.prototype.hasOwnProperty.call(data, "consentimento_whatsapp")) {
+    camposNegocio.consentimento_whatsapp = _normalizeConsent(data.consentimento_whatsapp);
+  }
+  // M14.3A (correção final) — default de INSERT só quando o campo NÃO foi
+  // enviado (própria ausência em camposNegocio, refletindo hasOwnProperty em
+  // data); status_exame:"" explícito nunca vira "Aguardando" silenciosamente.
+  if (!Object.prototype.hasOwnProperty.call(camposNegocio, "servico")) camposNegocio.servico = "Espirometria";
+  if (!Object.prototype.hasOwnProperty.call(camposNegocio, "status_exame")) camposNegocio.status_exame = "Aguardando";
+
+  var resposta = _inserirEventoClinicoIdempotente({
+    contrato: "crm_espirometria",
+    aba: _SHEETS.ESPIROMETRIA,
+    idCol: "exame_id",
+    rotulo: "Espirometria",
+    chaveBruta: data.idempotency_key || data.id_atendimento,
+    payloadOriginal: data,
+    camposNegocio: camposNegocio,
+  });
+
+  var corpo = JSON.parse(resposta.getContent());
   _logEntry({
     acao:   "createEspirometria",
-    status: "OK",
+    status: corpo.ok ? "OK" : "ERRO",
     aba:    _SHEETS.ESPIROMETRIA,
-    id:     id,
-    resumo: atualizado ? "Espirometria atualizada (upsert)." : "Espirometria registrada.",
+    id:     corpo.id || "",
+    resumo: corpo.ok
+      ? (corpo.replayed ? "Reenvio idempotente — nada regravado." : "Espirometria registrada.")
+      : ("Recusado: " + String(corpo.error || "").slice(0, 120)),
   });
-  _auditAcao(auditRequestId, auditT0, "create_espirometria", "espirometria", id, data, atualizado ? "ok: update" : "ok: insert");
-  return _ok({
-    id:        id,
-    exame_id:  id,
-    created:   !atualizado,
-    updated:   atualizado,
-    message:   atualizado ? "Espirometria atualizada com sucesso." : "Espirometria registrada com sucesso.",
-  });
+  _auditAcao(auditRequestId, auditT0, "create_espirometria", "espirometria",
+             corpo.id || "", data,
+             corpo.ok ? (corpo.replayed ? "ok: replay" : "ok: insert") : ("ERROR: " + (corpo.code || "")));
+  return resposta;
 }
 
 function _createConsulta(data) {
   _required(data, ["primeiro_nome", "responsavel"]);
+  if (!_ctDisponivel()) return _err(_ERRO_CONTRATOS_AUSENTES, 500);
 
   var auditRequestId = Utilities.getUuid();
   var auditT0        = Date.now();
 
-  var sheet   = _getOrCreateSheet(_SHEETS.CONSULTAS);
-  var id      = _nextId(sheet, "CON");
-  var consent = _normalizeConsent(data.consentimento_whatsapp);
+  var dataConsulta = ctValidarDataComPrecisao(data.data_consulta, data.data_consulta_precisao);
+  if (!dataConsulta.ok) return _err("data_consulta: " + dataConsulta.erro, 400);
 
-  try {
-    _appendRowSemValidacao(sheet, _buildRow(sheet, {
-      consulta_id:            id,
-      data_entrada:           _nowBr(),
-      primeiro_nome:          data.primeiro_nome              || "",
-      telefone:               data.telefone                   || "",
-      origem:                 data.origem                     || "",
-      tipo_consulta:          data.tipo_consulta              || "",
-      status:                 data.status                     || "Agendada",
-      medica:                 data.medica                     || "",
-      data_consulta:          data.data_consulta              || "",
-      proximo_contato:        data.proximo_contato            || "",
-      motivo_proximo_contato: data.motivo_proximo_contato     || "",
-      canal:                  data.canal                      || "",
-      responsavel:            data.responsavel                || "",
-      consentimento_whatsapp: consent,
-    }));
-  } catch (e) {
-    _auditAcao(auditRequestId, auditT0, "create_consulta", "consulta", id, data, "ERROR: falha na gravacao");
-    throw e;
+  var camposNegocio = {};
+  ["primeiro_nome", "telefone", "origem", "tipo_consulta", "status", "medica",
+   "proximo_contato", "motivo_proximo_contato", "canal", "responsavel",
+   "paciente_id", "id_legado", "modalidade"].forEach(function(c) {
+    if (Object.prototype.hasOwnProperty.call(data, c)) {
+      camposNegocio[c] = String(data[c] === null || data[c] === undefined ? "" : data[c]).trim();
+    }
+  });
+  if (Object.prototype.hasOwnProperty.call(data, "data_consulta")) {
+    camposNegocio.data_consulta = dataConsulta.valor;
+    if (dataConsulta.precisao !== "desconhecida") camposNegocio.data_consulta_precisao = dataConsulta.precisao;
   }
+  if (Object.prototype.hasOwnProperty.call(data, "consentimento_whatsapp")) {
+    camposNegocio.consentimento_whatsapp = _normalizeConsent(data.consentimento_whatsapp);
+  }
+  // M14.3A (correção final) — default de INSERT só quando o campo NÃO foi
+  // enviado; status:"" explícito nunca vira "Agendada" silenciosamente.
+  if (!Object.prototype.hasOwnProperty.call(camposNegocio, "status")) camposNegocio.status = "Agendada";
 
-  _logEntry({ acao: "createConsulta", status: "OK", aba: _SHEETS.CONSULTAS, id: id, resumo: "Consulta registrada." });
-  _auditAcao(auditRequestId, auditT0, "create_consulta", "consulta", id, data, "ok");
-  return _ok({ id: id, message: "Consulta registrada com sucesso." });
+  var resposta = _inserirEventoClinicoIdempotente({
+    contrato: "crm_consultas",
+    aba: _SHEETS.CONSULTAS,
+    idCol: "consulta_id",
+    rotulo: "Consulta",
+    chaveBruta: data.idempotency_key || data.id_atendimento,
+    payloadOriginal: data,
+    camposNegocio: camposNegocio,
+  });
+
+  var corpo = JSON.parse(resposta.getContent());
+  _logEntry({
+    acao:   "createConsulta",
+    status: corpo.ok ? "OK" : "ERRO",
+    aba:    _SHEETS.CONSULTAS,
+    id:     corpo.id || "",
+    resumo: corpo.ok
+      ? (corpo.replayed ? "Reenvio idempotente — nada regravado." : "Consulta registrada.")
+      : ("Recusado: " + String(corpo.error || "").slice(0, 120)),
+  });
+  _auditAcao(auditRequestId, auditT0, "create_consulta", "consulta",
+             corpo.id || "", data,
+             corpo.ok ? (corpo.replayed ? "ok: replay" : "ok: insert") : ("ERROR: " + (corpo.code || "")));
+  return resposta;
 }
 
 function _createClinicaB2B(data) {
@@ -472,7 +683,7 @@ function _createClinicaB2B(data) {
 
   var pcmsoSheet = _getOrCreateSheet(_SHEETS.B2B_PCMSO);
   var crmSheet   = _getOrCreateSheet(_SHEETS.CRM_CLINICAS);
-  var crmId      = _nextId(crmSheet, "CLI");
+  var crmId      = ctNovoIdServidor("CLI", Utilities.getUuid()); // M14.3A: servidor emite; nunca lastRow
 
   // Uma ação de negócio (cadastro da clínica), duas abas escritas —
   // um único evento de auditoria, identificado pelo clinica_id do CRM.
@@ -519,72 +730,95 @@ function _createClinicaB2B(data) {
 
 function _registrarInteracaoClinica(data) {
   _required(data, ["nome_clinica", "etapa", "responsavel"]);
+  if (!_ctDisponivel()) return _err(_ERRO_CONTRATOS_AUSENTES, 500);
 
   var auditRequestId = Utilities.getUuid();
   var auditT0        = Date.now();
 
-  var sheet    = _getOrCreateSheet(_SHEETS.CRM_CLINICAS);
-  var allData  = sheet.getDataRange().getValues();
-  if (allData.length < 1) throw new Error("Aba " + _SHEETS.CRM_CLINICAS + " sem cabeçalho.");
-
-  var headers  = allData[0].map(function(h) { return String(h).toLowerCase().trim(); });
-  var nomeIdx  = headers.indexOf("nome_clinica");
+  var sheet   = _getOrCreateSheet(_SHEETS.CRM_CLINICAS);
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 1) throw new Error("Aba " + _SHEETS.CRM_CLINICAS + " sem cabeçalho.");
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+    .map(function(h) { return String(h).trim(); });
+  var nomeIdx = headers.indexOf("nome_clinica");
   if (nomeIdx < 0) throw new Error("Coluna nome_clinica não encontrada.");
 
   var keyTarget = _keyNorm(data.nome_clinica);
-  var rowIdx    = -1;
-  for (var i = 1; i < allData.length; i++) {
-    if (_keyNorm(String(allData[i][nomeIdx] || "")) === keyTarget) {
-      rowIdx = i + 1; // índice 1-based do Sheets
-      break;
+  var rowIdx = -1;
+  if (lastRow >= 2) {
+    var allData = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    for (var i = 0; i < allData.length; i++) {
+      if (_keyNorm(String(allData[i][nomeIdx] || "")) === keyTarget) { rowIdx = i + 2; break; }
     }
   }
 
-  var updates = {
-    etapa:             data.etapa              || "",
-    ultima_interacao:  _nowBr(),
-    proxima_acao:      data.proxima_acao        || "",
-    data_proxima_acao: data.data_proxima_acao   || "",
-    prioridade:        data.prioridade          || "",
-    responsavel:       data.responsavel         || "",
-  };
-
-  if (rowIdx > 0) {
-    // clinica_id da linha encontrada — só para identificar a entidade no log.
-    var idColIdx      = headers.indexOf("clinica_id");
-    var clinicaIdAudit = idColIdx >= 0 ? String(allData[rowIdx - 1][idColIdx] || "").trim() : "";
-
-    var updateFailures = [];
-    Object.keys(updates).forEach(function(col) {
-      var colIdx = headers.indexOf(col);
-      if (colIdx < 0) return;
-      if (!_writeCellVerified(sheet, rowIdx, colIdx + 1, updates[col])) updateFailures.push(col);
-    });
-    if (updateFailures.length > 0) {
-      _logEntry({ acao: "registrarInteracaoClinica", status: "ERRO-GRAVACAO", aba: _SHEETS.CRM_CLINICAS, id: "", resumo: "Falha ao gravar: " + updateFailures.join(", ") });
-      _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", clinicaIdAudit, data, "ERROR: falha na gravacao");
-      return _err("Falha ao gravar campos: " + updateFailures.join(", "), 500);
+  // M14.3A (correção final) — contrato executável "crm_clinicas": fail-closed
+  // TOTAL (qualquer campo suportado e enviado sem coluna correspondente gera
+  // erro ANTES de qualquer setValue, nunca sucesso parcial) + patch POR PRESENÇA
+  // REAL da propriedade (vazio explícito ≠ ausência). etapa e ultima_interacao
+  // são a regra formal desta ação (sempre aplicadas); demais campos entram
+  // somente se o cliente realmente os enviou.
+  var campos = { etapa: String(data.etapa || "").trim(), ultima_interacao: _nowBr() };
+  var solicitados = ["etapa", "ultima_interacao"];
+  ["proxima_acao", "data_proxima_acao", "prioridade", "responsavel"].forEach(function(c) {
+    if (Object.prototype.hasOwnProperty.call(data, c)) {
+      campos[c] = String(data[c] === null || data[c] === undefined ? "" : data[c]).trim();
+      solicitados.push(c);
     }
-    _logEntry({ acao: "registrarInteracaoClinica", status: "OK", aba: _SHEETS.CRM_CLINICAS, id: "", resumo: "Interação atualizada." });
-    _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", clinicaIdAudit, data, "ok: update");
-    return _ok({ message: "Interação registrada com sucesso.", updated: true });
+  });
+
+  var linhaExistente = rowIdx > 0 ? sheet.getRange(rowIdx, 1, 1, lastCol).getValues()[0] : null;
+  var clinicaIdAudit = "";
+  var newId = "";
+  if (!linhaExistente) {
+    newId = ctNovoIdServidor("CLI", Utilities.getUuid());
+    campos.clinica_id   = newId;
+    campos.nome_clinica = String(data.nome_clinica || "").trim();
+    solicitados = solicitados.concat(["clinica_id", "nome_clinica"]);
+  } else {
+    var idIdx = headers.indexOf("clinica_id");
+    clinicaIdAudit = idIdx >= 0 ? String(linhaExistente[idIdx] || "").trim() : "";
   }
 
-  // Clínica não encontrada: cria nova linha
-  var newId = _nextId(sheet, "CLI");
+  // Validação COMPLETA antes de qualquer escrita: campo solicitado sem coluna
+  // correspondente retorna erro aqui — nenhuma célula foi tocada ainda.
+  var plano = ctPlanejarUpsert("crm_clinicas", headers, campos, solicitados, linhaExistente);
+  if (!plano.ok) {
+    _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", clinicaIdAudit, data, "ERROR: " + plano.erro);
+    return _err(plano.erro, 422);
+  }
+
   try {
-    _appendRowSemValidacao(sheet, _buildRow(sheet, Object.assign({
-      clinica_id:   newId,
-      nome_clinica: data.nome_clinica || "",
-      bairro: "", regiao: "", tipo_clinica: "", observacao: "",
-    }, updates)));
+    _aplicarPlanoUpsert(sheet, plano, rowIdx > 0 ? rowIdx : -1);
   } catch (e) {
-    _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", newId, data, "ERROR: falha na gravacao");
-    throw e;
+    _logEntry({ acao: "registrarInteracaoClinica", status: "ERRO-GRAVACAO", aba: _SHEETS.CRM_CLINICAS, id: clinicaIdAudit || newId, resumo: e.message });
+    _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", clinicaIdAudit || newId, data, "ERROR: falha na gravacao");
+    // Escrita parcial residual (M14.3A): nunca escondida — relata exatamente
+    // o que persistiu e o que falhou (ver _aplicarPlanoUpsert).
+    return _err(e.message, 500, {
+      campos_gravados_parcialmente: e.camposGravadosParcialmente || [],
+      campos_com_falha: e.camposComFalha || [],
+    });
   }
+
+  if (linhaExistente) {
+    _logEntry({ acao: "registrarInteracaoClinica", status: "OK", aba: _SHEETS.CRM_CLINICAS, id: clinicaIdAudit, resumo: "Interação atualizada." });
+    _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", clinicaIdAudit, data, "ok: update");
+    return _ok({
+      message: "Interação registrada com sucesso.", updated: true,
+      campos_persistidos: plano.persistidos, campos_ignorados: plano.ignorados,
+      contrato_versao: plano.contrato_versao,
+    });
+  }
+
   _logEntry({ acao: "registrarInteracaoClinica", status: "OK-NOVO", aba: _SHEETS.CRM_CLINICAS, id: newId, resumo: "Nova clínica criada via interação." });
   _auditAcao(auditRequestId, auditT0, "registrar_interacao_clinica", "clinica", newId, data, "ok: insert");
-  return _ok({ id: newId, message: "Clínica não encontrada — nova entrada criada.", created: true });
+  return _ok({
+    id: newId, message: "Clínica não encontrada — nova entrada criada.", created: true,
+    campos_persistidos: plano.persistidos, campos_ignorados: plano.ignorados,
+    contrato_versao: plano.contrato_versao,
+  });
 }
 
 function _registrarInteracaoPaciente(data) {
@@ -594,7 +828,7 @@ function _registrarInteracaoPaciente(data) {
   var auditT0        = Date.now();
 
   var sheet   = _getOrCreateSheet(_SHEETS.FOLLOWUP_WA);
-  var id      = _nextId(sheet, "FUP");
+  var id      = ctNovoIdServidor("FUP", Utilities.getUuid());
   var consent = _normalizeConsent(data.consentimento);
 
   try {
@@ -621,91 +855,6 @@ function _registrarInteracaoPaciente(data) {
   return _ok({ id: id, message: "Interação registrada." });
 }
 
-/**
- * Registra um novo atendimento da Parceria Pastore direto na aba
- * "Parceria Pastore - Atendimentos", a partir do modal "Novo atendimento"
- * do painel (Parcerias → Pastore). Ver painel-soprolife/docs/parceria-pastore-planilha.md
- * para o modelo completo de campos e privacidade.
- *
- * Nome, WhatsApp e observação são privados por definição (nunca saem desta
- * planilha nem do arquivo data-private/parcerias-pastore.local.json — o
- * summary público do painel só lê agregados, nunca estes campos).
- *
- * receita_bruta / custo_total / resultado_liquido (colunas S/T/U) NÃO são
- * escritos aqui — a planilha real já calcula essas três colunas por fórmula
- * por linha (ver _ensureFormulaColumns). Deixar em branco e copiar a fórmula
- * da linha anterior é mais seguro do que tentar replicar o cálculo aqui e
- * divergir da fórmula real.
- */
-function _registrarAtendimentoPastore(data) {
-  _required(data, ["data_atendimento", "paciente_nome", "tipo_exame"]);
-
-  var auditRequestId = Utilities.getUuid();
-  var auditT0        = Date.now();
-
-  var sheet = _getOrCreateSheet(_SHEETS.PARCERIA_PASTORE_ATENDIMENTOS);
-  _ensureSheetHeader(sheet, _PARCERIA_PASTORE_ATENDIMENTOS_CABECALHO);
-
-  var row = _buildRow(sheet, {
-    data_atendimento:             data.data_atendimento             || "",
-    unidade:                      data.unidade                      || "Pastore Ipanema",
-    dia_semana:                   data.dia_semana                   || "",
-    horario_inicio:               data.horario_inicio               || "",
-    horario_fim:                  data.horario_fim                  || "",
-    origem:                       data.origem                       || "Pastore",
-    paciente_nome:                data.paciente_nome                || "",
-    paciente_whatsapp:            data.paciente_whatsapp            || "",
-    tipo_exame:                   data.tipo_exame                   || "",
-    broncodilatador:              data.broncodilatador              || "Não",
-    valor_cobrado:                data.valor_cobrado                || "",
-    forma_pagamento:              data.forma_pagamento              || "",
-    recebido_por:                 data.recebido_por                 || "SoproLife",
-    repasse_pastore:              data.repasse_pastore !== undefined && data.repasse_pastore !== "" ? data.repasse_pastore : 0,
-    custo_insumo:                 data.custo_insumo                 || "",
-    custo_deslocamento:           data.custo_deslocamento !== undefined && data.custo_deslocamento !== "" ? data.custo_deslocamento : 0,
-    custo_profissional:           data.custo_profissional !== undefined && data.custo_profissional !== "" ? data.custo_profissional : 0,
-    outros_custos:                data.outros_custos !== undefined && data.outros_custos !== "" ? data.outros_custos : 0,
-    status:                       data.status                       || "Realizado",
-    followup_status:              data.followup_status              || "A definir",
-    consentimento_contato_futuro: data.consentimento_contato_futuro || "A definir",
-    // receita_bruta / custo_total / resultado_liquido: propositalmente ausentes
-    // (ver docstring acima) — _buildRow grava "" nessas colunas, e
-    // _ensureFormulaColumns substitui pela fórmula copiada da linha anterior.
-  });
-
-  // _buildRow() nunca escreve observacao_privada_minima (proteção padrão
-  // aplicada a todas as abas). Aqui é intencional e seguro: o campo é privado
-  // por definição nesta aba específica (nunca sai da planilha/data-private) e
-  // o próprio formulário do painel pede essa observação.
-  var headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0]
-    .map(function(h) { return String(h).trim(); });
-  var obsIdx = headers.indexOf("observacao_privada_minima");
-  if (obsIdx >= 0 && data.observacao_privada_minima) {
-    row[obsIdx] = String(data.observacao_privada_minima);
-  }
-
-  var newRow = _firstEmptyRowByHeaders(sheet, ["data_atendimento", "paciente_nome", "tipo_exame"]);
-  try {
-    _writeRowSkippingColumnsSemValidacao(sheet, newRow, row, _PARCERIA_PASTORE_FORMULA_COLS);
-    _ensureFormulaColumns(sheet, newRow, _PARCERIA_PASTORE_FORMULA_COLS);
-  } catch (e) {
-    // A aba não tem coluna de ID — a linha é o identificador (mesmo padrão de _logEntry abaixo).
-    _auditAcao(auditRequestId, auditT0, "registrar_atendimento_pastore", "pastore", "linha-" + newRow, data, "ERROR: falha na gravacao");
-    throw e;
-  }
-
-  _logEntry({
-    acao:   "registrarAtendimentoPastore",
-    status: "OK",
-    aba:    _SHEETS.PARCERIA_PASTORE_ATENDIMENTOS,
-    id:     "linha " + newRow,
-    resumo: "Atendimento Pastore registrado (" + (data.tipo_exame || "") + ", status " + (data.status || "Realizado") + ").",
-    // nome, whatsapp e observação NUNCA entram no log — mesma regra do resto do arquivo
-  });
-  _auditAcao(auditRequestId, auditT0, "registrar_atendimento_pastore", "pastore", "linha-" + newRow, data, "ok");
-
-  return _ok({ row: newRow, message: "Atendimento Pastore registrado com sucesso." });
-}
 
 // Valor monetário: vazio -> fallback (ou erro se obrigatório); qualquer coisa
 // que não vire número finito >= 0 -> erro. Mesma regra de
@@ -744,6 +893,7 @@ function _efServerNum(raw, opts) {
  */
 function _registrarEspirometriaFinanceiro(data) {
   data = data || {};
+  if (!_ctDisponivel()) return _err(_ERRO_CONTRATOS_AUSENTES, 500);
 
   var camposProibidosPresentes = _EF_CAMPOS_PROIBIDOS.filter(function(campo) {
     return Object.prototype.hasOwnProperty.call(data, campo);
@@ -753,6 +903,22 @@ function _registrarEspirometriaFinanceiro(data) {
   }
 
   _required(data, ["data_exame", "status_exame", "status_pagamento", "valor_cobrado", "local_atendimento"]);
+
+  // M14.3A (2ª rodada) — id_atendimento é OBRIGATÓRIO e validado por ação:
+  // nenhum lançamento novo pode nascer órfão pela própria API. É chave de
+  // NEGÓCIO (vínculo com o exame), não idempotency key técnica: atualizar o
+  // pagamento do mesmo atendimento é o fluxo desenhado (patch por presença).
+  var chaveRes = ctChaveIdempotenciaAcao(data.id_atendimento, "ESP");
+  if (!chaveRes.ok) return _err("id_atendimento: " + chaveRes.erro, 400);
+  var idAtendimento = chaveRes.chave;
+  if (!idAtendimento) {
+    return _err("id_atendimento é obrigatório — lançamento financeiro sem vínculo com o atendimento não pode ser criado.", 400);
+  }
+
+  // Datas: valor + precisão validados juntos — inválido é erro explícito;
+  // mês/ano nunca vira dia factual; vazio nunca vira hoje.
+  var dataExameFin = ctValidarDataComPrecisao(data.data_exame, data.data_exame_precisao);
+  if (!dataExameFin.ok) return _err("data_exame: " + dataExameFin.erro, 400);
 
   var statusExame = String(data.status_exame).trim();
   if (_EF_STATUS_EXAME.indexOf(statusExame) < 0) {
@@ -774,19 +940,33 @@ function _registrarEspirometriaFinanceiro(data) {
     return _err("forma_pagamento inválida: " + formaPagamento, 400);
   }
 
-  var origemPreco = data.origem_preco ? String(data.origem_preco).trim() : "Tabela";
-  if (_EF_ORIGEM_PRECO.indexOf(origemPreco) < 0) {
-    return _err("origem_preco inválida: " + origemPreco, 400);
+  // AUSÊNCIA PERMANECE AUSENTE (M14.3A, 2ª rodada): nenhum default monetário
+  // é inventado — valor_tabela ausente NÃO vira 250; origem_preco ausente NÃO
+  // vira "Tabela"; valor_recebido ausente NÃO vira 0 silencioso.
+  var origemPreco = "";
+  if (Object.prototype.hasOwnProperty.call(data, "origem_preco") && String(data.origem_preco || "").trim()) {
+    origemPreco = String(data.origem_preco).trim();
+    if (_EF_ORIGEM_PRECO.indexOf(origemPreco) < 0) {
+      return _err("origem_preco inválida: " + origemPreco, 400);
+    }
   }
 
-  var valorTabela = _efServerNum(data.valor_tabela, { fallback: _EF_VALOR_TABELA_PADRAO });
-  if (valorTabela.erro) return _err("valor_tabela inválido.", 400);
+  var valorTabela = { valor: null };
+  if (Object.prototype.hasOwnProperty.call(data, "valor_tabela") && String(data.valor_tabela === null ? "" : data.valor_tabela).trim() !== "") {
+    valorTabela = _efServerNum(data.valor_tabela, { obrigatorio: true });
+    if (valorTabela.erro) return _err("valor_tabela inválido.", 400);
+  }
 
   var valorCobrado = _efServerNum(data.valor_cobrado, { obrigatorio: true });
   if (valorCobrado.erro) return _err("valor_cobrado inválido.", 400);
 
-  var valorRecebidoInformado = _efServerNum(data.valor_recebido, { fallback: 0 });
-  if (valorRecebidoInformado.erro) return _err("valor_recebido inválido.", 400);
+  var temValorRecebido = Object.prototype.hasOwnProperty.call(data, "valor_recebido") &&
+                         String(data.valor_recebido === null ? "" : data.valor_recebido).trim() !== "";
+  var valorRecebidoInformado = { valor: null };
+  if (temValorRecebido) {
+    valorRecebidoInformado = _efServerNum(data.valor_recebido, { obrigatorio: true });
+    if (valorRecebidoInformado.erro) return _err("valor_recebido inválido.", 400);
+  }
 
   // Regras cruzadas por status de pagamento — mesma lógica de
   // buildEspirometriaFinanceiroPayload (M11.1.1). Cancelado (por exame OU
@@ -795,83 +975,123 @@ function _registrarEspirometriaFinanceiro(data) {
   if (!cancelado) {
     if (statusPagamento === "Recebido") {
       if (!formaPagamento) return _err("forma_pagamento é obrigatória quando status_pagamento é Recebido.", 400);
+      if (!temValorRecebido) return _err("valor_recebido é obrigatório quando status_pagamento é Recebido.", 400);
       if (valorRecebidoInformado.valor !== valorCobrado.valor) {
         return _err("valor_recebido deve ser igual a valor_cobrado quando status_pagamento é Recebido.", 400);
       }
     } else if (statusPagamento === "Parcial") {
       if (!formaPagamento) return _err("forma_pagamento é obrigatória quando status_pagamento é Parcial.", 400);
+      if (!temValorRecebido) return _err("valor_recebido é obrigatório quando status_pagamento é Parcial.", 400);
       if (!(valorRecebidoInformado.valor > 0 && valorRecebidoInformado.valor < valorCobrado.valor)) {
         return _err("valor_recebido deve ser maior que zero e menor que valor_cobrado quando status_pagamento é Parcial.", 400);
       }
     }
   }
 
-  // Recalculado no servidor — nunca só aceita o valor_recebido do cliente.
-  // Pendente/Cortesia/Cancelado (exame ou pagamento) nunca contam como receita.
+  // REGRA FORMAL DE ZERO (registrada aqui e coberta por teste): Pendente,
+  // Cortesia e Cancelado (exame ou pagamento) têm, por definição do fluxo
+  // M11.1.1, recebimento igual a 0 — este é o ÚNICO caso em que 0 é gravado
+  // sem ter sido digitado. Nos demais status, valor_recebido é o informado
+  // (obrigatório). Nada além disso é derivado.
   var semRecebimento = cancelado || statusPagamento === "Cortesia" || statusPagamento === "Pendente";
   var valorRecebido  = semRecebimento ? 0 : valorRecebidoInformado.valor;
-  var desconto       = Math.max(0, Math.round((valorTabela.valor - valorCobrado.valor) * 100) / 100);
 
-  var idAtendimento        = data.id_atendimento ? String(data.id_atendimento).trim() : "";
+  // Desconto: SÓ derivável quando valor_tabela foi realmente enviado.
+  var desconto = null;
+  if (valorTabela.valor !== null) {
+    desconto = Math.max(0, Math.round((valorTabela.valor - valorCobrado.valor) * 100) / 100);
+  }
+
   var observacaoFinanceira = data.observacao_financeira ? String(data.observacao_financeira) : "";
-  var criadoEm             = data.criado_em ? String(data.criado_em) : new Date().toISOString();
+  // M14.3A (correção final) — criado_em é autoridade EXCLUSIVA do servidor no
+  // insert; um valor enviado pelo cliente é sempre ignorado (nunca aceito),
+  // e o update preserva o criado_em já gravado (ver ramo "existente" abaixo:
+  // imutável, nunca entra em campos). Não há caminho por onde o cliente
+  // consiga fixar/forjar este timestamp técnico.
+  var criadoEmClienteIgnorado = Object.prototype.hasOwnProperty.call(data, "criado_em");
+  var criadoEm = new Date().toISOString();
 
   var auditRequestId = Utilities.getUuid();
   var auditT0        = Date.now();
 
-  var sheet = _getOrCreateSheet(_SHEETS.FINANCEIRO_LANCAMENTOS);
-  _ensureSheetHeader(sheet, _FINANCEIRO_LANCAMENTOS_CABECALHO);
+  var lock = _lockScriptOuErro();
+  if (!lock) return _err("Sistema ocupado (lock não obtido) — tente novamente.", 503);
 
-  // Upsert por id_atendimento (Etapa 8): se já existir lançamento para o
-  // mesmo atendimento, atualiza a linha em vez de duplicar.
-  var existente = idAtendimento ? _findRowByIdColumn(sheet, "id_atendimento", idAtendimento) : null;
-
-  var camposLinha = {
-    id_atendimento:         idAtendimento,
-    criado_em:              criadoEm,
-    data_exame:             String(data.data_exame).trim(),
-    tipo_movimento:         "receita",
-    servico:                "Espirometria",
-    local_atendimento:      localAtendimento,
-    valor_tabela:           valorTabela.valor,
-    valor_cobrado:          valorCobrado.valor,
-    valor_recebido:         valorRecebido,
-    desconto:               desconto,
-    status_exame:           statusExame,
-    status_pagamento:       statusPagamento,
-    forma_pagamento:        formaPagamento,
-    origem_preco:           origemPreco,
-    observacao_financeira:  observacaoFinanceira,
-    fonte:                  "nova_espirometria",
-  };
-
-  var idLancamento = "";
+  var plano, idLancamento = "";
   try {
+    var sheet = _getOrCreateSheet(_SHEETS.FINANCEIRO_LANCAMENTOS);
+    _ensureSheetHeader(sheet, _FINANCEIRO_LANCAMENTOS_CABECALHO);
+
+    // Upsert de NEGÓCIO por id_atendimento: retry/atualização de pagamento
+    // vira PATCH POR PRESENÇA — só as colunas presentes/derivadas entram;
+    // colunas extras/fórmulas/valores não enviados são preservados.
+    var existente = _findRowByIdColumn(sheet, "id_atendimento", idAtendimento);
+
+    var campos = {
+      data_exame:       dataExameFin.valor,
+      local_atendimento: localAtendimento,
+      valor_cobrado:    valorCobrado.valor,
+      valor_recebido:   valorRecebido,
+      status_exame:     statusExame,
+      status_pagamento: statusPagamento,
+    };
+    if (formaPagamento)            campos.forma_pagamento = formaPagamento;
+    if (origemPreco)               campos.origem_preco = origemPreco;
+    if (valorTabela.valor !== null) campos.valor_tabela = valorTabela.valor;
+    if (desconto !== null)         campos.desconto = desconto;
+    if (Object.prototype.hasOwnProperty.call(data, "observacao_financeira")) {
+      campos.observacao_financeira = observacaoFinanceira;
+    }
+    if (dataExameFin.precisao !== "desconhecida") campos.data_exame_precisao = dataExameFin.precisao;
+    if (Object.prototype.hasOwnProperty.call(data, "servico") && String(data.servico || "").trim()) {
+      campos.servico = String(data.servico).trim();
+    }
+
     if (existente) {
       var idColIdx = existente.headers.indexOf("id_lancamento");
       idLancamento = idColIdx >= 0 ? String(existente.rowData[idColIdx] || "").trim() : "";
-      if (!idLancamento) idLancamento = _nextId(sheet, "FIN");
-
-      var row = _buildRow(sheet, Object.assign({ id_lancamento: idLancamento }, camposLinha));
-      var updateFailures = [];
-      row.forEach(function(val, i) {
-        if (!_writeCellVerified(sheet, existente.rowIdx, i + 1, val)) updateFailures.push(existente.headers[i]);
-      });
-      if (updateFailures.length > 0) {
-        throw new Error("Falha ao gravar campos: " + updateFailures.join(", "));
+      if (!idLancamento) {
+        idLancamento = ctNovoIdServidor("FIN", Utilities.getUuid());
+        campos.id_lancamento = idLancamento; // linha antiga sem id: completa
       }
+      // id_atendimento/criado_em/tipo_movimento/fonte: imutáveis — preservados.
     } else {
-      idLancamento = _nextId(sheet, "FIN");
-      _appendRowSemValidacao(sheet, _buildRow(sheet, Object.assign({ id_lancamento: idLancamento }, camposLinha)));
+      idLancamento          = ctNovoIdServidor("FIN", Utilities.getUuid());
+      campos.id_lancamento  = idLancamento;
+      campos.id_atendimento = idAtendimento;
+      campos.criado_em      = criadoEm;
+      campos.tipo_movimento = "receita";
+      campos.fonte          = "nova_espirometria";
+      if (!campos.servico)  campos.servico = "Espirometria";
     }
-  } catch (e) {
-    _auditAcao(auditRequestId, auditT0, "registrar_espirometria_financeiro", "financeiro", idLancamento, data, "ERROR: falha na gravacao");
-    return _err("Erro ao gravar lançamento financeiro: " + e.message, 500);
+
+    var solicitadosFin = ctCamposPresentes("financeiro_lancamentos", data);
+    var headersFin = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+    plano = ctPlanejarUpsert("financeiro_lancamentos", headersFin, campos, solicitadosFin,
+                             existente ? existente.rowData : null);
+    if (!plano.ok) {
+      _auditAcao(auditRequestId, auditT0, "registrar_espirometria_financeiro", "financeiro", idLancamento, data, "ERROR: contrato/cabecalho");
+      return _err(plano.erro, 422);
+    }
+
+    try {
+      _aplicarPlanoUpsert(sheet, plano, existente ? existente.rowIdx : -1);
+    } catch (e) {
+      _auditAcao(auditRequestId, auditT0, "registrar_espirometria_financeiro", "financeiro", idLancamento, data, "ERROR: falha na gravacao");
+      // Escrita parcial residual (M14.3A): nunca escondida — relata
+      // exatamente o que persistiu e o que falhou (ver _aplicarPlanoUpsert).
+      return _err("Erro ao gravar lançamento financeiro: " + e.message, 500, {
+        campos_gravados_parcialmente: e.camposGravadosParcialmente || [],
+        campos_com_falha: e.camposComFalha || [],
+      });
+    }
+  } finally {
+    lock.releaseLock();
   }
 
-  // Auditoria mínima (Etapa 7): ação, status, id_lancamento, id_atendimento
-  // (se houver), valor_recebido, status_pagamento, timestamp — nunca
-  // observacao_financeira nem qualquer outro texto livre.
+  // Auditoria mínima (Etapa 7): ação, status, id_lancamento, id_atendimento,
+  // valor_recebido, status_pagamento, timestamp — nunca observacao_financeira
+  // nem qualquer outro texto livre.
   _logAudit({
     requestId:    auditRequestId,
     acao:         "registrar_espirometria_financeiro",
@@ -880,7 +1100,7 @@ function _registrarEspirometriaFinanceiro(data) {
     origem:       data.audit_origem,
     operador:     data.audit_operador,
     trigger:      "web_app",
-    resultado:    "ok" + (idAtendimento ? " | id_atendimento=" + idAtendimento : "") +
+    resultado:    "ok | id_atendimento=" + idAtendimento +
                   " | valor_recebido=" + valorRecebido + " | status_pagamento=" + statusPagamento,
     durationMs:   Date.now() - auditT0,
   });
@@ -890,11 +1110,21 @@ function _registrarEspirometriaFinanceiro(data) {
     status: "OK",
     aba:    _SHEETS.FINANCEIRO_LANCAMENTOS,
     id:     idLancamento,
-    resumo: "Lançamento financeiro da espirometria registrado (" + statusPagamento + ").",
+    resumo: "Lançamento financeiro da espirometria registrado (" + statusPagamento + ")." +
+            (criadoEmClienteIgnorado ? " Aviso: criado_em enviado pelo cliente foi ignorado — o servidor sempre emite o próprio timestamp." : ""),
   });
 
-  return _ok({ id: idLancamento, message: "Lançamento financeiro salvo no Google Sheets." });
+  return _ok({
+    id:                 idLancamento,
+    campos_persistidos: plano.persistidos,
+    campos_ignorados:   plano.ignorados,
+    contrato_versao:    plano.contrato_versao,
+    versao_cabecalho:   plano.versao_cabecalho,
+    aviso_criado_em_ignorado: criadoEmClienteIgnorado || undefined,
+    message:            "Lançamento financeiro salvo no Google Sheets.",
+  });
 }
+
 
 /**
  * Atualiza a etapa de um lead já existente na aba Leads, identificado por lead_id.
@@ -1491,14 +1721,13 @@ function _vincularLeadAClinica(data) {
       contatoId:   data.contato_id || "",
       clinicaId:   clinicaId,
       nomeContato: data.nome_contato,
-      cargo:       data.cargo || "",
       telefone:    telLead, // vem do lead — nunca inventado
-      email:       data.email || "",
-      papel:       data.papel || "",
       responsavel: data.responsavel || "",
-      proximaAcao: data.proxima_acao || "",
-      dataProxima: data.data_proxima_acao || "",
       observacao:  obsCurta,
+      // Presença real (hasOwnProperty), não valor: distingue campo ausente de
+      // vazio explícito enviado pelo cliente (cargo/email/papel/proxima_acao/
+      // data_proxima_acao) — ver _upsertContatoB2B.
+      camposClienteOpcionais: data,
     });
   }
 
@@ -1573,23 +1802,30 @@ function _logConversaoLeads(leadId, nome, etapa, destinosCriados, resultado) {
  * clinica_id + nome_contato (chave normalizada). Aba criada sob demanda,
  * na primeira vez que um contato é vinculado.
  */
+// Mapa campo-do-cliente → coluna: os nomes já coincidem, mas o mapa deixa
+// explícito quais opcionais são elegíveis a entrar via presença real.
+var _B2B_CONTATO_OPCIONAIS = [
+  "cargo", "email", "papel", "proxima_acao", "data_proxima_acao",
+];
+
 function _upsertContatoB2B(info) {
   // Função interna (chamada por _vincularLeadAClinica) — o evento de
   // auditoria dela recebe request_id próprio (UUID de fallback em _logAudit);
   // quando _vincularLeadAClinica for instrumentada, passar derivado_de aqui.
   var auditT0 = Date.now();
+  if (!_ctDisponivel()) throw new Error(_ERRO_CONTRATOS_AUSENTES);
 
   var sheet = _getOrCreateSheet(_SHEETS.CRM_CONTATOS_B2B);
   _ensureSheetHeader(sheet, _CRM_CONTATOS_B2B_CABECALHO);
 
-  var lastCol = sheet.getLastColumn();
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
   var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0]
     .map(function(h) { return String(h).trim(); });
 
-  var clinicaIdx  = headers.indexOf("clinica_id");
-  var nomeIdx     = headers.indexOf("nome_contato");
+  var clinicaIdx    = headers.indexOf("clinica_id");
+  var nomeIdx       = headers.indexOf("nome_contato");
   var contatoIdIdx0 = headers.indexOf("contato_id");
-  var lastRow     = sheet.getLastRow();
+  var lastRow       = sheet.getLastRow();
 
   // Identifica o contato existente por contato_id explícito (se enviado) ou,
   // por padrão, por clinica_id + nome_contato normalizado — nunca cria
@@ -1607,45 +1843,73 @@ function _upsertContatoB2B(info) {
     }
   }
 
-  var updates = {
-    clinica_id:            info.clinicaId,
-    nome_contato:          info.nomeContato,
-    cargo:                 info.cargo || "",
-    telefone_whatsapp:     info.telefone || "",
-    email:                 info.email || "",
-    papel:                 info.papel || "",
+  // M14.3A (correção final) — contrato executável "crm_contatos_b2b":
+  // fail-closed TOTAL (qualquer campo suportado sem coluna correspondente
+  // gera erro ANTES de qualquer setValue) + patch por PRESENÇA REAL da
+  // propriedade (vazio explícito enviado pelo cliente ≠ ausência — ausência
+  // nunca limpa cargo/e-mail/observação já cadastrados). status_relacionamento
+  // e ultima_interacao são a regra formal desta ação (sempre aplicadas);
+  // telefone vem do lead (nunca digitado direto pelo cliente aqui) e só entra
+  // se não vazio; responsavel só entra se informado.
+  var campos = {
     status_relacionamento: "Ativo",
     ultima_interacao:      _nowBr(),
-    proxima_acao:          info.proximaAcao || "",
-    data_proxima_acao:     info.dataProxima || "",
-    responsavel:           info.responsavel || "",
-    observacao:            info.observacao || "",
   };
+  var solicitados = ["status_relacionamento", "ultima_interacao"];
+  if (String(info.telefone || "").trim()) {
+    campos.telefone_whatsapp = String(info.telefone).trim();
+    solicitados.push("telefone_whatsapp");
+  }
+  if (String(info.responsavel || "").trim()) {
+    campos.responsavel = String(info.responsavel).trim();
+    solicitados.push("responsavel");
+  }
+  if (String(info.observacao || "").trim()) {
+    campos.observacao = String(info.observacao).trim();
+    solicitados.push("observacao");
+  }
 
-  if (rowIdx > 0) {
-    var contatoUpdateFailures = [];
-    Object.keys(updates).forEach(function(col) {
-      var idx = headers.indexOf(col);
-      if (idx < 0) return;
-      if (!_writeCellVerified(sheet, rowIdx, idx + 1, updates[col])) contatoUpdateFailures.push(col);
-    });
-    if (contatoUpdateFailures.length > 0) {
-      _auditAcao(null, auditT0, "upsert_contato_b2b", "contato_b2b", String(info.contatoId || ""), null, "ERROR: falha na gravacao");
-      throw new Error("Falha ao gravar contato B2B — campos: " + contatoUpdateFailures.join(", "));
+  var origemCliente = info.camposClienteOpcionais || {};
+  _B2B_CONTATO_OPCIONAIS.forEach(function(coluna) {
+    if (Object.prototype.hasOwnProperty.call(origemCliente, coluna)) {
+      var v = origemCliente[coluna];
+      campos[coluna] = String(v === null || v === undefined ? "" : v).trim();
+      solicitados.push(coluna);
     }
+  });
+
+  var linhaExistente = rowIdx > 0 ? sheet.getRange(rowIdx, 1, 1, lastCol).getValues()[0] : null;
+  var newId = "";
+  if (!linhaExistente) {
+    newId = ctNovoIdServidor("CONT", Utilities.getUuid());
+    campos.contato_id   = newId;
+    campos.clinica_id   = String(info.clinicaId || "").trim();
+    campos.nome_contato = String(info.nomeContato || "").trim();
+    solicitados = solicitados.concat(["contato_id", "clinica_id", "nome_contato"]);
+  }
+
+  // Validação COMPLETA antes de qualquer escrita: campo solicitado sem coluna
+  // correspondente retorna erro aqui — nenhuma célula foi tocada ainda.
+  var plano = ctPlanejarUpsert("crm_contatos_b2b", headers, campos, solicitados, linhaExistente);
+  if (!plano.ok) {
+    _auditAcao(null, auditT0, "upsert_contato_b2b", "contato_b2b", String(info.contatoId || newId || ""), null, "ERROR: " + plano.erro);
+    throw new Error(plano.erro);
+  }
+
+  try {
+    _aplicarPlanoUpsert(sheet, plano, rowIdx > 0 ? rowIdx : -1);
+  } catch (e) {
+    _auditAcao(null, auditT0, "upsert_contato_b2b", "contato_b2b", String(info.contatoId || newId || ""), null, "ERROR: falha na gravacao");
+    throw e;
+  }
+
+  if (linhaExistente) {
     var contatoIdIdx = headers.indexOf("contato_id");
-    var contatoIdExistente = contatoIdIdx >= 0 ? String(sheet.getRange(rowIdx, contatoIdIdx + 1).getValue() || "") : "";
+    var contatoIdExistente = contatoIdIdx >= 0 ? String(linhaExistente[contatoIdIdx] || "") : "";
     _auditAcao(null, auditT0, "upsert_contato_b2b", "contato_b2b", contatoIdExistente, null, "ok: update");
     return contatoIdExistente;
   }
 
-  var newId = _nextId(sheet, "CONT");
-  try {
-    _appendRowSemValidacao(sheet, _buildRow(sheet, Object.assign({ contato_id: newId }, updates)));
-  } catch (e) {
-    _auditAcao(null, auditT0, "upsert_contato_b2b", "contato_b2b", newId, null, "ERROR: falha na gravacao");
-    throw e;
-  }
   _auditAcao(null, auditT0, "upsert_contato_b2b", "contato_b2b", newId, null, "ok: insert");
   return newId;
 }
@@ -1862,6 +2126,17 @@ function _getOrCreateSheet(name) {
 }
 
 /**
+ * Operação diária (M14.3A, correção final): NUNCA cria aba. Retorna a aba se
+ * ela já existir, ou null. Instalação/configuração estrutural é ação
+ * explícita separada (ex.: soprolife-sheets-template.gs) — nunca um efeito
+ * colateral de uma escrita comum que pode falhar por outro motivo.
+ */
+function _getSheetSemCriar(name) {
+  var ss = _getWorkbook();
+  return ss.getSheetByName(name);
+}
+
+/**
  * Aplica um cabeçalho a uma aba apenas se ela ainda não tiver dados —
  * nunca sobrescreve um cabeçalho já existente (reaproveita abas existentes).
  */
@@ -2019,6 +2294,16 @@ function _dedupLeadsConvertidos(data) {
   // alias legado (usado em testes anteriores desta mesma sessão de trabalho).
   var dryRun = data.dryRun === false || data.confirm === true ? false : true;
 
+  // M14.3A (2ª rodada) — o modo de APLICAÇÃO está BLOQUEADO: exclusão de
+  // linha, mesmo duplicata, é manutenção destrutiva e exige backup validado,
+  // manifesto e aprovação explícita (M14.3B). Só o dry-run (relatório) roda.
+  if (!dryRun) {
+    return _err(
+      "dedupLeadsConvertidos com aplicação está BLOQUEADO pela M14.3A: exclusão de " +
+      "linhas exige backup validado + aprovação explícita (M14.3B). Use dryRun:true " +
+      "para ver o relatório de duplicatas — nada foi excluído.", 423);
+  }
+
   var sheet   = _getOrCreateSheet(_SHEETS.LEADS_CONVERTIDOS);
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
@@ -2062,48 +2347,17 @@ function _dedupLeadsConvertidos(data) {
   var keep      = ordenado[0];
   var toRemove  = ordenado.slice(1);
 
-  if (dryRun) {
-    return _ok({
-      message: "Modo dry-run — envie dryRun:false (ou confirm:true) para remover de fato.",
-      dryRun: true,
-      lead_id: leadId,
-      linhas_duplicadas: toRemove.length,
-      manteria_linha: keep.rowNum,
-      manteria_motivo: "mais completa (" + keep.completeness + " campos preenchidos)",
-      removeria_linhas: toRemove.map(function(r) { return r.rowNum; }),
-    });
-  }
-
-  // Registra cada duplicata removida em "Log Conversões Leads" ANTES de apagar —
-  // preserva o rastro (lead_id, entidade_id, etapa) mesmo depois da limpeza.
-  toRemove.forEach(function(r) {
-    var entVal   = entIdx   >= 0 ? String(r.values[entIdx]   || "").trim() : "";
-    var etapaVal = etapaIdx >= 0 ? String(r.values[etapaIdx] || "").trim() : "";
-    _logConversaoLeads(
-      leadId, "", etapaVal,
-      entVal ? [_SHEETS.CRM_CLINICAS + ":" + entVal] : [],
-      "B2B — Duplicata removida em " + _SHEETS.LEADS_CONVERTIDOS + " (linha " + r.rowNum + ", mantida linha " + keep.rowNum + ")"
-    );
-  });
-
-  // Remove de trás para frente para não desalinhar índices de linha durante o loop.
-  toRemove.slice().sort(function(a, b) { return b.rowNum - a.rowNum; }).forEach(function(r) {
-    sheet.deleteRow(r.rowNum);
-  });
-
-  _logEntry({
-    acao:   "dedupLeadsConvertidos",
-    status: "OK",
-    aba:    _SHEETS.LEADS_CONVERTIDOS,
-    id:     leadId,
-    resumo: "Removidas " + toRemove.length + " duplicata(s), mantendo a mais completa (linha original " + keep.rowNum + ").",
-  });
-
+  // M14.3A (2ª rodada): sempre RELATÓRIO — o braço de exclusão foi removido
+  // (a aplicação real exige backup validado + aprovação, M14.3B; ver o
+  // bloqueio no início da função). Nenhuma linha é excluída por esta ação.
   return _ok({
-    message: "Duplicatas removidas.",
-    removed: toRemove.length,
-    dryRun: false,
+    message: "Relatório de duplicatas (somente leitura) — a exclusão está bloqueada até a M14.3B.",
+    dryRun: true,
     lead_id: leadId,
+    linhas_duplicadas: toRemove.length,
+    manteria_linha: keep.rowNum,
+    manteria_motivo: "mais completa (" + keep.completeness + " campos preenchidos)",
+    removeria_linhas: toRemove.map(function(r) { return r.rowNum; }),
   });
 }
 
@@ -2272,23 +2526,12 @@ function _executarReorderTecnicas(sheet, colunasTecnicas) {
   });
 }
 
-function _nextId(sheet, prefix) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return prefix + "-0001";
-
-  var ids = sheet.getRange(2, 1, lastRow - 1, 1)
-    .getValues()
-    .map(function(r) { return String(r[0]); })
-    .filter(function(v) { return v.startsWith(prefix + "-"); });
-
-  var max = 0;
-  ids.forEach(function(v) {
-    var n = parseInt(v.slice(prefix.length + 1), 10);
-    if (!isNaN(n) && n > max) max = n;
-  });
-
-  return prefix + "-" + String(max + 1).padStart(4, "0");
-}
+// M14.3A — o antigo _nextId (contador sequencial derivado de lastRow, sem
+// LockService) foi REMOVIDO: era vulnerável a concorrência e a linha
+// removida/reordenada. Novos IDs vêm de ctNovoIdServidor (contratos-
+// canonicos.gs): prefixo de entidade + UUID opaco emitido pelo servidor.
+// IDs sequenciais históricos (PAC-0001, CON-0001, FIN-0001...) permanecem
+// válidos e nunca são recalculados.
 
 function _buildRow(sheet, fieldMap) {
   var lastCol  = Math.max(sheet.getLastColumn(), 1);
@@ -2529,7 +2772,7 @@ function _logAudit(info) {
     var durationMs = parseInt(info.durationMs, 10);
 
     _appendRowSemValidacao(sheet, [
-      _nextId(sheet, "AUD"),
+      ctNovoIdServidor("AUD", Utilities.getUuid()),
       requestId,
       _nowBr(),
       _auditShortMeta(info.acao,         "desconhecida", 40),
@@ -2597,9 +2840,9 @@ function _ok(payload) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function _err(message, code) {
+function _err(message, code, extra) {
   return ContentService
-    .createTextOutput(JSON.stringify({ ok: false, error: message, code: code || 400 }))
+    .createTextOutput(JSON.stringify(Object.assign({ ok: false, error: message, code: code || 400 }, extra || {})))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -2620,51 +2863,6 @@ function _testCreatePaciente() {
           origem:                 "Teste manual",
           consentimento_whatsapp: "Sim",
           responsavel:            "Adeildo",
-        },
-      }),
-    },
-  };
-  Logger.log(doPost(mock).getContent());
-}
-
-/**
- * Teste manual de _registrarAtendimentoPastore — executar no editor do Apps
- * Script (nunca via HTTP). Usa "TESTE - APAGAR" no nome do paciente, seguindo
- * a regra de teste documentada em soprolife-sheets-sync: rodar o fluxo
- * completo com linha fictícia evidente e remover manualmente depois de
- * confirmar no painel.
- */
-function _testRegistrarAtendimentoPastore() {
-  var token = PropertiesService.getScriptProperties().getProperty("API_TOKEN");
-  if (!token) throw new Error("API_TOKEN não configurado. Defina em Arquivo → Propriedades do projeto → Propriedades do script.");
-  var mock = {
-    postData: {
-      contents: JSON.stringify({
-        token:  token,
-        action: "registrarAtendimentoPastore",
-        data: {
-          data_atendimento: Utilities.formatDate(new Date(), "America/Sao_Paulo", "yyyy-MM-dd"),
-          unidade:          "Pastore Ipanema",
-          dia_semana:       "Terça-feira",
-          horario_inicio:   "08:00",
-          horario_fim:      "12:00",
-          origem:           "Pastore",
-          paciente_nome:    "TESTE - APAGAR",
-          paciente_whatsapp: "",
-          tipo_exame:       "Espirometria",
-          broncodilatador:  "Não",
-          valor_cobrado:    "150",
-          forma_pagamento:  "Pix",
-          recebido_por:     "SoproLife",
-          repasse_pastore:  "0",
-          custo_insumo:     "10",
-          custo_deslocamento: "0",
-          custo_profissional: "0",
-          outros_custos:      "0",
-          status:               "Realizado",
-          followup_status:      "A definir",
-          consentimento_contato_futuro: "A definir",
-          observacao_privada_minima: "Linha de teste — apagar após validar.",
         },
       }),
     },

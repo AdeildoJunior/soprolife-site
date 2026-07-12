@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Estratégia canônica de IDs do Painel SoproLife — M14.3A",
+  "description": "Padrões de identificadores por entidade. Regra-mãe: IDs históricos NUNCA são substituídos — registros antigos preservam o id original em 'id_legado' e recebem id canônico apenas via migração autorizada (dry-run primeiro). O SERVIDOR é a autoridade de emissão de IDs novos. CRM e financeiro compartilham id_atendimento — nenhum fluxo pode criar IDs divergentes para o mesmo atendimento.",
+  "versao": "2.0.0",
+  "formato_canonico_novo": {
+    "padrao": "<PREFIXO>-<UUID>",
+    "regex": "^[A-Z]{3,4}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    "descricao": "Prefixo da entidade + UUID opaco emitido pelo SERVIDOR (ctNovoIdServidor em apps-script/contratos-canonicos.gs, via Utilities.getUuid). Nunca depende de lastRow, número de linha, contador sem lock, Math.random do navegador, relógio do navegador ou data histórica do atendimento."
+  },
+  "chave_idempotencia_legada": {
+    "padrao": "<PREFIXO>-AAAAMMDD-HHMMSS-XXXXXX",
+    "regex": "^[A-Z]{3,4}-\\d{8}-\\d{6}-[A-Z0-9]{4,8}$",
+    "descricao": "O antigo id gerado no NAVEGADOR (gerarIdAtendimentoEspi em app.js, ex.: ESP-20260709-143055-ABC123) é aceito pelo servidor APENAS como chave de idempotência (upsert por exame_id/id_atendimento — retry, duplo clique e timeout não duplicam). O timestamp embutido é o instante TÉCNICO de criação do formulário, nunca a data do exame. O servidor continua sendo a autoridade: sem chave válida, emite o ID canônico."
+  },
+  "entidades": {
+    "paciente_id": {
+      "prefixo": "PAC",
+      "formato_atual": "PAC-<uuid> (servidor, M14.3A)",
+      "regex_atual": "^PAC-[0-9a-f-]{36}$",
+      "gerado_por": [
+        "command-center-api.gs / converter-lead-em-paciente.gs (ctNovoIdServidor — UUID de servidor)"
+      ],
+      "aba": "CRM Pacientes",
+      "nota": "Formatos históricos PAC-NNNN (antigo _nextId) e PAC-AAAAMMDD-NNN (antigo sync/conversor) são id_legado válido — nunca renumerar. O sincronizador que recalculava IDs está BLOQUEADO (M14.3A).",
+      "padroes_legados": [
+        "^PAC-\\d{4}$",
+        "^PAC-\\d{8}-\\d{3}$"
+      ]
+    },
+    "id_atendimento": {
+      "prefixo": "ESP",
+      "formato_atual": "chave de idempotência legada (navegador) OU ESP-<uuid> (servidor)",
+      "regex_atual": "^[A-Za-z0-9-]{1,64}$ (validação fechada de chave) ",
+      "gerado_por": [
+        "servidor (ctNovoIdServidor) quando o cliente não envia chave",
+        "js/app.js (gerarIdAtendimentoEspi) — aceito só como idempotency_key legada"
+      ],
+      "aba": "CRM Espirometria (coluna exame_id) + Financeiro_Lancamentos (coluna id_atendimento)",
+      "nota": "Chave de negócio que liga o exame (operacional) ao lançamento (financeiro) — a MESMA string nas duas abas; o upsert dos dois lados usa esse valor com PATCH seletivo. O timestamp de chaves legadas é criação técnica, nunca data do exame.",
+      "padroes_legados": [
+        "^ESP-\\d{8}-\\d{6}-[A-Z0-9]{4,8}$",
+        "^ESP-\\d{4}$",
+        "^ESM-.+$"
+      ]
+    },
+    "exame_id": {
+      "prefixo": "ESP",
+      "formato_atual": "igual a id_atendimento para registros novos",
+      "aba": "CRM Espirometria",
+      "nota": "Registros históricos podem ter ESP-NNNN (sequencial), ESM-* (padrão antigo), chave do navegador ou célula vazia. Todos representam exames REAIS — nunca presumir teste por formato de ID. Preservar como id_legado na migração. Novos: ESP-<uuid> do servidor ou a idempotency key enviada.",
+      "padroes_legados": [
+        "^ESP-\\d{4}$",
+        "^ESM-.+$"
+      ]
+    },
+    "consulta_id": {
+      "prefixo": "CON",
+      "formato_atual": "CON-<uuid> (servidor, M14.3A); histórico CON-NNNN preservado",
+      "formato_canonico_futuro": "CON-<uuid>",
+      "aba": "CRM Consultas",
+      "padroes_legados": [
+        "^CON-\\d{4}$"
+      ]
+    },
+    "lancamento_id": {
+      "prefixo": "FIN",
+      "formato_atual": "FIN-<uuid> (servidor, M14.3A); histórico FIN-NNNN preservado (coluna id_lancamento)",
+      "aba": "Financeiro_Lancamentos",
+      "nota": "ID técnico da linha financeira; a chave de negócio é id_atendimento. Lançamento sem id_atendimento = órfão a reconciliar (estado_reconciliacao: orfao_a_reconciliar) — nunca apagar automaticamente.",
+      "padroes_legados": [
+        "^FIN-\\d{4}$"
+      ]
+    },
+    "lead_id": {
+      "prefixo": "LEAD",
+      "formato_atual": "LEAD-<uuid> (servidor, M14.3A); históricos LEAD-NNNN e LEAD-AAAAMMDD-NNN preservados",
+      "aba": "Leads",
+      "padroes_legados": [
+        "^LEAD-\\d{4}$",
+        "^LEAD-\\d{8}-\\d{3}$"
+      ]
+    },
+    "clinica_id": {
+      "prefixo": "CLI",
+      "formato_atual": "CLI-<uuid> (servidor, M14.3A); histórico CLI-NNNN preservado",
+      "aba": "CRM Clinicas",
+      "padroes_legados": [
+        "^CLI-\\d{4}$",
+        "^CLIN-.+$"
+      ]
+    },
+    "contato_id": {
+      "prefixo": "CONT",
+      "formato_atual": "CONT-<uuid> (servidor, M14.3A)",
+      "aba": "CRM Contatos B2B",
+      "padroes_legados": []
+    },
+    "followup_id": {
+      "prefixo": "FUP",
+      "formato_atual": "FUP-<uuid> (servidor, M14.3A); histórico FUP-NNNN preservado",
+      "aba": "Follow-up WhatsApp",
+      "padroes_legados": []
+    },
+    "parceiro_id": {
+      "prefixo": "PAR",
+      "formato_atual": "slug estável do parceiro (ex.: pastore)",
+      "aba": "— (conceitual; hoje o parceiro é um enum, não uma aba)",
+      "nota": "Só vira ID formal se surgirem múltiplas parcerias com configuração própria."
+    },
+    "unidade_id": {
+      "prefixo": "UNI",
+      "formato_atual": "slug estável da unidade (ex.: pastore-ipanema)",
+      "aba": "— (conceitual)"
+    }
+  },
+  "mapa_de_ids": {
+    "descricao": "Estrutura do mapeamento id legado → id canônico, a ser materializada numa aba/arquivo '_Mapa_IDs' apenas quando a migração real for autorizada. A ferramenta reconciliar-historico.py gera este mapa em dry-run.",
+    "campos": [
+      "id_canonico",
+      "id_legado",
+      "entidade",
+      "fonte_original",
+      "data_migracao",
+      "estado_reconciliacao",
+      "observacao_tecnica"
+    ],
+    "regras": [
+      "Todo registro migrado preserva o id_legado na própria linha E no mapa.",
+      "O mapa é append-only: correção = nova linha com estado novo, nunca sobrescrever.",
+      "Nenhuma entrada é criada sem execução autorizada da migração (dry-run não grava)."
+    ]
+  },
+  "regras_gerais": [
+    "Nunca substituir ID histórico cegamente — id antigo é rastreabilidade.",
+    "O SERVIDOR emite todo ID novo (UUID opaco com prefixo de entidade); o cliente pode enviar apenas uma chave de idempotência.",
+    "Proibido derivar ID de lastRow, número de linha, contador sem LockService, Math.random/relógio do navegador ou data histórica do atendimento.",
+    "CRM e financeiro nunca geram IDs independentes para o mesmo atendimento: a chave é uma só e o upsert é patch seletivo.",
+    "ID é técnico: nunca embutir nome, telefone ou qualquer dado pessoal no ID.",
+    "Formato de ID não indica se o registro é real ou teste — registros com ID legado são exames reais salvo confirmação humana em contrário."
+  ]
+}

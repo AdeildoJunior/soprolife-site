@@ -24,40 +24,56 @@ Não colocar aqui:
 - `atualizarResumoDashboardSoproLife` — recalcula indicadores na aba Resumo Dashboard
 - `onOpen` / `onEdit` — menu e gatilho automático de atualização
 
-### sync-crm-pacientes.gs
-- `sincronizarCRMPacientesSoproLife` — consolida CRM Espirometria e CRM Consultas em CRM Pacientes
-- `formatarDataBRSoproLife(valor)` — helper compartilhado de normalização de datas
+### sync-crm-pacientes.gs *(BLOQUEADO — M14.3A, não executar)*
+- `sincronizarCRMPacientesSoproLife` — **BLOQUEADA**: lança erro sempre. O fluxo antigo
+  apagava e reconstruía a aba CRM Pacientes (mestre persistente) e deduplicava por
+  primeiro nome — comportamento reprovado em auditoria independente
+  - Remova qualquer acionador instalável que ainda aponte para essa função
+  - Auditoria substituta (read-only): `python3 painel-soprolife/scripts/reconciliar-historico.py --audit`
+  - A migração incremental segura (upsert + LockService + staging + rollback) é a M14.3B
 
-### converter-lead-em-paciente.gs *(conversão manual — ação selecionada)*
-- `converterLeadSelecionadoSoproLife` — converte o lead da linha selecionada na aba Leads para os CRMs corretos
-  - **Não escaneia todos os leads automaticamente**: age somente na linha que o usuário selecionou
-  - Roteamento por `servico_interesse`:
-    - B2B (Clínicas / PCMSO): exibe instrução → usuário cadastra manualmente em CRM Clínicas (não vai para CRM Pacientes)
-    - Pessoa física: cria CRM Pacientes (se não existir)
-    - Espirometria: pergunta se o exame JÁ foi realizado → só então cria CRM Espirometria
-    - Consulta/Teleconsulta: pergunta se a consulta JÁ foi realizada → só então cria CRM Consultas
-  - Validação: nome obrigatório; alerta se telefone ausente
-  - Checagem de duplicata por telefone antes de criar qualquer CRM
-  - Acrescenta "Convertido a partir da aba Leads (LEAD-xxx · dd/MM/yyyy)" em `observacao_privada_minima`
-  - Não inventa: data de exame, médica, laudo, status — deixa em branco para a equipe preencher
-  - Registra no "Log Centro Comando"
-  - Após conversão: rodar `sincronizarCRMPacientesSoproLife` para consolidar CRM Pacientes
-  - Acionado pelo menu: **SoproLife → Leads → Converter lead selecionado → CRM**
+### contratos-canonicos.gs *(M14.3A — obrigatório para qualquer gravação)*
+- Contratos versionados EXECUTÁVEIS: validação fail-closed para TODO campo enviado,
+  patch por presença (ausência nunca limpa célula), datas valor+precisão, IDs de
+  servidor (`ctNovoIdServidor`) e idempotência separada da identidade
+  (`ctChaveIdempotenciaAcao` + fingerprint: mesma chave+payload = replay;
+  payload diferente = conflito 409; tudo sob LockService)
+- Espelho commitável: `core/contracts/registros-schemas.json` (teste: `scripts/test-contratos.js`)
+- Sem este arquivo instalado, TODA gravação do Command Center falha explicitamente
 
-### organizar-leads-operacionais.gs *(recomendado — use este para planilha nova ou migração)*
-- `organizarLeadsOperacionaisSoproLife` — migra aba Leads para cabeçalho canônico de 14 colunas
-  - Backup automático (`_Backup_Leads_Operacional_YYYYMMDD_HHMM`)
-  - Detecção de colunas pelo nome (não por posição fixa) — seguro para qualquer estrutura atual
-  - Migração inteligente: mapeia `data_entrada` → `data_contato`, `observacao_privada_minima` → `observacao`
-  - Campos removidos (`preferencia_atendimento`, `valor_informado`, `consentimento_whatsapp`) são incorporados em `observacao` se tiverem conteúdo relevante
-  - Remove apenas linhas com marcadores de dados demonstrativos
-  - Aplica 5 dropdowns: `servico_interesse`, `etapa` (inclui "Convertido em clínica/parceiro"), `canal`, `origem`, `tem_pedido_medico`
-  - Adiciona notas explicativas nos 14 cabeçalhos
-  - Usa apenas `Logger.log` — sem alertas de UI na função principal
-  - Acionado pelo menu: **SoproLife → Leads → Organizar Leads Operacionais**
+### pastore-staging.gs *(M14.3A — writer isolado, STAGING)*
+- `_registrarAtendimentoPastore` — grava na aba "Parceria Pastore - Atendimentos"
+  (staging do acordo comercial; NÃO é base canônica de pessoas nem de valores)
+- A integração ao histórico central (CRM Espirometria + Financeiro_Lancamentos) é a M14.3B
+
+### converter-lead-em-paciente.gs *(BLOQUEADO — M14.3A 2ª rodada, não executar)*
+- `converterLeadSelecionadoSoproLife` / `onEditConversaoLeadsSoproLife` — **BLOQUEADAS**:
+  o fluxo antigo deduplicava paciente por telefone (prova absoluta), aceitava data
+  impossível (31/02) por regex, gravava sem contrato fail-closed e não propagava
+  `paciente_id` aos eventos
+  - Remova o acionador instalável antigo (Extensões → Apps Script → Acionadores)
+  - Até a conversão canônica (M14.3B): registre o atendimento pela tela
+    "Nova Espirometria"/"Nova Consulta" do painel e atualize a etapa do lead
+
+### organizar-leads-operacionais.gs *(BLOQUEADO — M14.3A 2ª rodada)*
+- `organizarLeadsOperacionaisSoproLife` — **BLOQUEADA** (lança erro): limpava e
+  reconstruía a aba Leads inteira. Migração destrutiva exige backup validado,
+  manifesto, dry-run comparado e aprovação explícita (M14.3B)
+
+### manual-das-abas.gs *(M14.3 — gerado, não editar à mão)*
+- `atualizarManualDasAbasSoproLife` — recria a aba "Manual das Abas" com a matriz-resumo
+  e o detalhe completo de cada aba (tipo, status, seção do painel, quem grava/lê,
+  dados sensíveis, permissões, risco de exclusão e recomendação)
+  - Fonte de verdade: `core/contracts/abas-manifest.json`
+  - Regenerar: `python3 painel-soprolife/scripts/generate-manual-abas-gs.py` e colar o `.gs` atualizado
+  - Só escreve na aba "Manual das Abas" — nunca oculta/renomeia/exclui outras abas
 
 ### limpar-leads-e-manual-abas.gs *(compatibilidade — estrutura anterior de 10 colunas)*
-- `organizarLeadsEManualPlanilhasSoproLife` — limpeza de dados demo, padronização de dropdowns e criação do Manual das Abas
+- `organizarLeadsEManualPlanilhasSoproLife` — padronização ADITIVA (dropdowns + notas + Manual); **não remove linha nenhuma** (a antiga limpeza de dados demo por substring foi removida — exclusão é decisão humana)
+  - A parte do Manual **delega** para `atualizarManualDasAbasSoproLife`; sem
+    `manual-das-abas.gs` instalado, **falha com instrução clara** (M14.3A —
+    o fallback legado foi removido por estar desatualizado)
+  - Backup com nome único (`_Backup_Leads_Demo_YYYYMMDD_HHMMSS_<uuid>`), nunca excluído automaticamente
 
 ## Conceito central: Leads vs. CRM Pacientes
 
@@ -67,8 +83,8 @@ A distinção mais importante para usar a planilha corretamente:
 |---|---|---|
 | **Leads** | Pré-atendimento | Contatos interessados que ainda NÃO realizaram atendimento |
 | **CRM Pacientes** | Pós-atendimento | Carteira-mãe — uma linha por pessoa, pós primeiro atendimento |
-| **CRM Espirometria** | Histórico | Uma linha por exame realizado — alimenta CRM Pacientes |
-| **CRM Consultas** | Histórico | Uma linha por consulta realizada — alimenta CRM Pacientes |
+| **CRM Espirometria** | Histórico | Uma linha por exame realizado — vínculo via paciente_id (M14.3B) |
+| **CRM Consultas** | Histórico | Uma linha por consulta realizada — vínculo via paciente_id (M14.3B) |
 | **Follow-up WhatsApp** | Ações futuras | Fila de contatos planejados, não cadastro permanente |
 
 Um lead migra para CRM Pacientes somente após o primeiro atendimento.
@@ -77,14 +93,17 @@ Um lead migra para CRM Pacientes somente após o primeiro atendimento.
 
 1. `setupSoproLifeSheetsLite` — cria abas e cabeçalhos
 2. `setupValidacoesSoproLife` — aplica dropdowns iniciais
-3. `organizarLeadsOperacionaisSoproLife` — migra Leads para 14 colunas operacionais (recomendado)
-4. `organizarLeadsEManualPlanilhasSoproLife` — cria/atualiza o Manual das Abas
+3. ~~organizarLeadsOperacionaisSoproLife~~ — **bloqueada** (migração destrutiva → M14.3B)
+4. `atualizarManualDasAbasSoproLife` — cria/atualiza o Manual das Abas (M14.3, gerado do manifesto)
 5. Inserir dados reais (leads, clínicas) manualmente ou via importação
-6. Para leads B2C prontos: marcar `etapa = Convertido em paciente` e usar o menu para converter
+6. Para leads B2C atendidos: registrar pela tela "Nova Espirometria"/"Nova Consulta" do painel
+   e atualizar a etapa do lead (a conversão automática está **bloqueada** até a M14.3B)
 7. Para leads B2B prontos: marcar `etapa = Convertido em clínica/parceiro` e cadastrar em CRM Clínicas
-8. `converterLeadSelecionadoSoproLife` — menu SoproLife → Leads → Converter lead selecionado → CRM
-9. `sincronizarCRMPacientesSoproLife` — consolida CRM Pacientes (recorrente, via gatilho)
-10. `atualizarResumoDashboardSoproLife` — atualiza painel (automático via onEdit)
+9. `atualizarResumoDashboardSoproLife` — atualiza painel (automático via onEdit)
+
+> **Nunca** execute `sincronizarCRMPacientesSoproLife` (bloqueada na M14.3A) — a
+> consolidação de CRM Pacientes agora é auditada em modo read-only por
+> `reconciliar-historico.py` e a migração real depende de backup e autorização.
 
 ## Campos compartilhados entre Leads e CRM
 
@@ -120,16 +139,19 @@ Campos do Leads removidos na v2 (não copiados ao CRM):
 | CRM Consultas | Histórico de consultas/teleconsultas (uma linha por consulta) |
 | Follow-up WhatsApp | Fila de contatos futuros a enviar por WhatsApp |
 
-A função `sincronizarCRMPacientesSoproLife` (arquivo `sync-crm-pacientes.gs`)
-consolida as duas abas de histórico em CRM Pacientes automaticamente.
+**CRM Pacientes é MESTRE PERSISTENTE** (M14.3A): nenhum fluxo reescreve a aba,
+elimina linhas ou recalcula IDs. A consolidação automática antiga está bloqueada.
 
-Regras de deduplicação:
-1. Dois registros com o mesmo telefone normalizado são o mesmo paciente.
-2. Se não houver telefone, o nome normalizado é usado como chave.
-3. Informações existentes em CRM Pacientes são preservadas; nada é apagado sem necessidade.
+Regras de vínculo (nunca automáticas):
+1. **Nome sozinho NUNCA vincula** — homônimos existem.
+2. Telefone gera apenas um **candidato**; telefone presente em mais de um
+   cadastro é **ambiguous** (decisão humana).
+3. Candidato não confirmado fica **pending**; sem informação suficiente,
+   **unmatchable**. Nenhuma linha é eliminada; nenhuma fusão é automática.
+4. Vínculo determinístico só por `paciente_id` explícito.
 
 Formato de datas em CRM Pacientes:
-- Todas as datas gravadas na aba `CRM Pacientes` usam o formato `dd/MM/yyyy` (ex.: `18/06/2026`).
-- O helper `formatarDataBRSoproLife(valor)` normaliza Date objects, strings ISO, strings
-  no formato `MM/yyyy` e nomes de mês em português (ex.: `dezembro/2026` → `01/12/2026`).
+- Datas completas usam `dd/MM/yyyy`; datas históricas incompletas (`MM/yyyy`)
+  NUNCA viram um dia inventado — ficam como estão até a migração registrar
+  `data_precisao` (ver `contratos-canonicos.gs` / `parse_data_flex`).
 - Timezone: `America/Sao_Paulo`.

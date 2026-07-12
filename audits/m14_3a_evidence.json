@@ -1,0 +1,148 @@
+{
+  "profile": "TARGET_M14_3A_ACCEPTANCE",
+  "gerado_em": "2026-07-12 (correção final pós-3ª auditoria)",
+  "nota": "Cada controle aponta para a implementação ATIVA e para teste que EXECUTA o consumer real (scripts/test-writers-comportamentais.js roda _createEspirometria/_createConsulta/_registrarEspirometriaFinanceiro/_registrarAtendimentoPastore/_registrarInteracaoClinica/_upsertContatoB2B/conversor reais com mocks de SpreadsheetApp/LockService — não apenas planners ou verificação de texto). implemented:true NUNCA deve ser lido como prova por si só — a prova é o teste citado em cada 'artifacts', reexecutável a qualquer momento; este arquivo é só um índice. A 3ª auditoria independente (relatorio-codex-terceira-auditoria-m14-3a-20260712-160500.txt) rejeitou 3 controles e classificou 4 como parciais; esta rodada corrigiu exatamente os pontos rejeitados (ver 'correcao_final_m14_3a' em cada controle afetado) e não afirma nenhuma garantia além do que os testes citados realmente exercitam — em particular, NÃO se afirma atomicidade completa nas escritas de patch (ver _aplicarPlanoUpsert: Google Sheets não oferece transação nativa entre células não contíguas; a garantia real é 'erro estruturado sem gravação silenciosa parcial', não 'tudo ou nada'). Comandos reproduzíveis: node painel-soprolife/scripts/test-writers-comportamentais.js | node painel-soprolife/scripts/test-contratos.js | python3 painel-soprolife/scripts/test-guardas-estaticas.py | python3 painel-soprolife/scripts/test-reconciliar-historico.py | bash painel-soprolife/scripts/quality-gate-safe.sh (seção 8/10).",
+  "controls": {
+    "persistent_patient_master": {
+      "implemented": true,
+      "descricao": "CRM Pacientes é mestre persistente: sync destrutivo BLOQUEADO (stub que lança erro); conversor de leads BLOQUEADO (deduplicava por telefone — 2ª rodada); createPaciente só adiciona linha; dedupLeadsConvertidos só relata (exclusão bloqueada); guarda global proíbe clear/deleteRow em todo fluxo operacional. Teste comportamental executa o conversor bloqueado.",
+      "artifacts": [
+        "painel-soprolife/apps-script/sync-crm-pacientes.gs",
+        "painel-soprolife/apps-script/command-center-api.gs",
+        "painel-soprolife/scripts/test-guardas-estaticas.py",
+        "painel-soprolife/core/contracts/registros-schemas.json",
+        "painel-soprolife/apps-script/converter-lead-em-paciente.gs",
+        "painel-soprolife/scripts/test-writers-comportamentais.js"
+      ]
+    },
+    "explicit_patient_event_links": {
+      "implemented": true,
+      "descricao": "Eventos 1:N via paciente_id (contrato v2, fail-closed por presença); o conversor que criava eventos SEM vínculo foi BLOQUEADO até a conversão canônica (M14.3B); reconciliação: linked SÓ por paciente_id; paciente_id órfão = pending/orphan_link. Teste comportamental cobre o writer real aceitando/recusando os campos.",
+      "artifacts": [
+        "painel-soprolife/core/contracts/registros-schemas.json",
+        "painel-soprolife/apps-script/contratos-canonicos.gs",
+        "painel-soprolife/scripts/test-contratos.js",
+        "painel-soprolife/scripts/test-reconciliar-historico.py",
+        "painel-soprolife/scripts/test-writers-comportamentais.js"
+      ]
+    },
+    "non_inferential_reconciliation": {
+      "implemented": true,
+      "descricao": "Nome nunca vincula; telefone só candidato (listas, nunca sets); telefone compartilhado = ambiguous; paciente_id inexistente = pending/orphan_link (nunca unmatchable); Pastore por nome/telefone = candidato anotado, nunca 'já integrado'; todas as linhas fecham nos estados; plano 100% aplicar:false.",
+      "artifacts": [
+        "painel-soprolife/scripts/reconciliar-historico.py",
+        "painel-soprolife/scripts/test-reconciliar-historico.py",
+        "painel-soprolife/scripts/soprolife_normalizacao.py"
+      ]
+    },
+    "partial_date_precision": {
+      "implemented": true,
+      "descricao": "Validador único (ctValidarDataComPrecisao) executado pelos writers REAIS de espirometria/consulta/financeiro E pelo staging Pastore: 31/02/2026 é recusada NO WRITER (teste comportamental); mês/ano preserva precisão; vazio permanece vazio. Conversor com regex própria foi BLOQUEADO. UI não pré-preenche data clínica com hoje (hojeISO removido dos defaults; teste de UI atualizado).",
+      "artifacts": [
+        "painel-soprolife/apps-script/contratos-canonicos.gs",
+        "painel-soprolife/apps-script/command-center-api.gs",
+        "painel-soprolife/apps-script/pastore-staging.gs",
+        "painel-soprolife/js/app.js",
+        "painel-soprolife/scripts/test-writers-comportamentais.js",
+        "painel-soprolife/scripts/test-contratos.js",
+        "painel-soprolife/scripts/test-entrada-dados-ux.js"
+      ]
+    },
+    "legacy_id_preservation": {
+      "implemented": true,
+      "descricao": "ESP/ESM/PAC/CON/FIN legados classificados e preservados (nunca recalculados); chave do navegador vira idempotency_key legada com timestamp documentado como criação técnica; mapa _Mapa_IDs append-only especificado.",
+      "artifacts": [
+        "painel-soprolife/core/contracts/ids-canonicos.json",
+        "painel-soprolife/scripts/soprolife_normalizacao.py",
+        "painel-soprolife/scripts/test-normalizacao.py",
+        "painel-soprolife/scripts/test-contratos.js"
+      ]
+    },
+    "opaque_server_ids": {
+      "implemented": true,
+      "descricao": "ID canônico é SEMPRE UUID do servidor (teste comportamental verifica exame_id ≠ chave); a chave do cliente vai para coluna técnica separada (idempotency_key); formato/prefixo validado POR AÇÃO ('x', 'PAC-0001' e prefixo cruzado recusados — executado no writer real); mesma chave+payload = replay sem regravar; payload diferente = 409; LockService envolve busca+validação+escrita (ordem verificada por trilha de eventos); painel preserva a chave em sessionStorage até concluir (refresh não duplica); legados nunca recalculados.",
+      "correcao_final_m14_3a": "REJEITADO na 3ª auditoria: o fingerprint de idempotência usava FNV-1a de 32 bits, e uma colisão sintética real (dois payloads distintos, mesmo hash) foi demonstrada — a mesma chave aceitou o segundo payload como replay em vez de 409. Corrigido: ctFingerprintPayload agora é SHA-256 (hex completo, 64 chars) sobre uma serialização canônica tipada (chave:tipo:comprimento:texto, chaves ordenadas) que distingue número de string, booleano de string, e vazio explícito de ausência. test-contratos.js cobre tipo diferente não colidir, booleano vs string, vazio vs ausência, concatenação sem delimitador e o fallback legado (ctFingerprintDaLinha).",
+      "artifacts": [
+        "painel-soprolife/apps-script/contratos-canonicos.gs",
+        "painel-soprolife/apps-script/command-center-api.gs",
+        "painel-soprolife/js/app.js",
+        "painel-soprolife/scripts/test-writers-comportamentais.js",
+        "painel-soprolife/scripts/test-contratos.js",
+        "painel-soprolife/scripts/test-guardas-estaticas.py"
+      ]
+    },
+    "versioned_contracts_fail_closed": {
+      "implemented": true,
+      "descricao": "Fail-closed para TODO campo enviado (v1 e v2) nos writers de espirometria/consulta/financeiro E nos dois consumers B2B: teste comportamental envia telefone/prioridade/cargo contra cabeçalho sem a coluna e obtém ERRO com zero mutação; validação completa ANTES de qualquer escrita (inclusive antes das colunas técnicas e antes da criação de aba/cabeçalho); patch por presença real (hasOwnProperty) — vazio explícito difere de ausência e é testado nos dois sentidos; resposta expõe campos_persistidos + contrato_versao; espelho GS↔JSON testado. 'tipos_documentais' no JSON é declaradamente documental (sem promessa de validação de tipos executável).",
+      "correcao_final_m14_3a": "REJEITADO na 3ª auditoria por dois motivos, ambos corrigidos: (1) registrarInteracaoClinica e _upsertContatoB2B faziam escrita célula-a-célula ad hoc, ignorando silenciosamente campo suportado sem coluna (sucesso com mutação parcial) e tratando vazio explícito de e-mail como ausência. Migrados para contratos executáveis próprios (crm_clinicas, crm_contatos_b2b em contratos-canonicos.gs / registros-schemas.json), reusando ctPlanejarUpsert — mesma garantia fail-closed e de patch por presença dos writers centrais. (2) _inserirEventoClinicoIdempotente chamava _getOrCreateSheet/_ensureSheetHeader ANTES de validar o payload, então uma aba inexistente + payload v2 inválido retornava erro 422 mas deixava aba/cabeçalho criados. Corrigido: a operação diária usa _getSheetSemCriar (nunca cria aba) e retorna erro fail-closed se a aba não existir; criação de estrutura continua restrita ao instalador explícito. Testes comportamentais novos cobrem os dois consumers B2B (header ausente, vazio explícito, zero mutação) e o cenário de aba inexistente.",
+      "artifacts": [
+        "painel-soprolife/core/contracts/registros-schemas.json",
+        "painel-soprolife/apps-script/contratos-canonicos.gs",
+        "painel-soprolife/apps-script/command-center-api.gs",
+        "painel-soprolife/scripts/test-contratos.js",
+        "painel-soprolife/scripts/test-writers-comportamentais.js"
+      ]
+    },
+    "finance_single_source": {
+      "implemented": true,
+      "descricao": "Financeiro_Lancamentos única fonte; id_atendimento OBRIGATÓRIO e validado (teste comportamental: vazio/'x' = erro, nada gravado — nenhum órfão novo pela API); ausência permanece ausente (valor_tabela nunca 250, origem_preco nunca 'Tabela', valor_recebido obrigatório em Recebido/Parcial; 0 apenas pela REGRA FORMAL de Pendente/Cortesia/Cancelado — testada); update por chave de negócio em patch por presença preservando coluna extra/fórmula/imutáveis (testado); cliente sem defaults silenciosos (servidor E UI); criado_em é autoridade exclusiva do servidor; ledger 1:N no contrato (implementação M14.3B); os 3 órfãos de 09/07/2026 intocados.",
+      "correcao_final_m14_3a": "A 3ª auditoria classificou este controle como 'evidência rejeitada como um todo': o servidor já não inventava defaults, mas a UI ativa (js/app.js) ainda pré-preenchia valor_tabela=250, status_pagamento=Recebido, forma_pagamento=Pix e origem_preco=Tabela nos <select>/<input> — então 'cliente sem defaults' era falso no fluxo completo. Além disso, o servidor aceitava criado_em enviado pelo cliente. Ambos corrigidos: os campos financeiros da Nova Espirometria começam vazios (valor_tabela usa placeholder visual, nunca um value real; os selects começam em '—' e status_pagamento continua required, bloqueando envio sem escolha real do operador); criado_em deixou de ser enviado pelo cliente (removido do payload) e o servidor sempre emite o próprio timestamp no insert, ignorando qualquer valor enviado (com aviso explícito na resposta). Testes estáticos (test-espirometria-financeiro.js) e comportamentais (test-writers-comportamentais.js) cobrem os dois pontos, incluindo update com criado_em forjado no payload.",
+      "artifacts": [
+        "painel-soprolife/apps-script/command-center-api.gs",
+        "painel-soprolife/core/contracts/registros-schemas.json",
+        "painel-soprolife/js/app.js",
+        "painel-soprolife/js/espirometria-financeiro.js",
+        "painel-soprolife/scripts/test-writers-comportamentais.js",
+        "painel-soprolife/scripts/test-espirometria-financeiro.js",
+        "painel-soprolife/scripts/test-financeiro-summary.py"
+      ]
+    },
+    "pastore_as_dimension": {
+      "implemented": true,
+      "descricao": "Writer isolado em pastore-staging.gs, marcado STAGING na UI e no contrato; valida data com o contrato (impossível = erro — teste comportamental), status obrigatório (ausência não vira Realizado), custos/repasse ausentes ficam em branco (nunca 0 factual); não alimenta CRM/financeiro oficial; Config não é preço histórico; sem campos de pessoa na API principal.",
+      "correcao_final_m14_3a": "A 3ª auditoria apontou que, apesar do servidor exigir status, o modal 'Novo atendimento' (js/app.js) pré-selecionava status='Realizado' — ausência do operador nunca chegava como ausência de fato. Corrigido: o campo 'status' deixou de ter value pré-definido e o helper local de select do modal (f()) passou a incluir sempre uma opção em branco como primeira entrada (sem isso, o navegador seleciona o primeiro item da lista mesmo sem 'value' correspondente — é o que fazia 'Realizado' aparecer pré-escolhido). Coberto por checagem estática em test-espirometria-financeiro.js.",
+      "artifacts": [
+        "painel-soprolife/apps-script/pastore-staging.gs",
+        "painel-soprolife/apps-script/command-center-api.gs",
+        "painel-soprolife/core/contracts/registros-schemas.json",
+        "painel-soprolife/js/app.js",
+        "painel-soprolife/scripts/test-guardas-estaticas.py",
+        "painel-soprolife/scripts/test-writers-comportamentais.js",
+        "painel-soprolife/scripts/test-espirometria-financeiro.js"
+      ]
+    },
+    "single_sheet_catalog": {
+      "implemented": true,
+      "descricao": "Catálogo único das abas (abas-manifest.json) gera o Manual deterministicamente; teste falha se o .gs divergir do manifesto; fallback legado do Manual removido (ausência do gerado = erro com instrução).",
+      "artifacts": [
+        "painel-soprolife/core/contracts/abas-manifest.json",
+        "painel-soprolife/scripts/generate-manual-abas-gs.py",
+        "painel-soprolife/apps-script/manual-das-abas.gs",
+        "painel-soprolife/scripts/test-manual-abas.py",
+        "painel-soprolife/apps-script/limpar-leads-e-manual-abas.gs"
+      ]
+    },
+    "safe_installer_boundary": {
+      "implemented": true,
+      "descricao": "Fluxos destrutivos NEUTRALIZADOS: organizar-leads (clearContents+reconstrução) BLOQUEADO; limpar-leads sem deleteRow por substring (aditivo); dedupLeadsConvertidos só relatório; setup só cria/completa aba vazia; backups com nome único e nunca excluídos; guarda GLOBAL descobre automaticamente TODOS os .gs de apps-script/ (não uma lista fixa) e proíbe deleteRow(/deleteSheet( sem exceção nenhuma, e .clear()/.clearContents() com allowlist explícita e mínima por arquivo E pela aba derivada/regenerável específica (Manual das Abas, Resumo Dashboard) — qualquer arquivo novo, ainda não listado, é tratado como operacional por padrão.",
+      "correcao_final_m14_3a": "A 3ª auditoria rejeitou a garantia GLOBAL: test-guardas-estaticas.py continha uma condição terminada em 'or True' (sempre verdadeira, mascarando a checagem real de que o conversor não usa regex própria de data) e a lista GS_OPERACIONAIS era fixa, deixando de fora manual-das-abas.gs e soprolife-sheets-template.gs por completo (nenhuma checagem de deleteRow/deleteSheet rodava neles). Corrigido: 'or True' removido (a checagem agora recusa de verdade regex de data \\d{2}/\\d{2} no conversor); a guarda descobre os .gs via glob('apps-script/*.gs') e aplica deleteRow(/deleteSheet( a TODOS sem exceção, com allowlist de .clear()/.clearContents() restrita a arquivo+aba nomeados. Validado com mutação real em cópia /tmp (nunca no worktree real): injetar deleteRow( num arquivo hoje limpo, ou criar um .gs novo com clearContents(), faz o gate falhar (exit 1) em ambos os casos — confirmando que a guarda é de fato global e não uma lista que possa esquecer arquivo novo.",
+      "artifacts": [
+        "painel-soprolife/apps-script/organizar-leads-operacionais.gs",
+        "painel-soprolife/apps-script/limpar-leads-e-manual-abas.gs",
+        "painel-soprolife/apps-script/soprolife-sheets-template.gs",
+        "painel-soprolife/apps-script/command-center-api.gs",
+        "painel-soprolife/scripts/test-guardas-estaticas.py",
+        "painel-soprolife/scripts/test-writers-comportamentais.js"
+      ]
+    },
+    "privacy_guards": {
+      "implemented": true,
+      "descricao": "Nenhum ID sai em claro em relatório/plano (categoria+hash efêmero, mesmo ESP/ESM/PAC/CON/FIN — teste negativo com ESM-PESSOA-SINTETICA); scanner amplia CPF/telefone/e-mail com padrão de texto embutido em ID; plano validado ANTES de escrever (600); salt efêmero; aviso explícito de que hash de nome não é anonimização forte; fixtures 100% sintéticas.",
+      "artifacts": [
+        "painel-soprolife/scripts/reconciliar-historico.py",
+        "painel-soprolife/scripts/test-reconciliar-historico.py",
+        "painel-soprolife/scripts/pii_guard.py"
+      ]
+    }
+  }
+}

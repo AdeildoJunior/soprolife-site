@@ -1,0 +1,451 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Contratos versionados de registro — M14.3A",
+  "descricao": "Espelho commitável dos contratos EXECUTÁVEIS de apps-script/contratos-canonicos.gs (o teste scripts/test-contratos.js falha se divergirem). v1 = cabeçalho da planilha real hoje; v2 = alvo canônico (v1 + colunas aditivas). Writers validam ANTES de gravar: cabeçalho sem coluna obrigatória → erro; campo solicitado pelo payload sem coluna → erro (fail-closed, nada é descartado em silêncio); coluna desconhecida na aba → preservada, nunca tocada; atualização é patch seletivo (só colunas presentes no payload; ausência nunca apaga).",
+  "schema_version": "m14.3a",
+  "comportamento_global": {
+    "cabecalho_desconhecido": "preservar — colunas extras nunca são escritas nem removidas",
+    "campo_solicitado_sem_coluna": "erro explícito com a lista de colunas ausentes; nada é gravado",
+    "campo_derivado_sem_coluna": "omitido e reportado em 'ignorados' na resposta",
+    "resposta_do_writer": "inclui campos_persistidos, campos_ignorados e contrato_versao",
+    "atualizacao": "patch seletivo por coluna; limpar um campo exigirá ação explícita futura",
+    "transicao_v1_v2": "criar as colunas v2_extras (aditivas) com backup prévio e autorização (M14.3B); nenhum dado v1 é movido/renomeado; aliases de cabeçalho legado (nome→primeiro_nome, telefone_whatsapp→telefone, data_registro→data_cadastro/data_entrada) são mapeamento de LEITURA, nunca renomeação automática",
+    "patch_por_presenca": "o patch inclui SOMENTE colunas presentes como own property no payload; ausência nunca limpa célula; defaults existem apenas no INSERT; campos imutáveis nunca são recalculados; fail-closed vale para TODO campo enviado (v1 e v2), não só extras canônicos",
+    "valores_financeiros": "ausência permanece ausente: valor_tabela sem 250, origem_preco sem 'Tabela'; valor_recebido: obrigatório em Recebido/Parcial; 0 apenas pela regra formal de Pendente/Cortesia/Cancelado (registrada e testada); desconto só derivado quando valor_tabela foi enviado"
+  },
+  "ids": {
+    "autoridade": "servidor (Apps Script) — ctNovoIdServidor: PREFIXO + UUID opaco (Utilities.getUuid)",
+    "proibido": [
+      "lastRow",
+      "número da linha",
+      "contador sem LockService",
+      "Math.random do navegador",
+      "relógio do navegador como fonte canônica",
+      "data histórica do atendimento embutida em ID"
+    ],
+    "idempotency_key": "o id gerado no navegador (ESP-AAAAMMDD-HHMMSS-XXXXXX) é aceito SOMENTE como chave de idempotência legada (regex fechada); o timestamp embutido é criação técnica do formulário, nunca a data do exame",
+    "legados": "ESP-NNNN, ESM-*, PAC-NNNN, PAC-AAAAMMDD-NNN, CON-NNNN, FIN-NNNN e o formato do navegador são preservados para sempre e nunca recalculados"
+  },
+  "datas": {
+    "regra": "valor + precisao (dia|mes|ano|desconhecida) sempre juntos",
+    "validacao": "YYYY-MM-DD ou DD/MM/AAAA → dia; YYYY-MM ou MM/AAAA → mes; YYYY → ano; vazio → desconhecida; qualquer outro valor → erro explícito",
+    "coerencia": "se o payload envia valor E precisao, a dupla é validada; incompatível → erro",
+    "proibido": [
+      "mês/ano virar dia 01 factual",
+      "ausência virar hoje",
+      "data desconhecida receber precisao dia",
+      "âncora dia-01 persistida ou exibida como data diária"
+    ]
+  },
+  "entidades": {
+    "crm_pacientes": {
+      "id": "paciente_id",
+      "v1": [
+        "paciente_id",
+        "data_cadastro",
+        "primeiro_nome",
+        "telefone",
+        "ultimo_servico",
+        "status_relacionamento",
+        "proximo_contato",
+        "motivo_proximo_contato",
+        "canal",
+        "responsavel",
+        "consentimento_whatsapp",
+        "observacao_privada_minima"
+      ],
+      "v2_extras": [
+        "data_cadastro_precisao",
+        "id_legado"
+      ],
+      "obrigatorios": [
+        "paciente_id",
+        "primeiro_nome"
+      ],
+      "canonicos_opcionais": [
+        "data_cadastro_precisao",
+        "id_legado"
+      ],
+      "notas": "Mestre persistente: nenhuma reescrita integral, nenhuma deduplicação automática (nome NUNCA vincula; telefone gera apenas candidato). O sincronizador antigo está BLOQUEADO (ver sync-crm-pacientes.gs).",
+      "prefixo": "PAC",
+      "imutaveis": [
+        "paciente_id",
+        "data_cadastro"
+      ],
+      "colunas_tecnicas": [],
+      "tipos_documentais": {
+        "paciente_id": "id",
+        "data_cadastro": "data_br",
+        "telefone": "texto_privado",
+        "consentimento_whatsapp": "enum:consentimento_whatsapp",
+        "status_relacionamento": "enum:status_relacionamento",
+        "data_cadastro_precisao": "enum:data_precisao"
+      }
+    },
+    "crm_espirometria": {
+      "id": "exame_id",
+      "v1": [
+        "exame_id",
+        "data_entrada",
+        "primeiro_nome",
+        "telefone",
+        "servico",
+        "origem",
+        "status_exame",
+        "data_exame",
+        "proximo_contato",
+        "motivo_proximo_contato",
+        "canal",
+        "responsavel",
+        "consentimento_whatsapp"
+      ],
+      "v2_extras": [
+        "paciente_id",
+        "id_legado",
+        "data_exame_precisao",
+        "local_atendimento",
+        "parceiro",
+        "unidade",
+        "modalidade"
+      ],
+      "obrigatorios": [
+        "exame_id",
+        "primeiro_nome",
+        "status_exame"
+      ],
+      "canonicos_opcionais": [
+        "paciente_id",
+        "id_legado",
+        "data_exame_precisao",
+        "local_atendimento",
+        "parceiro",
+        "unidade",
+        "modalidade"
+      ],
+      "notas": "1:N com paciente via paciente_id (v2). Upsert por idempotency_key legada (exame_id) com patch seletivo.",
+      "prefixo": "ESP",
+      "imutaveis": [
+        "exame_id",
+        "data_entrada",
+        "idempotency_key",
+        "idempotency_fingerprint"
+      ],
+      "colunas_tecnicas": [
+        "idempotency_key",
+        "idempotency_fingerprint"
+      ],
+      "tipos_documentais": {
+        "exame_id": "id",
+        "data_exame": "data_com_precisao",
+        "data_exame_precisao": "enum:data_precisao",
+        "status_exame": "enum:status_exame",
+        "local_atendimento": "enum:local_atendimento",
+        "consentimento_whatsapp": "enum:consentimento_whatsapp"
+      }
+    },
+    "crm_consultas": {
+      "id": "consulta_id",
+      "v1": [
+        "consulta_id",
+        "data_entrada",
+        "primeiro_nome",
+        "telefone",
+        "origem",
+        "tipo_consulta",
+        "status",
+        "medica",
+        "data_consulta",
+        "proximo_contato",
+        "motivo_proximo_contato",
+        "canal",
+        "responsavel",
+        "consentimento_whatsapp"
+      ],
+      "v2_extras": [
+        "paciente_id",
+        "id_legado",
+        "data_consulta_precisao",
+        "modalidade"
+      ],
+      "obrigatorios": [
+        "consulta_id",
+        "primeiro_nome",
+        "status"
+      ],
+      "canonicos_opcionais": [
+        "paciente_id",
+        "id_legado",
+        "data_consulta_precisao",
+        "modalidade"
+      ],
+      "notas": "1:N com paciente via paciente_id (v2).",
+      "prefixo": "CON",
+      "imutaveis": [
+        "consulta_id",
+        "data_entrada",
+        "idempotency_key",
+        "idempotency_fingerprint"
+      ],
+      "colunas_tecnicas": [
+        "idempotency_key",
+        "idempotency_fingerprint"
+      ],
+      "tipos_documentais": {
+        "consulta_id": "id",
+        "data_consulta": "data_com_precisao",
+        "data_consulta_precisao": "enum:data_precisao",
+        "consentimento_whatsapp": "enum:consentimento_whatsapp"
+      }
+    },
+    "financeiro_lancamentos": {
+      "id": "id_lancamento",
+      "v1": [
+        "id_lancamento",
+        "id_atendimento",
+        "criado_em",
+        "data_exame",
+        "tipo_movimento",
+        "servico",
+        "local_atendimento",
+        "valor_tabela",
+        "valor_cobrado",
+        "valor_recebido",
+        "desconto",
+        "status_exame",
+        "status_pagamento",
+        "forma_pagamento",
+        "origem_preco",
+        "observacao_financeira",
+        "fonte"
+      ],
+      "v2_extras": [
+        "data_recebimento",
+        "data_exame_precisao",
+        "estado_reconciliacao",
+        "papel_movimento",
+        "movimento_referencia"
+      ],
+      "obrigatorios": [
+        "id_lancamento",
+        "id_atendimento",
+        "valor_cobrado",
+        "status_pagamento"
+      ],
+      "canonicos_opcionais": [
+        "data_recebimento",
+        "data_exame_precisao",
+        "estado_reconciliacao",
+        "papel_movimento",
+        "movimento_referencia"
+      ],
+      "cardinalidade": {
+        "regra": "um atendimento (id_atendimento) pode ter N movimentos financeiros",
+        "receita_principal": "no máximo UMA receita principal ativa por atendimento (papel_movimento=receita_principal)",
+        "correcoes": "ajustes, complementos e estornos são append-only (papel_movimento=ajuste|complemento|estorno) e referenciam o movimento original em movimento_referencia",
+        "duplicata": "mais de uma receita principal para o mesmo id_atendimento é CONFLITO visível na reconciliação — nunca resolvido silenciosamente por 'última linha vence'",
+        "implementacao": "ledger 1:N completo é M14.3B; este contrato garante que M14.3A não impõe 1:1"
+      },
+      "enums_locais": {
+        "papel_movimento": [
+          "receita_principal",
+          "ajuste",
+          "complemento",
+          "estorno"
+        ]
+      },
+      "notas": "Única fonte monetária. Os três lançamentos órfãos de 09/07/2026 permanecem intocados e pendentes de decisão humana.",
+      "prefixo": "FIN",
+      "imutaveis": [
+        "id_lancamento",
+        "id_atendimento",
+        "criado_em",
+        "tipo_movimento",
+        "fonte"
+      ],
+      "colunas_tecnicas": [],
+      "tipos_documentais": {
+        "id_lancamento": "id",
+        "valor_cobrado": "monetario",
+        "valor_recebido": "monetario",
+        "status_pagamento": "enum:status_pagamento",
+        "status_exame": "enum:status_exame",
+        "local_atendimento": "enum:local_atendimento",
+        "forma_pagamento": "enum:forma_pagamento",
+        "origem_preco": "enum:origem_preco",
+        "papel_movimento": "enum:papel_movimento"
+      }
+    },
+    "followup_whatsapp": {
+      "id": "followup_id",
+      "v1": [
+        "followup_id",
+        "data_criacao",
+        "primeiro_nome",
+        "telefone",
+        "tipo_mensagem",
+        "data_prevista",
+        "status",
+        "canal",
+        "responsavel",
+        "template_usado",
+        "consentimento"
+      ],
+      "v2_extras": [
+        "paciente_id"
+      ],
+      "obrigatorios": [
+        "followup_id",
+        "primeiro_nome",
+        "tipo_mensagem"
+      ],
+      "canonicos_opcionais": [
+        "paciente_id"
+      ],
+      "notas": "Fila de ações futuras, não cadastro. Unifica o cabeçalho antes divergente entre command-center-api.gs e converter-lead-em-paciente.gs ('consentimento' é o nome canônico; 'consentimento_whatsapp' era variação do converter).",
+      "prefixo": "FUP",
+      "imutaveis": [
+        "followup_id",
+        "data_criacao"
+      ],
+      "colunas_tecnicas": [],
+      "tipos_documentais": {
+        "followup_id": "id",
+        "telefone": "texto_privado",
+        "data_prevista": "data_br"
+      }
+    },
+    "crm_clinicas": {
+      "id": "clinica_id",
+      "v1": [
+        "clinica_id",
+        "nome_clinica",
+        "bairro",
+        "regiao",
+        "tipo_clinica",
+        "etapa",
+        "ultima_interacao",
+        "proxima_acao",
+        "data_proxima_acao",
+        "responsavel",
+        "prioridade",
+        "observacao"
+      ],
+      "v2_extras": [],
+      "obrigatorios": [
+        "clinica_id",
+        "nome_clinica"
+      ],
+      "canonicos_opcionais": [],
+      "notas": "registrarInteracaoClinica (M14.3A, correção final) usa este contrato para fail-closed total e patch por presença real; createClinicaB2B/updateCrmClinicaEtapa seguem seus próprios fluxos de escrita, fora deste contrato.",
+      "prefixo": "CLI",
+      "imutaveis": [
+        "clinica_id"
+      ],
+      "colunas_tecnicas": [],
+      "tipos_documentais": {
+        "clinica_id": "id"
+      }
+    },
+    "crm_contatos_b2b": {
+      "id": "contato_id",
+      "v1": [
+        "contato_id",
+        "clinica_id",
+        "nome_contato",
+        "cargo",
+        "telefone_whatsapp",
+        "email",
+        "papel",
+        "status_relacionamento",
+        "ultima_interacao",
+        "proxima_acao",
+        "data_proxima_acao",
+        "responsavel",
+        "observacao"
+      ],
+      "v2_extras": [],
+      "obrigatorios": [
+        "contato_id",
+        "clinica_id",
+        "nome_contato"
+      ],
+      "canonicos_opcionais": [],
+      "notas": "_upsertContatoB2B (M14.3A, correção final) usa este contrato para fail-closed total e patch por presença real.",
+      "prefixo": "CONT",
+      "imutaveis": [
+        "contato_id"
+      ],
+      "colunas_tecnicas": [],
+      "tipos_documentais": {
+        "contato_id": "id",
+        "telefone_whatsapp": "texto_privado",
+        "email": "texto_privado"
+      }
+    },
+    "pastore_atendimentos_staging": {
+      "id": "",
+      "v1": [
+        "data_atendimento",
+        "unidade",
+        "dia_semana",
+        "horario_inicio",
+        "horario_fim",
+        "origem",
+        "paciente_nome",
+        "paciente_whatsapp",
+        "tipo_exame",
+        "broncodilatador",
+        "valor_cobrado",
+        "forma_pagamento",
+        "recebido_por",
+        "repasse_pastore",
+        "custo_insumo",
+        "custo_deslocamento",
+        "custo_profissional",
+        "outros_custos",
+        "receita_bruta",
+        "custo_total",
+        "resultado_liquido",
+        "status",
+        "followup_status",
+        "consentimento_contato_futuro",
+        "observacao_privada_minima"
+      ],
+      "v2_extras": [
+        "id_atendimento",
+        "estado_reconciliacao"
+      ],
+      "obrigatorios": [
+        "data_atendimento",
+        "paciente_nome",
+        "tipo_exame"
+      ],
+      "canonicos_opcionais": [
+        "id_atendimento",
+        "estado_reconciliacao"
+      ],
+      "notas": "STAGING — não é base canônica de pessoas nem de valores. Pastore é dimensão do exame (parceiro/unidade/modalidade em CRM Espirometria); Config não é prova de preço real. Writer isolado em pastore-staging.gs até a integração M14.3B.",
+      "prefixo": "",
+      "imutaveis": [],
+      "colunas_tecnicas": [],
+      "tipos_documentais": {
+        "data_atendimento": "data_com_precisao",
+        "paciente_nome": "texto_privado",
+        "paciente_whatsapp": "texto_privado"
+      }
+    }
+  },
+  "aliases_reconciliacao": {
+    "politica": "aliases automáticos = equivalência lexical real (mesma palavra/flexão). Mudança de significado, estágio, local, consentimento ou resultado = decisao_manual (nunca aplicada sem humano). Mapa de aliases aplicados na migração é append-only.",
+    "fonte": "core/contracts/enums-canonicos.json (campos 'aliases' e 'decisao_manual')"
+  },
+  "idempotencia": {
+    "chave": "SEPARADA do ID canônico: o ID é sempre PREFIXO-<uuid> do servidor; a chave (opcional) vai para a coluna técnica idempotency_key, criada sob demanda pelo próprio writer",
+    "formato_por_acao": "prefixo da entidade + (formato legado do navegador AAAAMMDD-HHMMSS-XXXXXX OU uuid); 'x', 'PAC-0001' em espirometria e prefixo cruzado são recusados (ctChaveIdempotenciaAcao)",
+    "fingerprint": "SHA-256 (hex completo) sobre serialização canônica com tipo+comprimento por valor, gravado em idempotency_fingerprint; linhas legadas comparam pelo estado das mesmas colunas (ctFingerprintDaLinha). Substitui o FNV-1a de 32 bits (M14.3A, correção final) após colisão sintética real demonstrada em auditoria.",
+    "semantica": "mesma chave + mesmo payload = replay (mesmo resultado, nenhuma célula tocada); mesma chave + payload diferente = conflito 409 (nada gravado); sem chave = insert com ID do servidor",
+    "concorrencia": "LockService envolve busca + validação + escrita nos writers de espirometria/consulta/financeiro",
+    "financeiro": "id_atendimento é chave de NEGÓCIO obrigatória (nunca vazia — impede novo órfão); a atualização de pagamento por id_atendimento é patch POR PRESENÇA (fluxo desenhado), não replay/409",
+    "cliente": "o painel preserva a idempotency_key em sessionStorage até o formulário ser concluído com sucesso (refresh não gera chave nova)"
+  }
+}

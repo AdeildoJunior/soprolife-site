@@ -1,0 +1,305 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Enums canônicos do Painel SoproLife — M14.3A",
+  "description": "Vocabulário canônico compartilhado entre Google Sheets (Apps Script), scripts Python/JS e o painel. Cada domínio tem: 'valores' (lista fechada canônica); 'aliases' (SOMENTE equivalências lexicais reais — mesma palavra/flexão/variação de grafia — que uma migração autorizada pode aplicar em lote); 'decisao_manual' (valores encontrados no legado cujo mapeamento MUDA significado, estágio, local, consentimento ou resultado — o valor apontado é apenas o candidato mais provável e NUNCA é aplicado sem decisão humana caso a caso); e 'aberto' (true = lista pode crescer com decisão humana). Nenhuma ferramenta altera dado real automaticamente. Comparação: minúsculas, sem acentos, espaços colapsados (soprolife_normalizacao.py).",
+  "versao": "2.0.0",
+  "dominios": {
+    "status_exame": {
+      "descricao": "Status do exame em CRM Espirometria e Financeiro_Lancamentos. Fonte: _EF_STATUS_EXAME (Apps Script) = EF_STATUS_EXAME (espirometria-financeiro.js).",
+      "aberto": false,
+      "valores": ["Aguardando", "Realizado", "Cancelado", "Remarcado"],
+      "aliases": {
+        "exame realizado": "Realizado",
+        "realizada": "Realizado",
+        "aguardando exame": "Aguardando",
+        "cancelada": "Cancelado",
+        "remarcada": "Remarcado"
+      },
+      "decisao_manual": {
+        "confirmado": "Realizado",
+        "concluido": "Realizado",
+        "feito": "Realizado",
+        "agendado": "Aguardando",
+        "marcado": "Aguardando",
+        "desmarcado": "Cancelado",
+        "reagendado": "Remarcado"
+      },
+      "nota_decisao_manual": "'Confirmado'/'Agendado' descrevem AGENDAMENTO, não execução — promover a Realizado/Aguardando sem evidência muda o resultado clínico-operacional do registro."
+    },
+    "status_pagamento": {
+      "descricao": "Status financeiro do lançamento em Financeiro_Lancamentos. Fonte: _EF_STATUS_PAGAMENTO.",
+      "aberto": false,
+      "valores": ["Recebido", "Pendente", "Parcial", "Cortesia", "Cancelado"],
+      "aliases": {
+        "recebida": "Recebido",
+        "parcialmente pago": "Parcial",
+        "cancelada": "Cancelado"
+      },
+      "decisao_manual": {
+        "pago": "Recebido",
+        "quitado": "Recebido",
+        "a receber": "Pendente",
+        "em aberto": "Pendente",
+        "aguardando pagamento": "Pendente",
+        "gratis": "Cortesia",
+        "gratuito": "Cortesia",
+        "isento": "Cortesia"
+      }
+    },
+    "forma_pagamento": {
+      "descricao": "Forma de pagamento em Financeiro_Lancamentos. Fonte: _EF_FORMA_PAGAMENTO.",
+      "aberto": false,
+      "valores": ["Pix", "Dinheiro", "Cartão", "Outro"],
+      "aliases": {
+        "pix": "Pix",
+        "cartao": "Cartão",
+        "cartao de credito": "Cartão",
+        "cartao de debito": "Cartão"
+      },
+      "decisao_manual": {
+        "credito": "Cartão",
+        "debito": "Cartão",
+        "especie": "Dinheiro",
+        "em especie": "Dinheiro",
+        "cash": "Dinheiro",
+        "transferencia": "Outro",
+        "boleto": "Outro"
+      }
+    },
+    "origem_preco": {
+      "descricao": "Origem do preço praticado no lançamento. Fonte: _EF_ORIGEM_PRECO.",
+      "aberto": false,
+      "valores": ["Tabela", "Promoção", "Parceria", "Negociação", "PCMSO", "Cortesia"],
+      "aliases": {
+        "promocao": "Promoção",
+        "negociado": "Negociação",
+        "valor negociado": "Negociação",
+        "parceiro": "Parceria"
+      },
+      "decisao_manual": {
+        "desconto": "Negociação",
+        "pastore": "Parceria",
+        "empresa": "PCMSO",
+        "gratis": "Cortesia"
+      }
+    },
+    "local_atendimento": {
+      "descricao": "Onde o atendimento aconteceu. Fonte: _EF_LOCAL_ATENDIMENTO. O detalhe do parceiro/unidade fica em 'parceiro'/'unidade', nunca embutido aqui.",
+      "aberto": false,
+      "valores": ["Domiciliar", "Clínica", "Empresa / PCMSO", "Parceiro", "Outro"],
+      "aliases": {
+        "domicilio": "Domiciliar",
+        "atendimento domiciliar": "Domiciliar",
+        "clinica": "Clínica",
+        "empresa": "Empresa / PCMSO",
+        "pcmso": "Empresa / PCMSO",
+        "parceria": "Parceiro"
+      },
+      "decisao_manual": {
+        "em casa": "Domiciliar",
+        "casa do paciente": "Domiciliar",
+        "consultorio": "Clínica",
+        "coworking": "Clínica",
+        "pastore": "Parceiro",
+        "pastore ipanema": "Parceiro"
+      },
+      "nota_decisao_manual": "'Pastore' é PARCEIRO (dimensão própria), não sinônimo lexical de local; 'coworking' pode ou não ser espaço clínico — cada registro histórico exige confirmação."
+    },
+    "parceiro": {
+      "descricao": "Parceiro responsável pela demanda, quando local_atendimento = Parceiro. Lista aberta.",
+      "aberto": true,
+      "valores": ["Pastore"],
+      "aliases": {
+        "pastore ipanema": "Pastore",
+        "clinica pastore": "Pastore"
+      },
+      "decisao_manual": {}
+    },
+    "unidade": {
+      "descricao": "Unidade física do parceiro. Lista aberta.",
+      "aberto": true,
+      "valores": ["Pastore Ipanema"],
+      "aliases": {},
+      "decisao_manual": {}
+    },
+    "modalidade": {
+      "descricao": "Modalidade de realização do serviço (dimensão diferente do local).",
+      "aberto": false,
+      "valores": ["Presencial", "Domiciliar", "Teleconsulta"],
+      "aliases": {
+        "domicilio": "Domiciliar"
+      },
+      "decisao_manual": {
+        "online": "Teleconsulta",
+        "remoto": "Teleconsulta",
+        "video": "Teleconsulta",
+        "telemedicina": "Teleconsulta",
+        "em casa": "Domiciliar"
+      }
+    },
+    "servico": {
+      "descricao": "Serviço prestado. Lista aberta com os serviços atuais da SoproLife.",
+      "aberto": true,
+      "valores": ["Espirometria", "Espirometria domiciliar", "Consulta pneumologista", "Teleconsulta respiratória"],
+      "aliases": {
+        "espiro": "Espirometria",
+        "espirometria simples": "Espirometria",
+        "espirometria domiciliar": "Espirometria domiciliar",
+        "teleconsulta": "Teleconsulta respiratória"
+      },
+      "decisao_manual": {
+        "espirometria com broncodilatador": "Espirometria",
+        "consulta": "Consulta pneumologista"
+      },
+      "nota": "Com/sem broncodilatador é um atributo do exame, não um serviço diferente — mas colapsar o rótulo histórico perde informação e exige decisão humana."
+    },
+    "status_relacionamento": {
+      "descricao": "Status do relacionamento em CRM Pacientes. Hoje coexistem 'Ativo' (createPaciente) e 'Em acompanhamento' (fluxos antigos) — ambos canônicos, com semânticas distintas.",
+      "aberto": false,
+      "valores": ["Ativo", "Em acompanhamento", "Inativo", "Não contatar"],
+      "aliases": {
+        "em acompanhamento": "Em acompanhamento",
+        "acompanhamento": "Em acompanhamento",
+        "ativo": "Ativo",
+        "inativa": "Inativo",
+        "nao contatar": "Não contatar"
+      },
+      "decisao_manual": {
+        "arquivado": "Inativo",
+        "bloqueou": "Não contatar"
+      }
+    },
+    "consentimento_whatsapp": {
+      "descricao": "Consentimento para contato via WhatsApp. Canônico: Sim / Não / Não informado.",
+      "aberto": false,
+      "valores": ["Sim", "Não", "Não informado"],
+      "aliases": {
+        "s": "Sim",
+        "sim": "Sim",
+        "yes": "Sim",
+        "true": "Sim",
+        "1": "Sim",
+        "n": "Não",
+        "nao": "Não",
+        "no": "Não",
+        "false": "Não",
+        "0": "Não",
+        "": "Não informado"
+      },
+      "decisao_manual": {
+        "aceito": "Sim",
+        "ok": "Sim",
+        "confirmado": "Sim",
+        "recusa": "Não",
+        "nao confirmado": "Não informado",
+        "a definir": "Não informado",
+        "nao perguntado": "Não informado"
+      },
+      "nota_decisao_manual": "Consentimento nunca é promovido automaticamente: 'Não confirmado' pode significar 'perguntamos e não respondeu' (≠ 'Não informado'); 'ok/aceito/confirmado' exigem conferir o contexto original."
+    },
+    "canal": {
+      "descricao": "Canal de comunicação. Fonte: dropdowns de Leads (PLANILHAS_PRIVADAS.md).",
+      "aberto": false,
+      "valores": ["WhatsApp", "Site", "Google", "Instagram", "E-mail", "Telefone", "Indicação", "Presencial", "Outro"],
+      "aliases": {
+        "whats": "WhatsApp",
+        "zap": "WhatsApp",
+        "email": "E-mail",
+        "e mail": "E-mail",
+        "fone": "Telefone",
+        "indicacao": "Indicação",
+        "presencialmente": "Presencial"
+      },
+      "decisao_manual": {
+        "ligacao": "Telefone",
+        "pessoalmente": "Presencial"
+      }
+    },
+    "origem": {
+      "descricao": "Origem do contato/demanda. Fonte: dropdowns de Leads.",
+      "aberto": false,
+      "valores": ["Google", "WhatsApp", "Instagram", "Site", "Indicação", "Clínica parceira", "Tráfego pago", "Outro"],
+      "aliases": {
+        "indicacao": "Indicação",
+        "clinica parceira": "Clínica parceira",
+        "trafego pago": "Tráfego pago"
+      },
+      "decisao_manual": {
+        "pastore": "Clínica parceira",
+        "anuncio": "Tráfego pago",
+        "ads": "Tráfego pago"
+      }
+    },
+    "etapa_lead": {
+      "descricao": "Etapas oficiais da aba Leads. Fonte: _LEAD_ETAPAS_OFICIAIS (command-center-api.gs).",
+      "aberto": false,
+      "valores": [
+        "Novo contato", "Em conversa", "Aguardando retorno", "Agendado",
+        "Realizou consulta", "Realizou espirometria", "Realizou consulta e espirometria",
+        "Concluído", "Não respondeu", "Desistiu", "Perdido",
+        "Reunião marcada", "Proposta enviada", "Parceria fechada", "Parceiro ativo",
+        "Convertido em clínica/parceiro", "Sem resposta"
+      ],
+      "aliases": {
+        "novo": "Novo contato",
+        "conversando": "Em conversa"
+      },
+      "decisao_manual": {
+        "convertido em paciente": "Realizou espirometria"
+      },
+      "nota_decisao_manual": "'Convertido em paciente' (dropdown antigo) não diz QUAL serviço foi realizado — mapear para 'Realizou espirometria' seria inventar o serviço; cada lead exige conferência."
+    },
+    "etapa_clinica": {
+      "descricao": "Etapas oficiais de CRM Clinicas / Base Prospecção B2B PCMSO. Fonte: _CRM_ETAPAS_OFICIAIS.",
+      "aberto": false,
+      "valores": [
+        "Não abordada", "Abordada", "Em conversa", "Pediu apresentação",
+        "Aguardando retorno", "Proposta enviada", "Parceiro ativo",
+        "Sem interesse", "Não contatar / bloqueou", "Sem canal válido", "Arquivada"
+      ],
+      "aliases": {
+        "nao abordado": "Não abordada",
+        "abordado": "Abordada"
+      },
+      "decisao_manual": {
+        "prospectar": "Não abordada",
+        "respondeu": "Em conversa",
+        "parceira": "Parceiro ativo",
+        "pausada": "Arquivada"
+      }
+    },
+    "status_pastore_atendimento": {
+      "descricao": "Status do atendimento na aba Parceria Pastore - Atendimentos (staging).",
+      "aberto": false,
+      "valores": ["Realizado", "Cancelado", "Reagendado", "Não compareceu"],
+      "aliases": {
+        "nao compareceu": "Não compareceu",
+        "reagendou": "Reagendado"
+      },
+      "decisao_manual": {
+        "faltou": "Não compareceu"
+      }
+    },
+    "data_precisao": {
+      "descricao": "Precisão de uma data histórica. 'dia' = data completa confiável; 'mes' = só mês/ano conhecidos (NUNCA inventar o dia); 'ano' = só o ano; 'desconhecida' = campo vazio ou ilegível.",
+      "aberto": false,
+      "valores": ["dia", "mes", "ano", "desconhecida"],
+      "aliases": {},
+      "decisao_manual": {}
+    },
+    "estado_reconciliacao": {
+      "descricao": "Estado de um registro no processo de reconciliação (reconciliar-historico.py e futuro mapa de IDs). linked = vínculo explícito confirmado; pending = candidato aguardando decisão humana; ambiguous = mais de um candidato possível; unmatchable = informação insuficiente.",
+      "aberto": false,
+      "valores": ["linked", "pending", "ambiguous", "unmatchable", "nao_analisado", "conciliado", "pendente_backfill", "orfao_a_reconciliar", "conflito_decisao_humana"],
+      "aliases": {},
+      "decisao_manual": {}
+    },
+    "papel_movimento": {
+      "descricao": "Papel de um movimento financeiro no ledger 1:N (contrato financeiro_lancamentos v2): no máximo UMA receita_principal ativa por atendimento; ajustes/complementos/estornos são append-only e referenciam o movimento original.",
+      "aberto": false,
+      "valores": ["receita_principal", "ajuste", "complemento", "estorno"],
+      "aliases": {},
+      "decisao_manual": {}
+    }
+  }
+}

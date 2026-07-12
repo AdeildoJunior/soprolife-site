@@ -79,7 +79,10 @@ function buildEspirometriaFinanceiroPayload(formData) {
     erros.push(f.status_pagamento ? "Status do pagamento inválido." : "Status do pagamento é obrigatório.");
   }
 
-  const valorTabela = _efNum(f.valor_tabela, { fallback: EF_VALOR_TABELA_PADRAO });
+  // M14.3A (2ª rodada) — AUSÊNCIA PERMANECE AUSENTE: valor_tabela em branco
+  // NÃO vira 250 (o formulário mostra a sugestão visível, mas se o operador
+  // apagar o campo, nada é inventado — o payload simplesmente omite).
+  const valorTabela = _efNum(f.valor_tabela, { fallback: null });
   if (valorTabela.erro) erros.push("Valor tabela inválido.");
 
   const valorCobrado = _efNum(f.valor_cobrado, { obrigatorio: true });
@@ -87,13 +90,18 @@ function buildEspirometriaFinanceiroPayload(formData) {
     erros.push(f.valor_cobrado ? "Valor cobrado inválido." : "Valor cobrado é obrigatório.");
   }
 
-  const valorRecebido = _efNum(f.valor_recebido, { fallback: 0 });
+  // valor_recebido em branco NÃO vira 0 silencioso: para Recebido/Parcial é
+  // obrigatório (validado nas regras cruzadas abaixo); para Pendente/
+  // Cortesia/Cancelado o 0 é REGRA FORMAL do fluxo (aplicada adiante).
+  const valorRecebido = _efNum(f.valor_recebido, { fallback: null });
   if (valorRecebido.erro) erros.push("Valor recebido inválido.");
 
   const formaPagamento = _efEnum(f.forma_pagamento, EF_FORMA_PAGAMENTO);
   if (formaPagamento.erro) erros.push("Forma de pagamento inválida.");
 
-  const origemPreco = _efEnum(f.origem_preco, EF_ORIGEM_PRECO, { fallback: "Tabela" });
+  // origem_preco em branco NÃO vira "Tabela": o payload omite e a origem
+  // fica sem preenchimento até decisão explícita.
+  const origemPreco = _efEnum(f.origem_preco, EF_ORIGEM_PRECO, { fallback: "" });
   if (origemPreco.erro) erros.push("Origem do preço inválida.");
 
   const localAtendimento = _efEnum(f.local_atendimento, EF_LOCAL_ATENDIMENTO, { obrigatorio: true });
@@ -115,7 +123,9 @@ function buildEspirometriaFinanceiroPayload(formData) {
       if (!formaPagamento.valor) {
         erros.push("Forma de pagamento é obrigatória quando o status do pagamento é Recebido.");
       }
-      if (valorRecebido.valor <= 0) {
+      if (valorRecebido.valor === null) {
+        erros.push("Valor recebido é obrigatório quando o status do pagamento é Recebido.");
+      } else if (valorRecebido.valor <= 0) {
         erros.push("Valor recebido deve ser maior que zero quando o status do pagamento é Recebido.");
       } else if (valorRecebido.valor < valorCobrado.valor) {
         erros.push('Valor recebido menor que o valor cobrado — use o status de pagamento "Parcial".');
@@ -126,7 +136,9 @@ function buildEspirometriaFinanceiroPayload(formData) {
       if (!formaPagamento.valor) {
         erros.push("Forma de pagamento é obrigatória quando o status do pagamento é Parcial.");
       }
-      if (valorRecebido.valor <= 0) {
+      if (valorRecebido.valor === null) {
+        erros.push("Valor recebido é obrigatório quando o status do pagamento é Parcial.");
+      } else if (valorRecebido.valor <= 0) {
         erros.push("Valor recebido deve ser maior que zero quando o status do pagamento é Parcial.");
       } else if (valorRecebido.valor >= valorCobrado.valor) {
         erros.push("Valor recebido deve ser menor que o valor cobrado quando o status do pagamento é Parcial.");
@@ -146,33 +158,37 @@ function buildEspirometriaFinanceiroPayload(formData) {
   const cancelado = statusExame.valor === "Cancelado" || statusPagamento.valor === "Cancelado";
   const cortesia = statusPagamento.valor === "Cortesia";
   const pendente = statusPagamento.valor === "Pendente";
+  // REGRA FORMAL DE ZERO (única exceção à regra "ausência permanece ausente",
+  // registrada também no servidor e no contrato): Pendente/Cortesia/Cancelado
+  // têm, por definição do fluxo, recebimento 0.
   const valorRecebidoFinal = (cortesia || cancelado || pendente) ? 0 : valorRecebido.valor;
-
-  // Desconto: mesma fórmula seguindo em todos os status (nunca negativo).
-  // Em Cortesia isso já resulta em desconto = valor_tabela quando o exame é
-  // cobrado como 0, ou a diferença tabela-cobrado nos demais casos — a
-  // lógica atual já é a mais segura (nunca negativa) e não precisa de um
-  // caso especial a mais.
-  const desconto = Math.max(0, Math.round((valorTabela.valor - valorCobrado.valor) * 100) / 100);
 
   const payload = {
     id_atendimento: _efIdAtendimento(f.id_atendimento),
-    criado_em: new Date().toISOString(),
+    // criado_em NÃO é enviado pelo cliente (M14.3A, correção final): é
+    // autoridade exclusiva do servidor no insert (relógio do navegador nunca
+    // é a fonte de um timestamp técnico de criação).
     data_exame: dataExame,
     tipo_movimento: "receita",
     servico: "Espirometria",
     local_atendimento: localAtendimento.valor,
-    valor_tabela: valorTabela.valor,
     valor_cobrado: valorCobrado.valor,
     valor_recebido: valorRecebidoFinal,
-    desconto,
     status_exame: statusExame.valor,
     status_pagamento: statusPagamento.valor,
     forma_pagamento: formaPagamento.valor,
-    origem_preco: origemPreco.valor,
     observacao_financeira: _efSan(f.observacao_financeira, ""),
     fonte: "nova_espirometria",
   };
+
+  // Campos opcionais só entram quando realmente informados — o servidor é
+  // fail-closed por presença e a ausência permanece ausente na planilha.
+  if (valorTabela.valor !== null) {
+    payload.valor_tabela = valorTabela.valor;
+    // Desconto só é derivável quando o valor de tabela foi informado.
+    payload.desconto = Math.max(0, Math.round((valorTabela.valor - valorCobrado.valor) * 100) / 100);
+  }
+  if (origemPreco.valor) payload.origem_preco = origemPreco.valor;
 
   return { ok: true, payload, erros: [] };
 }
