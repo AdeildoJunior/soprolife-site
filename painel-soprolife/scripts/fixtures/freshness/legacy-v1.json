@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "configured": true,
+    "generatedAt": "2026-07-07T23:38:46+00:00",
+    "periodStart": "2026-06-09",
+    "periodEnd": "2026-07-06",
+    "lookbackDays": 28,
+    "sources": { "searchConsole": false, "ga4": false },
+    "safeToDisplay": true,
+    "containsPersonalData": false
+  },
+  "warnings": [
+    "Search Console: Reauthentication is needed. Please run `gcloud auth application-default login` to reauthenticate.",
+    "GA4: 503 Getting metadata from plugin failed with error: Reauthentication is needed."
+  ]
+}

@@ -132,6 +132,51 @@ caso("todas as linhas com a mesma largura", len({len(l) for l in linhas}) == 1)
 caso("matriz cita todas as abas", all(any(l[0] == a["nome"] for l in linhas) for a in abas))
 caso("detalhe cobre risco de exclusão", sum(1 for l in linhas if l[0].strip() == "Risco de exclusão") == len(abas))
 
+print("── M14.3A.1 — geração vs publicação (nunca confundir) ──")
+caso("nenhuma data fixa proibida no .gs gerado",
+     gen.verificar_sem_data_fixa(conteudo_esperado) == [])
+caso("data fixa literal é detectada (guarda funciona)",
+     gen.verificar_sem_data_fixa(
+         conteudo_esperado.replace('"Atualizado em",',
+                                   '"Atualizado em", "23/06/2026",', 1)) != [])
+caso("guarda exige a função real de atualização",
+     any("função real" in p for p in
+         gen.verificar_sem_data_fixa(conteudo_esperado.replace(
+             "function atualizarManualDasAbasSoproLife()", "function outraCoisa()"))))
+caso("'Atualizado em' usa new Date() (data viva na execução)",
+     "new Date()" in atual[atual.find('"Atualizado em"'):atual.find('"Atualizado em"') + 300])
+
+status_ma = gen.carregar_status()
+caso("manual-abas-status.json existe e é JSON válido", bool(status_ma))
+caso("status registra a versão do manifesto atual",
+     status_ma.get("manifestVersion") == str(manifest.get("versao")))
+caso("status registra o hash do manifesto atual",
+     status_ma.get("manifestSha256") == gen.hash_manifesto())
+caso("status registra o hash da geração atual do .gs",
+     status_ma.get("generationSha256") == gen.hash_texto(atual))
+
+pub = status_ma.get("publication") or {}
+caso("publicação tem estado explícito",
+     pub.get("state") in ("publication_pending", "published_confirmed_by_human"))
+caso("estado 'publicado' só com atestado humano (publishedAt + sha idêntico)",
+     pub.get("state") != "published_confirmed_by_human"
+     or (pub.get("publishedAt") and pub.get("publishedSha256") == gen.hash_texto(atual)))
+caso("código novo sem atestado → publication_pending (honesto)",
+     gen.estado_publicacao({"publication": {"publishedSha256": "outro-sha",
+                                            "publishedAt": "2026-06-23T00:00:00+00:00"}},
+                           gen.hash_texto(atual)) == "publication_pending")
+caso("sem nenhum atestado → publication_pending",
+     gen.estado_publicacao({}, gen.hash_texto(atual)) == "publication_pending")
+caso("atestado do sha atual → published_confirmed_by_human",
+     gen.estado_publicacao({"publication": {"publishedSha256": gen.hash_texto(atual),
+                                            "publishedAt": "2026-07-12T00:00:00+00:00"}},
+                           gen.hash_texto(atual)) == "published_confirmed_by_human")
+
+texto_status = json.dumps(status_ma, ensure_ascii=False)
+caso("status sem segredo/PII",
+     not re.search(r"(?i)(token|secret|password|credential|/home/|"
+                   r"\(?\d{2}\)?\s?\d{4,5}-\d{4})", texto_status))
+
 print()
 if FALHAS:
     print(f"RESULTADO: {FALHAS} falha(s).")

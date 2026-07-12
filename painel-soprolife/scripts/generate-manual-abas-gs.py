@@ -15,9 +15,21 @@ Fluxo:
         ▼
   aba "Manual das Abas" na planilha  ← documentação viva
 
+M14.3A.1 — três conceitos SEPARADOS (nunca confundir):
+  1. versão do manifesto (abas-manifest.json);
+  2. geração do manual-das-abas.gs (este script — só código local);
+  3. execução real no Google Sheets (SEMPRE humana; registrada via
+     --mark-published DEPOIS de executar de verdade no editor).
+
+Gerar o .gs NÃO atualiza o Google Sheets. Enquanto o humano não executar
+e registrar, o estado remoto é "publication_pending" — honesto, nunca
+"atualizado".
+
 Uso:
-    python3 painel-soprolife/scripts/generate-manual-abas-gs.py           # gera
-    python3 painel-soprolife/scripts/generate-manual-abas-gs.py --check  # só confere se está atualizado
+    python3 painel-soprolife/scripts/generate-manual-abas-gs.py                  # gera
+    python3 painel-soprolife/scripts/generate-manual-abas-gs.py --check          # confere (exit 1 se desatualizado)
+    python3 painel-soprolife/scripts/generate-manual-abas-gs.py --status         # estados: manifesto/geração/publicação
+    python3 painel-soprolife/scripts/generate-manual-abas-gs.py --mark-published # atestado humano pós-execução real
 
 Nunca toca na planilha real — apenas gera o arquivo .gs no repositório.
 """
@@ -25,13 +37,17 @@ Nunca toca na planilha real — apenas gera o arquivo .gs no repositório.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 MANIFEST = RAIZ / "core" / "contracts" / "abas-manifest.json"
 DESTINO = RAIZ / "apps-script" / "manual-das-abas.gs"
+STATUS = RAIZ / "core" / "contracts" / "manual-abas-status.json"
 
 ROTULOS_TIPO = {
     "cadastro": "Cadastro",
@@ -83,6 +99,65 @@ SECOES_PAINEL = {
     "documentos": "Documentos",
     "automacoes": "Automações",
 }
+
+
+def _agora_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def hash_manifesto() -> str:
+    return hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
+
+
+def hash_texto(texto: str) -> str:
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
+
+
+def carregar_status() -> dict:
+    """Estado conhecido de geração/publicação (commitável, sem segredo)."""
+    if not STATUS.exists():
+        return {}
+    try:
+        return json.loads(STATUS.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def gravar_status(status: dict) -> None:
+    STATUS.write_text(json.dumps(status, ensure_ascii=False, indent=2) + "\n",
+                      encoding="utf-8")
+
+
+def estado_publicacao(status: dict, sha_gs_atual: str) -> str:
+    """Estado remoto honesto: sem consulta segura à versão remota, o máximo
+    que sabemos vem do atestado humano registrado via --mark-published."""
+    pub = status.get("publication") or {}
+    if pub.get("publishedSha256") == sha_gs_atual and pub.get("publishedAt"):
+        return "published_confirmed_by_human"
+    if pub.get("publishedAt"):
+        return "publication_pending"  # já publicou antes, mas o código mudou
+    return "publication_pending"      # nunca houve atestado de publicação
+
+
+def verificar_sem_data_fixa(conteudo_gs: str) -> list[str]:
+    """Proíbe data fixa antiga na linha 'Atualizado em' do .gs gerado.
+
+    A data de atualização da aba real só pode vir de new Date() no momento
+    da execução — nunca de um literal embutido na geração.
+    """
+    problemas = []
+    # A linha de dados "Atualizado em" com literal de data é proibida.
+    if re.search(r'"Atualizado em"\s*,\s*"\d{1,2}/\d{1,2}/\d{4}', conteudo_gs):
+        problemas.append("linha 'Atualizado em' contém data literal fixa")
+    # O bloco que monta a linha deve usar new Date() (data viva na execução).
+    idx = conteudo_gs.find('"Atualizado em"')
+    if idx == -1:
+        problemas.append("linha 'Atualizado em' ausente do .gs")
+    elif "new Date()" not in conteudo_gs[idx:idx + 300]:
+        problemas.append("'Atualizado em' não usa Utilities.formatDate(new Date(), ...)")
+    if "function atualizarManualDasAbasSoproLife()" not in conteudo_gs:
+        problemas.append("função real de atualização ausente do .gs")
+    return problemas
 
 
 def _sim_nao(v) -> str:
@@ -164,7 +239,8 @@ def montar_linhas(manifest: dict) -> list[list[str]]:
         linhas.append(["", "", "", "", "", "", "", "", "", ""])
 
     linhas.append(["Gerado por", "atualizarManualDasAbasSoproLife()  |  fonte: core/contracts/abas-manifest.json (versão "
-                   + str(manifest.get("versao", "?")) + ")", "", "", "", "", "", "", "", ""])
+                   + str(manifest.get("versao", "?"))
+                   + ", manifesto sha256 " + hash_manifesto()[:12] + ")", "", "", "", "", "", "", "", ""])
     return linhas
 
 
@@ -274,28 +350,117 @@ function onOpen_manualAbas() {{
 """
 
 
+def _imprimir_status(manifest: dict, status: dict, conteudo_esperado: str) -> None:
+    atual = DESTINO.read_text(encoding="utf-8") if DESTINO.exists() else ""
+    sha_atual = hash_texto(atual) if atual else None
+    gs_em_dia = atual == conteudo_esperado
+    pub = status.get("publication") or {}
+    estado = estado_publicacao(status, sha_atual) if sha_atual else "unknown"
+
+    print("Manual das Abas — três estados separados:")
+    print(f"  1. Manifesto local:      v{manifest.get('versao', '?')} "
+          f"(sha256 {hash_manifesto()[:12]})")
+    print(f"  2. Código .gs gerado:    {'em dia com o manifesto' if gs_em_dia else 'DESATUALIZADO — regenerar'}")
+    if estado == "published_confirmed_by_human":
+        print(f"  3. Google Sheets real:   publicado (atestado humano em {pub.get('publishedAt')})")
+    else:
+        print("  3. Google Sheets real:   publicação pendente / estado desconhecido")
+        print("     (gerar o .gs NÃO atualiza a planilha; execute no editor do")
+        print("      Apps Script e registre com --mark-published)")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Gera apps-script/manual-das-abas.gs a partir do manifesto")
-    parser.add_argument("--check", action="store_true",
-                        help="não grava; falha (exit 1) se o .gs estiver desatualizado")
+    grupo = parser.add_mutually_exclusive_group()
+    grupo.add_argument("--check", action="store_true",
+                       help="não grava; falha (exit 1) se o .gs estiver desatualizado")
+    grupo.add_argument("--status", action="store_true",
+                       help="mostra manifesto/geração/publicação (sem gravar)")
+    grupo.add_argument("--mark-published", action="store_true",
+                       help="registra que o humano EXECUTOU o .gs atual no Google Sheets")
     args = parser.parse_args()
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     conteudo = gerar_gs(manifest)
+    status = carregar_status()
 
-    if args.check:
+    if args.status:
+        _imprimir_status(manifest, status, conteudo)
+        return 0
+
+    if args.mark_published:
         atual = DESTINO.read_text(encoding="utf-8") if DESTINO.exists() else ""
         if atual != conteudo:
-            print("DESATUALIZADO: apps-script/manual-das-abas.gs não bate com o manifesto.")
-            print("Rode: python3 painel-soprolife/scripts/generate-manual-abas-gs.py")
+            print("ERRO: o .gs está desatualizado em relação ao manifesto.")
+            print("  Regenere, execute no Apps Script e só então marque como publicado.")
+            return 1
+        status.setdefault("schemaVersion", 1)
+        status["manifestVersion"] = str(manifest.get("versao", "?"))
+        status["manifestSha256"] = hash_manifesto()
+        status["generationSha256"] = hash_texto(atual)
+        status["publication"] = {
+            "state": "published_confirmed_by_human",
+            "publishedAt": _agora_iso(),
+            "publishedSha256": hash_texto(atual),
+            "note": "Atestado HUMANO: registrado após execução real de "
+                    "atualizarManualDasAbasSoproLife() no editor do Apps Script. "
+                    "Nenhuma verificação remota automática foi feita.",
+        }
+        gravar_status(status)
+        print("Registrado: publicação atestada pelo humano para o .gs atual.")
+        print(f"Status: {STATUS.relative_to(RAIZ.parent)}")
+        return 0
+
+    if args.check:
+        falhas = []
+        atual = DESTINO.read_text(encoding="utf-8") if DESTINO.exists() else ""
+        if atual != conteudo:
+            falhas.append("apps-script/manual-das-abas.gs não bate com o manifesto — "
+                          "rode: python3 painel-soprolife/scripts/generate-manual-abas-gs.py")
+        falhas.extend(verificar_sem_data_fixa(conteudo))
+        if STATUS.exists():
+            st_manifest = status.get("manifestVersion")
+            if st_manifest and st_manifest != str(manifest.get("versao", "?")):
+                falhas.append(f"manual-abas-status.json registra manifesto v{st_manifest}, "
+                              f"mas o manifesto atual é v{manifest.get('versao')}")
+            sha_gs = hash_texto(atual) if atual else None
+            if sha_gs and status.get("generationSha256") not in (None, sha_gs):
+                falhas.append("manual-abas-status.json não corresponde ao .gs atual — regenerar")
+        if falhas:
+            for f in falhas:
+                print(f"FALHOU: {f}")
             return 1
         print("OK: manual-das-abas.gs está em dia com abas-manifest.json.")
+        _imprimir_status(manifest, status, conteudo)
         return 0
 
     DESTINO.write_text(conteudo, encoding="utf-8")
+    sha_novo = hash_texto(conteudo)
+    pub_anterior = status.get("publication") or {}
+    status.setdefault("schemaVersion", 1)
+    status["manifestVersion"] = str(manifest.get("versao", "?"))
+    status["manifestSha256"] = hash_manifesto()
+    status["generationSha256"] = sha_novo
+    status["generatedAt"] = _agora_iso()
+    if pub_anterior.get("publishedSha256") != sha_novo:
+        status["publication"] = {
+            "state": "publication_pending",
+            "publishedAt": pub_anterior.get("publishedAt"),
+            "publishedSha256": pub_anterior.get("publishedSha256"),
+            "note": "Código local mais novo que o último estado conhecido do "
+                    "Google Sheets. Executar no Apps Script e registrar com "
+                    "--mark-published.",
+        }
+    gravar_status(status)
+
     print(f"Gerado: {DESTINO.relative_to(RAIZ.parent)}")
-    print("Próximo passo (manual, fora deste repositório): colar no editor do Apps Script")
-    print("e executar atualizarManualDasAbasSoproLife(). Nada foi publicado automaticamente.")
+    print(f"Status: {STATUS.relative_to(RAIZ.parent)}")
+    print()
+    _imprimir_status(manifest, status, conteudo)
+    print()
+    print("Próximo passo (manual, fora deste repositório): colar no editor do Apps Script,")
+    print("executar atualizarManualDasAbasSoproLife() e registrar com --mark-published.")
+    print("Nada foi publicado automaticamente.")
     return 0
 
 

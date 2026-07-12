@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "configured": true,
+    "schemaVersion": 2,
+    "generatedAt": "2026-07-12T09:00:00+00:00",
+    "lastAttemptAt": "2026-07-12T09:00:00+00:00",
+    "staleAfterHours": 26,
+    "periodStart": null,
+    "periodEnd": null,
+    "lookbackDays": 28,
+    "sources": { "searchConsole": false, "ga4": false },
+    "sourceStatus": {
+      "searchConsole": {
+        "sourceId": "search-console",
+        "sourceName": "Search Console",
+        "schemaVersion": 1,
+        "lastSuccessAt": null,
+        "lastAttemptAt": "2026-07-12T09:00:00+00:00",
+        "sourceDataThrough": null,
+        "status": "failed",
+        "errorCode": "NOT_CONFIGURED",
+        "errorMessageSafe": "Fonte não configurada neste ambiente.",
+        "sourceAvailable": false,
+        "authenticationRequired": false,
+        "publicationRequired": false,
+        "warnings": []
+      },
+      "ga4": {
+        "sourceId": "ga4",
+        "sourceName": "GA4",
+        "schemaVersion": 1,
+        "lastSuccessAt": null,
+        "lastAttemptAt": "2026-07-12T09:00:00+00:00",
+        "sourceDataThrough": null,
+        "status": "failed",
+        "errorCode": "DEPENDENCY_MISSING",
+        "errorMessageSafe": "Dependência local ausente. Instale os requisitos do conector.",
+        "sourceAvailable": false,
+        "authenticationRequired": false,
+        "publicationRequired": false,
+        "warnings": []
+      }
+    },
+    "safeToDisplay": true,
+    "containsPersonalData": false
+  },
+  "warnings": []
+}

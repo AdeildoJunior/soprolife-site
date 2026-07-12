@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "manifestVersion": "1.2.0",
+  "manifestSha256": "0f1c8122644a89c25f5d2822fdeab864cbfd3f3dbb18eb569a25a231339c8351",
+  "generationSha256": "dc89b2a4fd7f8ca3c735025627188bf0cfded702037cf95eb7fdb05a8dd6be32",
+  "generatedAt": "2026-07-12T22:56:36+00:00",
+  "publication": {
+    "state": "publication_pending",
+    "publishedAt": null,
+    "publishedSha256": null,
+    "note": "Código local mais novo que o último estado conhecido do Google Sheets. Executar no Apps Script e registrar com --mark-published."
+  }
+}

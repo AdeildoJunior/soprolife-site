@@ -6,15 +6,31 @@ Lê dados agregados do Google Search Console e GA4 usando
 Application Default Credentials (gcloud). Nunca imprime
 property ID, URLs privadas, tokens ou credenciais.
 
+M14.3A.1 — contrato de frescor operacional:
+  - snapshot schema v2 com sourceStatus por fonte (freshness-contract.json);
+  - falha em uma fonte NUNCA apaga a última versão válida da outra;
+  - gravação atômica (tmp + validação + rename);
+  - erro de autenticação vira estado authentication_required, nunca
+    "sem tráfego";
+  - exit codes padronizados (ver core/contracts/freshness-contract.json).
+
 Pré-requisito:
     gcloud auth application-default login \\
         --scopes=https://www.googleapis.com/auth/webmasters.readonly,\\
                  https://www.googleapis.com/auth/analytics.readonly
 
 Uso:
-    python3 painel-soprolife/scripts/read-marketing-seo-adc.py
     python3 painel-soprolife/scripts/read-marketing-seo-adc.py --dry-run
     python3 painel-soprolife/scripts/read-marketing-seo-adc.py --write
+    python3 painel-soprolife/scripts/read-marketing-seo-adc.py --status
+    python3 painel-soprolife/scripts/read-marketing-seo-adc.py --check
+Flags:
+    --max-age-hours N   limite de frescor na avaliação (padrão: 26h)
+    --output PATH       snapshot alternativo (testes/fixtures)
+    --no-network        proíbe qualquer chamada externa (modos de teste)
+
+Exit codes: 0=fresh · 10=stale · 11=autenticação · 12=schema · 13=indisponível
+            14=erro · 15=desconhecido
 """
 
 import argparse
@@ -26,6 +42,7 @@ from pathlib import Path
 # Guarda de PII compartilhada (M2) — mesma pasta deste script.
 # _scan_for_secrets abaixo permanece como redundância.
 import pii_guard
+import freshness_contract as fc
 
 # Regras da guarda para o marketing-seo.local.json (mesmo conteúdo vai ao
 # arquivo privado e ao público — a guarda protege os dois):
@@ -33,11 +50,13 @@ import pii_guard
 #   permitidos pelo projeto) e page/siteUrl = URLs do site público —
 #   isentos do detector de nome, mas scans de telefone/CPF/segredos valem
 #   (um telefone digitado como busca NÃO pode chegar ao painel);
-# - warnings = mensagens de erro de API (podem citar a propriedade) —
-#   idem, isentas só do detector de nome.
+# - warnings = mensagens do catálogo fixo do contrato de frescor;
+# - sourceName/errorMessageSafe = textos fixos do contrato ("Search Console",
+#   mensagens do catálogo) — isentos só do detector de nome.
 _PII_RULES = {
     "campos_pessoa": [],
-    "campos_institucionais": ["query", "page", "siteUrl", "warnings", "sources"],
+    "campos_institucionais": ["query", "page", "siteUrl", "warnings", "sources",
+                              "sourceName", "errorMessageSafe"],
     "chaves_proibidas_extras": [],
 }
 
@@ -47,6 +66,14 @@ _OUT_PUBLIC  = Path("painel-soprolife/data/marketing-seo.local.json")
 
 SC_SCOPE  = "https://www.googleapis.com/auth/webmasters.readonly"
 GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
+
+# chave no snapshot, sourceId do contrato, nome de exibição
+_SOURCES_DEF = [
+    ("searchConsole", "search-console", "Search Console"),
+    ("ga4", "ga4", "GA4"),
+]
+
+DEFAULT_STALE_HOURS = 26  # sincronização diária + margem
 
 FORBIDDEN_OUTPUT = [
     "cpf", "refresh_token", "access_token", "client_secret",
@@ -70,17 +97,6 @@ def _load_config():
         print("AVISO: configuração deve ser um objeto JSON.")
         return None
     return cfg
-
-
-def _not_configured_output():
-    return {
-        "meta": {
-            "configured": False,
-            "generatedAt": _now_iso(),
-            "safeToDisplay": True,
-            "containsPersonalData": False,
-        }
-    }
 
 
 def _load_google_libs():
@@ -296,6 +312,187 @@ def _fetch_ga4(credentials, property_id, start_date, end_date, top_limit):
     return result, warnings
 
 
+# ───────────────────────── Snapshot v2 / contrato de frescor ────────────────
+
+def _carregar_snapshot(path):
+    """Carrega snapshot existente; None se ausente ou ilegível (nunca apaga)."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("meta"), dict):
+        return None
+    return data
+
+
+def _source_status_do_snapshot(snap):
+    """Bloco sourceStatus do snapshot; sintetiza a partir do formato legado v1."""
+    if not snap:
+        return {}
+    meta = snap.get("meta", {})
+    ss = meta.get("sourceStatus")
+    if isinstance(ss, dict) and ss:
+        return ss
+
+    # Legado (schema v1): deriva o contrato de sources booleanos + warnings.
+    out = {}
+    sources = meta.get("sources") or {}
+    warnings = snap.get("warnings") or []
+    for key, sid, nome in _SOURCES_DEF:
+        ok = bool(sources.get(key)) and isinstance(snap.get(key), dict)
+        err = None
+        if not ok:
+            if meta.get("configured") is not True:
+                err = "NOT_CONFIGURED"
+            else:
+                relevantes = [w for w in warnings if nome.lower() in str(w).lower()]
+                err = fc.classificar_erro(" ".join(relevantes or [str(w) for w in warnings])) \
+                    if (relevantes or warnings) else "SYNC_FAILED"
+        out[key] = fc.status_fonte(
+            sid, nome,
+            last_success_at=meta.get("generatedAt") if ok else None,
+            last_attempt_at=meta.get("generatedAt"),
+            source_data_through=meta.get("periodEnd") if ok else None,
+            error_code=err,
+        )
+    return out
+
+
+def _fontes_configuradas(cfg):
+    """Quais fontes têm configuração local (independentes uma da outra)."""
+    if cfg is None:
+        return {key: False for key, _, _ in _SOURCES_DEF}
+    return {
+        "searchConsole": bool(str(cfg.get("searchConsoleSiteUrl", "")).strip()),
+        "ga4": bool(str(cfg.get("ga4PropertyId", "")).strip()),
+    }
+
+
+def _avaliar_snapshot(snap, max_age_hours=None, agora=None):
+    """Avalia frescor por fonte + estado agregado. Relógio injetável (testes)."""
+    agora = agora or fc.agora_utc()
+    if snap is None:
+        return {"overall": fc.UNKNOWN, "exit": fc.EXIT_UNKNOWN, "fontes": {},
+                "staleAfterHours": max_age_hours or DEFAULT_STALE_HOURS}
+
+    meta = snap.get("meta", {})
+    stale_h = max_age_hours or meta.get("staleAfterHours") or DEFAULT_STALE_HOURS
+    status = _source_status_do_snapshot(snap)
+
+    fontes = {}
+    estados = []
+    for key, _sid, _nome in _SOURCES_DEF:
+        bloco = status.get(key)
+        if bloco is None:
+            continue
+        aval = fc.avaliar_frescor(bloco, stale_h, agora)
+        fontes[key] = {**bloco, **aval}
+        # Fonte deliberadamente não configurada não rebaixa o agregado quando
+        # existe outra fonte configurada.
+        if bloco.get("errorCode") != "NOT_CONFIGURED":
+            estados.append(aval["freshnessStatus"])
+
+    if not estados:
+        overall = fc.UNAVAILABLE if fontes else fc.UNKNOWN
+    else:
+        overall = fc.pior_estado(estados)
+    return {"overall": overall, "exit": fc.exit_code_para(overall),
+            "fontes": fontes, "staleAfterHours": stale_h}
+
+
+def _warnings_seguros(raw_warnings, nome_fonte):
+    """Converte avisos técnicos crus em mensagens fixas do catálogo (dedup)."""
+    vistos = []
+    for w in raw_warnings:
+        msg = f"{nome_fonte}: {fc.mensagem_segura(fc.classificar_erro(w))}"
+        if msg not in vistos:
+            vistos.append(msg)
+    return vistos
+
+
+def _montar_snapshot(cfg, prev, resultados, periodo, agora_iso, stale_h):
+    """Monta o snapshot v2 preservando a última versão válida por fonte.
+
+    resultados: {key: {"ok": bool, "data": dict, "raw_warnings": [...],
+                       "error_code": str|None}}
+    """
+    prev_status = _source_status_do_snapshot(prev)
+    configuradas = _fontes_configuradas(cfg)
+
+    meta = {
+        "configured": cfg is not None,
+        "schemaVersion": 2,
+        "generatedAt": agora_iso,
+        "lastAttemptAt": agora_iso,
+        "staleAfterHours": stale_h,
+        "periodStart": periodo[0],
+        "periodEnd": periodo[1],
+        "lookbackDays": periodo[2],
+        "sources": {},
+        "sourceStatus": {},
+        "safeToDisplay": True,
+        "containsPersonalData": False,
+    }
+    payload = {"meta": meta, "warnings": []}
+
+    for key, sid, nome in _SOURCES_DEF:
+        res = resultados.get(key) or {"ok": False, "data": {}, "raw_warnings": [],
+                                      "error_code": "NOT_CONFIGURED"}
+        avisos = _warnings_seguros(res.get("raw_warnings", []), nome)
+        meta["sources"][key] = bool(res["ok"])
+
+        if res["ok"]:
+            meta["sourceStatus"][key] = fc.status_fonte(
+                sid, nome,
+                last_success_at=agora_iso, last_attempt_at=agora_iso,
+                source_data_through=periodo[1], error_code=None,
+                warnings=avisos,
+            )
+            payload[key] = res["data"]
+        else:
+            err = res.get("error_code") or "SYNC_FAILED"
+            if not configuradas.get(key):
+                err = "NOT_CONFIGURED"
+            pblock = prev_status.get(key) or {}
+            meta["sourceStatus"][key] = fc.status_fonte(
+                sid, nome,
+                last_success_at=pblock.get("lastSuccessAt"),
+                last_attempt_at=agora_iso,
+                source_data_through=pblock.get("sourceDataThrough"),
+                error_code=err, warnings=avisos,
+            )
+            # Preserva a última versão válida — falha nunca apaga snapshot.
+            if prev and isinstance(prev.get(key), dict):
+                payload[key] = prev[key]
+        payload["warnings"].extend(avisos)
+
+    return payload
+
+
+def _imprimir_status(aval, out_path):
+    print(f"Snapshot: {out_path}")
+    print(f"Limite de frescor: {aval['staleAfterHours']}h")
+    for key, sid, nome in _SOURCES_DEF:
+        f = aval["fontes"].get(key)
+        if f is None:
+            print(f"  {nome}: (sem registro)")
+            continue
+        idade = f.get("ageSeconds")
+        idade_txt = f"{idade / 3600:.1f}h" if idade is not None else "—"
+        detalhe = f.get("errorMessageSafe") or ""
+        print(f"  {nome}: {f['freshnessStatus']}"
+              f" — última sincronização OK: {f.get('lastSuccessAt') or 'nunca'}"
+              f" (idade {idade_txt})"
+              f" — dados até: {f.get('sourceDataThrough') or '—'}"
+              f"{' — ' + detalhe if detalhe else ''}")
+    print(f"Estado agregado: {aval['overall']} (exit {aval['exit']})")
+
+
+# ───────────────────────── Escrita segura (atômica) ─────────────────────────
+
 def _scan_for_secrets(output):
     text = json.dumps(output, ensure_ascii=False).lower()
     for pattern in FORBIDDEN_OUTPUT:
@@ -304,7 +501,7 @@ def _scan_for_secrets(output):
     return None
 
 
-def _write_output(output):
+def _write_output(output, out_public=None):
     found = _scan_for_secrets(output)
     if found:
         print(f"ERRO CRÍTICO: padrão proibido '{found}' detectado no JSON de saída.")
@@ -315,20 +512,184 @@ def _write_output(output):
     # encontrar violação; nunca imprime o valor sensível.
     pii_guard.ensure_summary_safe(output, rules=_PII_RULES, context="marketing-seo")
 
-    text = json.dumps(output, ensure_ascii=False, indent=2) + "\n"
+    destino_publico = Path(out_public) if out_public else _OUT_PUBLIC
 
-    _OUT_PRIVATE.parent.mkdir(parents=True, exist_ok=True)
-    _OUT_PRIVATE.write_text(text, encoding="utf-8")
-    _OUT_PRIVATE.chmod(0o600)
-    print(f"Gravado em: {_OUT_PRIVATE}")
+    # Escrita atômica com validação de contrato: arquivo inválido nunca
+    # substitui snapshot válido (freshness-contract.json, regra 3/4).
+    # Com --output (testes/fixtures), NÃO toca no arquivo privado real.
+    if destino_publico == _OUT_PUBLIC:
+        fc.escrever_json_atomico(_OUT_PRIVATE, output,
+                                 validador=fc.validar_snapshot_marketing)
+        print(f"Gravado em: {_OUT_PRIVATE}")
 
-    _OUT_PUBLIC.parent.mkdir(parents=True, exist_ok=True)
-    _OUT_PUBLIC.write_text(text, encoding="utf-8")
-    _OUT_PUBLIC.chmod(0o600)
-    print(f"Sincronizado em: {_OUT_PUBLIC}")
+    fc.escrever_json_atomico(destino_publico, output,
+                             validador=fc.validar_snapshot_marketing)
+    print(f"Sincronizado em: {destino_publico}")
     print()
     print("Execute a seguir para verificar segurança:")
     print("  bash painel-soprolife/scripts/check-access.sh")
+
+
+# ───────────────────────── Modos de execução ────────────────────────────────
+
+def cmd_status(args, modo):
+    """--status / --check: avaliação offline do snapshot (sem rede)."""
+    out_path = Path(args.output) if args.output else _OUT_PUBLIC
+    snap = _carregar_snapshot(out_path)
+
+    if snap is not None and modo == "check":
+        try:
+            fc.validar_snapshot_marketing(snap)
+        except ValueError as exc:
+            print(f"SCHEMA INVÁLIDO: {exc}")
+            return fc.EXIT_SCHEMA_INVALID
+
+    aval = _avaliar_snapshot(snap, max_age_hours=args.max_age_hours)
+    if snap is None:
+        print(f"Snapshot inexistente ou ilegível: {out_path}")
+        print("Estado: unknown — nunca sincronizado neste ambiente.")
+        return fc.EXIT_UNKNOWN
+
+    _imprimir_status(aval, out_path)
+    return aval["exit"]
+
+
+def cmd_sync(args, mode):
+    """--dry-run / --write: consulta as fontes e (no write) grava o snapshot."""
+    print("SoproLife OS Local Core — Marketing & SEO connector (ADC)")
+    print(f"mode: {mode}")
+    print("auth: Application Default Credentials")
+    print()
+
+    out_path = Path(args.output) if args.output else _OUT_PUBLIC
+    prev = _carregar_snapshot(out_path)
+    if prev is None and out_path == _OUT_PUBLIC:
+        prev = _carregar_snapshot(_OUT_PRIVATE)
+    cfg = _load_config()
+    agora_iso = _now_iso()
+
+    stale_h = args.max_age_hours or DEFAULT_STALE_HOURS
+    if cfg and cfg.get("staleAfterHours"):
+        stale_h = args.max_age_hours or float(cfg["staleAfterHours"])
+
+    def _finalizar(resultados, periodo):
+        payload = _montar_snapshot(cfg, prev, resultados, periodo, agora_iso, stale_h)
+        aval = _avaliar_snapshot(payload, max_age_hours=args.max_age_hours)
+        print()
+        if mode == "write":
+            _write_output(payload, out_public=out_path)
+        else:
+            print("next_step: use --write para gravar os dados.")
+        _imprimir_status(aval, out_path)
+        return aval["exit"]
+
+    periodo_vazio = (None, None, None)
+
+    if cfg is None:
+        print("INFO: configuração não encontrada.")
+        print(f"  Esperado em: {_CONFIG_PATH}")
+        print("  Copie painel-soprolife/config-examples/marketing-seo.local.example.json")
+        print("  para esse caminho e preencha os valores reais.")
+        if prev is not None:
+            print("  Snapshot anterior será preservado.")
+        return _finalizar({}, periodo_vazio)
+
+    configuradas = _fontes_configuradas(cfg)
+    if not any(configuradas.values()):
+        print("AVISO: ga4PropertyId e searchConsoleSiteUrl estão vazios — nada a consultar.")
+        return _finalizar({}, periodo_vazio)
+
+    lookback  = max(1, int(cfg.get("lookbackDays", 28)))
+    top_limit = max(1, int(cfg.get("topLimit", 20)))
+    today      = date.today()
+    end_date   = (today - timedelta(days=1)).isoformat()
+    start_date = (today - timedelta(days=lookback)).isoformat()
+    periodo = (start_date, end_date, lookback)
+
+    print(f"Período: {start_date} → {end_date} ({lookback} dias)")
+    print()
+
+    def _falha_total(error_code, raw=None):
+        resultados = {}
+        for key, _sid, _nome in _SOURCES_DEF:
+            if configuradas.get(key):
+                resultados[key] = {"ok": False, "data": {},
+                                   "raw_warnings": [raw] if raw else [],
+                                   "error_code": error_code}
+        return _finalizar(resultados, periodo)
+
+    if args.no_network:
+        print("INFO: --no-network — nenhuma chamada externa será feita.")
+        return _falha_total("NETWORK_BLOCKED")
+
+    build, google_auth_default = _load_google_libs()
+    if build is None:
+        return _falha_total("DEPENDENCY_MISSING")
+
+    scopes = []
+    if configuradas["searchConsole"]:
+        scopes.append(SC_SCOPE)
+    if configuradas["ga4"]:
+        scopes.append(GA4_SCOPE)
+
+    try:
+        credentials, _ = google_auth_default(scopes=scopes)
+    except Exception as exc:
+        print("AVISO: falha na autenticação ADC.")
+        print()
+        print("Execute para autenticar com os escopos corretos:")
+        for s in scopes:
+            print(f"    {s}")
+        print("  gcloud auth application-default login --scopes=<escopos acima>")
+        return _falha_total(fc.classificar_erro(exc) if fc.classificar_erro(exc) != "SYNC_FAILED"
+                            else "AUTH_REQUIRED", raw=str(exc))
+
+    resultados = {}
+
+    if configuradas["searchConsole"]:
+        print("Consultando Search Console...")
+        sc_data, sc_warn = _fetch_search_console(
+            build, credentials, str(cfg.get("searchConsoleSiteUrl", "")).strip(),
+            start_date, end_date, top_limit
+        )
+        ok = bool(sc_data)
+        resultados["searchConsole"] = {
+            "ok": ok, "data": sc_data, "raw_warnings": sc_warn,
+            "error_code": None if ok else fc.classificar_erro(" ".join(sc_warn)),
+        }
+        if sc_warn:
+            print(f"  AVISO: {len(sc_warn)} problema(s) na consulta — detalhes seguros no snapshot.")
+        if ok:
+            totals = sc_data.get("totals", {})
+            print(f"  OK — impressões: {totals.get('impressions', 0)}, "
+                  f"cliques: {totals.get('clicks', 0)}")
+        print()
+
+    if configuradas["ga4"]:
+        print("Consultando GA4...")
+        ga4_data, ga4_warn = _fetch_ga4(
+            credentials, str(cfg.get("ga4PropertyId", "")).strip(),
+            start_date, end_date, top_limit
+        )
+        ok = bool(ga4_data)
+        resultados["ga4"] = {
+            "ok": ok, "data": ga4_data, "raw_warnings": ga4_warn,
+            "error_code": None if ok else fc.classificar_erro(" ".join(ga4_warn)),
+        }
+        if ga4_warn:
+            print(f"  AVISO: {len(ga4_warn)} problema(s) na consulta — detalhes seguros no snapshot.")
+        if ok:
+            totals = ga4_data.get("totals", {})
+            print(f"  OK — usuários: {totals.get('users', 0)}, "
+                  f"sessões: {totals.get('sessions', 0)}")
+        print()
+
+    print("Validação concluída. Nenhum dado pessoal exportado.")
+    for key, _sid, nome in _SOURCES_DEF:
+        if key in resultados:
+            print(f"  {nome}: {'OK' if resultados[key]['ok'] else 'falhou (snapshot preservado)'}")
+
+    return _finalizar(resultados, periodo)
 
 
 def main():
@@ -336,140 +697,26 @@ def main():
         description="Marketing & SEO connector ADC — SoproLife (sem chave privada)"
     )
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--dry-run", action="store_true", help="Valida sem gravar (padrão)")
-    group.add_argument("--write",   action="store_true", help="Grava JSON de saída")
+    group.add_argument("--dry-run", action="store_true",
+                       help="Consulta sem gravar (padrão)")
+    group.add_argument("--write",   action="store_true", help="Grava snapshot v2")
+    group.add_argument("--status",  action="store_true",
+                       help="Mostra frescor do snapshot local (sem rede)")
+    group.add_argument("--check",   action="store_true",
+                       help="Valida contrato + frescor (sem rede; exit codes)")
+    parser.add_argument("--max-age-hours", type=float, default=None,
+                        help=f"Limite de frescor em horas (padrão {DEFAULT_STALE_HOURS})")
+    parser.add_argument("--output", default=None,
+                        help="Caminho alternativo do snapshot (testes)")
+    parser.add_argument("--no-network", action="store_true",
+                        help="Proíbe chamadas externas (modos de teste)")
     args = parser.parse_args()
-    mode = "write" if args.write else "dry-run"
 
-    print("SoproLife OS Local Core — Marketing & SEO connector (ADC)")
-    print(f"mode: {mode}")
-    print("auth: Application Default Credentials")
-    print()
-
-    cfg = _load_config()
-    if cfg is None:
-        print("INFO: configuração não encontrada.")
-        print(f"  Esperado em: {_CONFIG_PATH}")
-        print("  Copie painel-soprolife/config-examples/marketing-seo.local.example.json")
-        print("  para esse caminho e preencha os valores reais.")
-        print()
-        if mode == "write":
-            print("Gravando JSON de fallback (configured=false)...")
-            _write_output(_not_configured_output())
-        return 0
-
-    ga4_prop  = str(cfg.get("ga4PropertyId", "")).strip()
-    sc_url    = str(cfg.get("searchConsoleSiteUrl", "")).strip()
-    lookback  = max(1, int(cfg.get("lookbackDays", 28)))
-    top_limit = max(1, int(cfg.get("topLimit", 20)))
-
-    if not sc_url and not ga4_prop:
-        print("AVISO: ga4PropertyId e searchConsoleSiteUrl estão vazios — nada a consultar.")
-        if mode == "write":
-            _write_output(_not_configured_output())
-        return 0
-
-    today      = date.today()
-    end_date   = (today - timedelta(days=1)).isoformat()
-    start_date = (today - timedelta(days=lookback)).isoformat()
-
-    print(f"Período: {start_date} → {end_date} ({lookback} dias)")
-    print()
-
-    build, google_auth_default = _load_google_libs()
-    if build is None:
-        if mode == "write":
-            _write_output(_not_configured_output())
-        return 0
-
-    scopes = []
-    if sc_url:
-        scopes.append(SC_SCOPE)
-    if ga4_prop:
-        scopes.append(GA4_SCOPE)
-
-    try:
-        credentials, _ = google_auth_default(scopes=scopes)
-    except Exception as exc:
-        print(f"AVISO: falha na autenticação ADC — {exc}")
-        print()
-        print("Execute para autenticar com os escopos corretos:")
-        for s in scopes:
-            print(f"    {s}")
-        print("  gcloud auth application-default login --scopes=<escopos acima>")
-        if mode == "write":
-            _write_output(_not_configured_output())
-        return 0
-
-    all_warnings = []
-    sc_data  = {}
-    ga4_data = {}
-
-    if sc_url:
-        print("Consultando Search Console...")
-        sc_data, sc_warn = _fetch_search_console(
-            build, credentials, sc_url, start_date, end_date, top_limit
-        )
-        all_warnings.extend(sc_warn)
-        if sc_warn:
-            for w in sc_warn:
-                print(f"  AVISO: {w}")
-        else:
-            totals = sc_data.get("totals", {})
-            print(f"  OK — impressões: {totals.get('impressions', 0)}, "
-                  f"cliques: {totals.get('clicks', 0)}")
-        print()
-
-    if ga4_prop:
-        print("Consultando GA4...")
-        ga4_data, ga4_warn = _fetch_ga4(
-            credentials, ga4_prop, start_date, end_date, top_limit
-        )
-        all_warnings.extend(ga4_warn)
-        if ga4_warn:
-            for w in ga4_warn:
-                print(f"  AVISO: {w}")
-        else:
-            totals = ga4_data.get("totals", {})
-            print(f"  OK — usuários: {totals.get('users', 0)}, "
-                  f"sessões: {totals.get('sessions', 0)}")
-        print()
-
-    sources_ok = {
-        "searchConsole": bool(sc_data),
-        "ga4": bool(ga4_data),
-    }
-
-    output = {
-        "meta": {
-            "configured": True,
-            "generatedAt": _now_iso(),
-            "periodStart": start_date,
-            "periodEnd": end_date,
-            "lookbackDays": lookback,
-            "sources": sources_ok,
-            "safeToDisplay": True,
-            "containsPersonalData": False,
-        },
-        "warnings": all_warnings,
-    }
-    if sc_data:
-        output["searchConsole"] = sc_data
-    if ga4_data:
-        output["ga4"] = ga4_data
-
-    print("Validação concluída. Nenhum dado pessoal exportado.")
-    print(f"  Search Console: {'OK' if sources_ok['searchConsole'] else 'indisponível'}")
-    print(f"  GA4:            {'OK' if sources_ok['ga4'] else 'indisponível'}")
-
-    if mode == "dry-run":
-        print()
-        print("next_step: use --write para gravar os dados.")
-        return 0
-
-    print()
-    _write_output(output)
-    return 0
+    if args.status:
+        return cmd_status(args, "status")
+    if args.check:
+        return cmd_status(args, "check")
+    return cmd_sync(args, "write" if args.write else "dry-run")
 
 
 if __name__ == "__main__":

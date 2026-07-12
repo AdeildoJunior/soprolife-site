@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "configured": true,
+    "schemaVersion": 2,
+    "generatedAt": "2026-07-12T09:00:00+00:00",
+    "lastAttemptAt": "2026-07-12T09:00:00+00:00",
+    "staleAfterHours": 26,
+    "periodStart": "2026-06-07",
+    "periodEnd": "2026-07-04",
+    "lookbackDays": 28,
+    "sources": { "searchConsole": false, "ga4": false },
+    "sourceStatus": {
+      "searchConsole": {
+        "sourceId": "search-console",
+        "sourceName": "Search Console",
+        "schemaVersion": 1,
+        "lastSuccessAt": "2026-07-05T09:00:00+00:00",
+        "lastAttemptAt": "2026-07-12T09:00:00+00:00",
+        "sourceDataThrough": "2026-07-04",
+        "status": "failed",
+        "errorCode": "AUTH_REQUIRED",
+        "errorMessageSafe": "Reautenticação necessária. Execute a renovação do ADC manualmente.",
+        "sourceAvailable": false,
+        "authenticationRequired": true,
+        "publicationRequired": false,
+        "warnings": []
+      },
+      "ga4": {
+        "sourceId": "ga4",
+        "sourceName": "GA4",
+        "schemaVersion": 1,
+        "lastSuccessAt": "2026-07-05T09:00:00+00:00",
+        "lastAttemptAt": "2026-07-12T09:00:00+00:00",
+        "sourceDataThrough": "2026-07-04",
+        "status": "failed",
+        "errorCode": "AUTH_REQUIRED",
+        "errorMessageSafe": "Reautenticação necessária. Execute a renovação do ADC manualmente.",
+        "sourceAvailable": false,
+        "authenticationRequired": true,
+        "publicationRequired": false,
+        "warnings": []
+      }
+    },
+    "safeToDisplay": true,
+    "containsPersonalData": false
+  },
+  "warnings": ["Reautenticação necessária. Execute a renovação do ADC manualmente."],
+  "searchConsole": {
+    "totals": { "impressions": 1100, "clicks": 41, "ctr": 0.037, "avgPosition": 12.9 }
+  },
+  "ga4": {
+    "totals": { "users": 82, "sessions": 110, "pageviews": 280 }
+  }
+}

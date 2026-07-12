@@ -1,0 +1,42 @@
+# SoproLife — Frescor operacional (M14.3A.1)
+# PREPARADO, NÃO INSTALADO: este arquivo só tem efeito depois que um humano
+# rodar scripts/install-operational-refresh.sh --apply na VPS.
+#
+# Garantias:
+#   - lock via flock: nunca duas execuções simultâneas;
+#   - timeout: nunca trava indefinidamente;
+#   - modo vem do EnvironmentFile (padrão: check — só leitura, sem rede);
+#   - NUNCA publica Apps Script nem abre navegador;
+#   - nenhum segredo em ExecStart, Environment ou journal.
+
+[Unit]
+Description=SoproLife — Frescor operacional do painel (Marketing/SEO + Manual)
+Documentation=file:/opt/soprolife/soprolife-site/painel-soprolife/docs/m14-3a1-frescor-operacional.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=HOME=/root
+# Modo padrão seguro: check (offline). Para autorizar a sincronização de
+# Marketing com rede, o humano define SOPROLIFE_REFRESH_MODE=refresh-marketing
+# no EnvironmentFile — nunca é o padrão.
+Environment=SOPROLIFE_REFRESH_MODE=check
+EnvironmentFile=-/etc/soprolife/operational-refresh.env
+WorkingDirectory=/opt/soprolife/soprolife-site
+ExecStart=/usr/bin/flock -n /run/soprolife-operational-refresh.lock \
+  /opt/soprolife/soprolife-site/painel-soprolife/scripts/soprolife-operational-refresh.sh $SOPROLIFE_REFRESH_MODE
+# Exit 10 (stale) não é falha da unidade: o estado vencido já fica visível no
+# painel e no exit do check manual. Exit 11 (autenticação) FALHA de propósito,
+# para aparecer no systemctl --failed até um humano renovar o ADC.
+SuccessExitStatus=0 10
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal
+# Logs limitados — evita inundar o journal em falha repetida.
+LogRateLimitIntervalSec=60
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target

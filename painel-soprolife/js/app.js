@@ -133,13 +133,17 @@ function fmtBRL(value) {
 // local (ex.: depois de atualizar um *.local.json na VPS, o painel continuava
 // mostrando os valores antigos até um hard-refresh). Usado por loadJson() e
 // loadOptionalJson() — helper único para todas as leituras de dados do painel.
+// O valor é fixo POR SESSÃO (M14.3A.1): cada carregamento da página busca
+// versão nova, mas releituras na mesma sessão podem reusar o cache HTTP.
+// Nunca inclui token ou identificador sensível na URL.
+const DATA_CACHE_BUST = Date.now().toString(36);
 function withCacheBust(path) {
   const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}_cb=${Date.now()}`;
+  return `${path}${sep}_cb=${DATA_CACHE_BUST}`;
 }
 
 async function loadJson(path) {
-  const response = await fetch(withCacheBust(path), { cache: "no-store" });
+  const response = await fetch(withCacheBust(path));
   if (!response.ok) {
     throw new Error(`Erro ao carregar ${path}`);
   }
@@ -148,7 +152,7 @@ async function loadJson(path) {
 
 async function loadOptionalJson(path) {
   try {
-    const response = await fetch(withCacheBust(path), { cache: "no-store" });
+    const response = await fetch(withCacheBust(path));
 
     if (response.status === 404) {
       return null;
@@ -3993,31 +3997,82 @@ function mktSourceTip(source, medium) {
 
 function renderMktHeader() {
   const m = state.marketingSeo;
+  const aval = mfAvaliar(m);
 
+  // Selo principal: estado de frescor honesto (nunca "dados reais" com
+  // snapshot vencido, erro de auth ou fonte indisponível).
   const label = document.querySelector("#marketingDataLabel");
   if (label) {
-    label.textContent = "Dados reais";
-    label.classList.add("safe-label-real");
+    label.textContent = aval.rotulo.label;
+    label.classList.remove("safe-label-real", "mf-fresh", "mf-stale", "mf-auth",
+                           "mf-unavailable", "mf-error", "mf-unknown");
+    label.classList.add(aval.rotulo.cls);
+    if (aval.overall === MF_FRESH) label.classList.add("safe-label-real");
   }
 
+  // Selos por fonte: GA4 e Search Console têm estados independentes.
   const badgesEl = document.querySelector("#mktSourceBadges");
   if (badgesEl) {
-    const sources = m.meta.sources || {};
-    const badges = [
-      sources.searchConsole ? '<span class="mkt-src-badge src-sc">Search Console</span>' : "",
-      sources.ga4 ? '<span class="mkt-src-badge src-ga4">GA4</span>' : "",
-    ].filter(Boolean);
-    if ((m.warnings || []).length > 0) {
-      badges.push(`<span class="mkt-src-warn" title="${escapeHtml((m.warnings || []).join("; "))}">⚠ ${m.warnings.length} aviso(s)</span>`);
+    const badges = [];
+    for (const f of MF_FONTES) {
+      const fonte = aval.fontes[f.key];
+      if (!fonte || fonte.errorCode === "NOT_CONFIGURED") continue;
+      const tip = fonte.errorMessageSafe
+        || `Última sincronização OK: ${mfFormatarDataHora(fonte.lastSuccessAt)}`;
+      badges.push(`<span class="mkt-src-badge ${f.key === "ga4" ? "src-ga4" : "src-sc"} ${fonte.rotulo.cls}"
+        title="${escapeHtml(tip)}">${escapeHtml(f.nome)} · ${escapeHtml(fonte.rotulo.label)}</span>`);
     }
     badgesEl.innerHTML = badges.join("");
-    badgesEl.hidden = false;
+    badgesEl.hidden = badges.length === 0;
   }
 
+  // Data/hora da última sincronização + período coberto (conceitos separados).
   const periodEl = document.querySelector("#mktPeriod");
-  if (periodEl && m.meta.periodStart && m.meta.periodEnd) {
-    periodEl.textContent = `${m.meta.periodStart} → ${m.meta.periodEnd} · ${m.meta.lookbackDays}d`;
+  if (periodEl) {
+    const partes = [];
+    partes.push(`Sincronizado: ${mfFormatarDataHora(aval.generatedAt)}`);
+    if (aval.period) {
+      partes.push(`Dados cobrem: ${aval.period.start} → ${aval.period.end}`);
+    }
+    periodEl.textContent = partes.join(" · ");
     periodEl.hidden = false;
+  }
+
+  // Faixa de aviso quando o estado não é fresh: explica que a última versão
+  // válida está preservada e como atualizar (instrução, sem executar nada).
+  const bannerEl = document.querySelector("#mktFreshnessBanner");
+  if (bannerEl) {
+    if (aval.overall === MF_FRESH) {
+      bannerEl.hidden = true;
+    } else {
+      const msgs = [];
+      for (const f of MF_FONTES) {
+        const fonte = aval.fontes[f.key];
+        if (fonte && fonte.errorMessageSafe) msgs.push(`${f.nome}: ${fonte.errorMessageSafe}`);
+        else if (fonte && fonte.status === MF_STALE) msgs.push(`${f.nome}: dados vencidos (limite ${aval.staleAfterHours}h).`);
+      }
+      const ultimaOk = [aval.fontes.searchConsole, aval.fontes.ga4]
+        .map((f) => mfParseIso(f?.lastSuccessAt))
+        .filter((v) => v !== null)
+        .sort((a, b) => b - a)[0];
+      bannerEl.innerHTML = `
+        <strong>${escapeHtml(aval.rotulo.label)}</strong> —
+        ${msgs.length ? escapeHtml(msgs.join(" ")) : "Snapshot fora do limite de frescor."}
+        ${ultimaOk ? `Mostrando a última versão válida (${escapeHtml(mfFormatarDataHora(new Date(ultimaOk).toISOString()))}).` : "Nenhuma versão válida disponível ainda."}
+        <details class="mkt-howto">
+          <summary>Como atualizar</summary>
+          <ol>
+            <li>No servidor (ou máquina local), execute:
+              <code>bash painel-soprolife/scripts/soprolife-operational-refresh.sh refresh-marketing</code></li>
+            <li>Se aparecer "reautenticação necessária", renove o ADC manualmente
+              (<code>gcloud auth application-default login</code> com os escopos do
+              Search Console/GA4) e repita o passo 1.</li>
+            <li>Recarregue esta página.</li>
+          </ol>
+          <p>Nenhuma credencial é executada pelo navegador.</p>
+        </details>`;
+      bannerEl.hidden = false;
+    }
   }
 }
 
@@ -4027,7 +4082,17 @@ function renderMktKpiStrip() {
   const container = document.querySelector("#mktKpiStrip");
   if (!container) return;
 
-  if (!sc && !ga4) { renderMktKpiStripDemo(); return; }
+  // Configurado porém sem NENHUM dado sincronizado: ausência é diferente de
+  // zero — mostra estado vazio honesto, nunca números demonstrativos nem 0.
+  if (!sc && !ga4) {
+    container.innerHTML = `
+      <article class="mkt-kpi-card mkt-kpi-empty">
+        <span class="mkt-kpi-label">Sem dados sincronizados</span>
+        <strong class="mkt-kpi-value">—</strong>
+        <small class="mkt-kpi-src">Ver aviso de frescor acima</small>
+      </article>`;
+    return;
+  }
 
   const kpis = [];
   if (sc) {
@@ -4433,6 +4498,15 @@ function renderCharts() {
         values: ga4Sources.slice(0, 8).map((s) => s.sessions),
       }
     : state.marketing.canais;
+
+  // Sem dados reais do GA4, o donut cai no demo — rotula honestamente para
+  // nunca parecer dado atual (contrato de frescor M14.3A.1).
+  const channelsSubEl = document.querySelector("#channelsSubtitle");
+  if (channelsSubEl && !ga4Sources?.length) {
+    channelsSubEl.textContent = isMarketingReal()
+      ? "Demonstrativo — GA4 sem dados sincronizados"
+      : "Canais de aquisição";
+  }
 
   createChart("channels", "#channelsChart", {
     type: "doughnut",

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SoproLife — Contrato de Frescor Operacional (M14.3A.1)",
+  "descricao": "Contrato único para toda fonte operacional do painel (Marketing/SEO, Manual das Abas, futuros). Define os campos de status de sincronização e os estados de frescor que o painel e os scripts devem respeitar. Nenhum campo pode conter token, credencial, path privado, ID sensível ou dado de paciente.",
+  "schemaVersion": 1,
+  "estados_frescor": [
+    "fresh",
+    "stale",
+    "unavailable",
+    "error",
+    "authentication_required",
+    "publication_pending",
+    "unknown"
+  ],
+  "exit_codes": {
+    "descricao": "Códigos de saída padronizados dos sincronizadores/verificadores.",
+    "0": "fresh — dado atualizado dentro do limite",
+    "10": "stale — dado válido porém vencido",
+    "11": "authentication_required — reautenticação humana necessária (ADC)",
+    "12": "schema_invalid — arquivo/payload não cumpre o contrato",
+    "13": "unavailable — fonte indisponível ou não configurada",
+    "14": "error — erro de sincronização não classificado",
+    "15": "unknown — estado não determinável (ex.: nunca sincronizado)"
+  },
+  "campos_por_fonte": {
+    "sourceId": "identificador estável da fonte (kebab-case, ex.: search-console)",
+    "sourceName": "nome de exibição seguro (ex.: Search Console)",
+    "schemaVersion": "versão deste contrato usada na gravação",
+    "generatedAt": "ISO-8601 UTC — quando o arquivo/snapshot foi gravado",
+    "sourceDataThrough": "ISO date — data máxima efetivamente coberta pelos dados",
+    "lastSuccessAt": "ISO-8601 UTC — última sincronização bem-sucedida desta fonte",
+    "lastAttemptAt": "ISO-8601 UTC — última tentativa (sucesso ou falha)",
+    "freshnessStatus": "um dos estados_frescor",
+    "staleAfterHours": "número — idade máxima antes de virar stale",
+    "ageSeconds": "número — calculado NA LEITURA (nunca persistido; evita apodrecer)",
+    "status": "ok | degraded | failed — resultado da última tentativa",
+    "errorCode": "código curto do catálogo (ex.: AUTH_REQUIRED) ou null",
+    "errorMessageSafe": "mensagem do catálogo fixo — NUNCA a exceção crua",
+    "sourceAvailable": "boolean — a fonte respondeu na última tentativa",
+    "authenticationRequired": "boolean — precisa de reautenticação humana",
+    "publicationRequired": "boolean — precisa de publicação humana (Apps Script)",
+    "warnings": "lista de mensagens seguras (sem segredo, sem path privado)"
+  },
+  "catalogo_erros": {
+    "AUTH_REQUIRED": "Reautenticação necessária. Execute a renovação do ADC manualmente.",
+    "PERMISSION_DENIED": "Acesso negado pela API. Verifique permissões da conta.",
+    "SOURCE_NOT_FOUND": "Fonte não encontrada. Verifique a configuração local.",
+    "DEPENDENCY_MISSING": "Dependência local ausente. Instale os requisitos do conector.",
+    "NOT_CONFIGURED": "Fonte não configurada neste ambiente.",
+    "NETWORK_BLOCKED": "Execução sem rede — sincronização não tentada.",
+    "SCHEMA_INVALID": "Arquivo de dados não cumpre o contrato — snapshot anterior preservado.",
+    "SYNC_FAILED": "Falha de sincronização. Snapshot anterior preservado."
+  },
+  "regras": [
+    "Ausência de dado é diferente de zero: fonte sem dados não vira gráfico zerado.",
+    "Falha em uma fonte nunca apaga a última versão válida de nenhuma fonte.",
+    "Gravação sempre atômica: temporário no mesmo diretório + validação + rename.",
+    "Arquivo que não valida contra o contrato nunca substitui snapshot válido.",
+    "Erro de autenticação aparece como 'reautenticação necessária', nunca como queda de tráfego.",
+    "GA4 e Search Console têm estados independentes.",
+    "Gerar código (.gs) não é publicar: estado remoto do Google é publication_pending/unknown até registro humano.",
+    "ageSeconds é sempre calculado na leitura com relógio injetável nos testes."
+  ]
+}

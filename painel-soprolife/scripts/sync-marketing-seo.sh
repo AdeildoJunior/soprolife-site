@@ -12,6 +12,14 @@ if [ ! -f "$PRIVATE_OUT" ]; then
   exit 0
 fi
 
-cp "$PRIVATE_OUT" "$PUBLIC_OUT"
-chmod 600 "$PUBLIC_OUT"
+# Cópia atômica: valida o JSON antes e nunca substitui um snapshot válido
+# por um arquivo truncado/corrompido (contrato de frescor M14.3A.1).
+if ! python3 -m json.tool "$PRIVATE_OUT" >/dev/null 2>&1; then
+  echo "ERRO: $PRIVATE_OUT não é JSON válido — snapshot atual preservado."
+  exit 1
+fi
+TMP_OUT="$(mktemp "${PUBLIC_OUT}.XXXXXX.tmp")"
+cp "$PRIVATE_OUT" "$TMP_OUT"
+chmod 600 "$TMP_OUT"
+mv "$TMP_OUT" "$PUBLIC_OUT"
 echo "OK: marketing-seo sincronizado → $PUBLIC_OUT"

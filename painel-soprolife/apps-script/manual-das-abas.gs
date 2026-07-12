@@ -703,7 +703,7 @@ var _MA_LINHAS = [
   ["  Segurança", "NUNCA RECRIAR esta aba — nenhum template/setup/fluxo pode reintroduzi-la (ver soprolife-sheets-template.gs e docs/financeiro-fonte-unica.md).", "", "", "", "", "", "", "", ""],
   ["  Recomendação de uso", "NUNCA recriar", "", "", "", "", "", "", "", ""],
   ["", "", "", "", "", "", "", "", "", ""],
-  ["Gerado por", "atualizarManualDasAbasSoproLife()  |  fonte: core/contracts/abas-manifest.json (versão 1.2.0)", "", "", "", "", "", "", "", ""]
+  ["Gerado por", "atualizarManualDasAbasSoproLife()  |  fonte: core/contracts/abas-manifest.json (versão 1.2.0, manifesto sha256 0f1c8122644a)", "", "", "", "", "", "", "", ""]
 ];
 
 /**

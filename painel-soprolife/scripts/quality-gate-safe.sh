@@ -42,6 +42,7 @@ run "node --check js/operational-brain.js"   node --check painel-soprolife/js/op
 run "node --check js/daily-briefing.js"      node --check painel-soprolife/js/daily-briefing.js
 run "node --check js/today-actions.js"       node --check painel-soprolife/js/today-actions.js
 run "node --check js/espirometria-financeiro.js" node --check painel-soprolife/js/espirometria-financeiro.js
+run "node --check js/marketing-freshness.js" node --check painel-soprolife/js/marketing-freshness.js
 
 secao "2/10 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
@@ -98,6 +99,20 @@ run "test-normalizacao (datas/IDs/enums)" python3 painel-soprolife/scripts/test-
 run "test-reconciliar-historico (estados/privacidade)" python3 painel-soprolife/scripts/test-reconciliar-historico.py
 run "test-manual-abas (manifesto → .gs em dia)" python3 painel-soprolife/scripts/test-manual-abas.py
 run "generate-manual-abas --check" python3 painel-soprolife/scripts/generate-manual-abas-gs.py --check
+
+secao "8b/10 M14.3A.1 — contrato de frescor operacional (offline, clock injetado)"
+run "py_compile freshness_contract"        python3 -m py_compile painel-soprolife/scripts/freshness_contract.py
+run "py_compile read-marketing-seo-adc"    python3 -m py_compile painel-soprolife/scripts/read-marketing-seo-adc.py
+run "test-freshness-contract (Python)"     python3 painel-soprolife/scripts/test-freshness-contract.py
+run "test-marketing-freshness (painel JS)" node painel-soprolife/scripts/test-marketing-freshness.js
+run "test-systemd-units (sintaxe + sem segredo)" python3 painel-soprolife/scripts/test-systemd-units.py
+run "bash -n soprolife-operational-refresh"  bash -n painel-soprolife/scripts/soprolife-operational-refresh.sh
+run "bash -n install-operational-refresh"    bash -n painel-soprolife/scripts/install-operational-refresh.sh
+run "bash -n uninstall-operational-refresh"  bash -n painel-soprolife/scripts/uninstall-operational-refresh.sh
+run "json.tool freshness-contract.json" \
+  python3 -m json.tool painel-soprolife/core/contracts/freshness-contract.json
+run "json.tool manual-abas-status.json" \
+  python3 -m json.tool painel-soprolife/core/contracts/manual-abas-status.json
 
 secao "9/10 Git — whitespace e guard rails de staging"
 run "git diff --check" git diff --check

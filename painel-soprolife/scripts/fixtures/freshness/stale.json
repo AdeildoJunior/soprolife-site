@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "configured": true,
+    "schemaVersion": 2,
+    "generatedAt": "2026-07-01T09:00:00+00:00",
+    "lastAttemptAt": "2026-07-01T09:00:00+00:00",
+    "staleAfterHours": 26,
+    "periodStart": "2026-06-03",
+    "periodEnd": "2026-06-30",
+    "lookbackDays": 28,
+    "sources": { "searchConsole": true, "ga4": true },
+    "sourceStatus": {
+      "searchConsole": {
+        "sourceId": "search-console",
+        "sourceName": "Search Console",
+        "schemaVersion": 1,
+        "lastSuccessAt": "2026-07-01T09:00:00+00:00",
+        "lastAttemptAt": "2026-07-01T09:00:00+00:00",
+        "sourceDataThrough": "2026-06-30",
+        "status": "ok",
+        "errorCode": null,
+        "errorMessageSafe": null,
+        "sourceAvailable": true,
+        "authenticationRequired": false,
+        "publicationRequired": false,
+        "warnings": []
+      },
+      "ga4": {
+        "sourceId": "ga4",
+        "sourceName": "GA4",
+        "schemaVersion": 1,
+        "lastSuccessAt": "2026-07-01T09:00:00+00:00",
+        "lastAttemptAt": "2026-07-01T09:00:00+00:00",
+        "sourceDataThrough": "2026-06-30",
+        "status": "ok",
+        "errorCode": null,
+        "errorMessageSafe": null,
+        "sourceAvailable": true,
+        "authenticationRequired": false,
+        "publicationRequired": false,
+        "warnings": []
+      }
+    },
+    "safeToDisplay": true,
+    "containsPersonalData": false
+  },
+  "warnings": [],
+  "searchConsole": {
+    "totals": { "impressions": 900, "clicks": 30, "ctr": 0.033, "avgPosition": 14.1 }
+  },
+  "ga4": {
+    "totals": { "users": 70, "sessions": 95, "pageviews": 240 }
+  }
+}

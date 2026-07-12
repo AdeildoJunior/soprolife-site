@@ -1,0 +1,21 @@
+# SoproLife — Timer do frescor operacional (M14.3A.1)
+# PREPARADO, NÃO INSTALADO: só tem efeito após install-operational-refresh.sh
+# --apply + habilitação humana explícita.
+
+[Unit]
+Description=SoproLife — Timer do frescor operacional do painel
+Requires=soprolife-operational-refresh.service
+
+[Timer]
+# Aguarda o boot estabilizar (rede, credenciais montadas)
+OnBootSec=10min
+# Frequência razoável: dados de Marketing/SEO são diários; 6h dá 4 checagens
+# por dia sem martelar as APIs nem o journal
+OnUnitActiveSec=6h
+# Espalha o disparo para não coincidir com outros timers
+RandomizedDelaySec=10min
+# Recupera disparo perdido se a VPS estiver desligada no horário
+Persistent=true
+
+[Install]
+WantedBy=timers.target
