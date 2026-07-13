@@ -1,0 +1,11 @@
+{
+  "nome": "regex-com-texto-de-segredo",
+  "descricao": "Extra com literais regex cujo conteúdo PARECE segredo (apiToken/clientSecret/etc dentro de /.../), mas não é atribuição real — não pode disparar SEGREDO_SUSPEITO.",
+  "base": "canonico",
+  "remover": [],
+  "renomear": {},
+  "esperado": "BLOCKED",
+  "achados_esperados": ["EXTRA_NAO_PERMITIDO"],
+  "allow_extra": ["anotacoes-regex-sinteticas.gs"],
+  "allow_extra_torna_ready": true
+}

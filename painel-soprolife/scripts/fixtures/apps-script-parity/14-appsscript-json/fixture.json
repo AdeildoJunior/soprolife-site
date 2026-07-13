@@ -1,0 +1,11 @@
+{
+  "nome": "appsscript-json",
+  "descricao": "Exportação inclui appsscript.json sintético — informativo, não bloqueia.",
+  "base": "canonico",
+  "remover": [],
+  "renomear": {},
+  "esperado": "READY",
+  "achados_esperados": ["APPSSCRIPT_JSON"],
+  "allow_extra": [],
+  "allow_extra_torna_ready": false
+}

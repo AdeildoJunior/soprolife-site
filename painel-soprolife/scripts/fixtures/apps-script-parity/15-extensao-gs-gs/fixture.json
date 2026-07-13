@@ -1,0 +1,11 @@
+{
+  "nome": "extensao-gs-gs",
+  "descricao": "Arquivo remoto com dupla extensão .gs.gs (renomeação antiga no editor).",
+  "base": "canonico",
+  "remover": [],
+  "renomear": {},
+  "esperado": "BLOCKED",
+  "achados_esperados": ["EXTENSAO_GS_GS"],
+  "allow_extra": [],
+  "allow_extra_torna_ready": false
+}

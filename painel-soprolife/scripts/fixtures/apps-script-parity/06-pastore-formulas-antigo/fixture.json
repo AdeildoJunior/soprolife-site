@@ -1,0 +1,11 @@
+{
+  "nome": "pastore-formulas-antigo",
+  "descricao": "pastore-formulas.gs legado duplicando _PARCERIA_PASTORE_FORMULA_COLS e escrevendo fórmulas.",
+  "base": "canonico",
+  "remover": [],
+  "renomear": {},
+  "esperado": "BLOCKED",
+  "achados_esperados": ["NOME_PROIBIDO", "GLOBAL_DUPLICADO"],
+  "allow_extra": [],
+  "allow_extra_torna_ready": false
+}

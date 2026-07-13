@@ -1,0 +1,550 @@
+{
+  "manifesto": "apps-script-publication-manifest",
+  "versao": 1,
+  "descricao": "Manifesto canônico dos 9 arquivos .gs aprovados no Git para o projeto Apps Script do SoproLife Command Center. Fonte única para comparação com exportação remota e para o pacote de publicação manual. Determinístico: sem timestamp.",
+  "gerado_por": "painel-soprolife/scripts/generate-apps-script-publication-manifest.py",
+  "total_arquivos": 9,
+  "total_globais": 145,
+  "regras_publicacao": {
+    "ordem_publicacao": [
+      "contratos-canonicos.gs",
+      "command-center-api.gs",
+      "pastore-staging.gs",
+      "converter-lead-em-paciente.gs",
+      "sync-crm-pacientes.gs",
+      "organizar-leads-operacionais.gs",
+      "soprolife-sheets-template.gs",
+      "manual-das-abas.gs",
+      "limpar-leads-e-manual-abas.gs"
+    ],
+    "entrypoints_unicos": [
+      "doPost",
+      "doGet",
+      "onOpen",
+      "onEdit",
+      "_registrarAtendimentoPastore",
+      "_cvConverterLeadCore"
+    ],
+    "simbolos_proibidos": [
+      "_nextId",
+      "_reescreverAbaPacientes",
+      "_cvConjuntoTelefones",
+      "_conteudoManualAbas",
+      "onOpen_syncCRM"
+    ],
+    "funcoes_bloqueadas": {
+      "converterLeadSelecionadoSoproLife": "_CV_CONVERSAO_BLOQUEADA",
+      "_cvConverterLeadCore": "_CV_CONVERSAO_BLOQUEADA",
+      "sincronizarCRMPacientesSoproLife": "_SYNC_CRM_PACIENTES_BLOQUEADO",
+      "organizarLeadsOperacionaisSoproLife": "_OP_LEADS_BLOQUEADO"
+    },
+    "operacoes_destrutivas": [
+      "clearContents",
+      "deleteRow",
+      "deleteRows",
+      "deleteSheet"
+    ],
+    "operacoes_monitoradas": [
+      "clear",
+      "clearContents",
+      "deleteRow",
+      "deleteRows",
+      "deleteSheet",
+      "appendRow",
+      "insertSheet",
+      "setValue",
+      "setValues"
+    ],
+    "padroes_nome_proibido": [
+      "pastore-planilha",
+      "pastore-formulas",
+      "resumo-dashboard-auto",
+      "(^|[^a-z])old([^a-z]|$)",
+      "backup",
+      "c[oó]pia",
+      "copy",
+      "antig[ao]",
+      "(^|[^a-z0-9])v[0-9]+([^a-z0-9]|$)"
+    ]
+  },
+  "arquivos": [
+    {
+      "nome_apps_script": "command-center-api.gs",
+      "caminho_local": "painel-soprolife/apps-script/command-center-api.gs",
+      "classificacao": "api_web_app",
+      "obrigatorio": true,
+      "web_app": true,
+      "exige_nova_implantacao": true,
+      "estado": "operacional",
+      "bytes": 125657,
+      "linhas": 2871,
+      "sha256": "beacc6818ce2ed4e0e504a353d2b0ddb4766a07b891c5e98a5219cea1a251965",
+      "globais": [
+        "_ABAS_OPERACIONAIS",
+        "_ABAS_TECNICAS_OCULTAVEIS",
+        "_AUDIT_BUILD_VERSION_FALLBACK",
+        "_AUDIT_CAMPOS_PERMITIDOS",
+        "_AUDIT_VALOR_PRIVADO",
+        "_B2B_CONTATO_OPCIONAIS",
+        "_B2B_LEADS_CONVERTIDOS_CABECALHO_FALLBACK",
+        "_B2B_LOG_CONVERSOES_CABECALHO_FALLBACK",
+        "_CRM_CONTATOS_B2B_CABECALHO",
+        "_CRM_ETAPAS_OFICIAIS",
+        "_EF_CAMPOS_PROIBIDOS",
+        "_EF_FORMA_PAGAMENTO",
+        "_EF_LOCAL_ATENDIMENTO",
+        "_EF_ORIGEM_PRECO",
+        "_EF_STATUS_EXAME",
+        "_EF_STATUS_PAGAMENTO",
+        "_EF_VALOR_TABELA_PADRAO",
+        "_ERRO_CONTRATOS_AUSENTES",
+        "_FINANCEIRO_LANCAMENTOS_CABECALHO",
+        "_LEAD_COLUNAS_EXTRA_B2B",
+        "_LEAD_ETAPAS_B2B_TERMINAL",
+        "_LEAD_ETAPAS_CONVERSAO",
+        "_LEAD_ETAPAS_OFICIAIS",
+        "_LOG_AUDITORIA_CABECALHO",
+        "_SHEETS",
+        "_aplicarPlanoUpsert",
+        "_appendRowSemValidacao",
+        "_auditAcao",
+        "_auditSanitizeValor",
+        "_auditShortMeta",
+        "_buildRow",
+        "_camposSolicitados",
+        "_createClinicaB2B",
+        "_createConsulta",
+        "_createEspirometria",
+        "_createLead",
+        "_createPaciente",
+        "_ctDisponivel",
+        "_dedupLeadsConvertidos",
+        "_efServerNum",
+        "_ensureExtraColumns",
+        "_ensureFormulaColumns",
+        "_ensureLeadStageValidationAllows",
+        "_ensureSheetHeader",
+        "_ensureSheetSize",
+        "_err",
+        "_executarReorderTecnicas",
+        "_findRowByColumns",
+        "_findRowByIdColumn",
+        "_firstEmptyRowByHeaders",
+        "_getOrCreateSheet",
+        "_getSheetSemCriar",
+        "_getWorkbook",
+        "_inserirEventoClinicoIdempotente",
+        "_joinNotEmpty",
+        "_keyNorm",
+        "_lockScriptOuErro",
+        "_logAudit",
+        "_logConversaoLeads",
+        "_logEntry",
+        "_mirrorEtapaParaPcmso",
+        "_normalizeConsent",
+        "_nowBr",
+        "_ok",
+        "_organizarAba",
+        "_organizarAbasCommandCenter",
+        "_planReorderTecnicas",
+        "_registrarEspirometriaFinanceiro",
+        "_registrarInteracaoClinica",
+        "_registrarInteracaoPaciente",
+        "_required",
+        "_rowCompleteness",
+        "_setCellSemValidacao",
+        "_setValuesSemValidacao",
+        "_testCreatePaciente",
+        "_testLogAudit",
+        "_updateCrmClinicaEtapa",
+        "_updateLeadStage",
+        "_upsertContatoB2B",
+        "_vincularLeadAClinica",
+        "_writeCellVerified",
+        "_writeEtapaVerified",
+        "_writeRowSkippingColumnsSemValidacao",
+        "doPost"
+      ],
+      "entrypoints": [
+        {
+          "nome": "doPost",
+          "tipo": "web_app"
+        }
+      ],
+      "dependencias": {
+        "contratos-canonicos.gs": [
+          "CT_CONTRATOS_VERSAO",
+          "CT_REGISTROS",
+          "ctCamposPresentes",
+          "ctChaveIdempotenciaAcao",
+          "ctFingerprintDaLinha",
+          "ctFingerprintPayload",
+          "ctNovoIdServidor",
+          "ctPlanejarEscrita",
+          "ctPlanejarUpsert",
+          "ctValidarCabecalho",
+          "ctValidarDataComPrecisao"
+        ],
+        "converter-lead-em-paciente.gs": [
+          "_cvConverterLeadCore"
+        ],
+        "pastore-staging.gs": [
+          "_registrarAtendimentoPastore"
+        ]
+      },
+      "operacoes_escrita": {
+        "insertSheet": 1,
+        "setValue": 5,
+        "setValues": 2
+      }
+    },
+    {
+      "nome_apps_script": "contratos-canonicos.gs",
+      "caminho_local": "painel-soprolife/apps-script/contratos-canonicos.gs",
+      "classificacao": "contratos_fail_closed",
+      "obrigatorio": true,
+      "web_app": true,
+      "exige_nova_implantacao": true,
+      "estado": "operacional",
+      "bytes": 25280,
+      "linhas": 553,
+      "sha256": "cada4de8d33c2874a32a1d88e50213a3a8e601242f93831332e33d24195a13f6",
+      "globais": [
+        "CT_CONTRATOS_VERSAO",
+        "CT_IDEMPOTENCY_RX",
+        "CT_ID_LEGADO_PADROES",
+        "CT_PRECISOES",
+        "CT_REGISTROS",
+        "_ctHeadersLimpos",
+        "_ctSha256Hex",
+        "ctCamposPresentes",
+        "ctChaveIdempotenciaAcao",
+        "ctFingerprintDaLinha",
+        "ctFingerprintPayload",
+        "ctIdEhLegadoConhecido",
+        "ctIdempotencyKeySegura",
+        "ctNovoIdServidor",
+        "ctParseDataPrecisao",
+        "ctPlanejarEscrita",
+        "ctPlanejarUpsert",
+        "ctSerializacaoCanonica",
+        "ctValidarCabecalho",
+        "ctValidarDataComPrecisao"
+      ],
+      "entrypoints": [
+        {
+          "nome": "ctCamposPresentes",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctChaveIdempotenciaAcao",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctFingerprintDaLinha",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctFingerprintPayload",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctIdEhLegadoConhecido",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctIdempotencyKeySegura",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctNovoIdServidor",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctParseDataPrecisao",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctPlanejarEscrita",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctPlanejarUpsert",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctSerializacaoCanonica",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctValidarCabecalho",
+          "tipo": "manual"
+        },
+        {
+          "nome": "ctValidarDataComPrecisao",
+          "tipo": "manual"
+        }
+      ],
+      "dependencias": {},
+      "operacoes_escrita": {}
+    },
+    {
+      "nome_apps_script": "pastore-staging.gs",
+      "caminho_local": "painel-soprolife/apps-script/pastore-staging.gs",
+      "classificacao": "writer_staging_pastore",
+      "obrigatorio": true,
+      "web_app": true,
+      "exige_nova_implantacao": true,
+      "estado": "operacional",
+      "bytes": 11052,
+      "linhas": 207,
+      "sha256": "3550f5cbe3609fe89dd7f25d7ae3c288135c581c7a4dbb9062d63e159d014e6f",
+      "globais": [
+        "_PARCERIA_PASTORE_ATENDIMENTOS_CABECALHO",
+        "_PARCERIA_PASTORE_FORMULA_COLS",
+        "_registrarAtendimentoPastore",
+        "_testRegistrarAtendimentoPastore"
+      ],
+      "entrypoints": [],
+      "dependencias": {
+        "command-center-api.gs": [
+          "_SHEETS",
+          "_auditAcao",
+          "_buildRow",
+          "_ensureFormulaColumns",
+          "_ensureSheetHeader",
+          "_err",
+          "_firstEmptyRowByHeaders",
+          "_getOrCreateSheet",
+          "_logEntry",
+          "_ok",
+          "_required",
+          "_writeRowSkippingColumnsSemValidacao",
+          "doPost"
+        ],
+        "contratos-canonicos.gs": [
+          "ctValidarDataComPrecisao"
+        ]
+      },
+      "operacoes_escrita": {}
+    },
+    {
+      "nome_apps_script": "converter-lead-em-paciente.gs",
+      "caminho_local": "painel-soprolife/apps-script/converter-lead-em-paciente.gs",
+      "classificacao": "stub_seguranca",
+      "obrigatorio": true,
+      "web_app": true,
+      "exige_nova_implantacao": true,
+      "estado": "stub",
+      "bytes": 3690,
+      "linhas": 76,
+      "sha256": "0c5f15764c2db2e86380e85257bf71520fc2c969e3b688438a1ddc48deb81402",
+      "globais": [
+        "_CV_CONVERSAO_BLOQUEADA",
+        "_cvConverterLeadCore",
+        "converterLeadSelecionadoSoproLife",
+        "onEditConversaoLeadsSoproLife"
+      ],
+      "entrypoints": [
+        {
+          "nome": "converterLeadSelecionadoSoproLife",
+          "tipo": "manual"
+        },
+        {
+          "nome": "onEditConversaoLeadsSoproLife",
+          "tipo": "trigger_nomeado"
+        }
+      ],
+      "dependencias": {},
+      "operacoes_escrita": {}
+    },
+    {
+      "nome_apps_script": "sync-crm-pacientes.gs",
+      "caminho_local": "painel-soprolife/apps-script/sync-crm-pacientes.gs",
+      "classificacao": "stub_seguranca",
+      "obrigatorio": true,
+      "web_app": false,
+      "exige_nova_implantacao": false,
+      "estado": "stub",
+      "bytes": 3390,
+      "linhas": 61,
+      "sha256": "41e16afde4a5ff030bf8f6ba2381d0c9f74ad31b39a56c69ef9c968684414e8e",
+      "globais": [
+        "_SYNC_CRM_PACIENTES_BLOQUEADO",
+        "sincronizarCRMPacientesSoproLife"
+      ],
+      "entrypoints": [
+        {
+          "nome": "sincronizarCRMPacientesSoproLife",
+          "tipo": "manual"
+        }
+      ],
+      "dependencias": {},
+      "operacoes_escrita": {}
+    },
+    {
+      "nome_apps_script": "organizar-leads-operacionais.gs",
+      "caminho_local": "painel-soprolife/apps-script/organizar-leads-operacionais.gs",
+      "classificacao": "stub_seguranca",
+      "obrigatorio": true,
+      "web_app": false,
+      "exige_nova_implantacao": false,
+      "estado": "stub",
+      "bytes": 2427,
+      "linhas": 46,
+      "sha256": "8de7e6a78bc0ecee6290bf3a3ea1567b52234ae77e6937332a2b037138639287",
+      "globais": [
+        "_OP_LEADS_BLOQUEADO",
+        "organizarLeadsOperacionaisSoproLife"
+      ],
+      "entrypoints": [
+        {
+          "nome": "organizarLeadsOperacionaisSoproLife",
+          "tipo": "manual"
+        }
+      ],
+      "dependencias": {},
+      "operacoes_escrita": {}
+    },
+    {
+      "nome_apps_script": "soprolife-sheets-template.gs",
+      "caminho_local": "painel-soprolife/apps-script/soprolife-sheets-template.gs",
+      "classificacao": "instalador_e_triggers",
+      "obrigatorio": true,
+      "web_app": false,
+      "exige_nova_implantacao": false,
+      "estado": "instalador",
+      "bytes": 16618,
+      "linhas": 377,
+      "sha256": "8fee34d7cd11404ba1f72b5b09ecb9946e3b5464197d5dbef8e52205a1d5df8e",
+      "globais": [
+        "ETAPA_PCMSO_VALORES",
+        "_colLetter",
+        "adicionarColunaEtapaPcmso",
+        "atualizarResumoDashboardSoproLife",
+        "onEdit",
+        "onOpen",
+        "setupSoproLifeSheetsLite",
+        "setupValidacoesSoproLife"
+      ],
+      "entrypoints": [
+        {
+          "nome": "adicionarColunaEtapaPcmso",
+          "tipo": "manual"
+        },
+        {
+          "nome": "atualizarResumoDashboardSoproLife",
+          "tipo": "manual"
+        },
+        {
+          "nome": "setupSoproLifeSheetsLite",
+          "tipo": "manual"
+        },
+        {
+          "nome": "setupValidacoesSoproLife",
+          "tipo": "manual"
+        },
+        {
+          "nome": "onEdit",
+          "tipo": "trigger_simples"
+        },
+        {
+          "nome": "onOpen",
+          "tipo": "trigger_simples"
+        }
+      ],
+      "dependencias": {},
+      "operacoes_escrita": {
+        "clear": 1,
+        "insertSheet": 2,
+        "setValue": 1,
+        "setValues": 2
+      }
+    },
+    {
+      "nome_apps_script": "manual-das-abas.gs",
+      "caminho_local": "painel-soprolife/apps-script/manual-das-abas.gs",
+      "classificacao": "documentacao_gerada",
+      "obrigatorio": true,
+      "web_app": false,
+      "exige_nova_implantacao": false,
+      "estado": "gerado",
+      "bytes": 71732,
+      "linhas": 773,
+      "sha256": "dc89b2a4fd7f8ca3c735025627188bf0cfded702037cf95eb7fdb05a8dd6be32",
+      "globais": [
+        "_MA_ABA",
+        "_MA_LINHAS",
+        "_maAlertaSeguro",
+        "atualizarManualDasAbasSoproLife",
+        "onOpen_manualAbas"
+      ],
+      "entrypoints": [
+        {
+          "nome": "atualizarManualDasAbasSoproLife",
+          "tipo": "manual"
+        },
+        {
+          "nome": "onOpen_manualAbas",
+          "tipo": "trigger_nomeado"
+        }
+      ],
+      "dependencias": {},
+      "operacoes_escrita": {
+        "clear": 1,
+        "insertSheet": 1,
+        "setValues": 1
+      }
+    },
+    {
+      "nome_apps_script": "limpar-leads-e-manual-abas.gs",
+      "caminho_local": "painel-soprolife/apps-script/limpar-leads-e-manual-abas.gs",
+      "classificacao": "manutencao_manual",
+      "obrigatorio": true,
+      "web_app": false,
+      "exige_nova_implantacao": false,
+      "estado": "manutencao_legado_compativel",
+      "bytes": 11755,
+      "linhas": 288,
+      "sha256": "7ff286f16f12e521d7bcc3aa33a146abcaa136a06cd150e96138c70f895f1268",
+      "globais": [
+        "_DROP_CANAL",
+        "_DROP_ETAPA",
+        "_DROP_ORIGEM",
+        "_DROP_SERVICO_INTERESSE",
+        "_LEADS_ABA",
+        "_MANUAL_ABA",
+        "_NOTAS_LEADS",
+        "_TERMOS_DEMO",
+        "_adicionarNotasCabecalhosLeads",
+        "_aplicarDropdown",
+        "_criarBackupLeads",
+        "_criarOuAtualizarManualAbas",
+        "_padronizarDropdownsLeads",
+        "mostrarAlertaSeguroSoproLife",
+        "onOpen_limparLeads",
+        "organizarLeadsEManualPlanilhasSoproLife"
+      ],
+      "entrypoints": [
+        {
+          "nome": "mostrarAlertaSeguroSoproLife",
+          "tipo": "manual"
+        },
+        {
+          "nome": "organizarLeadsEManualPlanilhasSoproLife",
+          "tipo": "manual"
+        },
+        {
+          "nome": "onOpen_limparLeads",
+          "tipo": "trigger_nomeado"
+        }
+      ],
+      "dependencias": {
+        "manual-das-abas.gs": [
+          "atualizarManualDasAbasSoproLife"
+        ]
+      },
+      "operacoes_escrita": {}
+    }
+  ]
+}

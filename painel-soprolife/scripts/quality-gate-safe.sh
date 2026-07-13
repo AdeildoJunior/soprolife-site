@@ -114,6 +114,26 @@ run "json.tool freshness-contract.json" \
 run "json.tool manual-abas-status.json" \
   python3 -m json.tool painel-soprolife/core/contracts/manual-abas-status.json
 
+secao "8c/10 M14.3A.2 — Apps Script parity (kit offline de publicação)"
+run "py_compile apps_script_parity (lib)" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile painel-soprolife/scripts/apps_script_parity.py
+run "py_compile generate-apps-script-publication-manifest" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile painel-soprolife/scripts/generate-apps-script-publication-manifest.py
+run "py_compile compare-apps-script-export" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile painel-soprolife/scripts/compare-apps-script-export.py
+run "py_compile test-apps-script-parity" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile painel-soprolife/scripts/test-apps-script-parity.py
+run "bash -n prepare-apps-script-publication-pack" \
+  bash -n painel-soprolife/scripts/prepare-apps-script-publication-pack.sh
+run "json.tool apps-script-publication-manifest.json" \
+  python3 -m json.tool painel-soprolife/core/contracts/apps-script-publication-manifest.json
+run "json.tool apps-script-remote-export.schema.json" \
+  python3 -m json.tool painel-soprolife/core/contracts/apps-script-remote-export.schema.json
+run "manifesto --check (Git → manifesto em dia)" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 painel-soprolife/scripts/generate-apps-script-publication-manifest.py --check
+run "test-apps-script-parity (gerador+comparador+pacote+fixtures+segredos)" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 painel-soprolife/scripts/test-apps-script-parity.py
+
 secao "9/10 Git — whitespace e guard rails de staging"
 run "git diff --check" git diff --check
 

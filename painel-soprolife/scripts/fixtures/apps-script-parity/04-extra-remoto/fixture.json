@@ -1,0 +1,11 @@
+{
+  "nome": "extra-remoto",
+  "descricao": "Arquivo remoto extra inofensivo, fora da lista canônica.",
+  "base": "canonico",
+  "remover": [],
+  "renomear": {},
+  "esperado": "BLOCKED",
+  "achados_esperados": ["EXTRA_NAO_PERMITIDO"],
+  "allow_extra": ["anotacoes-operacionais-sinteticas.gs"],
+  "allow_extra_torna_ready": true
+}

@@ -1,0 +1,11 @@
+{
+  "nome": "dopost-duplicado",
+  "descricao": "Segundo doPost em arquivo extra — coexistência insegura no Web App.",
+  "base": "canonico",
+  "remover": [],
+  "renomear": {},
+  "esperado": "BLOCKED",
+  "achados_esperados": ["ENTRYPOINT_DUPLICADO", "EXTRA_NAO_PERMITIDO"],
+  "allow_extra": [],
+  "allow_extra_torna_ready": false
+}

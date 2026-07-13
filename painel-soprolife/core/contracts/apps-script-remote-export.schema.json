@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "soprolife/apps-script-remote-export.schema.json",
+  "title": "SoproLife — contrato da exportação manual do projeto Apps Script remoto",
+  "description": "Formato do DIRETÓRIO de exportação manual do projeto Apps Script remoto, consumido por painel-soprolife/scripts/compare-apps-script-export.py. A exportação é feita por um humano (copiar/colar do editor ou ferramenta externa) e fica FORA do Git — nunca commitá-la. Este schema descreve: (1) os arquivos aceitos no diretório; (2) o formato opcional do remote-inventory.json. Arquivos de código podem vir como .gs (editor) ou .js (ferramenta externa); o comparador normaliza removendo UMA extensão final e preservando o nome lógico — 'x.gs' e 'x.js' são o mesmo arquivo lógico 'x'; 'pastore-planilha.gs.gs' normaliza para o nome lógico 'pastore-planilha.gs', denunciando a dupla extensão. É PROIBIDO colocar neste diretório (e em qualquer lugar do Git): .clasp.json, Script ID, deployment ID, URL /exec, token, credencial ou dado de paciente.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "arquivos_de_codigo": {
+      "description": "Todo arquivo *.gs ou *.js no nível raiz do diretório exportado. Conteúdo: texto UTF-8 idêntico ao que está salvo no editor Apps Script (byte a byte; atenção a quebras de linha CRLF introduzidas por copiar/colar no Windows).",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "nome": {
+            "type": "string",
+            "pattern": "^[^/\\\\]+\\.(gs|js)$",
+            "description": "Nome do arquivo como aparece no editor remoto, com extensão .gs ou .js."
+          },
+          "nome_logico": {
+            "type": "string",
+            "description": "Nome sem a extensão final (.gs/.js), calculado pelo comparador — não é um arquivo real."
+          }
+        },
+        "required": ["nome"]
+      }
+    },
+    "appsscript_json": {
+      "description": "Opcional: cópia do manifesto appsscript.json do projeto remoto (Configurações → mostrar manifesto). Informativo — o comparador reporta timeZone e webapp, não bloqueia por presença.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeZone": { "type": "string" },
+        "exceptionLogging": { "type": "string" },
+        "runtimeVersion": { "type": "string" },
+        "webapp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "access": { "type": "string" },
+            "executeAs": { "type": "string" }
+          }
+        },
+        "oauthScopes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "remote_inventory": {
+      "description": "Opcional: remote-inventory.json preenchido À MÃO com o inventário não sensível do projeto remoto (schemaVersion implícito no contrato = este arquivo). NUNCA incluir valores de propriedades (propertyValues), Script ID, deployment ID, URL de implantação, token, segredo ou credencial — só os campos estruturais explicitamente listados abaixo são aceitos; qualquer outro campo é rejeitado.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "coletado_em": {
+          "type": "string",
+          "description": "exportedAt: data/hora da coleta manual, ex.: 2026-07-12 21:00 America/Sao_Paulo."
+        },
+        "arquivos_visiveis_no_editor": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "logicalFiles: nomes de arquivo exatamente como aparecem no editor, na ordem exibida."
+        },
+        "triggers": {
+          "type": "array",
+          "description": "Acionadores instaláveis listados em Triggers (Relógio) — os simples (onOpen/onEdit) não aparecem lá. Aceita somente descrição estrutural segura (handlerFunction/eventType/sourceType/enabled/notesSafe) — nunca IDs de trigger.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "funcao": { "type": "string", "description": "handlerFunction" },
+              "evento": { "type": "string", "description": "eventType — ex.: ao abrir, ao editar, tempo" },
+              "origem": { "type": "string", "description": "sourceType — ex.: planilha, tempo" },
+              "ativo": { "type": "boolean", "description": "enabled" },
+              "observacoes": { "type": "string", "description": "notesSafe — nunca segredo/ID/URL" }
+            },
+            "required": ["funcao", "evento"]
+          }
+        },
+        "propriedades_do_script_nomes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "propertyNames: SOMENTE os nomes das chaves de Script Properties (ex.: API_TOKEN, BUILD_VERSION). NUNCA os valores (propertyValues é proibido em qualquer campo deste contrato)."
+        },
+        "implantacao": {
+          "type": "object",
+          "description": "Metadados NÃO sensíveis da implantação ativa. Sem deployment ID e sem URL.",
+          "additionalProperties": false,
+          "properties": {
+            "versao_ativa": { "type": ["integer", "string"], "description": "deploymentVersion" },
+            "descricao_da_versao": { "type": "string", "description": "deploymentDescription" },
+            "executar_como": { "type": "string" },
+            "quem_pode_acessar": { "type": "string" }
+          }
+        },
+        "observacoes": { "type": "string", "description": "notesSafe — nunca segredo/ID/URL" }
+      },
+      "required": ["coletado_em", "arquivos_visiveis_no_editor"]
+    }
+  },
+  "x-proibido-no-diretorio": [
+    ".clasp.json",
+    "Script ID",
+    "deployment ID",
+    "URL /exec ou script.google.com/macros",
+    "token / credencial / chave privada",
+    "qualquer dado de paciente ou PII"
+  ],
+  "x-consumidor": "painel-soprolife/scripts/compare-apps-script-export.py",
+  "x-referencia": "painel-soprolife/docs/m14-3a2-paridade-apps-script.md"
+}

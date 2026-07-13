@@ -1,0 +1,11 @@
+{
+  "nome": "arquivo-js",
+  "descricao": "Exportação por ferramenta externa: um canônico vem como .js com o mesmo conteúdo.",
+  "base": "canonico",
+  "remover": [],
+  "renomear": {"organizar-leads-operacionais.gs": "organizar-leads-operacionais.js"},
+  "esperado": "READY",
+  "achados_esperados": ["ARQUIVO_IDENTICO"],
+  "allow_extra": [],
+  "allow_extra_torna_ready": false
+}

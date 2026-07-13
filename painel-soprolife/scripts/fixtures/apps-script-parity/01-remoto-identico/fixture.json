@@ -1,0 +1,11 @@
+{
+  "nome": "remoto-identico",
+  "descricao": "Exportação remota byte a byte igual aos 9 canônicos do Git.",
+  "base": "canonico",
+  "remover": [],
+  "renomear": {},
+  "esperado": "READY",
+  "achados_esperados": ["ARQUIVO_IDENTICO"],
+  "allow_extra": [],
+  "allow_extra_torna_ready": false
+}

@@ -1,0 +1,11 @@
+{
+  "nome": "hash-divergente",
+  "descricao": "organizar-leads-operacionais.gs remoto com conteúdo diferente do Git (marcador de bloqueio preservado).",
+  "base": "canonico",
+  "remover": [],
+  "renomear": {},
+  "esperado": "BLOCKED",
+  "achados_esperados": ["HASH_DIVERGENTE"],
+  "allow_extra": [],
+  "allow_extra_torna_ready": false
+}

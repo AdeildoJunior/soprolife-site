@@ -1,0 +1,11 @@
+{
+  "nome": "canonico-ausente",
+  "descricao": "Projeto remoto sem sync-crm-pacientes.gs (stub de segurança ausente).",
+  "base": "canonico",
+  "remover": ["sync-crm-pacientes.gs"],
+  "renomear": {},
+  "esperado": "BLOCKED",
+  "achados_esperados": ["CANONICO_AUSENTE"],
+  "allow_extra": [],
+  "allow_extra_torna_ready": false
+}
