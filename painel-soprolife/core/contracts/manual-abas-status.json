@@ -5,9 +5,9 @@
   "generationSha256": "dc89b2a4fd7f8ca3c735025627188bf0cfded702037cf95eb7fdb05a8dd6be32",
   "generatedAt": "2026-07-12T22:56:36+00:00",
   "publication": {
-    "state": "publication_pending",
-    "publishedAt": null,
-    "publishedSha256": null,
-    "note": "Código local mais novo que o último estado conhecido do Google Sheets. Executar no Apps Script e registrar com --mark-published."
+    "state": "published_confirmed_by_human",
+    "publishedAt": "2026-07-13T00:41:00+00:00",
+    "publishedSha256": "dc89b2a4fd7f8ca3c735025627188bf0cfded702037cf95eb7fdb05a8dd6be32",
+    "note": "Atestado HUMANO: registrado após execução real de atualizarManualDasAbasSoproLife() no editor do Apps Script. Nenhuma verificação remota automática foi feita."
   }
 }
