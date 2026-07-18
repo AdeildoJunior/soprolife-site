@@ -1,0 +1,23 @@
+# PostgreSQL 16 local para o Núcleo M15.
+# Uso: POSTGRES_PASSWORD=... docker compose up -d
+# A API NÃO roda em container nesta fase — apenas o banco.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: soprolife-m15-postgres
+    environment:
+      POSTGRES_DB: soprolife_m15
+      POSTGRES_USER: soprolife
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no ambiente ou .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - m15_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U soprolife -d soprolife_m15"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  m15_pgdata:

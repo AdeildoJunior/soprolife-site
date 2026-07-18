@@ -1,0 +1,6 @@
+exame_id,paciente_id,nome,data_exame,status,local,responsavel,observacao
+ESP-0001,PAC-0001,Paciente Sintetico 001,10/01/2026,Realizado,Domiciliar,Equipe,Fixture sintética
+ESP-0002,PAC-0002,Paciente Sintetico 002,02/2026,Realizado,Cowork,Equipe,Data incompleta
+ESP-0003,,Paciente Novo Espiro 001,20/02/2026,Realizado,Domiciliar,,Sem paciente_id cria pessoa
+ESP-0004,,,05/03/2026,Realizado,,,Sem paciente deve rejeitar
+ESP-0005,PAC-0001,Paciente Sintetico 001,12/04/2026,Aguardando,Empresa PCMSO ocupacional,,PCMSO deve rejeitar

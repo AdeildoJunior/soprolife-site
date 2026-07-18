@@ -1,0 +1,10 @@
+# Núcleo M15 — nunca commitar ambiente, banco local ou relatórios com dados
+.venv/
+var/
+*.db
+*.db-journal
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+!.env.example

@@ -46,3 +46,7 @@ painel-soprolife/**/*.secret.json
 
 # Private equipment/documents archive — never commit originals
 painel-soprolife/data-private/documentos/
+
+# Exceção: o TEMPLATE .env.example do núcleo M15 é versionado (sem segredos);
+# arquivos .env reais continuam bloqueados pela regra .env.* acima.
+!painel-soprolife/nucleo-m15/.env.example

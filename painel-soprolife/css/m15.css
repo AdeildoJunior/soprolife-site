@@ -1,0 +1,282 @@
+/* Núcleo Operacional M15 (experimental) — estilos isolados com prefixo m15-.
+   Não altera nenhuma classe existente do painel. */
+
+.m15-badge-exp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, var(--warning, #e7a93f), #d98c1e);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.m15-badge-sint {
+  display: inline-flex;
+  align-items: center;
+  background: var(--soft, #eef6f8);
+  color: var(--teal-dark, #0f8f83);
+  border: 1px dashed var(--teal, #1db7a6);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.m15-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.m15-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--navy, #0b1f36);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.m15-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 16px;
+}
+
+.m15-tab {
+  border: 1px solid var(--line, #dbe5ef);
+  background: var(--card, #fff);
+  color: var(--muted, #6d7b8a);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.m15-tab:hover { border-color: var(--teal, #1db7a6); color: var(--teal-dark, #0f8f83); }
+
+.m15-tab.active {
+  background: var(--navy, #0b1f36);
+  border-color: var(--navy, #0b1f36);
+  color: #fff;
+}
+
+.m15-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.m15-card {
+  background: var(--card, #fff);
+  border: 1px solid var(--line, #dbe5ef);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-xs, 0 1px 4px rgba(15, 34, 57, .05));
+}
+
+.m15-card .m15-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--muted, #6d7b8a);
+  margin-bottom: 6px;
+}
+
+.m15-card .m15-card-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--navy, #0b1f36);
+}
+
+.m15-card.m15-alerta .m15-card-value { color: var(--danger, #e45c64); }
+.m15-card.m15-hoje .m15-card-value { color: var(--warning, #e7a93f); }
+.m15-card.m15-ok .m15-card-value { color: var(--success, #16a37d); }
+
+.m15-panel {
+  background: var(--card, #fff);
+  border: 1px solid var(--line, #dbe5ef);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-xs, 0 1px 4px rgba(15, 34, 57, .05));
+}
+
+.m15-panel h3 {
+  margin: 0 0 10px;
+  font-size: 14.5px;
+  color: var(--navy, #0b1f36);
+}
+
+.m15-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.m15-filtros select,
+.m15-filtros input,
+.m15-form select,
+.m15-form input,
+.m15-form textarea {
+  border: 1px solid var(--line, #dbe5ef);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--text, #132033);
+  background: #fff;
+}
+
+.m15-filtros select:focus,
+.m15-form input:focus { outline: 2px solid var(--teal, #1db7a6); outline-offset: 1px; }
+
+.m15-table-wrap { overflow-x: auto; }
+
+.m15-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.m15-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--muted, #6d7b8a);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line, #dbe5ef);
+  white-space: nowrap;
+}
+
+.m15-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--soft, #eef6f8);
+  color: var(--text, #132033);
+  vertical-align: top;
+}
+
+.m15-table tr:hover td { background: var(--soft, #eef6f8); }
+
+.m15-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--soft, #eef6f8);
+  color: var(--navy, #0b1f36);
+  white-space: nowrap;
+}
+
+.m15-pill.atrasado { background: #fdecec; color: var(--danger, #e45c64); }
+.m15-pill.retomar_hoje { background: #fdf3e0; color: #b57708; }
+.m15-pill.retomar_semana { background: #e7f6f4; color: var(--teal-dark, #0f8f83); }
+.m15-pill.concluido, .m15-pill.Realizado, .m15-pill.Realizada,
+.m15-pill.Recebido, .m15-pill.ativa { background: #e5f5ef; color: var(--success, #16a37d); }
+.m15-pill.Cancelado, .m15-pill.Cancelada { background: #fdecec; color: var(--danger, #e45c64); }
+
+.m15-empty {
+  text-align: center;
+  color: var(--muted, #6d7b8a);
+  font-size: 13px;
+  padding: 26px 10px;
+  border: 1px dashed var(--line, #dbe5ef);
+  border-radius: 12px;
+}
+
+.m15-btn {
+  border: none;
+  border-radius: 10px;
+  background: var(--navy, #0b1f36);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: opacity .15s ease;
+}
+
+.m15-btn:hover { opacity: .88; }
+.m15-btn.m15-btn-sec { background: var(--soft, #eef6f8); color: var(--navy, #0b1f36); }
+.m15-btn.m15-btn-wa { background: #1fae54; display: inline-flex; align-items: center; gap: 6px; }
+.m15-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.m15-aviso {
+  background: #fdf3e0;
+  border: 1px solid #edd9ac;
+  color: #8a5c07;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.m15-erro {
+  background: #fdecec;
+  border: 1px solid #f2c4c7;
+  color: #a33840;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.m15-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.m15-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted, #6d7b8a);
+}
+
+.m15-form .m15-form-full { grid-column: 1 / -1; }
+
+.m15-token-box {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.m15-token-box input { flex: 1; min-width: 220px; }
+
+.m15-muted { color: var(--muted, #6d7b8a); font-size: 12px; }
+
+.m15-mensagem-preview {
+  background: var(--soft, #eef6f8);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  margin: 8px 0;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  .m15-cards { grid-template-columns: repeat(2, 1fr); }
+  .m15-form { grid-template-columns: 1fr; }
+}

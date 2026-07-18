@@ -1,0 +1,8 @@
+id,nome,telefone,email,origem,canal,data_primeiro_contato,modalidade,responsavel,observacao
+L-0001,Lead Sintetico 001,(21) 0000-1001,lead001@exemplo.test,instagram,direct,05/03/2026,domiciliar,Equipe,Fixture sintética
+L-0002,Lead Sintetico 002,(21) 0000-1002,,google,site,06/2026,cowork,Equipe,Data incompleta mes/ano
+L-0003,Lead Sintetico 003,,,indicacao,whatsapp,dezembro/2026,clinica parceira,,Data com nome de mês
+L-0004,,2100001004,,instagram,direct,10/03/2026,,,Sem nome deve rejeitar
+L-0005,Lead Sintetico 005,(21) 0000-1001,,empresa,email,2026-04,PCMSO empresa ocupacional,,PCMSO deve rejeitar
+L-0002,Lead Sintetico 002,(21) 0000-1002,,google,site,06/2026,cowork,Equipe,Duplicado no arquivo
+L-0006,Lead Sintetico 006,(21) 0000-1001,,site,formulario,2026,domiciliar,,Telefone igual ao L-0001 gera candidato

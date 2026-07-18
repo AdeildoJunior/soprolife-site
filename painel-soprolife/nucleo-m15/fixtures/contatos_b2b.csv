@@ -1,0 +1,5 @@
+id,clinica,contato,cargo,telefone,email,cidade,observacao
+B2B-0001,Clinica Sintetica Alfa,Contato Alfa 001,Coordenação,(21) 0000-3001,alfa@exemplo.test,Rio de Janeiro,Fixture sintética
+B2B-0002,Clinica Sintetica Beta,,,,,Niterói,Sem contato nomeado
+B2B-0003,Empresa PCMSO Ocupacional Ltda,Contato PCMSO,,,,Rio de Janeiro,PCMSO deve rejeitar
+B2B-0004,,Contato Sem Clinica,,,,,Sem clínica deve rejeitar

@@ -1,0 +1,4 @@
+consulta_id,paciente_id,nome,data_consulta,profissional,status,observacao
+CON-0001,PAC-0001,Paciente Sintetico 001,15/01/2026,Dr. Exemplo,Realizada,Fixture sintética
+CON-0002,,Paciente Novo Consulta 001,03/2026,Dra. Exemplo,Realizada,Data incompleta
+CON-0003,,,10/02/2026,,Realizada,Sem paciente deve rejeitar

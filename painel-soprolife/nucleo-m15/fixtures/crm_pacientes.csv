@@ -1,0 +1,5 @@
+paciente_id,nome,telefone,email,data_nascimento,observacao
+PAC-0001,Paciente Sintetico 001,(21) 0000-2001,pac001@exemplo.test,15/05/1980,Fixture sintética
+PAC-0002,Paciente Sintetico 002,(21) 0000-2002,,03/1975,Nascimento só mês/ano
+PAC-0003,Paciente Sintetico 003,,,,Sem contato
+PAC-0004,,2100002004,,,Sem nome deve rejeitar
