@@ -14,9 +14,13 @@ readonly ENV_FILE="/opt/soprolife/secrets/m15.env"
 readonly VENV_DIR="/opt/soprolife/venvs/m15"
 readonly UNIT_SOURCE="$EXPECTED_REPO/painel-soprolife/systemd/soprolife-m15-api.service"
 readonly UNIT_TARGET="/etc/systemd/system/soprolife-m15-api.service"
+readonly LOOPBACK_UNIT_SOURCE="$EXPECTED_REPO/painel-soprolife/systemd/soprolife-painel-loopback.service"
+readonly LOOPBACK_UNIT_TARGET="/etc/systemd/system/soprolife-painel-loopback.service"
+readonly HARDENING_LIB="$M15_DIR/scripts/lib-deploy-hardening.sh"
 readonly DB_ROLE="soprolife_m15"
 readonly DB_NAME="soprolife_m15"
-readonly STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+readonly STAMP
 readonly BACKUP_DIR="/opt/soprolife/backups/m15/$STAMP"
 TEMP_ENV=""
 TEMP_BUNDLE=""
@@ -46,11 +50,15 @@ on_error() {
   trap - ERR
   if (( MUTATION_STARTED )); then
     sudo systemctl stop soprolife-m15-api.service >/dev/null 2>&1 || true
-    sudo journalctl -u soprolife-m15-api.service --since "@$(( $(date +%s) - 1800 ))" \
-      --no-pager >"/tmp/soprolife-m15-failure-$STAMP.log" 2>/dev/null || true
-    sudo install -m 0600 "/tmp/soprolife-m15-failure-$STAMP.log" \
-      "$BACKUP_DIR/failure-journal.log" 2>/dev/null || true
-    rm -f -- "/tmp/soprolife-m15-failure-$STAMP.log"
+    local unit
+    for unit in soprolife-m15-api soprolife-painel-loopback; do
+      # shellcheck disable=SC2024  # redirect intencional do usuário atual em /tmp
+      sudo journalctl -u "$unit.service" --since "@$(( $(date +%s) - 1800 ))" \
+        --no-pager >"/tmp/soprolife-m15-failure-$unit-$STAMP.log" 2>/dev/null || true
+      sudo install -m 0600 "/tmp/soprolife-m15-failure-$unit-$STAMP.log" \
+        "$BACKUP_DIR/failure-journal-$unit.log" 2>/dev/null || true
+      rm -f -- "/tmp/soprolife-m15-failure-$unit-$STAMP.log"
+    done
   fi
   echo "" >&2
   echo "IMPLANTAÇÃO INTERROMPIDA (código $exit_code). Banco e backup foram preservados." >&2
@@ -72,6 +80,10 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || fail "fora de um wor
 [[ "$(readlink -f "$REPO_ROOT")" == "$EXPECTED_REPO" ]] || \
   fail "repositório deve estar em $EXPECTED_REPO"
 cd "$REPO_ROOT"
+
+[[ -f "$HARDENING_LIB" ]] || fail "biblioteca de hardening ausente: $HARDENING_LIB"
+# shellcheck source=lib-deploy-hardening.sh
+source "$HARDENING_LIB"
 
 CURRENT_BRANCH="$(git branch --show-current)"
 CURRENT_COMMIT="$(git rev-parse HEAD)"
@@ -120,6 +132,10 @@ printf '%s\n' "$CURRENT_COMMIT" | sudo tee "$BACKUP_DIR/commit-before.txt" >/dev
 sudo chmod 0600 "$BACKUP_DIR/commit-before.txt"
 if sudo test -f "$UNIT_TARGET"; then
   sudo cp -a "$UNIT_TARGET" "$BACKUP_DIR/soprolife-m15-api.service.before"
+fi
+if sudo test -f "$LOOPBACK_UNIT_TARGET"; then
+  sudo cp -a "$LOOPBACK_UNIT_TARGET" \
+    "$BACKUP_DIR/soprolife-painel-loopback.service.before"
 fi
 if sudo test -f "$ENV_FILE"; then
   sudo cp -a "$ENV_FILE" "$BACKUP_DIR/m15.env.before"
@@ -238,18 +254,28 @@ run_m15_env "$VENV_DIR/bin/alembic" current
 run_m15_env "$VENV_DIR/bin/alembic" check
 
 sudo install -o root -g root -m 0644 "$UNIT_SOURCE" "$UNIT_TARGET"
+sudo install -o root -g root -m 0644 "$LOOPBACK_UNIT_SOURCE" "$LOOPBACK_UNIT_TARGET"
 sudo systemctl daemon-reload
-sudo systemctl enable --now soprolife-m15-api.service
 
-http_ok() {
-  python3 - "$1" <<'PY'
-import json, sys, urllib.request
-with urllib.request.urlopen(sys.argv[1], timeout=8) as response:
-    body = json.load(response)
-    if response.status != 200 or body.get("status") != "ok":
-        raise SystemExit(1)
-PY
-}
+# Restart (e não apenas enable --now) garante que API já ativa passe a rodar
+# o código do commit implantado. Units Type=simple retornam antes do processo
+# ficar pronto; a espera com retry evita a corrida de inicialização que
+# interrompeu o primeiro deploy produtivo (falso "conexão recusada").
+sudo systemctl enable soprolife-m15-api.service
+sudo systemctl restart soprolife-m15-api.service
+soprolife_wait_health_ok "http://127.0.0.1:8015/api/v1/health" \
+  "API M15 direta (127.0.0.1:8015)"
+
+# Proxy loopback do painel: a unit versionada substitui qualquer processo
+# manual antigo, mas somente após validação (usuário, comando, cgroup e
+# listener); conflito desconhecido aborta o deploy sem matar nada.
+soprolife_garantir_porta_loopback_livre "soprolife-painel-loopback.service" \
+  "soprolife"
+sudo systemctl enable soprolife-painel-loopback.service
+sudo systemctl restart soprolife-painel-loopback.service
+soprolife_wait_health_ok \
+  "http://127.0.0.1:8765/painel-soprolife/api/m15/health" \
+  "proxy M15 loopback (127.0.0.1:8765)"
 
 http_200() {
   python3 - "$1" <<'PY'
@@ -261,22 +287,24 @@ with urllib.request.urlopen(sys.argv[1], timeout=8) as response:
 PY
 }
 
-http_ok "http://127.0.0.1:8015/api/v1/health"
-
-# Processo Python do painel precisa recarregar o arquivo alterado. Só reinicia
-# se o proxy ainda não estiver respondendo com a versão nova.
-if ! http_ok "http://127.0.0.1:8765/painel-soprolife/api/m15/health" 2>/dev/null; then
-  sudo systemctl is-active --quiet soprolife-painel.service || \
-    fail "serviço do painel não está ativo"
-  sudo systemctl restart soprolife-painel.service
-fi
-http_ok "http://127.0.0.1:8765/painel-soprolife/api/m15/health"
-
 if [[ -z "$TAILSCALE_IP" ]] && command -v tailscale >/dev/null 2>&1; then
   TAILSCALE_IP="$(tailscale ip -4 | head -n 1)"
 fi
 [[ "$TAILSCALE_IP" =~ ^100\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || \
   fail "informe o IP Tailscale como terceiro argumento"
+
+# Unit Tailscale existente não é substituída. Só reinicia se ainda não estiver
+# servindo a rota M15 do commit implantado, e sempre aguarda a prontidão.
+if ! soprolife_probe_health_ok \
+     "http://$TAILSCALE_IP:8765/painel-soprolife/api/m15/health"; then
+  sudo systemctl is-active --quiet soprolife-painel.service || \
+    fail "serviço do painel Tailscale não está ativo"
+  sudo systemctl restart soprolife-painel.service
+  soprolife_wait_health_ok \
+    "http://$TAILSCALE_IP:8765/painel-soprolife/api/m15/health" \
+    "proxy M15 via Tailscale ($TAILSCALE_IP:8765)"
+fi
+
 http_200 "http://127.0.0.1:8765/painel-soprolife/"
 http_200 "http://$TAILSCALE_IP:8765/painel-soprolife/"
 
@@ -299,6 +327,7 @@ assert cfg["api_base"] == "/painel-soprolife/api/m15"
 PY
 
 sudo systemctl --no-pager --full status soprolife-m15-api.service
+sudo systemctl --no-pager --full status soprolife-painel-loopback.service
 echo "Implantação técnica concluída; feature flag permanece false."
 echo "Backup verificado: $BACKUP_DIR"
 echo "Nenhum usuário, dado demo ou dado real foi criado/importado."

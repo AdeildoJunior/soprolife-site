@@ -1,0 +1,52 @@
+# M15.3B — Servidor do painel em loopback (127.0.0.1:8765).
+# Complementa (NÃO substitui) soprolife-painel.service, que atende o painel
+# no IP Tailscale. Esta unit garante que o health/proxy local usado pelo
+# deploy sempre execute o código do commit implantado, sob systemd, no lugar
+# do antigo processo manual órfão.
+[Unit]
+Description=SoproLife Painel proxy loopback (127.0.0.1:8765)
+Documentation=file:/opt/soprolife/soprolife-site/painel-soprolife/docs/m15-3b-hardening-operacional.md
+Wants=network-online.target
+After=network-online.target soprolife-m15-api.service
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=soprolife
+Group=soprolife
+WorkingDirectory=/opt/soprolife/soprolife-site
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=SOPROLIFE_PANEL_HOST=127.0.0.1
+Environment=SOPROLIFE_PANEL_PORT=8765
+ExecStart=/usr/bin/python3 /opt/soprolife/soprolife-site/painel-soprolife/scripts/command-center-local-server.py
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=45s
+TimeoutStopSec=30s
+KillSignal=SIGINT
+UMask=0077
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/opt/soprolife/soprolife-site
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

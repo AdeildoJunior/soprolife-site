@@ -379,5 +379,94 @@ class DeploymentKitTests(unittest.TestCase):
             self.assertNotIn(forbidden, deploy.lower())
 
 
+class HardeningM153BTests(unittest.TestCase):
+    """M15.3B: unit loopback versionada + espera de health no deploy."""
+
+    UNIT = SCRIPT_DIR.parent / "systemd" / "soprolife-painel-loopback.service"
+    DEPLOY = SCRIPT_DIR.parent / "nucleo-m15" / "scripts" / "deploy-producao-vps.sh"
+    LIB = SCRIPT_DIR.parent / "nucleo-m15" / "scripts" / "lib-deploy-hardening.sh"
+
+    def test_unit_loopback_bind_exclusivo_em_loopback(self):
+        unit = self.UNIT.read_text(encoding="utf-8")
+        self.assertIn("Environment=SOPROLIFE_PANEL_HOST=127.0.0.1", unit)
+        self.assertIn("Environment=SOPROLIFE_PANEL_PORT=8765", unit)
+        self.assertNotIn("0.0.0.0", unit)
+        self.assertNotIn("SOPROLIFE_PANEL_HOST=100.", unit)
+
+    def test_unit_loopback_usuario_diretorio_e_servidor_corretos(self):
+        unit = self.UNIT.read_text(encoding="utf-8")
+        self.assertIn("User=soprolife", unit)
+        self.assertIn("Group=soprolife", unit)
+        self.assertIn("WorkingDirectory=/opt/soprolife/soprolife-site", unit)
+        self.assertIn("command-center-local-server.py", unit)
+        self.assertIn("Restart=on-failure", unit)
+
+    def test_unit_loopback_hardening_somente_leitura_sem_segredos(self):
+        unit = self.UNIT.read_text(encoding="utf-8")
+        for item in (
+            "NoNewPrivileges=yes", "PrivateTmp=yes", "ProtectSystem=strict",
+            "ProtectHome=yes", "ReadOnlyPaths=/opt/soprolife/soprolife-site",
+            "UMask=0077", "CapabilityBoundingSet=",
+        ):
+            self.assertIn(item, unit)
+        # Sem acesso a segredos desnecessários e sem escrita no repositório.
+        self.assertNotIn("EnvironmentFile", unit)
+        self.assertNotIn("ReadWritePaths", unit)
+        self.assertNotIn("/opt/soprolife/secrets", unit)
+
+    def test_unit_loopback_nao_substitui_unit_tailscale(self):
+        unit = self.UNIT.read_text(encoding="utf-8")
+        self.assertNotIn("Alias=", unit)
+        self.assertNotIn("Conflicts=", unit)
+        deploy = self.DEPLOY.read_text(encoding="utf-8")
+        self.assertNotIn(
+            'install -o root -g root -m 0644 "$LOOPBACK_UNIT_SOURCE" '
+            '"/etc/systemd/system/soprolife-painel.service"',
+            deploy,
+        )
+
+    def test_deploy_instala_habilita_e_reinicia_unit_loopback(self):
+        deploy = self.DEPLOY.read_text(encoding="utf-8")
+        self.assertIn("soprolife-painel-loopback.service", deploy)
+        self.assertIn('"$LOOPBACK_UNIT_SOURCE" "$LOOPBACK_UNIT_TARGET"', deploy)
+        self.assertIn("systemctl daemon-reload", deploy)
+        self.assertIn("systemctl enable soprolife-painel-loopback.service", deploy)
+        self.assertIn("systemctl restart soprolife-painel-loopback.service", deploy)
+
+    def test_deploy_usa_espera_de_health_e_nao_sleep_fixo(self):
+        deploy = self.DEPLOY.read_text(encoding="utf-8")
+        self.assertIn("lib-deploy-hardening.sh", deploy)
+        self.assertIn(
+            'soprolife_wait_health_ok "http://127.0.0.1:8015/api/v1/health"',
+            deploy,
+        )
+        self.assertIn(
+            '"http://127.0.0.1:8765/painel-soprolife/api/m15/health"', deploy
+        )
+        self.assertNotRegex(deploy, r"(?m)^\s*sleep\s+\d+\s*$")
+
+    def test_deploy_conflito_de_porta_passa_pela_validacao_fail_closed(self):
+        deploy = self.DEPLOY.read_text(encoding="utf-8")
+        self.assertIn("soprolife_garantir_porta_loopback_livre", deploy)
+        lib = self.LIB.read_text(encoding="utf-8")
+        self.assertIn("fail-closed", lib)
+        for validacao in ("ps -o user=", "ps -o args=", "cgroup", "MainPID"):
+            self.assertIn(validacao, lib)
+        # kill nunca é incondicional: só aparece depois das validações.
+        indice_kill = lib.index('SOPROLIFE_KILL_CMD')
+        for validacao in ("ps -o user=", "ps -o args=", "/cgroup"):
+            self.assertLess(lib.index(validacao), indice_kill)
+
+    def test_deploy_sem_admin_sem_importacao_sem_flag(self):
+        deploy = self.DEPLOY.read_text(encoding="utf-8")
+        lib = self.LIB.read_text(encoding="utf-8")
+        for texto in (deploy, lib):
+            self.assertNotIn("criar-usuario", texto)
+            self.assertNotIn("csv_import", texto)
+            self.assertNotIn("importar-csv", texto)
+            self.assertNotIn('"enabled": true', texto)
+        self.assertIn('cfg["enabled"] is False', deploy)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

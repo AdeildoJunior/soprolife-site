@@ -9,18 +9,25 @@ Antes, o frontend tentava alcançar `127.0.0.1:8015`; em um navegador remoto,
 esse endereço é a máquina do usuário. Depois do M15.2:
 
 ```text
-navegador (Tailscale)
-  http://IP-TAILSCALE:8765/painel-soprolife/
+navegador (Tailscale)                 deploy/health local (VPS)
+  http://IP-TAILSCALE:8765/...          http://127.0.0.1:8765/...
+        │                                     │
+        ▼                                     ▼
+soprolife-painel.service            soprolife-painel-loopback.service
+(command-center-local-server.py     (mesmo servidor, bind exclusivo
+ no IP Tailscale)                    em 127.0.0.1 — M15.3B)
         │ mesma origem: /painel-soprolife/api/m15/...
-        ▼
-command-center-local-server.py (:8765)
-        │ upstream fixo, HTTP loopback
         ▼
 FastAPI M15 (127.0.0.1:8015 /api/v1/...)
         │ conexão PostgreSQL local
         ▼
 PostgreSQL 16 (5432, não exposto)
 ```
+
+Desde a M15.3B o painel tem duas units na porta 8765: a unit Tailscale
+(acesso real dos usuários) e a unit loopback (health checks e validação
+local do deploy). Detalhes, validação de conflito de porta e rollback da
+unit loopback: `m15-3b-hardening-operacional.md`.
 
 Apps Script continua em `/painel-soprolife/api/command-center`; arquivos
 estáticos e módulos históricos continuam no mesmo servidor. Marketing, SEO,
@@ -99,9 +106,16 @@ O script confirma usuário/host/branch/commit/flag, pede a frase interativa,
 cria backup antes de mutações, instala somente PostgreSQL 16/client/venv e
 dependências apt decorrentes, cria role/banco dedicados, gera segredos sem
 imprimi-los, instala estritamente `requirements.lock`, executa `pip check`,
-`alembic upgrade/current/check`, instala/inicia o unit e testa API direta,
-proxy, painel localhost e painel Tailscale. Ele também falha se API ou
-PostgreSQL aparecerem expostos.
+`alembic upgrade/current/check`, instala as units da API e do proxy
+loopback, reinicia os serviços e testa API direta, proxy, painel localhost e
+painel Tailscale. Ele também falha se API ou PostgreSQL aparecerem expostos.
+
+Desde a M15.3B, todos os testes de health após iniciar/reiniciar serviços
+usam espera com retry (`lib-deploy-hardening.sh`): units `Type=simple`
+retornam antes do processo carregar, e o teste imediato causava falso
+"conexão recusada". A espera exige HTTP 200 com `status=ok`, tem tentativas
+e timeout total finitos e continua falhando fechado se o serviço realmente
+não subir.
 
 Reexecução é segura: pacotes/migrações/banco são idempotentes; segredos
 existentes são validados e reutilizados para manter rollback consistente. Uma
@@ -127,6 +141,7 @@ diretamente: altere a versão Git, revise e reinstale pelo procedimento.
 sudo systemctl status soprolife-m15-api.service --no-pager --full
 sudo journalctl -u soprolife-m15-api.service --since today --no-pager
 sudo journalctl -u soprolife-painel.service --since today --no-pager
+sudo journalctl -u soprolife-painel-loopback.service --since today --no-pager
 sudo ss -ltnp | grep -E ':(5432|8015|8765)\b'
 curl --fail --silent http://127.0.0.1:8015/api/v1/health
 curl --fail --silent http://127.0.0.1:8765/painel-soprolife/api/m15/health
@@ -167,7 +182,8 @@ sudo systemctl restart soprolife-painel.service
 `git reset --keep` acima é um comando futuro destrutivo: confirme commit e
 worktree limpo antes de executá-lo. Alternativamente, faça um novo commit de
 reversão pelo fluxo Git normal. Para rollback apenas do unit/proxy, restaure os
-arquivos `.before` do diretório privado informado pelo deploy, rode
+arquivos `.before` do diretório privado informado pelo deploy (inclusive
+`soprolife-painel-loopback.service.before`, quando existir), rode
 `systemctl daemon-reload` e reinicie somente o serviço afetado.
 
 O banco **não é apagado automaticamente**. Se rollback de schema/dados for
