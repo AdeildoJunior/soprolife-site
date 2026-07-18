@@ -17,10 +17,11 @@ Acompanhar:
 
 ## Como rodar localmente
 
-A partir da raiz do repositório, suba um servidor estático:
+A partir da raiz do repositório, suba o servidor do painel. Ele mantém os
+arquivos estáticos e os proxies Apps Script/M15:
 
 ```bash
-python3 -m http.server 8765
+python3 painel-soprolife/scripts/command-center-local-server.py
 ```
 
 Depois acesse:
@@ -30,6 +31,15 @@ http://127.0.0.1:8765/painel-soprolife/
 ```
 
 > Evite abrir o `index.html` diretamente via `file://`, porque o painel carrega os JSONs com `fetch()`.
+> `python3 -m http.server` ainda serve as telas antigas, mas não oferece o proxy
+> M15. A feature flag M15 permanece desligada por padrão.
+
+## Núcleo M15 em produção futura
+
+Fluxo: navegador → `/painel-soprolife/api/m15` na porta 8765 → FastAPI em
+`127.0.0.1:8015` → PostgreSQL 16 local. A API não é publicada no IP Tailscale.
+O kit foi preparado, mas não executado. Veja
+`docs/m15-2-proxy-seguro-deploy-vps.md` e `docs/m15-2-primeiro-usuario.md`.
 
 ## Testes rápidos
 

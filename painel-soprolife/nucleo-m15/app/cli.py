@@ -9,8 +9,8 @@ Uso (a partir de painel-soprolife/nucleo-m15, com o venv ativo):
   python -m app.cli seed-demo                # dados 100% sintéticos
   python -m app.cli seed-institucional --arquivo data-private/parceiros.json
 
-Senha do usuário: variável de ambiente M15_NOVA_SENHA (nunca argumento de
-linha de comando, para não vazar em histórico/ps).
+Senha do usuário: solicitada com getpass (preferencial) ou pela variável
+temporária M15_NOVA_SENHA; nunca por argumento de linha de comando.
 """
 
 import argparse
@@ -73,6 +73,32 @@ def cmd_emitir_token(args) -> int:
         return 0
     finally:
         db.close()
+
+
+def cmd_definir_usuario_ativo(args, ativo: bool) -> int:
+    """Ativa/inativa usuário; tokens de usuário inativo falham imediatamente."""
+    db = _session()
+    try:
+        user = db.execute(
+            select(User).where(User.email == args.email.lower())
+        ).scalar_one_or_none()
+        if not user:
+            print("ERRO: usuário não encontrado.", file=sys.stderr)
+            return 1
+        user.ativo = ativo
+        db.commit()
+        print("Usuário ativado." if ativo else "Usuário inativado; tokens revogados.")
+        return 0
+    finally:
+        db.close()
+
+
+def cmd_desativar_usuario(args) -> int:
+    return cmd_definir_usuario_ativo(args, False)
+
+
+def cmd_ativar_usuario(args) -> int:
+    return cmd_definir_usuario_ativo(args, True)
 
 
 def cmd_importar(args) -> int:
@@ -187,6 +213,14 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("emitir-token", help="Emite token de acesso")
     p.add_argument("--email", required=True)
     p.set_defaults(func=cmd_emitir_token)
+
+    p = sub.add_parser("desativar-usuario", help="Inativa usuário e revoga seus tokens")
+    p.add_argument("--email", required=True)
+    p.set_defaults(func=cmd_desativar_usuario)
+
+    p = sub.add_parser("ativar-usuario", help="Reativa usuário")
+    p.add_argument("--email", required=True)
+    p.set_defaults(func=cmd_ativar_usuario)
 
     p = sub.add_parser("importar", help="Importa CSV legado (dry-run por padrão)")
     p.add_argument("--tipo", required=True, choices=sorted(IMPORT_TYPES))

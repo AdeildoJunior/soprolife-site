@@ -67,9 +67,8 @@ def test_prod_bind_publico_rejeitado():
     secret = "f" * 8 + "0123456789abcdefghij" + "Z" * 8
     with pytest.raises(ValidationError, match="loopback"):
         _settings(env="prod", auth_secret=secret, api_host="0.0.0.0")
-    ok = _settings(env="prod", auth_secret=secret, api_host="0.0.0.0",
-                   allow_nonlocal_bind="eu-entendo-o-risco")
-    assert ok.api_host == "0.0.0.0"
+    with pytest.raises(ValidationError, match="loopback"):
+        _settings(env="prod", auth_secret=secret, api_host="100.87.98.100")
 
 
 def test_serve_impoe_host_porta_e_desliga_access_log(monkeypatch):

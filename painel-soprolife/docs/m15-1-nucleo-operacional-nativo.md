@@ -20,8 +20,9 @@ Centro de Comando (HTML/JS estático)
 ```
 Centro de Comando
   ├─ telas antigas  → JSONs/Sheets (INTACTAS)
-  └─ Núcleo M15 (feature flag) → API SoproLife → PostgreSQL 16
-                                                  (SQLite em dev/teste)
+  └─ Núcleo M15 (feature flag) → proxy de mesma origem (:8765)
+                                  → API SoproLife (127.0.0.1:8015)
+                                  → PostgreSQL 16 (SQLite em dev/teste)
 ```
 
 O Sheets deixa de ser o backend definitivo. Planilhas e CSVs antigos
@@ -143,7 +144,8 @@ dados reais nunca em fixtures/Git (fixtures são 100% sintéticas).
 ## 7. Interface M15 (experimental)
 
 Feature flag em `data/m15-config.json` (`enabled:false` por padrão — painel
-intocado) ou `localStorage.soproM15='on'`. O token de sessão existe somente em
+intocado) ou `localStorage.soproM15='on'`. `api_base` usa a rota relativa de
+mesma origem `/painel-soprolife/api/m15`. O token de sessão existe somente em
 memória e nunca é salvo no `localStorage`. Arquivos novos: `js/m15-nucleo.js`,
 `css/m15.css` (prefixo `m15-`, sem tocar no cascade existente); única mudança
 em arquivo existente: 1 tag `<script>` no `index.html`.
@@ -165,16 +167,14 @@ essenciais (pessoa, parceiro), fila de follow-up com botão WhatsApp
 - Importações: cada lote registrado com SHA-256; reverter = restaurar dump
   anterior ao lote (fase experimental) — nunca apagar linhas manualmente.
 
-## 9. Publicação futura na VPS (fora do escopo desta etapa)
+## 9. Kit de publicação futura na VPS (M15.2)
 
-1. Provisionar PostgreSQL 16 (local à VPS, sem exposição externa);
-2. `.env` com `M15_ENV=prod`, `M15_AUTH_SECRET` forte e `M15_DATABASE_URL`;
-3. `alembic upgrade head`;
-4. `python -m app.serve` atrás do proxy local, bind 127.0.0.1, acesso via Tailscale
-   (skills soprolife-vps-safe / soprolife-vps-deploy-safe);
-5. systemd unit própria (padrão soprolife-systemd-safe, backup datado antes);
-6. seed institucional por arquivo privado na VPS, somente com dados confirmados;
-7. importação real: dry-run → revisão humana dos relatórios → `--execute`.
+O M15.2 versiona o proxy seguro, unit systemd, deploy fail-closed, backup e
+runbook do primeiro usuário. Produção não foi implantada. O procedimento usa
+PostgreSQL apt local, sem Docker/Podman; mantém a API exclusivamente em
+`127.0.0.1:8015` e o navegador acessa pelo proxy da porta 8765. Consulte
+`m15-2-proxy-seguro-deploy-vps.md`. Seed/importação real continuam fora do
+deploy e exigem mudança separada.
 
 ## 10. Substituição gradual do Sheets
 

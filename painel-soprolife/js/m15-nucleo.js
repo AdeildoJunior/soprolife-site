@@ -2,8 +2,8 @@
  *
  * - Feature flag: data/m15-config.json (enabled) OU localStorage soproM15='on'.
  *   Desligado (padrão), este arquivo não altera NADA no painel.
- * - Backend: API própria SoproLife (FastAPI + PostgreSQL/SQLite),
- *   ver painel-soprolife/nucleo-m15/README.md.
+ * - Backend: proxy de mesma origem → API própria em loopback
+ *   (FastAPI + PostgreSQL/SQLite), ver nucleo-m15/README.md.
  * - Token: colado pelo usuário (CLI emitir-token) e mantido SOMENTE EM
  *   MEMÓRIA nesta fase (nunca em localStorage/sessionStorage — reduz o
  *   impacto de XSS). Recarregar a página exige colar o token de novo.
@@ -16,7 +16,7 @@
 
   var CONFIG_URL = "data/m15-config.json";
   var state = {
-    apiBase: "http://127.0.0.1:8015/api/v1",
+    apiBase: "/painel-soprolife/api/m15",
     tab: "visao",
     filters: {},
     token: "", // em memória apenas; some ao recarregar (decisão de segurança)
@@ -101,7 +101,7 @@
       '    <span class="m15-muted">Token de acesso (CLI: <code>python -m app.cli emitir-token</code>):</span>' +
       '    <input type="password" id="m15Token" placeholder="cole o token da API aqui" autocomplete="off">' +
       '    <button class="m15-btn m15-btn-sec" id="m15TokenSave">Usar token (sessão)</button>' +
-      '    <span class="m15-muted" id="m15ApiStatus">API: verificando…</span>' +
+      '    <span class="m15-muted" id="m15ApiStatus">Proxy/API: verificando…</span>' +
       '    <span class="m15-muted">O token fica só em memória — recarregou, cole de novo.</span>' +
       "  </div>" +
       "</div>" +
@@ -142,7 +142,7 @@
     var hint = err && err.status === 401
       ? " Cole um token válido acima (CLI: emitir-token) e tente de novo."
       : (err && err.message && err.message.indexOf("fetch") !== -1
-        ? " A API está rodando? Veja nucleo-m15/README.md." : "");
+        ? " O proxy e a API loopback estão rodando? Veja nucleo-m15/README.md." : "");
     body().innerHTML = '<div class="m15-erro">Erro: ' + esc(err.message || err) + hint + "</div>";
   }
 
@@ -617,16 +617,21 @@
   function checkApi() {
     var el = document.getElementById("m15ApiStatus");
     fetch(state.apiBase + "/health").then(function (r) { return r.json(); }).then(function (h) {
-      el.textContent = "API: " + h.status + " (" + h.ambiente + ", banco " + h.banco + ")";
+      el.textContent = "Proxy/API: " + h.status + " (" + h.ambiente + ", banco " + h.banco + ")";
     }).catch(function () {
-      el.textContent = "API: fora do ar — inicie com nucleo-m15/README.md";
+      el.textContent = "Proxy/API: indisponível — veja nucleo-m15/README.md";
     });
   }
 
   // ------------------------------------------------------------ bootstrap
 
   function activate(config) {
-    if (config && config.api_base) state.apiBase = config.api_base;
+    // Fail-closed: configuração pública nunca pode transformar o frontend em
+    // cliente de URL absoluta/outro host. Desenvolvimento troca só o upstream
+    // server-side; a rota do navegador permanece a mesma.
+    if (config && config.api_base === "/painel-soprolife/api/m15") {
+      state.apiBase = config.api_base;
+    }
 
     var link = document.createElement("link");
     link.rel = "stylesheet";

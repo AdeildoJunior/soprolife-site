@@ -1,0 +1,50 @@
+[Unit]
+Description=SoproLife M15 API (loopback only)
+Documentation=file:/opt/soprolife/soprolife-site/painel-soprolife/docs/m15-2-proxy-seguro-deploy-vps.md
+Wants=network-online.target
+After=network-online.target postgresql.service
+Requires=postgresql.service
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=soprolife
+Group=soprolife
+WorkingDirectory=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=M15_API_HOST=127.0.0.1
+Environment=M15_API_PORT=8015
+ExecStart=/opt/soprolife/venvs/m15/bin/python -m app.serve
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=45s
+TimeoutStopSec=30s
+KillSignal=SIGINT
+UMask=0077
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/opt/soprolife/soprolife-site
+ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15/var
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

@@ -84,6 +84,30 @@ def test_login_e_uso_do_token(client, users):
     assert ok.status_code == 200
 
 
+def test_cli_inativacao_revoga_token_e_permite_reativar(
+    client, users, engine, monkeypatch
+):
+    from app import cli
+    from sqlalchemy.orm import sessionmaker
+
+    monkeypatch.setattr(cli, "_session", sessionmaker(bind=engine))
+
+    token = client.post(
+        "/api/v1/auth/token",
+        json={"email": "admin@teste.local", "password": "senha-teste-123"},
+    ).json()["token"]
+    assert cli.main(["desativar-usuario", "--email", "admin@teste.local"]) == 0
+    denied = client.get(
+        "/api/v1/pessoas", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert denied.status_code == 401
+    assert cli.main(["ativar-usuario", "--email", "admin@teste.local"]) == 0
+    allowed = client.get(
+        "/api/v1/pessoas", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert allowed.status_code == 200
+
+
 def test_login_senha_errada(client, users):
     resp = client.post(
         "/api/v1/auth/token",

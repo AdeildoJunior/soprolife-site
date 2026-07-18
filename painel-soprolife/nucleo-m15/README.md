@@ -3,7 +3,7 @@
 Backend próprio do Centro de Comando:
 
 ```
-Centro de Comando  →  API SoproLife (FastAPI)  →  PostgreSQL 16
+Navegador → proxy de mesma origem (:8765) → API loopback (:8015) → PostgreSQL 16
 ```
 
 O Google Sheets **deixa de ser o backend operacional definitivo**, mas as
@@ -28,8 +28,8 @@ cp .env.example .env            # ajuste se quiser PostgreSQL
 # migrações (SQLite local por padrão)
 .venv/bin/alembic upgrade head
 
-# usuário interno (senha via env, nunca em argumento)
-M15_NOVA_SENHA='sua-senha-local' .venv/bin/python -m app.cli criar-usuario \
+# usuário interno (senha solicitada com eco oculto, nunca em argumento)
+.venv/bin/python -m app.cli criar-usuario \
   --email voce@soprolife.local --nome "Seu Nome" --papel admin
 
 # dados sintéticos de demonstração (idempotente)
@@ -39,9 +39,9 @@ M15_NOVA_SENHA='sua-senha-local' .venv/bin/python -m app.cli criar-usuario \
 .venv/bin/python -m app.serve
 ```
 
-Healthcheck: `curl http://127.0.0.1:8015/api/v1/health`
+Healthcheck direto: `curl http://127.0.0.1:8015/api/v1/health`
 
-### PostgreSQL 16 via Docker (opcional)
+### PostgreSQL 16 via Docker (somente desenvolvimento opcional)
 
 ```bash
 POSTGRES_PASSWORD='troque-esta-senha' docker compose up -d
@@ -52,13 +52,16 @@ POSTGRES_PASSWORD='troque-esta-senha' docker compose up -d
 
 ## Interface no painel
 
-1. Rode o painel: `python3 -m http.server 8765` (raiz do repositório) e a API.
+1. Rode a API e, na raiz do repositório, o servidor com proxy:
+   `python3 painel-soprolife/scripts/command-center-local-server.py`.
 2. Ligue a flag: `data/m15-config.json` → `"enabled": true` **ou**
    `localStorage.setItem('soproM15','on')` no console do navegador.
 3. Emita um token (`.venv/bin/python -m app.cli emitir-token --email ...`) e
    cole no campo "Token de acesso" da seção **Núcleo M15**.
 
 Com a flag desligada (padrão do repositório) o painel fica exatamente como era.
+O frontend usa `/painel-soprolife/api/m15`, nunca uma URL absoluta da API. Em
+produção a API continua em `127.0.0.1:8015`; Docker/Podman não são usados.
 
 ## Importador seguro (dry-run padrão)
 
@@ -120,11 +123,15 @@ versão major 16 e o remove ao sair, inclusive em caso de erro.
 - Autenticação por token assinado (HMAC) para usuários internos; papéis
   admin > gestor > operacional > leitura;
 - `M15_ENV=prod` exige `M15_AUTH_SECRET` (fail-closed);
-- API só em `127.0.0.1`; CORS restrito ao painel local;
+- API só em `127.0.0.1`; CORS local e acesso remoto somente pelo proxy de
+  mesma origem do painel;
 - trilha de auditoria append-only sem PII; timestamps UTC, exibição em
   America/Sao_Paulo;
 - financeiro sem nome/telefone/CPF — somente IDs técnicos;
 - WhatsApp: monta URL para revisão humana; **nunca** dispara envio automático;
 - pessoas "não contatar" nunca entram na fila de follow-up.
 
-Documentação completa: `painel-soprolife/docs/m15-1-nucleo-operacional-nativo.md`.
+Documentação: `painel-soprolife/docs/m15-1-nucleo-operacional-nativo.md` e
+`painel-soprolife/docs/m15-2-proxy-seguro-deploy-vps.md`. O segundo documento
+inclui instalação/update/logs/backup/rollback; o primeiro usuário fica no
+runbook separado `painel-soprolife/docs/m15-2-primeiro-usuario.md`.

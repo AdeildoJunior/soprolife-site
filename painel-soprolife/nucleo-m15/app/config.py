@@ -2,8 +2,7 @@
 
 Regras de produção (M15_ENV=prod):
 - M15_AUTH_SECRET obrigatório, >=32 caracteres e >=10 símbolos distintos;
-- bind deve ser loopback, salvo consentimento explícito via
-  M15_ALLOW_NONLOCAL_BIND=eu-entendo-o-risco;
+- bind deve ser sempre loopback;
 - CORS apenas com origens http(s) explícitas — nunca "*".
 """
 
@@ -20,7 +19,6 @@ MIN_SECRET_LEN = 32
 MIN_SECRET_DISTINCT = 10
 TTL_MIN_MINUTES = 5
 TTL_MAX_MINUTES = 720
-NONLOCAL_BIND_CONSENT = "eu-entendo-o-risco"
 
 
 class Settings(BaseSettings):
@@ -34,7 +32,6 @@ class Settings(BaseSettings):
     token_ttl_minutes: int = 120
     api_host: str = "127.0.0.1"
     api_port: int = 8015
-    allow_nonlocal_bind: str = ""
     cors_origins: list[str] = ["http://127.0.0.1:8765", "http://localhost:8765"]
     display_timezone: str = "America/Sao_Paulo"
 
@@ -80,13 +77,9 @@ class Settings(BaseSettings):
                     ">=10 símbolos distintos. Gere com: "
                     "python3 -c \"import secrets; print(secrets.token_hex(32))\""
                 )
-            if (
-                self.api_host not in LOOPBACK_HOSTS
-                and self.allow_nonlocal_bind != NONLOCAL_BIND_CONSENT
-            ):
+            if self.api_host not in LOOPBACK_HOSTS:
                 raise ValueError(
-                    "Em prod, M15_API_HOST deve ser loopback. Bind público exige "
-                    f"M15_ALLOW_NONLOCAL_BIND={NONLOCAL_BIND_CONSENT} (consciente)."
+                    "Em prod, M15_API_HOST deve ser loopback; bind público é proibido."
                 )
             for origin in self.cors_origins:
                 parsed = urlsplit(origin)

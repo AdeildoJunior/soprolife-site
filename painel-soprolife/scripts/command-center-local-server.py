@@ -3,7 +3,8 @@
 SoproLife Command Center — Servidor proxy local.
 
 Serve os arquivos estáticos do painel e atua como proxy seguro para o
-Apps Script, adicionando o token de autenticação server-side.
+Apps Script, adicionando o token de autenticação server-side. Também publica
+a API M15 de loopback sob uma rota de mesma origem.
 
 O token e a URL do Apps Script nunca saem do servidor — o browser só
 vê a resposta final (ok/erro + id gerado).
@@ -11,21 +12,28 @@ vê a resposta final (ok/erro + id gerado).
 Endpoints:
   GET  /painel-soprolife/api/command-center/status  → {"configured": bool}
   POST /painel-soprolife/api/command-center          → proxy para Apps Script
+  GET|POST|PATCH /painel-soprolife/api/m15/...       → http://127.0.0.1:8015/api/v1/...
 
-Logs mostram apenas: action, ok/erro, status HTTP.
-Nunca imprime: token, URL, telefone, nomes ou dados pessoais.
+Logs do Apps Script mantêm action/resultado/status. Logs M15 mostram somente
+operação genérica, método, status, request_id sanitizado e duração.
+Nunca imprime: token, URL, querystring, corpo, telefone, nomes ou CPF.
 
 Uso:
     cd ~/soprolife-site
     python3 painel-soprolife/scripts/command-center-local-server.py
 """
 
+import http.client
 import http.server
+import ipaddress
 import json
 import os
+import re
 import socket
 import sys
+import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -35,6 +43,21 @@ PORT = int(os.environ.get("SOPROLIFE_PANEL_PORT", "8765"))
 _CONFIG_PATH = Path("painel-soprolife/data-private/command-center-config.local.json")
 _API_PATH    = "/painel-soprolife/api/command-center"
 _STATUS_PATH = "/painel-soprolife/api/command-center/status"
+_M15_PREFIX = "/painel-soprolife/api/m15"
+_M15_DEFAULT_UPSTREAM = "http://127.0.0.1:8015/api/v1"
+_M15_METHODS = frozenset({"GET", "POST", "PATCH"})
+_M15_FORWARD_HEADERS = {
+    "authorization": "Authorization",
+    "content-type": "Content-Type",
+    "idempotency-key": "Idempotency-Key",
+    "x-request-id": "X-Request-ID",
+    "accept": "Accept",
+}
+_M15_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_M15_MAX_REQUEST_BODY = 1024 * 1024
+_M15_MAX_RESPONSE_BODY = 4 * 1024 * 1024
+_M15_CONNECT_TIMEOUT = 3.0
+_M15_RESPONSE_TIMEOUT = 15.0
 
 
 def _audit_meta(value, fallback: str) -> str:
@@ -43,21 +66,128 @@ def _audit_meta(value, fallback: str) -> str:
     return v or fallback
 
 
+def _m15_upstream() -> tuple[str, int, str]:
+    """Retorna host/porta/base validados; aceita somente HTTP em IP loopback."""
+    raw = os.environ.get("SOPROLIFE_M15_UPSTREAM", _M15_DEFAULT_UPSTREAM).strip()
+    parsed = urllib.parse.urlsplit(raw)
+    try:
+        host = parsed.hostname or ""
+        address = ipaddress.ip_address(host)
+        port = parsed.port or 80
+    except ValueError as exc:
+        raise ValueError("upstream M15 inválido") from exc
+    if (
+        parsed.scheme != "http"
+        or not address.is_loopback
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or not (1 <= port <= 65535)
+    ):
+        raise ValueError("upstream M15 deve usar HTTP em loopback")
+    base_path = parsed.path.rstrip("/")
+    if base_path != "/api/v1":
+        raise ValueError("caminho-base do upstream M15 inválido")
+    return host, port, base_path
+
+
+def _m15_public_path(raw_target: str) -> tuple[str, str] | None:
+    """Valida o alvo público e devolve (sufixo, query), sem normalização ambígua."""
+    parsed = urllib.parse.urlsplit(raw_target)
+    path = parsed.path
+    if path != _M15_PREFIX and not path.startswith(_M15_PREFIX + "/"):
+        return None
+    try:
+        decoded = urllib.parse.unquote(path, errors="strict")
+    except (UnicodeDecodeError, ValueError):
+        raise ValueError("caminho M15 inválido")
+    suffix = decoded[len(_M15_PREFIX):]
+    segments = suffix.split("/")
+    if (
+        "\\" in decoded
+        or "\x00" in decoded
+        or any(segment in (".", "..") for segment in segments)
+        or "//" in suffix
+        or decoded != path
+    ):
+        # Percent-encoding no path é desnecessário para os endpoints atuais e
+        # rejeitá-lo elimina traversal/normalizações divergentes no upstream.
+        raise ValueError("caminho M15 inválido")
+    return suffix, parsed.query
+
+
+def _safe_request_id(value: str | None) -> str:
+    value = (value or "").strip()
+    return value if _M15_REQUEST_ID_RE.fullmatch(value) else "-"
+
+
 # ── Handler ───────────────────────────────────────────────────────────────────
 
 class _Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
-        if self.path == _STATUS_PATH:
+        try:
+            m15 = _m15_public_path(self.path)
+        except ValueError:
+            self._m15_error(400, "Caminho M15 inválido.")
+            return
+        if m15 is not None:
+            self._handle_m15("GET", m15)
+        elif self.path == _STATUS_PATH:
             self._handle_status()
         else:
             super().do_GET()
 
     def do_POST(self):
-        if self.path == _API_PATH:
+        try:
+            m15 = _m15_public_path(self.path)
+        except ValueError:
+            self._m15_error(400, "Caminho M15 inválido.")
+            return
+        if m15 is not None:
+            self._handle_m15("POST", m15)
+        elif self.path == _API_PATH:
             self._handle_proxy()
         else:
             self._json({"ok": False, "error": "Endpoint não encontrado."}, 404)
+
+    def do_PATCH(self):
+        self._dispatch_m15_only("PATCH")
+
+    def do_HEAD(self):
+        try:
+            m15 = _m15_public_path(self.path)
+        except ValueError:
+            self._m15_error(400, "Caminho M15 inválido.")
+            return
+        if m15 is not None:
+            self._m15_error(405, "Método não permitido.", {"Allow": "GET, POST, PATCH"})
+        else:
+            super().do_HEAD()
+
+    def do_PUT(self):
+        self._dispatch_m15_only("PUT")
+
+    def do_DELETE(self):
+        self._dispatch_m15_only("DELETE")
+
+    def do_OPTIONS(self):
+        self._dispatch_m15_only("OPTIONS")
+
+    def _dispatch_m15_only(self, method: str) -> None:
+        try:
+            m15 = _m15_public_path(self.path)
+        except ValueError:
+            self._m15_error(400, "Caminho M15 inválido.")
+            return
+        if m15 is None:
+            self.send_error(501, "Unsupported method")
+            return
+        if method not in _M15_METHODS:
+            self._m15_error(405, "Método não permitido.", {"Allow": "GET, POST, PATCH"})
+            return
+        self._handle_m15(method, m15)
 
     # ── Status ─────────────────────────────────────────────────────────────
 
@@ -182,6 +312,126 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(result_raw)
 
+    # ── Proxy M15 de mesma origem ────────────────────────────────────────
+
+    def _handle_m15(self, method: str, route: tuple[str, str]) -> None:
+        started = time.monotonic()
+        request_id = _safe_request_id(self.headers.get("X-Request-ID"))
+        status = 502
+        connection = None
+        try:
+            host, port, base_path = _m15_upstream()
+        except ValueError:
+            self._m15_error(503, "Proxy M15 indisponível por configuração inválida.")
+            self._m15_log(method, 503, request_id, started)
+            return
+
+        suffix, query = route
+        upstream_target = base_path + suffix
+        if query:
+            upstream_target += "?" + query
+
+        transfer_encoding = self.headers.get("Transfer-Encoding")
+        raw_length = self.headers.get("Content-Length")
+        if transfer_encoding:
+            self._m15_error(400, "Transfer-Encoding não aceito.")
+            self._m15_log(method, 400, request_id, started)
+            return
+        try:
+            length = int(raw_length or "0")
+        except ValueError:
+            length = -1
+        if length < 0:
+            self._m15_error(400, "Content-Length inválido.")
+            self._m15_log(method, 400, request_id, started)
+            return
+        if length > _M15_MAX_REQUEST_BODY:
+            self._m15_error(413, "Corpo da requisição excede o limite.")
+            self._m15_log(method, 413, request_id, started)
+            return
+        body = self.rfile.read(length) if length else None
+
+        headers = {}
+        for source, target in _M15_FORWARD_HEADERS.items():
+            value = self.headers.get(source)
+            if value is None:
+                continue
+            if source == "x-request-id":
+                value = request_id
+                if value == "-":
+                    continue
+            headers[target] = value
+
+        try:
+            connection = http.client.HTTPConnection(host, port, timeout=_M15_CONNECT_TIMEOUT)
+            connection.connect()
+            if connection.sock is not None:
+                connection.sock.settimeout(_M15_RESPONSE_TIMEOUT)
+            connection.request(method, upstream_target, body=body, headers=headers)
+            response = connection.getresponse()
+            status = response.status
+            result_raw = response.read(_M15_MAX_RESPONSE_BODY + 1)
+            if len(result_raw) > _M15_MAX_RESPONSE_BODY:
+                self._m15_error(502, "Resposta da API excede o limite.")
+                status = 502
+                return
+            content_type = response.getheader("Content-Type") or ""
+            if not content_type.lower().startswith("application/json"):
+                self._m15_error(502, "Resposta inválida da API.")
+                status = 502
+                return
+            try:
+                json.loads(result_raw)
+            except (TypeError, ValueError):
+                self._m15_error(502, "Resposta inválida da API.")
+                status = 502
+                return
+
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            upstream_request_id = _safe_request_id(response.getheader("X-Request-ID"))
+            if upstream_request_id != "-":
+                self.send_header("X-Request-ID", upstream_request_id)
+            self.send_header("Content-Length", str(len(result_raw)))
+            self.end_headers()
+            self.wfile.write(result_raw)
+        except (socket.timeout, TimeoutError):
+            status = 504
+            self._m15_error(504, "Tempo limite excedido ao contatar a API.")
+        except (ConnectionRefusedError, ConnectionError, OSError, http.client.HTTPException):
+            status = 502
+            self._m15_error(502, "API M15 indisponível.")
+        except Exception:
+            status = 502
+            self._m15_error(502, "Resposta inválida da API.")
+        finally:
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+            self._m15_log(method, status, request_id, started)
+
+    def _m15_error(self, status: int, message: str, headers: dict | None = None) -> None:
+        body = json.dumps({"ok": False, "error": message}).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        if headers:
+            for name, value in headers.items():
+                self.send_header(name, value)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    @staticmethod
+    def _m15_log(method: str, status: int, request_id: str, started: float) -> None:
+        duration_ms = max(0, round((time.monotonic() - started) * 1000))
+        print(
+            f"[M15] operation=proxy method={method} status={status} "
+            f"request_id={request_id} duration_ms={duration_ms}",
+            flush=True,
+        )
+
     # ── Utilitário ─────────────────────────────────────────────────────────
 
     def _json(self, obj: dict, status: int = 200) -> None:
@@ -207,7 +457,9 @@ def main() -> None:
     repo_root = Path(__file__).resolve().parent.parent.parent
     os.chdir(repo_root)
 
-    server = http.server.HTTPServer((HOST, PORT), _Handler)
+    # Falha antes de abrir a porta se o upstream server-side for inseguro.
+    _m15_upstream()
+    server = http.server.ThreadingHTTPServer((HOST, PORT), _Handler)
 
     cc_ok = _CONFIG_PATH.exists()
     try:
@@ -221,6 +473,7 @@ def main() -> None:
     print(f"Acesso:  http://{HOST}:{PORT}/painel-soprolife/")
     print(f"API:     http://{HOST}:{PORT}{_API_PATH}")
     print(f"Status:  http://{HOST}:{PORT}{_STATUS_PATH}")
+    print(f"M15:     mesma origem em {_M15_PREFIX}/... (upstream loopback validado)")
     print()
     print(f"Command Center: {'CONFIGURADO — escrita ativa' if cc_ok else 'SEM CONFIG — modo leitura'}")
     print()

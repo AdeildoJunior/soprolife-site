@@ -1,5 +1,5 @@
 {
   "enabled": false,
-  "api_base": "http://127.0.0.1:8015/api/v1",
-  "nota": "Feature flag do Núcleo Operacional M15 (experimental). enabled=false mantém o painel exatamente como antes. Para testar localmente: mude para true OU rode localStorage.setItem('soproM15','on') no console. A API precisa estar rodando (ver painel-soprolife/nucleo-m15/README.md)."
+  "api_base": "/painel-soprolife/api/m15",
+  "nota": "Feature flag do Núcleo Operacional M15 (experimental). enabled=false mantém o painel exatamente como antes. O acesso à API usa o proxy de mesma origem; desenvolvimento local deve usar scripts/command-center-local-server.py. Consulte painel-soprolife/nucleo-m15/README.md."
 }
