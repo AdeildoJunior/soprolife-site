@@ -1,7 +1,10 @@
 """Autenticação interna (usuários + papéis) com tokens assinados HMAC.
 
 - Senhas: PBKDF2-HMAC-SHA256 (sem dependência externa).
-- Tokens: user_id.expiração.assinatura (base64url), validade limitada.
+- Tokens: user_id.expiração.fingerprint_senha.assinatura, validade limitada.
+  O fingerprint (derivado do hash da senha, nunca da senha) amarra o token à
+  credencial vigente: redefinir a senha revoga todos os tokens antigos sem
+  precisar de tabela de sessões.
 - Papéis: admin > gestor > operacional > leitura.
 - Fail-closed: sem token válido, nada responde além de /health e /auth/token.
 """
@@ -114,22 +117,31 @@ def _sign(payload: str, secret: str) -> str:
     return base64.urlsafe_b64encode(sig).decode().rstrip("=")
 
 
-def issue_token(user_id: str, ttl_minutes: int | None = None) -> str:
+def password_fingerprint(password_hash: str) -> str:
+    """Fingerprint curto do HASH da senha (nunca da senha em claro).
+
+    Entra no token para amarrá-lo à credencial vigente: trocar a senha muda
+    o fingerprint e invalida imediatamente todos os tokens anteriores.
+    """
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:12]
+
+
+def issue_token(user_id: str, password_hash: str, ttl_minutes: int | None = None) -> str:
     settings = get_settings()
     ttl = ttl_minutes or settings.token_ttl_minutes
     exp = int(time.time()) + ttl * 60
-    payload = f"{user_id}.{exp}"
+    payload = f"{user_id}.{exp}.{password_fingerprint(password_hash)}"
     return f"{payload}.{_sign(payload, settings.resolved_auth_secret())}"
 
 
-def parse_token(token: str) -> str | None:
-    """Retorna user_id se o token é válido e não expirou; caso contrário None."""
+def parse_token(token: str) -> tuple[str, str] | None:
+    """Retorna (user_id, fingerprint) se o token é válido e não expirou."""
     settings = get_settings()
     parts = token.split(".")
-    if len(parts) != 3:
+    if len(parts) != 4:
         return None
-    user_id, exp_str, sig = parts
-    payload = f"{user_id}.{exp_str}"
+    user_id, exp_str, fingerprint, sig = parts
+    payload = f"{user_id}.{exp_str}.{fingerprint}"
     if not hmac.compare_digest(sig, _sign(payload, settings.resolved_auth_secret())):
         return None
     try:
@@ -137,19 +149,23 @@ def parse_token(token: str) -> str | None:
             return None
     except ValueError:
         return None
-    return user_id
+    return user_id, fingerprint
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Token ausente.")
-    user_id = parse_token(auth.removeprefix("Bearer ").strip())
-    if not user_id:
+    parsed = parse_token(auth.removeprefix("Bearer ").strip())
+    if not parsed:
         raise HTTPException(status_code=401, detail="Token inválido ou expirado.")
+    user_id, fingerprint = parsed
     user = db.get(User, user_id)
     if not user or not user.ativo:
         raise HTTPException(status_code=401, detail="Usuário inexistente ou inativo.")
+    # senha redefinida -> fingerprint muda -> tokens antigos caem na hora
+    if not hmac.compare_digest(fingerprint, password_fingerprint(user.password_hash)):
+        raise HTTPException(status_code=401, detail="Token inválido ou expirado.")
     request.state.user_id = user.id
     return user
 

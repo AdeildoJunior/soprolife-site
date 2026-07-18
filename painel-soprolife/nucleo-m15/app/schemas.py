@@ -47,6 +47,39 @@ class TokenRequest(StrictModel):
     password: str = Field(min_length=1, max_length=200)
 
 
+# ------------------------------------------------------ administração (M15.3A)
+
+PapelUsuario = Literal["admin", "gestor", "operacional", "leitura"]
+
+_EMAIL_RE = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
+# Senha nunca trafega em URL nem aparece em log/auditoria — só em corpo POST.
+SENHA_MIN = 10
+
+
+class AdminUserCreate(StrictModel):
+    email: str = Field(min_length=5, max_length=200, pattern=_EMAIL_RE)
+    nome: str = Field(min_length=2, max_length=200)
+    papel: PapelUsuario = "leitura"
+    senha: str = Field(min_length=SENHA_MIN, max_length=200)
+
+    @field_validator("email")
+    @classmethod
+    def _email_lower(cls, v: str) -> str:
+        return v.lower()
+
+
+class AdminUserUpdate(StrictModel):
+    """Papel e estado — troca de senha tem endpoint próprio."""
+
+    papel: PapelUsuario | None = None
+    ativo: bool | None = None
+
+
+class AdminPasswordReset(StrictModel):
+    senha: str = Field(min_length=SENHA_MIN, max_length=200)
+
+
 class ContactIn(StrictModel):
     tipo: Literal["whatsapp", "telefone", "email", "outro"]
     valor: str = Field(min_length=1, max_length=200)
@@ -62,6 +95,8 @@ class PersonCreate(StrictModel):
 
 
 class PersonUpdate(StrictModel):
+    nome_completo: str | None = Field(default=None, min_length=2, max_length=300)
+    data_nascimento: date | None = None
     status: Literal["ativo", "inativo"] | None = None
     nao_contatar: bool | None = None
     observacao: str | None = Field(default=None, max_length=4000)
@@ -143,11 +178,27 @@ class PartnerCreate(StrictModel):
     observacao: str | None = Field(default=None, max_length=4000)
 
 
+class PartnerUpdate(StrictModel):
+    nome: str | None = Field(default=None, min_length=2, max_length=200)
+    tipo: Literal["clinica", "consultorio", "outro"] | None = None
+    status: Literal["prospecto", "em_negociacao", "ativa", "pausada", "encerrada"] | None = None
+    cidade: str | None = Field(default=None, max_length=120)
+    observacao: str | None = Field(default=None, max_length=4000)
+
+
 class PartnerUnitCreate(StrictModel):
     partner_id: str
     nome: str = Field(min_length=1, max_length=200)
     bairro: str | None = Field(default=None, max_length=120)
     cidade: str | None = Field(default=None, max_length=120)
+    observacao: str | None = Field(default=None, max_length=2000)
+
+
+class PartnerUnitUpdate(StrictModel):
+    nome: str | None = Field(default=None, min_length=1, max_length=200)
+    bairro: str | None = Field(default=None, max_length=120)
+    cidade: str | None = Field(default=None, max_length=120)
+    ativo: bool | None = None
     observacao: str | None = Field(default=None, max_length=2000)
 
 
@@ -162,6 +213,17 @@ class PartnerContactCreate(StrictModel):
     observacao: str | None = Field(default=None, max_length=2000)
 
 
+class PartnerContactUpdate(StrictModel):
+    partner_unit_id: str | None = None
+    nome: str | None = Field(default=None, min_length=2, max_length=200)
+    cargo: str | None = Field(default=None, max_length=120)
+    telefone: str | None = Field(default=None, max_length=40)
+    email: str | None = Field(default=None, max_length=200)
+    principal: bool | None = None
+    ativo: bool | None = None
+    observacao: str | None = Field(default=None, max_length=2000)
+
+
 class PartnershipCreate(StrictModel):
     partner_id: str
     status: Literal["em_negociacao", "ativa", "pausada", "encerrada"] = "em_negociacao"
@@ -171,6 +233,19 @@ class PartnershipCreate(StrictModel):
     valor_repasse_fixo: MoneyOrZero | None = None
     responsavel_soprolife: str | None = Field(default=None, max_length=120)
     responsavel_followup: Literal["soprolife", "parceiro"] = "soprolife"
+    observacao: str | None = Field(default=None, max_length=4000)
+
+
+class PartnershipUpdate(StrictModel):
+    """Atualização de parceria — papel gestor/admin (repasses são sensíveis)."""
+
+    status: Literal["em_negociacao", "ativa", "pausada", "encerrada"] | None = None
+    data_inicio: str | None = Field(default=None, max_length=40)
+    modelo_repasse: Literal["percentual", "fixo", "nenhum", "indefinido"] | None = None
+    percentual_repasse: Percent | None = None
+    valor_repasse_fixo: MoneyOrZero | None = None
+    responsavel_soprolife: str | None = Field(default=None, max_length=120)
+    responsavel_followup: Literal["soprolife", "parceiro"] | None = None
     observacao: str | None = Field(default=None, max_length=4000)
 
 
@@ -294,6 +369,23 @@ class FinancialEntryCreate(StrictModel):
     consultation_id: str | None = None
     partner_referral_id: str | None = None
     idempotency_key: str | None = Field(default=None, min_length=4, max_length=64)
+
+    _no_pii = field_validator("categoria", "descricao")(_reject_finance_pii)
+
+
+class FinancialEntryUpdate(StrictModel):
+    """Atualização do lançamento — gestor/admin.
+
+    `valor` e `tipo` são imutáveis de propósito: correção de valor é um novo
+    lançamento (trilha íntegra), nunca uma edição silenciosa.
+    """
+
+    categoria: str | None = Field(default=None, max_length=60)
+    descricao: str | None = Field(default=None, max_length=300)
+    status: StatusPagamento | None = None
+    data_recebimento: date | None = None
+    forma_pagamento: FormaPagamento | None = None
+    origem_preco: OrigemPreco | None = None
 
     _no_pii = field_validator("categoria", "descricao")(_reject_finance_pii)
 

@@ -156,6 +156,13 @@ def update_person(
 ):
     person = _get_person(db, person_id)
     changed = []
+    if payload.nome_completo is not None:
+        person.nome_completo = payload.nome_completo
+        person.nome_normalizado = normalize_name(payload.nome_completo)
+        changed.append("nome_completo")
+    if payload.data_nascimento is not None:
+        person.data_nascimento = payload.data_nascimento
+        changed.append("data_nascimento")
     if payload.status is not None:
         person.status = payload.status
         changed.append("status")

@@ -69,7 +69,7 @@ def cmd_emitir_token(args) -> int:
         if not user:
             print("ERRO: usuário não encontrado.", file=sys.stderr)
             return 1
-        print(issue_token(user.id))
+        print(issue_token(user.id, user.password_hash))
         return 0
     finally:
         db.close()

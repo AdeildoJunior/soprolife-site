@@ -56,8 +56,15 @@ POSTGRES_PASSWORD='troque-esta-senha' docker compose up -d
    `python3 painel-soprolife/scripts/command-center-local-server.py`.
 2. Ligue a flag: `data/m15-config.json` → `"enabled": true` **ou**
    `localStorage.setItem('soproM15','on')` no console do navegador.
-3. Emita um token (`.venv/bin/python -m app.cli emitir-token --email ...`) e
-   cole no campo "Token de acesso" da seção **Núcleo M15**.
+3. Entre na seção **Núcleo M15** com e-mail e senha do usuário interno
+   (criado pela CLI `criar-usuario` ou pela aba Administração, papel admin).
+   Alternativa: cole um token da CLI (`.venv/bin/python -m app.cli
+   emitir-token --email ...`). A sessão vive só em memória.
+
+Desde a M15.3A a interface cobre a operação diária (pessoas, leads,
+espirometrias, consultas, parceiros, encaminhamentos, follow-up, financeiro)
+e a administração de usuários (aba exclusiva do papel admin). Redefinir a
+senha de um usuário revoga imediatamente os tokens antigos dele.
 
 Com a flag desligada (padrão do repositório) o painel fica exatamente como era.
 O frontend usa `/painel-soprolife/api/m15`, nunca uma URL absoluta da API. Em

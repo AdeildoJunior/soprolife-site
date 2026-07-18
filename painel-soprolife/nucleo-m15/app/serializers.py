@@ -399,3 +399,15 @@ def ser_audit(a: m.AuditLog) -> dict:
         "entidade_id": a.entidade_id,
         "detalhes": a.detalhes,
     }
+
+
+def ser_user(u: m.User) -> dict:
+    """Usuário interno para a administração — NUNCA inclui hash de senha."""
+    return {
+        "id": u.id,
+        "email": u.email,
+        "nome": u.nome,
+        "ativo": u.ativo,
+        "papeis": sorted(r.name for r in u.roles),
+        **_stamps(u),
+    }

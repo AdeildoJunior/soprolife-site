@@ -18,7 +18,7 @@ from ..domain import ensure_sem_pcmso
 from ..ids import allocate_public_code
 from ..models import FinancialEntry, PartnerTransfer, User
 from ..pagination import PageParams, paginate
-from ..schemas import FinancialEntryCreate, TransferCreate
+from ..schemas import FinancialEntryCreate, FinancialEntryUpdate, TransferCreate
 from ..security import ROLE_GESTOR, ROLE_LEITURA, require_role
 from ..serializers import ser_financial_entry, ser_transfer
 from ..services.idempotency import idempotent_create
@@ -127,6 +127,40 @@ def create_entry(
     audit(db, "lancamento.criado", "financial_entries", entry.id, user.id,
           request.state.request_id,
           {"public_code": entry.public_code, "tipo": entry.tipo, "status": entry.status})
+    db.commit()
+    return ser_financial_entry(entry)
+
+
+@router.patch("/lancamentos/{entry_id}")
+def update_entry(
+    entry_id: str,
+    payload: FinancialEntryUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    """Atualização operacional do lançamento (status/recebimento) — gestor/admin.
+
+    Valor e tipo são imutáveis: correção monetária é um NOVO lançamento,
+    preservando a trilha da fonte financeira canônica.
+    """
+    entry = db.get(FinancialEntry, entry_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Lançamento não encontrado.")
+    _check_pcmso(db, request, user, payload, "lancamentos.update")
+    updates = payload.model_dump(exclude_none=True)
+    status_final = updates.get("status", entry.status)
+    data_receb_final = updates.get("data_recebimento", entry.data_recebimento)
+    if status_final == "Recebido" and data_receb_final is None:
+        raise HTTPException(status_code=422, detail={
+            "codigo": "recebido_sem_data",
+            "mensagem": "Status 'Recebido' exige data_recebimento."})
+    changed = []
+    for field, value in updates.items():
+        setattr(entry, field, value)
+        changed.append(field)
+    audit(db, "lancamento.atualizado", "financial_entries", entry.id, user.id,
+          request.state.request_id, {"campos": changed, "status": entry.status})
     db.commit()
     return ser_financial_entry(entry)
 

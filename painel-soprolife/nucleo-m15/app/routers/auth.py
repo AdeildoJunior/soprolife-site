@@ -13,9 +13,29 @@ from ..audit import audit
 from ..db import get_db
 from ..models import User
 from ..schemas import TokenRequest
-from ..security import issue_token, login_rate_limiter, verify_password_or_dummy
+from ..security import (
+    get_current_user,
+    issue_token,
+    login_rate_limiter,
+    user_effective_roles,
+    verify_password_or_dummy,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/me")
+def me(user: User = Depends(get_current_user)):
+    """Identidade do token atual — permite à UI ocultar ações fora do papel.
+
+    A autorização REAL continua no servidor (require_role); isto é só UX.
+    """
+    return {
+        "id": user.id,
+        "nome": user.nome,
+        "papeis": sorted(r.name for r in user.roles),
+        "papeis_efetivos": sorted(user_effective_roles(user)),
+    }
 
 
 @router.post("/token")
@@ -41,6 +61,6 @@ def token(payload: TokenRequest, request: Request, db: Session = Depends(get_db)
           user_id=user.id, request_id=request.state.request_id)
     db.commit()
     return {
-        "token": issue_token(user.id),
+        "token": issue_token(user.id, user.password_hash),
         "usuario": {"id": user.id, "nome": user.nome, "papeis": [r.name for r in user.roles]},
     }

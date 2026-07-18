@@ -16,7 +16,8 @@ ALLOWED_KEYS = {
     "public_code", "campos", "status", "tipo", "canal", "motivo", "followup",
     "candidatos_identidade", "nova_data", "resultado", "modo", "source_type",
     "total", "validas", "rejeitadas", "ambiguas", "sha256", "batch_id",
-    "decisao", "contexto", "campo", "marcador", "codigo", "fila",
+    "decisao", "contexto", "campo", "marcador", "codigo", "fila", "papel",
+    "ativo",
 }
 
 _MAX_STR = 120

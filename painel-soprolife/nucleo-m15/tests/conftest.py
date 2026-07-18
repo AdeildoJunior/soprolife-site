@@ -81,7 +81,9 @@ def client(engine, users):
 
 @pytest.fixture()
 def tokens(users):
-    return {name: issue_token(user.id) for name, user in users.items()}
+    return {
+        name: issue_token(user.id, user.password_hash) for name, user in users.items()
+    }
 
 
 @pytest.fixture()

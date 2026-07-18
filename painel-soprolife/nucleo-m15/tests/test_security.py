@@ -6,6 +6,7 @@ from app.security import (
     hash_password,
     issue_token,
     parse_token,
+    password_fingerprint,
     verify_password,
 )
 
@@ -18,15 +19,27 @@ def test_hash_e_verificacao_de_senha():
 
 
 def test_token_valido_e_invalido():
-    token = issue_token("user-123")
-    assert parse_token(token) == "user-123"
+    stored = hash_password("senha-de-teste")
+    token = issue_token("user-123", stored)
+    user_id, fingerprint = parse_token(token)
+    assert user_id == "user-123"
+    assert fingerprint == password_fingerprint(stored)
     assert parse_token(token + "x") is None
     assert parse_token("lixo") is None
 
 
 def test_token_expirado():
-    token = issue_token("user-123", ttl_minutes=-1)
+    token = issue_token("user-123", hash_password("senha-de-teste"), ttl_minutes=-1)
     assert parse_token(token) is None
+
+
+def test_fingerprint_nao_expoe_senha():
+    stored = hash_password("senha-secreta-original")
+    token = issue_token("user-123", stored)
+    assert "senha-secreta-original" not in token
+    # trocar a senha muda o fingerprint (base da revogação de tokens)
+    outro = hash_password("senha-nova-diferente")
+    assert password_fingerprint(stored) != password_fingerprint(outro)
 
 
 def test_hierarquia_de_papeis():
@@ -106,6 +119,16 @@ def test_cli_inativacao_revoga_token_e_permite_reativar(
         "/api/v1/pessoas", headers={"Authorization": f"Bearer {token}"}
     )
     assert allowed.status_code == 200
+
+
+def test_auth_me_retorna_papeis(client, auth):
+    resp = client.get("/api/v1/auth/me", headers=auth("gestor"))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["papeis"] == ["gestor"]
+    assert body["papeis_efetivos"] == ["gestor", "leitura", "operacional"]
+    assert "email" not in body and "password_hash" not in body
+    assert client.get("/api/v1/auth/me").status_code == 401
 
 
 def test_login_senha_errada(client, users):

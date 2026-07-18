@@ -30,9 +30,13 @@ from ..models import (
 from ..pagination import PageParams, paginate
 from ..schemas import (
     PartnerContactCreate,
+    PartnerContactUpdate,
     PartnerCreate,
     PartnershipCreate,
+    PartnershipUpdate,
     PartnerUnitCreate,
+    PartnerUnitUpdate,
+    PartnerUpdate,
     ReferralCreate,
     ReferralFinanceUpdate,
     ReferralUpdate,
@@ -145,6 +149,26 @@ def get_partner(
     return data
 
 
+@router.patch("/parceiros/{partner_id}")
+def update_partner(
+    partner_id: str,
+    payload: PartnerUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    partner = ensure_partner_exists(db, partner_id)
+    _check_pcmso(db, request, user, payload, "parceiros.update")
+    changed = []
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(partner, field, value)
+        changed.append(field)
+    audit(db, "parceiro.atualizado", "partners", partner.id, user.id,
+          request.state.request_id, {"campos": changed})
+    db.commit()
+    return ser_partner(partner)
+
+
 # ----------------------------------------------------------------- unidades
 
 @router.get("/unidades")
@@ -180,6 +204,27 @@ def create_unit(
     db.flush()
     audit(db, "unidade.criada", "partner_units", unit.id, user.id,
           request.state.request_id, {"public_code": unit.public_code})
+    db.commit()
+    return ser_partner_unit(unit)
+
+
+@router.patch("/unidades/{unit_id}")
+def update_unit(
+    unit_id: str,
+    payload: PartnerUnitUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    unit = db.get(PartnerUnit, unit_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unidade não encontrada.")
+    changed = []
+    for field, value in payload.model_dump(exclude_none=True).items():
+        setattr(unit, field, value)
+        changed.append(field)
+    audit(db, "unidade.atualizada", "partner_units", unit.id, user.id,
+          request.state.request_id, {"campos": changed})
     db.commit()
     return ser_partner_unit(unit)
 
@@ -227,6 +272,30 @@ def create_partner_contact(
     return ser_partner_contact(contact)
 
 
+@router.patch("/contatos-parceiros/{contact_id}")
+def update_partner_contact(
+    contact_id: str,
+    payload: PartnerContactUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    contact = db.get(PartnerContact, contact_id)
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contato não encontrado.")
+    updates = payload.model_dump(exclude_none=True)
+    if "partner_unit_id" in updates:
+        ensure_unit_of_partner(db, updates["partner_unit_id"], contact.partner_id)
+    changed = []
+    for field, value in updates.items():
+        setattr(contact, field, value)
+        changed.append(field)
+    audit(db, "contato_parceiro.atualizado", "partner_contacts", contact.id, user.id,
+          request.state.request_id, {"campos": changed})
+    db.commit()
+    return ser_partner_contact(contact)
+
+
 # ---------------------------------------------------------------- parcerias
 
 @router.get("/parcerias")
@@ -270,6 +339,32 @@ def create_partnership(
     db.flush()
     audit(db, "parceria.criada", "partnerships", partnership.id, user.id,
           request.state.request_id, {"public_code": partnership.public_code})
+    db.commit()
+    return ser_partnership(partnership)
+
+
+@router.patch("/parcerias/{partnership_id}")
+def update_partnership(
+    partnership_id: str,
+    payload: PartnershipUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    """Parceria envolve repasses — mutação restrita a gestor/admin."""
+    partnership = db.get(Partnership, partnership_id)
+    if not partnership:
+        raise HTTPException(status_code=404, detail="Parceria não encontrada.")
+    updates = payload.model_dump(exclude_none=True)
+    changed = []
+    for field, value in updates.items():
+        if field == "data_inicio":
+            _apply_date(partnership, "data_inicio", value)
+        else:
+            setattr(partnership, field, value)
+        changed.append(field)
+    audit(db, "parceria.atualizada", "partnerships", partnership.id, user.id,
+          request.state.request_id, {"campos": changed})
     db.commit()
     return ser_partnership(partnership)
 

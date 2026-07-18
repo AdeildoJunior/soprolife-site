@@ -11,6 +11,7 @@ from . import __version__
 from .config import get_settings
 from .errors import install_error_handling
 from .routers import (
+    admin_users,
     auth,
     finance,
     followups,
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(followups.router, prefix=prefix)
     app.include_router(finance.router, prefix=prefix)
     app.include_router(imports_audit.router, prefix=prefix)
+    app.include_router(admin_users.router, prefix=prefix)
     return app
 
 
