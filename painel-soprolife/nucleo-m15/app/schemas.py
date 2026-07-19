@@ -413,6 +413,17 @@ class PersonSearch(StrictModel):
     tamanho: int = Field(default=25, ge=1, le=100)
 
 
+class MigrationApproval(StrictModel):
+    """Aprovação humana de execução de snapshot — todos os identificadores
+    exatos e digitados; nada é assumido nem aprovado automaticamente."""
+
+    sha256: str = Field(min_length=64, max_length=64,
+                        pattern=r"^[0-9a-f]{64}$")
+    mapping_version: str = Field(min_length=1, max_length=40)
+    dry_run_batch_id: str = Field(min_length=36, max_length=36)
+    observacao: str | None = Field(default=None, max_length=2000)
+
+
 class IdentityDecision(StrictModel):
     """Decisão humana sobre candidato de identidade — nunca funde registros."""
 

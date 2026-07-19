@@ -9,22 +9,30 @@ from sqlalchemy.orm import Session
 from ..audit import audit
 from ..db import get_db
 from ..importer.csv_import import IMPORT_TYPES, MAX_UPLOAD_BYTES, run_import
+from ..migration.service import (
+    MigrationError,
+    approve_snapshot,
+    preflight,
+    snapshot_status,
+)
 from ..models import (
     AuditLog,
     IdentityCandidate,
     ImportBatch,
     ImportRow,
+    ImportSnapshot,
     MigrationDecision,
     User,
 )
 from ..pagination import PageParams, paginate
-from ..schemas import IdentityDecision
+from ..schemas import IdentityDecision, MigrationApproval
 from ..security import ROLE_ADMIN, ROLE_GESTOR, require_role
 from ..serializers import (
     ser_audit,
     ser_identity_candidate,
     ser_import_batch,
     ser_import_row,
+    ser_import_snapshot,
 )
 
 router = APIRouter(tags=["migracao"])
@@ -105,6 +113,70 @@ def list_batch_rows(
     if status:
         stmt = stmt.where(ImportRow.status == status)
     return paginate(db, stmt, params, ser_import_row)
+
+
+# --------------------------------------------- snapshots privados (M15.6A)
+
+@router.get("/migracao/snapshots")
+def list_snapshots(
+    params: PageParams = Depends(),
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    """Snapshots registrados — aliases, hashes e contagens; nunca PII."""
+    stmt = select(ImportSnapshot).order_by(ImportSnapshot.created_at.desc())
+    return paginate(db, stmt, params, ser_import_snapshot)
+
+
+@router.get("/migracao/snapshots/{snapshot_id}")
+def snapshot_detail(
+    snapshot_id: str,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    """Detalhe + portões de execução. A evidência de backup só é validável
+    pela CLI local (arquivo privado); aqui os portões de backup aparecem
+    pendentes — a execução NUNCA acontece pela API."""
+    try:
+        status = snapshot_status(db, snapshot_id)
+    except MigrationError:
+        raise HTTPException(status_code=404, detail="Snapshot não encontrado.")
+    gates = preflight(db, snapshot_id)
+    return {
+        "snapshot": status,
+        "gates": gates["gates"],
+        "portoes_ok": gates["ok"],
+        "execucao_pela_api": False,
+        "aviso": "Execução real somente pela CLI local, com todos os portões "
+                 "verdes e frase exata.",
+    }
+
+
+@router.post("/migracao/snapshots/{snapshot_id}/aprovacao")
+def approve_snapshot_api(
+    snapshot_id: str,
+    payload: MigrationApproval,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_ADMIN)),
+):
+    """Aprovação humana explícita (papel admin). Idempotente: repetir a
+    requisição (refresh) NÃO duplica aprovação — retorna 409."""
+    try:
+        result = approve_snapshot(
+            db, snapshot_id, payload.sha256, payload.mapping_version,
+            payload.dry_run_batch_id, user_id=user.id,
+            observacao=payload.observacao,
+        )
+    except MigrationError as exc:
+        if exc.codigo == "snapshot_inexistente":
+            raise HTTPException(status_code=404, detail="Snapshot não encontrado.")
+        status_code = 409 if exc.codigo == "ja_aprovado" else 422
+        raise HTTPException(status_code=status_code, detail=exc.as_dict())
+    audit(db, "migracao.aprovacao_api", "import_snapshots", snapshot_id,
+          user.id, request.state.request_id)
+    db.commit()
+    return result
 
 
 # ------------------------------------------------------ decisão de identidade
