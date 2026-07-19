@@ -347,15 +347,22 @@ class TestChecagensEstaticas(unittest.TestCase):
         self.rejeita(**{"painel-soprolife/scripts/test-m15-go-live.js": None})
 
 
-class TestConfigDaPonte(unittest.TestCase):
-    def test_release_da_ponte_permanece_enabled_false(self):
+class TestConfigDoReleaseIntegrado(unittest.TestCase):
+    # M15.5C: o release integrado (ponte M15.5B + go-live M15.5A) tem
+    # enabled=true; a ponte segue fail-closed no deploy (exige as variáveis
+    # exatas), e o próprio repositório precisa passar no check-source.
+    def test_release_integrado_tem_enabled_true_e_api_base_intacto(self):
         raiz_repo = pathlib.Path(__file__).resolve().parents[3]
         cfg = json.loads(
             (raiz_repo / "painel-soprolife/data/m15-config.json")
             .read_text(encoding="utf-8")
         )
-        self.assertIs(cfg["enabled"], False)
+        self.assertIs(cfg["enabled"], True)
         self.assertEqual(cfg["api_base"], "/painel-soprolife/api/m15")
+
+    def test_release_integrado_passa_no_check_source(self):
+        raiz_repo = pathlib.Path(__file__).resolve().parents[3]
+        gate.checar_fonte_alvo(str(raiz_repo))
 
 
 if __name__ == "__main__":

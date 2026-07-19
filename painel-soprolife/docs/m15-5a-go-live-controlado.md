@@ -28,10 +28,11 @@ privado é comunicado por canal interno.
   seguindo o fluxo padrão (skills soprolife-vps-deploy-safe / soprolife-vps-safe).
   Nenhum restart de serviço é necessário só para a flag (arquivos estáticos).
 - Atenção: `nucleo-m15/scripts/deploy-producao-vps.sh` (deploy de
-  infraestrutura) mantém, por segurança, a exigência histórica de
-  `enabled=false` e passará a recusar execução após este merge. Atualizar
-  essa trava é uma etapa própria, autorizada separadamente — não é
-  necessária para o go-live do frontend.
+  infraestrutura) rejeita `enabled=true` por padrão. Desde a integração
+  M15.5C (ponte M15.5B no mesmo release), esse deploy só é aceito pelo
+  modo go-live explícito e fail-closed: `SOPROLIFE_M15_GO_LIVE=YES` +
+  `SOPROLIFE_M15_HTTPS_BASE_URL` HTTPS validada (ver
+  docs/m15-5b-go-live-deploy-bridge.md).
 
 ## Cache do navegador
 
