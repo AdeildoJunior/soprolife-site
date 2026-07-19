@@ -4,8 +4,11 @@ O script oficial `painel-soprolife/nucleo-m15/scripts/deploy-producao-vps.sh`
 recusava historicamente qualquer release com `enabled=true` no
 `data/m15-config.json`. Esta ponte mantém essa recusa COMO PADRÃO e abre um
 único caminho explícito, validado e fail-closed para implantar um release de
-go-live (ex.: o M15.5A integrado). O release da própria ponte permanece
-`enabled=false`.
+go-live (ex.: o M15.5A integrado). No branch isolado da ponte (M15.5B) o
+release permanecia `enabled=false`; no release integrado M15.5C (ponte +
+go-live M15.5A) o `data/m15-config.json` tem `enabled=true`, portanto o
+deploy desse release SÓ é aceito com as variáveis de go-live abaixo — sem
+elas, aborta fail-closed antes de qualquer mutação.
 
 Nenhum hostname real de tailnet aparece neste documento ou no código — use
 sempre o endereço comunicado por canal interno. Exemplos usam o placeholder
@@ -66,6 +69,12 @@ stdlib (nenhuma flag insegura). A ponte NÃO configura Tailscale Serve,
 Funnel, certificados, firewall ou ACLs — isso permanece operação humana.
 
 ## Release em dois estágios
+
+Nota M15.5C: o branch integrado (`fable-m15-5c-integrated-go-live`) contém a
+ponte E o go-live no mesmo release, com `enabled=true` — seu deploy é
+diretamente o Estágio 2. O Estágio 1 descreve o deploy de qualquer release
+com `enabled=false` (fluxo histórico e rollback), que segue sem exigir
+variável nenhuma.
 
 ### Estágio 1 — implantar a ponte (enabled=false)
 

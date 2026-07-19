@@ -4,7 +4,8 @@
 # Cobre o lado shell da ponte: matriz de autorização (somente YES maiúsculo),
 # leitura fail-closed da feature flag, validação da URL base via CLI do gate
 # Python (sem rede: só parsing), fiação do deploy-producao-vps.sh e a garantia
-# de que o release desta ponte permanece enabled=false. Os probes HTTPS e as
+# de que o release integrado M15.5C (enabled=true) é um alvo válido do
+# check-source, com a ponte seguindo fail-closed. Os probes HTTPS e as
 # checagens estáticas profundas são cobertos em test_go_live_https_gate.py
 # com rede mockada.
 #
@@ -173,11 +174,19 @@ for padrao in \
   fi
 done
 
-echo "── release da ponte permanece enabled=false ──"
+echo "── release integrado M15.5C: enabled=true e alvo aprovado no check-source ──"
 
+# M15.5C: o release integrado (ponte + go-live) tem enabled=true; a ponte
+# segue fail-closed no deploy e o próprio repositório é um alvo válido.
 SAIDA="$(soprolife_go_live_flag_config \
   "$REPO_ROOT/painel-soprolife/data/m15-config.json" 2>/dev/null)"
-caso "data/m15-config.json deste release lê 'false'" "false" "$SAIDA"
+caso "data/m15-config.json deste release lê 'true'" "true" "$SAIDA"
+
+if soprolife_go_live_checar_fonte_alvo "$REPO_ROOT" >/dev/null 2>&1; then
+  caso "release integrado passa no check-source do gate" 0 0
+else
+  caso "release integrado passa no check-source do gate" 0 1
+fi
 
 echo
 if (( FALHAS )); then

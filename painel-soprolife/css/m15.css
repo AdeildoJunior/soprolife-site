@@ -35,6 +35,61 @@
   border-radius: 999px;
 }
 
+/* M15.5A — go-live controlado: selo de implantação e modo de acesso. */
+.m15-badge-ctrl {
+  display: inline-flex;
+  align-items: center;
+  background: var(--soft, #eef6f8);
+  color: var(--navy, #0b1f36);
+  border: 1px solid var(--border, #d7e2ea);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.m15-badge-access {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.m15-badge-https {
+  background: rgba(29, 183, 166, .12);
+  color: var(--teal-dark, #0f8f83);
+  border: 1px solid var(--teal, #1db7a6);
+}
+
+.m15-badge-dev {
+  background: var(--soft, #eef6f8);
+  color: var(--muted, #6d7b8a);
+  border: 1px solid var(--border, #d7e2ea);
+}
+
+.m15-badge-blocked {
+  background: rgba(217, 83, 79, .1);
+  color: #b23b37;
+  border: 1px solid #d9534f;
+}
+
+/* Aviso de origem bloqueada (HTTP remoto): sem campo de senha, sem token. */
+.m15-block {
+  background: #fdf3f2;
+  border: 1px solid #eec4c2;
+  border-left: 4px solid #d9534f;
+  color: #7a2f2c;
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  margin: 6px 0;
+}
+
 .m15-header {
   display: flex;
   align-items: center;

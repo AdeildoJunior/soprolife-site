@@ -7,7 +7,8 @@
 //    precisão parcial (AAAA-MM / AAAA nunca viram dia exato sozinhos).
 // 2) Guardas ESTÁTICAS: sem recurso externo, sem persistência de token,
 //    payloads dos formulários intactos, classes responsivas presentes e
-//    feature flag do M15 continua desligada.
+//    feature flag do M15 ligada (go-live controlado M15.5A) com api_base
+//    de mesma origem.
 //
 // Uso: node painel-soprolife/scripts/test-m15-ui-calendar.js
 // Exit: 0 = todos passaram | 1 = houve falha.
@@ -305,10 +306,10 @@ caso("index.html carrega o datepicker ANTES do núcleo (defer em ordem)",
      /m15-datepicker\.js[^"]*" defer><\/script>\s*<script src="\.\/js\/m15-nucleo\.js/.test(indexSrc));
 
 console.log();
-console.log("C2) Feature flag e API base intocadas");
+console.log("C2) Feature flag ligada (go-live M15.5A) e API base intocada");
 {
   const cfg = JSON.parse(configSrc);
-  caso("m15-config.json: enabled === false", cfg.enabled === false);
+  caso("m15-config.json: enabled === true (go-live M15.5A)", cfg.enabled === true);
   caso("m15-config.json: api_base de mesma origem",
        cfg.api_base === "/painel-soprolife/api/m15" && cfg.api_base.indexOf("://") === -1);
   caso("m15-nucleo.js mantém apiBase de mesma origem",
