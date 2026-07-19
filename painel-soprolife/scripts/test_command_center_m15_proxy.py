@@ -327,10 +327,12 @@ class ProxyM15Tests(unittest.TestCase):
 
 
 class FrontendConfigTests(unittest.TestCase):
-    def test_config_mesma_origem_flag_desligada(self):
+    def test_config_mesma_origem_flag_ligada_go_live(self):
+        # M15.5A: go-live controlado — flag global ligada; api_base continua
+        # de mesma origem (o proxy loopback segue obrigatório).
         config_path = SCRIPT_DIR.parent / "data" / "m15-config.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))
-        self.assertIs(config["enabled"], False)
+        self.assertIs(config["enabled"], True)
         self.assertEqual(config["api_base"], "/painel-soprolife/api/m15")
         self.assertNotIn("://", config["api_base"])
 

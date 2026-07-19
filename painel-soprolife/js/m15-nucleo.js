@@ -1,7 +1,13 @@
-/* Núcleo Operacional M15 (experimental) — módulo isolado e reversível.
+/* Núcleo Operacional M15 (beta — implantação controlada) — módulo isolado e reversível.
  *
  * - Feature flag: data/m15-config.json (enabled) OU localStorage soproM15='on'.
- *   Desligado (padrão), este arquivo não altera NADA no painel.
+ *   Com enabled=true (go-live M15.5A) o núcleo aparece para todos, sem opt-in
+ *   local; enabled=false volta o painel exatamente ao estado anterior.
+ * - Contexto seguro (M15.5A): o login com credenciais reais só é aceito em
+ *   HTTPS ou em loopback de desenvolvimento (js/m15-security.js). Em origem
+ *   HTTP remota o formulário de senha/token NÃO é renderizado e nenhuma
+ *   requisição de autenticação é enviada (fail-closed, inclusive quando a
+ *   guarda não carregou). O restante do painel legado continua acessível.
  * - Backend: proxy de mesma origem → API própria em loopback
  *   (FastAPI + PostgreSQL/SQLite), ver nucleo-m15/README.md.
  * - Sessão: login por e-mail+senha (POST /auth/token) ou token colado
@@ -24,7 +30,30 @@
     filters: {},
     token: "", // em memória apenas; some ao recarregar (decisão de segurança)
     user: null, // {id, nome, papeis, papeis_efetivos} via /auth/me
+    // Contexto de acesso (M15.5A) — fail-closed: nasce bloqueado e só muda
+    // depois que a guarda js/m15-security.js classifica a origem real.
+    access: { mode: "blocked", secure: false, motivo: "guarda de segurança indisponível (fail-closed)" },
   };
+
+  function classifyAccess() {
+    var gate = (typeof window !== "undefined" && window.SoproM15Security) || null;
+    if (gate && typeof gate.classify === "function") {
+      state.access = gate.classify(window.location);
+    }
+    return state.access;
+  }
+
+  function blockedMessage() {
+    var gate = (typeof window !== "undefined" && window.SoproM15Security) || null;
+    return (gate && gate.MENSAGEM_BLOQUEIO) ||
+      "Origem HTTP insegura: o login do Núcleo M15 fica desativado. " +
+      "Abra o endereço HTTPS privado do painel para entrar.";
+  }
+
+  function blockedNotice() {
+    return '<div class="m15-block" role="alert"><strong>Acesso HTTP inseguro — login desativado.</strong> ' +
+      esc(blockedMessage()) + "</div>";
+  }
 
   function getToken() { return state.token; }
 
@@ -62,6 +91,13 @@
   }
 
   function api(path, options) {
+    // Guarda de contexto seguro (M15.5A): em origem bloqueada NENHUMA
+    // requisição de autenticação sai do navegador — nem senha, nem token.
+    if (!state.access.secure && path.indexOf("/auth/") === 0) {
+      return Promise.reject(new Error(
+        "Login bloqueado em origem HTTP insegura. Abra o endereço HTTPS privado do painel."
+      ));
+    }
     options = options || {};
     options.headers = Object.assign({
       "Authorization": "Bearer " + getToken(),
@@ -281,6 +317,20 @@
     ["admin", "Administração", "admin"],
   ];
 
+  // Selo honesto do modo de acesso — distingue HTTPS seguro, desenvolvimento
+  // local e HTTP remoto bloqueado. IP privado (ex.: Tailscale 100.x) via HTTP
+  // NUNCA é anunciado como seguro.
+  function accessBadge() {
+    if (state.access.mode === "https") {
+      return '<span class="m15-badge-access m15-badge-https" title="Página servida por HTTPS (acesso privado via Tailscale Serve)">Acesso seguro (HTTPS)</span>';
+    }
+    if (state.access.mode === "localdev") {
+      return '<span class="m15-badge-access m15-badge-dev" title="Loopback local — tráfego não sai desta máquina">Desenvolvimento local</span>';
+    }
+    return '<span class="m15-badge-access m15-badge-blocked" title="' +
+      esc(blockedMessage()) + '">HTTP inseguro — login bloqueado</span>';
+  }
+
   function buildSection() {
     var section = document.createElement("section");
     section.id = "m15-nucleo";
@@ -288,8 +338,9 @@
     section.innerHTML =
       '<div class="m15-header">' +
       '  <h2>Núcleo Operacional' +
-      '    <span class="m15-badge-exp">M15 experimental</span>' +
-      '    <span class="m15-badge-sint">ambiente com dados sintéticos</span>' +
+      '    <span class="m15-badge-exp">M15 Beta</span>' +
+      '    <span class="m15-badge-ctrl">implantação controlada</span>' +
+      accessBadge() +
       "  </h2>" +
       "</div>" +
       '<div class="m15-panel"><div id="m15AuthArea"></div></div>' +
@@ -322,6 +373,12 @@
   function renderAuthArea() {
     var area = document.getElementById("m15AuthArea");
     if (!area) return;
+    if (!state.access.secure) {
+      // Origem bloqueada: nada de campo de senha, nada de campo de token,
+      // nenhuma credencial jamais é pedida ou enviada a partir daqui.
+      area.innerHTML = blockedNotice();
+      return;
+    }
     if (state.token && state.user) {
       area.innerHTML =
         '<div class="m15-session">' +
@@ -493,8 +550,9 @@
           { label: "Aguardando data", value: fila.totais.aguardando_data },
           { label: "Não contatar (ocultos)", value: fila.excluidos_nao_contatar },
         ]) + "</div>" +
-        '<div class="m15-aviso">Ambiente experimental M15: coexiste com o painel atual. ' +
-        "As telas antigas e o Google Sheets continuam intactos até validação humana.</div>";
+        '<div class="m15-aviso">M15 Beta em implantação controlada — acesso seguro via Tailscale (HTTPS). ' +
+        "O núcleo nativo coexiste com o painel atual: as telas antigas e o Google Sheets continuam intactos. " +
+        "Registros de demonstração seguem marcados como “sintético”.</div>";
     });
   };
 
@@ -527,7 +585,7 @@
             if (podeEditar) row.push(editBtn(p.id));
             return row;
           }),
-          "Nenhuma pessoa cadastrada. Use o formulário abaixo ou o seed sintético."
+          "Nenhuma pessoa cadastrada. Use o formulário abaixo."
         ) +
         '<div id="m15EditBox"></div>' +
         (podeEditar
@@ -1953,6 +2011,10 @@
 
   function render() {
     if (!body()) return;
+    if (!state.access.secure) {
+      body().innerHTML = blockedNotice();
+      return;
+    }
     if (!state.token) {
       body().innerHTML =
         '<div class="m15-empty">Entre com e-mail e senha (ou cole um token da CLI) para operar o núcleo M15.</div>';
@@ -1983,6 +2045,10 @@
       state.apiBase = config.api_base;
     }
 
+    // Classifica a origem ANTES de montar qualquer UI: cabeçalho, área de
+    // login e corpo dependem do modo de acesso (https/localdev/blocked).
+    classifyAccess();
+
     var link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = "css/m15.css";
@@ -1992,7 +2058,7 @@
     if (!nav) return;
     var label = document.createElement("div");
     label.className = "nav-group-label";
-    label.textContent = "Experimental";
+    label.textContent = "M15 Beta";
     nav.appendChild(label);
     nav.appendChild(navButton());
 

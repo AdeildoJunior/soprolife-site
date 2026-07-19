@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "api_base": "/painel-soprolife/api/m15",
-  "nota": "Feature flag do Núcleo Operacional M15 (experimental). enabled=false mantém o painel exatamente como antes. O acesso à API usa o proxy de mesma origem; desenvolvimento local deve usar scripts/command-center-local-server.py. Consulte painel-soprolife/nucleo-m15/README.md."
+  "nota": "Go-live controlado do Núcleo Operacional M15 (M15.5A). enabled=true torna o Núcleo M15 visível globalmente, sem o opt-in local soproM15. O login com credenciais reais só funciona em HTTPS ou em loopback de desenvolvimento (guarda de contexto seguro em js/m15-security.js); origens HTTP remotas ficam bloqueadas. O acesso à API usa o proxy de mesma origem; desenvolvimento local deve usar scripts/command-center-local-server.py. Rollback: enabled=false. Consulte painel-soprolife/docs/m15-5a-go-live-controlado.md."
 }
