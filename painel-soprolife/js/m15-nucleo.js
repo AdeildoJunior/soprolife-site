@@ -161,13 +161,54 @@
     }).join("");
   }
 
-  function fld(label, inner, full) {
-    return "<label" + (full ? ' class="m15-form-full"' : "") + ">" + esc(label) + inner + "</label>";
+  // Campo do sistema compartilhado de formulários (M15.4A).
+  // opt: true = linha inteira (compat), número = colunas do grid de 12,
+  // objeto = { span, help } — rótulo tem SEMPRE 1 linha (texto completo no
+  // title); dica longa vai para o help abaixo do controle, assim os
+  // controles vizinhos ficam alinhados na mesma linha de base.
+  function fld(label, inner, opt) {
+    var span = 3, help = "";
+    if (opt === true) span = 12;
+    else if (typeof opt === "number") span = opt;
+    else if (opt && typeof opt === "object") {
+      span = opt.span || 3;
+      help = opt.help || "";
+    }
+    var classes = "m15-field " + (span >= 12 ? "m15-form-full" : "m15-span-" + span);
+    return '<label class="' + classes + '"><span class="m15-field-label" title="' +
+      esc(label) + '">' + esc(label) + "</span>" + inner +
+      (help ? '<span class="m15-field-help">' + esc(help) + "</span>" : "") +
+      "</label>";
+  }
+
+  // Grupo visual: campos relacionais/opcionais coesos; cls "m15-group-tech"
+  // marca IDs técnicos (disponíveis, porém visualmente secundários).
+  function grp(title, inner, cls) {
+    return '<div class="m15-group' + (cls ? " " + cls : "") + '">' +
+      '<span class="m15-group-title">' + esc(title) + "</span>" + inner + "</div>";
   }
 
   function inp(name, value, attrs) {
     return '<input name="' + esc(name) + '" value="' + esc(value == null ? "" : value) +
       '" ' + (attrs || "") + ">";
+  }
+
+  // Campo de data do calendário SoproLife. O valor no payload permanece no
+  // formato do backend (AAAA-MM-DD; parcial aceita também AAAA-MM e AAAA).
+  function dateInp(name, value, opts) {
+    opts = opts || {};
+    var attrs = 'data-m15-date="' + (opts.parcial ? "partial" : "full") + '"';
+    if (!opts.parcial) attrs += ' type="date"';
+    if (opts.required) attrs += " required";
+    return inp(name, value, attrs);
+  }
+
+  var HELP_DATA_PARCIAL = "Aceita dia (DD/MM/AAAA), mês (MM/AAAA) ou só ano (AAAA).";
+
+  function attachDates(root) {
+    if (window.SoproM15DatePicker) {
+      window.SoproM15DatePicker.attachAll(root || body());
+    }
   }
 
   function sel(name, list, selected, attrs) {
@@ -209,6 +250,7 @@
     if (!box) return;
     box.innerHTML = html;
     if (wire) wire(box);
+    attachDates(box);
     box.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
@@ -282,8 +324,8 @@
     if (!area) return;
     if (state.token && state.user) {
       area.innerHTML =
-        '<div class="m15-token-box">' +
-        '  <span><strong>Conectado:</strong> ' + esc(state.user.nome) +
+        '<div class="m15-session">' +
+        '  <span class="m15-session-user"><strong>Conectado:</strong> ' + esc(state.user.nome) +
         '    <span class="m15-pill">' + esc((state.user.papeis || []).join(", ")) + "</span></span>" +
         '  <button class="m15-btn m15-btn-sec" id="m15Sair">Sair</button>' +
         '  <span class="m15-muted" id="m15ApiStatus"></span>' +
@@ -298,16 +340,25 @@
       });
     } else {
       area.innerHTML =
-        '<div class="m15-token-box">' +
-        '  <input type="email" id="m15Email" placeholder="e-mail" autocomplete="off">' +
-        '  <input type="password" id="m15Senha" placeholder="senha" autocomplete="off">' +
-        '  <button class="m15-btn" id="m15Entrar">Entrar</button>' +
-        '  <span class="m15-muted" id="m15ApiStatus">Proxy/API: verificando…</span>' +
-        "</div>" +
-        '<div class="m15-token-box" style="margin-top:8px">' +
-        '  <span class="m15-muted">ou token da CLI (<code>python -m app.cli emitir-token</code>):</span>' +
-        '  <input type="password" id="m15Token" placeholder="cole o token da API aqui" autocomplete="off">' +
-        '  <button class="m15-btn m15-btn-sec" id="m15TokenSave">Usar token</button>' +
+        '<div class="m15-login">' +
+        '  <div class="m15-login-grid">' +
+        '    <label class="m15-field"><span class="m15-field-label">E-mail</span>' +
+        '      <input type="email" id="m15Email" placeholder="voce@soprolife.com.br" autocomplete="off"></label>' +
+        '    <label class="m15-field"><span class="m15-field-label">Senha</span>' +
+        '      <input type="password" id="m15Senha" placeholder="••••••••••" autocomplete="off"></label>' +
+        '    <button class="m15-btn" id="m15Entrar">Entrar</button>' +
+        "  </div>" +
+        '  <span class="m15-muted m15-login-status" id="m15ApiStatus">Proxy/API: verificando…</span>' +
+        '  <details class="m15-login-alt">' +
+        '    <summary>Entrar com token da CLI (avançado)</summary>' +
+        '    <div class="m15-login-grid">' +
+        '      <label class="m15-field"><span class="m15-field-label">Token da API ' +
+        "(python -m app.cli emitir-token)</span>" +
+        '        <input type="password" id="m15Token" placeholder="cole o token da API aqui" autocomplete="off"></label>' +
+        '      <button class="m15-btn m15-btn-sec" id="m15TokenSave">Usar token</button>' +
+        "    </div>" +
+        '    <span class="m15-muted">O token vive apenas em memória — nunca em localStorage/sessionStorage.</span>' +
+        "  </details>" +
         "</div>";
       var doLogin = function () {
         var email = document.getElementById("m15Email").value.trim();
@@ -481,13 +532,13 @@
         '<div id="m15EditBox"></div>' +
         (podeEditar
           ? '<div class="m15-panel"><h3>Nova pessoa</h3><form class="m15-form" id="m15FormPessoa">' +
-            fld("Nome completo", inp("nome_completo", "", 'required minlength="2"')) +
-            fld("Data de nascimento", inp("data_nascimento", "", 'type="date"')) +
-            fld("WhatsApp (opcional)", inp("whatsapp", "", 'placeholder="(21) 9…"')) +
+            fld("Nome completo", inp("nome_completo", "", 'required minlength="2"'), 6) +
+            fld("Data de nascimento", dateInp("data_nascimento", ""), 3) +
+            fld("WhatsApp (opcional)", inp("whatsapp", "", 'placeholder="(21) 9…"'), 3) +
             fld("Consentimento WhatsApp", sel("consentimento_whatsapp",
-              [["", "não informado"], "concedido", "desconhecido", "revogado"], "")) +
-            fld("Observação", inp("observacao", ""), true) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Criar pessoa</button></div>' +
+              [["", "não informado"], "concedido", "desconhecido", "revogado"], ""), 3) +
+            fld("Observação", inp("observacao", ""), 9) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar pessoa</button></div>' +
             "</form></div>"
           : "");
       document.getElementById("m15PessoasBuscar").addEventListener("click", function () {
@@ -530,25 +581,25 @@
     openEdit(
       '<div class="m15-panel"><h3>Editar ' + esc(p.public_code) + " — " + esc(p.nome_completo) + "</h3>" +
       '<form class="m15-form" id="m15EditPessoa">' +
-      fld("Nome completo", inp("nome_completo", p.nome_completo, 'minlength="2"')) +
-      fld("Data de nascimento", inp("data_nascimento", p.data_nascimento || "", 'type="date"')) +
-      fld("Status", sel("status", ["ativo", "inativo"], p.status)) +
+      fld("Nome completo", inp("nome_completo", p.nome_completo, 'minlength="2"'), 6) +
+      fld("Data de nascimento", dateInp("data_nascimento", p.data_nascimento || ""), 3) +
+      fld("Status", sel("status", ["ativo", "inativo"], p.status), 3) +
       fld("Não contatar", sel("nao_contatar", [["false", "pode contatar"], ["true", "NÃO contatar"]],
-        p.nao_contatar ? "true" : "false")) +
-      fld("Observação", inp("observacao", p.observacao || ""), true) +
-      '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar</button> ' +
+        p.nao_contatar ? "true" : "false"), 3) +
+      fld("Observação", inp("observacao", p.observacao || ""), 9) +
+      '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
       closeEditButton() + "</div></form>" +
       '<h3>Adicionar contato</h3><form class="m15-form" id="m15EditContato">' +
-      fld("Tipo", sel("tipo", ["whatsapp", "telefone", "email", "outro"], "whatsapp")) +
-      fld("Valor", inp("valor", "", "required")) +
-      fld("Principal", sel("principal", [["false", "não"], ["true", "sim"]], "false")) +
-      '<div class="m15-form-full"><button class="m15-btn m15-btn-sec" type="submit">Adicionar contato</button></div>' +
+      fld("Tipo", sel("tipo", ["whatsapp", "telefone", "email", "outro"], "whatsapp"), 3) +
+      fld("Valor", inp("valor", "", "required"), 6) +
+      fld("Principal", sel("principal", [["false", "não"], ["true", "sim"]], "false"), 3) +
+      '<div class="m15-form-full m15-actions"><button class="m15-btn m15-btn-sec" type="submit">Adicionar contato</button></div>' +
       "</form>" +
       '<h3>Registrar consentimento</h3><form class="m15-form" id="m15EditConsent">' +
-      fld("Canal", sel("canal", ["whatsapp", "telefone", "email"], "whatsapp")) +
-      fld("Status", sel("status", ["concedido", "revogado", "desconhecido"], "concedido")) +
-      fld("Origem", inp("origem", "", 'placeholder="ex.: conversa telefônica"')) +
-      '<div class="m15-form-full"><button class="m15-btn m15-btn-sec" type="submit">Registrar consentimento</button></div>' +
+      fld("Canal", sel("canal", ["whatsapp", "telefone", "email"], "whatsapp"), 3) +
+      fld("Status", sel("status", ["concedido", "revogado", "desconhecido"], "concedido"), 3) +
+      fld("Origem", inp("origem", "", 'placeholder="ex.: conversa telefônica"'), 6) +
+      '<div class="m15-form-full m15-actions"><button class="m15-btn m15-btn-sec" type="submit">Registrar consentimento</button></div>' +
       "</form></div>",
       function (box) {
         wireClose(box);
@@ -632,19 +683,20 @@
         '<div id="m15EditBox"></div>' +
         (podeEditar
           ? '<div class="m15-panel"><h3>Novo lead</h3><form class="m15-form" id="m15FormLead">' +
-            fld("Pessoa (PES-… ou nome)", inp("pessoa", "", "required")) +
-            fld("Origem", inp("origem", "", 'placeholder="ex.: site, indicação"')) +
-            fld("Canal de entrada", inp("canal_entrada", "", 'placeholder="ex.: whatsapp"')) +
+            fld("Pessoa", inp("pessoa", "", "required"),
+              { span: 6, help: "Código PES-… ou nome já cadastrado na aba Pessoas." }) +
+            fld("Origem", inp("origem", "", 'placeholder="ex.: site, indicação"'), 3) +
+            fld("Canal de entrada", inp("canal_entrada", "", 'placeholder="ex.: whatsapp"'), 3) +
             fld("Serviço de interesse", sel("servico_interesse",
-              [["", "—"], "espirometria", "consulta", "ambos", "outro"], "")) +
-            fld("Modalidade", sel("modalidade", [["", "—"]].concat(MODALIDADES), "")) +
-            fld("Etapa", sel("etapa", LEAD_ETAPAS, "novo")) +
-            fld("1º contato (AAAA-MM-DD, AAAA-MM ou AAAA)", inp("data_primeiro_contato", "",
-              'placeholder="2026-07-18"')) +
-            fld("Retomada manual", inp("data_retomada_manual", "", 'type="date"')) +
-            fld("Responsável", inp("responsavel", "")) +
-            fld("Observação", inp("observacao", ""), true) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Criar lead</button></div>' +
+              [["", "—"], "espirometria", "consulta", "ambos", "outro"], ""), 3) +
+            fld("Modalidade", sel("modalidade", [["", "—"]].concat(MODALIDADES), ""), 3) +
+            fld("Etapa", sel("etapa", LEAD_ETAPAS, "novo"), 3) +
+            fld("Responsável", inp("responsavel", ""), 3) +
+            fld("1º contato", dateInp("data_primeiro_contato", "", { parcial: true }),
+              { span: 3, help: HELP_DATA_PARCIAL }) +
+            fld("Retomada manual", dateInp("data_retomada_manual", ""), 3) +
+            fld("Observação", inp("observacao", ""), 6) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar lead</button></div>' +
             "</form></div>"
           : "");
       document.getElementById("m15LeadsEtapa").addEventListener("change", function (ev) {
@@ -679,12 +731,12 @@
           openEdit(
             '<div class="m15-panel"><h3>Editar lead ' + esc(l.public_code) + "</h3>" +
             '<form class="m15-form" id="m15EditLead">' +
-            fld("Etapa", sel("etapa", LEAD_ETAPAS, l.etapa)) +
-            fld("Modalidade", sel("modalidade", [["", "—"]].concat(MODALIDADES), l.modalidade || "")) +
-            fld("Retomada manual", inp("data_retomada_manual", l.data_retomada_manual || "", 'type="date"')) +
-            fld("Responsável", inp("responsavel", l.responsavel || "")) +
+            fld("Etapa", sel("etapa", LEAD_ETAPAS, l.etapa), 3) +
+            fld("Modalidade", sel("modalidade", [["", "—"]].concat(MODALIDADES), l.modalidade || ""), 3) +
+            fld("Retomada manual", dateInp("data_retomada_manual", l.data_retomada_manual || ""), 3) +
+            fld("Responsável", inp("responsavel", l.responsavel || ""), 3) +
             fld("Observação", inp("observacao", l.observacao || ""), true) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar</button> ' +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
             closeEditButton() + "</div></form></div>",
             function (box) {
               wireClose(box);
@@ -755,22 +807,27 @@
           (podeEditar
             ? '<div class="m15-panel"><h3>' + (isExam ? "Nova espirometria" : "Nova consulta") +
               '</h3><form class="m15-form" id="m15FormAtt">' +
-              fld("Pessoa (PES-… ou nome)", inp("pessoa", "", "required")) +
-              fld("Data (AAAA-MM-DD, AAAA-MM ou AAAA)", inp("data", "")) +
+              fld("Pessoa", inp("pessoa", "", "required"),
+                { span: 6, help: "Código PES-… ou nome já cadastrado na aba Pessoas." }) +
+              fld(isExam ? "Data do exame" : "Data da consulta",
+                dateInp("data", "", { parcial: true }), { span: 3, help: HELP_DATA_PARCIAL }) +
+              fld("Status", sel("status", statusList, statusList[0]), 3) +
               (isExam
                 ? fld("Modalidade", sel("modalidade",
-                    [["", "—"], "residencial", "cowork", "clinica_parceira"], "")) +
-                  fld("Local de atendimento", inp("local_atendimento", "")) +
-                  fld("Parceiro (opcional)", sel("partner_id", [["", "sem parceiro"]].concat(partners), "")) +
-                  fld("Unidade (opcional)", sel("partner_unit_id", [["", "sem unidade"]], ""))
+                    [["", "—"], "residencial", "cowork", "clinica_parceira"], ""), 4) +
+                  fld("Origem", inp("origem", ""), 4) +
+                  fld("Responsável", inp("responsavel", ""), 4) +
+                  grp("Local e parceria (opcional)",
+                    fld("Local de atendimento", inp("local_atendimento", ""), 4) +
+                    fld("Parceiro", sel("partner_id", [["", "sem parceiro"]].concat(partners), ""), 4) +
+                    fld("Unidade", sel("partner_unit_id", [["", "sem unidade"]], ""), 4))
                 : fld("Modalidade", sel("modalidade",
-                    [["", "—"], "teleconsulta", "residencial", "cowork", "clinica_parceira"], "")) +
-                  fld("Profissional", inp("profissional", ""))) +
-              fld("Status", sel("status", statusList, statusList[0])) +
-              fld("Origem", inp("origem", "")) +
-              fld("Responsável", inp("responsavel", "")) +
-              fld("Observação", inp("observacao", ""), true) +
-              '<div class="m15-form-full"><button class="m15-btn" type="submit">' +
+                    [["", "—"], "teleconsulta", "residencial", "cowork", "clinica_parceira"], ""), 4) +
+                  fld("Profissional", inp("profissional", ""), 4) +
+                  fld("Origem", inp("origem", ""), 4) +
+                  fld("Responsável", inp("responsavel", ""), 4)) +
+              fld("Observação", inp("observacao", ""), isExam ? true : 8) +
+              '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">' +
               (isExam ? "Criar espirometria" : "Criar consulta") + "</button></div>" +
               "</form></div>"
             : "");
@@ -815,14 +872,14 @@
             openEdit(
               '<div class="m15-panel"><h3>Editar ' + esc(e.public_code) + "</h3>" +
               '<form class="m15-form" id="m15EditAtt">' +
-              fld("Status", sel("status", statusList, e.status)) +
-              fld("Data", inp("data", (isExam ? e.data_exame : e.data_consulta) || "",
-                'placeholder="AAAA-MM-DD"')) +
+              fld("Status", sel("status", statusList, e.status), 3) +
+              fld("Data", dateInp("data", (isExam ? e.data_exame : e.data_consulta) || "",
+                { parcial: true }), { span: 3, help: HELP_DATA_PARCIAL }) +
               (isExam
-                ? fld("Responsável", inp("responsavel", e.responsavel || ""))
-                : fld("Profissional", inp("profissional", e.profissional || ""))) +
+                ? fld("Responsável", inp("responsavel", e.responsavel || ""), 6)
+                : fld("Profissional", inp("profissional", e.profissional || ""), 6)) +
               fld("Observação", inp("observacao", e.observacao || ""), true) +
-              '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar</button> ' +
+              '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
               closeEditButton() + "</div></form>" +
               '<p class="m15-muted">Marcar como ' + (isExam ? '"Realizado"' : '"Realizada"') +
               " agenda o follow-up de 6 meses automaticamente.</p></div>",
@@ -891,11 +948,11 @@
         ) +
         (podeEditar
           ? '<h3>Novo parceiro</h3><form class="m15-form" id="m15FormParceiro">' +
-            fld("Nome", inp("nome", "", 'required minlength="2"')) +
-            fld("Tipo", sel("tipo", ["clinica", "consultorio", "outro"], "clinica")) +
-            fld("Status", sel("status", PARTNER_STATUS, "prospecto")) +
-            fld("Cidade", inp("cidade", "")) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Criar parceiro</button></div>' +
+            fld("Nome", inp("nome", "", 'required minlength="2"'), 6) +
+            fld("Tipo", sel("tipo", ["clinica", "consultorio", "outro"], "clinica"), 2) +
+            fld("Status", sel("status", PARTNER_STATUS, "prospecto"), 2) +
+            fld("Cidade", inp("cidade", ""), 2) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar parceiro</button></div>' +
             "</form>"
           : "") +
         "</div>" +
@@ -915,11 +972,11 @@
         ) +
         (podeEditar
           ? '<h3>Nova unidade</h3><form class="m15-form" id="m15FormUnidade">' +
-            fld("Parceiro", sel("partner_id", pOpts, "", "required")) +
-            fld("Nome", inp("nome", "", "required")) +
-            fld("Bairro", inp("bairro", "")) +
-            fld("Cidade", inp("cidade", "")) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Criar unidade</button></div>' +
+            fld("Parceiro", sel("partner_id", pOpts, "", "required"), 4) +
+            fld("Nome", inp("nome", "", "required"), 4) +
+            fld("Bairro", inp("bairro", ""), 2) +
+            fld("Cidade", inp("cidade", ""), 2) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar unidade</button></div>' +
             "</form>"
           : "") +
         "</div>" +
@@ -939,13 +996,13 @@
         ) +
         (podeEditar
           ? '<h3>Novo contato</h3><form class="m15-form" id="m15FormContato">' +
-            fld("Parceiro", sel("partner_id", pOpts, "", "required")) +
-            fld("Nome", inp("nome", "", 'required minlength="2"')) +
-            fld("Cargo", inp("cargo", "")) +
-            fld("Telefone", inp("telefone", "")) +
-            fld("E-mail", inp("email", "")) +
-            fld("Principal", sel("principal", [["false", "não"], ["true", "sim"]], "false")) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Criar contato</button></div>' +
+            fld("Parceiro", sel("partner_id", pOpts, "", "required"), 4) +
+            fld("Nome", inp("nome", "", 'required minlength="2"'), 4) +
+            fld("Cargo", inp("cargo", ""), 4) +
+            fld("Telefone", inp("telefone", ""), 4) +
+            fld("E-mail", inp("email", ""), 4) +
+            fld("Principal", sel("principal", [["false", "não"], ["true", "sim"]], "false"), 4) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar contato</button></div>' +
             "</form>"
           : "") +
         "</div>" +
@@ -971,15 +1028,16 @@
         ) +
         (podeGestor
           ? '<h3>Nova parceria (gestor)</h3><form class="m15-form" id="m15FormParceria">' +
-            fld("Parceiro", sel("partner_id", pOpts, "", "required")) +
-            fld("Status", sel("status", ["em_negociacao", "ativa", "pausada", "encerrada"], "em_negociacao")) +
-            fld("Início (AAAA-MM-DD/AAAA-MM/AAAA)", inp("data_inicio", "")) +
-            fld("Modelo de repasse", sel("modelo_repasse", ["indefinido", "percentual", "fixo", "nenhum"], "indefinido")) +
-            fld("% repasse", inp("percentual_repasse", "", 'type="number" step="0.01" min="0" max="100"')) +
-            fld("Valor fixo (R$)", inp("valor_repasse_fixo", "", 'type="number" step="0.01" min="0"')) +
-            fld("Responsável SoproLife", inp("responsavel_soprolife", "")) +
-            fld("Follow-up por", sel("responsavel_followup", ["soprolife", "parceiro"], "soprolife")) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Criar parceria</button></div>' +
+            fld("Parceiro", sel("partner_id", pOpts, "", "required"), 6) +
+            fld("Status", sel("status", ["em_negociacao", "ativa", "pausada", "encerrada"], "em_negociacao"), 3) +
+            fld("Início", dateInp("data_inicio", "", { parcial: true }),
+              { span: 3, help: HELP_DATA_PARCIAL }) +
+            fld("Modelo de repasse", sel("modelo_repasse", ["indefinido", "percentual", "fixo", "nenhum"], "indefinido"), 3) +
+            fld("% repasse", inp("percentual_repasse", "", 'type="number" step="0.01" min="0" max="100"'), 3) +
+            fld("Valor fixo (R$)", inp("valor_repasse_fixo", "", 'type="number" step="0.01" min="0"'), 3) +
+            fld("Follow-up por", sel("responsavel_followup", ["soprolife", "parceiro"], "soprolife"), 3) +
+            fld("Responsável SoproLife", inp("responsavel_soprolife", ""), 6) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar parceria</button></div>' +
             "</form>"
           : "") +
         "</div>" +
@@ -1052,12 +1110,12 @@
         openEdit(
           '<div class="m15-panel"><h3>Editar parceiro ' + esc(p.public_code) + "</h3>" +
           '<form class="m15-form" id="m15EditParceiro">' +
-          fld("Nome", inp("nome", p.nome, 'minlength="2"')) +
-          fld("Tipo", sel("tipo", ["clinica", "consultorio", "outro"], p.tipo)) +
-          fld("Status", sel("status", PARTNER_STATUS, p.status)) +
-          fld("Cidade", inp("cidade", p.cidade || "")) +
-          fld("Observação", inp("observacao", p.observacao || ""), true) +
-          '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar</button> ' +
+          fld("Nome", inp("nome", p.nome, 'minlength="2"'), 6) +
+          fld("Tipo", sel("tipo", ["clinica", "consultorio", "outro"], p.tipo), 3) +
+          fld("Status", sel("status", PARTNER_STATUS, p.status), 3) +
+          fld("Cidade", inp("cidade", p.cidade || ""), 4) +
+          fld("Observação", inp("observacao", p.observacao || ""), 8) +
+          '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
           closeEditButton() + "</div></form></div>",
           function (box) {
             wireClose(box);
@@ -1081,11 +1139,11 @@
         openEdit(
           '<div class="m15-panel"><h3>Editar unidade ' + esc(u.public_code) + "</h3>" +
           '<form class="m15-form" id="m15EditUnidade">' +
-          fld("Nome", inp("nome", u.nome)) +
-          fld("Bairro", inp("bairro", u.bairro || "")) +
-          fld("Cidade", inp("cidade", u.cidade || "")) +
-          fld("Ativa", sel("ativo", [["true", "sim"], ["false", "não"]], u.ativo ? "true" : "false")) +
-          '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar</button> ' +
+          fld("Nome", inp("nome", u.nome), 4) +
+          fld("Bairro", inp("bairro", u.bairro || ""), 3) +
+          fld("Cidade", inp("cidade", u.cidade || ""), 3) +
+          fld("Ativa", sel("ativo", [["true", "sim"], ["false", "não"]], u.ativo ? "true" : "false"), 2) +
+          '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
           closeEditButton() + "</div></form></div>",
           function (box) {
             wireClose(box);
@@ -1107,13 +1165,13 @@
         openEdit(
           '<div class="m15-panel"><h3>Editar contato ' + esc(c.public_code) + "</h3>" +
           '<form class="m15-form" id="m15EditContatoP">' +
-          fld("Nome", inp("nome", c.nome, 'minlength="2"')) +
-          fld("Cargo", inp("cargo", c.cargo || "")) +
-          fld("Telefone", inp("telefone", c.telefone || "")) +
-          fld("E-mail", inp("email", c.email || "")) +
-          fld("Principal", sel("principal", [["false", "não"], ["true", "sim"]], c.principal ? "true" : "false")) +
-          fld("Ativo", sel("ativo", [["true", "sim"], ["false", "não"]], c.ativo ? "true" : "false")) +
-          '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar</button> ' +
+          fld("Nome", inp("nome", c.nome, 'minlength="2"'), 4) +
+          fld("Cargo", inp("cargo", c.cargo || ""), 4) +
+          fld("Telefone", inp("telefone", c.telefone || ""), 4) +
+          fld("E-mail", inp("email", c.email || ""), 6) +
+          fld("Principal", sel("principal", [["false", "não"], ["true", "sim"]], c.principal ? "true" : "false"), 3) +
+          fld("Ativo", sel("ativo", [["true", "sim"], ["false", "não"]], c.ativo ? "true" : "false"), 3) +
+          '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
           closeEditButton() + "</div></form></div>",
           function (box) {
             wireClose(box);
@@ -1139,15 +1197,16 @@
         openEdit(
           '<div class="m15-panel"><h3>Editar parceria ' + esc(pt.public_code) + " (gestor)</h3>" +
           '<form class="m15-form" id="m15EditParceria">' +
-          fld("Status", sel("status", ["em_negociacao", "ativa", "pausada", "encerrada"], pt.status)) +
-          fld("Início", inp("data_inicio", pt.data_inicio || "", 'placeholder="AAAA-MM-DD"')) +
-          fld("Modelo de repasse", sel("modelo_repasse", ["indefinido", "percentual", "fixo", "nenhum"], pt.modelo_repasse)) +
+          fld("Status", sel("status", ["em_negociacao", "ativa", "pausada", "encerrada"], pt.status), 4) +
+          fld("Início", dateInp("data_inicio", pt.data_inicio || "", { parcial: true }),
+            { span: 4, help: HELP_DATA_PARCIAL }) +
+          fld("Modelo de repasse", sel("modelo_repasse", ["indefinido", "percentual", "fixo", "nenhum"], pt.modelo_repasse), 4) +
           fld("% repasse", inp("percentual_repasse", pt.percentual_repasse == null ? "" : pt.percentual_repasse,
-            'type="number" step="0.01" min="0" max="100"')) +
+            'type="number" step="0.01" min="0" max="100"'), 4) +
           fld("Valor fixo (R$)", inp("valor_repasse_fixo", pt.valor_repasse_fixo == null ? "" : pt.valor_repasse_fixo,
-            'type="number" step="0.01" min="0"')) +
-          fld("Follow-up por", sel("responsavel_followup", ["soprolife", "parceiro"], pt.responsavel_followup)) +
-          '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar</button> ' +
+            'type="number" step="0.01" min="0"'), 4) +
+          fld("Follow-up por", sel("responsavel_followup", ["soprolife", "parceiro"], pt.responsavel_followup), 4) +
+          '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
           closeEditButton() + "</div></form></div>",
           function (box) {
             wireClose(box);
@@ -1218,19 +1277,22 @@
         '<div id="m15EditBox"></div>' +
         (podeEditar
           ? '<div class="m15-panel"><h3>Novo encaminhamento</h3><form class="m15-form" id="m15FormEnc">' +
-            fld("Pessoa (PES-… ou nome)", inp("pessoa", "", "required")) +
-            fld("Parceiro", sel("partner_id", partners, "", "required")) +
-            fld("Unidade (opcional)", sel("partner_unit_id", [["", "sem unidade"]], "")) +
-            fld("Serviço", sel("servico_solicitado", [["", "—"], "espirometria", "consulta", "ambos", "outro"], "")) +
-            fld("Encaminhado em (AAAA-MM-DD/AAAA-MM/AAAA)", inp("data_encaminhamento", "")) +
-            fld("Data agendada", inp("data_agendada", "", 'type="date"')) +
-            fld("Status", sel("status", REFERRAL_STATUS, "Recebido da clínica")) +
-            fld("Clínica autorizou contato da SoproLife?", sel("autorizacao",
-              [["", "não informado (sem contato)"], ["true", "sim"], ["false", "não"]], "")) +
-            fld("Follow-up por", sel("responsavel_followup", ["soprolife", "parceiro"], "soprolife")) +
-            fld("Responsável SoproLife", inp("responsavel_soprolife", "")) +
+            fld("Pessoa", inp("pessoa", "", "required"),
+              { span: 6, help: "Código PES-… ou nome já cadastrado na aba Pessoas." }) +
+            fld("Parceiro", sel("partner_id", partners, "", "required"), 3) +
+            fld("Unidade (opcional)", sel("partner_unit_id", [["", "sem unidade"]], ""), 3) +
+            fld("Serviço", sel("servico_solicitado", [["", "—"], "espirometria", "consulta", "ambos", "outro"], ""), 3) +
+            fld("Encaminhado em", dateInp("data_encaminhamento", "", { parcial: true }),
+              { span: 3, help: HELP_DATA_PARCIAL }) +
+            fld("Data agendada", dateInp("data_agendada", ""), 3) +
+            fld("Status", sel("status", REFERRAL_STATUS, "Recebido da clínica"), 3) +
+            fld("Autorização de contato", sel("autorizacao",
+              [["", "não informado (sem contato)"], ["true", "sim"], ["false", "não"]], ""),
+              { span: 4, help: "A clínica autorizou a SoproLife a contatar o paciente?" }) +
+            fld("Follow-up por", sel("responsavel_followup", ["soprolife", "parceiro"], "soprolife"), 4) +
+            fld("Responsável SoproLife", inp("responsavel_soprolife", ""), 4) +
             fld("Observação operacional", inp("observacao_operacional", ""), true) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Criar encaminhamento</button></div>' +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar encaminhamento</button></div>' +
             "</form></div>"
           : "");
       document.getElementById("m15EncStatus").addEventListener("change", function (ev) {
@@ -1276,18 +1338,18 @@
           openEdit(
             '<div class="m15-panel"><h3>Editar encaminhamento ' + esc(ref.public_code) + "</h3>" +
             '<form class="m15-form" id="m15EditEnc">' +
-            fld("Status", sel("status", REFERRAL_STATUS, ref.status)) +
-            fld("Data agendada", inp("data_agendada", ref.data_agendada || "", 'type="date"')) +
-            fld("Data de realização", inp("data_realizacao", ref.data_realizacao || "", 'type="date"')) +
+            fld("Status", sel("status", REFERRAL_STATUS, ref.status), 4) +
+            fld("Data agendada", dateInp("data_agendada", ref.data_agendada || ""), 4) +
+            fld("Data de realização", dateInp("data_realizacao", ref.data_realizacao || ""), 4) +
             fld("Laudo enviado", sel("laudo_enviado", [["", "—"], ["true", "sim"], ["false", "não"]],
-              ref.laudo_enviado ? "true" : "")) +
-            fld("Data envio do laudo", inp("data_envio_laudo", ref.data_envio_laudo || "", 'type="date"')) +
+              ref.laudo_enviado ? "true" : ""), 4) +
+            fld("Data envio do laudo", dateInp("data_envio_laudo", ref.data_envio_laudo || ""), 4) +
+            fld("Próximo follow-up", dateInp("proximo_followup", ref.proximo_followup || ""), 4) +
             fld("Autorização de contato", sel("autorizacao",
-              [["", "manter"], ["true", "sim"], ["false", "não"]], "")) +
-            fld("Follow-up por", sel("responsavel_followup", ["soprolife", "parceiro"], ref.responsavel_followup)) +
-            fld("Próximo follow-up", inp("proximo_followup", ref.proximo_followup || "", 'type="date"')) +
-            fld("Observação operacional", inp("observacao_operacional", ref.observacao_operacional || ""), true) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar</button> ' +
+              [["", "manter"], ["true", "sim"], ["false", "não"]], ""), 3) +
+            fld("Follow-up por", sel("responsavel_followup", ["soprolife", "parceiro"], ref.responsavel_followup), 3) +
+            fld("Observação operacional", inp("observacao_operacional", ref.observacao_operacional || ""), 6) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
             closeEditButton() + "</div></form></div>",
             function (box) {
               wireClose(box);
@@ -1324,18 +1386,22 @@
             "estes campos registram a visão do encaminhamento sem duplicar receita.</p>" +
             '<form class="m15-form" id="m15EditEncFin">' +
             fld("Valor cobrado (R$)", inp("valor_cobrado", ref.valor_cobrado == null ? "" : ref.valor_cobrado,
-              'type="number" step="0.01" min="0"')) +
+              'type="number" step="0.01" min="0"'), 4) +
             fld("Valor recebido (R$)", inp("valor_recebido", ref.valor_recebido == null ? "" : ref.valor_recebido,
-              'type="number" step="0.01" min="0"')) +
-            fld("Tipo de repasse", sel("tipo_repasse", [["", "—"], "percentual", "fixo", "nenhum"], ref.tipo_repasse || "")) +
-            fld("% repasse", inp("percentual_repasse", ref.percentual_repasse == null ? "" : ref.percentual_repasse,
-              'type="number" step="0.01" min="0" max="100"')) +
-            fld("Valor do repasse (R$)", inp("valor_repasse", ref.valor_repasse == null ? "" : ref.valor_repasse,
-              'type="number" step="0.01" min="0"')) +
+              'type="number" step="0.01" min="0"'), 4) +
             fld("Status do repasse", sel("status_repasse", [["", "—"], "previsto", "aguardando", "pago", "cancelado"],
-              ref.status_repasse || "")) +
-            fld("ID do lançamento vinculado (LAN)", inp("financial_entry_id", ref.financial_entry_id || ""), true) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar financeiro</button> ' +
+              ref.status_repasse || ""), 4) +
+            grp("Acordo de repasse",
+              fld("Tipo de repasse", sel("tipo_repasse", [["", "—"], "percentual", "fixo", "nenhum"], ref.tipo_repasse || ""), 4) +
+              fld("% repasse", inp("percentual_repasse", ref.percentual_repasse == null ? "" : ref.percentual_repasse,
+                'type="number" step="0.01" min="0" max="100"'), 4) +
+              fld("Valor do repasse (R$)", inp("valor_repasse", ref.valor_repasse == null ? "" : ref.valor_repasse,
+                'type="number" step="0.01" min="0"'), 4)) +
+            grp("Vínculo técnico (opcional)",
+              fld("ID do lançamento (LAN)", inp("financial_entry_id", ref.financial_entry_id || ""),
+                { span: 6, help: "Identificador técnico do lançamento no Financeiro — nunca digite dados de pessoas." }),
+              "m15-group-tech") +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar financeiro</button> ' +
             closeEditButton() + "</div></form></div>",
             function (box) {
               wireClose(box);
@@ -1429,19 +1495,21 @@
       if (podeEditar) {
         html +=
           '<div class="m15-panel"><h3>Novo follow-up manual</h3><form class="m15-form" id="m15FormFup">' +
-          fld("Pessoa (PES-… ou nome)", inp("pessoa", "", "required")) +
-          fld("Vencimento", inp("due_date", "", 'type="date"')) +
-          fld("Responsável", inp("responsavel", "")) +
+          fld("Pessoa", inp("pessoa", "", "required"),
+            { span: 6, help: "Código PES-… ou nome já cadastrado na aba Pessoas." }) +
+          fld("Vencimento", dateInp("due_date", ""), 3) +
+          fld("Responsável", inp("responsavel", ""), 3) +
           fld("Observação", inp("observacao", ""), true) +
-          '<div class="m15-form-full"><button class="m15-btn" type="submit">Criar follow-up</button></div>' +
+          '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar follow-up</button></div>' +
           "</form></div>" +
           '<div class="m15-panel"><h3>Registrar interação</h3><form class="m15-form" id="m15FormInt">' +
-          fld("Pessoa (PES-… ou nome)", inp("pessoa", "", "required")) +
-          fld("Canal", sel("canal", ["whatsapp", "telefone", "email", "presencial", "outro"], "telefone")) +
-          fld("Direção", sel("direcao", ["enviado", "recebido"], "enviado")) +
-          fld("Resultado", inp("resultado", "", 'placeholder="ex.: respondeu, sem resposta"')) +
-          fld("Resumo", inp("resumo", ""), true) +
-          '<div class="m15-form-full"><button class="m15-btn" type="submit">Registrar interação</button></div>' +
+          fld("Pessoa", inp("pessoa", "", "required"),
+            { span: 6, help: "Código PES-… ou nome já cadastrado na aba Pessoas." }) +
+          fld("Canal", sel("canal", ["whatsapp", "telefone", "email", "presencial", "outro"], "telefone"), 3) +
+          fld("Direção", sel("direcao", ["enviado", "recebido"], "enviado"), 3) +
+          fld("Resultado", inp("resultado", "", 'placeholder="ex.: respondeu, sem resposta"'), 4) +
+          fld("Resumo", inp("resumo", ""), 8) +
+          '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Registrar interação</button></div>' +
           "</form></div>";
       }
       html +=
@@ -1507,9 +1575,9 @@
           openEdit(
             '<div class="m15-panel"><h3>Nova tentativa de follow-up</h3>' +
             '<form class="m15-form" id="m15FormRetry">' +
-            fld("Nova data", inp("nova_data", "", 'type="date" required')) +
-            fld("Observação", inp("observacao", "")) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Reagendar</button> ' +
+            fld("Nova data", dateInp("nova_data", "", { required: true }), 4) +
+            fld("Observação", inp("observacao", ""), 8) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Reagendar</button> ' +
             closeEditButton() + "</div></form></div>",
             function (box) {
               wireClose(box);
@@ -1607,19 +1675,24 @@
           ? '<div class="m15-panel"><h3>Novo lançamento (gestor)</h3>' +
             '<p class="m15-muted">Nunca digite nome, telefone ou CPF — a API rejeita PII em categoria/descrição.</p>' +
             '<form class="m15-form" id="m15FormLan">' +
-            fld("Tipo", sel("tipo", ["receita", "despesa", "repasse"], "receita")) +
-            fld("Categoria", inp("categoria", "", 'placeholder="ex.: Espirometria"')) +
-            fld("Valor (R$)", inp("valor", "", 'type="number" step="0.01" min="0.01" required')) +
-            fld("Competência (AAAA-MM-DD/AAAA-MM/AAAA)", inp("data_competencia", "")) +
-            fld("Data de recebimento", inp("data_recebimento", "", 'type="date"')) +
-            fld("Status", sel("status", ["Pendente", "Recebido", "Parcial", "Cortesia", "Cancelado"], "Pendente")) +
-            fld("Forma de pagamento", sel("forma_pagamento", [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"], "")) +
-            fld("Origem do preço", sel("origem_preco", [["", "—"], "Tabela", "Promoção", "Parceria", "Negociação", "Cortesia"], "")) +
-            fld("ID exame (ESP, opcional)", inp("spirometry_exam_id", "")) +
-            fld("ID consulta (CON, opcional)", inp("consultation_id", "")) +
-            fld("ID encaminhamento (ENC, opcional)", inp("partner_referral_id", "")) +
-            fld("Descrição (sem PII)", inp("descricao", ""), true) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Criar lançamento</button></div>' +
+            fld("Tipo", sel("tipo", ["receita", "despesa", "repasse"], "receita"), 3) +
+            fld("Valor (R$)", inp("valor", "", 'type="number" step="0.01" min="0.01" required'), 3) +
+            fld("Categoria", inp("categoria", "", 'placeholder="ex.: Espirometria"'), 3) +
+            fld("Competência", dateInp("data_competencia", "", { parcial: true }),
+              { span: 3, help: HELP_DATA_PARCIAL }) +
+            grp("Pagamento e baixa",
+              fld("Status", sel("status", ["Pendente", "Recebido", "Parcial", "Cortesia", "Cancelado"], "Pendente"), 3) +
+              fld("Data de recebimento", dateInp("data_recebimento", ""), 3) +
+              fld("Forma de pagamento", sel("forma_pagamento", [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"], ""), 3) +
+              fld("Origem do preço", sel("origem_preco", [["", "—"], "Tabela", "Promoção", "Parceria", "Negociação", "Cortesia"], ""), 3)) +
+            grp("Vínculos técnicos (opcionais) — LAN ↔ ESP/CON/ENC",
+              fld("ID exame (ESP)", inp("spirometry_exam_id", ""), 4) +
+              fld("ID consulta (CON)", inp("consultation_id", ""), 4) +
+              fld("ID encaminhamento (ENC)", inp("partner_referral_id", ""), 4),
+              "m15-group-tech") +
+            fld("Descrição (sem PII)", inp("descricao", ""),
+              { span: 12, help: "Texto livre opcional — nunca inclua nome, telefone ou CPF." }) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar lançamento</button></div>' +
             "</form></div>"
           : "");
       var formLan = document.getElementById("m15FormLan");
@@ -1655,13 +1728,14 @@
             '<div class="m15-panel"><h3>Editar lançamento ' + esc(e.public_code) + " (gestor)</h3>" +
             '<p class="m15-muted">Valor e tipo são imutáveis — correção monetária é um novo lançamento.</p>' +
             '<form class="m15-form" id="m15EditLan">' +
-            fld("Status", sel("status", ["Pendente", "Recebido", "Parcial", "Cortesia", "Cancelado"], e.status)) +
-            fld("Data de recebimento", inp("data_recebimento", e.data_recebimento || "", 'type="date"')) +
+            fld("Status", sel("status", ["Pendente", "Recebido", "Parcial", "Cortesia", "Cancelado"], e.status), 3) +
+            fld("Data de recebimento", dateInp("data_recebimento", e.data_recebimento || ""), 3) +
             fld("Forma de pagamento", sel("forma_pagamento", [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"],
-              e.forma_pagamento || "")) +
-            fld("Categoria (sem PII)", inp("categoria", e.categoria || "")) +
-            fld("Descrição (sem PII)", inp("descricao", e.descricao || ""), true) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar</button> ' +
+              e.forma_pagamento || ""), 3) +
+            fld("Categoria (sem PII)", inp("categoria", e.categoria || ""), 3) +
+            fld("Descrição (sem PII)", inp("descricao", e.descricao || ""),
+              { span: 12, help: "Texto livre opcional — nunca inclua nome, telefone ou CPF." }) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
             closeEditButton() + "</div></form></div>",
             function (box) {
               wireClose(box);
@@ -1782,12 +1856,12 @@
         ) +
         '<div id="m15EditBox"></div>' +
         '<div class="m15-panel"><h3>Novo usuário</h3><form class="m15-form" id="m15FormUser">' +
-        fld("Nome", inp("nome", "", 'required minlength="2"')) +
-        fld("E-mail", inp("email", "", 'type="email" required')) +
-        fld("Papel", sel("papel", PAPEIS, "leitura")) +
-        fld("Senha (mín. 10)", inp("senha", "", 'type="password" required minlength="10" autocomplete="new-password"')) +
-        fld("Confirmar senha", inp("senha2", "", 'type="password" required minlength="10" autocomplete="new-password"')) +
-        '<div class="m15-form-full"><button class="m15-btn" type="submit">Criar usuário</button></div>' +
+        fld("Nome", inp("nome", "", 'required minlength="2"'), 4) +
+        fld("E-mail", inp("email", "", 'type="email" required'), 4) +
+        fld("Papel", sel("papel", PAPEIS, "leitura"), 4) +
+        fld("Senha (mín. 10)", inp("senha", "", 'type="password" required minlength="10" autocomplete="new-password"'), 6) +
+        fld("Confirmar senha", inp("senha2", "", 'type="password" required minlength="10" autocomplete="new-password"'), 6) +
+        '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar usuário</button></div>' +
         "</form>" +
         '<p class="m15-muted">Menor privilégio: comece por leitura/operacional; gestor cuida de financeiro e ' +
         "parcerias; admin administra usuários. Nenhuma conta é criada automaticamente.</p></div>";
@@ -1815,9 +1889,9 @@
           openEdit(
             '<div class="m15-panel"><h3>Editar usuário — ' + esc(u.nome) + "</h3>" +
             '<form class="m15-form" id="m15EditUser">' +
-            fld("Papel", sel("papel", PAPEIS, (u.papeis || [])[0] || "leitura")) +
-            fld("Estado", sel("ativo", [["true", "ativo"], ["false", "inativo"]], u.ativo ? "true" : "false")) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Salvar</button> ' +
+            fld("Papel", sel("papel", PAPEIS, (u.papeis || [])[0] || "leitura"), 6) +
+            fld("Estado", sel("ativo", [["true", "ativo"], ["false", "inativo"]], u.ativo ? "true" : "false"), 6) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
             closeEditButton() + "</div></form>" +
             '<p class="m15-muted">Inativar derruba os tokens do usuário imediatamente. ' +
             "O último admin ativo nunca pode ser rebaixado ou inativado.</p></div>",
@@ -1847,9 +1921,9 @@
           openEdit(
             '<div class="m15-panel"><h3>Redefinir senha — ' + esc(u.nome) + "</h3>" +
             '<form class="m15-form" id="m15FormSenha">' +
-            fld("Nova senha (mín. 10)", inp("senha", "", 'type="password" required minlength="10" autocomplete="new-password"')) +
-            fld("Confirmar", inp("senha2", "", 'type="password" required minlength="10" autocomplete="new-password"')) +
-            '<div class="m15-form-full"><button class="m15-btn" type="submit">Redefinir senha</button> ' +
+            fld("Nova senha (mín. 10)", inp("senha", "", 'type="password" required minlength="10" autocomplete="new-password"'), 6) +
+            fld("Confirmar", inp("senha2", "", 'type="password" required minlength="10" autocomplete="new-password"'), 6) +
+            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Redefinir senha</button> ' +
             closeEditButton() + "</div></form>" +
             '<p class="m15-muted">Todos os tokens antigos deste usuário serão revogados imediatamente.</p></div>',
             function (box) {
@@ -1886,7 +1960,7 @@
     }
     var loader = loaders[state.tab] || loaders.visao;
     body().innerHTML = '<div class="m15-empty">Carregando…</div>';
-    loader().catch(showError);
+    loader().then(function () { attachDates(); }).catch(showError);
   }
 
   function checkApi() {
