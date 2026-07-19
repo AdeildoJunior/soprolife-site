@@ -88,6 +88,17 @@ Ordem recomendada: `crm_pacientes` → `crm_espirometria` → `crm_consultas` �
 `leads` → `contatos_b2b` (exames/consultas se vinculam aos pacientes por
 `legacy_id`, nunca por nome).
 
+## Migração governada por snapshot (M15.6A)
+
+Para snapshots privados do Google Sheets, o fluxo governado substitui o
+`importar` direto: manifesto imutável → registro → dry-run → aprovação
+humana → execução explícita (frase exata) → reconciliação → evidência de
+rollback. Comandos em `python -m app.cli migracao --help`; runbook completo
+em `painel-soprolife/docs/m15-6a-migracao-sheets-readiness.md`. Manifestos,
+snapshots e evidências de backup vivem SOMENTE no diretório privado
+aprovado (`M15_IMPORT_PRIVATE_DIR`, padrão `data-private/import-snapshots`),
+fora do Git.
+
 ## Parceiro institucional — comando privado
 
 Crie `painel-soprolife/data-private/parceiros-institucionais.json` (fora do

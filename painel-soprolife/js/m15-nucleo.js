@@ -1819,15 +1819,110 @@
 
   // ----------------------------------------------------------------- migração
 
+  // Rótulos dos portões de execução (mesmos nomes do backend/CLI).
+  var GATE_LABELS = {
+    snapshot_registrado: "Snapshot registrado",
+    checksum_inalterado: "Checksum inalterado",
+    dry_run_realizado: "Dry-run realizado",
+    sem_erros_criticos: "Zero erros críticos",
+    mapping_version_revisada: "Mapping version revisada",
+    execucao_disponivel: "Execução disponível",
+    backup_validado: "Backup privado validado",
+    evidencia_rollback_disponivel: "Evidência de rollback",
+    aprovacao_humana: "Aprovação humana",
+    idempotencia: "Idempotência (sem execução prévia)",
+  };
+
+  function gatesChecklist(gates) {
+    var itens = Object.keys(GATE_LABELS).map(function (nome) {
+      var g = gates[nome];
+      if (!g) { return ""; }
+      return (
+        "<li>" + pill(g.ok ? "ok" : "pendente") + " " +
+        esc(GATE_LABELS[nome]) +
+        ' <span class="m15-muted">' + esc(String(g.detalhe || "")) + "</span></li>"
+      );
+    }).join("");
+    return '<ul class="m15-gates">' + itens + "</ul>";
+  }
+
+  function snapshotDetailHtml(det) {
+    var s = det.snapshot;
+    var dry = s.dry_run || null;
+    var resumo = dry && dry.resumo ? dry.resumo : null;
+    var execb = s.execucao_batch || null;
+    var recon = execb ? execb.reconciliacao : null;
+    var rollback = execb ? execb.evidencia_rollback : null;
+    var html =
+      "<h3>Snapshot " + esc(s.workbook_alias) + " / " + esc(s.sheet_alias) + "</h3>" +
+      "<p>" + pill(s.source_type) + " " + pill(s.status) +
+      ' <span class="m15-muted">mapping ' + esc(s.mapping_version) +
+      (s.mapping_version === s.mapping_version_atual ? "" : " (desatualizada — atual " + esc(s.mapping_version_atual) + ")") +
+      " · <code>" + esc((s.sha256 || "").slice(0, 12)) + "…</code></span></p>";
+    if (resumo) {
+      html +=
+        "<p><strong>Dry-run:</strong> total " + esc(String(resumo.total)) +
+        " · válidas " + esc(String(resumo.validas)) +
+        " · rejeitadas " + esc(String(resumo.rejeitadas)) +
+        " · excluídas " + esc(String(resumo.excluidas)) +
+        " · ambíguas " + esc(String(resumo.ambiguas)) +
+        " · críticos " + esc(String(resumo.criticos)) +
+        " · avisos " + esc(String(resumo.avisos)) + "</p>";
+    } else {
+      html += '<p class="m15-muted">Sem dry-run registrado ainda.</p>';
+    }
+    html += "<h4>Portões de execução</h4>" + gatesChecklist(det.gates || {});
+    html += s.aprovacao
+      ? "<p><strong>Aprovação:</strong> " + pill(s.aprovacao.tipo === "aprovacao_execucao" ? "aprovado" : "revogado") +
+        ' <span class="m15-muted">' + esc((s.aprovacao.ts_utc || "").slice(0, 19)) + "</span></p>"
+      : '<p class="m15-muted">Sem aprovação humana registrada.</p>';
+    if (recon) {
+      html +=
+        "<h4>Reconciliação</h4><p>aceitas " + esc(String(recon.fonte_aceitas)) +
+        " · rejeitadas " + esc(String(recon.fonte_rejeitadas)) +
+        " · inalteradas " + esc(String(recon.alvo_inalterados)) +
+        " · identidades pendentes " + esc(String(recon.identidades_nao_resolvidas)) +
+        " · checksum " + pill(recon.checksum && recon.checksum.confere ? "confere" : "divergente") + "</p>";
+    }
+    if (rollback) {
+      html += "<p><strong>Evidência de rollback:</strong> <code>" +
+        esc(String(rollback.arquivo_backup || rollback.arquivo || "—")) + "</code></p>";
+    }
+    html +=
+      '<div class="m15-aviso">Execução permanece DESABILITADA nesta interface. ' +
+      "Ela só existe na CLI local (<code>python -m app.cli migracao executar</code>), " +
+      "após todos os portões verdes, com lote exato, evidência de backup e frase exata digitada." +
+      "</div>";
+    return html;
+  }
+
   loaders.migracao = function () {
     return Promise.all([
       api("/importacoes?tamanho=25").catch(function () { return { itens: [], total: 0 }; }),
       api("/identidade/candidatos?tamanho=25").catch(function () { return { itens: [], total: 0 }; }),
+      api("/migracao/snapshots?tamanho=25").catch(function () { return { itens: [], total: 0 }; }),
     ]).then(function (r) {
       body().innerHTML =
-        '<div class="m15-aviso">Importação real é feita pela CLI com dry-run padrão: ' +
-        "<code>python -m app.cli importar --tipo leads --arquivo arquivo.csv</code> " +
-        "(só grava com <code>--execute</code>). Planilhas e CSVs antigos permanecem como fonte histórica e rollback.</div>" +
+        '<div class="m15-aviso">Fluxo governado (M15.6A): snapshot privado → validação → mapeamento → ' +
+        "dry-run → revisão humana → aprovação → execução explícita (CLI) → reconciliação → rollback. " +
+        "Registro de snapshot e dry-run: <code>python -m app.cli migracao --help</code>. " +
+        "Dry-run é sempre o padrão; nada aqui grava registro operacional.</div>" +
+        '<div class="m15-panel"><h3>Snapshots privados (' + r[2].total + ")</h3>" +
+        table(
+          ["Fonte", "Workbook/Aba", "Linhas", "SHA-256", "Mapping", "Status", "Ações"],
+          r[2].itens.map(function (s) {
+            return [
+              esc(s.source_type),
+              esc(s.workbook_alias) + " / " + esc(s.sheet_alias),
+              String(s.row_count),
+              "<code>" + esc((s.sha256 || "").slice(0, 12)) + "…</code>",
+              esc(s.mapping_version),
+              pill(s.status),
+              '<button class="m15-btn m15-btn-sec" data-m15-snap="' + esc(s.id) + '">Detalhes</button>',
+            ];
+          }),
+          "Nenhum snapshot registrado — use a CLI (migracao registrar-snapshot)."
+        ) + '<div id="m15SnapDetail"></div></div>' +
         '<div class="m15-panel"><h3>Lotes de importação (' + r[0].total + ")</h3>" +
         table(
           ["Fonte", "Arquivo", "SHA-256", "Modo", "Total", "Válidas", "Rejeitadas", "Ambíguas"],
@@ -1856,6 +1951,22 @@
           }),
           "Nenhuma ambiguidade pendente."
         ) + "</div>";
+      Array.prototype.forEach.call(
+        body().querySelectorAll("[data-m15-snap]"),
+        function (btn) {
+          btn.addEventListener("click", function () {
+            var box = document.getElementById("m15SnapDetail");
+            box.innerHTML = '<p class="m15-muted">Carregando…</p>';
+            api("/migracao/snapshots/" + btn.getAttribute("data-m15-snap"))
+              .then(function (det) {
+                box.innerHTML = '<div class="m15-panel">' + snapshotDetailHtml(det) + "</div>";
+              })
+              .catch(function () {
+                box.innerHTML = '<div class="m15-aviso">Não foi possível carregar o detalhe do snapshot.</div>';
+              });
+          });
+        }
+      );
     });
   };
 
