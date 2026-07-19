@@ -43,6 +43,8 @@ run "node --check js/daily-briefing.js"      node --check painel-soprolife/js/da
 run "node --check js/today-actions.js"       node --check painel-soprolife/js/today-actions.js
 run "node --check js/espirometria-financeiro.js" node --check painel-soprolife/js/espirometria-financeiro.js
 run "node --check js/marketing-freshness.js" node --check painel-soprolife/js/marketing-freshness.js
+run "node --check js/m15-nucleo.js"          node --check painel-soprolife/js/m15-nucleo.js
+run "node --check js/m15-datepicker.js"      node --check painel-soprolife/js/m15-datepicker.js
 
 secao "2/10 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
@@ -52,6 +54,7 @@ run "test-daily-briefing (M9)"      node painel-soprolife/scripts/test-daily-bri
 run "test-today-actions (M10)"      node painel-soprolife/scripts/test-today-actions.js
 run "test-espirometria-financeiro (M11)" node painel-soprolife/scripts/test-espirometria-financeiro.js
 run "test-entrada-dados-ux (M12.1)"      node painel-soprolife/scripts/test-entrada-dados-ux.js
+run "test-m15-ui-calendar (M15.4A)"      node painel-soprolife/scripts/test-m15-ui-calendar.js
 
 secao "3/10 Sintaxe Python"
 run "py_compile generate-saude-operacional" python3 -m py_compile painel-soprolife/scripts/generate-saude-operacional.py
