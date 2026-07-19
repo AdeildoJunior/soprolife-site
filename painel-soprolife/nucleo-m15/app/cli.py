@@ -24,6 +24,20 @@ reconciliação; dry-run é SEMPRE o padrão, nunca há execução implícita):
   python -m app.cli migracao reconciliar --snapshot <id>
   python -m app.cli migracao status [--snapshot <id>]
 
+Execução multiaba FINAL (M15.6C — caminho único de escrita do formato
+multiaba; CLI-only, admin-only, frase exata SEMPRE digitada interativamente,
+nunca aceita por argumento ou variável de ambiente):
+
+  python -m app.cli migracao preflight-execucao-multiaba --envelope env.json \
+      --batch <dry_run_batch_id> --backup-evidencia ev.json --email admin@x
+  python -m app.cli migracao plano-rollback-multiaba --envelope env.json \
+      --batch <dry_run_batch_id> --email admin@x
+  python -m app.cli migracao executar-multiaba --envelope env.json \
+      --batch <dry_run_batch_id> --backup-evidencia ev.json --email admin@x
+  python -m app.cli migracao reconciliar-multiaba --batch-execucao <id>
+  python -m app.cli migracao rollback-multiaba --batch-execucao <id> \
+      --email admin@x            # só quando provadamente seguro
+
 Todos os subcomandos de migração aceitam --json (saída machine-readable) e
 retornam exit != 0 em falha. Arquivos de manifesto/evidência vivem SOMENTE
 no diretório privado aprovado (M15_IMPORT_PRIVATE_DIR).
@@ -305,6 +319,152 @@ def cmd_migracao_revisar_multiaba(args) -> int:
             args.mapping_version,
             user_id,
         )
+        db.commit()
+        _emit(result, args.json)
+        return 0
+    except (MultiSheetError, ValueError) as exc:
+        db.rollback()
+        return _migration_error(exc, args.json)
+    finally:
+        db.close()
+
+
+def cmd_migracao_preflight_execucao_multiaba(args) -> int:
+    from .migration.executor import preflight_multi_sheet_execution
+    from .migration.multisheet import MultiSheetError
+
+    db = _session()
+    try:
+        result = preflight_multi_sheet_execution(
+            db, args.envelope, args.batch, args.backup_evidencia, args.email)
+        _emit(result, args.json)
+        return 0 if result["ok"] else 1
+    except (MultiSheetError, ValueError) as exc:
+        return _migration_error(exc, args.json)
+    finally:
+        db.close()
+
+
+def cmd_migracao_plano_rollback_multiaba(args) -> int:
+    from .migration.executor import (
+        generate_rollback_plan,
+        resolve_admin,
+        rollback_plan_report,
+    )
+    from .migration.multisheet import MultiSheetError
+
+    db = _session()
+    try:
+        if args.batch_execucao:
+            # pós-execução: manifesto REAL a partir da proveniência
+            result = rollback_plan_report(db, args.batch_execucao)
+            _emit(result, args.json)
+            return 0
+        if not (args.envelope and args.batch):
+            raise ValueError(
+                "informe --envelope e --batch (pré-execução) ou "
+                "--batch-execucao (pós-execução)")
+        admin = resolve_admin(db, args.email)
+        result = generate_rollback_plan(
+            db, args.envelope, args.batch, user_id=admin.id)
+        db.commit()  # persiste apenas o plano sanitizado no lote de dry-run
+        _emit(result, args.json)
+        return 0
+    except (MultiSheetError, ValueError) as exc:
+        db.rollback()
+        return _migration_error(exc, args.json)
+    finally:
+        db.close()
+
+
+def cmd_migracao_executar_multiaba(args) -> int:
+    """Execução REAL multiaba: portões completos + frase exata interativa.
+
+    A frase NUNCA é aceita por argumento de linha de comando nem por
+    variável de ambiente — somente digitada na hora, após portões verdes.
+    """
+    from .migration.executor import (
+        confirmation_phrase_multiaba,
+        execute_multi_sheet,
+        preflight_multi_sheet_execution,
+    )
+    from .migration.multisheet import MultiSheetError
+
+    db = _session()
+    try:
+        pf = preflight_multi_sheet_execution(
+            db, args.envelope, args.batch, args.backup_evidencia, args.email)
+        if not pf["ok"]:
+            reprovados = sorted(
+                nome for nome, g in pf["gates"].items() if not g["ok"])
+            return _migration_error(
+                MultiSheetError("portoes_reprovados", reprovados), args.json)
+        frase_esperada = confirmation_phrase_multiaba(args.batch)
+        print(
+            f"Confirmação final. Digite exatamente: {frase_esperada}",
+            file=sys.stderr,
+        )
+        try:
+            frase = input("> ")
+        except EOFError:
+            frase = ""
+        result = execute_multi_sheet(
+            db, args.envelope, args.batch, frase, args.backup_evidencia,
+            admin_email=args.email,
+        )
+        db.commit()  # transação ÚNICA: tudo ou nada
+        _emit(result, args.json)
+        return 0
+    except (MultiSheetError, ValueError) as exc:
+        db.rollback()
+        return _migration_error(exc, args.json)
+    finally:
+        db.close()
+
+
+def cmd_migracao_reconciliar_multiaba(args) -> int:
+    from .migration.executor import (
+        reconcile_multi_sheet_execution,
+        resolve_admin,
+    )
+    from .migration.multisheet import MultiSheetError
+
+    db = _session()
+    try:
+        admin = resolve_admin(db, args.email)
+        result = reconcile_multi_sheet_execution(
+            db, args.batch_execucao, user_id=admin.id)
+        db.commit()  # registra o fechamento (ou a divergência) auditável
+        _emit(result, args.json)
+        return 0 if result["ok"] else 1
+    except (MultiSheetError, ValueError) as exc:
+        db.rollback()
+        return _migration_error(exc, args.json)
+    finally:
+        db.close()
+
+
+def cmd_migracao_rollback_multiaba(args) -> int:
+    """Rollback seletivo — só quando provadamente seguro; frase interativa."""
+    from .migration.executor import (
+        rollback_multi_sheet_execution,
+        rollback_phrase_multiaba,
+    )
+    from .migration.multisheet import MultiSheetError
+
+    db = _session()
+    try:
+        frase_esperada = rollback_phrase_multiaba(args.batch_execucao)
+        print(
+            f"Confirmação final. Digite exatamente: {frase_esperada}",
+            file=sys.stderr,
+        )
+        try:
+            frase = input("> ")
+        except EOFError:
+            frase = ""
+        result = rollback_multi_sheet_execution(
+            db, args.batch_execucao, frase, admin_email=args.email)
         db.commit()
         _emit(result, args.json)
         return 0
@@ -625,9 +785,58 @@ def main(argv: list[str] | None = None) -> int:
     mp.add_argument("--referencia", required=True)
     mp.add_argument(
         "--decisao", required=True,
-        choices=("resolvido", "excluido", "adiado"),
+        choices=("resolvido", "excluido", "adiado",
+                 "vincular_candidato", "criar_pessoa"),
     )
     mp.add_argument("--mapping-version", required=True)
+
+    mp = _mig_parser(
+        "preflight-execucao-multiaba",
+        "Avalia TODOS os portões da execução multiaba (não escreve nada)",
+        cmd_migracao_preflight_execucao_multiaba,
+    )
+    mp.add_argument("--envelope", required=True)
+    mp.add_argument("--batch", required=True,
+                    help="ID exato do lote de dry-run multiaba")
+    mp.add_argument("--backup-evidencia", default=None)
+
+    mp = _mig_parser(
+        "plano-rollback-multiaba",
+        "Gera o plano de rollback: planejado (pré-execução, obrigatório "
+        "antes do execute) ou real (pós-execução, via proveniência)",
+        cmd_migracao_plano_rollback_multiaba,
+    )
+    mp.add_argument("--envelope", default=None)
+    mp.add_argument("--batch", default=None,
+                    help="ID do lote de dry-run (modo pré-execução)")
+    mp.add_argument("--batch-execucao", default=None,
+                    help="ID do lote executado (modo pós-execução)")
+
+    mp = _mig_parser(
+        "executar-multiaba",
+        "Execução REAL multiaba — admin-only, portões completos, frase "
+        "exata digitada interativamente (nunca por argumento/variável)",
+        cmd_migracao_executar_multiaba,
+    )
+    mp.add_argument("--envelope", required=True)
+    mp.add_argument("--batch", required=True,
+                    help="ID exato do lote de dry-run multiaba revisado")
+    mp.add_argument("--backup-evidencia", required=True)
+
+    mp = _mig_parser(
+        "reconciliar-multiaba",
+        "Fechamento exato pós-execução; o lote só conclui se tudo fechar",
+        cmd_migracao_reconciliar_multiaba,
+    )
+    mp.add_argument("--batch-execucao", required=True)
+
+    mp = _mig_parser(
+        "rollback-multiaba",
+        "Rollback seletivo do lote executado — só quando provadamente "
+        "seguro; frase exata digitada interativamente",
+        cmd_migracao_rollback_multiaba,
+    )
+    mp.add_argument("--batch-execucao", required=True)
 
     mp = _mig_parser("relatorio",
                      "Gera relatório sanitizado (JSON/MD/CSV neutralizado)",

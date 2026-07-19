@@ -144,9 +144,46 @@ O envelope bruto privado versionado pode ser validado e simulado com:
 ```
 
 O fluxo compartilha aliases simulados entre abas, gera fila de revisão e
-reconciliação prévia sanitizadas e não grava entidades operacionais. Execução
-multiaba real permanece indisponível; a API e o browser não oferecem execute.
+reconciliação prévia sanitizadas e não grava entidades operacionais. A API e
+o browser não oferecem execute (somente status).
 Veja `../docs/m15-6b-real-snapshot-adapters-dry-run.md`.
+
+## Execução multiaba final (M15.6C)
+
+Caminho único de escrita do formato multiaba — CLI local, admin exato, todos
+os portões verdes e frase digitada interativamente (nunca por argumento nem
+variável de ambiente). O deploy do código NÃO executa nada: dados reais só
+mudam quando o comando abaixo for rodado por decisão humana.
+
+```bash
+# decisões humanas executáveis por token privado (vincular_candidato,
+# criar_pessoa, excluido) — telefone só vincula com decisão explícita
+.venv/bin/python -m app.cli migracao revisar-multiaba --batch <id> \
+  --referencia <token> --decisao vincular_candidato \
+  --mapping-version m15-6b.1 --email gestor@exemplo
+
+# plano de rollback ANTES de escrever (obrigatório) + portões completos
+.venv/bin/python -m app.cli migracao plano-rollback-multiaba \
+  --envelope snapshot-envelope.json --batch <dry_run_id> --email admin@ex
+.venv/bin/python -m app.cli migracao preflight-execucao-multiaba \
+  --envelope snapshot-envelope.json --batch <dry_run_id> \
+  --backup-evidencia ev.json --email admin@ex
+
+# execução real (frase EXECUTAR MIGRACAO MULTIABA <batch> digitada na hora),
+# reconciliação com fechamento exato e rollback seletivo provadamente seguro
+.venv/bin/python -m app.cli migracao executar-multiaba --envelope ... \
+  --batch <dry_run_id> --backup-evidencia ev.json --email admin@ex
+.venv/bin/python -m app.cli migracao reconciliar-multiaba \
+  --batch-execucao <id> --email admin@ex
+.venv/bin/python -m app.cli migracao rollback-multiaba \
+  --batch-execucao <id> --email admin@ex
+```
+
+Toda linha criada guarda proveniência (lote, domínio, fingerprint
+irreversível, mapping, chave de idempotência única): repetir o mesmo lote
+cria zero linhas; o rollback usa só IDs criados pelo lote, em ordem reversa,
+e falha fechado diante de dependência externa ou proveniência incompleta.
+PCMSO permanece excluído; Financeiro_Lancamentos segue fonte monetária única.
 
 O script PostgreSQL usa o container descartável `m15-pg-teste`, confirma a
 versão major 16 e o remove ao sair, inclusive em caso de erro.
