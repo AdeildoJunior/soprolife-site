@@ -13,7 +13,7 @@ Evitar os erros já cometidos em Custos & Investimentos: confundir "responsável
 
 ## Quando não usar
 - Leads/CRM B2B → usar `soprolife-b2b-pcmso-crm`.
-- Mudança puramente visual sem tocar em número/cálculo → usar `soprolife-panel-ui-ux`.
+- Mudança puramente visual sem tocar em número/cálculo → usar `soprolife-ux-premium`.
 
 ## Arquivos e pastas relevantes
 - `painel-soprolife/data-private/custos-investimentos.local.json` — fonte privada detalhada.

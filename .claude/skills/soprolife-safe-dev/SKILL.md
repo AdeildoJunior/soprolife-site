@@ -17,7 +17,7 @@ Ser a referência prática de segurança e organização para qualquer tarefa de
 - Sincronização com Google Sheets/Apps Script → usar `soprolife-sheets-sync`.
 - Regras de negócio de Leads/CRM B2B → usar `soprolife-b2b-pcmso-crm`.
 - Regras de Custos & Investimentos → usar `soprolife-finance-costs`.
-- Mudança puramente visual → usar `soprolife-panel-ui-ux`.
+- Mudança puramente visual → usar `soprolife-ux-premium`.
 
 ## Arquivos e pastas relevantes
 - `painel-soprolife/js/app.js` — lógica do painel (sem tokens, sem URLs secretas).

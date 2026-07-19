@@ -27,7 +27,7 @@ citar esta skill.
    - `python3 painel-soprolife/scripts/pii_guard.py --self-test` (se guardas mudaram)
    - `bash -n` nos `.sh` alterados
    - `bash painel-soprolife/scripts/check-access.sh` → exit 0
-   - teste visual real se frontend mudou (skill soprolife-panel-ui-ux)
+   - teste visual real se frontend mudou (skill soprolife-ux-premium)
 5. Mostrar: `git status --short`, `git diff --check`, `git diff --stat`,
    diff completo, riscos e decisões tomadas.
 6. **Parar.** Aguardar revisão/aprovação.

@@ -13,7 +13,7 @@ Documentar o fluxo comercial B2B/PCMSO do painel (Leads → CRM Clínicas → CR
 
 ## Quando não usar
 - Custos & Investimentos / rateio entre sócios → usar `soprolife-finance-costs`.
-- Mudança puramente visual sem tocar em lógica de negócio → usar `soprolife-panel-ui-ux`.
+- Mudança puramente visual sem tocar em lógica de negócio → usar `soprolife-ux-premium`.
 
 ## Arquivos e pastas relevantes
 - `painel-soprolife/js/app.js` — funções `isLeadConvertido()`, `isB2BLead()`, constantes `LEAD_ETAPA_OPTIONS`, `LEAD_ETAPAS_TERMINAIS`.
