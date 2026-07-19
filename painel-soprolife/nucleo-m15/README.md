@@ -133,6 +133,21 @@ Idempotente; não inventa telefone, e-mail, datas nem percentuais.
 bash scripts/test-postgres-efemero.sh
 ```
 
+## Snapshot multiaba M15.6B
+
+O envelope bruto privado versionado pode ser validado e simulado com:
+
+```bash
+.venv/bin/python -m app.cli migracao dry-run-multiaba \
+  --envelope snapshot-envelope.json --json
+.venv/bin/python -m app.cli migracao status-multiaba --json
+```
+
+O fluxo compartilha aliases simulados entre abas, gera fila de revisão e
+reconciliação prévia sanitizadas e não grava entidades operacionais. Execução
+multiaba real permanece indisponível; a API e o browser não oferecem execute.
+Veja `../docs/m15-6b-real-snapshot-adapters-dry-run.md`.
+
 O script PostgreSQL usa o container descartável `m15-pg-teste`, confirma a
 versão major 16 e o remove ao sair, inclusive em caso de erro.
 

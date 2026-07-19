@@ -1896,17 +1896,88 @@
     return html;
   }
 
+  function multiSheetDetailHtml(det) {
+    var totals = det.totals || {};
+    var recon = det.reconciliation_preview || {};
+    var finance = det.financial_relationship_coverage || {};
+    var reviews = det.review_summary || {};
+    var decisions = det.decision_summary || {};
+    var reviewRows = Object.keys(reviews).sort().map(function (category) {
+      var item = reviews[category] || {};
+      var state = decisions[category] || {};
+      var hasDecisionState = Object.keys(state).length > 0;
+      return [
+        esc(category), String(item.count || 0),
+        String(hasDecisionState
+          ? ((state.pendente || 0) + (state.adiado || 0))
+          : (item.pending || 0)),
+        String(hasDecisionState
+          ? ((state.registrada || 0) + (state.resolvido || 0) + (state.excluido || 0))
+          : (item.registered || 0)),
+      ];
+    });
+    return (
+      "<h3>Dry-run multiaba</h3>" +
+      "<p>" + pill(det.status) +
+      ' <span class="m15-muted">mapping ' + esc(det.mapping_version || "—") +
+      " · adapters " + esc(det.adapters_version || "—") + "</span></p>" +
+      "<p><strong>Fontes:</strong> total " + esc(String(totals.source_total || 0)) +
+      " · válidas " + esc(String(totals.valid || 0)) +
+      " · rejeitadas " + esc(String(totals.rejected || 0)) +
+      " · excluídas " + esc(String(totals.excluded || 0)) +
+      " · revisão " + esc(String(totals.pending_review || 0)) +
+      " · duplicadas " + esc(String(totals.duplicates || 0)) +
+      " · existentes " + esc(String(totals.already_existing || 0)) + "</p>" +
+      "<p><strong>Reconciliação prévia:</strong> " +
+      pill(recon.fechamento_ok ? "fechamento ok" : "divergência") +
+      " · contabilizadas " + esc(String(recon.linhas_contabilizadas || 0)) +
+      " · diferença " + esc(String(recon.diferenca || 0)) +
+      " · gravações operacionais " +
+      esc(String(recon.registros_operacionais_gravados || 0)) + "</p>" +
+      "<p><strong>Financeiro:</strong> relações técnicas " +
+      esc(String(finance.vinculadas_tecnicamente || 0)) +
+      " · não resolvidas " + esc(String(finance.nao_resolvidas || 0)) +
+      " · fontes não autorizadas " +
+      esc(String(finance.bloqueadas_fonte_nao_autorizada || 0)) + "</p>" +
+      "<h4>Revisão humana protegida</h4>" +
+      table(
+        ["Categoria", "Total", "Pendente", "Registrada"],
+        reviewRows,
+        "Nenhum item de revisão.",
+      ) +
+      '<div class="m15-aviso">Execução multiaba real indisponível por desenho. ' +
+      "Esta tela não possui botão de execução e não exibe valores de origem.</div>"
+    );
+  }
+
   loaders.migracao = function () {
     return Promise.all([
       api("/importacoes?tamanho=25").catch(function () { return { itens: [], total: 0 }; }),
       api("/identidade/candidatos?tamanho=25").catch(function () { return { itens: [], total: 0 }; }),
       api("/migracao/snapshots?tamanho=25").catch(function () { return { itens: [], total: 0 }; }),
+      api("/migracao/multiaba?limite=25").catch(function () { return { items: [], total: 0 }; }),
     ]).then(function (r) {
       body().innerHTML =
-        '<div class="m15-aviso">Fluxo governado (M15.6A): snapshot privado → validação → mapeamento → ' +
+        '<div class="m15-aviso">Fluxo governado (M15.6B): snapshot privado → adapters explícitos → staging multiaba → ' +
         "dry-run → revisão humana → aprovação → execução explícita (CLI) → reconciliação → rollback. " +
         "Registro de snapshot e dry-run: <code>python -m app.cli migracao --help</code>. " +
         "Dry-run é sempre o padrão; nada aqui grava registro operacional.</div>" +
+        '<div class="m15-panel"><h3>Dry-runs multiaba (' + r[3].total + ")</h3>" +
+        table(
+          ["Mapping", "Fonte", "Válidas", "Revisão", "Fechamento", "Status", "Ações"],
+          (r[3].items || []).map(function (m) {
+            var totals = m.totals || {};
+            var recon = m.reconciliation_preview || {};
+            return [
+              esc(m.mapping_version || "—"), String(totals.source_total || 0),
+              String(totals.valid || 0), String(m.pending_decisions || 0),
+              pill(recon.fechamento_ok ? "ok" : "divergente"), pill(m.status),
+              '<button class="m15-btn m15-btn-sec" data-m15-multi="' +
+                esc(m.batch_id) + '">Detalhes</button>',
+            ];
+          }),
+          "Nenhum dry-run multiaba sanitizado registrado.",
+        ) + '<div id="m15MultiDetail"></div></div>' +
         '<div class="m15-panel"><h3>Snapshots privados (' + r[2].total + ")</h3>" +
         table(
           ["Fonte", "Workbook/Aba", "Linhas", "SHA-256", "Mapping", "Status", "Ações"],
@@ -1963,6 +2034,22 @@
               })
               .catch(function () {
                 box.innerHTML = '<div class="m15-aviso">Não foi possível carregar o detalhe do snapshot.</div>';
+              });
+          });
+        }
+      );
+      Array.prototype.forEach.call(
+        body().querySelectorAll("[data-m15-multi]"),
+        function (btn) {
+          btn.addEventListener("click", function () {
+            var box = document.getElementById("m15MultiDetail");
+            box.innerHTML = '<p class="m15-muted">Carregando…</p>';
+            api("/migracao/multiaba/" + btn.getAttribute("data-m15-multi"))
+              .then(function (det) {
+                box.innerHTML = '<div class="m15-panel">' + multiSheetDetailHtml(det) + "</div>";
+              })
+              .catch(function () {
+                box.innerHTML = '<div class="m15-aviso">Não foi possível carregar o dry-run multiaba.</div>';
               });
           });
         }

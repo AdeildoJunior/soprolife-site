@@ -189,6 +189,19 @@ def _user_id_por_email(db, email: str | None) -> str | None:
     return user.id
 
 
+def _reviewer_id_por_email(db, email: str | None) -> str:
+    if not email:
+        raise ValueError("revisor autenticado obrigatório")
+    user = db.execute(
+        select(User).where(User.email == email.lower())
+    ).scalar_one_or_none()
+    if user is None:
+        raise ValueError("revisor não encontrado")
+    if not {role.name for role in user.roles}.intersection({"admin", "gestor"}):
+        raise ValueError("papel de revisor insuficiente")
+    return user.id
+
+
 def cmd_migracao_validar_manifesto(args) -> int:
     from .migration.manifest import load_and_validate_manifest
 
@@ -226,6 +239,76 @@ def cmd_migracao_dry_run(args) -> int:
         print("DRY-RUN: nenhum registro operacional foi gravado.", file=sys.stderr)
         return 0
     except (MigrationError, ValueError) as exc:
+        db.rollback()
+        return _migration_error(exc, args.json)
+    finally:
+        db.close()
+
+
+def cmd_migracao_dry_run_multiaba(args) -> int:
+    from .migration.multisheet import MultiSheetError, run_multi_sheet_dry_run
+
+    db = _session()
+    try:
+        user_id = _user_id_por_email(db, args.email)
+        result = run_multi_sheet_dry_run(
+            db, args.envelope, user_id=user_id
+        )
+        db.commit()  # apenas resumo sanitizado; zero registros operacionais
+        _emit(result, args.json)
+        print(
+            "DRY-RUN MULTIABA: execução real bloqueada; nada operacional foi gravado.",
+            file=sys.stderr,
+        )
+        return 0
+    except (MultiSheetError, ValueError) as exc:
+        db.rollback()
+        return _migration_error(exc, args.json)
+    finally:
+        db.close()
+
+
+def cmd_migracao_status_multiaba(args) -> int:
+    from .migration.multisheet import (
+        MultiSheetError,
+        list_multi_sheet_status,
+        multi_sheet_status,
+    )
+
+    db = _session()
+    try:
+        result = (
+            multi_sheet_status(db, args.batch)
+            if args.batch else list_multi_sheet_status(db)
+        )
+        _emit(result, args.json)
+        return 0
+    except (MultiSheetError, ValueError) as exc:
+        return _migration_error(exc, args.json)
+    finally:
+        db.close()
+
+
+def cmd_migracao_revisar_multiaba(args) -> int:
+    from .migration.multisheet import MultiSheetError, decide_multi_sheet_review
+
+    db = _session()
+    try:
+        user_id = (
+            _reviewer_id_por_email(db, args.email) if args.email else None
+        )
+        result = decide_multi_sheet_review(
+            db,
+            args.batch,
+            args.referencia,
+            args.decisao,
+            args.mapping_version,
+            user_id,
+        )
+        db.commit()
+        _emit(result, args.json)
+        return 0
+    except (MultiSheetError, ValueError) as exc:
         db.rollback()
         return _migration_error(exc, args.json)
     finally:
@@ -515,6 +598,36 @@ def main(argv: list[str] | None = None) -> int:
                      "Dry-run do snapshot (padrão; nunca grava registro "
                      "operacional)", cmd_migracao_dry_run)
     mp.add_argument("--snapshot", required=True, help="ID do snapshot")
+
+    mp = _mig_parser(
+        "dry-run-multiaba",
+        "Dry-run do envelope bruto versionado; execução real sempre bloqueada",
+        cmd_migracao_dry_run_multiaba,
+    )
+    mp.add_argument(
+        "--envelope", required=True,
+        help="Nome simples do envelope no diretório privado aprovado",
+    )
+
+    mp = _mig_parser(
+        "status-multiaba",
+        "Status, bloqueios, revisão e reconciliação prévia multiaba",
+        cmd_migracao_status_multiaba,
+    )
+    mp.add_argument("--batch", default=None)
+
+    mp = _mig_parser(
+        "revisar-multiaba",
+        "Registra decisão humana por token privado (não executa nem mescla)",
+        cmd_migracao_revisar_multiaba,
+    )
+    mp.add_argument("--batch", required=True)
+    mp.add_argument("--referencia", required=True)
+    mp.add_argument(
+        "--decisao", required=True,
+        choices=("resolvido", "excluido", "adiado"),
+    )
+    mp.add_argument("--mapping-version", required=True)
 
     mp = _mig_parser("relatorio",
                      "Gera relatório sanitizado (JSON/MD/CSV neutralizado)",
