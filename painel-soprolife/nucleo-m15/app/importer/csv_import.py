@@ -752,6 +752,7 @@ def run_import(
     handler = HANDLERS[source_type]
     counts = {"importado": 0, "rejeitado": 0, "duplicado": 0, "ja_existente": 0, "ambiguo": 0}
     rejections: list[dict] = []
+    motivo_counts: dict[str, int] = {}
 
     for index, row in enumerate(rows, start=2):  # linha 1 = cabeçalho
         row_hash = sha256_bytes(
@@ -780,6 +781,8 @@ def run_import(
         else:
             status, motivo, entity_type, entity_id = handler(ctx, row, import_row_id)
         counts[status] = counts.get(status, 0) + 1
+        if motivo and status in ("rejeitado", "duplicado"):
+            motivo_counts[motivo] = motivo_counts.get(motivo, 0) + 1
         if status in ("rejeitado", "duplicado") and len(rejections) < 50:
             rejections.append({"linha": index, "motivo": motivo})
         if execute:
@@ -811,6 +814,7 @@ def run_import(
         "ambiguas": counts["ambiguo"],
         "candidatos_identidade": ctx.identity_candidates,
         "followups_criados": ctx.followups_created,
+        "motivos": motivo_counts,
         "rejeicoes_amostra": rejections,
         "executado_em_utc": datetime.now(timezone.utc).isoformat(),
         "aviso": None if execute else "DRY-RUN: nada foi gravado no banco.",

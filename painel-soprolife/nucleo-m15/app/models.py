@@ -565,6 +565,47 @@ class PartnerTransfer(Base, TimestampMixin):
 
 # ---------------------------------------------------------------- migração
 
+class ImportSnapshot(Base, TimestampMixin):
+    """Snapshot privado imutável registrado a partir de um manifesto (M15.6A).
+
+    Identidade = (workbook_alias, sheet_alias, sha256) — o mesmo conteúdo do
+    mesmo lugar só pode ser registrado UMA vez. Aliases nunca guardam ID de
+    planilha, credencial ou hostname; o arquivo fica no diretório privado
+    aprovado (fora do Git) e aqui só entram metadados sem PII.
+    """
+
+    __tablename__ = "import_snapshots"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    workbook_alias: Mapped[str] = mapped_column(String(120), nullable=False)
+    sheet_alias: Mapped[str] = mapped_column(String(120), nullable=False)
+    snapshot_ts_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    arquivo: Mapped[str] = mapped_column(String(200), nullable=False)  # nome, nunca caminho
+    sha256: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    manifest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    mapping_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    encoding: Mapped[str] = mapped_column(String(20), nullable=False)
+    delimiter: Mapped[str] = mapped_column(String(4), nullable=False)
+    headers: Mapped[list | None] = mapped_column(JSON)
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    linha_inicial_dados: Mapped[int] = mapped_column(Integer, default=2, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="registrado", nullable=False)
+    dry_run_batch_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("import_batches.id")
+    )
+    execute_batch_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("import_batches.id")
+    )
+    registered_by: Mapped[str | None] = mapped_column(String(UUID_LEN))
+    __table_args__ = (
+        UniqueConstraint(
+            "workbook_alias", "sheet_alias", "sha256",
+            name="uq_import_snapshot_identidade",
+        ),
+    )
+
+
 class ImportBatch(Base):
     __tablename__ = "import_batches"
     id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)

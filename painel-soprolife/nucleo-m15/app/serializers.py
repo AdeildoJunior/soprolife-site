@@ -342,6 +342,31 @@ def ser_transfer(t: m.PartnerTransfer) -> dict:
     }
 
 
+def ser_import_snapshot(s: m.ImportSnapshot) -> dict:
+    """Metadados do snapshot privado — aliases e hashes, nunca PII."""
+    return {
+        "id": s.id,
+        "source_type": s.source_type,
+        "workbook_alias": s.workbook_alias,
+        "sheet_alias": s.sheet_alias,
+        "snapshot_ts_utc": iso(s.snapshot_ts_utc),
+        "arquivo": s.arquivo,
+        "sha256": s.sha256,
+        "manifest_sha256": s.manifest_sha256,
+        "schema_version": s.schema_version,
+        "mapping_version": s.mapping_version,
+        "encoding": s.encoding,
+        "delimiter": s.delimiter,
+        "row_count": s.row_count,
+        "linha_inicial_dados": s.linha_inicial_dados,
+        "status": s.status,
+        "dry_run_batch_id": s.dry_run_batch_id,
+        "execute_batch_id": s.execute_batch_id,
+        "created_at_utc": iso(s.created_at),
+        "created_at_local": to_local(s.created_at),
+    }
+
+
 def ser_import_batch(b: m.ImportBatch) -> dict:
     return {
         "id": b.id,
