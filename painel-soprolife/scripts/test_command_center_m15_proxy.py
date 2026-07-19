@@ -374,7 +374,13 @@ class DeploymentKitTests(unittest.TestCase):
         self.assertIn("alembic\" upgrade head", deploy)
         self.assertIn("pg_restore --list", deploy)
         self.assertIn("M15_API_HOST=127.0.0.1", deploy)
-        self.assertIn('cfg["enabled"] is False', deploy)
+        # M15.5B: enabled=true segue rejeitado por padrão; só entra pelo modo
+        # go-live explícito e fail-closed da ponte (lib-go-live-gate.sh), com
+        # validação HTTPS antes e depois da mutação.
+        self.assertIn('cfg["enabled"] is (sys.argv[2] == "true")', deploy)
+        self.assertIn("soprolife_go_live_exigir_autorizacao", deploy)
+        self.assertIn("soprolife_go_live_validar_https pre", deploy)
+        self.assertIn("soprolife_go_live_validar_https pos", deploy)
         for forbidden in ("seed-demo", "seed-institucional", "podman ", "docker "):
             self.assertNotIn(forbidden, deploy.lower())
 
@@ -465,7 +471,10 @@ class HardeningM153BTests(unittest.TestCase):
             self.assertNotIn("csv_import", texto)
             self.assertNotIn("importar-csv", texto)
             self.assertNotIn('"enabled": true', texto)
-        self.assertIn('cfg["enabled"] is False', deploy)
+        # M15.5B: o deploy nunca liga a flag por conta própria; enabled=true
+        # exige autorização explícita (SOPROLIFE_M15_GO_LIVE=YES) fail-closed.
+        self.assertIn('cfg["enabled"] is (sys.argv[2] == "true")', deploy)
+        self.assertIn("SOPROLIFE_M15_GO_LIVE=YES", deploy)
 
 
 if __name__ == "__main__":

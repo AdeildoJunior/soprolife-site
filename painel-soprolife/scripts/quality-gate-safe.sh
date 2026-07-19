@@ -137,6 +137,22 @@ run "manifesto --check (Git → manifesto em dia)" \
 run "test-apps-script-parity (gerador+comparador+pacote+fixtures+segredos)" \
   env PYTHONDONTWRITEBYTECODE=1 python3 painel-soprolife/scripts/test-apps-script-parity.py
 
+secao "8d/10 M15.5B — ponte de go-live do deploy (offline, rede mockada)"
+run "bash -n deploy-producao-vps.sh" \
+  bash -n painel-soprolife/nucleo-m15/scripts/deploy-producao-vps.sh
+run "bash -n lib-deploy-hardening.sh" \
+  bash -n painel-soprolife/nucleo-m15/scripts/lib-deploy-hardening.sh
+run "bash -n lib-go-live-gate.sh" \
+  bash -n painel-soprolife/nucleo-m15/scripts/lib-go-live-gate.sh
+run "py_compile go_live_https_gate" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile painel-soprolife/nucleo-m15/scripts/go_live_https_gate.py
+run "test-deploy-hardening (M15.3B)" \
+  bash painel-soprolife/nucleo-m15/scripts/test-deploy-hardening.sh
+run "test-deploy-go-live (M15.5B shell)" \
+  bash painel-soprolife/nucleo-m15/scripts/test-deploy-go-live.sh
+run "test_go_live_https_gate (M15.5B Python)" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 painel-soprolife/nucleo-m15/scripts/test_go_live_https_gate.py
+
 secao "9/10 Git — whitespace e guard rails de staging"
 run "git diff --check" git diff --check
 

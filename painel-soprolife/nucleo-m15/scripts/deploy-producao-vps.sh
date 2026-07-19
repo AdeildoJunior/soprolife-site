@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
-# Implantação manual e auditável do M15 na VPS. Não ativa a feature flag,
-# não cria dados e não importa arquivos. Execute no terminal da própria VPS.
+# Implantação manual e auditável do M15 na VPS. Não ativa a feature flag por
+# conta própria, não cria dados e não importa arquivos. Execute no terminal da
+# própria VPS.
+#
+# M15.5B — modo go-live controlado: um release com enabled=true no
+# data/m15-config.json permanece REJEITADO por padrão. Ele só é aceito com as
+# DUAS variáveis de ambiente presentes e válidas (fail-closed):
+#   SOPROLIFE_M15_GO_LIVE=YES   (exatamente YES, maiúsculo)
+#   SOPROLIFE_M15_HTTPS_BASE_URL=https://painel-privado.exemplo.ts.net/
+# Nesse modo o endereço HTTPS privado é validado ANTES de qualquer mutação e
+# novamente APÓS o deploy (painel 200, health status=ok, enabled=true servido,
+# m15-security.js servido e carregado antes de m15-nucleo.js). Releases com
+# enabled=false continuam com o comportamento atual, sem exigir variáveis.
 set -Eeuo pipefail
 IFS=$'\n\t'
 umask 077
@@ -17,6 +28,7 @@ readonly UNIT_TARGET="/etc/systemd/system/soprolife-m15-api.service"
 readonly LOOPBACK_UNIT_SOURCE="$EXPECTED_REPO/painel-soprolife/systemd/soprolife-painel-loopback.service"
 readonly LOOPBACK_UNIT_TARGET="/etc/systemd/system/soprolife-painel-loopback.service"
 readonly HARDENING_LIB="$M15_DIR/scripts/lib-deploy-hardening.sh"
+readonly GO_LIVE_LIB="$M15_DIR/scripts/lib-go-live-gate.sh"
 readonly DB_ROLE="soprolife_m15"
 readonly DB_NAME="soprolife_m15"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -84,6 +96,9 @@ cd "$REPO_ROOT"
 [[ -f "$HARDENING_LIB" ]] || fail "biblioteca de hardening ausente: $HARDENING_LIB"
 # shellcheck source=lib-deploy-hardening.sh
 source "$HARDENING_LIB"
+[[ -f "$GO_LIVE_LIB" ]] || fail "biblioteca de go-live ausente: $GO_LIVE_LIB"
+# shellcheck source=lib-go-live-gate.sh
+source "$GO_LIVE_LIB"
 
 CURRENT_BRANCH="$(git branch --show-current)"
 CURRENT_COMMIT="$(git rev-parse HEAD)"
@@ -98,21 +113,35 @@ CURRENT_HOST="$(hostname --fqdn 2>/dev/null || hostname)"
   fail "worktree não está limpo"
 id soprolife >/dev/null 2>&1 || fail "usuário de serviço soprolife não existe"
 
-python3 - "$REPO_ROOT/painel-soprolife/data/m15-config.json" <<'PY'
-import json, pathlib, sys
-cfg = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-if cfg.get("enabled") is not False:
-    raise SystemExit("feature flag M15 precisa permanecer false")
-if cfg.get("api_base") != "/painel-soprolife/api/m15":
-    raise SystemExit("api_base M15 produtivo inesperado")
-PY
+# M15.5B: enabled=true segue rejeitado por padrão; só passa pelo modo go-live
+# controlado (autorização explícita + URL HTTPS validada + checagens estáticas
+# do release alvo + probe HTTPS), tudo ANTES de qualquer mutação produtiva.
+M15_FLAG="$(soprolife_go_live_flag_config \
+  "$REPO_ROOT/painel-soprolife/data/m15-config.json")" || \
+  fail "configuração M15 do release alvo inválida"
+GO_LIVE_MODE=0
+if [[ "$M15_FLAG" == "true" ]]; then
+  soprolife_go_live_exigir_autorizacao || \
+    fail "release enabled=true sem autorização de go-live"
+  soprolife_go_live_validar_url_base "${SOPROLIFE_M15_HTTPS_BASE_URL-}" || \
+    fail "URL base HTTPS do go-live inválida"
+  soprolife_go_live_checar_fonte_alvo "$REPO_ROOT" || \
+    fail "release alvo reprovado nas checagens estáticas do go-live"
+  soprolife_go_live_validar_https pre "${SOPROLIFE_M15_HTTPS_BASE_URL-}" || \
+    fail "endereço HTTPS privado reprovado na validação pré-deploy"
+  GO_LIVE_MODE=1
+fi
 
 echo "Contexto confirmado:"
 echo "  usuário: $CURRENT_USER"
 echo "  hostname: $CURRENT_HOST"
 echo "  branch: $CURRENT_BRANCH"
 echo "  commit: $CURRENT_COMMIT"
-echo "  feature flag: false"
+if (( GO_LIVE_MODE )); then
+  echo "  feature flag: true (go-live controlado autorizado e pré-validado)"
+else
+  echo "  feature flag: false"
+fi
 echo "  Docker/Podman: não serão instalados nem usados"
 printf "Digite exatamente 'IMPLANTAR M15' para continuar: "
 read -r CONFIRMATION
@@ -319,15 +348,27 @@ if sudo ss -ltnH | awk '$4 ~ /:8015$/ {print $4}' | grep -Fq "$TAILSCALE_IP"; th
   fail "API está exposta diretamente no IP Tailscale"
 fi
 
-python3 - "$REPO_ROOT/painel-soprolife/data/m15-config.json" <<'PY'
+python3 - "$REPO_ROOT/painel-soprolife/data/m15-config.json" "$M15_FLAG" <<'PY'
 import json, pathlib, sys
 cfg = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert cfg["enabled"] is False
+assert cfg["enabled"] is (sys.argv[2] == "true")
 assert cfg["api_base"] == "/painel-soprolife/api/m15"
 PY
 
+# M15.5B: em go-live, revalida o endereço HTTPS privado APÓS o deploy —
+# painel 200, health status=ok, enabled=true servido, m15-security.js servido
+# e carregado antes de m15-nucleo.js no index.html publicado.
+if (( GO_LIVE_MODE )); then
+  soprolife_go_live_validar_https pos "${SOPROLIFE_M15_HTTPS_BASE_URL-}" || \
+    fail "validação HTTPS pós-deploy do go-live falhou"
+fi
+
 sudo systemctl --no-pager --full status soprolife-m15-api.service
 sudo systemctl --no-pager --full status soprolife-painel-loopback.service
-echo "Implantação técnica concluída; feature flag permanece false."
+if (( GO_LIVE_MODE )); then
+  echo "Implantação técnica concluída; go-live controlado validado (enabled=true)."
+else
+  echo "Implantação técnica concluída; feature flag permanece false."
+fi
 echo "Backup verificado: $BACKUP_DIR"
 echo "Nenhum usuário, dado demo ou dado real foi criado/importado."
