@@ -15,6 +15,14 @@ from ..migration.service import (
     preflight,
     snapshot_status,
 )
+from ..migration.multisheet import (
+    MultiSheetError,
+    decide_multi_sheet_review,
+    list_multi_sheet_status,
+    multi_sheet_review_queue,
+    multi_sheet_status,
+    run_multi_sheet_dry_run,
+)
 from ..models import (
     AuditLog,
     IdentityCandidate,
@@ -25,7 +33,12 @@ from ..models import (
     User,
 )
 from ..pagination import PageParams, paginate
-from ..schemas import IdentityDecision, MigrationApproval
+from ..schemas import (
+    IdentityDecision,
+    MigrationApproval,
+    MultiSheetDryRunRequest,
+    MultiSheetReviewDecision,
+)
 from ..security import ROLE_ADMIN, ROLE_GESTOR, require_role
 from ..serializers import (
     ser_audit,
@@ -116,6 +129,85 @@ def list_batch_rows(
 
 
 # --------------------------------------------- snapshots privados (M15.6A)
+
+@router.get("/migracao/multiaba")
+def list_multi_sheet_dry_runs(
+    limite: int = 25,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    """Resumos sanitizados; nenhum alias de aba ou valor de origem."""
+    limite = max(1, min(limite, 100))
+    return list_multi_sheet_status(db, limite)
+
+
+@router.post("/migracao/multiaba/dry-run")
+def multi_sheet_dry_run_api(
+    payload: MultiSheetDryRunRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_ADMIN)),
+):
+    """Simulação protegida. A API não possui endpoint de execução real."""
+    try:
+        result = run_multi_sheet_dry_run(
+            db, payload.envelope, user_id=user.id
+        )
+        db.commit()
+        return result
+    except MultiSheetError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=exc.as_dict())
+
+
+@router.get("/migracao/multiaba/{batch_id}")
+def multi_sheet_detail_api(
+    batch_id: str,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    try:
+        return multi_sheet_status(db, batch_id)
+    except MultiSheetError:
+        raise HTTPException(status_code=404, detail="Dry-run multiaba não encontrado.")
+
+
+@router.get("/migracao/multiaba/{batch_id}/revisoes")
+def multi_sheet_review_queue_api(
+    batch_id: str,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    try:
+        return multi_sheet_review_queue(db, batch_id)
+    except MultiSheetError:
+        raise HTTPException(status_code=404, detail="Dry-run multiaba não encontrado.")
+
+
+@router.post(
+    "/migracao/multiaba/{batch_id}/revisoes/{private_reference_token}/decisao"
+)
+def decide_multi_sheet_review_api(
+    batch_id: str,
+    private_reference_token: str,
+    payload: MultiSheetReviewDecision,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    try:
+        result = decide_multi_sheet_review(
+            db,
+            batch_id,
+            private_reference_token,
+            payload.decisao,
+            payload.mapping_version,
+            user.id,
+        )
+        db.commit()
+        return result
+    except MultiSheetError as exc:
+        db.rollback()
+        status = 409 if exc.codigo == "decisao_de_revisao_ja_registrada" else 422
+        raise HTTPException(status_code=status, detail=exc.as_dict())
 
 @router.get("/migracao/snapshots")
 def list_snapshots(

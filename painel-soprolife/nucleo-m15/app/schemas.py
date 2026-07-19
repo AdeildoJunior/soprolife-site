@@ -424,6 +424,23 @@ class MigrationApproval(StrictModel):
     observacao: str | None = Field(default=None, max_length=2000)
 
 
+class MultiSheetDryRunRequest(StrictModel):
+    """Nome simples do envelope já presente no diretório privado aprovado."""
+
+    envelope: str = Field(
+        min_length=1,
+        max_length=200,
+        pattern=r"^[^/\\\x00]+$",
+    )
+
+
+class MultiSheetReviewDecision(StrictModel):
+    """Decisão sanitizada; nunca recebe nem devolve o conteúdo da linha."""
+
+    decisao: Literal["resolvido", "excluido", "adiado"]
+    mapping_version: str = Field(min_length=1, max_length=40)
+
+
 class IdentityDecision(StrictModel):
     """Decisão humana sobre candidato de identidade — nunca funde registros."""
 
