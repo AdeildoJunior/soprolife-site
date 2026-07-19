@@ -1,5 +1,13 @@
 /* Núcleo Operacional M15 (experimental) — estilos isolados com prefixo m15-.
-   Não altera nenhuma classe existente do painel. */
+   Não altera nenhuma classe existente do painel.
+
+   M15.4A — sistema compartilhado de formulários:
+   - grid de 12 colunas com larguras por importância (.m15-span-*);
+   - controles com altura padrão de 40px alinhados na mesma linha de base;
+   - rótulos de 1 linha (altura fixa) — dica longa vai para .m15-field-help;
+   - grupos visuais (.m15-group) para campos relacionais/técnicos;
+   - IDs técnicos sempre disponíveis, porém visualmente secundários;
+   - calendário próprio SoproLife (.m15-cal), sem dependência externa. */
 
 .m15-badge-exp {
   display: inline-flex;
@@ -83,23 +91,27 @@
 .m15-card {
   background: var(--card, #fff);
   border: 1px solid var(--line, #dbe5ef);
-  border-radius: 16px;
-  padding: 14px 16px;
+  border-radius: 14px;
+  padding: 12px 14px;
   box-shadow: var(--shadow-xs, 0 1px 4px rgba(15, 34, 57, .05));
 }
 
 .m15-card .m15-card-label {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .4px;
   color: var(--muted, #6d7b8a);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .m15-card .m15-card-value {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--navy, #0b1f36);
 }
 
@@ -122,29 +134,58 @@
   color: var(--navy, #0b1f36);
 }
 
+.m15-panel h3 + .m15-muted { margin-top: -6px; display: block; margin-bottom: 10px; }
+
+/* ─────────────────────────── controles (altura padrão 40px) ─────────────── */
+
+.m15-filtros select,
+.m15-filtros input,
+.m15-form select,
+.m15-form input:not([type="hidden"]),
+.m15-form textarea,
+.m15-login input {
+  border: 1px solid var(--line, #dbe5ef);
+  border-radius: 10px;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text, #132033);
+  background: #fff;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.m15-form select { padding-right: 28px; }
+
+.m15-filtros select:focus,
+.m15-filtros input:focus,
+.m15-form select:focus,
+.m15-form input:focus,
+.m15-login input:focus {
+  outline: 2px solid var(--teal, #1db7a6);
+  outline-offset: 1px;
+}
+
+/* ─────────────────────────────── barra de filtros ───────────────────────── */
+
 .m15-filtros {
   display: flex;
   flex-wrap: wrap;
+  align-items: end;
   gap: 8px;
   margin-bottom: 12px;
 }
 
 .m15-filtros select,
-.m15-filtros input,
-.m15-form select,
-.m15-form input,
-.m15-form textarea {
-  border: 1px solid var(--line, #dbe5ef);
-  border-radius: 10px;
-  padding: 7px 10px;
-  font-size: 12.5px;
-  font-family: inherit;
-  color: var(--text, #132033);
-  background: #fff;
-}
+.m15-filtros input { width: auto; }
 
-.m15-filtros select:focus,
-.m15-form input:focus { outline: 2px solid var(--teal, #1db7a6); outline-offset: 1px; }
+.m15-filtros input { min-width: 240px; }
+
+.m15-filtros .m15-btn { height: 40px; }
+
+/* ──────────────────────────────── tabelas ───────────────────────────────── */
 
 .m15-table-wrap { overflow-x: auto; }
 
@@ -169,7 +210,7 @@
   padding: 9px 10px;
   border-bottom: 1px solid var(--soft, #eef6f8);
   color: var(--text, #132033);
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 .m15-table tr:hover td { background: var(--soft, #eef6f8); }
@@ -196,10 +237,12 @@
   text-align: center;
   color: var(--muted, #6d7b8a);
   font-size: 13px;
-  padding: 26px 10px;
+  padding: 22px 10px;
   border: 1px dashed var(--line, #dbe5ef);
   border-radius: 12px;
 }
+
+/* ──────────────────────────────── botões ────────────────────────────────── */
 
 .m15-btn {
   border: none;
@@ -217,6 +260,8 @@
 .m15-btn.m15-btn-sec { background: var(--soft, #eef6f8); color: var(--navy, #0b1f36); }
 .m15-btn.m15-btn-wa { background: #1fae54; display: inline-flex; align-items: center; gap: 6px; }
 .m15-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.m15-table .m15-btn { padding: 5px 11px; font-size: 12px; }
 
 .m15-aviso {
   background: #fdf3e0;
@@ -238,23 +283,139 @@
   margin-bottom: 10px;
 }
 
+/* ───────────────────── sistema compartilhado de formulários ─────────────── */
+
 .m15-form {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 12px 14px;
   margin-top: 10px;
 }
 
-.m15-form label {
+/* Campo: rótulo de UMA linha com altura fixa (rótulo longo não empurra o
+   controle para baixo — a dica extensa vive em .m15-field-help). */
+.m15-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted, #6d7b8a);
+  align-self: start;
+}
+
+.m15-field-label {
+  display: block;
+  height: 18px;
+  line-height: 18px;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.m15-field-help {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted, #6d7b8a);
+}
+
+/* Larguras por importância (12 colunas no desktop). */
+.m15-span-2 { grid-column: span 2; }
+.m15-span-3 { grid-column: span 3; }
+.m15-span-4 { grid-column: span 4; }
+.m15-span-6 { grid-column: span 6; }
+.m15-span-8 { grid-column: span 8; }
+.m15-span-9 { grid-column: span 9; }
+.m15-form-full, .m15-span-12 { grid-column: 1 / -1; }
+
+/* Compatibilidade: label sem classe de campo segue o padrão antigo. */
+.m15-form > label:not(.m15-field) {
   display: flex;
   flex-direction: column;
   gap: 4px;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--muted, #6d7b8a);
+  grid-column: span 3;
 }
 
-.m15-form .m15-form-full { grid-column: 1 / -1; }
+/* Grupo visual: campos relacionais/opcionais coesos dentro do formulário. */
+.m15-group {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 12px 14px;
+  border: 1px solid var(--soft, #eef6f8);
+  background: #f8fbfd;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.m15-group-title {
+  grid-column: 1 / -1;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted, #6d7b8a);
+}
+
+/* Grupo técnico: IDs de vínculo disponíveis, porém secundários. */
+.m15-group.m15-group-tech { background: var(--soft, #eef6f8); border-style: dashed; }
+
+.m15-group.m15-group-tech input {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: #fff;
+}
+
+/* Linha de ações: botão primário colado ao formulário, sem linha vazia. */
+.m15-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.m15-actions .m15-btn { height: 40px; padding: 0 18px; }
+
+/* ─────────────────────────── login e sessão ─────────────────────────────── */
+
+.m15-login { max-width: 720px; }
+
+.m15-login-grid {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) minmax(160px, 2fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.m15-login-grid .m15-btn { height: 40px; padding: 0 18px; }
+
+.m15-login .m15-field-label { color: var(--muted, #6d7b8a); font-weight: 600; }
+
+.m15-login-alt { margin-top: 10px; }
+
+.m15-login-alt summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted, #6d7b8a);
+  user-select: none;
+}
+
+.m15-login-alt summary:hover { color: var(--teal-dark, #0f8f83); }
+
+.m15-login-alt[open] summary { margin-bottom: 8px; }
+
+.m15-login-alt .m15-login-grid {
+  grid-template-columns: minmax(220px, 4fr) auto;
+}
+
+.m15-login-status { margin-top: 8px; display: block; }
 
 .m15-token-box {
   display: flex;
@@ -264,6 +425,17 @@
 }
 
 .m15-token-box input { flex: 1; min-width: 220px; }
+
+.m15-session {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.m15-session .m15-session-user { color: var(--navy, #0b1f36); font-size: 13px; }
+
+.m15-session .m15-muted { margin-left: auto; }
 
 .m15-muted { color: var(--muted, #6d7b8a); font-size: 12px; }
 
@@ -293,7 +465,182 @@
 
 .m15-toast.m15-toast-erro { background: var(--danger, #e45c64); }
 
-@media (max-width: 720px) {
+/* ───────────────────── calendário SoproLife (m15-datepicker) ────────────── */
+
+.m15-date {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.m15-date .m15-date-input {
+  flex: 1;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+
+.m15-date .m15-date-btn {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 40px;
+  border: 1px solid var(--line, #dbe5ef);
+  border-top-right-radius: 10px;
+  border-bottom-right-radius: 10px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  background: var(--soft, #eef6f8);
+  color: var(--navy, #0b1f36);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.m15-date .m15-date-btn:hover { background: #e2eff2; }
+
+.m15-date .m15-date-btn:focus-visible {
+  outline: 2px solid var(--teal, #1db7a6);
+  outline-offset: 1px;
+}
+
+.m15-date-invalid .m15-date-input { border-color: var(--danger, #e45c64); }
+
+.m15-cal {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 500;
+  width: 264px;
+  background: var(--card, #fff);
+  border: 1px solid var(--line, #dbe5ef);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(15, 34, 57, .18);
+  padding: 10px;
+  font-weight: 400;
+}
+
+.m15-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.m15-cal-title {
+  flex: 1;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--navy, #0b1f36);
+  text-transform: capitalize;
+}
+
+.m15-cal-nav {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line, #dbe5ef);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--navy, #0b1f36);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.m15-cal-nav:hover { border-color: var(--teal, #1db7a6); color: var(--teal-dark, #0f8f83); }
+
+.m15-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.m15-cal-dow {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  color: var(--muted, #6d7b8a);
+  padding: 3px 0;
+}
+
+.m15-cal-day {
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text, #132033);
+  height: 30px;
+  cursor: pointer;
+}
+
+.m15-cal-day:hover { background: var(--soft, #eef6f8); }
+
+.m15-cal-day:focus-visible {
+  outline: 2px solid var(--teal, #1db7a6);
+  outline-offset: -1px;
+}
+
+.m15-cal-day.m15-cal-out { color: var(--muted, #6d7b8a); opacity: .45; }
+
+.m15-cal-day.m15-cal-today {
+  box-shadow: inset 0 0 0 1px var(--teal, #1db7a6);
+  color: var(--teal-dark, #0f8f83);
+  font-weight: 700;
+}
+
+.m15-cal-day.m15-cal-selected,
+.m15-cal-day.m15-cal-selected:hover {
+  background: var(--navy, #0b1f36);
+  color: #fff;
+  font-weight: 700;
+}
+
+.m15-cal-day:disabled {
+  color: var(--line, #dbe5ef);
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.m15-cal-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 8px;
+  border-top: 1px solid var(--soft, #eef6f8);
+  padding-top: 8px;
+}
+
+.m15-cal-foot .m15-btn { padding: 5px 12px; font-size: 12px; }
+
+.m15-cal-hint {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--muted, #6d7b8a);
+}
+
+/* ─────────────────────────────── responsivo ─────────────────────────────── */
+
+@media (max-width: 1120px) {
+  .m15-span-2, .m15-span-3 { grid-column: span 4; }
+  .m15-span-4, .m15-span-6 { grid-column: span 6; }
+  .m15-span-8, .m15-span-9 { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
   .m15-cards { grid-template-columns: repeat(2, 1fr); }
   .m15-form { grid-template-columns: 1fr; }
+  .m15-span-2, .m15-span-3, .m15-span-4, .m15-span-6,
+  .m15-span-8, .m15-span-9, .m15-form > label:not(.m15-field) {
+    grid-column: 1 / -1;
+  }
+  .m15-group { grid-template-columns: 1fr; }
+  .m15-login-grid,
+  .m15-login-alt .m15-login-grid { grid-template-columns: 1fr; }
+  .m15-filtros input { min-width: 0; flex: 1; }
+  .m15-session .m15-muted { margin-left: 0; }
 }
