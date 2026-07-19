@@ -21,7 +21,19 @@ from .staging import ESTADOS, StagingError, stage_multi_sheet
 MULTI_SHEET_SOURCE_TYPE = "snapshot_multiaba"
 MULTI_SHEET_REPORT_VERSION = "m15.multi-sheet-dry-run.1"
 MULTI_SHEET_REVIEW_DECISION = "revisao_multiaba"
-REVIEW_DECISIONS = frozenset(("resolvido", "excluido", "adiado"))
+# Decisões genéricas (M15.6B) + decisões com efeito executável (M15.6C).
+# "resolvido"/"adiado" nunca liberam execução; o vocabulário executável por
+# categoria é validado aqui e re-aplicado fail-closed pelo executor.
+EXEC_REVIEW_DECISIONS = frozenset(("vincular_candidato", "criar_pessoa"))
+REVIEW_DECISIONS = frozenset(
+    ("resolvido", "excluido", "adiado")) | EXEC_REVIEW_DECISIONS
+EXEC_DECISION_CATEGORIES = {
+    "vincular_candidato": frozenset(("candidato_identidade_provavel",)),
+    "criar_pessoa": frozenset((
+        "candidato_identidade_provavel", "exame_orfao", "consulta_orfa",
+        "registro_orfao",
+    )),
+}
 
 
 class MultiSheetError(ValueError):
@@ -315,6 +327,9 @@ def decide_multi_sheet_review(
     )
     if item is None:
         raise MultiSheetError("referencia_privada_inexistente")
+    categorias = EXEC_DECISION_CATEGORIES.get(decision)
+    if categorias is not None and item["category"] not in categorias:
+        raise MultiSheetError("decisao_incompativel_com_categoria")
     current = _decisions_by_token(db, batch.id).get(private_reference_token)
     if current and current["decision"] == decision:
         raise MultiSheetError("decisao_de_revisao_ja_registrada")
@@ -351,6 +366,46 @@ def decide_multi_sheet_review(
     }
 
 
+def _execution_status(db: Session, batch: ImportBatch,
+                      pending_decisions: int) -> dict:
+    """Status SANITIZADO de execução (M15.6C) — somente leitura, sem PII.
+
+    A API nunca executa: aqui só aparecem prontidão, hash do plano, estado
+    de reconciliação e evidência de rollback do lote executado (se houver).
+    """
+    exec_batch = db.execute(
+        select(ImportBatch).where(
+            ImportBatch.source_type == MULTI_SHEET_SOURCE_TYPE,
+            ImportBatch.sha256 == batch.sha256,
+            ImportBatch.modo == "executado",
+        )
+    ).scalars().first()
+    plano = (batch.params or {}).get("plano_execucao_multiaba") or {}
+    info = {
+        "caminho_execucao": "somente_cli_local_admin",
+        "revisoes_pendentes": pending_decisions,
+        "plano_rollback_gerado": bool(plano),
+        "plan_hash": plano.get("plan_hash"),
+        "backup": "validacao_somente_pela_cli_local",
+        "pronto_para_preflight": pending_decisions == 0 and bool(plano),
+        "executado": exec_batch is not None,
+    }
+    if exec_batch is not None:
+        params = exec_batch.params or {}
+        recon = params.get("reconciliacao_execucao") or {}
+        info.update({
+            "batch_execucao_id": exec_batch.id,
+            "status_execucao": exec_batch.status,
+            "plan_hash": params.get("plan_hash") or info["plan_hash"],
+            "reconciliacao_ok": recon.get("ok"),
+            "reconciliacao_status": recon.get("status_final"),
+            "evidencia_rollback_registrada":
+                bool(params.get("evidencia_rollback")),
+            "rollback_realizado": bool(params.get("rollback_execucao")),
+        })
+    return info
+
+
 def multi_sheet_status(db: Session, batch_id: str) -> dict:
     batch = _get_multi_batch(db, batch_id)
     report = batch.params["multi_sheet_report"]
@@ -369,6 +424,7 @@ def multi_sheet_status(db: Session, batch_id: str) -> dict:
         "decision_summary": {
             key: decision_summary[key] for key in sorted(decision_summary)
         },
+        "execution": _execution_status(db, batch, queue["pending_decisions"]),
         "execution_allowed": False,
     }
 
@@ -402,6 +458,8 @@ def list_multi_sheet_status(db: Session, limit: int = 25) -> dict:
             ),
             "reconciliation_preview": report.get("reconciliation_preview"),
             "blockers": report.get("blockers", []),
+            "execution": _execution_status(
+                db, batch, queue["pending_decisions"]),
             "execution_allowed": False,
         })
     return {
@@ -409,5 +467,5 @@ def list_multi_sheet_status(db: Session, limit: int = 25) -> dict:
         "total": total,
         "mapping_version": ADAPTERS_VERSION,
         "execution_allowed": False,
-        "global_blocker": "real_multi_sheet_execution_not_implemented",
+        "global_blocker": "execucao_real_somente_via_cli_admin_com_portoes",
     }

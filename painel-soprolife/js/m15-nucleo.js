@@ -1945,8 +1945,41 @@
         reviewRows,
         "Nenhum item de revisão.",
       ) +
-      '<div class="m15-aviso">Execução multiaba real indisponível por desenho. ' +
-      "Esta tela não possui botão de execução e não exibe valores de origem.</div>"
+      multiSheetExecutionHtml(det.execution || {}) +
+      '<div class="m15-aviso">Execução real SOMENTE pela CLI local ' +
+      "(<code>migracao executar-multiaba</code>), com admin exato, portões " +
+      "completos e frase digitada. Esta tela não possui botão de execução " +
+      "e não exibe valores de origem.</div>"
+    );
+  }
+
+  function multiSheetExecutionHtml(ex) {
+    var hash = ex.plan_hash ? String(ex.plan_hash).slice(0, 16) + "…" : "—";
+    var recon = "—";
+    if (ex.executado) {
+      recon = ex.reconciliacao_ok === true
+        ? "fechada"
+        : (ex.reconciliacao_ok === false ? "divergente" : "pendente");
+    }
+    return (
+      "<h4>Execução final (M15.6C) — somente status</h4>" +
+      "<p><strong>Prontidão:</strong> " +
+      pill(ex.pronto_para_preflight ? "pronta para preflight" : "bloqueada") +
+      " · revisões pendentes " + esc(String(ex.revisoes_pendentes || 0)) +
+      " · plano de rollback " +
+      pill(ex.plano_rollback_gerado ? "gerado" : "não gerado") + "</p>" +
+      "<p><strong>Plan hash:</strong> <code>" + esc(hash) + "</code>" +
+      " · <strong>Backup:</strong> " +
+      esc(ex.backup || "validação somente pela CLI local") + "</p>" +
+      "<p><strong>Execução:</strong> " +
+      pill(ex.executado ? (ex.status_execucao || "executado") : "não executada") +
+      " · <strong>Reconciliação:</strong> " + pill(recon) +
+      " · <strong>Evidência de rollback:</strong> " +
+      pill(ex.executado
+        ? (ex.rollback_realizado
+          ? "rollback realizado"
+          : (ex.evidencia_rollback_registrada ? "registrada" : "ausente"))
+        : "—") + "</p>"
     );
   }
 
@@ -1958,10 +1991,11 @@
       api("/migracao/multiaba?limite=25").catch(function () { return { items: [], total: 0 }; }),
     ]).then(function (r) {
       body().innerHTML =
-        '<div class="m15-aviso">Fluxo governado (M15.6B): snapshot privado → adapters explícitos → staging multiaba → ' +
-        "dry-run → revisão humana → aprovação → execução explícita (CLI) → reconciliação → rollback. " +
-        "Registro de snapshot e dry-run: <code>python -m app.cli migracao --help</code>. " +
-        "Dry-run é sempre o padrão; nada aqui grava registro operacional.</div>" +
+        '<div class="m15-aviso">Fluxo governado (M15.6C): snapshot privado → adapters explícitos → staging multiaba → ' +
+        "dry-run → revisão humana → preflight → backup → execução explícita (somente CLI, admin, frase digitada) → " +
+        "reconciliação → rollback seletivo. " +
+        "Comandos: <code>python -m app.cli migracao --help</code>. " +
+        "Dry-run é sempre o padrão; esta tela é somente status e nada aqui grava registro operacional.</div>" +
         '<div class="m15-panel"><h3>Dry-runs multiaba (' + r[3].total + ")</h3>" +
         table(
           ["Mapping", "Fonte", "Válidas", "Revisão", "Fechamento", "Status", "Ações"],

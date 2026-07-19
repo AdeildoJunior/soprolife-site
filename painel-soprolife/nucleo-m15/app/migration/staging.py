@@ -184,6 +184,9 @@ class _Contexto:
         self.fila: list[ItemRevisao] = []
         self.perfil_datas: dict[str, dict] = {}
         self.registros_data_privados: list[dict] = []
+        # M15.6C: registro PRIVADO por linha (campos canônicos + estado final)
+        # para o plano de execução decidido; nunca sai da camada privada.
+        self.registros_linhas_privados: list[dict] = []
         self.identidade = {
             "pessoas_explicitas": 0,
             "vinculos_deterministicos": 0,
@@ -884,22 +887,36 @@ def stage_multi_sheet(
         )
         abas[sheet.sheet_alias] = resumo
         handler = _HANDLERS[sheet.sheet_kind]
+
+        def _registrar_linha(linha, status, motivo, campos=None,
+                             _resumo=resumo, _sheet=sheet):
+            """Registra o estado E o espelho privado da linha (M15.6C)."""
+            _resumo.registrar(linha, status, motivo)
+            ctx.registros_linhas_privados.append({
+                "aba": _sheet.sheet_alias,
+                "kind": _sheet.sheet_kind,
+                "linha": linha,
+                "status": status,
+                "motivo": motivo,
+                "campos": campos,
+            })
+
         for raw_row in sheet.rows:
             linha = raw_row.linha
             if _linha_vazia(raw_row.valores):
-                resumo.registrar(linha, ST_EXCLUIDA, "linha_vazia")
+                _registrar_linha(linha, ST_EXCLUIDA, "linha_vazia")
                 continue
             coluna = _coluna_injecao(sheet.headers, raw_row.valores)
             if coluna is not None:
                 # fórmula nunca é executada nem reproduzida: rejeição
-                resumo.registrar(
+                _registrar_linha(
                     linha, ST_REJEITADA,
                     f"injecao_formula_coluna_{normalize_name(coluna).replace(' ', '_')}",
                 )
                 continue
             row = adapt_row(adapter, sheet.headers, raw_row.valores)
             if adapter.sheet_kind != "pcmso_historico" and _eh_pcmso(row.campos):
-                resumo.registrar(linha, ST_EXCLUIDA, "pcmso_fora_da_operacao")
+                _registrar_linha(linha, ST_EXCLUIDA, "pcmso_fora_da_operacao")
                 continue
             _contar_refs_monetarias(ctx, row)
             if adapter.sheet_kind == "financeiro_lancamentos":
@@ -915,7 +932,7 @@ def stage_multi_sheet(
                 status, motivo = handler(
                     ctx, sheet.sheet_alias, linha, row, resumo
                 )
-            resumo.registrar(linha, status, motivo)
+            _registrar_linha(linha, status, motivo, campos=dict(row.campos))
 
     if not consentimentos_processados:
         _processar_consentimentos(ctx)
@@ -940,7 +957,7 @@ def stage_multi_sheet(
         if item.status == "pendente":
             pendentes_revisao_itens += 1
 
-    bloqueios = ["execucao_real_indisponivel_para_multiaba_m15_6b"]
+    bloqueios = ["execucao_real_somente_via_cli_m15_6c_com_portoes"]
     if pendentes_revisao_itens:
         bloqueios.append(f"itens_de_revisao_pendentes:{pendentes_revisao_itens}")
     if ctx.financeiro["nao_resolvidas"]:
@@ -1024,6 +1041,7 @@ def stage_multi_sheet(
         # Contrato PRIVADO em memória: preserva texto, normalização, precisão
         # e referência de origem. A camada pública remove este bloco inteiro.
         "registros_data_privados": ctx.registros_data_privados,
+        "registros_linhas_privados": ctx.registros_linhas_privados,
         "perfil_identidade": dict(sorted(ctx.identidade.items())),
         "cobertura_financeira": dict(sorted(ctx.financeiro.items())),
         "fila_revisao": [item.as_dict() for item in fila_ordenada],
