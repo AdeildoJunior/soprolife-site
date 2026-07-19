@@ -355,6 +355,26 @@ class PartnerContact(Base, TimestampMixin):
     observacao: Mapped[str | None] = mapped_column(Text)
 
 
+class PartnerUnitConfig(Base, TimestampMixin):
+    """Configuração operacional de unidade parceira (M15.6C, ex-Pastore Config).
+
+    NUNCA carrega valor monetário: colunas de preço/repasse/custo da fonte
+    são referência bloqueada (M14.2) e ficam fora do modelo por contrato.
+    """
+
+    __tablename__ = "partner_unit_configs"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    partner_unit_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("partner_units.id"), index=True, nullable=False
+    )
+    status: Mapped[str | None] = mapped_column(String(40))
+    dia_semana: Mapped[str | None] = mapped_column(String(40))
+    horario_inicio: Mapped[str | None] = mapped_column(String(20))
+    horario_fim: Mapped[str | None] = mapped_column(String(20))
+    capacidade_estimada_por_turno: Mapped[str | None] = mapped_column(String(40))
+    observacao: Mapped[str | None] = mapped_column(Text)
+
+
 class Partnership(Base, TimestampMixin):
     __tablename__ = "partnerships"
     id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
@@ -686,6 +706,35 @@ Index(
     sqlite_where=IdentityCandidate.status == "pendente",
     postgresql_where=IdentityCandidate.status == "pendente",
 )
+
+
+class MigrationProvenance(Base):
+    """Razão de proveniência da execução multiaba (M15.6C) — append-only.
+
+    Uma linha por registro operacional criado pelo lote de execução:
+    lote, tabela alvo, id criado, domínio de origem, fingerprint irreversível
+    da referência privada (sha256 — nunca o valor), versão de mapeamento e
+    chave de idempotência determinística ÚNICA. Reexecutar o mesmo plano
+    encontra as chaves e não cria nada; o rollback seletivo usa SOMENTE os
+    entity_id daqui, em ordem reversa de criação (coluna ordem).
+    """
+
+    __tablename__ = "migration_provenance"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    batch_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("import_batches.id"), index=True, nullable=False
+    )
+    ordem: Mapped[int] = mapped_column(Integer, nullable=False)
+    entidade: Mapped[str] = mapped_column(String(60), nullable=False)
+    entity_id: Mapped[str] = mapped_column(String(UUID_LEN), index=True, nullable=False)
+    source_domain: Mapped[str] = mapped_column(String(60), nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    mapping_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        UniqueConstraint("batch_id", "ordem", name="uq_migration_provenance_ordem"),
+    )
 
 
 class MigrationDecision(Base):
