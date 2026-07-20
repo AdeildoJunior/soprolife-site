@@ -27,6 +27,7 @@ Contrato central:
 import hashlib
 import json
 import pathlib
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -583,27 +584,74 @@ def build_execution_plan(
     return plano
 
 
-def _identidade_tecnica_duplicata(kind: str, campos: dict):
-    """Identidade fechada usada para decidir duplicatas sem heurística."""
+# Dia e horário DEFINEM a agenda de uma unidade Pastore. A normalização é
+# fechada e determinística: diferença inofensiva de grafia/formatação nunca
+# cria distinção falsa, e forma equivalente nunca vira duplicata falsa.
+_DIA_SEMANA_CANONICO = {
+    "dom": "domingo", "domingo": "domingo",
+    "seg": "segunda", "segunda": "segunda", "segunda feira": "segunda",
+    "ter": "terca", "terca": "terca", "terca feira": "terca",
+    "qua": "quarta", "quarta": "quarta", "quarta feira": "quarta",
+    "qui": "quinta", "quinta": "quinta", "quinta feira": "quinta",
+    "sex": "sexta", "sexta": "sexta", "sexta feira": "sexta",
+    "sab": "sabado", "sabado": "sabado",
+}
+_HORARIO_RE = re.compile(r"^([01]?\d|2[0-3])(?:[:h.]([0-5]\d))?h?$")
+
+
+def _normalizar_dia_semana(valor: str) -> str:
+    texto = normalize_name((valor or "").replace("-", " "))
+    return _DIA_SEMANA_CANONICO.get(texto, texto)
+
+
+def _normalizar_horario(valor: str) -> str:
+    texto = normalize_name(valor).replace(" ", "")
+    m = _HORARIO_RE.match(texto)
+    if m:
+        return f"{int(m.group(1)):02d}:{m.group(2) or '00'}"
+    return texto
+
+
+def _escopo_duplicata(kind: str, campos: dict):
+    """Escopo fechado que liga a duplicata bloqueante às linhas anteriores."""
     if kind == "pastore_config":
         unidade = normalize_name(campos.get("unidade", ""))
         return (kind, unidade) if unidade else None
     return None
 
 
-def _linha_ativa_duplicada(plano: PlanoExecucao, kind: str, campos: dict):
-    identidade = _identidade_tecnica_duplicata(kind, campos)
-    if identidade is None:
+def _identidade_tecnica_duplicata(kind: str, campos: dict):
+    """Identidade fechada usada para decidir duplicatas sem heurística.
+
+    Para pastore_config a identidade inclui os campos que definem a agenda
+    (dia da semana e horários normalizados): a mesma unidade em dia ou
+    horário diferente é configuração tecnicamente distinta. Texto livre de
+    observação nunca participa da identidade.
+    """
+    escopo = _escopo_duplicata(kind, campos)
+    if escopo is None:
         return None
-    for anterior in reversed(plano.linhas):
-        if (
-            anterior["kind"] == kind
-            and anterior.get("status_final") == "importado"
-            and _identidade_tecnica_duplicata(kind, anterior["campos"])
-            == identidade
-        ):
-            return anterior
-    return None
+    if kind == "pastore_config":
+        return escopo + (
+            _normalizar_dia_semana(campos.get("dia_semana", "")),
+            _normalizar_horario(campos.get("horario_inicio", "")),
+            _normalizar_horario(campos.get("horario_fim", "")),
+        )
+    return escopo
+
+
+def _linhas_ativas_duplicadas(plano: PlanoExecucao, kind: str,
+                              campos: dict) -> list[dict]:
+    """Linhas já importadas no MESMO escopo da duplicata, na ordem do plano."""
+    escopo = _escopo_duplicata(kind, campos)
+    if escopo is None:
+        return []
+    return [
+        anterior for anterior in plano.linhas
+        if anterior["kind"] == kind
+        and anterior.get("status_final") == "importado"
+        and _escopo_duplicata(kind, anterior["campos"]) == escopo
+    ]
 
 
 def _resolver_linha_duplicada(
@@ -631,8 +679,8 @@ def _resolver_linha_duplicada(
         )
         return
 
-    anterior = _linha_ativa_duplicada(builder.plano, kind, campos)
-    if anterior is None:
+    anteriores = _linhas_ativas_duplicadas(builder.plano, kind, campos)
+    if not anteriores:
         builder.plano.conflitos_nao_resolvidos += 1
         builder.bloquear("duplicata_sem_identidade_tecnica_anterior")
         final.update(
@@ -641,13 +689,18 @@ def _resolver_linha_duplicada(
             decisao=decisao,
         )
         return
+    anterior = anteriores[-1]
 
     identidade_atual = _identidade_tecnica_duplicata(kind, campos)
-    identidade_anterior = _identidade_tecnica_duplicata(
-        kind, anterior["campos"])
 
     if decisao == "manter_ambas":
-        if identidade_atual == identidade_anterior:
+        # fail-closed contra QUALQUER linha ativa do escopo: agenda
+        # normalizada idêntica nunca coexiste, nem fora de ordem.
+        if any(
+            _identidade_tecnica_duplicata(kind, ativa["campos"])
+            == identidade_atual
+            for ativa in anteriores
+        ):
             builder.plano.conflitos_nao_resolvidos += 1
             builder.bloquear("duplicatas_com_identidade_tecnica_igual")
             final.update(
@@ -767,24 +820,33 @@ def _construir_linha_valida(builder: _PlanBuilder, kind: str, aba: str,
 
     if kind == "pastore_config":
         unidade_norm = normalize_name(campos["unidade"])
-        if not builder.parceiro_pastore:
-            builder.op(
-                "partners", "partners:pastore:ativo", kind, aba, linha,
-                {"nome": "Pastore", "tipo": "clinica", "status": "ativa"},
-                legacy=("partners", "pastore", "ativo"), subtipo="pastore",
+        chave_unidade = builder.unidades_pastore.get(unidade_norm)
+        chave_config = f"partner_unit_configs:pastore_config:{unidade_norm}"
+        if chave_unidade is None:
+            if not builder.parceiro_pastore:
+                builder.op(
+                    "partners", "partners:pastore:ativo", kind, aba, linha,
+                    {"nome": "Pastore", "tipo": "clinica", "status": "ativa"},
+                    legacy=("partners", "pastore", "ativo"), subtipo="pastore",
+                )
+                builder.parceiro_pastore = True
+            chave_unidade = builder.op(
+                "partner_units",
+                f"partner_units:pastore_config:{unidade_norm}",
+                kind, aba, linha,
+                {"nome": campos["unidade"].strip()},
+                refs={"partner_id": "partners:pastore:ativo"},
+                subtipo="unidade",
             )
-            builder.parceiro_pastore = True
-        chave_unidade = builder.op(
-            "partner_units", f"partner_units:pastore_config:{unidade_norm}",
-            kind, aba, linha,
-            {"nome": campos["unidade"].strip()},
-            refs={"partner_id": "partners:pastore:ativo"}, subtipo="unidade",
-        )
-        builder.unidades_pastore[unidade_norm] = chave_unidade
+            builder.unidades_pastore[unidade_norm] = chave_unidade
+        else:
+            # manter_ambas: agenda distinta da MESMA unidade coexiste sem
+            # criar segunda unidade; só a config adicional entra, com chave
+            # derivada da identidade técnica normalizada da agenda.
+            identidade = _identidade_tecnica_duplicata(kind, campos)
+            chave_config += ":" + "-".join(identidade[2:])
         builder.op(
-            "partner_unit_configs",
-            f"partner_unit_configs:pastore_config:{unidade_norm}", kind, aba,
-            linha,
+            "partner_unit_configs", chave_config, kind, aba, linha,
             {"status": _trunc(campos.get("status"), 40),
              "dia_semana": _trunc(campos.get("dia_semana"), 40),
              "horario_inicio": _trunc(campos.get("horario_inicio"), 20),
