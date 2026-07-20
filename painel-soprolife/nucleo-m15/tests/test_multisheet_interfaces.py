@@ -56,9 +56,13 @@ def test_api_fila_e_decisao_humana_por_token_privado(
     assert queue.status_code == 200
     item = next(i for i in queue.json()["items"] if i["status"] == "pendente")
     assert set(item) == {
-        "private_reference_token", "category", "status", "mapping_version",
-        "decision_state",
+        "private_reference_token", "category", "category_label", "status",
+        "mapping_version", "decision_state",
     }
+    # rótulo sanitizado do console: nunca ecoa token privado nem afirma que
+    # a gravação oficial da revisão está bloqueada
+    assert item["private_reference_token"] not in item["category_label"]
+    assert "gravação oficial bloqueada" not in item["category_label"]
     decision_url = (
         f"{queue_url}/{item['private_reference_token']}/decisao"
     )

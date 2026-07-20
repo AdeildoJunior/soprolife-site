@@ -124,6 +124,7 @@ def executable_sheets():
             synthetic_row(
                 "pastore_config", unidade="Unidade Sintetica 001",
                 status="ativo", dia_semana="terca",
+                horario_inicio="08:00", horario_fim="12:00",
                 valor_exame_sem_bd="999,00"),
         ]},
         {"kind": "pastore_atendimentos", "alias": "Pastore Atend Sinteticos",
@@ -179,14 +180,26 @@ DECISAO_PADRAO = {
 }
 
 
-def sheets_com_duplicata_pastore(*, status_segunda="inativo"):
+def sheets_com_duplicata_pastore(*, status_segunda="inativo",
+                                 **agenda_segunda):
+    """Mesma unidade duas vezes; a agenda da 2ª linha é personalizável.
+
+    A 1ª linha do cenário base é terça 08:00–12:00; o padrão daqui (quarta
+    08:00–12:00) tem identidade técnica distinta pelo dia da semana.
+    """
     sheets = executable_sheets()
     config = next(s for s in sheets if s["kind"] == "pastore_config")
+    campos = {
+        "dia_semana": "quarta",
+        "horario_inicio": "08:00",
+        "horario_fim": "12:00",
+    }
+    campos.update(agenda_segunda)
     config["rows"].append(synthetic_row(
         "pastore_config",
         unidade="  unidade sintetica 001  ",
         status=status_segunda,
-        dia_semana="quarta",
+        **campos,
     ))
     return sheets
 
@@ -375,16 +388,83 @@ def test_duplicata_pastore_manter_segunda_substitui_primeira(
     assert configs[0].campos["dia_semana"] == "quarta"
 
 
-def test_duplicata_pastore_manter_ambas_exige_identidades_distintas(
-    db, users, tmp_path,
-):
+def _plano_manter_ambas(db, users, tmp_path, **agenda_segunda):
     nome, batch_id = dry_run(
-        db, tmp_path, sheets_com_duplicata_pastore(), users)
+        db, tmp_path,
+        sheets_com_duplicata_pastore(**agenda_segunda), users)
     decidir_pendentes(
         db, batch_id, users,
         overrides={"duplicata_execucao": "manter_ambas"},
     )
-    plano = build_final_plan(db, nome, batch_id, base_dir=tmp_path)
+    return nome, batch_id, build_final_plan(
+        db, nome, batch_id, base_dir=tmp_path)
+
+
+def _assert_ambas_importadas(plano):
+    linhas = [l for l in plano.linhas if l["kind"] == "pastore_config"]
+    assert [l["status_final"] for l in linhas] == ["importado", "importado"]
+    assert linhas[1]["decisao"] == "manter_ambas"
+    assert plano.conflitos_nao_resolvidos == 0
+    assert "duplicatas_com_identidade_tecnica_igual" not in plano.bloqueios
+    unidades = [op for op in plano.ops if op.entidade == "partner_units"
+                and op.fonte == "pastore_config"]
+    assert len(unidades) == 1  # a MESMA unidade nunca nasce duas vezes
+    configs = [op for op in plano.ops
+               if op.entidade == "partner_unit_configs"]
+    assert len(configs) == 2
+    assert len({op.chave for op in configs}) == 2
+    return configs
+
+
+def test_manter_ambas_com_dia_distinto_importa_e_executa(db, users, tmp_path):
+    nome, batch_id, plano = _plano_manter_ambas(
+        db, users, tmp_path, dia_semana="Sábado")
+    configs = _assert_ambas_importadas(plano)
+    assert {op.campos["dia_semana"] for op in configs} == {"terca", "Sábado"}
+
+    # execução real completa: as duas agendas coexistem no banco
+    generate_rollback_plan(
+        db, nome, batch_id, base_dir=tmp_path, user_id=users["admin"].id)
+    db.commit()
+    evidencia = write_backup_evidence(tmp_path)
+    resultado = executar_ok(db, tmp_path, users, nome, batch_id, evidencia)
+    assert resultado["ok"] is True
+    configs_db = db.execute(select(PartnerUnitConfig)).scalars().all()
+    assert {c.dia_semana for c in configs_db} == {"terca", "Sábado"}
+    assert len({c.partner_unit_id for c in configs_db}) == 1
+    recon = reconcile_multi_sheet_execution(
+        db, resultado["batch_execucao_id"], base_dir=tmp_path,
+        user_id=users["admin"].id)
+    assert recon["ok"] is True
+
+
+def test_manter_ambas_com_horario_inicio_distinto_importa_ambas(
+    db, users, tmp_path,
+):
+    _, _, plano = _plano_manter_ambas(
+        db, users, tmp_path, dia_semana="terca", horario_inicio="09:00")
+    configs = _assert_ambas_importadas(plano)
+    assert {op.campos["horario_inicio"] for op in configs} == {
+        "08:00", "09:00"}
+
+
+def test_manter_ambas_com_horario_fim_distinto_importa_ambas(
+    db, users, tmp_path,
+):
+    _, _, plano = _plano_manter_ambas(
+        db, users, tmp_path, dia_semana="terca", horario_fim="11:00")
+    configs = _assert_ambas_importadas(plano)
+    assert {op.campos["horario_fim"] for op in configs} == {"11:00", "12:00"}
+
+
+def test_manter_ambas_bloqueada_para_agenda_identica_normalizada(
+    db, users, tmp_path,
+):
+    # grafia/acentos/formatação equivalentes à 1ª linha (terca 08:00–12:00):
+    # a identidade normalizada é IDÊNTICA e manter_ambas segue fail-closed
+    _, _, plano = _plano_manter_ambas(
+        db, users, tmp_path,
+        dia_semana="Terça-feira", horario_inicio="8h", horario_fim="12h00")
     assert plano.conflitos_nao_resolvidos == 1
     assert "duplicatas_com_identidade_tecnica_igual" in plano.bloqueios
     assert any(
@@ -393,6 +473,45 @@ def test_duplicata_pastore_manter_ambas_exige_identidades_distintas(
         and linha["decisao"] == "manter_ambas"
         for linha in plano.linhas
     )
+    configs = [op for op in plano.ops
+               if op.entidade == "partner_unit_configs"]
+    assert len(configs) == 1
+
+
+def test_normalizacao_deterministica_de_dia_e_horario():
+    assert executor._normalizar_dia_semana("Terça-feira") == "terca"
+    assert executor._normalizar_dia_semana("TERÇA") == "terca"
+    assert executor._normalizar_dia_semana(" ter ") == "terca"
+    assert executor._normalizar_dia_semana("Sábado") == "sabado"
+    assert executor._normalizar_dia_semana("sexta feira") == "sexta"
+    assert executor._normalizar_dia_semana("") == ""
+    assert executor._normalizar_horario("8:00") == "08:00"
+    assert executor._normalizar_horario("08h") == "08:00"
+    assert executor._normalizar_horario("8h30") == "08:30"
+    assert executor._normalizar_horario("12h00") == "12:00"
+    assert executor._normalizar_horario(" 08:00 ") == "08:00"
+    assert executor._normalizar_horario("") == ""
+    assert (executor._normalizar_horario("09:00")
+            != executor._normalizar_horario("08:00"))
+
+
+def test_rotulo_sanitizado_do_console_sem_afirmacao_estale(
+    db, users, tmp_path,
+):
+    nome, batch_id = dry_run(
+        db, tmp_path, sheets_com_duplicata_pastore(), users)
+    fila = multi_sheet_review_queue(db, batch_id)
+    assert fila["execution_allowed"] is False
+    item = next(
+        i for i in fila["items"] if i["category"] == "duplicata_execucao")
+    label = item["category_label"]
+    assert "pendente de revisão humana" in label
+    assert "gravação oficial bloqueada" not in label
+    assert item["private_reference_token"] not in label
+    assert "priv-" not in label
+    status = multi_sheet_status(db, batch_id)
+    assert label in [
+        i.get("category_label") for i in status["review_queue"]]
 
 
 def test_execucao_bloqueada_por_checksum_alterado(db, users, tmp_path):

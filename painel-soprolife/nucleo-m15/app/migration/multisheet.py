@@ -1,9 +1,10 @@
 """Orquestração pública e sanitizada do dry-run multiaba M15.6B.
 
 O grafo detalhado fica apenas em memória. Somente um resumo sem valores de
-origem, nomes de abas ou números de linha pode ser persistido e exposto. A
-execução real deste formato não existe: todo resultado contém o bloqueio
-explícito e não há handler de escrita associado ao source_type multiaba.
+origem, nomes de abas ou números de linha pode ser persistido e exposto.
+Esta camada nunca executa: a gravação oficial de decisões de revisão é
+suportada (revisar-multiaba, revisor autenticado) e a execução real é
+exclusiva da CLI local admin (M15.6C), com portões completos e frase exata.
 """
 
 import hashlib
@@ -39,6 +40,16 @@ EXEC_DECISION_CATEGORIES = {
     "manter_primeira": frozenset(("duplicata_execucao",)),
     "manter_segunda": frozenset(("duplicata_execucao",)),
     "manter_ambas": frozenset(("duplicata_execucao",)),
+}
+# Rótulo sanitizado por categoria para qualquer console de revisão humana.
+# Linguagem precisa: a gravação oficial da decisão É suportada; o que segue
+# bloqueado é somente a execução fora da CLI local admin. Nunca inclui token
+# privado nem valor de origem.
+REVIEW_CATEGORY_LABELS = {
+    "duplicata_execucao": (
+        "Duplicata bloqueante de execução — pendente de revisão humana; "
+        "decisão oficial gravável via revisar-multiaba"
+    ),
 }
 
 
@@ -288,6 +299,9 @@ def multi_sheet_review_queue(db: Session, batch_id: str) -> dict:
         decision = decisions.get(item["private_reference_token"])
         items.append({
             **item,
+            "category_label": REVIEW_CATEGORY_LABELS.get(
+                item["category"], item["category"]
+            ),
             "decision_state": (
                 decision["decision_state"] if decision else item["status"]
             ),
