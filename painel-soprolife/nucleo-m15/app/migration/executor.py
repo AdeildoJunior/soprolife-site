@@ -81,6 +81,7 @@ from .staging import (
     CAT_CANDIDATO_IDENTIDADE,
     CAT_CONSULTA_ORFA,
     CAT_DATA_INVALIDA,
+    CAT_DUPLICATA_EXECUCAO,
     CAT_EXAME_ORFAO,
     CAT_FINANCEIRO_NAO_RESOLVIDO,
     CAT_FONTE_MONETARIA_BLOQUEADA,
@@ -121,6 +122,8 @@ DECISOES_EXECUTAVEIS_POR_CATEGORIA = {
     CAT_DATA_INVALIDA: frozenset(("excluido",)),
     CAT_FINANCEIRO_NAO_RESOLVIDO: frozenset(("excluido",)),
     CAT_FONTE_MONETARIA_BLOQUEADA: frozenset(("excluido",)),
+    CAT_DUPLICATA_EXECUCAO: frozenset(
+        ("manter_primeira", "manter_segunda", "manter_ambas")),
 }
 
 # Ordem FINAL de inserção por entidade (contrato M15.6C, fixa e estável).
@@ -394,6 +397,8 @@ class _PlanBuilder:
                     self.plano.financeiro_nao_resolvido += 1
                 if item["categoria"] == CAT_ID_CONFLITANTE:
                     self.plano.conflitos_nao_resolvidos += 1
+                if item["categoria"] == CAT_DUPLICATA_EXECUCAO:
+                    self.plano.conflitos_nao_resolvidos += 1
                 return None, "revisao_pendente_sem_decisao_executavel"
             decisoes.add(registrada)
         if len(decisoes) > 1:
@@ -542,7 +547,9 @@ def build_execution_plan(
         elif status == ST_EXCLUIDA:
             final.update(status_final="excluido", motivo=motivo)
         elif status == ST_DUPLICADA:
-            final.update(status_final="duplicado", motivo=motivo)
+            _resolver_linha_duplicada(
+                builder, kind, aba, linha, campos, motivo,
+                itens.get((aba, linha), []), final)
         elif status == ST_JA_EXISTENTE:
             final.update(status_final="ja_existente", motivo=motivo)
         elif status == ST_VALIDA:
@@ -574,6 +581,114 @@ def build_execution_plan(
     plano.ops.sort(key=lambda op: (ORDEM_ENTIDADES[op.entidade], op.seq))
     _validar_referencias(plano, builder)
     return plano
+
+
+def _identidade_tecnica_duplicata(kind: str, campos: dict):
+    """Identidade fechada usada para decidir duplicatas sem heurística."""
+    if kind == "pastore_config":
+        unidade = normalize_name(campos.get("unidade", ""))
+        return (kind, unidade) if unidade else None
+    return None
+
+
+def _linha_ativa_duplicada(plano: PlanoExecucao, kind: str, campos: dict):
+    identidade = _identidade_tecnica_duplicata(kind, campos)
+    if identidade is None:
+        return None
+    for anterior in reversed(plano.linhas):
+        if (
+            anterior["kind"] == kind
+            and anterior.get("status_final") == "importado"
+            and _identidade_tecnica_duplicata(kind, anterior["campos"])
+            == identidade
+        ):
+            return anterior
+    return None
+
+
+def _resolver_linha_duplicada(
+    builder: _PlanBuilder,
+    kind: str,
+    aba: str,
+    linha: int,
+    campos: dict,
+    motivo: str | None,
+    itens_da_linha: list[dict],
+    final: dict,
+) -> None:
+    """Aplica somente decisões explícitas sobre uma duplicata bloqueante."""
+    decisao, bloqueio = builder.decisao_da_linha(
+        aba, linha, itens_da_linha)
+    if bloqueio:
+        final.update(status_final="duplicado", motivo=bloqueio)
+        return
+
+    if decisao == "manter_primeira":
+        final.update(
+            status_final="excluido",
+            motivo="duplicata_excluida_por_decisao_humana",
+            decisao=decisao,
+        )
+        return
+
+    anterior = _linha_ativa_duplicada(builder.plano, kind, campos)
+    if anterior is None:
+        builder.plano.conflitos_nao_resolvidos += 1
+        builder.bloquear("duplicata_sem_identidade_tecnica_anterior")
+        final.update(
+            status_final="duplicado",
+            motivo="duplicata_sem_identidade_tecnica_anterior",
+            decisao=decisao,
+        )
+        return
+
+    identidade_atual = _identidade_tecnica_duplicata(kind, campos)
+    identidade_anterior = _identidade_tecnica_duplicata(
+        kind, anterior["campos"])
+
+    if decisao == "manter_ambas":
+        if identidade_atual == identidade_anterior:
+            builder.plano.conflitos_nao_resolvidos += 1
+            builder.bloquear("duplicatas_com_identidade_tecnica_igual")
+            final.update(
+                status_final="duplicado",
+                motivo="duplicatas_com_identidade_tecnica_igual",
+                decisao=decisao,
+            )
+            return
+        _construir_linha_valida(builder, kind, aba, linha, campos, final)
+        final["decisao"] = decisao
+        return
+
+    if decisao == "manter_segunda" and kind == "pastore_config":
+        # A configuração Pastore vem antes dos atendimentos no plano. Neste
+        # ponto nenhuma operação posterior pode depender da primeira linha.
+        origem = (anterior["aba"], anterior["linha"])
+        builder.plano.ops = [
+            op for op in builder.plano.ops
+            if not (op.fonte == kind and (op.aba, op.linha) == origem)
+        ]
+        builder.chaves = {op.chave for op in builder.plano.ops}
+        builder.parceiro_pastore = any(
+            op.chave == "partners:pastore:ativo" for op in builder.plano.ops)
+        unidade = normalize_name(campos.get("unidade", ""))
+        builder.unidades_pastore.pop(unidade, None)
+        anterior.update(
+            status_final="excluido",
+            motivo="primeira_duplicata_excluida_por_decisao_humana",
+            decisao=decisao,
+        )
+        _construir_linha_valida(builder, kind, aba, linha, campos, final)
+        final["decisao"] = decisao
+        return
+
+    builder.plano.conflitos_nao_resolvidos += 1
+    builder.bloquear("decisao_de_duplicata_sem_aplicacao_segura")
+    final.update(
+        status_final="duplicado",
+        motivo="decisao_de_duplicata_sem_aplicacao_segura",
+        decisao=decisao,
+    )
 
 
 def _registrar_exclusao_decidida(builder: _PlanBuilder, kind: str,

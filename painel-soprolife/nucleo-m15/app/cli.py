@@ -786,7 +786,8 @@ def main(argv: list[str] | None = None) -> int:
     mp.add_argument(
         "--decisao", required=True,
         choices=("resolvido", "excluido", "adiado",
-                 "vincular_candidato", "criar_pessoa"),
+                 "vincular_candidato", "criar_pessoa",
+                 "manter_primeira", "manter_segunda", "manter_ambas"),
     )
     mp.add_argument("--mapping-version", required=True)
 
