@@ -69,12 +69,14 @@ CAT_DATA_INVALIDA = "data_invalida_ativa"
 CAT_FINANCEIRO_NAO_RESOLVIDO = "relacao_financeira_nao_resolvida"
 CAT_FONTE_MONETARIA_BLOQUEADA = "fonte_monetaria_nao_autorizada"
 CAT_EXCLUSAO_EXPLICITA = "exclusao_explicita"
+CAT_DUPLICATA_EXECUCAO = "duplicata_execucao"
 
 CATEGORIAS_REVISAO = (
     CAT_CANDIDATO_IDENTIDADE, CAT_EXAME_ORFAO, CAT_CONSULTA_ORFA,
     CAT_REGISTRO_ORFAO, CAT_LEAD_SEM_PESSOA, CAT_ID_CONFLITANTE,
     CAT_ID_NAO_ENCONTRADO, CAT_DATA_INVALIDA, CAT_FINANCEIRO_NAO_RESOLVIDO,
     CAT_FONTE_MONETARIA_BLOQUEADA, CAT_EXCLUSAO_EXPLICITA,
+    CAT_DUPLICATA_EXECUCAO,
 )
 
 _MONEY_RE = re.compile(r"^\d+(?:[.,]\d{1,2})?$")
@@ -891,6 +893,20 @@ def stage_multi_sheet(
         def _registrar_linha(linha, status, motivo, campos=None,
                              _resumo=resumo, _sheet=sheet):
             """Registra o estado E o espelho privado da linha (M15.6C)."""
+            if status == ST_DUPLICADA:
+                # Toda duplicata que bloqueia a execução precisa ser
+                # alcançável pelo revisar-multiaba. O motivo e os valores
+                # continuam somente na camada privada; o relatório público
+                # recebe categoria + token opaco.
+                ctx.revisar(ItemRevisao(
+                    token=_token(
+                        _sheet.sheet_alias, linha, CAT_DUPLICATA_EXECUCAO),
+                    categoria=CAT_DUPLICATA_EXECUCAO,
+                    aba=_sheet.sheet_alias,
+                    linha=linha,
+                    campo=None,
+                    motivo=motivo or "duplicata_sem_motivo",
+                ))
             _resumo.registrar(linha, status, motivo)
             ctx.registros_linhas_privados.append({
                 "aba": _sheet.sheet_alias,

@@ -24,7 +24,10 @@ MULTI_SHEET_REVIEW_DECISION = "revisao_multiaba"
 # Decisões genéricas (M15.6B) + decisões com efeito executável (M15.6C).
 # "resolvido"/"adiado" nunca liberam execução; o vocabulário executável por
 # categoria é validado aqui e re-aplicado fail-closed pelo executor.
-EXEC_REVIEW_DECISIONS = frozenset(("vincular_candidato", "criar_pessoa"))
+EXEC_REVIEW_DECISIONS = frozenset((
+    "vincular_candidato", "criar_pessoa",
+    "manter_primeira", "manter_segunda", "manter_ambas",
+))
 REVIEW_DECISIONS = frozenset(
     ("resolvido", "excluido", "adiado")) | EXEC_REVIEW_DECISIONS
 EXEC_DECISION_CATEGORIES = {
@@ -33,6 +36,9 @@ EXEC_DECISION_CATEGORIES = {
         "candidato_identidade_provavel", "exame_orfao", "consulta_orfa",
         "registro_orfao",
     )),
+    "manter_primeira": frozenset(("duplicata_execucao",)),
+    "manter_segunda": frozenset(("duplicata_execucao",)),
+    "manter_ambas": frozenset(("duplicata_execucao",)),
 }
 
 
@@ -289,7 +295,8 @@ def multi_sheet_review_queue(db: Session, batch_id: str) -> dict:
     pending = sum(
         1 for item in items
         if item["status"] == "pendente" and item["decision_state"] not in (
-            "resolvido", "excluido"
+            "resolvido", "excluido", "vincular_candidato", "criar_pessoa",
+            "manter_primeira", "manter_segunda", "manter_ambas",
         )
     )
     return {

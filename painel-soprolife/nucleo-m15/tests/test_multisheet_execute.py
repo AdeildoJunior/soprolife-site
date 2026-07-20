@@ -179,6 +179,18 @@ DECISAO_PADRAO = {
 }
 
 
+def sheets_com_duplicata_pastore(*, status_segunda="inativo"):
+    sheets = executable_sheets()
+    config = next(s for s in sheets if s["kind"] == "pastore_config")
+    config["rows"].append(synthetic_row(
+        "pastore_config",
+        unidade="  unidade sintetica 001  ",
+        status=status_segunda,
+        dia_semana="quarta",
+    ))
+    return sheets
+
+
 def dry_run(db, base, sheets, users):
     nome = write_raw_envelope(base, sheets)
     resultado = run_multi_sheet_dry_run(
@@ -295,6 +307,92 @@ def test_execucao_bloqueada_com_duplicata_nao_resolvida(db, users, tmp_path):
     pf2 = preflight_multi_sheet_execution(
         db, nome, batch_id, evidencia, ADMIN, base_dir=tmp_path)
     assert pf2["gates"]["duplicatas_conflitos_resolvidos"]["ok"] is True
+
+
+def test_duplicata_pastore_recebe_token_oficial_e_permanece_pendente(
+    db, users, tmp_path,
+):
+    nome, batch_id = dry_run(
+        db, tmp_path, sheets_com_duplicata_pastore(), users)
+    fila = multi_sheet_review_queue(db, batch_id)
+    duplicatas = [
+        item for item in fila["items"]
+        if item["category"] == "duplicata_execucao"
+    ]
+    assert len(duplicatas) == 1
+    assert duplicatas[0]["private_reference_token"].startswith("priv-")
+    assert duplicatas[0]["status"] == "pendente"
+
+    decidir_pendentes(db, batch_id, users)
+    plano = build_final_plan(db, nome, batch_id, base_dir=tmp_path)
+    assert plano.conflitos_nao_resolvidos == 1
+    assert plano.revisoes_pendentes_sem_decisao == 1
+    assert any(
+        linha["kind"] == "pastore_config"
+        and linha["status_final"] == "duplicado"
+        for linha in plano.linhas
+    )
+
+
+def test_duplicata_pastore_manter_primeira_exclui_segunda(
+    db, users, tmp_path,
+):
+    nome, batch_id = dry_run(
+        db, tmp_path, sheets_com_duplicata_pastore(), users)
+    decidir_pendentes(
+        db, batch_id, users,
+        overrides={"duplicata_execucao": "manter_primeira"},
+    )
+    plano = build_final_plan(db, nome, batch_id, base_dir=tmp_path)
+    linhas = [l for l in plano.linhas if l["kind"] == "pastore_config"]
+    assert [l["status_final"] for l in linhas] == ["importado", "excluido"]
+    assert linhas[1]["decisao"] == "manter_primeira"
+    assert plano.conflitos_nao_resolvidos == 0
+    configs = [op for op in plano.ops if op.entidade == "partner_unit_configs"]
+    assert len(configs) == 1
+    assert configs[0].campos["status"] == "ativo"
+
+
+def test_duplicata_pastore_manter_segunda_substitui_primeira(
+    db, users, tmp_path,
+):
+    nome, batch_id = dry_run(
+        db, tmp_path,
+        sheets_com_duplicata_pastore(status_segunda="inativo"), users,
+    )
+    decidir_pendentes(
+        db, batch_id, users,
+        overrides={"duplicata_execucao": "manter_segunda"},
+    )
+    plano = build_final_plan(db, nome, batch_id, base_dir=tmp_path)
+    linhas = [l for l in plano.linhas if l["kind"] == "pastore_config"]
+    assert [l["status_final"] for l in linhas] == ["excluido", "importado"]
+    assert all(l["decisao"] == "manter_segunda" for l in linhas)
+    assert plano.conflitos_nao_resolvidos == 0
+    configs = [op for op in plano.ops if op.entidade == "partner_unit_configs"]
+    assert len(configs) == 1
+    assert configs[0].campos["status"] == "inativo"
+    assert configs[0].campos["dia_semana"] == "quarta"
+
+
+def test_duplicata_pastore_manter_ambas_exige_identidades_distintas(
+    db, users, tmp_path,
+):
+    nome, batch_id = dry_run(
+        db, tmp_path, sheets_com_duplicata_pastore(), users)
+    decidir_pendentes(
+        db, batch_id, users,
+        overrides={"duplicata_execucao": "manter_ambas"},
+    )
+    plano = build_final_plan(db, nome, batch_id, base_dir=tmp_path)
+    assert plano.conflitos_nao_resolvidos == 1
+    assert "duplicatas_com_identidade_tecnica_igual" in plano.bloqueios
+    assert any(
+        linha["kind"] == "pastore_config"
+        and linha["status_final"] == "duplicado"
+        and linha["decisao"] == "manter_ambas"
+        for linha in plano.linhas
+    )
 
 
 def test_execucao_bloqueada_por_checksum_alterado(db, users, tmp_path):
@@ -645,6 +743,34 @@ def test_cli_executar_multiaba_sem_frase_por_argumento(capsys):
         ajuda = capsys.readouterr().out
         assert "--frase" not in ajuda
         assert "--confirmacao" not in ajuda
+
+
+def test_cli_revisar_multiaba_aceita_decisao_explicita_de_duplicata(
+    engine, db, users, tmp_path, monkeypatch, capsys,
+):
+    from sqlalchemy.orm import sessionmaker
+
+    nome, batch_id = dry_run(
+        db, tmp_path, sheets_com_duplicata_pastore(), users)
+    item = next(
+        i for i in multi_sheet_review_queue(db, batch_id)["items"]
+        if i["category"] == "duplicata_execucao"
+    )
+    reviewer_email = users["gestor"].email
+    db.close()
+    SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(cli, "_session", lambda: SessionLocal())
+    assert cli.main([
+        "migracao", "revisar-multiaba",
+        "--batch", batch_id,
+        "--referencia", item["private_reference_token"],
+        "--decisao", "manter_primeira",
+        "--mapping-version", item["mapping_version"],
+        "--email", reviewer_email,
+        "--json",
+    ]) == 0
+    saida = json.loads(capsys.readouterr().out)
+    assert saida["decision_state"] == "manter_primeira"
 
 
 def test_fluxo_completo_pela_cli_com_frase_interativa(
