@@ -155,6 +155,33 @@ os portões verdes e frase digitada interativamente (nunca por argumento nem
 variável de ambiente). O deploy do código NÃO executa nada: dados reais só
 mudam quando o comando abaixo for rodado por decisão humana.
 
+### Revisão multiaba em lote
+
+O arquivo JSON deve estar em `M15_IMPORT_PRIVATE_DIR`, ser regular, pertencer
+ao usuário do processo, ter modo `0600` ou `0400` e não ser symlink/hardlink.
+O schema fechado `m15.review-batch.1` exige `coverage_mode=all_actionable`,
+`batch_id`, `snapshot_sha256`, `mapping_version`, `queue_fingerprint` e uma
+entrada para cada token acionável com `token`, `category`, `decision` e
+`expected_current_decision`. Use `null` em `decision` apenas para preservar
+um item que ainda não possua decisão; o comando nunca remove histórico.
+
+```bash
+# somente validação e preview: sempre zero escrita
+.venv/bin/python -m app.cli migracao revisar-multiaba-em-lote \
+  --arquivo decisoes-m15.json --email admin@ex --somente-preview
+
+# aplicação futura: mostra o mesmo preview e pede uma única frase em TTY
+.venv/bin/python -m app.cli migracao revisar-multiaba-em-lote \
+  --arquivo decisoes-m15.json --email admin@ex
+```
+
+A frase é `GRAVAR REVISOES MULTIABA <batch-id> <fingerprint-curto>`. Ela não
+tem argumento, flag `--yes` nem alternativa por variável de ambiente ou pipe.
+Depois da digitação, arquivo, fila e estados são relidos sob lock do
+`ImportBatch`; decisões e auditorias entram em um único commit. Replay idêntico
+é `no_op` sem novas linhas. O recibo contém apenas hashes, contagens e IDs
+técnicos, e este comando nunca chama a execução operacional.
+
 ```bash
 # decisões humanas executáveis por token privado (vincular_candidato,
 # criar_pessoa, excluido) — telefone só vincula com decisão explícita

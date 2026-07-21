@@ -10,9 +10,11 @@ ausência de PII em logs. Nenhum dado real é usado.
 """
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
 
 from app import cli
 from app.main import create_app
@@ -31,10 +33,18 @@ from app.migration.executor import (
 )
 from app.migration.multisheet import (
     MultiSheetError,
+    _decisions_by_token,
     decide_multi_sheet_review,
     multi_sheet_review_queue,
     multi_sheet_status,
     run_multi_sheet_dry_run,
+)
+from app.migration import review_batch
+from app.migration.review_batch import (
+    LoadedReviewBatch,
+    apply_review_batch,
+    prepare_review_batch,
+    serialize_review_batch,
 )
 from app.models import (
     AuditLog,
@@ -43,6 +53,7 @@ from app.models import (
     ImportBatch,
     ImportRow,
     LegacyAlias,
+    MigrationDecision,
     MigrationProvenance,
     PartnerUnitConfig,
     Person,
@@ -57,6 +68,168 @@ PHONE_B = "(21) 0000-9102"
 PHONE_C = "(21) 0000-9103"
 
 ADMIN = "admin@teste.local"
+
+
+def review_batch_sheets():
+    """Retrato sintético do padrão auditado: 30 itens, sem dados reais."""
+    patient_rows = []
+    exam_rows = []
+    for index in range(1, 25):
+        phone = f"(21) 0000-{9200 + index:04d}"
+        patient_rows.append(synthetic_row(
+            "crm_pacientes",
+            paciente_id=f"P-SYN-{index:03d}",
+            primeiro_nome=f"Pessoa Sintetica {index:03d}",
+            telefone=phone,
+        ))
+        exam_rows.append(synthetic_row(
+            "crm_espirometria",
+            exame_id=f"E-SYN-{index:03d}",
+            primeiro_nome=f"Pessoa Sintetica {index:03d}",
+            telefone=phone,
+            data_exame="10/07/2026",
+        ))
+    exam_rows.append(synthetic_row(
+        "crm_espirometria",
+        exame_id="E-MENOR-SYN",
+        primeiro_nome="Paciente Menor Sintetica",
+        telefone="(21) 0000-9998",
+        data_exame="10/07/2026",
+    ))
+    return [
+        {
+            "kind": "crm_pacientes",
+            "alias": "Pacientes Sinteticos Lote",
+            "rows": patient_rows,
+        },
+        {
+            "kind": "crm_espirometria",
+            "alias": "Exames Sinteticos Lote",
+            "rows": exam_rows,
+        },
+        {
+            "kind": "followup_whatsapp",
+            "alias": "Followups Sinteticos Lote",
+            "rows": [synthetic_row(
+                "followup_whatsapp",
+                followup_id="FW-MENOR-SYN",
+                primeiro_nome="Paciente Menor Sintetica",
+                telefone="(21) 0000-9998",
+                data_prevista="15/12/2026",
+            )],
+        },
+        {
+            "kind": "financeiro_lancamentos",
+            "alias": "Financeiro Sintetico Lote",
+            "rows": [
+                synthetic_row(
+                    "financeiro_lancamentos",
+                    id_lancamento=f"FIN-SYN-{index:04d}",
+                    tipo_movimento="receita",
+                    valor_cobrado="100,00",
+                )
+                for index in range(1, 4)
+            ],
+        },
+        {
+            "kind": "pastore_config",
+            "alias": "Agenda Sintetica Lote",
+            "rows": [
+                synthetic_row(
+                    "pastore_config",
+                    unidade="Unidade Sintetica Lote",
+                    status="ativo",
+                    dia_semana="terca",
+                    horario_inicio="08:00",
+                    horario_fim="12:00",
+                ),
+                synthetic_row(
+                    "pastore_config",
+                    unidade="Unidade Sintetica Lote",
+                    status="ativo",
+                    dia_semana="sabado",
+                    horario_inicio="08:00",
+                    horario_fim="12:00",
+                ),
+            ],
+        },
+    ]
+
+
+def prepare_review_batch_fixture(db, users, tmp_path):
+    envelope = write_raw_envelope(tmp_path, review_batch_sheets())
+    dry = run_multi_sheet_dry_run(
+        db, envelope, base_dir=tmp_path, user_id=users["admin"].id
+    )
+    db.commit()
+    batch_id = dry["batch_id"]
+    queue = multi_sheet_review_queue(db, batch_id)
+    assert queue["actionable_total"] == 30
+    financial = sorted(
+        item["private_reference_token"] for item in queue["items"]
+        if item["category"] == "relacao_financeira_nao_resolvida"
+    )
+    for item in queue["items"]:
+        if item["status"] != "pendente":
+            continue
+        category = item["category"]
+        if category == "candidato_identidade_provavel":
+            decision = "resolvido"
+        elif category == "duplicata_execucao":
+            decision = "manter_ambas"
+        elif category in ("exame_orfao", "registro_orfao"):
+            decision = "adiado"
+        elif category == "relacao_financeira_nao_resolvida":
+            decision = "excluido" if item["private_reference_token"] in financial[:2] else None
+        else:  # pragma: no cover - contrato fechado desta fixture
+            raise AssertionError(category)
+        if decision is not None:
+            decide_multi_sheet_review(
+                db,
+                batch_id,
+                item["private_reference_token"],
+                decision,
+                item["mapping_version"],
+                users["gestor"].id,
+            )
+    db.commit()
+
+    current_queue = multi_sheet_review_queue(db, batch_id)
+    current = _decisions_by_token(db, batch_id)
+    batch = db.get(ImportBatch, batch_id)
+    entries = []
+    for item in current_queue["items"]:
+        if item["status"] != "pendente":
+            continue
+        token = item["private_reference_token"]
+        previous = (current.get(token) or {}).get("decision")
+        desired = (
+            "vincular_candidato"
+            if item["category"] == "candidato_identidade_provavel"
+            else previous
+        )
+        entries.append({
+            "token": token,
+            "category": item["category"],
+            "decision": desired,
+            "expected_current_decision": previous,
+        })
+    document = {
+        "schema_version": "m15.review-batch.1",
+        "coverage_mode": "all_actionable",
+        "batch_id": batch_id,
+        "snapshot_sha256": batch.sha256,
+        "mapping_version": current_queue["mapping_version"],
+        "queue_fingerprint": current_queue["queue_fingerprint"],
+        "items": entries,
+    }
+    fingerprint = review_batch._canonical_fingerprint(document)
+    loaded = LoadedReviewBatch(
+        document=document,
+        fingerprint=fingerprint,
+        path=tmp_path / "review-synthetic.json",
+    )
+    return envelope, batch_id, loaded
 
 
 def executable_sheets():
@@ -723,6 +896,240 @@ def test_reexecucao_do_mesmo_lote_cria_zero_linhas(db, users, tmp_path):
     assert contar(db, Person) == pessoas
     assert contar(db, MigrationProvenance) == proveniencias
     assert contar(db, LegacyAlias) == aliases
+
+
+def test_revisao_lote_24_substituicoes_preserva_demais_e_alinha_status_preflight(
+    db, users, tmp_path,
+):
+    envelope, batch_id, loaded = prepare_review_batch_fixture(
+        db, users, tmp_path
+    )
+    status_before = multi_sheet_status(db, batch_id)
+    assert status_before["pending_decisions"] == 27
+    assert sum(
+        item["replacement_required"] for item in status_before["review_queue"]
+        if item["category"] == "candidato_identidade_provavel"
+    ) == 24
+    plan_before = build_final_plan(db, envelope, batch_id, base_dir=tmp_path)
+    assert plan_before.revisoes_pendentes_sem_decisao == 27
+    decisions_before = contar(db, MigrationDecision)
+    audit_before = contar(db, AuditLog)
+    preview = prepare_review_batch(db, loaded, users["admin"].id)
+    assert preview["counts"] == {
+        "preserved": 6,
+        "new": 0,
+        "replacements": 24,
+        "excluded": 2,
+        "delayed": 2,
+        "pending": 3,
+        "changed": 24,
+        "actionable_total": 30,
+    }
+    assert preview["preflight_effect"] == {
+        "pending_reviews_before": 27,
+        "pending_reviews_after": 3,
+        "review_gate_would_pass": False,
+    }
+
+    receipt = apply_review_batch(db, loaded, users["admin"].id)
+    db.commit()
+    assert receipt["status"] == "applied"
+    assert len(receipt["decision_ids"]) == 24
+    assert receipt["audit_events_created"] == 25
+    assert receipt["operational_migration_executed"] is False
+    assert contar(db, MigrationDecision) == decisions_before + 24
+    assert contar(db, AuditLog) == audit_before + 25
+    assert contar(db, Person) == 0
+    assert contar(db, LegacyAlias) == 0
+    assert contar(db, FinancialEntry) == 0
+
+    latest = _decisions_by_token(db, batch_id)
+    categories = {
+        entry["token"]: entry["category"] for entry in loaded.document["items"]
+    }
+    assert sum(
+        value["decision"] == "vincular_candidato"
+        for token, value in latest.items()
+        if categories[token] == "candidato_identidade_provavel"
+    ) == 24
+    assert [
+        value["decision"] for token, value in latest.items()
+        if categories[token] == "duplicata_execucao"
+    ] == ["manter_ambas"]
+    assert sorted(
+        value["decision"] for token, value in latest.items()
+        if categories[token] in ("exame_orfao", "registro_orfao")
+    ) == ["adiado", "adiado"]
+    assert sorted(
+        value["decision"] for token, value in latest.items()
+        if categories[token] == "relacao_financeira_nao_resolvida"
+    ) == ["excluido", "excluido"]
+
+    new_decisions = db.execute(
+        select(MigrationDecision).where(
+            MigrationDecision.id.in_(receipt["decision_ids"])
+        )
+    ).scalars().all()
+    assert all(d.detalhes["previous_decision"] == "resolvido"
+               for d in new_decisions)
+    assert all(d.detalhes["review_batch_fingerprint"] == loaded.fingerprint
+               for d in new_decisions)
+
+    status_after = multi_sheet_status(db, batch_id)
+    assert status_after["pending_decisions"] == 3
+    pf = preflight_multi_sheet_execution(
+        db, envelope, batch_id, None, ADMIN, base_dir=tmp_path
+    )
+    assert pf["gates"]["revisoes_resolvidas"]["detalhe"] == (
+        "pendentes_sem_decisao=3"
+    )
+    assert pf["resumo_plano"]["revisoes_pendentes_sem_decisao"] == (
+        status_after["pending_decisions"]
+    )
+
+
+def test_revisao_lote_falha_no_item_24_desfaz_23_anteriores(
+    db, users, tmp_path, monkeypatch,
+):
+    _envelope, _batch_id, loaded = prepare_review_batch_fixture(
+        db, users, tmp_path
+    )
+    before_decisions = contar(db, MigrationDecision)
+    before_audit = contar(db, AuditLog)
+    original = review_batch._append_batch_decision
+    calls = 0
+
+    def fail_on_24(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 24:
+            raise RuntimeError("synthetic item failure")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(review_batch, "_append_batch_decision", fail_on_24)
+    with pytest.raises(RuntimeError, match="synthetic item failure"):
+        apply_review_batch(db, loaded, users["admin"].id)
+    db.rollback()
+    assert calls == 24
+    assert contar(db, MigrationDecision) == before_decisions
+    assert contar(db, AuditLog) == before_audit
+
+
+def test_revisao_lote_falha_da_auditoria_desfaz_todas_as_decisoes(
+    db, users, tmp_path, monkeypatch,
+):
+    _envelope, _batch_id, loaded = prepare_review_batch_fixture(
+        db, users, tmp_path
+    )
+    before_decisions = contar(db, MigrationDecision)
+    before_audit = contar(db, AuditLog)
+    original = review_batch.audit
+
+    def fail_aggregate(db_, action, *args, **kwargs):
+        if action == "migracao.multiaba_revisao_lote":
+            raise RuntimeError("synthetic audit failure")
+        return original(db_, action, *args, **kwargs)
+
+    monkeypatch.setattr(review_batch, "audit", fail_aggregate)
+    with pytest.raises(RuntimeError, match="synthetic audit failure"):
+        apply_review_batch(db, loaded, users["admin"].id)
+    db.rollback()
+    assert contar(db, MigrationDecision) == before_decisions
+    assert contar(db, AuditLog) == before_audit
+
+
+def test_revisao_lote_replay_identico_noop_e_conflitante_recusado(
+    db, users, tmp_path,
+):
+    _envelope, batch_id, loaded = prepare_review_batch_fixture(
+        db, users, tmp_path
+    )
+    first = apply_review_batch(db, loaded, users["admin"].id)
+    db.commit()
+    decisions_after = contar(db, MigrationDecision)
+    audits_after = contar(db, AuditLog)
+    replay = apply_review_batch(db, loaded, users["admin"].id)
+    db.commit()
+    assert first["status"] == "applied"
+    assert replay["status"] == "no_op"
+    assert replay["decision_ids"] == []
+    assert replay["audit_events_created"] == 0
+    assert contar(db, MigrationDecision) == decisions_after
+    assert contar(db, AuditLog) == audits_after
+
+    candidate = next(
+        entry for entry in loaded.document["items"]
+        if entry["category"] == "candidato_identidade_provavel"
+    )
+    decide_multi_sheet_review(
+        db,
+        batch_id,
+        candidate["token"],
+        "adiado",
+        loaded.document["mapping_version"],
+        users["gestor"].id,
+    )
+    db.commit()
+    with pytest.raises(MultiSheetError) as exc:
+        apply_review_batch(db, loaded, users["admin"].id)
+    assert exc.value.codigo == "fingerprint_fila_divergente"
+    db.rollback()
+
+
+def test_revisao_lote_duas_execucoes_concorrentes_um_commit_e_um_noop(
+    engine, db, users, tmp_path,
+):
+    _envelope, _batch_id, loaded = prepare_review_batch_fixture(
+        db, users, tmp_path
+    )
+    user_id = users["admin"].id
+    db.rollback()  # libera o lock de leitura da sessão-fixture no SQLite
+    SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+    def run_once():
+        with serialize_review_batch(loaded.document["batch_id"]):
+            session = SessionLocal()
+            try:
+                result = apply_review_batch(
+                    session, loaded, user_id
+                )
+                session.commit()
+                return result["status"]
+            except Exception:
+                session.rollback()
+                raise
+            finally:
+                session.close()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(run_once) for _ in range(2)]
+        statuses = sorted(future.result() for future in futures)
+    db.rollback()
+    assert statuses == ["applied", "no_op"]
+    assert len([
+        decision for decision in db.execute(select(MigrationDecision)).scalars()
+        if (decision.detalhes or {}).get("review_batch_fingerprint")
+        == loaded.fingerprint
+    ]) == 24
+    assert len([
+        log for log in db.execute(select(AuditLog)).scalars()
+        if log.acao == "migracao.multiaba_revisao_lote"
+    ]) == 1
+
+
+def test_recibo_revisao_lote_nao_expoe_pii_nem_token_completo(
+    db, users, tmp_path,
+):
+    _envelope, _batch_id, loaded = prepare_review_batch_fixture(
+        db, users, tmp_path
+    )
+    receipt = apply_review_batch(db, loaded, users["admin"].id)
+    serialized = json.dumps(receipt, ensure_ascii=False)
+    assert "Pessoa Sintetica" not in serialized
+    assert "0000-" not in serialized
+    assert all(entry["token"] not in serialized
+               for entry in loaded.document["items"])
+    db.rollback()
 
 
 def test_reconciliacao_fecha_e_conclui_o_lote(db, users, tmp_path):

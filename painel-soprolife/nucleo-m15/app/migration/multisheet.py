@@ -8,6 +8,7 @@ exclusiva da CLI local admin (M15.6C), com portões completos e frase exata.
 """
 
 import hashlib
+import json
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -17,7 +18,21 @@ from ..models import ImportBatch, LegacyAlias, MigrationDecision
 from .adapters import ADAPTERS, ADAPTERS_VERSION
 from .manifest import ManifestError
 from .rawsnapshot import load_raw_envelope
-from .staging import ESTADOS, StagingError, stage_multi_sheet
+from .staging import (
+    CAT_CANDIDATO_IDENTIDADE,
+    CAT_CONSULTA_ORFA,
+    CAT_DATA_INVALIDA,
+    CAT_DUPLICATA_EXECUCAO,
+    CAT_EXAME_ORFAO,
+    CAT_FINANCEIRO_NAO_RESOLVIDO,
+    CAT_FONTE_MONETARIA_BLOQUEADA,
+    CAT_ID_CONFLITANTE,
+    CAT_ID_NAO_ENCONTRADO,
+    CAT_REGISTRO_ORFAO,
+    ESTADOS,
+    StagingError,
+    stage_multi_sheet,
+)
 
 MULTI_SHEET_SOURCE_TYPE = "snapshot_multiaba"
 MULTI_SHEET_REPORT_VERSION = "m15.multi-sheet-dry-run.1"
@@ -40,6 +55,25 @@ EXEC_DECISION_CATEGORIES = {
     "manter_primeira": frozenset(("duplicata_execucao",)),
     "manter_segunda": frozenset(("duplicata_execucao",)),
     "manter_ambas": frozenset(("duplicata_execucao",)),
+}
+# Vocabulário fechado que efetivamente libera cada item para o executor.
+# Esta é a fonte única usada por fila/status e pelo plano final: estados
+# históricos genéricos permanecem visíveis, porém bloqueantes.
+EXECUTABLE_REVIEW_DECISIONS_BY_CATEGORY = {
+    CAT_CANDIDATO_IDENTIDADE: frozenset(
+        ("vincular_candidato", "criar_pessoa", "excluido")
+    ),
+    CAT_EXAME_ORFAO: frozenset(("criar_pessoa", "excluido")),
+    CAT_CONSULTA_ORFA: frozenset(("criar_pessoa", "excluido")),
+    CAT_REGISTRO_ORFAO: frozenset(("criar_pessoa", "excluido")),
+    CAT_ID_CONFLITANTE: frozenset(("excluido",)),
+    CAT_ID_NAO_ENCONTRADO: frozenset(("excluido",)),
+    CAT_DATA_INVALIDA: frozenset(("excluido",)),
+    CAT_FINANCEIRO_NAO_RESOLVIDO: frozenset(("excluido",)),
+    CAT_FONTE_MONETARIA_BLOQUEADA: frozenset(("excluido",)),
+    CAT_DUPLICATA_EXECUCAO: frozenset(
+        ("manter_primeira", "manter_segunda", "manter_ambas")
+    ),
 }
 # Rótulo sanitizado por categoria para qualquer console de revisão humana.
 # Linguagem precisa: a gravação oficial da decisão É suportada; o que segue
@@ -197,8 +231,17 @@ def build_multi_sheet_report(
     return sanitize_multi_sheet_plan(plan, envelope.envelope_sha256)
 
 
-def _get_multi_batch(db: Session, batch_id: str) -> ImportBatch:
-    batch = db.get(ImportBatch, batch_id)
+def _get_multi_batch(
+    db: Session, batch_id: str, *, for_update: bool = False
+) -> ImportBatch:
+    if for_update:
+        batch = db.execute(
+            select(ImportBatch)
+            .where(ImportBatch.id == batch_id)
+            .with_for_update()
+        ).scalar_one_or_none()
+    else:
+        batch = db.get(ImportBatch, batch_id)
     if batch is None or batch.source_type != MULTI_SHEET_SOURCE_TYPE:
         raise MultiSheetError("lote_multiaba_inexistente")
     if not (batch.params or {}).get("multi_sheet_report"):
@@ -290,6 +333,36 @@ def _decisions_by_token(db: Session, batch_id: str) -> dict[str, dict]:
     return latest
 
 
+def is_executable_review_decision(category: str, decision: str | None) -> bool:
+    """Verdade única de fechamento entre fila, status, plano e preflight."""
+    return decision in EXECUTABLE_REVIEW_DECISIONS_BY_CATEGORY.get(
+        category, frozenset()
+    )
+
+
+def _actionable_review_items(items: list[dict]) -> list[dict]:
+    """Itens que exigem decisão humana; registros informativos ficam fora."""
+    return [item for item in items if item["status"] == "pendente"]
+
+
+def review_queue_fingerprint(items: list[dict]) -> str:
+    """Digest do conjunto acionável e de seu estado corrente, sem PII."""
+    canonical = [
+        {
+            "token": item["private_reference_token"],
+            "category": item["category"],
+            "status": item["status"],
+            "current_decision": item.get("current_decision"),
+        }
+        for item in _actionable_review_items(items)
+    ]
+    canonical.sort(key=lambda item: item["token"])
+    encoded = json.dumps(
+        canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def multi_sheet_review_queue(db: Session, batch_id: str) -> dict:
     batch = _get_multi_batch(db, batch_id)
     report = batch.params["multi_sheet_report"]
@@ -297,28 +370,50 @@ def multi_sheet_review_queue(db: Session, batch_id: str) -> dict:
     items = []
     for item in report["review_queue"]:
         decision = decisions.get(item["private_reference_token"])
+        current_decision = decision["decision_state"] if decision else None
+        executable = sorted(
+            EXECUTABLE_REVIEW_DECISIONS_BY_CATEGORY.get(
+                item["category"], frozenset()
+            )
+        )
+        requires_executable = (
+            item["status"] == "pendente"
+            and not is_executable_review_decision(
+                item["category"], current_decision
+            )
+        )
         items.append({
             **item,
             "category_label": REVIEW_CATEGORY_LABELS.get(
                 item["category"], item["category"]
             ),
             "decision_state": (
-                decision["decision_state"] if decision else item["status"]
+                current_decision if decision else item["status"]
             ),
+            "executable_decisions": executable,
+            "requires_executable_decision": requires_executable,
+            "replacement_required": (
+                current_decision is not None and requires_executable
+            ),
+            # Campo interno removido antes da resposta pública. Distingue
+            # ausência de decisão do status de origem "pendente".
+            "current_decision": current_decision,
         })
-    pending = sum(
-        1 for item in items
-        if item["status"] == "pendente" and item["decision_state"] not in (
-            "resolvido", "excluido", "vincular_candidato", "criar_pessoa",
-            "manter_primeira", "manter_segunda", "manter_ambas",
-        )
-    )
+    actionable = _actionable_review_items(items)
+    pending = sum(item["requires_executable_decision"] for item in actionable)
+    fingerprint = review_queue_fingerprint(items)
+    public_items = [
+        {key: value for key, value in item.items() if key != "current_decision"}
+        for item in items
+    ]
     return {
         "batch_id": batch.id,
         "mapping_version": report["mapping_version"],
-        "items": items,
+        "items": public_items,
         "total": len(items),
+        "actionable_total": len(actionable),
         "pending_decisions": pending,
+        "queue_fingerprint": fingerprint,
         "execution_allowed": False,
     }
 
@@ -335,7 +430,7 @@ def decide_multi_sheet_review(
         raise MultiSheetError("revisor_autenticado_obrigatorio")
     if decision not in REVIEW_DECISIONS:
         raise MultiSheetError("decisao_de_revisao_invalida")
-    batch = _get_multi_batch(db, batch_id)
+    batch = _get_multi_batch(db, batch_id, for_update=True)
     report = batch.params["multi_sheet_report"]
     if mapping_version != report["mapping_version"]:
         raise MultiSheetError("mapping_version_nao_confere")
@@ -350,6 +445,12 @@ def decide_multi_sheet_review(
         raise MultiSheetError("referencia_privada_inexistente")
     categorias = EXEC_DECISION_CATEGORIES.get(decision)
     if categorias is not None and item["category"] not in categorias:
+        raise MultiSheetError("decisao_incompativel_com_categoria")
+    if decision == "excluido" and decision not in (
+        EXECUTABLE_REVIEW_DECISIONS_BY_CATEGORY.get(
+            item["category"], frozenset()
+        )
+    ):
         raise MultiSheetError("decisao_incompativel_com_categoria")
     current = _decisions_by_token(db, batch.id).get(private_reference_token)
     if current and current["decision"] == decision:

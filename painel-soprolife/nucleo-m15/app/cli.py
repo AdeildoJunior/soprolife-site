@@ -38,6 +38,13 @@ nunca aceita por argumento ou variável de ambiente):
   python -m app.cli migracao rollback-multiaba --batch-execucao <id> \
       --email admin@x            # só quando provadamente seguro
 
+Revisão multiaba em lote (M15.6C — só decisões append-only; nunca executa):
+
+  python -m app.cli migracao revisar-multiaba-em-lote \
+      --arquivo decisoes-m15.json --email admin@x --somente-preview
+  python -m app.cli migracao revisar-multiaba-em-lote \
+      --arquivo decisoes-m15.json --email admin@x
+
 Todos os subcomandos de migração aceitam --json (saída machine-readable) e
 retornam exit != 0 em falha. Arquivos de manifesto/evidência vivem SOMENTE
 no diretório privado aprovado (M15_IMPORT_PRIVATE_DIR).
@@ -216,6 +223,21 @@ def _reviewer_id_por_email(db, email: str | None) -> str:
     return user.id
 
 
+def _admin_id_por_email(db, email: str | None) -> str:
+    if not email:
+        raise ValueError("administrador obrigatório")
+    user = db.execute(
+        select(User).where(User.email == email.lower())
+    ).scalar_one_or_none()
+    if user is None:
+        raise ValueError("administrador não encontrado")
+    if not user.ativo:
+        raise ValueError("administrador inativo")
+    if "admin" not in {role.name for role in user.roles}:
+        raise ValueError("papel admin obrigatório")
+    return user.id
+
+
 def cmd_migracao_validar_manifesto(args) -> int:
     from .migration.manifest import load_and_validate_manifest
 
@@ -327,6 +349,99 @@ def cmd_migracao_revisar_multiaba(args) -> int:
         return _migration_error(exc, args.json)
     finally:
         db.close()
+
+
+def cmd_migracao_revisar_multiaba_em_lote(args) -> int:
+    """Preview + uma confirmação TTY + commit único de decisões append-only."""
+    from .migration.multisheet import MultiSheetError
+    from .migration.review_batch import (
+        apply_review_batch,
+        confirmation_phrase,
+        load_private_review_batch,
+        prepare_review_batch,
+        serialize_review_batch,
+    )
+
+    db = None
+    try:
+        loaded = load_private_review_batch(args.arquivo)
+        with serialize_review_batch(loaded.document["batch_id"]):
+            # A sessão nasce já dentro do lock de processo. Isso evita que
+            # SQLite mantenha snapshot de leitura antigo enquanto espera;
+            # PostgreSQL ainda usa SELECT ... FOR UPDATE no ImportBatch.
+            db = _session()
+            try:
+                user_id = _admin_id_por_email(db, args.email)
+                preview = prepare_review_batch(db, loaded, user_id)
+                if args.somente_preview:
+                    _emit(preview, args.json)
+                    db.rollback()
+                    return 0
+
+                if args.json:
+                    # Mantém stdout como uma única linha machine-readable:
+                    # o preview antecede a confirmação pelo canal stderr.
+                    print(
+                        json.dumps(
+                            preview, ensure_ascii=False, sort_keys=True
+                        ),
+                        file=sys.stderr,
+                    )
+                else:
+                    _emit(preview, False)
+
+                if not sys.stdin.isatty():
+                    raise MultiSheetError("confirmacao_exige_tty_interativo")
+                expected = confirmation_phrase(
+                    loaded.document["batch_id"], loaded.fingerprint
+                )
+                print(
+                    f"Confirmação única. Digite exatamente: {expected}",
+                    file=sys.stderr,
+                )
+                try:
+                    supplied = sys.stdin.readline()
+                except (EOFError, OSError) as exc:
+                    raise MultiSheetError(
+                        "confirmacao_interativa_indisponivel"
+                    ) from exc
+                if supplied == "":
+                    raise MultiSheetError("confirmacao_interativa_eof")
+                if supplied.rstrip("\r\n") != expected:
+                    raise MultiSheetError("frase_de_confirmacao_incorreta")
+
+                # Arquivo e fila são relidos/revalidados ainda sob a mesma
+                # serialização e transação antes de qualquer INSERT.
+                reloaded = load_private_review_batch(args.arquivo)
+                if (
+                    reloaded.path != loaded.path
+                    or reloaded.fingerprint != loaded.fingerprint
+                    or reloaded.document != loaded.document
+                ):
+                    raise MultiSheetError(
+                        "arquivo_revisao_modificado_apos_preview"
+                    )
+                receipt = apply_review_batch(db, reloaded, user_id)
+                db.commit()
+            except Exception:
+                # O rollback acontece ANTES de liberar a serialização.
+                db.rollback()
+                raise
+        _emit(receipt, args.json)
+        return 0
+    except (MultiSheetError, ValueError) as exc:
+        if db is not None:
+            db.rollback()
+        return _migration_error(exc, args.json)
+    except Exception:
+        if db is not None:
+            db.rollback()
+        return _migration_error(
+            MultiSheetError("revisao_multiaba_lote_falhou"), args.json
+        )
+    finally:
+        if db is not None:
+            db.close()
 
 
 def cmd_migracao_preflight_execucao_multiaba(args) -> int:
@@ -790,6 +905,23 @@ def main(argv: list[str] | None = None) -> int:
                  "manter_primeira", "manter_segunda", "manter_ambas"),
     )
     mp.add_argument("--mapping-version", required=True)
+
+    mp = _mig_parser(
+        "revisar-multiaba-em-lote",
+        "Preview consolidado e gravação atômica/idempotente de decisões; "
+        "nunca executa a migração operacional",
+        cmd_migracao_revisar_multiaba_em_lote,
+    )
+    mp.add_argument(
+        "--arquivo",
+        required=True,
+        help="JSON privado dentro de M15_IMPORT_PRIVATE_DIR",
+    )
+    mp.add_argument(
+        "--somente-preview",
+        action="store_true",
+        help="Valida e exibe o preview sem solicitar confirmação nem escrever",
+    )
 
     mp = _mig_parser(
         "preflight-execucao-multiaba",

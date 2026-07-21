@@ -70,6 +70,7 @@ from ..normalize import normalize_name, normalize_phone
 from .adapters import ADAPTERS, ADAPTERS_VERSION
 from .manifest import ManifestError, validate_backup_evidence
 from .multisheet import (
+    EXECUTABLE_REVIEW_DECISIONS_BY_CATEGORY,
     MULTI_SHEET_SOURCE_TYPE,
     MultiSheetError,
     _decisions_by_token,
@@ -108,24 +109,6 @@ STATUS_EXECUTADO = "executado_aguardando_reconciliacao"
 STATUS_CONCLUIDO = "concluido"
 STATUS_DIVERGENTE = "executado_com_divergencia"
 STATUS_REVERTIDO = "revertido"
-
-# Decisões humanas com efeito executável, por categoria da fila (fechado).
-# "resolvido"/"adiado" NUNCA executam nada: item pendente sem decisão
-# executável mantém a execução bloqueada (fail-closed).
-DECISOES_EXECUTAVEIS_POR_CATEGORIA = {
-    CAT_CANDIDATO_IDENTIDADE: frozenset(
-        ("vincular_candidato", "criar_pessoa", "excluido")),
-    CAT_EXAME_ORFAO: frozenset(("criar_pessoa", "excluido")),
-    CAT_CONSULTA_ORFA: frozenset(("criar_pessoa", "excluido")),
-    CAT_REGISTRO_ORFAO: frozenset(("criar_pessoa", "excluido")),
-    CAT_ID_CONFLITANTE: frozenset(("excluido",)),
-    CAT_ID_NAO_ENCONTRADO: frozenset(("excluido",)),
-    CAT_DATA_INVALIDA: frozenset(("excluido",)),
-    CAT_FINANCEIRO_NAO_RESOLVIDO: frozenset(("excluido",)),
-    CAT_FONTE_MONETARIA_BLOQUEADA: frozenset(("excluido",)),
-    CAT_DUPLICATA_EXECUCAO: frozenset(
-        ("manter_primeira", "manter_segunda", "manter_ambas")),
-}
 
 # Ordem FINAL de inserção por entidade (contrato M15.6C, fixa e estável).
 ORDEM_ENTIDADES = {
@@ -389,7 +372,7 @@ class _PlanBuilder:
             return None, None
         decisoes = set()
         for item in pendentes:
-            executaveis = DECISOES_EXECUTAVEIS_POR_CATEGORIA.get(
+            executaveis = EXECUTABLE_REVIEW_DECISIONS_BY_CATEGORY.get(
                 item["categoria"], frozenset())
             registrada = self.decisoes.get(item["token"])
             if registrada is None or registrada not in executaveis:
