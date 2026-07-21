@@ -18,8 +18,10 @@ snapshot das planilhas, SEMPRE fora do Git):
 """
 
 import json
+import os
 import pathlib
 import re
+import stat
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -29,6 +31,7 @@ from .manifest import (
     _walk_forbidden,
     import_private_dir,
     resolve_inside,
+    safe_name,
     sha256_bytes,
 )
 
@@ -45,6 +48,7 @@ _SHEET_FILE_REQUIRED = (
 )
 _ROW_KEYS = {"linha", "valores"}
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_SNAPSHOT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 
 
 @dataclass(frozen=True)
@@ -78,8 +82,176 @@ class RawEnvelope:
     sheets: list[RawSheet] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class RawSnapshotWriteResult:
+    """Recibo sanitizado; nunca inclui células nem identificador de origem."""
+
+    envelope_name: str
+    envelope_sha256: str
+    snapshot_ts_utc: str
+    sheet_count: int
+
+
 def _fail(codigo: str) -> ManifestError:
     return ManifestError(codigo)
+
+
+def _canonical_json(document: dict) -> bytes:
+    return json.dumps(
+        document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+
+
+def _write_exclusive_private(path: pathlib.Path, content: bytes) -> None:
+    """Cria arquivo regular 0600 uma única vez, sem seguir links."""
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise _fail("arquivo_excede_limite")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(path, flags, 0o600)
+    except FileExistsError as exc:
+        raise _fail("snapshot_imutavel_ja_existe") from exc
+    try:
+        offset = 0
+        while offset < len(content):
+            written = os.write(fd, content[offset:])
+            if written <= 0:
+                raise _fail("falha_ao_gravar_snapshot")
+            offset += written
+        os.fsync(fd)
+        opened = os.fstat(fd)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or stat.S_IMODE(opened.st_mode) != 0o600
+            or opened.st_nlink != 1
+            or opened.st_uid != os.geteuid()
+        ):
+            raise _fail("arquivo_privado_inseguro")
+    except Exception:
+        os.close(fd)
+        path.unlink(missing_ok=True)
+        raise
+    os.close(fd)
+
+
+def write_immutable_raw_snapshot(
+    *,
+    snapshot_id: str,
+    workbook_alias: str,
+    snapshot_ts_utc: str,
+    locale: str,
+    timezone: str,
+    mapping_version: str,
+    sheets: list[dict],
+    known_kinds: frozenset | None = None,
+) -> RawSnapshotWriteResult:
+    """Gera snapshot multiaba privado e imutável a partir de valores textuais.
+
+    O chamador de integração lê a fonte oficial e entrega somente aliases e
+    células formatadas. IDs da planilha, URLs e credenciais não fazem parte do
+    contrato. A publicação local é exclusiva e validada integralmente antes
+    de devolver o recibo; nunca há escrita operacional no banco.
+    """
+    if (
+        not isinstance(snapshot_id, str)
+        or not _SNAPSHOT_ID_RE.fullmatch(snapshot_id)
+        or safe_name(snapshot_id) is None
+    ):
+        raise _fail("snapshot_id_invalido")
+    if not isinstance(sheets, list) or not sheets:
+        raise _fail("envelope_sem_abas")
+    if len(sheets) > MAX_COLS:
+        raise _fail("envelope_excede_limite_de_abas")
+
+    base = import_private_dir()
+    base.mkdir(parents=True, exist_ok=True)
+    if base.is_symlink() or not base.is_dir():
+        raise _fail("diretorio_privado_inseguro")
+    base = base.resolve(strict=True)
+
+    refs: list[dict] = []
+    payloads: list[tuple[str, bytes]] = []
+    seen_aliases: set[str] = set()
+    for index, spec in enumerate(sheets, start=1):
+        if not isinstance(spec, dict) or set(spec) != {
+            "sheet_alias", "sheet_kind", "headers", "linha_inicial_dados", "rows"
+        }:
+            raise _fail("estrutura_de_aba_desconhecida")
+        alias = spec["sheet_alias"]
+        kind = spec["sheet_kind"]
+        if (
+            not isinstance(alias, str)
+            or not alias.strip()
+            or alias in seen_aliases
+            or not isinstance(kind, str)
+            or not kind.strip()
+            or (known_kinds is not None and kind not in known_kinds)
+        ):
+            raise _fail("referencia_de_aba_invalida")
+        seen_aliases.add(alias)
+        filename = f"m15-raw-{snapshot_id}-sheet-{index:02d}.json"
+        sheet_document = {
+            "schema_version": "m15.raw-sheet.1",
+            "sheet_alias": alias,
+            "headers": spec["headers"],
+            "linha_inicial_dados": spec["linha_inicial_dados"],
+            "rows": spec["rows"],
+        }
+        errors: list[str] = []
+        _walk_forbidden(sheet_document, "", errors)
+        if errors:
+            raise _fail("conteudo_proibido_na_aba")
+        content = _canonical_json(sheet_document)
+        ref = {
+            "sheet_alias": alias,
+            "sheet_kind": kind,
+            "arquivo": filename,
+            "sha256": sha256_bytes(content),
+        }
+        _validate_sheet_file(sheet_document, ref)
+        refs.append(ref)
+        payloads.append((filename, content))
+
+    envelope_name = f"m15-raw-{snapshot_id}-envelope.json"
+    envelope = {
+        "schema_version": "m15.raw-envelope.1",
+        "workbook_alias": workbook_alias,
+        "snapshot_ts_utc": snapshot_ts_utc,
+        "locale": locale,
+        "timezone": timezone,
+        "mapping_version": mapping_version,
+        "sheets": refs,
+    }
+    errors = []
+    _walk_forbidden(envelope, "", errors)
+    if errors:
+        raise _fail("conteudo_proibido_no_envelope")
+    envelope_content = _canonical_json(envelope)
+
+    created: list[pathlib.Path] = []
+    try:
+        for filename, content in payloads:
+            target = base / filename
+            _write_exclusive_private(target, content)
+            created.append(target)
+        envelope_path = base / envelope_name
+        _write_exclusive_private(envelope_path, envelope_content)
+        created.append(envelope_path)
+        loaded = load_raw_envelope(envelope_name, base, known_kinds)
+    except Exception:
+        # Remove apenas arquivos que esta tentativa acabou de criar; um
+        # snapshot pré-existente jamais é tocado ou substituído.
+        for created_path in reversed(created):
+            created_path.unlink(missing_ok=True)
+        raise
+    return RawSnapshotWriteResult(
+        envelope_name=envelope_name,
+        envelope_sha256=loaded.envelope_sha256,
+        snapshot_ts_utc=loaded.snapshot_ts_utc,
+        sheet_count=len(loaded.sheets),
+    )
 
 
 def _load_json_confined(base: pathlib.Path, name: str, limite: int) -> tuple[dict, bytes]:

@@ -5,7 +5,9 @@ from datetime import date
 import pytest
 from sqlalchemy import select
 
+from app.migration.adapters import ADAPTERS, ADAPTERS_VERSION
 from app.migration.executor import build_execution_plan
+from app.migration.manifest import ManifestError
 from app.migration.multisheet import (
     MultiSheetError,
     decide_multi_sheet_review,
@@ -22,6 +24,10 @@ from app.migration.operational_completion import (
     preview_financial_reconstruction,
     write_immutable_private_json,
 )
+from app.migration.rawsnapshot import (
+    load_raw_envelope,
+    write_immutable_raw_snapshot,
+)
 from app.models import (
     AuditLog,
     Person,
@@ -30,7 +36,11 @@ from app.models import (
     SpirometryExam,
 )
 from app.services.relationships import RelationshipError, create_relationship
-from tests._multisheet_fixtures import synthetic_row, write_raw_envelope
+from tests._multisheet_fixtures import (
+    headers_for,
+    synthetic_row,
+    write_raw_envelope,
+)
 
 
 def _create_person(client, auth, name: str, contacts=None, consent=None):
@@ -302,3 +312,50 @@ def test_admin_supplement_deterministic_private_immutable(tmp_path, monkeypatch)
     assert load_immutable_private_json(path.name) == first
     with pytest.raises(OperationalCompletionError, match="immutable_private_file_exists"):
         write_immutable_private_json("synthetic-supplement.json", first)
+
+
+def test_raw_snapshot_generator_is_private_immutable_and_loadable(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.setenv("M15_IMPORT_PRIVATE_DIR", str(tmp_path))
+    kind = "crm_espirometria"
+    headers = headers_for(kind)
+    row = synthetic_row(
+        kind,
+        exame_id="EX-SYN-SNAPSHOT-001",
+        primeiro_nome="Synthetic Snapshot Person",
+        data_exame="2026-07-15",
+    )
+    arguments = {
+        "snapshot_id": "synthetic-20260721T120000Z",
+        "workbook_alias": "synthetic-workbook",
+        "snapshot_ts_utc": "2026-07-21T12:00:00+00:00",
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "mapping_version": ADAPTERS_VERSION,
+        "sheets": [{
+            "sheet_alias": "Synthetic Examinations",
+            "sheet_kind": kind,
+            "headers": headers,
+            "linha_inicial_dados": 2,
+            "rows": [{
+                "linha": 2,
+                "valores": [row[header] for header in headers],
+            }],
+        }],
+        "known_kinds": frozenset(ADAPTERS),
+    }
+    receipt = write_immutable_raw_snapshot(**arguments)
+    assert receipt.sheet_count == 1
+    assert len(receipt.envelope_sha256) == 64
+    generated = sorted(tmp_path.iterdir())
+    assert len(generated) == 2
+    assert all(path.stat().st_mode & 0o777 == 0o600 for path in generated)
+    loaded = load_raw_envelope(
+        receipt.envelope_name, tmp_path, frozenset(ADAPTERS)
+    )
+    assert loaded.envelope_sha256 == receipt.envelope_sha256
+    assert loaded.sheets[0].rows[0].linha == 2
+    with pytest.raises(ManifestError, match="snapshot_imutavel_ja_existe"):
+        write_immutable_raw_snapshot(**arguments)
+    assert sorted(tmp_path.iterdir()) == generated
