@@ -156,3 +156,38 @@ CRM Consultas, Follow-up WhatsApp) antes de chegarem à aba Resumo Dashboard.
 ## Integração futura com update-local-data.sh
 
 Quando estável, o `update-local-data.sh` poderá chamar este script antes do `sync-dashboard-summary.sh`, substituindo a etapa de importação manual por CSV.
+
+## Leitor multiaba ao vivo (M15.7 — snapshot bruto imutável)
+
+Além do conector de resumo agregado acima, existe um segundo conector,
+independente, para as abas de dados reais que alimentam a migração
+governada M15.6B/M15.7:
+
+| Arquivo | Finalidade |
+|---|---|
+| `scripts/read-multisheet-snapshot-adc.py` | leitor multiaba principal |
+| `nucleo-m15/app/migration/rawsnapshot.py` | escritor/leitor do snapshot imutável (inalterado) |
+| `nucleo-m15/app/migration/adapters.py` | registro fechado de 12 `sheet_kind` (inalterado) |
+
+Escopo fechado (12 abas, nenhuma outra é lida):
+CRM Pacientes, CRM Espirometria, CRM Consultas, Leads, CRM Clinicas,
+CRM Contatos B2B, Follow-up WhatsApp, Financeiro_Lancamentos,
+Parceria Pastore - Config, Parceria Pastore - Atendimentos,
+Parceria Pastore - Custos, Base Prospecção B2B PCMSO.
+
+"Resumo Dashboard" permanece exclusivamente no conector de resumo agregado
+acima e nunca entra neste snapshot bruto multiaba.
+
+Usa as mesmas credenciais ADC e o mesmo arquivo de configuração privada já
+documentados nesta página — não requer novo login nem novo escopo.
+
+```bash
+cd painel-soprolife/nucleo-m15
+../scripts/read-multisheet-snapshot-adc.py --show-structure
+../scripts/read-multisheet-snapshot-adc.py --dry-run
+../scripts/read-multisheet-snapshot-adc.py --write
+```
+
+`mapping_version` do envelope gravado é sempre `ADAPTERS_VERSION`
+(`app/migration/adapters.py`), nunca um valor inventado — o script importa a
+constante diretamente, então nunca diverge do registro de adapters em uso.
