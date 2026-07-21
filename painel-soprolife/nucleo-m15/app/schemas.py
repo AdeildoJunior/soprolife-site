@@ -8,7 +8,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .normalize import contains_clinical_info, contains_pii_like
 
@@ -107,6 +107,24 @@ class ConsentIn(StrictModel):
     status: Literal["concedido", "revogado", "desconhecido"]
     origem: str | None = Field(default=None, max_length=120)
     observacao: str | None = Field(default=None, max_length=2000)
+
+
+RelationshipType = Literal[
+    "mother", "father", "legal_guardian", "grandparent", "other"
+]
+
+
+class PersonRelationshipCreate(StrictModel):
+    guardian_person_id: str = Field(min_length=36, max_length=36)
+    relationship_type: RelationshipType
+    is_legal_guardian: bool = False
+    active: bool = True
+
+
+class PersonRelationshipDeactivate(StrictModel):
+    reason_code: Literal[
+        "relationship_ended", "superseded", "administrative_correction"
+    ]
 
 
 class LeadCreate(StrictModel):
@@ -311,11 +329,31 @@ class InteractionCreate(StrictModel):
 
 
 class FollowupCreate(StrictModel):
-    person_id: str
+    # ``person_id`` é o alias legado do paciente. Clientes novos devem enviar
+    # ``patient_person_id`` e podem apontar o contato para o responsável.
+    person_id: str | None = None
+    patient_person_id: str | None = None
+    contact_person_id: str | None = None
     tipo: Literal["manual", "lead_sem_atendimento"] = "manual"
     due_date: date | None = None
     responsavel: str | None = Field(default=None, max_length=120)
     observacao: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _validate_patient(self):
+        if self.person_id is None and self.patient_person_id is None:
+            raise ValueError("patient_person_id é obrigatório")
+        if (
+            self.person_id is not None
+            and self.patient_person_id is not None
+            and self.person_id != self.patient_person_id
+        ):
+            raise ValueError("person_id e patient_person_id divergem")
+        return self
+
+    @property
+    def resolved_patient_person_id(self) -> str:
+        return self.patient_person_id or self.person_id  # type: ignore[return-value]
 
 
 class FollowupComplete(StrictModel):
@@ -437,7 +475,17 @@ class MultiSheetDryRunRequest(StrictModel):
 class MultiSheetReviewDecision(StrictModel):
     """Decisão sanitizada; nunca recebe nem devolve o conteúdo da linha."""
 
-    decisao: Literal["resolvido", "excluido", "adiado"]
+    decisao: Literal[
+        "resolvido",
+        "excluido",
+        "adiado",
+        "vincular_candidato",
+        "criar_pessoa",
+        "create_minor_patient_with_guardian",
+        "manter_primeira",
+        "manter_segunda",
+        "manter_ambas",
+    ]
     mapping_version: str = Field(min_length=1, max_length=40)
 
 

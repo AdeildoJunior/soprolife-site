@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 from .mapping import is_monetary_header, normalize_header
 
-ADAPTERS_VERSION = "m15-6b.1"
+ADAPTERS_VERSION = "m15-7.1"
 
 # Papéis de coluna (contrato fechado).
 PAPEL_ID = "id"                                # identificador explícito da fonte
@@ -108,6 +108,9 @@ ADAPTERS: dict[str, AdapterReal] = {
                 _c("primeiro_nome", PAPEL_NOME_PESSOA, canonico="nome_pessoa",
                    obrigatorio=True),
                 _c("telefone", PAPEL_TELEFONE),
+                _c("nome_responsavel_legal", PAPEL_NOME_PESSOA),
+                _c("telefone_responsavel_legal", PAPEL_TELEFONE),
+                _c("tipo_relacao_responsavel", PAPEL_TEXTO),
                 _c("ultimo_servico", PAPEL_TEXTO),
                 _c("status_relacionamento", PAPEL_TEXTO),
                 _c("proximo_contato", PAPEL_DATA),
@@ -136,6 +139,9 @@ ADAPTERS: dict[str, AdapterReal] = {
                 _c("data_entrada", PAPEL_DATA),
                 _c("primeiro_nome", PAPEL_NOME_PESSOA, canonico="nome_pessoa"),
                 _c("telefone", PAPEL_TELEFONE),
+                _c("nome_responsavel_legal", PAPEL_NOME_PESSOA),
+                _c("telefone_responsavel_legal", PAPEL_TELEFONE),
+                _c("tipo_relacao_responsavel", PAPEL_TEXTO),
                 _c("servico", PAPEL_TEXTO),
                 _c("origem", PAPEL_TEXTO),
                 _c("status_exame", PAPEL_TEXTO),
@@ -160,6 +166,9 @@ ADAPTERS: dict[str, AdapterReal] = {
                 _c("data_entrada", PAPEL_DATA),
                 _c("primeiro_nome", PAPEL_NOME_PESSOA, canonico="nome_pessoa"),
                 _c("telefone", PAPEL_TELEFONE),
+                _c("nome_responsavel_legal", PAPEL_NOME_PESSOA),
+                _c("telefone_responsavel_legal", PAPEL_TELEFONE),
+                _c("tipo_relacao_responsavel", PAPEL_TEXTO),
                 _c("origem", PAPEL_TEXTO),
                 _c("tipo_consulta", PAPEL_TEXTO),
                 _c("status", PAPEL_TEXTO),
@@ -266,6 +275,9 @@ ADAPTERS: dict[str, AdapterReal] = {
                 _c("data_criacao", PAPEL_DATA),
                 _c("primeiro_nome", PAPEL_NOME_PESSOA, canonico="nome_pessoa"),
                 _c("telefone", PAPEL_TELEFONE),
+                _c("nome_responsavel_legal", PAPEL_NOME_PESSOA),
+                _c("telefone_responsavel_legal", PAPEL_TELEFONE),
+                _c("tipo_relacao_responsavel", PAPEL_TEXTO),
                 _c("tipo_mensagem", PAPEL_TEXTO),
                 _c("data_prevista", PAPEL_DATA),
                 _c("status", PAPEL_TEXTO),

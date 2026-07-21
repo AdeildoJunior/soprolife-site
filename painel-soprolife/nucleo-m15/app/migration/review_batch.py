@@ -1,8 +1,9 @@
 """Revisão multiaba em lote: arquivo privado, preview e escrita atômica.
 
 Este módulo grava somente ``MigrationDecision`` e ``AuditLog`` append-only.
-Ele nunca chama o executor operacional. O chamador mantém uma única transação
-aberta, segura o lock até o commit e faz rollback integral em qualquer falha.
+Ele nunca chama o executor operacional. O preview não retém lock; somente a
+transação posterior à confirmação TTY trava o lote até o commit. Qualquer
+falha nessa aplicação preserva rollback integral.
 """
 
 from __future__ import annotations
@@ -74,6 +75,8 @@ class LoadedReviewBatch:
     document: dict
     fingerprint: str
     path: pathlib.Path
+    device: int | None = None
+    inode: int | None = None
 
 
 def _json_object_without_duplicates(pairs):
@@ -173,7 +176,9 @@ def _resolve_review_file(filename: str) -> tuple[pathlib.Path, pathlib.Path]:
     return base, candidate
 
 
-def _read_secure_private_file(filename: str) -> tuple[pathlib.Path, bytes]:
+def _read_secure_private_file(
+    filename: str,
+) -> tuple[pathlib.Path, bytes, int, int]:
     _base, candidate = _resolve_review_file(filename)
     try:
         before = candidate.lstat()
@@ -186,7 +191,9 @@ def _read_secure_private_file(filename: str) -> tuple[pathlib.Path, bytes]:
     mode = stat.S_IMODE(before.st_mode)
     if mode & ~0o600 or not mode & stat.S_IRUSR:
         raise MultiSheetError("arquivo_revisao_permissoes_inseguras")
-    if before.st_uid != os.geteuid() or before.st_nlink != 1:
+    if before.st_nlink != 1:
+        raise MultiSheetError("arquivo_revisao_hardlink_recusado")
+    if before.st_uid != os.geteuid():
         raise MultiSheetError("arquivo_revisao_propriedade_insegura")
 
     flags = os.O_RDONLY
@@ -218,12 +225,12 @@ def _read_secure_private_file(filename: str) -> tuple[pathlib.Path, bytes]:
             raise MultiSheetError("arquivo_revisao_excede_limite")
     finally:
         os.close(fd)
-    return candidate, content
+    return candidate, content, opened.st_dev, opened.st_ino
 
 
 def load_private_review_batch(filename: str) -> LoadedReviewBatch:
     """Carrega JSON confinado sem seguir symlink e valida contrato fechado."""
-    path, content = _read_secure_private_file(filename)
+    path, content, device, inode = _read_secure_private_file(filename)
     try:
         text = content.decode("utf-8")
         document = json.loads(text, object_pairs_hook=_json_object_without_duplicates)
@@ -236,6 +243,8 @@ def load_private_review_batch(filename: str) -> LoadedReviewBatch:
         document=validated,
         fingerprint=_canonical_fingerprint(validated),
         path=path,
+        device=device,
+        inode=inode,
     )
 
 
@@ -284,34 +293,35 @@ def _compatible(category: str, decision: str | None) -> bool:
     )
 
 
-def _transition_was_applied(
-    db: Session,
-    batch_id: str,
-    token: str,
-    desired: str | None,
-    expected: str | None,
-    fingerprint: str,
-) -> bool:
+def _decision_history_lookup(
+    db: Session, batch_id: str
+) -> set[tuple[str, str, str | None, str]]:
+    """Carrega uma vez o histórico relevante para validar replay exato."""
     decisions = db.execute(
         select(MigrationDecision).where(
             MigrationDecision.tipo == MULTI_SHEET_REVIEW_DECISION
         )
     ).scalars().all()
+    lookup: set[tuple[str, str, str | None, str]] = set()
     for decision in decisions:
         details = decision.detalhes or {}
-        if (
-            details.get("batch_id") == batch_id
-            and details.get("private_reference_token") == token
-            and details.get("review_batch_fingerprint") == fingerprint
-            and details.get("previous_decision") == expected
-            and decision.decisao == desired
-        ):
-            return True
-    return False
+        token = details.get("private_reference_token")
+        fingerprint = details.get("review_batch_fingerprint")
+        if details.get("batch_id") == batch_id and token and fingerprint:
+            lookup.add((
+                token,
+                decision.decisao,
+                details.get("previous_decision"),
+                fingerprint,
+            ))
+    return lookup
 
 
 def _is_exact_replay(
-    db: Session, document: dict, fingerprint: str, live: dict
+    document: dict,
+    fingerprint: str,
+    live: dict,
+    history: set[tuple[str, str, str | None, str]],
 ) -> bool:
     transitioned = False
     for entry in document["items"]:
@@ -322,14 +332,7 @@ def _is_exact_replay(
             return False
         if expected != desired:
             transitioned = True
-            if not _transition_was_applied(
-                db,
-                document["batch_id"],
-                entry["token"],
-                desired,
-                expected,
-                fingerprint,
-            ):
+            if (entry["token"], desired, expected, fingerprint) not in history:
                 return False
     return transitioned
 
@@ -345,13 +348,21 @@ def _pending_count(live: dict, desired_by_token: dict[str, str | None]) -> int:
 
 
 def prepare_review_batch(
-    db: Session, loaded: LoadedReviewBatch, user_id: str | None
+    db: Session,
+    loaded: LoadedReviewBatch,
+    user_id: str | None,
+    *,
+    lock_batch: bool = False,
 ) -> dict:
-    """Trava o ImportBatch, reconstitui a fila e produz preview sem escrever."""
+    """Reconstitui a fila e produz preview; lock é opt-in pós-confirmação."""
     if user_id is None:
         raise MultiSheetError("revisor_autenticado_obrigatorio")
     document = loaded.document
-    batch = _locked_batch(db, document["batch_id"])
+    batch = (
+        _locked_batch(db, document["batch_id"])
+        if lock_batch
+        else _get_multi_batch(db, document["batch_id"])
+    )
     report = batch.params["multi_sheet_report"]
     if batch.sha256 != document["snapshot_sha256"]:
         raise MultiSheetError("snapshot_sha256_nao_confere")
@@ -382,7 +393,10 @@ def prepare_review_batch(
 
     replay = False
     if queue["queue_fingerprint"] != document["queue_fingerprint"]:
-        replay = _is_exact_replay(db, document, loaded.fingerprint, live)
+        history = _decision_history_lookup(db, document["batch_id"])
+        replay = _is_exact_replay(
+            document, loaded.fingerprint, live, history
+        )
         if not replay:
             raise MultiSheetError("fingerprint_fila_divergente")
 
@@ -490,10 +504,16 @@ def _append_batch_decision(
 
 
 def apply_review_batch(
-    db: Session, loaded: LoadedReviewBatch, user_id: str | None
+    db: Session,
+    loaded: LoadedReviewBatch,
+    user_id: str | None,
+    *,
+    batch_already_locked: bool = False,
 ) -> dict:
     """Revalida sob lock e acrescenta decisões+auditoria; nunca faz commit."""
-    preview = prepare_review_batch(db, loaded, user_id)
+    preview = prepare_review_batch(
+        db, loaded, user_id, lock_batch=not batch_already_locked
+    )
     if preview["replay"] or not preview["would_write"]:
         return {
             "ok": True,

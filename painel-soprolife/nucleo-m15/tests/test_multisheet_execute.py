@@ -19,6 +19,7 @@ from sqlalchemy.orm import sessionmaker
 from app import cli
 from app.main import create_app
 from app.migration import executor
+from app.migration.adapters import ADAPTERS_VERSION
 from app.migration.executor import (
     ORDEM_ENTIDADES,
     build_final_plan,
@@ -824,7 +825,7 @@ def test_execucao_completa_decisoes_ordem_e_entidades(db, users, tmp_path):
     for prov in provenancias:
         assert prov.source_domain
         assert len(prov.source_fingerprint) == 64
-        assert prov.mapping_version == "m15-6b.1"
+        assert prov.mapping_version == ADAPTERS_VERSION
         assert len(prov.idempotency_key) == 64
 
     # PCMSO permanece excluído e não cria linha operacional

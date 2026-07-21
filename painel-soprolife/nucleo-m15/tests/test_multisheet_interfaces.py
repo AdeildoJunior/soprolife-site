@@ -364,6 +364,57 @@ def test_arquivo_revisao_recusa_fora_symlink_e_permissoes_inseguras(
     assert exc.value.codigo == "arquivo_revisao_permissoes_inseguras"
 
 
+def test_arquivo_revisao_recusa_hardlink_dedicado(
+    db, users, tmp_path, monkeypatch,
+):
+    _batch_id, _document, valid = _review_setup(db, users, tmp_path)
+    monkeypatch.setenv("M15_IMPORT_PRIVATE_DIR", str(tmp_path))
+    hardlink = tmp_path / "revisoes-hardlink.json"
+    hardlink.hardlink_to(valid)
+    with pytest.raises(MultiSheetError) as exc:
+        load_private_review_batch(hardlink.name)
+    assert exc.value.codigo == "arquivo_revisao_hardlink_recusado"
+
+
+def test_cli_revisao_recusa_troca_de_inode_entre_preview_e_confirmacao(
+    db, engine, users, tmp_path, monkeypatch, capsys,
+):
+    _batch_id, document, path = _review_setup(db, users, tmp_path)
+    candidate = next(
+        item for item in document["items"]
+        if item["category"] == "candidato_identidade_provavel"
+    )
+    candidate["decision"] = "vincular_candidato"
+    _write_review_file(path, document)
+    monkeypatch.setenv("M15_IMPORT_PRIVATE_DIR", str(tmp_path))
+    loaded = load_private_review_batch(path.name)
+    phrase = confirmation_phrase(
+        loaded.document["batch_id"], loaded.fingerprint
+    )
+
+    class ReplacingTTY(_TTY):
+        def readline(self, *args, **kwargs):
+            replacement = path.with_name("replacement.json")
+            _write_review_file(replacement, document)
+            replacement.replace(path)
+            return phrase + "\n"
+
+    db.rollback()
+    SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(cli, "_session", lambda: SessionLocal())
+    monkeypatch.setattr(cli.sys, "stdin", ReplacingTTY())
+    before_decisions = len(db.execute(select(MigrationDecision)).scalars().all())
+    before_audit = len(db.execute(select(AuditLog)).scalars().all())
+
+    assert cli.main([
+        "migracao", "revisar-multiaba-em-lote", "--arquivo", path.name,
+        "--email", users["admin"].email, "--json",
+    ]) == 1
+    error = json.loads(capsys.readouterr().err.splitlines()[-1])
+    assert error["codigo"] == "arquivo_revisao_modificado_apos_preview"
+    assert len(db.execute(select(MigrationDecision)).scalars().all()) == before_decisions
+    assert len(db.execute(select(AuditLog)).scalars().all()) == before_audit
+
 @pytest.mark.parametrize(
     ("field", "value", "error_code"),
     [

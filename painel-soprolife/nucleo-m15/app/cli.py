@@ -355,6 +355,7 @@ def cmd_migracao_revisar_multiaba_em_lote(args) -> int:
     """Preview + uma confirmação TTY + commit único de decisões append-only."""
     from .migration.multisheet import MultiSheetError
     from .migration.review_batch import (
+        _locked_batch,
         apply_review_batch,
         confirmation_phrase,
         load_private_review_batch,
@@ -365,63 +366,69 @@ def cmd_migracao_revisar_multiaba_em_lote(args) -> int:
     db = None
     try:
         loaded = load_private_review_batch(args.arquivo)
+        # Preview em sessão própria: nenhum SELECT FOR UPDATE permanece
+        # aberto durante o tempo humano de leitura/confirmacao.
+        db = _session()
+        user_id = _admin_id_por_email(db, args.email)
+        preview = prepare_review_batch(db, loaded, user_id)
+        db.rollback()
+        db.close()
+        db = None
+        if args.somente_preview:
+            _emit(preview, args.json)
+            return 0
+
+        if args.json:
+            # Mantém stdout como uma única linha machine-readable:
+            # o preview antecede a confirmação pelo canal stderr.
+            print(
+                json.dumps(preview, ensure_ascii=False, sort_keys=True),
+                file=sys.stderr,
+            )
+        else:
+            _emit(preview, False)
+
+        if not sys.stdin.isatty():
+            raise MultiSheetError("confirmacao_exige_tty_interativo")
+        expected = confirmation_phrase(
+            loaded.document["batch_id"], loaded.fingerprint
+        )
+        print(
+            f"Confirmação única. Digite exatamente: {expected}",
+            file=sys.stderr,
+        )
+        try:
+            supplied = sys.stdin.readline()
+        except (EOFError, OSError) as exc:
+            raise MultiSheetError(
+                "confirmacao_interativa_indisponivel"
+            ) from exc
+        if supplied == "":
+            raise MultiSheetError("confirmacao_interativa_eof")
+        if supplied.rstrip("\r\n") != expected:
+            raise MultiSheetError("frase_de_confirmacao_incorreta")
+
+        # Somente depois da frase nasce a transação protegida. O lote é
+        # travado antes de reler arquivo e fila, que são revalidados ao vivo.
         with serialize_review_batch(loaded.document["batch_id"]):
-            # A sessão nasce já dentro do lock de processo. Isso evita que
-            # SQLite mantenha snapshot de leitura antigo enquanto espera;
-            # PostgreSQL ainda usa SELECT ... FOR UPDATE no ImportBatch.
             db = _session()
             try:
                 user_id = _admin_id_por_email(db, args.email)
-                preview = prepare_review_batch(db, loaded, user_id)
-                if args.somente_preview:
-                    _emit(preview, args.json)
-                    db.rollback()
-                    return 0
-
-                if args.json:
-                    # Mantém stdout como uma única linha machine-readable:
-                    # o preview antecede a confirmação pelo canal stderr.
-                    print(
-                        json.dumps(
-                            preview, ensure_ascii=False, sort_keys=True
-                        ),
-                        file=sys.stderr,
-                    )
-                else:
-                    _emit(preview, False)
-
-                if not sys.stdin.isatty():
-                    raise MultiSheetError("confirmacao_exige_tty_interativo")
-                expected = confirmation_phrase(
-                    loaded.document["batch_id"], loaded.fingerprint
-                )
-                print(
-                    f"Confirmação única. Digite exatamente: {expected}",
-                    file=sys.stderr,
-                )
-                try:
-                    supplied = sys.stdin.readline()
-                except (EOFError, OSError) as exc:
-                    raise MultiSheetError(
-                        "confirmacao_interativa_indisponivel"
-                    ) from exc
-                if supplied == "":
-                    raise MultiSheetError("confirmacao_interativa_eof")
-                if supplied.rstrip("\r\n") != expected:
-                    raise MultiSheetError("frase_de_confirmacao_incorreta")
-
-                # Arquivo e fila são relidos/revalidados ainda sob a mesma
-                # serialização e transação antes de qualquer INSERT.
+                _locked_batch(db, loaded.document["batch_id"])
                 reloaded = load_private_review_batch(args.arquivo)
                 if (
                     reloaded.path != loaded.path
                     or reloaded.fingerprint != loaded.fingerprint
                     or reloaded.document != loaded.document
+                    or reloaded.device != loaded.device
+                    or reloaded.inode != loaded.inode
                 ):
                     raise MultiSheetError(
                         "arquivo_revisao_modificado_apos_preview"
                     )
-                receipt = apply_review_batch(db, reloaded, user_id)
+                receipt = apply_review_batch(
+                    db, reloaded, user_id, batch_already_locked=True
+                )
                 db.commit()
             except Exception:
                 # O rollback acontece ANTES de liberar a serialização.
@@ -902,6 +909,7 @@ def main(argv: list[str] | None = None) -> int:
         "--decisao", required=True,
         choices=("resolvido", "excluido", "adiado",
                  "vincular_candidato", "criar_pessoa",
+                 "create_minor_patient_with_guardian",
                  "manter_primeira", "manter_segunda", "manter_ambas"),
     )
     mp.add_argument("--mapping-version", required=True)

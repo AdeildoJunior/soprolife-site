@@ -100,6 +100,18 @@ def ser_consent(c: m.Consent) -> dict:
     }
 
 
+def ser_person_relationship(r: m.PersonRelationship) -> dict:
+    return {
+        "id": r.id,
+        "minor_person_id": r.minor_person_id,
+        "guardian_person_id": r.guardian_person_id,
+        "relationship_type": r.relationship_type,
+        "is_legal_guardian": r.is_legal_guardian,
+        "active": r.active,
+        **_stamps(r),
+    }
+
+
 def _date_meta(obj, prefix: str) -> dict:
     return {
         prefix: d(getattr(obj, prefix)),
@@ -283,6 +295,8 @@ def ser_followup(f: m.Followup, fila: str | None = None) -> dict:
         "id": f.id,
         "public_code": f.public_code,
         "person_id": f.person_id,
+        "patient_person_id": f.patient_person_id,
+        "contact_person_id": f.contact_person_id or f.person_id,
         "tipo": f.tipo,
         "origem_entidade": f.origem_entidade,
         "origem_id": f.origem_id,

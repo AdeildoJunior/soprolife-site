@@ -136,6 +136,43 @@ class PersonContact(Base, TimestampMixin):
     person: Mapped[Person] = relationship(back_populates="contacts")
 
 
+class PersonRelationship(Base, TimestampMixin):
+    """Vínculo explícito menor–responsável; nunca transfere contatos.
+
+    A linha é a verdade corrente do vínculo. Criação é idempotente pela chave
+    natural e desativação é auditada pela camada de serviço/API; não existe
+    cascata de exclusão nem inferência por nome, telefone ou outros atributos.
+    """
+
+    __tablename__ = "person_relationships"
+    id: Mapped[str] = mapped_column(
+        String(UUID_LEN), primary_key=True, default=new_uuid
+    )
+    minor_person_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("people.id"), index=True, nullable=False
+    )
+    guardian_person_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("people.id"), index=True, nullable=False
+    )
+    relationship_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    is_legal_guardian: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "minor_person_id <> guardian_person_id",
+            name="pessoas_relacionadas_distintas",
+        ),
+        UniqueConstraint(
+            "minor_person_id",
+            "guardian_person_id",
+            "relationship_type",
+            name="uq_person_relationship_natural_key",
+        ),
+    )
+
+
 class Consent(Base):
     """Histórico rastreável de consentimento por canal (append-only por linha)."""
 
@@ -269,6 +306,15 @@ class Followup(Base, TimestampMixin):
     person_id: Mapped[str] = mapped_column(
         String(UUID_LEN), ForeignKey("people.id"), index=True, nullable=False
     )
+    # ``person_id`` permanece como paciente por compatibilidade. O contato
+    # pode ser outra pessoa (por exemplo, responsável legal do menor).
+    contact_person_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("people.id"), index=True
+    )
+
+    @property
+    def patient_person_id(self) -> str:
+        return self.person_id
     tipo: Mapped[str] = mapped_column(
         String(30), nullable=False
     )  # pos_exame|pos_consulta|lead_sem_atendimento|encaminhamento_parceiro|manual

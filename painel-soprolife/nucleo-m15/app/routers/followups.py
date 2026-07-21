@@ -27,6 +27,7 @@ from ..schemas import (
 from ..security import ROLE_LEITURA, ROLE_OPERACIONAL, require_role
 from ..serializers import ser_followup, ser_interaction
 from ..services import followup as fsvc
+from ..services.relationships import legal_contact_relationship
 
 router = APIRouter(tags=["followup"])
 
@@ -42,6 +43,22 @@ def _followup_or_404(db: Session, followup_id: str) -> Followup:
 
 def _is_synthetic(person: Person) -> bool:
     return person.legacy_source == "seed_demo"
+
+
+def _contact_person(db: Session, fup: Followup, patient: Person) -> Person:
+    if not fup.contact_person_id:
+        return patient
+    contact = db.get(Person, fup.contact_person_id)
+    if contact is None:  # FK deveria tornar isto inalcançável; falha fechada.
+        raise HTTPException(status_code=409, detail="Pessoa de contato inválida.")
+    if contact.id == patient.id:
+        return patient
+    if legal_contact_relationship(db, patient.id, contact.id) is None:
+        raise HTTPException(
+            status_code=409,
+            detail={"codigo": "active_legal_guardian_required"},
+        )
+    return contact
 
 
 @router.get("/followups")
@@ -64,13 +81,20 @@ def list_followups(
 
 
 def _queue_item(db: Session, fup: Followup, person: Person, queue: str) -> dict:
-    consent = fsvc.whatsapp_consent_status(db, person.id)
-    sintetico = _is_synthetic(person)
+    contact = _contact_person(db, fup, person)
+    consent = fsvc.whatsapp_consent_status(db, contact.id)
+    sintetico = _is_synthetic(person) or _is_synthetic(contact)
     item = ser_followup(fup, fila=queue)
     item["pessoa"] = {
         "id": person.id,
         "public_code": person.public_code,
         "nome_completo": person.nome_completo,
+    }
+    item["paciente"] = item["pessoa"]
+    item["pessoa_contato"] = {
+        "id": contact.id,
+        "public_code": contact.public_code,
+        "nome_completo": contact.nome_completo,
     }
     item["consentimento_whatsapp"] = consent
     item["aviso_consentimento"] = consent != "concedido"
@@ -81,6 +105,7 @@ def _queue_item(db: Session, fup: Followup, person: Person, queue: str) -> dict:
         and consent == "concedido"
         and not fup.controlado_por_parceiro
         and not sintetico
+        and not contact.nao_contatar
     )
     return item
 
@@ -116,6 +141,9 @@ def followup_queue(
     }
     excluidos_nao_contatar = 0
     for fup, person in rows:
+        if _contact_person(db, fup, person).nao_contatar:
+            excluidos_nao_contatar += 1
+            continue
         queue = fsvc.classify_queue(fup, person, today)
         if queue == fsvc.FILA_NAO_CONTATAR:
             excluidos_nao_contatar += 1
@@ -155,13 +183,27 @@ def create_followup(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
-    person = db.get(Person, payload.person_id)
+    patient_id = payload.resolved_patient_person_id
+    person = db.get(Person, patient_id)
     if not person:
         raise HTTPException(status_code=404, detail="Pessoa não encontrada.")
+    contact_id = payload.contact_person_id or patient_id
+    contact = db.get(Person, contact_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Pessoa de contato não encontrada.")
+    if (
+        contact_id != patient_id
+        and legal_contact_relationship(db, patient_id, contact_id) is None
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"codigo": "active_legal_guardian_required"},
+        )
     fup, motivo = fsvc.schedule_followup(
         db, person, payload.tipo,
         due=payload.due_date, due_manual=payload.due_date is not None,
         responsavel=payload.responsavel, observacao=payload.observacao,
+        contact_person_id=(contact_id if contact_id != patient_id else None),
     )
     if fup is None:
         raise HTTPException(
@@ -204,7 +246,8 @@ def retry(
 ):
     fup = _followup_or_404(db, followup_id)
     person = db.get(Person, fup.person_id)
-    if person.nao_contatar:
+    contact_person = _contact_person(db, fup, person)
+    if person.nao_contatar or contact_person.nao_contatar:
         raise HTTPException(
             status_code=409,
             detail="Pessoa marcada como 'não contatar' — nova tentativa bloqueada.",
@@ -234,7 +277,8 @@ def whatsapp_url(
     if fup.status != "pendente":
         raise HTTPException(status_code=409, detail="Follow-up não está pendente.")
     person = db.get(Person, fup.person_id)
-    if person.nao_contatar:
+    contact_person = _contact_person(db, fup, person)
+    if person.nao_contatar or contact_person.nao_contatar:
         raise HTTPException(
             status_code=409,
             detail="Pessoa marcada como 'não contatar' — contato bloqueado.",
@@ -246,13 +290,13 @@ def whatsapp_url(
                     "mensagem": "Este follow-up é controlado pela clínica parceira — "
                                 "a SoproLife não contata diretamente."},
         )
-    if _is_synthetic(person):
+    if _is_synthetic(person) or _is_synthetic(contact_person):
         raise HTTPException(
             status_code=409,
             detail={"codigo": "registro_sintetico",
                     "mensagem": "Registro sintético de demonstração — WhatsApp desabilitado."},
         )
-    consent = fsvc.whatsapp_consent_status(db, person.id)
+    consent = fsvc.whatsapp_consent_status(db, contact_person.id)
     if consent != "concedido":
         raise HTTPException(
             status_code=409,
@@ -263,7 +307,7 @@ def whatsapp_url(
         )
     contact = db.execute(
         select(PersonContact).where(
-            PersonContact.person_id == person.id,
+            PersonContact.person_id == contact_person.id,
             PersonContact.tipo.in_(["whatsapp", "telefone"]),
             PersonContact.ativo == True,  # noqa: E712
             PersonContact.nao_discavel == False,  # noqa: E712
@@ -271,7 +315,7 @@ def whatsapp_url(
     ).scalars().first()
     if not contact or not contact.valor_normalizado:
         raise HTTPException(status_code=422, detail="Pessoa sem telefone discável cadastrado.")
-    message = fsvc.default_message(person.nome_completo, fup.tipo)
+    message = fsvc.default_message(contact_person.nome_completo, fup.tipo)
     return {
         "followup_id": fup.id,
         "url": fsvc.build_whatsapp_url(contact.valor_normalizado, message),
@@ -296,13 +340,14 @@ def whatsapp_confirm(
     if fup.status != "pendente":
         raise HTTPException(status_code=409, detail="Follow-up não está pendente.")
     person = db.get(Person, fup.person_id)
-    if person.nao_contatar:
+    contact_person = _contact_person(db, fup, person)
+    if person.nao_contatar or contact_person.nao_contatar:
         raise HTTPException(status_code=409, detail="Pessoa 'não contatar'.")
     if fup.controlado_por_parceiro:
         raise HTTPException(status_code=409, detail="Follow-up controlado pela clínica.")
-    if _is_synthetic(person):
+    if _is_synthetic(person) or _is_synthetic(contact_person):
         raise HTTPException(status_code=409, detail="Registro sintético de demonstração.")
-    if fsvc.whatsapp_consent_status(db, person.id) != "concedido":
+    if fsvc.whatsapp_consent_status(db, contact_person.id) != "concedido":
         raise HTTPException(
             status_code=409,
             detail="Consentimento de WhatsApp não concedido — confirmação bloqueada.",

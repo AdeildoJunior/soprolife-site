@@ -7,13 +7,29 @@ from sqlalchemy.orm import Session
 from ..audit import audit
 from ..db import get_db
 from ..ids import allocate_public_code
-from ..models import Consent, LegacyAlias, Person, PersonContact, User
+from ..models import (
+    Consent,
+    LegacyAlias,
+    Person,
+    PersonContact,
+    PersonRelationship,
+    User,
+)
 from ..normalize import normalize_name, normalize_phone
 from ..pagination import PageParams, paginate
-from ..schemas import ConsentIn, ContactIn, PersonCreate, PersonSearch, PersonUpdate
+from ..schemas import (
+    ConsentIn,
+    ContactIn,
+    PersonCreate,
+    PersonRelationshipCreate,
+    PersonRelationshipDeactivate,
+    PersonSearch,
+    PersonUpdate,
+)
 from ..security import ROLE_LEITURA, ROLE_OPERACIONAL, require_role
-from ..serializers import ser_consent, ser_person
+from ..serializers import ser_consent, ser_person, ser_person_relationship
 from ..services.identity import find_person_candidates, register_candidates
+from ..services.relationships import RelationshipError, create_relationship
 
 router = APIRouter(prefix="/pessoas", tags=["pessoas"])
 
@@ -230,3 +246,90 @@ def add_consent(
           request.state.request_id, {"canal": payload.canal, "status": payload.status})
     db.commit()
     return ser_consent(consent)
+
+
+@router.get("/{person_id}/responsaveis")
+def list_guardians(
+    person_id: str,
+    active: bool | None = None,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_LEITURA)),
+):
+    _get_person(db, person_id)
+    stmt = (
+        select(PersonRelationship)
+        .where(PersonRelationship.minor_person_id == person_id)
+        .order_by(PersonRelationship.created_at, PersonRelationship.id)
+    )
+    if active is not None:
+        stmt = stmt.where(PersonRelationship.active == active)
+    return {
+        "items": [
+            ser_person_relationship(item)
+            for item in db.execute(stmt).scalars().all()
+        ]
+    }
+
+
+@router.post("/{person_id}/responsaveis", status_code=201)
+def add_guardian(
+    person_id: str,
+    payload: PersonRelationshipCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    try:
+        relationship, replay = create_relationship(
+            db,
+            minor_person_id=person_id,
+            guardian_person_id=payload.guardian_person_id,
+            relationship_type=payload.relationship_type,
+            is_legal_guardian=payload.is_legal_guardian,
+            active=payload.active,
+        )
+    except RelationshipError as exc:
+        status = 404 if exc.code.endswith("_not_found") else 409
+        raise HTTPException(status_code=status, detail={"codigo": exc.code}) from exc
+    if not replay:
+        audit(
+            db,
+            "pessoa.relacionamento_criado",
+            "person_relationships",
+            relationship.id,
+            user.id,
+            request.state.request_id,
+            {
+                "relationship_type": relationship.relationship_type,
+                "is_legal_guardian": relationship.is_legal_guardian,
+            },
+        )
+    db.commit()
+    return {**ser_person_relationship(relationship), "replay": replay}
+
+
+@router.post("/{person_id}/responsaveis/{relationship_id}/desativar")
+def deactivate_guardian(
+    person_id: str,
+    relationship_id: str,
+    payload: PersonRelationshipDeactivate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    relationship = db.get(PersonRelationship, relationship_id)
+    if relationship is None or relationship.minor_person_id != person_id:
+        raise HTTPException(status_code=404, detail="Relacionamento não encontrado.")
+    if relationship.active:
+        relationship.active = False
+        audit(
+            db,
+            "pessoa.relacionamento_desativado",
+            "person_relationships",
+            relationship.id,
+            user.id,
+            request.state.request_id,
+            {"reason_code": payload.reason_code},
+        )
+        db.commit()
+    return ser_person_relationship(relationship)

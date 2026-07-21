@@ -93,6 +93,7 @@ def schedule_followup(
     controlado_por_parceiro: bool = False,
     partner_id: str | None = None,
     observacao: str | None = None,
+    contact_person_id: str | None = None,
 ) -> tuple[Followup | None, str]:
     """Cria follow-up de forma atômica, respeitando 'não contatar' e dedupe.
 
@@ -109,6 +110,7 @@ def schedule_followup(
             fup = Followup(
                 public_code=allocate_public_code(db, "followups"),
                 person_id=person.id,
+                contact_person_id=contact_person_id,
                 tipo=tipo,
                 origem_entidade=origem_entidade,
                 origem_id=origem_id,
@@ -139,6 +141,7 @@ def sync_followup_for_origin(
     responsavel: str | None = None,
     controlado_por_parceiro: bool | None = None,
     partner_id: str | None = None,
+    contact_person_id: str | None = None,
 ) -> tuple[Followup | None, str]:
     """Sincroniza o follow-up com o estado da origem NA MESMA transação.
 
@@ -165,6 +168,12 @@ def sync_followup_for_origin(
                 and existing.controlado_por_parceiro != controlado_por_parceiro):
             existing.controlado_por_parceiro = controlado_por_parceiro
             changed = True
+        if (
+            contact_person_id is not None
+            and existing.contact_person_id != contact_person_id
+        ):
+            existing.contact_person_id = contact_person_id
+            changed = True
         if changed:
             db.flush()
         return existing, "atualizado" if changed else "ja_existente"
@@ -173,6 +182,7 @@ def sync_followup_for_origin(
         responsavel=responsavel,
         controlado_por_parceiro=bool(controlado_por_parceiro),
         partner_id=partner_id,
+        contact_person_id=contact_person_id,
     )
 
 
@@ -279,7 +289,7 @@ def record_confirmed_interaction(
     """Registra a interação SOMENTE após confirmação humana do envio."""
     interaction = Interaction(
         public_code=allocate_public_code(db, "interactions"),
-        person_id=fup.person_id,
+        person_id=fup.contact_person_id or fup.person_id,
         canal="whatsapp",
         direcao="enviado",
         resumo=resumo,

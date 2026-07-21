@@ -30,6 +30,7 @@ import pathlib
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import func, inspect as sa_inspect, select, text
 from sqlalchemy.orm import Session
@@ -61,6 +62,7 @@ from ..models import (
     PaymentAllocation,
     Person,
     PersonContact,
+    PersonRelationship,
     Role,
     SpirometryExam,
     User,
@@ -119,13 +121,14 @@ ORDEM_ENTIDADES = {
     "partnerships": 5,
     "people": 6,
     "person_contacts": 7,
-    "consents": 8,
-    "leads": 9,
-    "spirometry_exams": 10,
-    "consultations": 11,
-    "followups": 12,
-    "financial_entries": 13,
-    "legacy_aliases": 14,
+    "person_relationships": 8,
+    "consents": 9,
+    "leads": 10,
+    "spirometry_exams": 11,
+    "consultations": 12,
+    "followups": 13,
+    "financial_entries": 14,
+    "legacy_aliases": 15,
 }
 
 _MODELOS = {
@@ -136,6 +139,7 @@ _MODELOS = {
     "partnerships": Partnership,
     "people": Person,
     "person_contacts": PersonContact,
+    "person_relationships": PersonRelationship,
     "consents": Consent,
     "leads": Lead,
     "spirometry_exams": SpirometryExam,
@@ -1010,7 +1014,11 @@ def _op_financeiro(builder: _PlanBuilder, kind: str, aba: str, linha: int,
         if bruto:
             valor = bruto.replace(",", ".")
             break
-    if not valor or float(valor) <= 0:
+    try:
+        valor_decimal = Decimal(valor)
+    except (InvalidOperation, ValueError):
+        valor_decimal = Decimal(0)
+    if valor_decimal <= 0:
         builder.bloquear("valor_monetario_ausente_ou_nao_positivo")
         final.update(status_final="pendente",
                      motivo="valor_monetario_ausente_ou_nao_positivo")
@@ -1020,7 +1028,7 @@ def _op_financeiro(builder: _PlanBuilder, kind: str, aba: str, linha: int,
         kind, aba, linha,
         {"tipo": tipo,
          "categoria": _trunc(campos.get("servico"), 60),
-         "valor": valor,
+         "valor": valor_decimal,
          "data_competencia": _data_campos(campos, "data_exame"),
          "status": _trunc(campos.get("status_pagamento"), 20) or "Pendente",
          "forma_pagamento": _trunc(campos.get("forma_pagamento"), 20),
@@ -1039,6 +1047,7 @@ def _construir_linha_decidida(builder: _PlanBuilder, kind: str, aba: str,
     final["decisao"] = decisao
     plano = builder.plano
 
+    guardian = None
     if decisao == "vincular_candidato":
         telefone = (campos.get("telefone")
                     or campos.get("telefone_whatsapp")
@@ -1060,6 +1069,89 @@ def _construir_linha_decidida(builder: _PlanBuilder, kind: str, aba: str,
             final.update(status_final="pendente",
                          motivo="criar_pessoa_sem_nome_na_origem")
             return
+    elif decisao == "create_minor_patient_with_guardian":
+        minor_name = (campos.get("nome_pessoa") or "").strip()
+        guardian_name = (
+            campos.get("nome_responsavel_legal") or ""
+        ).strip()
+        if not minor_name or not guardian_name:
+            builder.bloquear("minor_guardian_names_required_from_source")
+            final.update(
+                status_final="pendente",
+                motivo="minor_guardian_names_required_from_source",
+            )
+            return
+        minor_key = f"people:minor-decision:{aba}:{linha}"
+        guardian_key = f"people:guardian-decision:{aba}:{linha}"
+        builder.op(
+            "people", minor_key, kind, aba, linha,
+            {"nome_completo": minor_name},
+            subtipo="minor_patient", decisao=decisao,
+        )
+        builder.op(
+            "people", guardian_key, kind, aba, linha,
+            {"nome_completo": guardian_name},
+            subtipo="legal_guardian", decisao=decisao,
+        )
+        # A decisão estruturada declara que o telefone desta linha pertence
+        # ao responsável. Ele nunca é copiado para a pessoa menor.
+        guardian_phone = (
+            campos.get("telefone_responsavel_legal")
+            or campos.get("telefone")
+            or campos.get("paciente_whatsapp")
+            or ""
+        ).strip()
+        if guardian_phone:
+            builder.op(
+                "person_contacts",
+                f"{guardian_key}:contact",
+                kind,
+                aba,
+                linha,
+                {"tipo": "whatsapp", "valor": guardian_phone},
+                refs={"person_id": guardian_key},
+                subtipo="legal_guardian_contact",
+                decisao=decisao,
+            )
+        relationship_type = normalize_name(
+            campos.get("tipo_relacao_responsavel") or "legal_guardian"
+        ).replace(" ", "_")
+        relationship_aliases = {
+            "mae": "mother", "mother": "mother",
+            "pai": "father", "father": "father",
+            "responsavel_legal": "legal_guardian",
+            "legal_guardian": "legal_guardian",
+            "avo": "grandparent", "avó": "grandparent",
+            "grandparent": "grandparent", "other": "other",
+        }
+        relationship_type = relationship_aliases.get(relationship_type)
+        if relationship_type is None:
+            builder.bloquear("minor_guardian_relationship_type_invalid")
+            final.update(
+                status_final="pendente",
+                motivo="minor_guardian_relationship_type_invalid",
+            )
+            return
+        builder.op(
+            "person_relationships",
+            f"person_relationships:{aba}:{linha}",
+            kind,
+            aba,
+            linha,
+            {
+                "relationship_type": relationship_type,
+                "is_legal_guardian": True,
+                "active": True,
+            },
+            refs={
+                "minor_person_id": minor_key,
+                "guardian_person_id": guardian_key,
+            },
+            subtipo="minor_legal_guardian_relationship",
+            decisao=decisao,
+        )
+        pessoa = minor_key
+        guardian = guardian_key
     else:  # inalcançável: vocabulário fechado por categoria
         builder.bloquear("decisao_sem_construtor")
         final.update(status_final="pendente", motivo="decisao_sem_construtor")
@@ -1111,7 +1203,10 @@ def _construir_linha_decidida(builder: _PlanBuilder, kind: str, aba: str,
                         if normalize_name(campos.get("status", "")) ==
                         "concluido" else "pendente"),
              "responsavel": _trunc(campos.get("responsavel"), 120)},
-            refs={"person_id": pessoa},
+            refs={
+                "person_id": pessoa,
+                **({"contact_person_id": guardian} if guardian else {}),
+            },
             legacy=("followups", "followup_whatsapp", followup_id),
             decisao=decisao,
         )
@@ -1510,6 +1605,14 @@ def _instanciar(db: Session, op: OperacaoPlanejada, refs: dict,
             valor=valor, valor_normalizado=normalize_phone(valor) or valor,
             principal=True,
         )
+    if op.entidade == "person_relationships":
+        return PersonRelationship(
+            minor_person_id=refs["minor_person_id"],
+            guardian_person_id=refs["guardian_person_id"],
+            relationship_type=campos["relationship_type"],
+            is_legal_guardian=bool(campos.get("is_legal_guardian")),
+            active=bool(campos.get("active", True)),
+        )
     if op.entidade == "consents":
         return Consent(
             person_id=refs["person_id"], canal=campos["canal"],
@@ -1571,7 +1674,9 @@ def _instanciar(db: Session, op: OperacaoPlanejada, refs: dict,
     if op.entidade == "followups":
         return Followup(
             public_code=allocate_public_code(db, "followups"),
-            person_id=refs["person_id"], tipo=campos.get("tipo", "manual"),
+            person_id=refs["person_id"],
+            contact_person_id=refs.get("contact_person_id"),
+            tipo=campos.get("tipo", "manual"),
             due_date=campos.get("due_date"),
             status=campos.get("status") or "pendente",
             responsavel=campos.get("responsavel"),
@@ -1837,12 +1942,14 @@ _CAMPOS_RELACAO = {
     "partner_contacts": (("partner_id", True),),
     "partnerships": (("partner_id", True),),
     "person_contacts": (("person_id", True),),
+    "person_relationships": (("minor_person_id", True),
+                             ("guardian_person_id", True)),
     "consents": (("person_id", True),),
     "leads": (("person_id", True),),
     "spirometry_exams": (("person_id", True), ("partner_id", False),
                          ("partner_unit_id", False)),
     "consultations": (("person_id", True),),
-    "followups": (("person_id", True),),
+    "followups": (("person_id", True), ("contact_person_id", False)),
     "financial_entries": (("spirometry_exam_id", False),),
     "legacy_aliases": (("entity_id", True),),
 }

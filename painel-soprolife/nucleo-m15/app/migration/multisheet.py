@@ -42,6 +42,7 @@ MULTI_SHEET_REVIEW_DECISION = "revisao_multiaba"
 # categoria é validado aqui e re-aplicado fail-closed pelo executor.
 EXEC_REVIEW_DECISIONS = frozenset((
     "vincular_candidato", "criar_pessoa",
+    "create_minor_patient_with_guardian",
     "manter_primeira", "manter_segunda", "manter_ambas",
 ))
 REVIEW_DECISIONS = frozenset(
@@ -49,6 +50,10 @@ REVIEW_DECISIONS = frozenset(
 EXEC_DECISION_CATEGORIES = {
     "vincular_candidato": frozenset(("candidato_identidade_provavel",)),
     "criar_pessoa": frozenset((
+        "candidato_identidade_provavel", "exame_orfao", "consulta_orfa",
+        "registro_orfao",
+    )),
+    "create_minor_patient_with_guardian": frozenset((
         "candidato_identidade_provavel", "exame_orfao", "consulta_orfa",
         "registro_orfao",
     )),
@@ -61,11 +66,15 @@ EXEC_DECISION_CATEGORIES = {
 # históricos genéricos permanecem visíveis, porém bloqueantes.
 EXECUTABLE_REVIEW_DECISIONS_BY_CATEGORY = {
     CAT_CANDIDATO_IDENTIDADE: frozenset(
-        ("vincular_candidato", "criar_pessoa", "excluido")
+        ("vincular_candidato", "criar_pessoa",
+         "create_minor_patient_with_guardian", "excluido")
     ),
-    CAT_EXAME_ORFAO: frozenset(("criar_pessoa", "excluido")),
-    CAT_CONSULTA_ORFA: frozenset(("criar_pessoa", "excluido")),
-    CAT_REGISTRO_ORFAO: frozenset(("criar_pessoa", "excluido")),
+    CAT_EXAME_ORFAO: frozenset((
+        "criar_pessoa", "create_minor_patient_with_guardian", "excluido")),
+    CAT_CONSULTA_ORFA: frozenset((
+        "criar_pessoa", "create_minor_patient_with_guardian", "excluido")),
+    CAT_REGISTRO_ORFAO: frozenset((
+        "criar_pessoa", "create_minor_patient_with_guardian", "excluido")),
     CAT_ID_CONFLITANTE: frozenset(("excluido",)),
     CAT_ID_NAO_ENCONTRADO: frozenset(("excluido",)),
     CAT_DATA_INVALIDA: frozenset(("excluido",)),
