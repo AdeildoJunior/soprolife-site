@@ -679,7 +679,8 @@ class ImportBatch(Base):
     source_name: Mapped[str] = mapped_column(String(300), nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     modo: Mapped[str] = mapped_column(String(15), nullable=False)  # dry_run|executado
-    status: Mapped[str] = mapped_column(String(20), default="dry_run", nullable=False)
+    # 64 comporta o maior status ("executado_aguardando_reconciliacao", 34)
+    status: Mapped[str] = mapped_column(String(64), default="dry_run", nullable=False)
     total_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     valid_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     rejected_rows: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
