@@ -336,9 +336,13 @@ MANIFESTO_ESPERADO = {
     "leads": 2,
     "spirometry_exams": 3,
     "consultations": 1,
-    "followups": 1,
+    # M15.8: cada lead válido agora enfileira seu próprio follow-up de
+    # captação (lead_sem_atendimento) — 1 (followup_whatsapp) + 2 (leads).
+    "followups": 3,
     "financial_entries": 1,
-    "legacy_aliases": 12,
+    # +2 aliases: um por follow-up de lead novo (legacy_source
+    # "leads_followup"), além dos já existentes.
+    "legacy_aliases": 14,
 }
 
 DECISAO_PADRAO = {

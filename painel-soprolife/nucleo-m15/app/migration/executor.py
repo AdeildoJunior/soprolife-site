@@ -68,11 +68,14 @@ from ..models import (
     User,
     UserRole,
 )
+from ..dates import add_months
 from ..normalize import normalize_name, normalize_phone
+from ..services.followup import FOLLOWUP_MONTHS
 from .adapters import ADAPTERS, ADAPTERS_VERSION
 from .manifest import ManifestError, validate_backup_evidence
 from .multisheet import (
     EXECUTABLE_REVIEW_DECISIONS_BY_CATEGORY,
+    GUARDIAN_RELATIONSHIP_TYPE_ALIASES,
     MULTI_SHEET_SOURCE_TYPE,
     MultiSheetError,
     _decisions_by_token,
@@ -368,18 +371,28 @@ class _PlanBuilder:
             return ("existing", entidade, fonte, legacy_id)
         return None
 
-    def decisao_da_linha(self, aba: str, linha: int,
-                         itens_da_linha: list[dict]) -> tuple[str | None, str | None]:
-        """Decisão executável da linha pendente. Retorna (decisao, bloqueio)."""
+    def decisao_da_linha(
+        self, aba: str, linha: int, itens_da_linha: list[dict]
+    ) -> tuple[str | None, dict | None, str | None]:
+        """Decisão executável da linha pendente.
+
+        Retorna (decisao, guardian_override, bloqueio). ``guardian_override``
+        só é não-None quando o operador registrou explicitamente uma
+        substituição estruturada menor/responsável (M15.8) para esta linha;
+        duas substituições divergentes na mesma linha bloqueiam fechado.
+        """
         pendentes = [i for i in itens_da_linha if i["status"] == "pendente"]
         if not pendentes:
-            return None, None
+            return None, None, None
         decisoes = set()
+        overrides_canonicos: set[str] = set()
+        overrides: list[dict] = []
         for item in pendentes:
             executaveis = EXECUTABLE_REVIEW_DECISIONS_BY_CATEGORY.get(
                 item["categoria"], frozenset())
             registrada = self.decisoes.get(item["token"])
-            if registrada is None or registrada not in executaveis:
+            decisao_registrada = registrada["decision"] if registrada else None
+            if registrada is None or decisao_registrada not in executaveis:
                 self.plano.revisoes_pendentes_sem_decisao += 1
                 if item["categoria"] == CAT_FINANCEIRO_NAO_RESOLVIDO:
                     self.plano.financeiro_nao_resolvido += 1
@@ -387,11 +400,21 @@ class _PlanBuilder:
                     self.plano.conflitos_nao_resolvidos += 1
                 if item["categoria"] == CAT_DUPLICATA_EXECUCAO:
                     self.plano.conflitos_nao_resolvidos += 1
-                return None, "revisao_pendente_sem_decisao_executavel"
-            decisoes.add(registrada)
+                return None, None, "revisao_pendente_sem_decisao_executavel"
+            decisoes.add(decisao_registrada)
+            override = registrada.get("guardian_override")
+            if override is not None:
+                overrides.append(override)
+                overrides_canonicos.add(json.dumps(
+                    override, ensure_ascii=False, sort_keys=True,
+                    separators=(",", ":"),
+                ))
         if len(decisoes) > 1:
-            return None, "decisoes_conflitantes_na_mesma_linha"
-        return decisoes.pop(), None
+            return None, None, "decisoes_conflitantes_na_mesma_linha"
+        if len(overrides_canonicos) > 1:
+            return None, None, "guardian_override_conflitante_na_mesma_linha"
+        override_final = overrides[0] if overrides else None
+        return decisoes.pop(), override_final, None
 
     # --------------------------------------------------- pessoas auxiliares
 
@@ -450,20 +473,26 @@ def _itens_por_linha(plan: dict) -> dict[tuple, list[dict]]:
 
 def _decisoes_executaveis(db: Session, batch_id: str,
                           envelope_sha256: str, plan: dict) -> dict:
-    """Mapa raw_token -> decisão registrada (última por token privado)."""
+    """Mapa raw_token -> {decision, guardian_override} (última por token
+    privado). ``guardian_override`` só existe quando um operador autorizou
+    explicitamente a substituição estruturada menor/responsável (M15.8);
+    ausência (None) preserva o comportamento anterior (só campos da fonte)."""
     privadas = _decisions_by_token(db, batch_id)
-    resultado: dict[str, str] = {}
+    resultado: dict[str, dict] = {}
     for item in plan["fila_revisao"]:
         token_privado = _private_token(envelope_sha256, item["token"])
         registrada = privadas.get(token_privado)
         if registrada:
-            resultado[item["token"]] = registrada["decision"]
+            resultado[item["token"]] = {
+                "decision": registrada["decision"],
+                "guardian_override": registrada.get("guardian_override"),
+            }
     return resultado
 
 
 def _decisoes_fingerprint(decisoes: dict) -> str:
     canonical = json.dumps(sorted(decisoes.items()), ensure_ascii=False,
-                           separators=(",", ":"))
+                           sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -543,7 +572,7 @@ def build_execution_plan(
         elif status == ST_VALIDA:
             _construir_linha_valida(builder, kind, aba, linha, campos, final)
         elif status == ST_PENDENTE:
-            decisao, bloqueio = builder.decisao_da_linha(
+            decisao, guardian_override, bloqueio = builder.decisao_da_linha(
                 aba, linha, itens.get((aba, linha), []))
             if bloqueio:
                 builder.bloquear(bloqueio)
@@ -555,7 +584,8 @@ def build_execution_plan(
                              decisao="excluido")
             else:
                 _construir_linha_decidida(
-                    builder, kind, aba, linha, campos, decisao, final)
+                    builder, kind, aba, linha, campos, decisao, final,
+                    guardian_override=guardian_override)
         else:  # inalcançável: estados do staging são fechados
             raise MultiSheetError("estado_de_linha_desconhecido")
         plano.linhas.append(final)
@@ -652,7 +682,7 @@ def _resolver_linha_duplicada(
     final: dict,
 ) -> None:
     """Aplica somente decisões explícitas sobre uma duplicata bloqueante."""
-    decisao, bloqueio = builder.decisao_da_linha(
+    decisao, _guardian_override, bloqueio = builder.decisao_da_linha(
         aba, linha, itens_da_linha)
     if bloqueio:
         final.update(status_final="duplicado", motivo=bloqueio)
@@ -766,6 +796,50 @@ def _data_campos(campos: dict, campo: str) -> dict:
         "precisao": nd.precision,
         "dia_assumido": nd.day_assumed,
     }
+
+
+def _lead_followup_due(campos: dict):
+    """Vencimento do follow-up de captação de um lead importado (M15.8).
+
+    Regra do proprietário: preserva a próxima ação já agendada na fonte
+    (só quando tem precisão de DIA — mesma cautela já aplicada ao
+    ``data_prevista`` do Follow-up WhatsApp: data imprecisa nunca vira
+    prazo literal); senão calcula 6 meses corridos após a data do primeiro
+    contato (mesma janela ``FOLLOWUP_MONTHS`` usada no pós-atendimento);
+    sem nenhuma data utilizável na fonte, o vencimento fica None — pendente
+    explícito, NUNCA inventado.
+    """
+    proxima = _data_campos(campos, "data_proxima_acao")
+    if proxima.get("valor") is not None and proxima.get("precisao") == "dia":
+        return proxima["valor"]
+    contato = _data_campos(campos, "data_contato")
+    if contato.get("valor") is not None:
+        return add_months(contato["valor"], FOLLOWUP_MONTHS)
+    return None
+
+
+def _op_lead_followup(builder: "_PlanBuilder", kind: str, aba: str,
+                      linha: int, campos: dict, lead_id: str,
+                      pessoa, decisao: str | None = None) -> str:
+    """Fila o follow-up de captação (M15.8) para UM lead importado.
+
+    Nunca converte o lead em paciente: cria só um Followup(tipo=
+    "lead_sem_atendimento") ligado à mesma pessoa do lead, jamais um
+    exame/consulta. Idempotente por ``legacy`` próprio (nunca duplica em
+    reexecução do mesmo lote).
+    """
+    return builder.op(
+        "followups", f"followups:leads:{lead_id}", kind, aba, linha,
+        {
+            "tipo": "lead_sem_atendimento",
+            "due_date": _lead_followup_due(campos),
+            "status": "pendente",
+            "responsavel": _trunc(campos.get("responsavel"), 120),
+        },
+        refs={"person_id": pessoa},
+        legacy=("followups", "leads_followup", lead_id),
+        decisao=decisao,
+    )
 
 
 def _construir_linha_valida(builder: _PlanBuilder, kind: str, aba: str,
@@ -917,6 +991,10 @@ def _construir_linha_valida(builder: _PlanBuilder, kind: str, aba: str,
             refs={"person_id": pessoa},
             legacy=("leads", "leads", lead_id),
         )
+        # M15.8: todo lead importado entra na fila de retomada — nunca vira
+        # paciente/exame/consulta por conta própria (ver docstring de
+        # _op_lead_followup).
+        _op_lead_followup(builder, kind, aba, linha, campos, lead_id, pessoa)
         final.update(status_final="importado", motivo=None,
                      entidade="leads", chave=chave)
         return
@@ -1042,8 +1120,17 @@ def _op_financeiro(builder: _PlanBuilder, kind: str, aba: str, linha: int,
 
 def _construir_linha_decidida(builder: _PlanBuilder, kind: str, aba: str,
                               linha: int, campos: dict, decisao: str,
-                              final: dict) -> None:
-    """Linha pendente com decisão executável aprovada (nunca automática)."""
+                              final: dict,
+                              guardian_override: dict | None = None) -> None:
+    """Linha pendente com decisão executável aprovada (nunca automática).
+
+    ``guardian_override`` (M15.8) é a substituição estruturada e já
+    validada (ver ``multisheet.validate_guardian_override``) que um
+    operador registrou explicitamente para ESTA linha quando a fonte real
+    não separa nome/telefone do menor e do responsável em colunas próprias
+    (ex.: um único campo de nome contendo os dois). Quando ausente, o
+    comportamento é IDÊNTICO ao anterior: só os campos da própria fonte.
+    """
     final["decisao"] = decisao
     plano = builder.plano
 
@@ -1070,9 +1157,23 @@ def _construir_linha_decidida(builder: _PlanBuilder, kind: str, aba: str,
                          motivo="criar_pessoa_sem_nome_na_origem")
             return
     elif decisao == "create_minor_patient_with_guardian":
-        minor_name = (campos.get("nome_pessoa") or "").strip()
+        override = guardian_override or {}
+        # A substituição operador-autorizada (M15.8) existe exatamente para
+        # os casos em que um único campo de nome/telefone da fonte mistura
+        # menor e responsável em um só texto: quando um operador registrou
+        # esta decisão explícita, ela é AUTORITATIVA para o split e
+        # prevalece sobre o campo bruto e ambíguo da fonte. Sem override, o
+        # comportamento é idêntico ao anterior (M15.7): só os campos já
+        # separados da própria fonte.
+        minor_name = (
+            override.get("minor_name")
+            or campos.get("nome_pessoa")
+            or ""
+        ).strip()
         guardian_name = (
-            campos.get("nome_responsavel_legal") or ""
+            override.get("guardian_name")
+            or campos.get("nome_responsavel_legal")
+            or ""
         ).strip()
         if not minor_name or not guardian_name:
             builder.bloquear("minor_guardian_names_required_from_source")
@@ -1096,7 +1197,8 @@ def _construir_linha_decidida(builder: _PlanBuilder, kind: str, aba: str,
         # A decisão estruturada declara que o telefone desta linha pertence
         # ao responsável. Ele nunca é copiado para a pessoa menor.
         guardian_phone = (
-            campos.get("telefone_responsavel_legal")
+            override.get("guardian_phone")
+            or campos.get("telefone_responsavel_legal")
             or campos.get("telefone")
             or campos.get("paciente_whatsapp")
             or ""
@@ -1113,18 +1215,17 @@ def _construir_linha_decidida(builder: _PlanBuilder, kind: str, aba: str,
                 subtipo="legal_guardian_contact",
                 decisao=decisao,
             )
-        relationship_type = normalize_name(
-            campos.get("tipo_relacao_responsavel") or "legal_guardian"
-        ).replace(" ", "_")
-        relationship_aliases = {
-            "mae": "mother", "mother": "mother",
-            "pai": "father", "father": "father",
-            "responsavel_legal": "legal_guardian",
-            "legal_guardian": "legal_guardian",
-            "avo": "grandparent", "avó": "grandparent",
-            "grandparent": "grandparent", "other": "other",
-        }
-        relationship_type = relationship_aliases.get(relationship_type)
+        relationship_type_raw = (
+            override.get("relationship_type")
+            or campos.get("tipo_relacao_responsavel")
+            or "legal_guardian"
+        )
+        relationship_type = normalize_name(relationship_type_raw).replace(
+            " ", "_"
+        )
+        relationship_type = GUARDIAN_RELATIONSHIP_TYPE_ALIASES.get(
+            relationship_type
+        )
         if relationship_type is None:
             builder.bloquear("minor_guardian_relationship_type_invalid")
             final.update(
@@ -1225,6 +1326,8 @@ def _construir_linha_decidida(builder: _PlanBuilder, kind: str, aba: str,
             refs={"person_id": pessoa},
             legacy=("leads", "leads", lead_id), decisao=decisao,
         )
+        _op_lead_followup(builder, kind, aba, linha, campos, lead_id, pessoa,
+                          decisao=decisao)
         final.update(status_final="importado", motivo=None,
                      entidade="leads", chave=chave)
         return

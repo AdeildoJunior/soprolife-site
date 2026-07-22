@@ -327,12 +327,28 @@ def cmd_migracao_status_multiaba(args) -> int:
 
 def cmd_migracao_revisar_multiaba(args) -> int:
     from .migration.multisheet import MultiSheetError, decide_multi_sheet_review
+    from .migration.review_batch import _read_secure_private_file
 
     db = _session()
     try:
         user_id = (
             _reviewer_id_por_email(db, args.email) if args.email else None
         )
+        guardian_override = None
+        # Nome/telefone reais só entram via arquivo privado confinado
+        # (M15_IMPORT_PRIVATE_DIR, 0600) — nunca por argumento de linha de
+        # comando (shell history/ps expõem argumentos, nunca conteúdo de
+        # arquivo). Mesma cautela já aplicada à senha de usuário.
+        if args.responsavel_arquivo:
+            _path, conteudo, _dev, _ino = _read_secure_private_file(
+                args.responsavel_arquivo
+            )
+            try:
+                guardian_override = json.loads(conteudo.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise MultiSheetError(
+                    "arquivo_responsavel_json_invalido"
+                ) from exc
         result = decide_multi_sheet_review(
             db,
             args.batch,
@@ -340,6 +356,7 @@ def cmd_migracao_revisar_multiaba(args) -> int:
             args.decisao,
             args.mapping_version,
             user_id,
+            guardian_override=guardian_override,
         )
         db.commit()
         _emit(result, args.json)
@@ -913,6 +930,17 @@ def main(argv: list[str] | None = None) -> int:
                  "manter_primeira", "manter_segunda", "manter_ambas"),
     )
     mp.add_argument("--mapping-version", required=True)
+    mp.add_argument(
+        "--responsavel-arquivo",
+        default=None,
+        help=(
+            "Só com --decisao create_minor_patient_with_guardian: caminho "
+            "de um JSON PRIVADO (dentro de M15_IMPORT_PRIVATE_DIR, 0600) "
+            "com minor_name/guardian_name/guardian_phone/relationship_type "
+            "quando a fonte real não separa os dois em colunas próprias. "
+            "Nunca informar nome/telefone diretamente na linha de comando."
+        ),
+    )
 
     mp = _mig_parser(
         "revisar-multiaba-em-lote",

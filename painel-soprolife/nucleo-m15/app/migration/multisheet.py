@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from ..audit import audit
 from ..models import ImportBatch, LegacyAlias, MigrationDecision
+from ..normalize import normalize_name, normalize_phone
 from .adapters import ADAPTERS, ADAPTERS_VERSION
 from .manifest import ManifestError
 from .rawsnapshot import load_raw_envelope
@@ -94,6 +95,76 @@ REVIEW_CATEGORY_LABELS = {
         "decisão oficial gravável via revisar-multiaba"
     ),
 }
+
+# Vocabulário fechado do vínculo menor-responsável (M15.8). Mesma fonte
+# única usada pelo staging/decisão de fonte (campos.tipo_relacao_responsavel)
+# e pela substituição operador-autorizada por linha (guardian_override):
+# nenhuma heurística nova, apenas o alias já existente reaproveitado.
+GUARDIAN_RELATIONSHIP_TYPE_ALIASES = {
+    "mae": "mother", "mother": "mother",
+    "pai": "father", "father": "father",
+    "responsavel_legal": "legal_guardian",
+    "legal_guardian": "legal_guardian",
+    "avo": "grandparent", "avó": "grandparent",
+    "grandparent": "grandparent", "other": "other",
+}
+# Campos aceitos numa substituição pontual operador-autorizada para UMA
+# linha pendente decidida como create_minor_patient_with_guardian, quando a
+# fonte real não tem colunas separadas de responsável (M15.8). Nunca grava
+# prosa livre: só os quatro campos estruturados abaixo, cada um validado.
+GUARDIAN_OVERRIDE_FIELDS = frozenset(
+    ("minor_name", "guardian_name", "guardian_phone", "relationship_type")
+)
+_GUARDIAN_OVERRIDE_DECISION = "create_minor_patient_with_guardian"
+_GUARDIAN_NAME_MAX_LEN = 300
+
+
+def validate_guardian_override(payload: dict) -> dict:
+    """Valida a substituição estruturada menor/responsável (M15.8).
+
+    Fail-closed: qualquer campo ausente, vazio, de tipo errado ou fora do
+    vocabulário fechado de relacionamento rejeita a substituição inteira.
+    Retorna o payload normalizado (nomes com espaço colapsado/strip,
+    telefone e tipo de relação já canônicos) pronto para ser gravado em
+    ``MigrationDecision.detalhes``.
+    """
+    if not isinstance(payload, dict) or set(payload) != GUARDIAN_OVERRIDE_FIELDS:
+        raise MultiSheetError("guardian_override_schema_invalido")
+    minor_name = payload.get("minor_name")
+    guardian_name = payload.get("guardian_name")
+    guardian_phone = payload.get("guardian_phone")
+    relationship_type_raw = payload.get("relationship_type")
+    for label, value in (
+        ("minor_name", minor_name),
+        ("guardian_name", guardian_name),
+        ("guardian_phone", guardian_phone),
+        ("relationship_type", relationship_type_raw),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            raise MultiSheetError(f"guardian_override_{label}_ausente")
+    minor_name = " ".join(minor_name.split())
+    guardian_name = " ".join(guardian_name.split())
+    if (
+        len(minor_name) > _GUARDIAN_NAME_MAX_LEN
+        or len(guardian_name) > _GUARDIAN_NAME_MAX_LEN
+    ):
+        raise MultiSheetError("guardian_override_nome_excede_limite")
+    if normalize_name(minor_name) == normalize_name(guardian_name):
+        raise MultiSheetError("guardian_override_menor_e_responsavel_iguais")
+    guardian_phone_normalizado = normalize_phone(guardian_phone)
+    if not guardian_phone_normalizado:
+        raise MultiSheetError("guardian_override_telefone_invalido")
+    relationship_type = GUARDIAN_RELATIONSHIP_TYPE_ALIASES.get(
+        normalize_name(relationship_type_raw).replace(" ", "_")
+    )
+    if relationship_type is None:
+        raise MultiSheetError("guardian_override_tipo_relacao_invalido")
+    return {
+        "minor_name": minor_name,
+        "guardian_name": guardian_name,
+        "guardian_phone": guardian_phone.strip(),
+        "relationship_type": relationship_type,
+    }
 
 
 class MultiSheetError(ValueError):
@@ -338,6 +409,7 @@ def _decisions_by_token(db: Session, batch_id: str) -> dict[str, dict]:
         latest[token] = {
             "decision": decision.decisao,
             "decision_state": decision.decisao,
+            "guardian_override": details.get("guardian_override"),
         }
     return latest
 
@@ -434,11 +506,14 @@ def decide_multi_sheet_review(
     decision: str,
     mapping_version: str,
     user_id: str | None,
+    guardian_override: dict | None = None,
 ) -> dict:
     if user_id is None:
         raise MultiSheetError("revisor_autenticado_obrigatorio")
     if decision not in REVIEW_DECISIONS:
         raise MultiSheetError("decisao_de_revisao_invalida")
+    if guardian_override is not None and decision != _GUARDIAN_OVERRIDE_DECISION:
+        raise MultiSheetError("guardian_override_requer_decisao_guardian")
     batch = _get_multi_batch(db, batch_id, for_update=True)
     report = batch.params["multi_sheet_report"]
     if mapping_version != report["mapping_version"]:
@@ -465,17 +540,25 @@ def decide_multi_sheet_review(
     if current and current["decision"] == decision:
         raise MultiSheetError("decisao_de_revisao_ja_registrada")
 
+    validated_override = (
+        validate_guardian_override(guardian_override)
+        if guardian_override is not None
+        else None
+    )
+    detalhes = {
+        "batch_id": batch.id,
+        "private_reference_token": private_reference_token,
+        "mapping_version": mapping_version,
+        "category": item["category"],
+        "rule": "human_review_multi_sheet_dry_run",
+    }
+    if validated_override is not None:
+        detalhes["guardian_override"] = validated_override
     db.add(MigrationDecision(
         tipo=MULTI_SHEET_REVIEW_DECISION,
         decisao=decision,
         decidido_por=user_id,
-        detalhes={
-            "batch_id": batch.id,
-            "private_reference_token": private_reference_token,
-            "mapping_version": mapping_version,
-            "category": item["category"],
-            "rule": "human_review_multi_sheet_dry_run",
-        },
+        detalhes=detalhes,
     ))
     audit(
         db, "migracao.multiaba_revisao", "import_batches", batch.id, user_id,
