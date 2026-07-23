@@ -317,47 +317,59 @@ console.log("C2) Feature flag ligada (go-live M15.5A) e API base intocada");
 }
 
 // ───────────── D) payloads dos formulários preservados ─────────────────────
+// M16 — a criação de Lead, Espirometria/Consulta e Financeiro saiu do Núcleo
+// M15 (m15-nucleo.js) e passou a viver exclusivamente na Central de
+// Cadastros (js/central-cadastros.js), única implementação de cada
+// formulário. Encaminhamento (Pacientes de Parceiros) NÃO é uma das 7 abas
+// canônicas da Central e continua no Núcleo M15, por isso sua checagem
+// permanece sobre nucleoSrc, intocada.
 console.log();
-console.log("D) Payloads intactos (nomes de campo e chaves de API)");
+console.log("D) Payloads intactos (nomes de campo e chaves de API) — agora na Central");
 
-function trecho(marcadorInicio, marcadorFim) {
-  const i = nucleoSrc.indexOf(marcadorInicio);
+const centralJsPath = path.join(RAIZ, "js", "central-cadastros.js");
+const centralJsSrc = fs.readFileSync(centralJsPath, "utf8");
+
+function trechoCentral(marcadorInicio, marcadorFim) {
+  const i = centralJsSrc.indexOf(marcadorInicio);
   if (i < 0) return "";
-  const f = marcadorFim ? nucleoSrc.indexOf(marcadorFim, i) : -1;
-  return f > i ? nucleoSrc.slice(i, f) : nucleoSrc.slice(i);
+  const f = marcadorFim ? centralJsSrc.indexOf(marcadorFim, i) : -1;
+  return f > i ? centralJsSrc.slice(i, f) : "";
 }
 
-const leadSrc = trecho("Novo lead", '"Lead criado."');
-["person_id", '"origem"', '"canal_entrada"', '"servico_interesse"', '"modalidade"',
- '"etapa"', '"data_primeiro_contato"', '"data_retomada_manual"', '"responsavel"',
- '"observacao"'].forEach((k) => {
-  caso(`Novo lead envia ${k}`, leadSrc.indexOf(k) !== -1);
+const leadSrc = trechoCentral("LOADERS.lead = function", "function loadLeadRecents(");
+["person_id", '"servico_interesse"', '"origem"', '"canal_entrada"', '"responsavel"',
+ '"data_primeiro_contato"', '"data_retomada_manual"', '"observacao"'].forEach((k) => {
+  caso(`Central — Novo lead envia ${k}`, leadSrc.indexOf(k) !== -1);
 });
-caso("Novo lead: responsável está na linha de qualificação (antes das datas)",
+caso("Central — Novo lead: responsável está antes da linha de datas",
      leadSrc.indexOf('fld("Responsável"') < leadSrc.indexOf('fld("1º contato"'));
 
-const attSrc = trecho("Nova espirometria", '"Espirometria criada."');
-['isExam ? "data_exame" : "data_consulta"', '"local_atendimento"', '"partner_id"',
- '"partner_unit_id"', '"profissional"', '"origem"', '"responsavel"', '"observacao"',
- "idempotency_key"].forEach((k) => {
-  caso(`Espirometria/Consulta envia ${k}`, attSrc.indexOf(k) !== -1);
+const espSrc = trechoCentral("LOADERS.espirometria = function", "function loadEspRecents(");
+['status: val(form, "status")', "idempotency_key: m15().idemKey()", '"modalidade"',
+ '"local_atendimento"', '"partner_id"', '"partner_unit_id"', '"origem"',
+ '"responsavel"', '"observacao"', "broncodilatador"].forEach((k) => {
+  caso(`Central — Espirometria envia ${k}`, espSrc.indexOf(k) !== -1);
 });
-caso("Espirometria agrupa local/parceiro/unidade em grupo coeso",
-     /grp\("Local e parceria \(opcional\)"/.test(nucleoSrc));
 
-const lanSrc = trecho("Novo lançamento (gestor)", "m15EditBox");
-['tipo: val(f, "tipo")', "valor: moneyStr", 'status: val(f, "status")', "idempotency_key",
- '"categoria"', '"descricao"', '"data_competencia"', '"data_recebimento"',
- '"forma_pagamento"', '"origem_preco"', '"spirometry_exam_id"', '"consultation_id"',
- '"partner_referral_id"'].forEach((k) => {
-  caso(`Financeiro envia ${k}`, lanSrc.indexOf(k) !== -1);
+const conSrc = trechoCentral("LOADERS.consulta = function", "function loadConRecents(");
+['status: val(form, "status")', "idempotency_key: m15().idemKey()", '"modalidade"',
+ '"profissional"', '"origem"', '"responsavel"', '"observacao"'].forEach((k) => {
+  caso(`Central — Consulta envia ${k}`, conSrc.indexOf(k) !== -1);
 });
-caso("Financeiro: IDs técnicos em grupo secundário (m15-group-tech)",
-     lanSrc.indexOf("m15-group-tech") !== -1);
-caso("Financeiro: aviso de PII permanece",
-     lanSrc.indexOf("Nunca digite nome, telefone ou CPF") !== -1);
 
-caso("Encaminhamento: vínculo LAN em grupo técnico",
+const finSrc = trechoCentral("LOADERS.financeiro = function", "function loadFinRecents(");
+['tipo: val(form, "tipo")', "valor,", 'status: val(form, "status")',
+ "idempotency_key: m15().idemKey()", '"categoria"', '"descricao"', '"data_competencia"',
+ '"data_recebimento"', '"forma_pagamento"', '"origem_preco"',
+ "vinculo.spirometry_exam_id", "vinculo.consultation_id"].forEach((k) => {
+  caso(`Central — Financeiro envia ${k}`, finSrc.indexOf(k) !== -1);
+});
+caso("Central — Financeiro nunca expõe campo de nome/telefone/CPF no formulário",
+     !/name="nome"|name="telefone"|name="cpf"/.test(finSrc));
+caso("Central — Financeiro avisa que o vínculo substitui nome/telefone/CPF",
+     finSrc.indexOf("O financeiro NÃO guarda nome, telefone ou CPF") !== -1);
+
+caso("Encaminhamento (Núcleo M15): vínculo LAN em grupo técnico — entidade fora das 7 abas da Central",
      /grp\("Vínculo técnico \(opcional\)"[\s\S]{0,400}financial_entry_id[\s\S]{0,600}"m15-group-tech"/.test(nucleoSrc));
 
 console.log();
@@ -377,11 +389,11 @@ caso("altura padrão de controle 40px", cssSrc.indexOf("height: 40px") !== -1);
 caso("rótulo com altura fixa de 1 linha (não empurra o controle)",
      /\.m15-field-label\s*\{[^}]*height: 18px/.test(cssSrc));
 
-const camposData = [
-  ['dateInp("data_nascimento"', "Pessoas"],
-  ['dateInp("data_primeiro_contato", "", { parcial: true })', "Leads (parcial)"],
-  ['dateInp("data_retomada_manual"', "Leads retomada"],
-  ['dateInp("data", "", { parcial: true })', "Espirometria/Consulta (parcial)"],
+// Campos que continuam no Núcleo M15 (edição de registros existentes, ou
+// entidades fora das 7 abas canônicas da Central — Encaminhamento/Follow-up).
+const camposDataNucleo = [
+  ['dateInp("data_nascimento"', "Pessoas (edição)"],
+  ['dateInp("data_retomada_manual"', "Leads (edição)"],
   ['dateInp("data_inicio", "", { parcial: true })', "Parceria início (parcial)"],
   ['dateInp("data_encaminhamento", "", { parcial: true })', "Encaminhamento (parcial)"],
   ['dateInp("data_agendada"', "Encaminhamento agendada"],
@@ -390,15 +402,30 @@ const camposData = [
   ['dateInp("proximo_followup"', "Encaminhamento próximo follow-up"],
   ['dateInp("due_date"', "Follow-up vencimento"],
   ['dateInp("nova_data", "", { required: true })', "Follow-up nova tentativa"],
-  ['dateInp("data_competencia", "", { parcial: true })', "Financeiro competência (parcial)"],
-  ['dateInp("data_recebimento"', "Financeiro recebimento"],
+  ['dateInp("data_recebimento"', "Financeiro recebimento (edição)"],
 ];
-camposData.forEach(([marca, nome]) => {
-  caso(`calendário SoproLife em: ${nome}`, nucleoSrc.indexOf(marca) !== -1);
+camposDataNucleo.forEach(([marca, nome]) => {
+  caso(`calendário SoproLife (Núcleo M15) em: ${nome}`, nucleoSrc.indexOf(marca) !== -1);
 });
-caso("attachDates roda após cada render e no editor",
+caso("attachDates roda após cada render e no editor (Núcleo M15)",
      nucleoSrc.indexOf("loader().then(function () { attachDates(); })") !== -1 &&
      nucleoSrc.indexOf("attachDates(box)") !== -1);
+
+// Campos de criação que migraram para a Central de Cadastros.
+const camposDataCentral = [
+  ['dateInp(prefix + "_nasc", "")', "Central — pessoa inline (nascimento)"],
+  ['dateInp("data_primeiro_contato", "", { parcial: true })', "Central — Leads (parcial)"],
+  ['dateInp("data_retomada_manual", "")', "Central — Lead próxima ação"],
+  ['dateInp("data_exame", "", { parcial: true })', "Central — Espirometria (parcial)"],
+  ['dateInp("data_consulta", "", { parcial: true })', "Central — Consulta (parcial)"],
+  ['dateInp("data_competencia", "", { parcial: true })', "Central — Financeiro competência (parcial)"],
+  ['dateInp("data_recebimento", "")', "Central — Financeiro recebimento"],
+];
+camposDataCentral.forEach(([marca, nome]) => {
+  caso(`calendário SoproLife em: ${nome}`, centralJsSrc.indexOf(marca) !== -1);
+});
+caso("Central: attachDates roda após cada render",
+     centralJsSrc.indexOf(".then(() => attachDates(root))") !== -1);
 
 console.log();
 if (falhas) {

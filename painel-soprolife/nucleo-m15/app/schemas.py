@@ -25,7 +25,7 @@ EtapaLead = Literal[
     "novo", "em_contato", "agendado", "convertido", "perdido",
     "nao_respondeu", "aguardando_retomada",
 ]
-StatusExame = Literal["Aguardando", "Realizado", "Cancelado", "Remarcado"]
+StatusExame = Literal["Aguardando", "Realizado", "Laudo Liberado", "Cancelado", "Remarcado"]
 StatusConsulta = Literal["Agendada", "Realizada", "Cancelada", "Remarcada", "Não compareceu"]
 StatusEncaminhamento = Literal[
     "Recebido da clínica", "Aguardando contato", "Contato realizado", "Agendado",
@@ -156,6 +156,7 @@ class ExamCreate(StrictModel):
     partner_id: str | None = None
     partner_unit_id: str | None = None
     status: StatusExame = "Aguardando"
+    broncodilatador: bool | None = None
     origem: str | None = Field(default=None, max_length=120)
     responsavel: str | None = Field(default=None, max_length=120)
     idempotency_key: str | None = Field(default=None, min_length=4, max_length=64)
@@ -165,6 +166,7 @@ class ExamCreate(StrictModel):
 class ExamUpdate(StrictModel):
     status: StatusExame | None = None
     data_exame: str | None = Field(default=None, max_length=40)
+    broncodilatador: bool | None = None
     responsavel: str | None = Field(default=None, max_length=120)
     observacao: str | None = Field(default=None, max_length=4000)
 
@@ -439,6 +441,25 @@ class TransferCreate(StrictModel):
     data_prevista: date | None = None
     data_pagamento: date | None = None
     idempotency_key: str | None = Field(default=None, min_length=4, max_length=64)
+
+
+class FinanceSearch(StrictModel):
+    """Busca de lançamentos por corpo POST — código ou nome nunca em URL."""
+
+    q: str | None = Field(default=None, max_length=200)
+    pagina: int = Field(default=1, ge=1)
+    tamanho: int = Field(default=25, ge=1, le=100)
+
+
+class DuplicateCheck(StrictModel):
+    """Pré-checagem de duplicados ANTES de criar a pessoa — somente leitura.
+
+    Recebe nome/telefones via corpo POST (nunca URL) e devolve candidatos;
+    a decisão de prosseguir é sempre humana, nunca fusão automática.
+    """
+
+    nome_completo: str | None = Field(default=None, min_length=2, max_length=300)
+    telefones: list[str] = Field(default_factory=list, max_length=5)
 
 
 class PersonSearch(StrictModel):

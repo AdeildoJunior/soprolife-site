@@ -294,6 +294,16 @@
     return '<button class="m15-btn m15-btn-sec" type="button" data-m15-fechar>Fechar</button>';
   }
 
+  // Cadastro novo é SEMPRE na Central de Cadastros — as abas do núcleo
+  // mantêm listagem e edição; o botão abaixo leva à central com a aba certa.
+  function centralBtn(tab, label) {
+    return '<div class="m15-central-link">' +
+      '<button class="m15-btn" type="button" data-m15-central="' + esc(tab) + '">' +
+      esc(label) + "</button>" +
+      '<span class="m15-muted">Cadastros novos acontecem na Central de Cadastros — um único fluxo para toda a operação.</span>' +
+      "</div>";
+  }
+
   function wireClose(box) {
     var btn = box.querySelector("[data-m15-fechar]");
     if (btn) btn.addEventListener("click", function () { box.innerHTML = ""; });
@@ -394,6 +404,7 @@
         renderAuthArea();
         renderTabs();
         render();
+        notifySession();
       });
     } else {
       area.innerHTML =
@@ -451,6 +462,15 @@
     }
   }
 
+  // Ouvintes externos de sessão (Central de Cadastros) — avisados a cada
+  // login/logout para re-renderizar sem acoplamento direto.
+  var sessionListeners = [];
+  function notifySession() {
+    sessionListeners.forEach(function (cb) {
+      try { cb(); } catch (e) { /* ouvinte não pode quebrar o núcleo */ }
+    });
+  }
+
   function afterAuth() {
     return api("/auth/me").then(function (me) {
       state.user = me;
@@ -460,6 +480,7 @@
       renderAuthArea();
       renderTabs();
       render();
+      notifySession();
     });
   }
 
@@ -550,9 +571,9 @@
           { label: "Aguardando data", value: fila.totais.aguardando_data },
           { label: "Não contatar (ocultos)", value: fila.excluidos_nao_contatar },
         ]) + "</div>" +
-        '<div class="m15-aviso">M15 Beta em implantação controlada — acesso seguro via Tailscale (HTTPS). ' +
-        "O núcleo nativo coexiste com o painel atual: as telas antigas e o Google Sheets continuam intactos. " +
-        "Registros de demonstração seguem marcados como “sintético”.</div>";
+        '<div class="m15-aviso">Núcleo nativo (API M15 + PostgreSQL) é a fonte oficial da operação. ' +
+        "Cadastros novos acontecem na Central de Cadastros; o Google Sheets ficou como leitura/importação de legado " +
+        "(Automações e Migração). Registros de demonstração seguem marcados como “sintético”.</div>";
     });
   };
 
@@ -585,20 +606,10 @@
             if (podeEditar) row.push(editBtn(p.id));
             return row;
           }),
-          "Nenhuma pessoa cadastrada. Use o formulário abaixo."
+          "Nenhuma pessoa cadastrada. Use a Central de Cadastros."
         ) +
         '<div id="m15EditBox"></div>' +
-        (podeEditar
-          ? '<div class="m15-panel"><h3>Nova pessoa</h3><form class="m15-form" id="m15FormPessoa">' +
-            fld("Nome completo", inp("nome_completo", "", 'required minlength="2"'), 6) +
-            fld("Data de nascimento", dateInp("data_nascimento", ""), 3) +
-            fld("WhatsApp (opcional)", inp("whatsapp", "", 'placeholder="(21) 9…"'), 3) +
-            fld("Consentimento WhatsApp", sel("consentimento_whatsapp",
-              [["", "não informado"], "concedido", "desconhecido", "revogado"], ""), 3) +
-            fld("Observação", inp("observacao", ""), 9) +
-            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar pessoa</button></div>' +
-            "</form></div>"
-          : "");
+        (podeEditar ? centralBtn("paciente", "+ Nova pessoa / paciente") : "");
       document.getElementById("m15PessoasBuscar").addEventListener("click", function () {
         state.filters.pessoasQ = document.getElementById("m15PessoasQ").value;
         render();
@@ -609,23 +620,6 @@
           render();
         }
       });
-      var formPessoa = document.getElementById("m15FormPessoa");
-      if (formPessoa) {
-        formPessoa.addEventListener("submit", function (ev) {
-          ev.preventDefault();
-          var f = ev.target;
-          var payload = { nome_completo: val(f, "nome_completo"), contatos: [] };
-          if (val(f, "whatsapp")) {
-            payload.contatos.push({ tipo: "whatsapp", valor: val(f, "whatsapp"), principal: true });
-          }
-          setIf(payload, "data_nascimento", val(f, "data_nascimento"));
-          setIf(payload, "consentimento_whatsapp", val(f, "consentimento_whatsapp"));
-          setIf(payload, "observacao", val(f, "observacao"));
-          submitVia(f, function () {
-            return api("/pessoas", { method: "POST", body: JSON.stringify(payload) });
-          }, "Pessoa criada.");
-        });
-      }
       body().querySelectorAll("[data-m15-edit]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var p = items[btn.getAttribute("data-m15-edit")];
@@ -736,52 +730,14 @@
             if (podeEditar) row.push(editBtn(l.id));
             return row;
           }),
-          "Nenhum lead. Crie abaixo a partir de uma pessoa cadastrada."
+          "Nenhum lead. Cadastre pela Central de Cadastros."
         ) +
         '<div id="m15EditBox"></div>' +
-        (podeEditar
-          ? '<div class="m15-panel"><h3>Novo lead</h3><form class="m15-form" id="m15FormLead">' +
-            fld("Pessoa", inp("pessoa", "", "required"),
-              { span: 6, help: "Código PES-… ou nome já cadastrado na aba Pessoas." }) +
-            fld("Origem", inp("origem", "", 'placeholder="ex.: site, indicação"'), 3) +
-            fld("Canal de entrada", inp("canal_entrada", "", 'placeholder="ex.: whatsapp"'), 3) +
-            fld("Serviço de interesse", sel("servico_interesse",
-              [["", "—"], "espirometria", "consulta", "ambos", "outro"], ""), 3) +
-            fld("Modalidade", sel("modalidade", [["", "—"]].concat(MODALIDADES), ""), 3) +
-            fld("Etapa", sel("etapa", LEAD_ETAPAS, "novo"), 3) +
-            fld("Responsável", inp("responsavel", ""), 3) +
-            fld("1º contato", dateInp("data_primeiro_contato", "", { parcial: true }),
-              { span: 3, help: HELP_DATA_PARCIAL }) +
-            fld("Retomada manual", dateInp("data_retomada_manual", ""), 3) +
-            fld("Observação", inp("observacao", ""), 6) +
-            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar lead</button></div>' +
-            "</form></div>"
-          : "");
+        (podeEditar ? centralBtn("lead", "+ Novo lead") : "");
       document.getElementById("m15LeadsEtapa").addEventListener("change", function (ev) {
         state.filters.leadsEtapa = ev.target.value;
         render();
       });
-      var formLead = document.getElementById("m15FormLead");
-      if (formLead) {
-        formLead.addEventListener("submit", function (ev) {
-          ev.preventDefault();
-          var f = ev.target;
-          submitVia(f, function () {
-            return resolvePerson(val(f, "pessoa")).then(function (p) {
-              var payload = { person_id: p.id, etapa: val(f, "etapa") };
-              setIf(payload, "origem", val(f, "origem"));
-              setIf(payload, "canal_entrada", val(f, "canal_entrada"));
-              setIf(payload, "servico_interesse", val(f, "servico_interesse"));
-              setIf(payload, "modalidade", val(f, "modalidade"));
-              setIf(payload, "data_primeiro_contato", val(f, "data_primeiro_contato"));
-              setIf(payload, "data_retomada_manual", val(f, "data_retomada_manual"));
-              setIf(payload, "responsavel", val(f, "responsavel"));
-              setIf(payload, "observacao", val(f, "observacao"));
-              return api("/leads", { method: "POST", body: JSON.stringify(payload) });
-            });
-          }, "Lead criado.");
-        });
-      }
       body().querySelectorAll("[data-m15-edit]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var l = items[btn.getAttribute("data-m15-edit")];
@@ -824,17 +780,13 @@
     var isExam = kind === "espirometrias";
     var statusKey = isExam ? "espStatus" : "conStatus";
     var statusList = isExam
-      ? ["Aguardando", "Realizado", "Cancelado", "Remarcado"]
+      ? ["Aguardando", "Realizado", "Laudo Liberado", "Cancelado", "Remarcado"]
       : ["Agendada", "Realizada", "Cancelada", "Remarcada", "Não compareceu"];
     return function () {
       var status = state.filters[statusKey] || "";
       var podeEditar = can("operacional");
-      return Promise.all([
-        api("/" + kind + "?tamanho=50" + (status ? "&status=" + encodeURIComponent(status) : "")),
-        podeEditar && isExam ? partnerOptions().catch(function () { return []; }) : Promise.resolve([]),
-      ]).then(function (r) {
-        var data = r[0];
-        var partners = r[1];
+      return api("/" + kind + "?tamanho=50" + (status ? "&status=" + encodeURIComponent(status) : ""))
+        .then(function (data) {
         var items = byId(data.itens);
         body().innerHTML =
           '<div class="m15-filtros"><select id="m15AttStatus">' +
@@ -863,66 +815,13 @@
           ) +
           '<div id="m15EditBox"></div>' +
           (podeEditar
-            ? '<div class="m15-panel"><h3>' + (isExam ? "Nova espirometria" : "Nova consulta") +
-              '</h3><form class="m15-form" id="m15FormAtt">' +
-              fld("Pessoa", inp("pessoa", "", "required"),
-                { span: 6, help: "Código PES-… ou nome já cadastrado na aba Pessoas." }) +
-              fld(isExam ? "Data do exame" : "Data da consulta",
-                dateInp("data", "", { parcial: true }), { span: 3, help: HELP_DATA_PARCIAL }) +
-              fld("Status", sel("status", statusList, statusList[0]), 3) +
-              (isExam
-                ? fld("Modalidade", sel("modalidade",
-                    [["", "—"], "residencial", "cowork", "clinica_parceira"], ""), 4) +
-                  fld("Origem", inp("origem", ""), 4) +
-                  fld("Responsável", inp("responsavel", ""), 4) +
-                  grp("Local e parceria (opcional)",
-                    fld("Local de atendimento", inp("local_atendimento", ""), 4) +
-                    fld("Parceiro", sel("partner_id", [["", "sem parceiro"]].concat(partners), ""), 4) +
-                    fld("Unidade", sel("partner_unit_id", [["", "sem unidade"]], ""), 4))
-                : fld("Modalidade", sel("modalidade",
-                    [["", "—"], "teleconsulta", "residencial", "cowork", "clinica_parceira"], ""), 4) +
-                  fld("Profissional", inp("profissional", ""), 4) +
-                  fld("Origem", inp("origem", ""), 4) +
-                  fld("Responsável", inp("responsavel", ""), 4)) +
-              fld("Observação", inp("observacao", ""), isExam ? true : 8) +
-              '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">' +
-              (isExam ? "Criar espirometria" : "Criar consulta") + "</button></div>" +
-              "</form></div>"
+            ? centralBtn(isExam ? "espirometria" : "consulta",
+                isExam ? "+ Nova espirometria" : "+ Nova consulta")
             : "");
         document.getElementById("m15AttStatus").addEventListener("change", function (ev) {
           state.filters[statusKey] = ev.target.value;
           render();
         });
-        var form = document.getElementById("m15FormAtt");
-        if (form) {
-          if (isExam) wireUnitSelect(form, "partner_id", "partner_unit_id");
-          form.addEventListener("submit", function (ev) {
-            ev.preventDefault();
-            var f = ev.target;
-            submitVia(f, function () {
-              return resolvePerson(val(f, "pessoa")).then(function (p) {
-                var payload = {
-                  person_id: p.id,
-                  status: val(f, "status"),
-                  idempotency_key: idemKey(),
-                };
-                setIf(payload, isExam ? "data_exame" : "data_consulta", val(f, "data"));
-                setIf(payload, "modalidade", val(f, "modalidade"));
-                if (isExam) {
-                  setIf(payload, "local_atendimento", val(f, "local_atendimento"));
-                  setIf(payload, "partner_id", val(f, "partner_id"));
-                  setIf(payload, "partner_unit_id", val(f, "partner_unit_id"));
-                } else {
-                  setIf(payload, "profissional", val(f, "profissional"));
-                }
-                setIf(payload, "origem", val(f, "origem"));
-                setIf(payload, "responsavel", val(f, "responsavel"));
-                setIf(payload, "observacao", val(f, "observacao"));
-                return api("/" + kind, { method: "POST", body: JSON.stringify(payload) });
-              });
-            }, isExam ? "Espirometria criada." : "Consulta criada.");
-          });
-        }
         body().querySelectorAll("[data-m15-edit]").forEach(function (btn) {
           btn.addEventListener("click", function () {
             var e = items[btn.getAttribute("data-m15-edit")];
@@ -934,7 +833,10 @@
               fld("Data", dateInp("data", (isExam ? e.data_exame : e.data_consulta) || "",
                 { parcial: true }), { span: 3, help: HELP_DATA_PARCIAL }) +
               (isExam
-                ? fld("Responsável", inp("responsavel", e.responsavel || ""), 6)
+                ? fld("Broncodilatador", sel("broncodilatador",
+                    [["", "não informado"], ["true", "com BD"], ["false", "sem BD"]],
+                    e.broncodilatador == null ? "" : String(e.broncodilatador)), 3) +
+                  fld("Responsável", inp("responsavel", e.responsavel || ""), 3)
                 : fld("Profissional", inp("profissional", e.profissional || ""), 6)) +
               fld("Observação", inp("observacao", e.observacao || ""), true) +
               '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
@@ -949,8 +851,14 @@
                   var payload = {};
                   setIf(payload, "status", val(f, "status"));
                   setIf(payload, isExam ? "data_exame" : "data_consulta", val(f, "data"));
-                  if (isExam) setIf(payload, "responsavel", val(f, "responsavel"));
-                  else setIf(payload, "profissional", val(f, "profissional"));
+                  if (isExam) {
+                    setIf(payload, "responsavel", val(f, "responsavel"));
+                    if (val(f, "broncodilatador") !== "") {
+                      payload.broncodilatador = val(f, "broncodilatador") === "true";
+                    }
+                  } else {
+                    setIf(payload, "profissional", val(f, "profissional"));
+                  }
                   setIf(payload, "observacao", val(f, "observacao"));
                   submitVia(f, function () {
                     return api("/" + kind + "/" + e.id, {
@@ -1004,15 +912,7 @@
           }),
           "Nenhum parceiro. O cadastro institucional (ex.: Pastore) entra pelo comando privado seed-institucional."
         ) +
-        (podeEditar
-          ? '<h3>Novo parceiro</h3><form class="m15-form" id="m15FormParceiro">' +
-            fld("Nome", inp("nome", "", 'required minlength="2"'), 6) +
-            fld("Tipo", sel("tipo", ["clinica", "consultorio", "outro"], "clinica"), 2) +
-            fld("Status", sel("status", PARTNER_STATUS, "prospecto"), 2) +
-            fld("Cidade", inp("cidade", ""), 2) +
-            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar parceiro</button></div>' +
-            "</form>"
-          : "") +
+        (podeEditar ? centralBtn("clinica", "+ Novo parceiro / clínica") : "") +
         "</div>" +
         '<div class="m15-panel"><h3>Unidades (' + r[1].total + ")</h3>" +
         table(
@@ -1028,15 +928,7 @@
           }),
           "Nenhuma unidade cadastrada."
         ) +
-        (podeEditar
-          ? '<h3>Nova unidade</h3><form class="m15-form" id="m15FormUnidade">' +
-            fld("Parceiro", sel("partner_id", pOpts, "", "required"), 4) +
-            fld("Nome", inp("nome", "", "required"), 4) +
-            fld("Bairro", inp("bairro", ""), 2) +
-            fld("Cidade", inp("cidade", ""), 2) +
-            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar unidade</button></div>' +
-            "</form>"
-          : "") +
+        (podeEditar ? centralBtn("clinica", "+ Nova unidade física") : "") +
         "</div>" +
         '<div class="m15-panel"><h3>Contatos de parceiros (' + r[2].total + ")</h3>" +
         table(
@@ -1052,17 +944,7 @@
           }),
           "Nenhum contato de parceiro."
         ) +
-        (podeEditar
-          ? '<h3>Novo contato</h3><form class="m15-form" id="m15FormContato">' +
-            fld("Parceiro", sel("partner_id", pOpts, "", "required"), 4) +
-            fld("Nome", inp("nome", "", 'required minlength="2"'), 4) +
-            fld("Cargo", inp("cargo", ""), 4) +
-            fld("Telefone", inp("telefone", ""), 4) +
-            fld("E-mail", inp("email", ""), 4) +
-            fld("Principal", sel("principal", [["false", "não"], ["true", "sim"]], "false"), 4) +
-            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar contato</button></div>' +
-            "</form>"
-          : "") +
+        (podeEditar ? centralBtn("contato-b2b", "+ Novo contato B2B") : "") +
         "</div>" +
         '<div class="m15-panel"><h3>Parcerias (' + r[3].total + ")</h3>" +
         '<p class="m15-muted">Percentuais e valores de repasse são definidos aqui (papel gestor/admin) — ' +
@@ -1106,39 +988,6 @@
         var form = document.getElementById(id);
         if (form) form.addEventListener("submit", handler);
       }
-      onSubmit("m15FormParceiro", function (ev) {
-        ev.preventDefault();
-        var f = ev.target;
-        var payload = { nome: val(f, "nome"), tipo: val(f, "tipo"), status: val(f, "status") };
-        setIf(payload, "cidade", val(f, "cidade"));
-        submitVia(f, function () {
-          return api("/parceiros", { method: "POST", body: JSON.stringify(payload) });
-        }, "Parceiro criado.");
-      });
-      onSubmit("m15FormUnidade", function (ev) {
-        ev.preventDefault();
-        var f = ev.target;
-        var payload = { partner_id: val(f, "partner_id"), nome: val(f, "nome") };
-        setIf(payload, "bairro", val(f, "bairro"));
-        setIf(payload, "cidade", val(f, "cidade"));
-        submitVia(f, function () {
-          return api("/unidades", { method: "POST", body: JSON.stringify(payload) });
-        }, "Unidade criada.");
-      });
-      onSubmit("m15FormContato", function (ev) {
-        ev.preventDefault();
-        var f = ev.target;
-        var payload = {
-          partner_id: val(f, "partner_id"), nome: val(f, "nome"),
-          principal: val(f, "principal") === "true",
-        };
-        setIf(payload, "cargo", val(f, "cargo"));
-        setIf(payload, "telefone", val(f, "telefone"));
-        setIf(payload, "email", val(f, "email"));
-        submitVia(f, function () {
-          return api("/contatos-parceiros", { method: "POST", body: JSON.stringify(payload) });
-        }, "Contato criado.");
-      });
       onSubmit("m15FormParceria", function (ev) {
         ev.preventDefault();
         var f = ev.target;
@@ -1692,28 +1541,37 @@
 
   loaders.financeiro = function () {
     var podeGestor = can("gestor");
-    return api("/lancamentos?tamanho=50").then(function (data) {
+    return api("/lancamentos?tamanho=50&incluir_contexto=true").then(function (data) {
       var items = byId(data.itens);
       var total = data.itens.reduce(function (acc, e) {
         // valores chegam como string monetária ("250.00") — sem float no backend
         return e.tipo === "receita" && e.status === "Recebido"
           ? acc + (parseFloat(e.valor) || 0) : acc;
       }, 0);
+      // Contexto do paciente derivado por relação técnica (nunca armazenado
+      // no lançamento): LAN → ESP/CON/ENC → pessoa.
+      function vinculoHtml(e) {
+        var ctx = e.contexto || {};
+        var ref = ctx.exame || ctx.consulta || ctx.encaminhamento;
+        if (!ref) return "—";
+        var pessoa = ref.pessoa
+          ? " · " + esc(ref.pessoa.nome_completo) +
+            ' <span class="m15-muted">(' + esc(ref.pessoa.public_code) + ")</span>"
+          : "";
+        return "<strong>" + esc(ref.public_code) + "</strong>" + pessoa;
+      }
       body().innerHTML =
         cards([
           { label: "Lançamentos", value: data.total },
           { label: "Receitas recebidas (página)", value: "R$ " + total.toFixed(2), cls: "m15-ok" },
         ]) +
         '<div class="m15-aviso">Financeiro do núcleo é separado dos dados pessoais: ' +
-        "sem nome, telefone ou CPF — apenas IDs técnicos (LAN ↔ ESP/CON/ENC).</div>" +
+        "sem nome, telefone ou CPF gravados — o paciente exibido ao lado vem da " +
+        "relação técnica (LAN ↔ ESP/CON/ENC) no momento da consulta.</div>" +
         table(
-          ["Código", "Tipo", "Categoria", "Valor", "Competência", "Status", "Vínculos"]
+          ["Código", "Tipo", "Categoria", "Valor", "Competência", "Status", "Vínculo · Paciente"]
             .concat(podeGestor ? ["Ações"] : []),
           data.itens.map(function (e) {
-            var links = [];
-            if (e.spirometry_exam_id) links.push("exame");
-            if (e.consultation_id) links.push("consulta");
-            if (e.partner_referral_id) links.push("encaminhamento");
             var row = [
               "<strong>" + esc(e.public_code) + "</strong>",
               esc(e.tipo),
@@ -1721,7 +1579,7 @@
               "R$ " + esc(e.valor || "0.00"),
               fmtDate(e.data_competencia) + (e.data_competencia_dia_assumido ? " (dia assumido)" : ""),
               pill(e.status),
-              links.join(", ") || "—",
+              vinculoHtml(e),
             ];
             if (podeGestor) row.push(editBtn(e.id));
             return row;
@@ -1729,55 +1587,7 @@
           "Nenhum lançamento no núcleo M15. A fonte financeira legada (Financeiro_Lancamentos) permanece intacta."
         ) +
         '<div id="m15EditBox"></div>' +
-        (podeGestor
-          ? '<div class="m15-panel"><h3>Novo lançamento (gestor)</h3>' +
-            '<p class="m15-muted">Nunca digite nome, telefone ou CPF — a API rejeita PII em categoria/descrição.</p>' +
-            '<form class="m15-form" id="m15FormLan">' +
-            fld("Tipo", sel("tipo", ["receita", "despesa", "repasse"], "receita"), 3) +
-            fld("Valor (R$)", inp("valor", "", 'type="number" step="0.01" min="0.01" required'), 3) +
-            fld("Categoria", inp("categoria", "", 'placeholder="ex.: Espirometria"'), 3) +
-            fld("Competência", dateInp("data_competencia", "", { parcial: true }),
-              { span: 3, help: HELP_DATA_PARCIAL }) +
-            grp("Pagamento e baixa",
-              fld("Status", sel("status", ["Pendente", "Recebido", "Parcial", "Cortesia", "Cancelado"], "Pendente"), 3) +
-              fld("Data de recebimento", dateInp("data_recebimento", ""), 3) +
-              fld("Forma de pagamento", sel("forma_pagamento", [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"], ""), 3) +
-              fld("Origem do preço", sel("origem_preco", [["", "—"], "Tabela", "Promoção", "Parceria", "Negociação", "Cortesia"], ""), 3)) +
-            grp("Vínculos técnicos (opcionais) — LAN ↔ ESP/CON/ENC",
-              fld("ID exame (ESP)", inp("spirometry_exam_id", ""), 4) +
-              fld("ID consulta (CON)", inp("consultation_id", ""), 4) +
-              fld("ID encaminhamento (ENC)", inp("partner_referral_id", ""), 4),
-              "m15-group-tech") +
-            fld("Descrição (sem PII)", inp("descricao", ""),
-              { span: 12, help: "Texto livre opcional — nunca inclua nome, telefone ou CPF." }) +
-            '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Criar lançamento</button></div>' +
-            "</form></div>"
-          : "");
-      var formLan = document.getElementById("m15FormLan");
-      if (formLan) {
-        formLan.addEventListener("submit", function (ev) {
-          ev.preventDefault();
-          var f = ev.target;
-          var payload = {
-            tipo: val(f, "tipo"),
-            valor: moneyStr(val(f, "valor")),
-            status: val(f, "status"),
-            idempotency_key: idemKey(),
-          };
-          setIf(payload, "categoria", val(f, "categoria"));
-          setIf(payload, "descricao", val(f, "descricao"));
-          setIf(payload, "data_competencia", val(f, "data_competencia"));
-          setIf(payload, "data_recebimento", val(f, "data_recebimento"));
-          setIf(payload, "forma_pagamento", val(f, "forma_pagamento"));
-          setIf(payload, "origem_preco", val(f, "origem_preco"));
-          setIf(payload, "spirometry_exam_id", val(f, "spirometry_exam_id"));
-          setIf(payload, "consultation_id", val(f, "consultation_id"));
-          setIf(payload, "partner_referral_id", val(f, "partner_referral_id"));
-          submitVia(f, function () {
-            return api("/lancamentos", { method: "POST", body: JSON.stringify(payload) });
-          }, "Lançamento criado.");
-        });
-      }
+        (podeGestor ? centralBtn("financeiro", "+ Novo lançamento") : "");
       body().querySelectorAll("[data-m15-edit]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var e = items[btn.getAttribute("data-m15-edit")];
@@ -2325,6 +2135,54 @@
         activate(config);
       });
   }
+
+  // Deep-link "+ Novo …" → Central de Cadastros (delegado no documento:
+  // sobrevive a qualquer re-render das abas do núcleo).
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target.closest && ev.target.closest("[data-m15-central]");
+    if (!btn) return;
+    if (window.SoproCentral && typeof window.SoproCentral.open === "function") {
+      window.SoproCentral.open(btn.getAttribute("data-m15-central"));
+    } else {
+      toast("Central de Cadastros indisponível nesta página.", "erro");
+    }
+  });
+
+  // Cliente compartilhado do núcleo M15 — usado pela Central de Cadastros.
+  // O token continua SOMENTE em memória, dentro deste módulo; a Central
+  // nunca vê a credencial, apenas dispara chamadas autenticadas.
+  window.SoproM15 = {
+    api: api,
+    can: can,
+    idemKey: idemKey,
+    hasToken: function () { return !!state.token; },
+    getUser: function () { return state.user; },
+    access: function () { classifyAccess(); return state.access; },
+    login: function (email, senha) {
+      return api("/auth/token", {
+        method: "POST", body: JSON.stringify({ email: email, password: senha }),
+      }).then(function (resp) {
+        state.token = resp.token;
+        return afterAuth();
+      });
+    },
+    useToken: function (token) {
+      state.token = (token || "").trim();
+      return afterAuth();
+    },
+    logout: function () {
+      state.token = "";
+      state.user = null;
+      renderAuthArea();
+      renderTabs();
+      render();
+      notifySession();
+    },
+    onSessionChange: function (cb) {
+      if (typeof cb === "function") sessionListeners.push(cb);
+    },
+    refresh: function () { render(); },
+  };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);

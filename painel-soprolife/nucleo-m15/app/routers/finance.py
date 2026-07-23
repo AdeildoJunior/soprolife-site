@@ -16,9 +16,18 @@ from ..dates import parse_incomplete_date
 from ..db import get_db
 from ..domain import ensure_sem_pcmso
 from ..ids import allocate_public_code
-from ..models import FinancialEntry, PartnerTransfer, User
+from ..models import (
+    Consultation,
+    FinancialEntry,
+    PartnerReferral,
+    PartnerTransfer,
+    Person,
+    SpirometryExam,
+    User,
+)
+from ..normalize import normalize_name
 from ..pagination import PageParams, paginate
-from ..schemas import FinancialEntryCreate, FinancialEntryUpdate, TransferCreate
+from ..schemas import FinanceSearch, FinancialEntryCreate, FinancialEntryUpdate, TransferCreate
 from ..security import ROLE_GESTOR, ROLE_LEITURA, require_role
 from ..serializers import ser_financial_entry, ser_transfer
 from ..services.idempotency import idempotent_create
@@ -58,10 +67,56 @@ def _check_pcmso(db: Session, request: Request, user: User, payload, contexto: s
         raise
 
 
+def _entry_context(db: Session, entry: FinancialEntry) -> dict:
+    """Contexto derivado SOMENTE por relação técnica (LAN ↔ ESP/CON/ENC).
+
+    O nome do paciente nunca é armazenado no lançamento — é lido da pessoa
+    vinculada no momento da exibição, preservando a separação PII/financeiro.
+    """
+    ctx: dict = {}
+
+    def _person_ctx(person_id: str | None) -> dict | None:
+        if not person_id:
+            return None
+        person = db.get(Person, person_id)
+        if not person:
+            return None
+        return {"public_code": person.public_code, "nome_completo": person.nome_completo}
+
+    if entry.spirometry_exam_id:
+        exam = db.get(SpirometryExam, entry.spirometry_exam_id)
+        if exam:
+            ctx["exame"] = {
+                "public_code": exam.public_code,
+                "data_exame": exam.data_exame.isoformat() if exam.data_exame else None,
+                "status": exam.status,
+                "pessoa": _person_ctx(exam.person_id),
+            }
+    if entry.consultation_id:
+        con = db.get(Consultation, entry.consultation_id)
+        if con:
+            ctx["consulta"] = {
+                "public_code": con.public_code,
+                "data_consulta": con.data_consulta.isoformat() if con.data_consulta else None,
+                "status": con.status,
+                "pessoa": _person_ctx(con.person_id),
+            }
+    if entry.partner_referral_id:
+        ref = db.get(PartnerReferral, entry.partner_referral_id)
+        if ref:
+            ctx["encaminhamento"] = {
+                "public_code": ref.public_code,
+                "status": ref.status,
+                "pessoa": _person_ctx(ref.person_id),
+            }
+    return ctx
+
+
 @router.get("/lancamentos")
 def list_entries(
     tipo: str | None = None,
     status: str | None = None,
+    incluir_contexto: bool = False,
     params: PageParams = Depends(),
     db: Session = Depends(get_db),
     _user: User = Depends(require_role(ROLE_LEITURA)),
@@ -71,7 +126,76 @@ def list_entries(
         stmt = stmt.where(FinancialEntry.tipo == tipo)
     if status:
         stmt = stmt.where(FinancialEntry.status == status)
-    return paginate(db, stmt, params, ser_financial_entry)
+    if not incluir_contexto:
+        return paginate(db, stmt, params, ser_financial_entry)
+
+    def _ser(entry: FinancialEntry) -> dict:
+        data = ser_financial_entry(entry)
+        data["contexto"] = _entry_context(db, entry)
+        return data
+
+    return paginate(db, stmt, params, _ser)
+
+
+@router.post("/lancamentos/busca")
+def search_entries(
+    payload: FinanceSearch,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_LEITURA)),
+):
+    """Busca por corpo POST (nome/código nunca em URL/log): casa código do
+    lançamento (LAN-…), código do vínculo (ESP-/CON-/ENC-…) ou nome do
+    paciente derivado da relação técnica."""
+    q = (payload.q or "").strip()
+    stmt = select(FinancialEntry).order_by(FinancialEntry.created_at.desc())
+    upper = q.upper()
+    if upper.startswith("LAN-"):
+        stmt = stmt.where(FinancialEntry.public_code == upper)
+    elif upper.startswith("ESP-"):
+        stmt = stmt.join(
+            SpirometryExam, FinancialEntry.spirometry_exam_id == SpirometryExam.id
+        ).where(SpirometryExam.public_code == upper)
+    elif upper.startswith("CON-"):
+        stmt = stmt.join(
+            Consultation, FinancialEntry.consultation_id == Consultation.id
+        ).where(Consultation.public_code == upper)
+    elif upper.startswith("ENC-"):
+        stmt = stmt.join(
+            PartnerReferral, FinancialEntry.partner_referral_id == PartnerReferral.id
+        ).where(PartnerReferral.public_code == upper)
+    elif q:
+        term = f"%{normalize_name(q)}%"
+        exam_person = (
+            select(FinancialEntry.id)
+            .join(SpirometryExam, FinancialEntry.spirometry_exam_id == SpirometryExam.id)
+            .join(Person, SpirometryExam.person_id == Person.id)
+            .where(Person.nome_normalizado.like(term))
+        )
+        con_person = (
+            select(FinancialEntry.id)
+            .join(Consultation, FinancialEntry.consultation_id == Consultation.id)
+            .join(Person, Consultation.person_id == Person.id)
+            .where(Person.nome_normalizado.like(term))
+        )
+        ref_person = (
+            select(FinancialEntry.id)
+            .join(PartnerReferral, FinancialEntry.partner_referral_id == PartnerReferral.id)
+            .join(Person, PartnerReferral.person_id == Person.id)
+            .where(Person.nome_normalizado.like(term))
+        )
+        stmt = stmt.where(
+            FinancialEntry.id.in_(exam_person)
+            | FinancialEntry.id.in_(con_person)
+            | FinancialEntry.id.in_(ref_person)
+        )
+
+    def _ser(entry: FinancialEntry) -> dict:
+        data = ser_financial_entry(entry)
+        data["contexto"] = _entry_context(db, entry)
+        return data
+
+    params = PageParams(pagina=payload.pagina, tamanho=payload.tamanho)
+    return paginate(db, stmt, params, _ser)
 
 
 @router.post("/lancamentos", status_code=201)

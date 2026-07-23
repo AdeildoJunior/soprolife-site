@@ -151,6 +151,7 @@ def ser_exam(e: m.SpirometryExam) -> dict:
         "partner_id": e.partner_id,
         "partner_unit_id": e.partner_unit_id,
         "status": e.status,
+        "broncodilatador": e.broncodilatador,
         "origem": e.origem,
         "responsavel": e.responsavel,
         "idempotency_key": e.idempotency_key,

@@ -252,6 +252,8 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
         String(UUID_LEN), ForeignKey("partner_units.id")
     )
     status: Mapped[str] = mapped_column(String(20), default="Aguardando", nullable=False)
+    # None = não informado (registros históricos); True/False = com/sem BD
+    broncodilatador: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     origem: Mapped[str | None] = mapped_column(String(120))
     responsavel: Mapped[str | None] = mapped_column(String(120))
     idempotency_key: Mapped[str | None] = mapped_column(String(64), unique=True)

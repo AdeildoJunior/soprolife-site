@@ -20,6 +20,7 @@ from ..pagination import PageParams, paginate
 from ..schemas import (
     ConsentIn,
     ContactIn,
+    DuplicateCheck,
     PersonCreate,
     PersonRelationshipCreate,
     PersonRelationshipDeactivate,
@@ -87,8 +88,16 @@ def search_people(
     stmt = select(Person).order_by(Person.created_at.desc())
     if payload.q:
         term = normalize_name(payload.q)
+        phone = normalize_phone(payload.q)
+        digits_in_q = sum(c.isdigit() for c in payload.q)
         if payload.q.upper().startswith("PES-"):
             stmt = stmt.where(Person.public_code == payload.q.upper())
+        elif phone and digits_in_q >= 8 and digits_in_q >= len(payload.q.strip()) // 2:
+            # Termo majoritariamente numérico: busca por telefone normalizado
+            # nos contatos (whatsapp/telefone) — candidato, nunca prova.
+            stmt = stmt.join(
+                PersonContact, PersonContact.person_id == Person.id
+            ).where(PersonContact.valor_normalizado == phone).distinct()
         else:
             stmt = stmt.where(Person.nome_normalizado.like(f"%{term}%"))
     if payload.status:
@@ -97,6 +106,34 @@ def search_people(
         stmt = stmt.where(Person.nao_contatar == payload.nao_contatar)
     params = PageParams(pagina=payload.pagina, tamanho=payload.tamanho)
     return paginate(db, stmt, params, ser_person)
+
+
+@router.post("/verificar-duplicados")
+def check_duplicates(
+    payload: DuplicateCheck,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    """Pré-checagem de duplicados sem efeito colateral: nada é criado nem
+    registrado — apenas devolve candidatos para aviso na UI antes do cadastro."""
+    phones = [p for p in (normalize_phone(t) for t in payload.telefones) if p]
+    candidates = find_person_candidates(
+        db, normalize_name(payload.nome_completo), phones
+    )
+    return {
+        "total": len(candidates),
+        "candidatos": [
+            {
+                "id": person.id,
+                "public_code": person.public_code,
+                "nome_completo": person.nome_completo,
+                "data_nascimento": person.data_nascimento.isoformat()
+                if person.data_nascimento else None,
+                "motivo": motivo,
+            }
+            for person, motivo in candidates
+        ],
+    }
 
 
 @router.post("", status_code=201)

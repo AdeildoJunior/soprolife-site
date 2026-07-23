@@ -217,6 +217,7 @@ def create_exam(
             partner_id=payload.partner_id,
             partner_unit_id=payload.partner_unit_id,
             status=payload.status,
+            broncodilatador=payload.broncodilatador,
             origem=payload.origem,
             responsavel=payload.responsavel,
             idempotency_key=key,
@@ -246,7 +247,8 @@ def create_exam(
 
 
 def _sync_exam_followup(db: Session, person: Person, exam: SpirometryExam) -> dict:
-    active = exam.status == "Realizado" and exam.data_exame is not None
+    # "Laudo Liberado" pressupõe exame realizado — mantém o follow-up ativo.
+    active = exam.status in ("Realizado", "Laudo Liberado") and exam.data_exame is not None
     fup, motivo = sync_followup_for_origin(
         db, person, "pos_exame", "spirometry_exams", exam.id,
         due=due_after_attendance(exam.data_exame) if active else None,
@@ -276,6 +278,9 @@ def update_exam(
     if payload.data_exame is not None:
         _apply_date(exam, "data_exame", payload.data_exame)
         changed.append("data_exame")
+    if payload.broncodilatador is not None:
+        exam.broncodilatador = payload.broncodilatador
+        changed.append("broncodilatador")
     if payload.responsavel is not None:
         exam.responsavel = payload.responsavel
         changed.append("responsavel")

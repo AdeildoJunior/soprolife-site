@@ -157,8 +157,19 @@ print("── UI: datas clínicas e chave persistente ──")
 appjs = ler("js/app.js")
 caso("data clínica não nasce com hoje (sem value: hojeISO())",
      "value: hojeISO()" not in appjs)
-caso("chave de idempotência sobrevive a refresh (sessionStorage)",
-     "sessionStorage" in appjs and "obterIdempotencyKeyEspi" in appjs)
+# M16 — a Nova Espirometria (com sua chave de idempotência em sessionStorage,
+# só naquele formulário) foi consolidada na Central de Cadastros. Lá a
+# proteção anti-duplo-clique é: chave criptográfica nova por tentativa de
+# envio (m15().idemKey(), crypto.getRandomValues) + botão desabilitado
+# durante o POST + o servidor tratando mesma chave/payload como replay
+# idempotente (idempotent_create) e mesma chave/payload diferente como 409 —
+# ver nucleo-m15/app/services/idempotency.py. Não depende mais de
+# sessionStorage sobreviver a um refresh.
+centraljs = ler("js/central-cadastros.js")
+caso("chave de idempotência da Central é gerada via API do núcleo (m15().idemKey())",
+     "m15().idemKey()" in centraljs)
+caso("Central desabilita o botão de envio durante o POST (anti duplo-clique)",
+     "btn.disabled = true;" in centraljs)
 caso("modal Pastore sem custos pré-preenchidos com 0",
      not re.search(r'id: "repasse_pastore"[^}]*value: 0', appjs))
 

@@ -301,262 +301,76 @@ for (const forma of ["Pix", "Dinheiro", "Cartão", "Outro"]) {
        rForma.ok === true && rForma.payload.forma_pagamento === forma);
 }
 
-// 18. M11.2A — Command Center financeiro. Checagens estáticas de texto
-// (sem require do .gs — Apps Script não é um módulo Node válido, e sem rede/
-// Google Sheets nesta etapa): confirmam que a ação existe nos dois lados,
-// que a aba nova não carrega campo de paciente e que nenhum segredo/URL do
-// Apps Script vaza para o front-end.
+// M16 — Central de Cadastros consolidou TODA criação (lead, paciente, exame,
+// consulta, clínica, contato B2B, financeiro) em js/central-cadastros.js,
+// contra a API M15/PostgreSQL. O antigo dual-save da Nova Espirometria
+// (bindFormEspiFinanceiro/buildEspirometriaOperacionalPayload/ACTION_MAP/
+// camposFinanceiro em renderEntradaDados) e o modal de staging da Pastore
+// (openNovoAtendimentoPastoreModal com o helper f()) foram REMOVIDOS de
+// app.js por decisão explícita do produto (uma única implementação de cada
+// formulário) — não por regressão. As seções abaixo substituem as antigas
+// checagens de integração (M11.2A–M14.3A) por checagens do estado atual:
+// nenhuma duplicata sobrevive em app.js, e os testes de PII/fetch/XHR do
+// módulo financeiro puro (espirometria-financeiro.js, casos 1–17 acima)
+// continuam intactos porque o arquivo em si não foi tocado.
 console.log();
-console.log("M11.2A — Command Center financeiro (checagens estáticas)");
+console.log("M16 — Central de Cadastros consolidou a Nova Espirometria (checagens estáticas)");
 
 const appJsPath = path.resolve(__dirname, "../js/app.js");
 const gsPath    = path.resolve(__dirname, "../apps-script/command-center-api.gs");
+const centralJsPath = path.resolve(__dirname, "../js/central-cadastros.js");
 const appJsSrc  = fs.readFileSync(appJsPath, "utf8");
 const gsSrc     = fs.readFileSync(gsPath, "utf8");
 const efSrc     = fs.readFileSync(path.resolve(__dirname, "../js/espirometria-financeiro.js"), "utf8");
+const centralJsSrc = fs.readFileSync(centralJsPath, "utf8");
 
-caso("registrarEspirometriaFinanceiro existe no front-end (app.js)",
-     appJsSrc.includes("registrarEspirometriaFinanceiro"));
-caso("registrarEspirometriaFinanceiro existe no Apps Script (função)",
+caso("app.js não contém mais o dual-save legado da Nova Espirometria (bindFormEspiFinanceiro)",
+     !appJsSrc.includes("bindFormEspiFinanceiro") &&
+     !appJsSrc.includes("registrarEspirometriaFinanceiro"));
+caso("app.js não contém mais o ACTION_MAP legado de Entrada de Dados",
+     !/const ACTION_MAP\s*=\s*\{/.test(appJsSrc));
+caso("app.js não contém mais o helper f() de opção em branco do modal Pastore (modal removido)",
+     !appJsSrc.includes('<option value="">—</option>${opts}</select>'));
+caso("openNovoAtendimentoPastoreModal virou deep-link para a Central (sem formulário próprio)",
+     /function openNovoAtendimentoPastoreModal\(\)\s*\{[\s\S]{0,300}?SoproCentral\.open\("espirometria"/.test(appJsSrc));
+
+caso("Apps Script mantém _registrarEspirometriaFinanceiro (infra legada/import, não apagada)",
      /function _registrarEspirometriaFinanceiro\s*\(/.test(gsSrc));
-caso("registrarEspirometriaFinanceiro está registrada no switch de ações do Apps Script",
-     /case "registrarEspirometriaFinanceiro":/.test(gsSrc));
-caso("Financeiro_Lancamentos aparece no Apps Script",
+caso("Apps Script mantém _createEspirometria (infra legada/import, não apagada)",
+     /function _createEspirometria\s*\(/.test(gsSrc));
+caso("Financeiro_Lancamentos aparece no Apps Script (fonte histórica preservada)",
      gsSrc.includes("Financeiro_Lancamentos"));
-
-const cabecalhoMatch = gsSrc.match(/_FINANCEIRO_LANCAMENTOS_CABECALHO\s*=\s*\[([\s\S]*?)\];/);
-caso("cabeçalho de Financeiro_Lancamentos encontrado no Apps Script", !!cabecalhoMatch);
-if (cabecalhoMatch) {
-  const CAMPOS_PROIBIDOS = [
-    "nome", "primeiro_nome", "paciente", "responsavel", "telefone", "whatsapp",
-    "cpf", "email", "endereco", "token", "secret",
-  ];
-  const cabecalhoHeaders = (cabecalhoMatch[1].match(/"([^"]+)"/g) || []).map((s) => s.slice(1, -1));
-  const vazamento = CAMPOS_PROIBIDOS.filter((c) => cabecalhoHeaders.includes(c));
-  caso("cabeçalho de Financeiro_Lancamentos não contém campos proibidos", vazamento.length === 0,
-       vazamento.join(", "));
-}
 
 caso("app.js não contém URL do Apps Script (script.google.com)",
      !/script\.google\.com/.test(appJsSrc));
 caso("app.js não contém propriedade API_TOKEN hardcoded",
      !/API_TOKEN/.test(appJsSrc));
-
 caso("espirometria-financeiro.js continua sem fetch",
      !/\bfetch\s*\(/.test(efSrc));
 caso("espirometria-financeiro.js continua sem XMLHttpRequest",
      !/XMLHttpRequest/.test(efSrc));
 
-// M11.2B — ajustes finos pós-teste real: origem_preco automática por chip,
-// id_atendimento gerado no front (hidden input estável por formulário) e
-// upsert seguro no Apps Script. Checagens estáticas de texto (sem DOM).
 console.log();
-console.log("M11.2B — ajustes finos pós-teste real (checagens estáticas)");
+console.log("M16 — Central de Cadastros: equivalentes de segurança na nova aba Espirometria");
 
-caso("app.js gera id_atendimento para a Nova Espirometria",
-     /function gerarIdAtendimentoEspi\s*\(/.test(appJsSrc) &&
-     appJsSrc.includes('id="id_atendimento" name="id_atendimento"'));
-caso("app.js mapeia R$250 para origem_preco Tabela",
-     /250:\s*"Tabela"/.test(appJsSrc));
-caso("Apps Script continua com Financeiro_Lancamentos (upsert por id_atendimento)",
-     gsSrc.includes("Financeiro_Lancamentos") && gsSrc.includes('"id_atendimento"'));
-
-// M11.2C — Nova Espirometria enxuta e pré-preenchida. Checagens estáticas de
-// texto sobre app.js (sem DOM): responsável virou select fechado, chips vão
-// de R$250 a R$200 de 10 em 10, R$220 mapeia para Promoção. M14.3A (correção
-// final) removeu os defaults factuais de status_pagamento/forma_pagamento —
-// ver seção dedicada mais abaixo.
-console.log();
-console.log("M11.2C — Nova Espirometria enxuta e pré-preenchida (checagens estáticas)");
-
-caso('Responsável contém "Adeildo"', /EF_RESPONSAVEL_OPTS\s*=\s*\[[^\]]*"Adeildo"/.test(appJsSrc));
-caso('Responsável contém "Luiz Faustino"', /EF_RESPONSAVEL_OPTS\s*=\s*\[[^\]]*"Luiz Faustino"/.test(appJsSrc));
-
-for (const valor of [250, 240, 230, 220, 210, 200]) {
-  caso(`chip de preço contém valor ${valor}`, new RegExp(`valor:\\s*${valor}\\b`).test(appJsSrc));
-}
-caso('chip "Outro valor" continua presente', appJsSrc.includes("Outro valor"));
-
-caso("app.js mapeia R$220 para origem_preco Promoção",
-     /220:\s*"Promoção"/.test(appJsSrc));
-
-// M14.3A (correção final) — status_pagamento/forma_pagamento NÃO vêm mais
-// pré-preenchidos: o operador escolhe explicitamente (ver seção dedicada
-// "defaults factuais removidos da UI" mais abaixo, que confirma a ausência
-// desses valores).
-
-caso("id_atendimento continua existindo no payload financeiro", CHAVES.includes("id_atendimento"));
-
-// M11.2C.1 — "Dados opcionais / CRM": Origem detalhada e Motivo do próximo
-// contato viram select de opções fechadas em vez de texto livre. Checagens
-// estáticas simples de texto sobre app.js (sem DOM) — não mexe no payload
-// financeiro nem em espirometria-financeiro.js.
-console.log();
-console.log("M11.2C.1 — Opções prontas em Dados opcionais / CRM (checagens estáticas)");
-
-caso('app.js contém "Google" (Origem detalhada)', appJsSrc.includes("Google"));
-caso('app.js contém "Instagram" (Origem detalhada)', appJsSrc.includes("Instagram"));
-caso('app.js contém "WhatsApp" (Origem detalhada)', appJsSrc.includes("WhatsApp"));
-caso('app.js contém "Indicação médica" (Origem detalhada)', appJsSrc.includes("Indicação médica"));
-caso('app.js contém "Empresa / PCMSO" (Origem detalhada)', appJsSrc.includes("Empresa / PCMSO"));
-caso('app.js contém "Confirmar agendamento" (Motivo do próximo contato)', appJsSrc.includes("Confirmar agendamento"));
-caso('app.js contém "Enviar preparo" (Motivo do próximo contato)', appJsSrc.includes("Enviar preparo"));
-caso('app.js contém "Solicitar pedido médico" (Motivo do próximo contato)', appJsSrc.includes("Solicitar pedido médico"));
-
-caso("espirometria-financeiro.js continua sem fetch (M11.2C.1 não mexeu no arquivo)",
-     !/\bfetch\s*\(/.test(efSrc));
-caso("espirometria-financeiro.js continua sem XMLHttpRequest (M11.2C.1 não mexeu no arquivo)",
-     !/XMLHttpRequest/.test(efSrc));
-
-// M12.2A — Nova Espirometria também grava registro operacional em CRM
-// Espirometria. bindFormEspiFinanceiro() agora faz dual-save: chama
-// createEspirometria (ACTION_MAP.espi) com o payload operacional e, na
-// sequência, registrarEspirometriaFinanceiro com resultado.payload (nunca
-// o formData bruto). Checagens estáticas de texto sobre app.js e sobre o
-// Apps Script — não faz chamada real ao Google Sheets.
-console.log();
-console.log("M12.2A — Espirometria também grava registro operacional no CRM (checagens estáticas)");
-
-const bindFormEspiSrc = (() => {
-  const inicio = appJsSrc.indexOf("function bindFormEspiFinanceiro(");
-  const fim    = appJsSrc.indexOf("function bindForm(panel, tabName)", inicio);
-  return fim > inicio ? appJsSrc.slice(inicio, fim) : "";
-})();
-
-caso("app.js chama createEspirometria (via ACTION_MAP.espi) dentro do fluxo da Nova Espirometria",
-     /submitToCommandCenter\(ACTION_MAP\.espi,\s*payloadOperacional\)/.test(bindFormEspiSrc));
-caso("app.js continua chamando registrarEspirometriaFinanceiro dentro do mesmo fluxo",
-     /submitToCommandCenter\("registrarEspirometriaFinanceiro",\s*resultado\.payload\)/.test(bindFormEspiSrc));
-caso("registrarEspirometriaFinanceiro recebe resultado.payload — não o formData bruto",
-     bindFormEspiSrc.includes('submitToCommandCenter("registrarEspirometriaFinanceiro", resultado.payload)') &&
-     !/submitToCommandCenter\("registrarEspirometriaFinanceiro",\s*formData\)/.test(bindFormEspiSrc));
-caso("payload operacional não inclui campos financeiros (valor_cobrado/valor_recebido/status_pagamento)",
+caso("central-cadastros.js não contém URL do Apps Script",
+     !/script\.google\.com/.test(centralJsSrc));
+caso("central-cadastros.js não usa fetch cru fora do cliente do núcleo (sem chamada direta a Sheets)",
+     !/fetch\(["'`]https:\/\/script\.google\.com/.test(centralJsSrc));
+caso("aba Espirometria da Central usa idempotency_key (anti duplo-clique via API M15)",
+     /LOADERS\.espirometria[\s\S]{0,4000}?idempotency_key:\s*m15\(\)\.idemKey\(\)/.test(centralJsSrc));
+caso("aba Espirometria da Central inclui campo broncodilatador",
+     /LOADERS\.espirometria[\s\S]{0,4000}?broncodilatador/.test(centralJsSrc));
+caso("aba Financeiro da Central nunca inclui campo de nome/telefone do paciente no formulário",
      (() => {
-       const inicio = appJsSrc.indexOf("function buildEspirometriaOperacionalPayload(");
-       const fim    = appJsSrc.indexOf("function bindFormEspiFinanceiro(", inicio);
-       const trecho = fim > inicio ? appJsSrc.slice(inicio, fim) : "";
+       const inicio = centralJsSrc.indexOf("LOADERS.financeiro = function");
+       const fim    = centralJsSrc.indexOf("function loadFinRecents(", inicio);
+       const trecho = fim > inicio ? centralJsSrc.slice(inicio, fim) : "";
        return trecho.length > 0 &&
-         !trecho.includes("valor_cobrado") && !trecho.includes("valor_recebido") &&
-         !trecho.includes("status_pagamento");
+         !/name="nome"|name="telefone"|name="whatsapp"|name="cpf"/.test(trecho);
      })());
-
-caso("createEspirometria existe no Apps Script (função)",
-     /function _createEspirometria\s*\(/.test(gsSrc));
-caso("createEspirometria está registrada no switch de ações do Apps Script",
-     /case "createEspirometria":/.test(gsSrc));
-caso("buildEspirometriaFinanceiroPayload continua sem fetch (M12.2A não mexeu no arquivo financeiro)",
-     !/\bfetch\s*\(/.test(efSrc));
-caso("buildEspirometriaFinanceiroPayload continua sem XMLHttpRequest (M12.2A não mexeu no arquivo financeiro)",
-     !/XMLHttpRequest/.test(efSrc));
-caso("app.js continua sem URL do Apps Script (script.google.com) após o M12.2A",
-     !/script\.google\.com/.test(appJsSrc));
-
-// M12.2B — Upsert/idempotência no CRM Espirometria. id_atendimento (mesmo
-// hidden input técnico já usado pelo financeiro) passa a viajar também no
-// payload operacional, e _createEspirometria usa esse valor como exame_id
-// quando o formato é seguro, procurando a linha existente antes de decidir
-// entre criar ou atualizar — evita duplicar linha em reenvio (duplo clique
-// ou reenvio manual após falha parcial). Checagens estáticas de texto sobre
-// app.js e command-center-api.gs — sem chamada real ao Google Sheets.
-console.log();
-console.log("M12.2B — Upsert/idempotência no CRM Espirometria (checagens estáticas)");
-
-const buildOperacionalSrc = (() => {
-  const inicio = appJsSrc.indexOf("function buildEspirometriaOperacionalPayload(");
-  const fim    = appJsSrc.indexOf("function bindFormEspiFinanceiro(", inicio);
-  return fim > inicio ? appJsSrc.slice(inicio, fim) : "";
-})();
-caso("payload operacional (buildEspirometriaOperacionalPayload) inclui id_atendimento",
-     /id_atendimento:\s*formData\.id_atendimento/.test(buildOperacionalSrc));
-
-const createEspiGsSrc = (() => {
-  const inicio = gsSrc.indexOf("function _createEspirometria(");
-  const fim    = gsSrc.indexOf("function _createConsulta(", inicio);
-  return fim > inicio ? gsSrc.slice(inicio, fim) : "";
-})();
-caso("_createEspirometria lê data.id_atendimento", createEspiGsSrc.includes("data.id_atendimento"));
-// M14.3A (2ª rodada) — identidade e idempotência SEPARADAS: o ID canônico é
-// sempre UUID do servidor; a chave do cliente vai para coluna técnica e só
-// serve para replay/conflito (mesma chave+payload = replay; payload
-// diferente = 409); busca+validação+insert rodam sob LockService.
-const contratosGsSrc = fs.readFileSync(
-  path.join(__dirname, "..", "apps-script", "contratos-canonicos.gs"), "utf8");
-const helperIdemSrc = (() => {
-  const inicio = gsSrc.indexOf("function _inserirEventoClinicoIdempotente(");
-  const fim    = gsSrc.indexOf("function _createEspirometria(", inicio);
-  return fim > inicio ? gsSrc.slice(inicio, fim) : "";
-})();
-caso("chave validada por AÇÃO (prefixo+formato fechado, nunca texto livre)",
-     helperIdemSrc.includes("ctChaveIdempotenciaAcao(opts.chaveBruta") &&
-     /\\d\{8\}-\\d\{6\}-\[A-Z0-9\]\{4,8\}/.test(contratosGsSrc));
-caso("ID canônico é SEMPRE do servidor (UUID); chave vai para coluna técnica",
-     helperIdemSrc.includes("ctNovoIdServidor(contrato.prefixo") &&
-     helperIdemSrc.includes("campos.idempotency_key = chave"));
-caso("busca linha existente pela chave (com fallback legado no id)",
-     helperIdemSrc.includes('_findRowByIdColumn(sheet, "idempotency_key", chave)') &&
-     helperIdemSrc.includes("_findRowByIdColumn(sheet, opts.idCol, chave)"));
-caso("mesma chave + payload diferente = conflito 409 (nunca patch)",
-     helperIdemSrc.includes("409") && helperIdemSrc.includes("fingerprint"));
-caso("mesma chave + mesmo payload = replay sem regravar",
-     helperIdemSrc.includes("replayed: true"));
-caso("busca+validação+insert sob LockService",
-     helperIdemSrc.includes("_lockScriptOuErro()") && gsSrc.includes("LockService.getScriptLock()"));
-caso("insert só depois de validação completa (fail-closed via contrato)",
-     helperIdemSrc.includes("ctPlanejarUpsert(opts.contrato") &&
-     helperIdemSrc.includes("ctCamposPresentes(opts.contrato"));
-caso("colunas técnicas de idempotência criadas sob demanda, só após validar",
-     helperIdemSrc.includes("_ensureExtraColumns(sheet, contrato.colunas_tecnicas)"));
-
-const registrarFinanceiroGsSrc = (() => {
-  const inicio = gsSrc.indexOf("function _registrarEspirometriaFinanceiro(");
-  const fim    = gsSrc.indexOf("\nfunction _updateLeadStage(", inicio);
-  return fim > inicio ? gsSrc.slice(inicio, fim) : "";
-})();
-caso("financeiro: id_atendimento obrigatório (nenhum órfão novo pela API)",
-     registrarFinanceiroGsSrc.includes("id_atendimento é obrigatório"));
-caso("financeiro: ausência não vira 250/Tabela/0 (defaults removidos)",
-     !registrarFinanceiroGsSrc.includes("_EF_VALOR_TABELA_PADRAO") &&
-     !/origem_preco\).trim\(\) : "Tabela"/.test(registrarFinanceiroGsSrc) &&
-     registrarFinanceiroGsSrc.includes("REGRA FORMAL DE ZERO"));
-
-caso("app.js continua enviando resultado.payload (não FormData bruto) para registrarEspirometriaFinanceiro após o M12.2B",
-     bindFormEspiSrc.includes('submitToCommandCenter("registrarEspirometriaFinanceiro", resultado.payload)'));
-caso("app.js continua sem script.google.com hardcoded após o M12.2B",
-     !/script\.google\.com/.test(appJsSrc));
-caso("espirometria-financeiro.js continua sem fetch após o M12.2B",
-     !/\bfetch\s*\(/.test(efSrc));
-caso("espirometria-financeiro.js continua sem XMLHttpRequest após o M12.2B",
-     !/XMLHttpRequest/.test(efSrc));
-
-// M14.3A (correção final) — nenhum campo financeiro/Pastore pode vir
-// pré-selecionado como fato: o operador precisa escolher explicitamente.
-console.log();
-console.log("M14.3A (correção final) — defaults factuais removidos da UI");
-const camposFinanceiroSrc = (() => {
-  const inicio = appJsSrc.indexOf("const camposFinanceiro = [");
-  const fim    = appJsSrc.indexOf("].join(\"\");", inicio);
-  return fim > inicio ? appJsSrc.slice(inicio, fim) : "";
-})();
-caso("valor_tabela usa placeholder (sugestão visual), não value=250",
-     camposFinanceiroSrc.includes('placeholder: String(EF_VALOR_TABELA_PADRAO)') &&
-     !/id: "valor_tabela"[^}]*value:/.test(camposFinanceiroSrc));
-caso("status_pagamento não vem pré-selecionado como 'Recebido'",
-     !/id: "status_pagamento"[^}]*value:\s*"Recebido"/.test(camposFinanceiroSrc));
-caso("forma_pagamento não vem pré-selecionado como 'Pix'",
-     !/id: "forma_pagamento"[^}]*value:\s*"Pix"/.test(camposFinanceiroSrc));
-caso("origem_preco não vem pré-selecionado como 'Tabela'",
-     !/id: "origem_preco"[^}]*value:\s*"Tabela"/.test(camposFinanceiroSrc));
-
-const pastoreStatusFieldSrc = (() => {
-  const m = appJsSrc.match(/\$\{f\(\{ id: "status", label: "Status"[^}]*\}\)\}/);
-  return m ? m[0] : "";
-})();
-caso("modal Pastore: campo 'status' encontrado no código", pastoreStatusFieldSrc.length > 0);
-caso("modal Pastore: status não vem pré-selecionado como 'Realizado'",
-     !/value:\s*"Realizado"/.test(pastoreStatusFieldSrc));
-caso("helper f() do modal Pastore sempre inclui opção em branco no select (evita default do navegador)",
-     /<select id="pa_\$\{id\}"[^>]*>\$\{opts\}<\/select>/.test(appJsSrc) === false &&
-     appJsSrc.includes('<option value="">—</option>${opts}</select>'));
+caso("aba Financeiro da Central vincula por exame/consulta (spirometry_exam_id/consultation_id), não por texto livre",
+     /vinculo\.spirometry_exam_id/.test(centralJsSrc) && /vinculo\.consultation_id/.test(centralJsSrc));
 
 console.log();
 if (falhas) { console.log(`RESULTADO: ${falhas} caso(s) FALHARAM.`); process.exit(1); }

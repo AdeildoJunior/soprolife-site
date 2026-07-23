@@ -217,9 +217,9 @@ console.log("E) Estado visual de go-live e carregamento dos scripts");
        indexSrc.indexOf("js/m15-security.js") < indexSrc.indexOf("js/m15-nucleo.js"));
   caso("index.html mantém datepicker antes do núcleo",
        indexSrc.indexOf("js/m15-datepicker.js") < indexSrc.indexOf("js/m15-nucleo.js"));
-  caso("scripts M15 com cache-buster atualizado (?v=2026071902)",
-       /m15-security\.js\?v=2026071902/.test(indexSrc) &&
-       /m15-nucleo\.js\?v=2026071902/.test(indexSrc));
+  caso("scripts M15 com cache-buster atualizado (?v=2026072301)",
+       /m15-security\.js\?v=2026072301/.test(indexSrc) &&
+       /m15-nucleo\.js\?v=2026072301/.test(indexSrc));
 }
 
 console.log();

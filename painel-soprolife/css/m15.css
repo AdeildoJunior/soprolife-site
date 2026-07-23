@@ -699,3 +699,16 @@
   .m15-filtros input { min-width: 0; flex: 1; }
   .m15-session .m15-muted { margin-left: 0; }
 }
+
+/* M16 — deep-link "+ Novo …" para a Central de Cadastros (cadastro único). */
+.m15-central-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: rgba(29, 183, 166, .06);
+  border: 1px dashed var(--teal, #1db7a6);
+  border-radius: 10px;
+}

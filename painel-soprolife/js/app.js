@@ -216,6 +216,17 @@ function setPremiumChartDefaults() {
   d.elements.point.hoverBorderWidth = 2;
   d.elements.bar.borderRadius = 10;
   d.elements.arc.borderWidth = 2;
+
+  // M16 — interatividade padrão: hover por índice mostra todas as séries do
+  // ponto (sem exigir mira no pixel) e cursor indica áreas clicáveis.
+  d.interaction.mode = "index";
+  d.interaction.intersect = false;
+  d.plugins.legend.labels.usePointStyle = true;
+  d.plugins.legend.labels.boxWidth = 8;
+  d.onHover = (event, elements) => {
+    const target = event.native ? event.native.target : null;
+    if (target) target.style.cursor = elements.length ? "pointer" : "default";
+  };
 }
 
 function chartGradient(canvasEl, r, g, b, alphaTop = 0.25, alphaBottom = 0.02) {
@@ -1117,11 +1128,11 @@ function renderCrmHub(container) {
     <div class="crm-hub-grid">
       ${crmModuleCard({
         icon: "📝",
-        title: "Entrada de Dados",
-        subtitle: "Cadastrar pacientes, exames, consultas e clínicas",
+        title: "Central de Cadastros",
+        subtitle: "Leads, pacientes, exames, consultas, parceiros e financeiro",
         view: "entrada-dados",
         stats: [],
-        emptyLabel: "Formulários prontos para uso"
+        emptyLabel: "Fluxo único · núcleo M15"
       })}
       ${crmModuleCard({
         icon: "🏥",
@@ -1949,662 +1960,34 @@ async function submitToCommandCenter(action, formData) {
   return json;
 }
 
+// M16 — a antiga "Entrada de Dados" (formulários que gravavam no Google
+// Sheets via Apps Script) foi CONSOLIDADA na Central de Cadastros, que grava
+// na API M15/PostgreSQL. Esta view permanece apenas como redirecionamento
+// para links antigos; nenhum formulário legado de criação existe mais aqui.
 function renderEntradaDados(container) {
-  const cfg = state.ccConfigured;
-
-  // ── Opções de select — declaradas ANTES de qualquer chamada que as use ────
-  // (const não é hoisted; declarar aqui evita TDZ quando showTab é chamado)
-  const consentOpts = ["Sim", "Não", "Não informado"];
-  const prioOpts    = ["Alta", "Normal", "Baixa"];
-  const etapaOpts   = [...CRM_ETAPAS_ATIVAS, ...CRM_ETAPAS_TERMINAIS];
-  // M12.1 — lista padronizada de origem/canal, reaproveitada em Lead,
-  // Paciente (campo "canal"), Consulta e Clínica B2B, para reduzir a
-  // quantidade de listas ligeiramente diferentes mapeadas na M12.0.
-  // Não usada na Nova Espirometria (fora de escopo desta etapa — a
-  // aba já tem sua própria lista EF_ORIGEM_DETALHADA_OPTS, intocada).
-  const origemCanalOpts = [
-    "Google", "Instagram", "WhatsApp", "Site SoproLife", "Indicação médica",
-    "Indicação de paciente", "Clínica parceira", "Empresa / PCMSO",
-    "LinkedIn", "Tráfego pago", "Retorno / recorrente", "Presencial",
-    "Ligação", "Outro",
-  ];
-
-  const ACTION_MAP = {
-    lead:      "createLead",
-    paciente:  "createPaciente",
-    espi:      "createEspirometria",
-    consulta:  "createConsulta",
-    clinica:   "createClinicaB2B",
-    interacao: "registrarInteracaoClinica",
-  };
-
-  // ── Helpers de renderização ───────────────────────────────────────────────
-
-  function field({ id, label, type = "text", options, required, placeholder, hint, value, step, disabled }) {
-    const req = required ? " *" : "";
-    const hintHtml = hint ? `<span class="cc-field-hint">${hint}</span>` : "";
-    if (type === "select" && options) {
-      const opts = options.map((o) => {
-        const val = typeof o === "string" ? o : o.value;
-        const lbl = typeof o === "string" ? o : o.label;
-        const selected = value !== undefined && value === val ? " selected" : "";
-        return `<option value="${escapeHtml(val)}"${selected}>${escapeHtml(lbl)}</option>`;
-      }).join("");
-      return `<div class="cc-field-group">
-        <label class="cc-label" for="${id}">${label}${req}${hintHtml}</label>
-        <select id="${id}" name="${id}" class="cc-select"${required ? " required" : ""}><option value="">—</option>${opts}</select>
-      </div>`;
-    }
-    const valAttr = value !== undefined && value !== null ? ` value="${escapeHtml(String(value))}"` : "";
-    const stepAttr = step ? ` step="${escapeHtml(String(step))}"` : "";
-    return `<div class="cc-field-group">
-      <label class="cc-label" for="${id}">${label}${req}${hintHtml}</label>
-      <input id="${id}" name="${id}" type="${type}" class="cc-input"${required ? " required" : ""}${disabled ? " disabled" : ""}${valAttr}${stepAttr}${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}>
-    </div>`;
-  }
-
-  // M12.1 — opts opcional para reaproveitar em mais abas o padrão de
-  // microcopy + seção "Dados opcionais / CRM" criado na Nova Espirometria
-  // (M11.2C), sem obrigar as chamadas existentes a mudar (2º/3º argumentos
-  // continuam opcionais, retrocompatível).
-  function formWrapper(title, fields, opts = {}) {
-    const { microcopy, secondaryTitle = "Dados opcionais / CRM", secondaryFields } = opts;
-    const disabledAttr = !cfg ? " disabled title='Configure o arquivo de conexão primeiro.'" : "";
-    const microcopyHtml = microcopy ? `<p class="cc-form-microcopy">${escapeHtml(microcopy)}</p>` : "";
-    const secondaryHtml = secondaryFields ? `
-      <div class="cc-form-section cc-form-section-secondary">
-        <p class="cc-form-section-title cc-form-section-title-secondary">${escapeHtml(secondaryTitle)}</p>
-        <div class="cc-form-grid">${secondaryFields}</div>
-      </div>` : "";
-    return `<form class="cc-form" novalidate>
-      <h4 class="cc-form-title">${title}</h4>
-      ${microcopyHtml}
-      <div class="cc-form-grid">${fields}</div>
-      ${secondaryHtml}
-      <div class="cc-submit-row">
-        <button type="submit" class="cc-btn-submit"${disabledAttr}>Salvar no Google Sheets</button>
-      </div>
-      <div class="cc-result" hidden></div>
-    </form>`;
-  }
-
-  // ── Construtores de formulário ────────────────────────────────────────────
-
-  function buildFormPaciente() {
-    // M12.1 — "origem" aqui alimenta a coluna ultimo_servico no Apps Script
-    // (_createPaciente: ultimo_servico = data.origem), não um canal de
-    // aquisição — por isso continua texto livre (virar select padronizado
-    // quebraria a semântica), só ganhou o pré-preenchimento "Espirometria".
-    // "canal" é o campo que representa origem/canal de fato — esse sim usa
-    // a lista padronizada.
-    return formWrapper("Novo Paciente", [
-      field({ id: "primeiro_nome",          label: "Primeiro nome",            required: true }),
-      field({ id: "responsavel",            label: "Responsável",              type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
-      field({ id: "telefone",               label: "Telefone / WhatsApp",      type: "tel", placeholder: "(11) 99999-9999" }),
-      field({ id: "canal",                  label: "Canal",                    type: "select", options: origemCanalOpts, value: "Google" }),
-      field({ id: "origem",                 label: "Origem / serviço",         placeholder: "Espirometria, Teleconsulta...", value: "Espirometria" }),
-      field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts, value: "Sim" }),
-    ].join(""), {
-      microcopy: "Digite nome e telefone. Os demais campos já vêm sugeridos e podem ser alterados.",
-    });
-  }
-
-  // M11 — valor real do exame nasce aqui, na própria tela do atendimento, em
-  // vez de um total manual digitado depois no financeiro (ver escopo M11).
-  const EF_STATUS_PAGAMENTO_OPTS = ["Recebido", "Pendente", "Parcial", "Cortesia", "Cancelado"];
-  const EF_FORMA_PAGAMENTO_OPTS  = ["Pix", "Dinheiro", "Cartão", "Outro"];
-  const EF_ORIGEM_PRECO_OPTS     = ["Tabela", "Promoção", "Parceria", "Negociação", "PCMSO", "Cortesia"];
-  const EF_LOCAL_ATENDIMENTO_OPTS = ["Domiciliar", "Clínica", "Empresa / PCMSO", "Parceiro", "Outro"];
-  const EF_RESPONSAVEL_OPTS = ["Adeildo", "Luiz Faustino"];
-  // M11.2C.1 — opções fechadas para os campos secundários de "Dados
-  // opcionais / CRM", trocando texto livre por escolha rápida sempre que
-  // fizer sentido (não entram no payload financeiro).
-  const EF_ORIGEM_DETALHADA_OPTS = [
-    "Google", "Instagram", "WhatsApp", "Site SoproLife", "Indicação médica",
-    "Indicação de paciente", "Clínica parceira", "Empresa / PCMSO",
-    "LinkedIn", "Tráfego pago", "Retorno / recorrente", "Outro",
-  ];
-  const EF_MOTIVO_PROXIMO_CONTATO_OPTS = [
-    "Não definido", "Confirmar agendamento", "Enviar preparo",
-    "Solicitar pedido médico", "Confirmar pagamento", "Enviar localização",
-    "Retomar interesse", "Pós-exame / laudo", "Parceria B2B", "Outro",
-  ];
-  // M11.2C — faixa de R$250 a R$200 em passos de R$10, do valor cheio até a
-  // condição mais especial. Os rótulos abaixo do valor refletem o motivo
-  // real de cada faixa (ver EF_ORIGEM_PRECO_POR_VALOR).
-  const EF_SUGESTOES = [
-    { valor: 250, rotulo: "R$ 250,00", motivo: "Tabela" },
-    { valor: 240, rotulo: "R$ 240,00", motivo: "Desconto" },
-    { valor: 230, rotulo: "R$ 230,00", motivo: "Desconto" },
-    { valor: 220, rotulo: "R$ 220,00", motivo: "Promoção" },
-    { valor: 210, rotulo: "R$ 210,00", motivo: "Condição especial" },
-    { valor: 200, rotulo: "R$ 200,00", motivo: "Condição especial" },
-  ];
-  // M11.2B — clicar num chip de preço também ajusta "Origem do preço" pro
-  // motivo real daquele valor. O operador ainda pode trocar manualmente
-  // depois — só o clique no chip preenche.
-  const EF_ORIGEM_PRECO_POR_VALOR = { 250: "Tabela", 240: "Negociação", 230: "Negociação", 220: "Promoção", 210: "Negociação", 200: "Negociação" };
-
-  // M14.3A (2ª rodada) — datas CLÍNICAS (exame/consulta) NÃO nascem mais
-  // pré-preenchidas com hoje: ausência de data não pode virar "hoje" sem
-  // decisão consciente do operador (auditoria ALTO-04). hojeISO() continua
-  // disponível para o botão explícito "usar hoje" ao lado do campo.
-  function hojeISO() {
-    const agora = new Date();
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${agora.getFullYear()}-${pad(agora.getMonth() + 1)}-${pad(agora.getDate())}`;
-  }
-
-  // M14.3A (2ª rodada) — CHAVE DE IDEMPOTÊNCIA (não é mais o ID do registro):
-  // o servidor emite o ID canônico (UUID); esta chave só garante que clique
-  // duplo/retry/refresh não dupliquem. Ela fica em sessionStorage até o
-  // formulário ser CONCLUÍDO com sucesso (refresh preserva a mesma chave);
-  // o timestamp embutido é o instante técnico de criação, nunca a data do
-  // exame. Mesma chave com payload DIFERENTE é recusada pelo servidor (409).
-  const EF_IDEM_STORAGE_KEY = "cc-espirometria-idempotency-key";
-
-  function obterIdempotencyKeyEspi() {
-    try {
-      const salva = sessionStorage.getItem(EF_IDEM_STORAGE_KEY);
-      if (salva) return salva;
-    } catch (e) { /* sessionStorage indisponível: chave só desta renderização */ }
-    const nova = gerarIdAtendimentoEspi();
-    try { sessionStorage.setItem(EF_IDEM_STORAGE_KEY, nova); } catch (e) { /* idem */ }
-    return nova;
-  }
-
-  function concluirIdempotencyKeyEspi() {
-    try { sessionStorage.removeItem(EF_IDEM_STORAGE_KEY); } catch (e) { /* sem storage */ }
-  }
-
-  function gerarIdAtendimentoEspi() {
-    const agora = new Date();
-    const pad = (n) => String(n).padStart(2, "0");
-    const data = `${agora.getFullYear()}${pad(agora.getMonth() + 1)}${pad(agora.getDate())}`;
-    const hora = `${pad(agora.getHours())}${pad(agora.getMinutes())}${pad(agora.getSeconds())}`;
-    const sufixo = Math.random().toString(36).slice(2, 8).toUpperCase();
-    return `ESP-${data}-${hora}-${sufixo}`;
-  }
-
-  function buildFormEspi() {
-    const idAtendimento = obterIdempotencyKeyEspi();
-    const camposAtendimento = [
-      field({ id: "primeiro_nome",          label: "Primeiro nome",            required: true }),
-      field({ id: "responsavel",            label: "Responsável",              type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
-      field({ id: "telefone",               label: "Telefone / WhatsApp",      type: "tel" }),
-      field({ id: "servico",                label: "Serviço",                  value: "Espirometria", disabled: true }),
-      field({ id: "status_exame",           label: "Status do exame",          type: "select", options: ["Aguardando", "Realizado", "Cancelado", "Remarcado"], value: "Realizado", required: true }),
-      field({ id: "data_exame",             label: "Data do exame",            type: "date", required: true, hint: "Informe a data real do exame — não é preenchida automaticamente" }),
-      field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts, value: "Sim" }),
-    ].join("");
-
-    // M14.3A (correção final) — nenhum campo financeiro vem pré-selecionado
-    // como fato: valor_tabela usa placeholder (sugestão visual que só entra
-    // no payload se o operador digitar) e os selects começam em "—" (vazio),
-    // exigindo escolha explícita — nunca aceitação passiva de Recebido/Pix/
-    // Tabela. status_pagamento continua required: o próprio HTML bloqueia o
-    // envio até uma escolha real ser feita.
-    const camposFinanceiro = [
-      field({ id: "local_atendimento",      label: "Local de atendimento", type: "select", options: EF_LOCAL_ATENDIMENTO_OPTS, value: "Domiciliar", required: true }),
-      field({ id: "valor_tabela",          label: "Valor tabela",        type: "number", step: "0.01", placeholder: String(EF_VALOR_TABELA_PADRAO) }),
-      field({ id: "valor_cobrado",         label: "Valor cobrado",       type: "number", step: "0.01", required: true }),
-      field({ id: "valor_recebido",        label: "Valor recebido",      type: "number", step: "0.01" }),
-      field({ id: "status_pagamento",      label: "Status do pagamento", type: "select", options: EF_STATUS_PAGAMENTO_OPTS, required: true }),
-      field({ id: "forma_pagamento",       label: "Forma de pagamento",  type: "select", options: EF_FORMA_PAGAMENTO_OPTS }),
-      field({ id: "origem_preco",          label: "Origem do preço",     type: "select", options: EF_ORIGEM_PRECO_OPTS }),
-    ].join("");
-
-    // M11.2C — campos de CRM secundários (não entram no payload financeiro)
-    // ficam numa seção separada abaixo, pra não competir com o fluxo
-    // principal de nome + telefone + preço/pagamento.
-    const camposCrmOpcionais = [
-      field({ id: "origem",                 label: "Origem detalhada",         type: "select", options: EF_ORIGEM_DETALHADA_OPTS, value: "Google" }),
-      field({ id: "proximo_contato",        label: "Próximo contato",          type: "date", hint: "Opcional" }),
-      field({ id: "motivo_proximo_contato", label: "Motivo do próximo contato", type: "select", options: EF_MOTIVO_PROXIMO_CONTATO_OPTS, value: "Não definido" }),
-      field({ id: "observacao_financeira",  label: "Observação" }),
-    ].join("");
-
-    const chipsHtml = EF_SUGESTOES.map((s) => `
-      <button type="button" class="cc-price-chip" data-valor="${s.valor}">
-        ${escapeHtml(s.rotulo)}<small>${escapeHtml(s.motivo)}</small>
-      </button>`).join("") + `
-      <button type="button" class="cc-price-chip cc-price-chip-outro" data-valor="outro">Outro valor</button>`;
-
-    // Não usa formWrapper (fields planos) porque esta aba precisa de uma
-    // seção própria com título e chips — as demais abas continuam com
-    // formWrapper sem alteração.
-    return `<form class="cc-form" novalidate>
-      <input type="hidden" id="id_atendimento" name="id_atendimento" value="${escapeHtml(idAtendimento)}">
-      <h4 class="cc-form-title">Nova Espirometria</h4>
-      <p class="cc-form-microcopy">Digite apenas nome e telefone. Os demais campos já vêm sugeridos e podem ser alterados.</p>
-      <div class="cc-form-grid">${camposAtendimento}</div>
-
-      <div class="cc-form-section">
-        <p class="cc-form-section-title">Preço e pagamento</p>
-        <div class="cc-price-chips" role="group" aria-label="Sugestões rápidas de valor">${chipsHtml}</div>
-        <div class="cc-form-grid">${camposFinanceiro}</div>
-      </div>
-
-      <div class="cc-form-section cc-form-section-secondary">
-        <p class="cc-form-section-title cc-form-section-title-secondary">Dados opcionais / CRM</p>
-        <div class="cc-form-grid">${camposCrmOpcionais}</div>
-      </div>
-
-      <div class="cc-submit-row">
-        <button type="submit" class="cc-btn-submit">Salvar lançamento financeiro</button>
-      </div>
-      <div class="cc-financeiro-preview" hidden></div>
-      <div class="cc-result" hidden></div>
-    </form>`;
-  }
-
-  function buildFormConsulta() {
-    // M12.1 — "medica" continua texto livre: não existe hoje nenhuma lista
-    // de profissionais no código para virar select sem inventar dados.
-    const camposConsulta = [
-      field({ id: "primeiro_nome",          label: "Primeiro nome",            required: true }),
-      field({ id: "responsavel",            label: "Responsável",              type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
-      field({ id: "telefone",               label: "Telefone / WhatsApp",      type: "tel" }),
-      field({ id: "origem",                 label: "Origem",                   type: "select", options: origemCanalOpts, value: "Google" }),
-      field({ id: "tipo_consulta",          label: "Tipo de consulta",         type: "select", options: ["Teleatendimento", "Domiciliar", "Presencial", "Retorno"], value: "Teleatendimento" }),
-      field({ id: "status",                 label: "Status",                   type: "select", options: ["Agendada", "Realizada", "Cancelada", "Remarcada"], value: "Agendada" }),
-      field({ id: "medica",                 label: "Médica / profissional" }),
-      field({ id: "data_consulta",          label: "Data da consulta",         type: "date", hint: "Informe a data real — não é preenchida automaticamente" }),
-      field({ id: "consentimento_whatsapp", label: "Consentimento WhatsApp",   type: "select", options: consentOpts, value: "Sim" }),
-    ].join("");
-
-    const camposConsultaOpcionais = [
-      field({ id: "proximo_contato",        label: "Próximo contato",          type: "date", hint: "Opcional" }),
-      field({ id: "motivo_proximo_contato", label: "Motivo do próximo contato" }),
-    ].join("");
-
-    return formWrapper("Nova Consulta", camposConsulta, { secondaryFields: camposConsultaOpcionais });
-  }
-
-  function buildFormClinica() {
-    // M12.1 — "Medicina do Trabalho" não existe em tipo_clinica; mantida a
-    // primeira opção existente ("Clínica") como default, conforme reportado
-    // no relatório desta etapa, em vez de inventar uma opção nova na lista.
-    return formWrapper("Nova Clínica B2B", [
-      field({ id: "nome_clinica",       label: "Nome da clínica / empresa",   required: true }),
-      field({ id: "status",             label: "Status",                      required: true, type: "select", options: etapaOpts, value: "Não abordada" }),
-      field({ id: "tipo_clinica",       label: "Tipo",                        type: "select", options: ["Clínica", "Consultório", "Hospital", "Empresa/PCMSO", "Laboratório", "Outro"], value: "Clínica" }),
-      field({ id: "bairro",             label: "Bairro" }),
-      field({ id: "regiao",             label: "Região" }),
-      field({ id: "telefone_whatsapp",  label: "Telefone / WhatsApp",         type: "tel" }),
-      field({ id: "origem",             label: "Origem da lista",             type: "select", options: origemCanalOpts, value: "Google" }),
-      field({ id: "interesse",          label: "Interesse",                   value: "Espirometria ocupacional / PCMSO" }),
-      field({ id: "responsavel",        label: "Responsável",                 type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo" }),
-      field({ id: "prioridade",         label: "Prioridade",                  type: "select", options: prioOpts, value: "Normal" }),
-    ].join(""), {
-      secondaryFields: [
-        field({ id: "proximo_passo",      label: "Próximo passo" }),
-        field({ id: "data_proximo_passo", label: "Data do próximo passo",       type: "date", hint: "Opcional" }),
-      ].join(""),
-    });
-  }
-
-  function buildFormInteracao() {
-    // M12.1 — nem "Contato realizado" nem "Em negociação" existem literalmente
-    // em etapaOpts (CRM_ETAPAS_ATIVAS/TERMINAIS); "Em conversa" é a etapa
-    // existente mais próxima do sentido de "acabei de registrar um contato",
-    // reportada no relatório desta etapa.
-    return formWrapper("Registrar Contato com Clínica", [
-      field({ id: "nome_clinica",      label: "Nome da clínica",             required: true, hint: " — deve corresponder ao nome no CRM" }),
-      field({ id: "etapa",             label: "Nova etapa",                  required: true, type: "select", options: etapaOpts, value: "Em conversa" }),
-      field({ id: "prioridade",        label: "Prioridade",                  type: "select", options: prioOpts, value: "Normal" }),
-      field({ id: "responsavel",       label: "Responsável",                 type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
-    ].join(""), {
-      secondaryFields: [
-        field({ id: "proxima_acao",      label: "Próxima ação" }),
-        field({ id: "data_proxima_acao", label: "Data da próxima ação",        type: "date", hint: "Opcional" }),
-      ].join(""),
-    });
-  }
-
-  function buildFormLead() {
-    const servicoOpts = [
-      "Espirometria",
-      "Espirometria domiciliar",
-      "Teleconsulta respiratória",
-      "Consulta pneumologista",
-      "Clínicas",
-      "PCMSO / empresa",
-    ];
-    // M12.1 — troca a lista local (que tinha "Painel VPS" duplicado) pela
-    // lista padronizada de origem/canal, reaproveitada em mais abas.
-    const etapaLeadOpts = LEAD_ETAPA_OPTIONS;
-    const camposLead = [
-      field({ id: "nome",              label: "Nome",                required: true }),
-      field({ id: "telefone_whatsapp", label: "Telefone / WhatsApp", type: "tel", placeholder: "(21) 99999-9999" }),
-      field({ id: "servico_interesse", label: "Serviço de interesse", type: "select", options: servicoOpts, value: "Espirometria" }),
-      field({ id: "origem",            label: "Origem",              type: "select", options: origemCanalOpts, value: "Google" }),
-      field({ id: "etapa",             label: "Etapa",               type: "select", options: etapaLeadOpts, value: "Novo contato" }),
-      field({ id: "responsavel",       label: "Responsável",         type: "select", options: EF_RESPONSAVEL_OPTS, value: "Adeildo", required: true }),
-    ].join("");
-
-    const camposLeadOpcionais = [
-      field({ id: "proxima_acao",      label: "Próxima ação" }),
-      field({ id: "data_proxima_acao", label: "Data da próxima ação", type: "date", hint: "Opcional" }),
-      field({ id: "observacao",        label: "Observação" }),
-    ].join("");
-
-    return formWrapper("Novo Lead", camposLead, { secondaryFields: camposLeadOpcionais });
-  }
-
-  const tabs = {
-    lead:      buildFormLead,
-    paciente:  buildFormPaciente,
-    espi:      buildFormEspi,
-    consulta:  buildFormConsulta,
-    clinica:   buildFormClinica,
-    interacao: buildFormInteracao,
-  };
-
-  // ── Lógica de tab ─────────────────────────────────────────────────────────
-
-  function showTab(name) {
-    container.querySelectorAll(".cc-tab").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.tab === name);
-    });
-    const panel = document.querySelector("#ccTabContent");
-    if (!panel) return;
-    try {
-      panel.innerHTML = tabs[name]();
-      bindForm(panel, name);
-    } catch (err) {
-      panel.innerHTML = `<p class="cc-render-error">Erro ao carregar formulário. Verifique o console ou atualize a página.</p>`;
-      console.error("[EntradaDados] Erro ao renderizar aba", name, err);
-    }
-  }
-
-  // ── Lógica de submit ─────────────────────────────────────────────────────
-
-  // M11.2A — a aba "Nova Espirometria" valida o payload financeiro localmente
-  // (sem rede) e, só se ok=true, envia APENAS esse payload seguro ao Command
-  // Center (registrarEspirometriaFinanceiro) — nunca os dados de identificação
-  // do paciente (primeiro_nome, responsavel, telefone) do mesmo formData.
-  // Status em que o valor recebido nunca deve aparecer preenchido na tela —
-  // a função pura zera de qualquer forma, mas deixar o campo limpo evita o
-  // operador achar que aquele valor foi mesmo recebido (M11.1.1).
-  const EF_STATUS_SEM_RECEBIMENTO = ["Pendente", "Cortesia", "Cancelado"];
-
-  // M12.2A — payload operacional aceito por _createEspirometria (Apps
-  // Script), espelhando exatamente _HEADERS_ESPI (sync-crm-pacientes.gs):
-  // exame_id, data_entrada, primeiro_nome, telefone, servico, origem,
-  // status_exame, data_exame, proximo_contato, motivo_proximo_contato,
-  // canal, responsavel, consentimento_whatsapp. exame_id/data_entrada são
-  // gerados no Apps Script; "canal" não tem campo próprio nesta tela (fica
-  // de fora, como já era antes do M12.2A). observacao/observacao_financeira
-  // NÃO fazem parte deste contrato — não enviadas, pra não depender de
-  // mudança no Apps Script (evitada nesta etapa por não ser indispensável).
-  //
-  // M14.3A — id_atendimento é a CHAVE DE IDEMPOTÊNCIA compartilhada pelos
-  // dois envios (operacional + financeiro). O servidor emite o ID canônico
-  // (UUID) e valida a chave por ação; reuso da chave com payload diferente
-  // é recusado (409).
-  function buildEspirometriaOperacionalPayload(formData) {
-    return {
-      id_atendimento:         formData.id_atendimento          || "",
-      primeiro_nome:          formData.primeiro_nome          || "",
-      responsavel:            formData.responsavel            || "",
-      telefone:               formData.telefone                || "",
-      servico:                "Espirometria",
-      origem:                 formData.origem                  || "",
-      status_exame:           formData.status_exame            || "",
-      data_exame:             formData.data_exame              || "",
-      proximo_contato:        formData.proximo_contato         || "",
-      motivo_proximo_contato: formData.motivo_proximo_contato  || "",
-      consentimento_whatsapp: formData.consentimento_whatsapp  || "",
-      // M14.3A — o registro operacional NÃO envia local_atendimento por
-      // enquanto, de propósito: o Apps Script agora é FAIL-CLOSED (campo
-      // solicitado sem coluna correspondente = erro, nunca descarte
-      // silencioso) e a coluna ainda não existe em CRM Espirometria.
-      // Quando a M14.3B criar as colunas canônicas (paciente_id,
-      // local_atendimento, parceiro, unidade, modalidade,
-      // data_exame_precisao), basta incluir os campos aqui — o servidor
-      // já valida e persiste (ver contratos-canonicos.gs).
-    };
-  }
-
-  function bindFormEspiFinanceiro(panel, form, result) {
-    const valorCobradoInput    = form.querySelector("#valor_cobrado");
-    const valorRecebidoInput   = form.querySelector("#valor_recebido");
-    const statusPagamentoInput = form.querySelector("#status_pagamento");
-    const origemPrecoInput     = form.querySelector("#origem_preco");
-
-    panel.querySelectorAll(".cc-price-chip").forEach((chip) => {
-      chip.addEventListener("click", () => {
-        panel.querySelectorAll(".cc-price-chip").forEach((c) => c.classList.remove("active"));
-        const valor = chip.dataset.valor;
-        if (valor === "outro") {
-          // Valor livre também é negociação — o operador ainda pode trocar
-          // a origem manualmente depois de digitar.
-          if (origemPrecoInput) origemPrecoInput.value = "Negociação";
-          valorCobradoInput.focus();
-          valorCobradoInput.select();
-          return;
-        }
-        chip.classList.add("active");
-        valorCobradoInput.value = valor;
-        valorCobradoInput.dispatchEvent(new Event("input", { bubbles: true }));
-        if (origemPrecoInput) {
-          origemPrecoInput.value = EF_ORIGEM_PRECO_POR_VALOR[Number(valor)] || "Negociação";
-        }
-        // Só copia para "recebido" se estiver vazio, o campo nunca é
-        // sobrescrito se já tiver algo digitado manualmente, e nunca copia
-        // quando o status atual é Pendente/Cortesia/Cancelado (não recebe).
-        const statusAtual = statusPagamentoInput ? statusPagamentoInput.value : "";
-        if (!EF_STATUS_SEM_RECEBIMENTO.includes(statusAtual) && !valorRecebidoInput.value.trim()) {
-          valorRecebidoInput.value = valor;
-          valorRecebidoInput.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-      });
-    });
-
-    // Mudar o status do pagamento ajusta "Valor recebido" para reduzir erro
-    // operacional (M11.1.1): Pendente/Cortesia/Cancelado -> limpa o campo
-    // (o valor final no payload é sempre 0, mas deixar visualmente limpo
-    // evita confundir com um recebimento real); Recebido com campo vazio ->
-    // preenche com o valor cobrado (já que ali os dois devem ser iguais);
-    // Parcial nunca mexe no que o operador já digitou manualmente.
-    if (statusPagamentoInput) {
-      statusPagamentoInput.addEventListener("change", () => {
-        const status = statusPagamentoInput.value;
-        if (EF_STATUS_SEM_RECEBIMENTO.includes(status)) {
-          valorRecebidoInput.value = "";
-          valorRecebidoInput.dispatchEvent(new Event("input", { bubbles: true }));
-        } else if (status === "Recebido" && !valorRecebidoInput.value.trim()) {
-          valorRecebidoInput.value = valorCobradoInput.value;
-          valorRecebidoInput.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-      });
-    }
-
-    const preview = panel.querySelector(".cc-financeiro-preview");
-    const btn = form.querySelector(".cc-btn-submit");
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const formData = {};
-      new FormData(form).forEach((val, key) => { formData[key] = val; });
-
-      const resultado = buildEspirometriaFinanceiroPayload(formData);
-
-      if (!resultado.ok) {
-        result.className = "cc-result cc-result-err";
-        result.textContent = "Corrija antes de continuar: " + resultado.erros.join(" ");
-        result.hidden = false;
-        if (preview) preview.hidden = true;
-        return;
-      }
-
-      // Preview do payload financeiro seguro — sempre mostrado após validação
-      // ok, independente do resultado do envio ao Command Center abaixo.
-      if (preview) {
-        preview.hidden = false;
-        preview.innerHTML = `
-          <p class="cc-financeiro-preview-title">Preview do lançamento financeiro</p>
-          <pre class="cc-financeiro-preview-json">${escapeHtml(JSON.stringify(resultado.payload, null, 2))}</pre>`;
-      }
-
-      if (!cfg) {
-        result.className = "cc-result cc-result-err";
-        result.textContent = "Dados financeiros validados, mas o Command Center não está configurado para salvar no Google Sheets.";
-        result.hidden = false;
-        return;
-      }
-
-      btn.disabled = true;
-      btn.textContent = "Salvando…";
-      result.hidden = true;
-
-      // M12.2A — dual-save independente: tenta primeiro o registro
-      // operacional em CRM Espirometria (createEspirometria, com
-      // identidade do paciente) e depois o lançamento financeiro seguro
-      // (registrarEspirometriaFinanceiro — envia SOMENTE resultado.payload,
-      // nunca o formData bruto, que tem primeiro_nome/responsavel/telefone).
-      // As duas chamadas são independentes: a falha de uma não cancela a
-      // outra, pra não regredir o fluxo financeiro já validado em produção
-      // (M11.2C) por causa de uma falha no CRM operacional, que é novo
-      // nesta etapa. btn.disabled acima já evita reenvio duplicado por
-      // duplo clique; id_atendimento permanece o mesmo hidden input gerado
-      // uma vez por render do formulário (upsert no financeiro).
-      try {
-        const payloadOperacional = buildEspirometriaOperacionalPayload(formData);
-
-        let crmOk = false;
-        let crmErro = null;
-        try {
-          await submitToCommandCenter(ACTION_MAP.espi, payloadOperacional);
-          crmOk = true;
-        } catch (err) {
-          crmErro = err.message;
-        }
-
-        let finOk = false;
-        let finErro = null;
-        try {
-          await submitToCommandCenter("registrarEspirometriaFinanceiro", resultado.payload);
-          finOk = true;
-        } catch (err) {
-          finErro = err.message;
-        }
-
-        if (crmOk && finOk) {
-          // Formulário concluído: a chave de idempotência é descartada — o
-          // próximo registro ganha chave nova (reuso com payload diferente
-          // seria recusado pelo servidor com 409).
-          concluirIdempotencyKeyEspi();
-          result.className = "cc-result cc-result-ok";
-          result.textContent = "Espirometria salva no CRM e lançamento financeiro salvo no Google Sheets.";
-        } else if (crmOk && !finOk) {
-          result.className = "cc-result cc-result-err";
-          result.textContent = "Falha parcial: espirometria salva no CRM, mas o lançamento financeiro FALHOU — " + finErro;
-        } else if (!crmOk && finOk) {
-          result.className = "cc-result cc-result-err";
-          result.textContent = "Falha parcial: lançamento financeiro salvo no Google Sheets, mas o registro no CRM Espirometria FALHOU — " + crmErro;
-        } else {
-          result.className = "cc-result cc-result-err";
-          result.textContent = "Falha ao salvar nos dois destinos — CRM: " + crmErro + " | Financeiro: " + finErro;
-        }
-        result.hidden = false;
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "Salvar lançamento financeiro";
-      }
-    });
-  }
-
-  function bindForm(panel, tabName) {
-    const form   = panel.querySelector(".cc-form");
-    const result = panel.querySelector(".cc-result");
-    const btn    = panel.querySelector(".cc-btn-submit");
-    if (!form) return;
-
-    if (tabName === "espi") {
-      bindFormEspiFinanceiro(panel, form, result);
-      return;
-    }
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      if (!cfg) return;
-
-      const formData = {};
-      new FormData(form).forEach((val, key) => { formData[key] = val; });
-
-      btn.disabled = true;
-      btn.textContent = "Enviando…";
-      result.hidden = true;
-
-      try {
-        const resp = await submitToCommandCenter(ACTION_MAP[tabName], formData);
-        result.className = "cc-result cc-result-ok";
-        result.textContent = resp.message + (resp.id ? ` (ID: ${resp.id})` : "");
-        result.hidden = false;
-        form.reset();
-      } catch (err) {
-        result.className = "cc-result cc-result-err";
-        result.textContent = "Erro: " + err.message;
-        result.hidden = false;
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "Salvar no Google Sheets";
-      }
-    });
-  }
-
-  // ── Monta DOM e inicializa ────────────────────────────────────────────────
-
-  const warningHtml = !cfg
-    ? `<div class="cc-config-warning">
-        <span class="cc-warning-icon">⚠️</span>
-        <div>
-          <strong>Configuração de escrita não encontrada.</strong>
-          <p>Use o Google Sheets manualmente ou configure
-          <code>painel-soprolife/data-private/command-center-config.local.json</code>
-          com base no exemplo em
-          <code>painel-soprolife/apps-script/command-center-config.local.example.json</code>.</p>
-        </div>
-      </div>`
-    : "";
-
   container.innerHTML = `
     <div class="crm-subview-header">
       <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
       <div>
-        <p class="eyebrow">Centro de Comando · Fase 3</p>
-        <h2>Entrada de Dados</h2>
-        <p class="section-sub">Cadastrar diretamente no Google Sheets via Apps Script</p>
+        <p class="eyebrow">Cadastro consolidado</p>
+        <h2>Entrada de Dados virou Central de Cadastros</h2>
+        <p class="section-sub">Leads, pacientes, espirometrias, consultas, clínicas, contatos B2B e financeiro agora são cadastrados em um único lugar, direto no núcleo M15 (PostgreSQL). Nada mais é salvo no Google Sheets.</p>
       </div>
     </div>
-
-    ${warningHtml}
-
-    <div class="cc-tabs" role="tablist">
-      <button class="cc-tab active" data-tab="lead"      role="tab">Novo Lead</button>
-      <button class="cc-tab"        data-tab="paciente"  role="tab">Novo Paciente</button>
-      <button class="cc-tab"        data-tab="espi"      role="tab">Nova Espirometria</button>
-      <button class="cc-tab"        data-tab="consulta"  role="tab">Nova Consulta</button>
-      <button class="cc-tab"        data-tab="clinica"   role="tab">Nova Clínica B2B</button>
-      <button class="cc-tab"        data-tab="interacao" role="tab">Contato com Clínica</button>
-    </div>
-
-    <div id="ccTabContent" class="cc-tab-content"></div>
+    <article class="panel entrada-redirect-panel">
+      <button type="button" class="finance-novo-btn" id="entradaIrCentral">Abrir a Central de Cadastros</button>
+      <p class="muted">A integração legada com o Google Sheets permanece disponível apenas para leitura/importação histórica na aba Automações e na Migração do Núcleo M15.</p>
+    </article>
   `;
-
-  container.querySelectorAll(".cc-tab").forEach((btn) => {
-    btn.addEventListener("click", () => showTab(btn.dataset.tab));
+  container.querySelector("#entradaIrCentral").addEventListener("click", () => {
+    if (window.SoproCentral) window.SoproCentral.open("lead");
   });
-
   document.querySelector("#crmBackBtn").addEventListener("click", () => {
     state.crmView = "hub";
     renderCrmView();
   });
-
-  showTab("lead");
 }
+
 
 function renderCrmPlaceholder(container, area) {
   const configs = {
@@ -3490,7 +2873,7 @@ function openLeadStageModal(lead, triggerBtn) {
     <div class="lead-stage-modal" role="dialog" aria-modal="true" aria-labelledby="leadStageTitle">
       <div class="lead-stage-modal-header">
         <div>
-          <p class="eyebrow">Mudar etapa</p>
+          <p class="eyebrow">Mudar etapa <span class="legacy-write-tag" title="Este registro vive na planilha legada (Google Sheets); a alteração de etapa é administração de dados históricos. Cadastros novos: Central de Cadastros.">Fonte legada · Sheets</span></p>
           <h4 id="leadStageTitle">${escapeHtml(nome)}</h4>
         </div>
         <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
@@ -3632,7 +3015,7 @@ function openCrmStageModal(clinica, triggerBtn) {
     <div class="lead-stage-modal" role="dialog" aria-modal="true" aria-labelledby="crmStageTitle">
       <div class="lead-stage-modal-header">
         <div>
-          <p class="eyebrow">Mudar etapa</p>
+          <p class="eyebrow">Mudar etapa <span class="legacy-write-tag" title="Este registro vive na planilha legada (Google Sheets); a alteração de etapa é administração de dados históricos. Cadastros novos: Central de Cadastros.">Fonte legada · Sheets</span></p>
           <h4 id="crmStageTitle">${escapeHtml(nome)}</h4>
         </div>
         <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
@@ -3768,7 +3151,7 @@ function openVincularClinicaModal(lead, triggerBtn) {
     <div class="lead-stage-modal vincular-clinica-modal" role="dialog" aria-modal="true" aria-labelledby="vincularClinicaTitle">
       <div class="lead-stage-modal-header">
         <div>
-          <p class="eyebrow">Vincular a clínica</p>
+          <p class="eyebrow">Vincular a clínica <span class="legacy-write-tag" title="Este registro vive na planilha legada (Google Sheets); a alteração de etapa é administração de dados históricos. Cadastros novos: Central de Cadastros.">Fonte legada · Sheets</span></p>
           <h4 id="vincularClinicaTitle">${escapeHtml(nome)}</h4>
         </div>
         <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
@@ -5543,214 +4926,16 @@ function renderParceriaPastore() {
   }
 }
 
-// ── Modal "Novo atendimento" (Parceria Pastore) ─────────────────────────────
-// Escreve direto na aba "Parceria Pastore - Atendimentos" via proxy local do
-// Command Center (nunca URL/token direto no browser — ver submitToCommandCenter
-// e painel-soprolife/scripts/command-center-local-server.py). Nome, WhatsApp e
-// observação são privados: só vão para a planilha/data-private, nunca para o
-// summary público (ver painel-soprolife/docs/parceria-pastore-planilha.md).
-let _pastoreAtendTrigger = null;
-
-const DIAS_SEMANA_PT = [
-  "Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira",
-  "Quinta-feira", "Sexta-feira", "Sábado",
-];
-
-function _pastoreDiaSemanaFromData(dataStr) {
-  if (!dataStr) return "";
-  const d = new Date(`${dataStr}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return "";
-  return DIAS_SEMANA_PT[d.getDay()];
-}
-
-function closeNovoAtendimentoPastoreModal() {
-  const overlay = document.querySelector(".pastore-atend-overlay");
-  if (overlay) overlay.remove();
-  document.removeEventListener("keydown", _pastoreAtendKeydown);
-  if (_pastoreAtendTrigger) {
-    _pastoreAtendTrigger.focus();
-    _pastoreAtendTrigger = null;
+// M16 — o modal legado de staging (gravava na planilha "Parceria Pastore -
+// Atendimentos" via Apps Script) foi substituído pelo fluxo canônico: o botão
+// "+ Novo atendimento" abre a Central de Cadastros na aba Espirometria com o
+// parceiro Pastore pré-selecionado. Registro nasce direto no núcleo M15.
+function openNovoAtendimentoPastoreModal() {
+  if (window.SoproCentral) {
+    window.SoproCentral.open("espirometria", { partner_name: "Pastore" });
   }
 }
 
-function _pastoreAtendKeydown(event) {
-  if (event.key === "Escape") closeNovoAtendimentoPastoreModal();
-}
-
-function openNovoAtendimentoPastoreModal(triggerBtn) {
-  closeNovoAtendimentoPastoreModal();
-  _pastoreAtendTrigger = triggerBtn || null;
-
-  const cfg = state.ccConfigured;
-  const hoje = new Date().toISOString().slice(0, 10);
-  const diaSemanaHoje = _pastoreDiaSemanaFromData(hoje) || "Terça-feira";
-
-  const diasOpts = ["Terça-feira", "Sábado", "Segunda-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Domingo"];
-  const statusOpts = ["Realizado", "Agendado", "Cancelado", "Não compareceu", "Laudo enviado"];
-  const followupOpts = ["A definir", "pendente", "em dia", "concluído"];
-  const consentOpts = ["A definir", "Sim", "Não"];
-  const pagamentoOpts = ["Pix", "Cartão", "Dinheiro", "Faturado Pastore", "Outro"];
-
-  function f({ id, label, type = "text", options, required, value, placeholder, step, hint }) {
-    const req = required ? " *" : "";
-    if (type === "select" && options) {
-      const opts = options.map((o) =>
-        `<option value="${escapeHtml(o)}"${o === value ? " selected" : ""}>${escapeHtml(o)}</option>`
-      ).join("");
-      // M14.3A (correção final) — sem esta opção em branco, o navegador
-      // mostra o primeiro item da lista como selecionado mesmo quando não
-      // há "value" correspondente (era assim que "status" acabava exibindo
-      // "Realizado" como se o operador tivesse escolhido).
-      return `<div class="cc-field-group">
-        <label class="cc-label" for="pa_${id}">${label}${req}</label>
-        <select id="pa_${id}" name="${id}" class="cc-select"${required ? " required" : ""}><option value="">—</option>${opts}</select>
-      </div>`;
-    }
-    if (type === "textarea") {
-      return `<div class="cc-field-group">
-        <label class="cc-label" for="pa_${id}">${label}${req}</label>
-        <textarea id="pa_${id}" name="${id}" class="cc-input"${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}></textarea>
-      </div>`;
-    }
-    const valAttr = value !== undefined && value !== null ? ` value="${escapeHtml(String(value))}"` : "";
-    const stepAttr = step ? ` step="${step}"` : "";
-    const hintHtml = hint ? `<small class="muted">${escapeHtml(hint)}</small>` : "";
-    return `<div class="cc-field-group">
-      <label class="cc-label" for="pa_${id}">${label}${req}</label>
-      <input id="pa_${id}" name="${id}" type="${type}" class="cc-input"${required ? " required" : ""}${valAttr}${stepAttr}${placeholder ? ` placeholder="${escapeHtml(placeholder)}"` : ""}>
-      ${hintHtml}
-    </div>`;
-  }
-
-  const overlay = document.createElement("div");
-  overlay.className = "pastore-atend-overlay";
-  overlay.innerHTML = `
-    <div class="pastore-atend-modal" role="dialog" aria-modal="true" aria-labelledby="pastoreAtendTitle">
-      <div class="pastore-atend-header">
-        <div>
-          <p class="eyebrow">Parceria Pastore</p>
-          <h4 id="pastoreAtendTitle">Novo atendimento</h4>
-          <p class="muted" style="margin:4px 0 0; font-size:0.78rem;">
-            Registro de STAGING da parceria — ainda não entra no histórico
-            central (CRM Espirometria) nem no financeiro oficial; a
-            integração é a etapa M14.3B.
-          </p>
-        </div>
-        <button type="button" class="pastore-atend-close" aria-label="Fechar">✕</button>
-      </div>
-
-      <form class="pastore-atend-form" novalidate>
-        <div class="pastore-atend-section">
-          <p class="pastore-atend-section-title">Atendimento</p>
-          <div class="pastore-atend-grid">
-            ${f({ id: "data_atendimento", label: "Data", type: "date", required: true, hint: "Informe a data real do atendimento" })}
-            ${f({ id: "unidade", label: "Unidade", value: "Pastore Ipanema" })}
-            ${f({ id: "dia_semana", label: "Dia da semana", type: "select", options: diasOpts, value: diaSemanaHoje })}
-            ${f({ id: "horario_inicio", label: "Horário início", type: "time", value: "08:00" })}
-            ${f({ id: "horario_fim", label: "Horário fim", type: "time", value: "12:00" })}
-            ${f({ id: "origem", label: "Origem", value: "Pastore" })}
-          </div>
-        </div>
-
-        <div class="pastore-atend-section">
-          <p class="pastore-atend-section-title">Paciente</p>
-          <div class="pastore-atend-grid">
-            ${f({ id: "paciente_nome", label: "Nome do paciente", required: true })}
-            ${f({ id: "paciente_whatsapp", label: "WhatsApp", type: "tel", placeholder: "(21) 99999-9999" })}
-            ${f({ id: "tipo_exame", label: "Tipo de exame", required: true, value: "Espirometria" })}
-            ${f({ id: "broncodilatador", label: "Broncodilatador", type: "select", options: ["Não", "Sim"], value: "Não" })}
-          </div>
-        </div>
-
-        <div class="pastore-atend-section">
-          <p class="pastore-atend-section-title">Financeiro</p>
-          <div class="pastore-atend-grid-compact">
-            ${f({ id: "valor_cobrado", label: "Valor cobrado", type: "number", step: "0.01" })}
-            ${f({ id: "forma_pagamento", label: "Forma pagamento", type: "select", options: pagamentoOpts, value: "" })}
-            ${f({ id: "recebido_por", label: "Recebido por", value: "SoproLife" })}
-            ${f({ id: "repasse_pastore", label: "Repasse Pastore", type: "number", step: "0.01", placeholder: "em branco = não informado" })}
-            ${f({ id: "custo_insumo", label: "Custo insumo", type: "number", step: "0.01" })}
-            ${f({ id: "custo_deslocamento", label: "Custo desloc.", type: "number", step: "0.01", placeholder: "em branco = não informado" })}
-            ${f({ id: "custo_profissional", label: "Custo profissional", type: "number", step: "0.01", placeholder: "em branco = não informado" })}
-            ${f({ id: "outros_custos", label: "Outros custos", type: "number", step: "0.01", placeholder: "em branco = não informado" })}
-          </div>
-        </div>
-
-        <div class="pastore-atend-section">
-          <p class="pastore-atend-section-title">Follow-up</p>
-          <div class="pastore-atend-grid">
-            ${f({ id: "status", label: "Status", type: "select", options: statusOpts, required: true })}
-            ${f({ id: "followup_status", label: "Follow-up", type: "select", options: followupOpts, value: "A definir" })}
-            ${f({ id: "consentimento_contato_futuro", label: "Consentimento contato futuro", type: "select", options: consentOpts, value: "A definir" })}
-          </div>
-          <div class="pastore-atend-grid" style="margin-top:.8rem">
-            ${f({ id: "observacao_privada_minima", label: "Observação privada (mínima)", type: "textarea", placeholder: "Nunca CPF, laudo ou diagnóstico" })}
-          </div>
-        </div>
-
-        <div class="cc-result" hidden></div>
-
-        <div class="pastore-atend-actions">
-          <button type="button" class="pastore-atend-cancel">Cancelar</button>
-          <button type="submit" class="pastore-atend-save"${!cfg ? " disabled title=\"Configure o proxy do Command Center primeiro.\"" : ""}>Salvar atendimento</button>
-        </div>
-      </form>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  document.addEventListener("keydown", _pastoreAtendKeydown);
-
-  const form = overlay.querySelector(".pastore-atend-form");
-  const result = overlay.querySelector(".cc-result");
-  const saveBtn = overlay.querySelector(".pastore-atend-save");
-  const cancelBtn = overlay.querySelector(".pastore-atend-cancel");
-
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) closeNovoAtendimentoPastoreModal();
-  });
-  overlay.querySelector(".pastore-atend-close").addEventListener("click", closeNovoAtendimentoPastoreModal);
-  cancelBtn.addEventListener("click", closeNovoAtendimentoPastoreModal);
-
-  // Auto-preenche dia da semana quando a data muda — campo continua editável
-  // manualmente (útil se a Pastore abrir uma exceção fora da agenda padrão).
-  const dataInput = overlay.querySelector("#pa_data_atendimento");
-  const diaSelect = overlay.querySelector("#pa_dia_semana");
-  dataInput.addEventListener("change", () => {
-    const dia = _pastoreDiaSemanaFromData(dataInput.value);
-    if (dia) diaSelect.value = dia;
-  });
-
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (!cfg) return;
-
-    const formData = {};
-    new FormData(form).forEach((val, key) => { formData[key] = val; });
-
-    saveBtn.disabled = true;
-    cancelBtn.disabled = true;
-    saveBtn.textContent = "Salvando…";
-    result.hidden = true;
-
-    try {
-      const resp = await submitToCommandCenter("registrarAtendimentoPastore", formData);
-      result.className = "cc-result cc-result-ok";
-      result.textContent = (resp.message || "Atendimento Pastore registrado") +
-        " — rode a sincronização (update-local-data.sh) e atualize a página para ver no resumo.";
-      result.hidden = false;
-      setTimeout(closeNovoAtendimentoPastoreModal, 2600);
-    } catch (err) {
-      result.className = "cc-result cc-result-err";
-      result.textContent = "Erro: " + err.message;
-      result.hidden = false;
-      saveBtn.disabled = false;
-      cancelBtn.disabled = false;
-      saveBtn.textContent = "Salvar atendimento";
-    }
-  });
-
-  overlay.querySelector("#pa_paciente_nome").focus();
-}
 
 function renderCustosInvestimentos() {
   const statsContainer = document.querySelector("#ciStats");
