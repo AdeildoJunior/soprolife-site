@@ -469,9 +469,9 @@
       "web_app": false,
       "exige_nova_implantacao": false,
       "estado": "gerado",
-      "bytes": 71732,
+      "bytes": 71884,
       "linhas": 773,
-      "sha256": "dc89b2a4fd7f8ca3c735025627188bf0cfded702037cf95eb7fdb05a8dd6be32",
+      "sha256": "40fad1a8e34edaf144dfbf4e828a3ec7e9f5ee074d1ad11519252e9934198bec",
       "globais": [
         "_MA_ABA",
         "_MA_LINHAS",

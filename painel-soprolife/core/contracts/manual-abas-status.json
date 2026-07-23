@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "manifestVersion": "1.2.0",
-  "manifestSha256": "0f1c8122644a89c25f5d2822fdeab864cbfd3f3dbb18eb569a25a231339c8351",
-  "generationSha256": "dc89b2a4fd7f8ca3c735025627188bf0cfded702037cf95eb7fdb05a8dd6be32",
-  "generatedAt": "2026-07-12T22:56:36+00:00",
+  "manifestSha256": "68a6d96c6f97ece43f8d5bcdafa92a170bb602072822b5492cbcc3dd748403be",
+  "generationSha256": "40fad1a8e34edaf144dfbf4e828a3ec7e9f5ee074d1ad11519252e9934198bec",
+  "generatedAt": "2026-07-23T17:34:39+00:00",
   "publication": {
-    "state": "published_confirmed_by_human",
+    "state": "publication_pending",
     "publishedAt": "2026-07-13T00:41:00+00:00",
     "publishedSha256": "dc89b2a4fd7f8ca3c735025627188bf0cfded702037cf95eb7fdb05a8dd6be32",
-    "note": "Atestado HUMANO: registrado após execução real de atualizarManualDasAbasSoproLife() no editor do Apps Script. Nenhuma verificação remota automática foi feita."
+    "note": "Código local mais novo que o último estado conhecido do Google Sheets. Executar no Apps Script e registrar com --mark-published."
   }
 }

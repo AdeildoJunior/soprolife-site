@@ -113,7 +113,7 @@
       "fonte": "oficial",
       "status": "operacional",
       "secao_command_center": "lancamentos",
-      "pagina_painel": "Entrada de Dados → Nova Espirometria (grava); CRM → follow-up de pacientes (lê)",
+      "pagina_painel": "Legado (Apps Script/Sheets, pré-M16) → Nova Espirometria; cadastro novo agora é Central de Cadastros (núcleo M15); CRM → follow-up de pacientes (lê)",
       "quem_grava": [
         "Apps Script createEspirometria (fail-closed; ID do servidor; idempotência por chave separada: replay ou conflito 409 — nunca patch de reenvio)"
       ],
@@ -178,7 +178,7 @@
       "fonte": "oficial",
       "status": "operacional",
       "secao_command_center": "lancamentos",
-      "pagina_painel": "Entrada de Dados → Nova Consulta; CRM → follow-up",
+      "pagina_painel": "Legado (Apps Script/Sheets, pré-M16) → Nova Consulta; cadastro novo agora é Central de Cadastros (núcleo M15); CRM → follow-up",
       "quem_grava": [
         "Apps Script createConsulta (fail-closed; mesma idempotência da espirometria)"
       ],

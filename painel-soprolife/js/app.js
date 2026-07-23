@@ -1074,7 +1074,7 @@ function renderCrmView() {
     case "followup-detalhe":  renderCrmFollowupDetalhe(container);      break;
     case "relatorios":        renderCrmRelatorios(container);               break;
     case "automacoes-crm":    renderCrmAutomacoes(container);           break;
-    case "entrada-dados":     renderEntradaDados(container);            break;
+    case "central-cadastros": renderEntradaDados(container);            break;
     default: renderCrmHub(container);
   }
 }
@@ -1130,7 +1130,7 @@ function renderCrmHub(container) {
         icon: "📝",
         title: "Central de Cadastros",
         subtitle: "Leads, pacientes, exames, consultas, parceiros e financeiro",
-        view: "entrada-dados",
+        view: "central-cadastros",
         stats: [],
         emptyLabel: "Fluxo único · núcleo M15"
       })}

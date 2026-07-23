@@ -2768,26 +2768,6 @@ td { font-size: .94rem; }
 .cc-input:invalid { border-color: var(--danger); }
 .cc-input:disabled { color: var(--muted); cursor: not-allowed; opacity: .75; }
 
-/* Submit row */
-.cc-submit-row {
-  margin-top: 1.25rem;
-  display: flex;
-  justify-content: flex-end;
-}
-.cc-btn-submit {
-  background: var(--teal);
-  color: #fff;
-  border: none;
-  border-radius: 12px;
-  padding: .6rem 1.5rem;
-  font-size: .9rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background .15s, opacity .15s;
-}
-.cc-btn-submit:hover:not(:disabled) { background: var(--teal-dark); }
-.cc-btn-submit:disabled { opacity: .45; cursor: not-allowed; }
-
 /* Result message */
 .cc-result {
   margin-top: .85rem;
@@ -3020,21 +3000,6 @@ td { font-size: .94rem; }
 .cc-select:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(29,183,166,.10);
-}
-
-/* ── CC Submit — gradiente teal com sombra e micro-lift ─────────────────── */
-.cc-btn-submit {
-  background: linear-gradient(135deg, var(--teal), var(--teal-dark));
-  box-shadow: 0 4px 14px rgba(29,183,166,.28);
-  padding: .7rem 2rem;
-  border-radius: 14px;
-  letter-spacing: .01em;
-  transition: background .18s, box-shadow .18s, transform .18s, opacity .15s;
-}
-.cc-btn-submit:hover:not(:disabled) {
-  background: linear-gradient(135deg, #25cab8, var(--teal));
-  box-shadow: 0 6px 20px rgba(29,183,166,.38);
-  transform: translateY(-1px);
 }
 
 /* ── CRM Placeholder — empty state com ícone em caixa ────────────────────── */
