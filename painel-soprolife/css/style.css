@@ -1,19 +1,86 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   M17 — DESIGN TOKENS (fonte única)
+   Consolida os 5 blocos :root que existiam espalhados pelo arquivo (linhas
+   originais ~1, ~4230, ~4753, ~5528, ~6958 — camadas "REDESIGN PREMIUM v2" e
+   "M13.4 PAINEL GERAL PREMIUM", que o próprio código já documentava como
+   provisórias: "camada final por design: sobrescreve v1–v4 sem removê-las —
+   a remoção dos blocos antigos é escopo da M13.7"). Os valores abaixo são o
+   resultado EXATO da cascata anterior (o :root declarado por último vence
+   por propriedade) — consolidar aqui não muda nenhum valor de cor/sombra/
+   easing já em uso; só remove a duplicação. --radius-sm (10px) passa a ser
+   usado como raio padrão de card (ver §4 "Bluedox — sistema de cards").
+   ═══════════════════════════════════════════════════════════════════════════ */
 :root {
-  --navy: #0b1f36;
-  --navy-2: #112c4a;
-  --teal: #1db7a6;
-  --teal-dark: #0f8f83;
-  --bg: #f3f7fb;
+  /* cores */
+  --navy: #0c1f3d;
+  --navy-2: #17355a;
+  --teal: #17b5a5;
+  --teal-dark: #0e9d8e;
+  --teal-soft: #e8f7f6;
+  --teal-pale: #f0faf9;
+  --bg: #eaeff7;
   --card: #ffffff;
   --text: #132033;
-  --muted: #6d7b8a;
+  --muted: #6e80a0;
+  --muted-light: #a4b5cc;
   --line: #dbe5ef;
-  --soft: #eef6f8;
-  --danger: #e45c64;
+  --line-light: #eef2f7;
+  --soft: #e6f5f3;
+  --danger: #dd4f4f;
+  --danger-soft: #fef0f0;
   --warning: #e7a93f;
+  --warn: #e8a030;
+  --warn-soft: #fff8ed;
   --success: #16a37d;
+  --ok: #1fa87a;
+  --ok-soft: #e5f7f0;
+  --purple: #8b6cf7;
+  --purple-soft: #f1ecff;
+  --sky: #2f8fd1;
+  --sky-soft: #e8f3fb;
+  --grid-dot: rgba(12,31,61,.05);
+
+  /* sombra */
   --shadow: 0 4px 20px rgba(15, 34, 57, .08);
-  --radius: 22px;
+  --shadow-xs: 0 1px 3px rgba(12,31,61,.04), 0 3px 10px rgba(12,31,61,.05);
+  --shadow-sm: 0 2px 8px rgba(12,31,61,.06), 0 6px 18px rgba(12,31,61,.07);
+  --shadow-md: 0 6px 20px rgba(12,31,61,.10), 0 14px 36px rgba(12,31,61,.08);
+  --shadow-lg: 0 16px 48px rgba(12,31,61,.16);
+  --shadow-1: 0 1px 2px rgba(12, 31, 61, .05);
+  --shadow-2: 0 4px 16px rgba(12, 31, 61, .08);
+  --shadow-3: 0 16px 48px rgba(12, 31, 61, .18);
+
+  /* easing */
+  --ease: .20s cubic-bezier(.4,0,.2,1);
+  --ease-fast: .12s cubic-bezier(.4,0,.2,1);
+
+  /* raio */
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-pill: 999px;
+
+  /* espaçamento */
+  --gap: 16px;
+  --stack: 24px;
+  --font-sans: 'Manrope', Inter, system-ui, -apple-system, sans-serif;
+
+  /* M17 — sistema Bluedox compacto (tokens novos) */
+  --m17-grid-gap: 12px;
+  --m17-section-gap: 16px;
+  --m17-pad-card: 14px;
+  --m17-pad-card-compact: 12px;
+  --m17-radius-card: var(--radius-sm);
+  --m17-h-input: 39px;
+  --m17-h-btn: 38px;
+  --m17-h-row: 42px;
+  --m17-h-kpi: 92px;
+  --m17-h-shortcut: 118px;
+  --m17-fs-title: 15px;
+  --m17-fs-helper: 12px;
+  --m17-fs-kpi: 26px;
 }
 
 * { box-sizing: border-box; }
@@ -1995,35 +2062,6 @@ td { font-size: .94rem; }
   line-height: 1.5;
 }
 
-/* ─── CRM Placeholder ───────────────────────────────── */
-.crm-placeholder {
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  padding: 56px 32px;
-  text-align: center;
-  box-shadow: var(--shadow);
-}
-
-.crm-placeholder-icon {
-  font-size: 2.8rem;
-  margin-bottom: 18px;
-}
-
-.crm-placeholder h3 {
-  font-size: 1.2rem;
-  color: var(--navy);
-  margin: 0 0 10px;
-}
-
-.crm-placeholder p {
-  color: var(--muted);
-  font-size: .92rem;
-  line-height: 1.6;
-  max-width: 480px;
-  margin: 0 auto 20px;
-}
-
 @media (max-width: 1000px) {
   .crm-hub-grid,
   .crm-submodule-grid {
@@ -2659,7 +2697,7 @@ td { font-size: .94rem; }
   .auto-section-badges { margin-top: .2rem; }
 }
 
-/* ── Entrada de Dados (Command Center Fase 3) ────────────────────────────── */
+/* ── Central de Cadastros: avisos, abas e tabs (Command Center Fase 3) ───── */
 
 .cc-config-warning {
   display: flex;
@@ -3000,22 +3038,6 @@ td { font-size: .94rem; }
 .cc-select:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(29,183,166,.10);
-}
-
-/* ── CRM Placeholder — empty state com ícone em caixa ────────────────────── */
-.crm-placeholder {
-  padding: 56px 32px 52px;
-}
-.crm-placeholder-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(29,183,166,.13), rgba(29,183,166,.05));
-  border: 1px solid rgba(29,183,166,.22);
-  display: grid;
-  place-items: center;
-  font-size: 2rem;
-  margin: 0 auto 20px;
 }
 
 /* ── Automation source cards — hover lift ────────────────────────────────── */
@@ -4271,17 +4293,7 @@ td { font-size: .94rem; }
    REDESIGN PREMIUM v2 — Visual BI executivo · SoproLife Command Center
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Tokens adicionais ──────────────────────────────────────────────────── */
-:root {
-  --bg:        #edf2f8;
-  --shadow-xs: 0 1px 4px rgba(15,34,57,.05);
-  --shadow-md: 0 8px 32px rgba(15,34,57,.11);
-  --shadow-lg: 0 18px 56px rgba(15,34,57,.16);
-  --ease:      .18s cubic-bezier(.4,0,.2,1);
-  --ease-fast: .12s cubic-bezier(.4,0,.2,1);
-  --radius-sm: 12px;
-  --radius-xs: 8px;
-}
+/* Tokens desta camada consolidados no :root único (M17, topo do arquivo). */
 
 /* ── Sidebar premium ────────────────────────────────────────────────────── */
 .sidebar {
@@ -4794,38 +4806,7 @@ h1 { font-size: clamp(1.55rem, 3vw, 2rem); }
    Complementa o bloco v2 acima. Sem dependências novas.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Design tokens v3 ────────────────────────────────────────────────────── */
-:root {
-  --navy:        #0c1f3d;
-  --navy-2:      #17355a;
-  --teal:        #17b5a5;
-  --teal-dark:   #0e9d8e;
-  --teal-soft:   #e8f7f6;
-  --teal-pale:   #f0faf9;
-  --muted:       #6e80a0;
-  --muted-light: #a4b5cc;
-  --line:        #dbe5ef;
-  --line-light:  #eef2f7;
-  --bg:          #eaeff7;
-  --soft:        #e6f5f3;
-  --ok:          #1fa87a;
-  --ok-soft:     #e5f7f0;
-  --danger:      #dd4f4f;
-  --danger-soft: #fef0f0;
-  --warn:        #e8a030;
-  --warn-soft:   #fff8ed;
-  --font-sans:   'Manrope', Inter, system-ui, -apple-system, sans-serif;
-  --shadow-xs:   0 1px 3px rgba(12,31,61,.04), 0 3px 10px rgba(12,31,61,.05);
-  --shadow-sm:   0 2px 8px rgba(12,31,61,.06), 0 6px 18px rgba(12,31,61,.07);
-  --shadow-md:   0 6px 20px rgba(12,31,61,.10), 0 14px 36px rgba(12,31,61,.08);
-  --shadow-lg:   0 16px 48px rgba(12,31,61,.16);
-  --ease:        .20s cubic-bezier(.4,0,.2,1);
-  --ease-fast:   .12s cubic-bezier(.4,0,.2,1);
-  --radius:      16px;
-  --radius-sm:   10px;
-  --radius-xs:   6px;
-  --radius-pill: 999px;
-}
+/* Tokens desta camada consolidados no :root único (M17, topo do arquivo). */
 
 /* ── Font global → Manrope ───────────────────────────────────────────────── */
 body, button, input, select, textarea, table {
@@ -5570,13 +5551,7 @@ canvas { display: block; }
    KPIs, cabeçalhos com selo colorido e estados vazios consistentes.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-:root {
-  --purple:      #8b6cf7;
-  --purple-soft: #f1ecff;
-  --sky:         #2f8fd1;
-  --sky-soft:    #e8f3fb;
-  --grid-dot:    rgba(12,31,61,.05);
-}
+/* Tokens desta camada consolidados no :root único (M17, topo do arquivo). */
 
 /* ── Textura de fundo — grade de pontos sutil, leitura de BI técnico ────── */
 .main {
@@ -6996,19 +6971,12 @@ th {
    Régua única do relatório M13.3B: gap 16px, stack 24px, radius 12/16px,
    sombra por camada, KPIs direto na grade (sem caixa externa), hero em
    faixa executiva e hub (Cérebro/Hoje) com linhas em vez de caixas.
-   Camada final por design: sobrescreve v1–v4 sem removê-las — a remoção
-   dos blocos antigos é escopo da M13.7 (consolidação sem mudança visual).
+   M13.7 (consolidação sem mudança visual) executada em M17: os 5 blocos
+   :root deste arquivo foram unificados num único bloco no topo do arquivo.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-:root {
-  --gap: 16px;
-  --stack: 24px;
-  --radius-lg: 16px;
-  --radius-md: 12px;
-  --shadow-1: 0 1px 2px rgba(12, 31, 61, .05);
-  --shadow-2: 0 4px 16px rgba(12, 31, 61, .08);
-  --shadow-3: 0 16px 48px rgba(12, 31, 61, .18);
-}
+/* tokens desta camada (gap/stack/radius-lg/radius-md/shadow-1/2/3) já
+   consolidados no :root único no topo do arquivo — ver comentário ali. */
 
 /* ── Shell: fundo plano, sem textura de pontos nem gradiente ─────────────── */
 .app-shell { background: var(--bg); }
@@ -7888,7 +7856,7 @@ th {
 
 .parceria-tab:hover:not(.active) { background: rgba(255, 255, 255, .7); }
 
-/* ── Entrada de Dados: card do formulário e chips na régua ───────────────── */
+/* ── Central de Cadastros: card do formulário e chips na régua ───────────── */
 .cc-tab-content {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -8190,38 +8158,66 @@ th {
   vertical-align: middle;
 }
 
-.entrada-redirect-panel {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 22px;
+/* ═══════════════════════════════════════════════════════════════════════════
+   M17 — SISTEMA DE CARDS COMPACTO (Bluedox)
+   Ponto único de verdade para dimensões de card/tabela/tipografia em todo o
+   Command Center. Substitui a antiga "passada compacta" (M13.6) com os
+   tokens definidos no :root — mesma função, valores alinhados ao alvo M17
+   (raio de card 10px, padding 12–14px, KPI 24–28px, linha de tabela
+   40–44px). Vem por último no arquivo de propósito: é a camada final que
+   toda página herda, sem precisar caçar cada seletor histórico espalhado
+   pelo arquivo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.panel, .metric-card {
+  padding: var(--m17-pad-card);
+  border-radius: var(--m17-radius-card);
 }
-
-/* --- passada compacta: cards e painéis menores, sem perder respiro --- */
-
-.panel { padding: 16px; border-radius: 14px; }
 .panel-header, .section-title { margin-bottom: 12px; gap: 12px; }
-.panel-header h3 { font-size: 14.5px; }
-.panel-header span { font-size: 11.5px; }
+.panel-header h3 { font-size: var(--m17-fs-title); }
+.panel-header span { font-size: var(--m17-fs-helper); }
 
-.kpi-card { padding: 12px 14px; }
-.kpi-value { font-size: 20px; }
-.kpi-label { font-size: 10.5px; }
+.kpi-card {
+  padding: var(--m17-pad-card-compact) var(--m17-pad-card);
+  border-radius: var(--m17-radius-card);
+  min-height: var(--m17-h-kpi);
+}
+.kpi-value { font-size: var(--m17-fs-kpi); }
+.kpi-label { font-size: 11px; }
 
-.nav-hub-card { padding: 12px 14px; }
+.nav-hub-card {
+  padding: var(--m17-pad-card-compact) var(--m17-pad-card);
+  border-radius: var(--m17-radius-card);
+  min-height: var(--m17-h-shortcut);
+}
 .nav-hub-card strong { font-size: 12.5px; }
 .nav-hub-desc { font-size: 10.5px; }
+
+.crm-module-card, .crm-submodule-card, .cc-tab-content {
+  border-radius: var(--m17-radius-card);
+}
+
+.cc-input, .cc-select {
+  height: var(--m17-h-input);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.finance-novo-btn, .parceria-btn-novo-atendimento {
+  height: var(--m17-h-btn);
+  padding: 0 16px;
+}
 
 .hero { padding: 18px 20px; }
 
 .chart-box { height: 210px; }
 
-table th, table td { padding: 8px 10px; font-size: 12.5px; }
+table th, table td { padding: 10px 12px; font-size: 12.5px; }
+.table-wrap tbody tr { height: var(--m17-h-row); }
 
-.m15-card { padding: 12px 14px; }
+.m15-card { padding: 12px 14px; border-radius: var(--m17-radius-card); }
 .m15-card-value { font-size: 20px; }
-.m15-panel { padding: 14px 16px; }
+.m15-panel { padding: 14px 16px; border-radius: var(--m17-radius-card); }
 
 .task-list .task-item, .task-board-list .task-item { padding: 8px 10px; }
 

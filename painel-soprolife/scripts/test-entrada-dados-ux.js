@@ -6,10 +6,14 @@
 // buildFormConsulta, buildFormClinica, buildFormInteracao, buildFormLead e
 // o ACTION_MAP que este arquivo testava (M12.1) foram REMOVIDAS de app.js
 // por decisão explícita do produto — não há mais nenhuma implementação
-// duplicada desses formulários. Este teste passou a checar o estado atual:
-// nenhuma duplicata sobrevive em app.js, o redirecionamento da view antiga
-// funciona, e a Central usa o mesmo tipo de defaults fechados (responsável,
-// origem, etapa) que a M12.1 introduziu — agora em um só lugar.
+// duplicada desses formulários. M17 removeu também a antiga tela de
+// redirecionamento "Entrada de Dados virou Central de Cadastros"
+// (renderEntradaDados): os cards e botões contextuais agora chamam
+// window.SoproCentral.open(...) diretamente. Este teste passou a checar o
+// estado atual: nenhuma duplicata sobrevive em app.js, nenhuma view de
+// redirecionamento remanesce, e a Central usa o mesmo tipo de defaults
+// fechados (responsável, origem, etapa) que a M12.1 introduziu — agora em
+// um só lugar.
 // Uso: node painel-soprolife/scripts/test-entrada-dados-ux.js
 // Exit: 0 = todos passaram | 1 = houve falha.
 
@@ -42,14 +46,12 @@ for (const fn of [
 }
 caso("app.js não contém mais o ACTION_MAP legado (createLead/createPaciente/...)",
      !/const ACTION_MAP\s*=\s*\{/.test(appJsSrc));
-caso("renderEntradaDados virou redirecionamento para a Central (sem <form> de criação)",
-     /function renderEntradaDados\(container\)\s*\{/.test(appJsSrc) &&
-     !/<form class="cc-form"/.test(
-       appJsSrc.slice(appJsSrc.indexOf("function renderEntradaDados("),
-                       appJsSrc.indexOf("function renderCrmPlaceholder("))
-     ));
-caso("botão de redirecionamento chama SoproCentral.open",
-     /entradaIrCentral["'`]\).addEventListener\("click", \(\) => \{\s*if \(window\.SoproCentral\) window\.SoproCentral\.open\("lead"\)/.test(appJsSrc));
+caso("renderEntradaDados (tela de redirecionamento) foi removida de app.js (M17)",
+     !/function renderEntradaDados\(/.test(appJsSrc));
+caso("nenhuma view de CRM aponta mais para a tela de redirecionamento legada",
+     !/case "central-cadastros":\s*renderEntradaDados/.test(appJsSrc));
+caso("card 'Central de Cadastros' do hub do CRM chama SoproCentral.open diretamente (sem redirect)",
+     /dataset\.crmView === "central-cadastros"[\s\S]{0,120}?window\.SoproCentral\.open\("lead"\)/.test(appJsSrc));
 
 // ── Responsável: mesmo padrão fechado Adeildo/Luiz Faustino, agora 1 lugar ──
 console.log();

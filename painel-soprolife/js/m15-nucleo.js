@@ -367,7 +367,7 @@
       '<svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" ' +
       'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
       '<circle cx="9" cy="9" r="7"/><circle cx="9" cy="9" r="2.6"/><path d="M9 2v2.5M9 13.5V16M2 9h2.5M13.5 9H16"/></svg>' +
-      "<span>Núcleo M15</span>";
+      "<span>Núcleo administrativo</span>";
     btn.addEventListener("click", function () {
       document.querySelectorAll(".nav-item").forEach(function (item) { item.classList.remove("active"); });
       document.querySelectorAll(".section").forEach(function (sec) { sec.classList.remove("active"); });
@@ -2098,10 +2098,10 @@
 
     var nav = document.querySelector(".sidebar .nav");
     if (!nav) return;
-    var label = document.createElement("div");
-    label.className = "nav-group-label";
-    label.textContent = "M15 Beta";
-    nav.appendChild(label);
+    // M17 — o Núcleo M15 não aparece mais como uma aplicação separada com
+    // rótulo de grupo próprio ("M15 Beta"): o botão é anexado ao final do
+    // grupo estático "Sistema" (Automações, Últimos lançamentos), como mais
+    // um item administrativo do mesmo grupo, não uma segunda aplicação.
     nav.appendChild(navButton());
 
     var main = document.querySelector("main") || document.querySelector(".content");

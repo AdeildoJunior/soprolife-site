@@ -41,7 +41,7 @@ const slug = (text) =>
     .replace(/\s+/g, "-");
 
 // Etapas oficiais do funil de leads — mesma lista usada para criar um lead
-// (aba "Novo Lead" em Entrada de Dados) e para mudar a etapa de um lead
+// (aba "Lead" na Central de Cadastros) e para mudar a etapa de um lead
 // existente (botão "Mudar etapa" na tabela de Leads e Agendamentos).
 // "Concluído" e "Perdido" foram adicionados por já constarem como opções
 // previstas no template inicial da planilha (soprolife-sheets-template.gs);
@@ -1074,7 +1074,6 @@ function renderCrmView() {
     case "followup-detalhe":  renderCrmFollowupDetalhe(container);      break;
     case "relatorios":        renderCrmRelatorios(container);               break;
     case "automacoes-crm":    renderCrmAutomacoes(container);           break;
-    case "central-cadastros": renderEntradaDados(container);            break;
     default: renderCrmHub(container);
   }
 }
@@ -1223,15 +1222,19 @@ function renderCrmHub(container) {
   `;
 
   container.querySelectorAll("[data-crm-view]").forEach((card) => {
-    card.addEventListener("click", () => {
+    // M17 — o card "Central de Cadastros" abre a Central diretamente
+    // (window.SoproCentral.open), sem passar por nenhuma view intermediária.
+    const activate = () => {
+      if (card.dataset.crmView === "central-cadastros") {
+        if (window.SoproCentral) window.SoproCentral.open("lead");
+        return;
+      }
       state.crmView = card.dataset.crmView;
       renderCrmView();
-    });
+    };
+    card.addEventListener("click", activate);
     card.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        state.crmView = card.dataset.crmView;
-        renderCrmView();
-      }
+      if (e.key === "Enter" || e.key === " ") activate();
     });
   });
 
@@ -1958,70 +1961,6 @@ async function submitToCommandCenter(action, formData) {
   const json = await response.json();
   if (!json.ok) throw new Error(json.error || "Erro desconhecido do servidor.");
   return json;
-}
-
-// M16 — a antiga "Entrada de Dados" (formulários que gravavam no Google
-// Sheets via Apps Script) foi CONSOLIDADA na Central de Cadastros, que grava
-// na API M15/PostgreSQL. Esta view permanece apenas como redirecionamento
-// para links antigos; nenhum formulário legado de criação existe mais aqui.
-function renderEntradaDados(container) {
-  container.innerHTML = `
-    <div class="crm-subview-header">
-      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
-      <div>
-        <p class="eyebrow">Cadastro consolidado</p>
-        <h2>Entrada de Dados virou Central de Cadastros</h2>
-        <p class="section-sub">Leads, pacientes, espirometrias, consultas, clínicas, contatos B2B e financeiro agora são cadastrados em um único lugar, direto no núcleo M15 (PostgreSQL). Nada mais é salvo no Google Sheets.</p>
-      </div>
-    </div>
-    <article class="panel entrada-redirect-panel">
-      <button type="button" class="finance-novo-btn" id="entradaIrCentral">Abrir a Central de Cadastros</button>
-      <p class="muted">A integração legada com o Google Sheets permanece disponível apenas para leitura/importação histórica na aba Automações e na Migração do Núcleo M15.</p>
-    </article>
-  `;
-  container.querySelector("#entradaIrCentral").addEventListener("click", () => {
-    if (window.SoproCentral) window.SoproCentral.open("lead");
-  });
-  document.querySelector("#crmBackBtn").addEventListener("click", () => {
-    state.crmView = "hub";
-    renderCrmView();
-  });
-}
-
-
-function renderCrmPlaceholder(container, area) {
-  const configs = {
-    "automacoes-crm": {
-      icon: "⚡",
-      title: "Automações CRM",
-      subtitle: "Lembretes, reativação e tarefas automáticas",
-      description: "Configuração de lembretes automáticos, reativação de pacientes inativos e tarefas recorrentes de relacionamento."
-    }
-  };
-
-  const config = configs[area] ?? { icon: "📁", title: area, subtitle: "", description: "Em desenvolvimento." };
-
-  container.innerHTML = `
-    <div class="crm-subview-header">
-      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
-      <div>
-        <p class="eyebrow">CRM SoproLife</p>
-        <h2>${config.title}</h2>
-        <p class="section-sub">${config.subtitle}</p>
-      </div>
-    </div>
-    <div class="crm-placeholder">
-      <div class="crm-placeholder-icon">${config.icon}</div>
-      <h3>${config.title}</h3>
-      <p>${config.description}</p>
-      <span class="badge">Em breve</span>
-    </div>
-  `;
-
-  document.querySelector("#crmBackBtn").addEventListener("click", () => {
-    state.crmView = "hub";
-    renderCrmView();
-  });
 }
 
 // ── Relatórios CRM ───────────────────────────────────────────────────────────
