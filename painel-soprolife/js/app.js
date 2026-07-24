@@ -15,7 +15,6 @@ const state = {
   runtimeStatus: null,
   dashboardSummary: null,
   crmView: "hub",
-  followupPacientes: null,
   followupSummary: null,
   followupClinicas: null,
   ultimosLancamentos: null,
@@ -428,11 +427,6 @@ async function init() {
       Array.isArray(contatosSummary?.contatos)
     ) {
       state.crmContatosB2B = contatosSummary.contatos;
-    }
-
-    const followupLocal = await loadOptionalJson("./data-private/followup-pacientes.local.json");
-    if (followupLocal) {
-      state.followupPacientes = followupLocal;
     }
 
     const followupSummary = await loadOptionalJson("./data/followup-pacientes-summary.local.json");
@@ -1036,13 +1030,6 @@ function renderFollowupB2B() {
   `;
 }
 
-function getCrmCardValue(key) {
-  const cards = state.dashboardSummary?.cards;
-  if (!Array.isArray(cards)) return "—";
-  const card = cards.find((c) => c.key === key);
-  return card != null ? card.value : "—";
-}
-
 function crmModuleCard({ icon, title, subtitle, view, stats, emptyLabel = "Em breve" }) {
   const statsHtml = stats.length > 0
     ? `<div class="crm-module-stats">${stats.map((s) => `
@@ -1070,14 +1057,35 @@ function renderCrmView() {
 
   switch (state.crmView) {
     case "clinicas":          renderCrmClinicas(container);             break;
-    case "pacientes":         renderCrmPacientes(container);            break;
-    case "followup-detalhe":  renderCrmFollowupDetalhe(container);      break;
+    // M19 — uma única implementação de paciente/acompanhamento, servida pelo
+    // workspace canônico (PostgreSQL/Núcleo M15). As telas legadas de
+    // planilha ("pacientes" e "followup-detalhe") e a parcial "acompanhamento
+    // -m15" foram removidas; os nomes antigos caem aqui por compatibilidade
+    // de navegação.
+    case "pacientes":
+    case "followup-detalhe":
+    case "acompanhamento-m15":
+    case "pacientes-acompanhamento":
+      if (window.SoproCrm) {
+        window.SoproCrm.abrir(container);
+      } else {
+        container.innerHTML = `<div class="crm-empty">Workspace de CRM indisponível nesta página.</div>`;
+      }
+      break;
     case "relatorios":        renderCrmRelatorios(container);               break;
     case "automacoes-crm":    renderCrmAutomacoes(container);           break;
-    case "acompanhamento-m15": renderCrmAcompanhamentoM15(container);   break;
     default: renderCrmHub(container);
   }
 }
+
+// M19 — ponte mínima para o workspace canônico de CRM voltar ao hub sem
+// que o módulo precise conhecer o estado interno do painel.
+window.SoproCrmHost = {
+  voltar: function () {
+    state.crmView = "hub";
+    renderCrmView();
+  },
+};
 
 function renderCrmHub(container) {
   const emProspeccao = state.crm.filter((item) => !isCrmEtapaTerminal(item.etapa)).length;
@@ -1147,29 +1155,11 @@ function renderCrmHub(container) {
       })}
       ${crmModuleCard({
         icon: "🩺",
-        title: "Pacientes",
-        subtitle: "Consultas, espirometrias, recorrência e follow-up",
-        view: "pacientes",
-        // Mesma fonte usada dentro da tela "Pacientes" (renderCrmPacientes):
-        // state.followupPacientes. getCrmCardValue() lia chaves que não
-        // existem no resumo (pacientesEmAcompanhamento/examesEspirometriaRealizados/
-        // followupsPendentes) e por isso sempre mostrava "—" aqui no hub,
-        // mesmo com dado real já carregado.
-        stats: [
-          { label: "Espirometrias", value: state.followupPacientes ? (state.followupPacientes.espirometria || []).length : "—" },
-          { label: "Consultas", value: state.followupPacientes ? (state.followupPacientes.consultas || []).length : "—" },
-          { label: "Follow-ups", value: state.followupPacientes
-              ? (state.followupPacientes.espirometria || []).length + (state.followupPacientes.consultas || []).length
-              : "—" }
-        ]
-      })}
-      ${crmModuleCard({
-        icon: "💬",
-        title: "Acompanhamento e WhatsApp",
-        subtitle: "Fila de contato de 6 meses — fonte oficial PostgreSQL/M15",
-        view: "acompanhamento-m15",
+        title: "Pacientes e Acompanhamento",
+        subtitle: "Pacientes, contatos a realizar, WhatsApp assistido, histórico e indicadores",
+        view: "pacientes-acompanhamento",
         stats: [],
-        emptyLabel: "Fila ao vivo · núcleo M15"
+        emptyLabel: "Fonte oficial · PostgreSQL/M15"
       })}
       ${crmModuleCard({
         icon: "⚡",
@@ -1364,398 +1354,6 @@ function updateCrmFilterTip(el) {
   el.setAttribute("aria-label", `Filtro de clínicas: ${el.value}. ${tip}`);
 }
 
-function renderCrmPacientes(container) {
-  const fp   = state.followupPacientes;
-  const espi = fp ? fp.espirometria : [];
-  const cons = fp ? fp.consultas    : [];
-  const all  = [...espi, ...cons];
-
-  const urgOrder = { atrasado: 0, hoje: 1, em_breve: 2, futuro: 3, sem_data: 4 };
-  const preview  = [...all]
-    .sort((a, b) => (urgOrder[a.status_followup] ?? 4) - (urgOrder[b.status_followup] ?? 4))
-    .slice(0, 5);
-
-  function statusClass(r) {
-    if (r.status_followup === "atrasado") return "status-atrasado";
-    if (r.status_followup === "hoje")     return "status-hoje";
-    if (r.status_followup === "em_breve") return "status-breve";
-    if (r.status_followup === "futuro")   return "status-futuro";
-    return "status-sem-data";
-  }
-  function statusLabel(r) {
-    if (r.status_followup === "atrasado") return "Atrasado";
-    if (r.status_followup === "hoje")     return "Hoje";
-    if (r.status_followup === "em_breve") return formatDateBr(r.data_followup);
-    if (r.status_followup === "futuro")   return formatDateBr(r.data_followup) || "Futuro";
-    return "Sem data";
-  }
-
-  function prevItem(r) {
-    const tipo = r.tipo_followup === "espirometria" ? "🫁" : "💊";
-    const tag  = `<span class="fp-status ${statusClass(r)}">${statusLabel(r)}</span>`;
-    const wa   = r.whatsapp_url
-      ? `<a class="fp-wa-btn" href="${r.whatsapp_url}" target="_blank" rel="noopener noreferrer">WhatsApp</a>`
-      : `<span class="fp-wa-btn fp-wa-disabled">Sem tel.</span>`;
-    return `
-      <li class="fp-prev-item">
-        <span class="fp-prev-tipo" aria-hidden="true">${tipo}</span>
-        <span class="fp-nome">${escapeHtml(r.nome || "—")}</span>
-        ${tag}${wa}
-      </li>`;
-  }
-
-  const nAtr = all.filter(r => r.status_followup === "atrasado").length;
-  const nHoj = all.filter(r => r.status_followup === "hoje").length;
-  const urgBadge = nAtr > 0
-    ? `<span class="fp-urgent-badge">⚠ ${nAtr} atrasado${nAtr > 1 ? "s" : ""}</span>`
-    : nHoj > 0 ? `<span class="fp-today-badge">🟡 ${nHoj} para hoje</span>` : "";
-
-  const hasData = fp !== null;
-  const privNote = hasData
-    ? `<div class="crm-private-note"><span>🔒</span><p>Dados do arquivo privado local (<code>data-private/followup-pacientes.local.json</code>). Gitignored — nunca enviado ao GitHub. Envio de WhatsApp é sempre assistido.</p></div>`
-    : `<div class="crm-safe-note"><span>ℹ️</span><p>Arquivo privado não encontrado. Execute <code>update-local-data.sh</code> ou <code>generate-followup-pacientes.py --write</code> para gerar os dados de follow-up.</p></div>`;
-
-  const pacientesStats = [
-    { key: "crmPacientesEmAcompanhamento", label: "Em acompanhamento", value: getCrmCardValue("pacientesEmAcompanhamento"), hint: "base ativa" },
-    { key: "crmPacientesEspirometrias",    label: "Espirometrias",      value: espi.length || getCrmCardValue("examesEspirometriaRealizados"), hint: "com follow-up" },
-    { key: "crmPacientesConsultas",        label: "Consultas",          value: cons.length || getCrmCardValue("teleconsultasRealizadas"), hint: "com follow-up" },
-    { key: "crmRecorrenciasAtivas",        label: "Recorrências ativas", value: getCrmCardValue("recorrenciasAtivas"), hint: "periódicos" }
-  ];
-
-  container.innerHTML = `
-    <div class="crm-subview-header">
-      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
-      <div>
-        <p class="eyebrow">B2C · Clínico</p>
-        <h2>Pacientes</h2>
-        <p class="section-sub">Follow-up de espirometrias e consultas — envio assistido via WhatsApp</p>
-      </div>
-    </div>
-
-    <div class="crm-stats">
-      ${pacientesStats.map((item) => statCardHtml("crm-stat-card", item)).join("")}
-    </div>
-
-    ${hasData ? `
-      <article class="panel fp-preview-panel">
-        <div class="panel-header">
-          <div>
-            <h3>Próximos follow-ups ${urgBadge}</h3>
-            <span>Os ${preview.length} mais urgentes de ${all.length} total</span>
-          </div>
-          <button class="btn-ver-todos" id="verTodosBtn">Ver todos (${all.length}) →</button>
-        </div>
-        ${preview.length
-          ? `<ul class="fp-prev-list">${preview.map(prevItem).join("")}</ul>`
-          : `<p class="fp-empty">Nenhum follow-up pendente.</p>`}
-      </article>
-    ` : ""}
-
-    ${privNote}
-  `;
-
-  document.querySelector("#crmBackBtn").addEventListener("click", () => {
-    state.crmView = "hub";
-    renderCrmView();
-  });
-  if (hasData) {
-    document.querySelector("#verTodosBtn").addEventListener("click", () => {
-      state.crmView = "followup-detalhe";
-      renderCrmView();
-    });
-  }
-}
-
-// M18 — Acompanhamento e WhatsApp: fila de follow-up de 6 meses contra a
-// API nativa M15/PostgreSQL (window.SoproM15), fonte oficial. Diferente de
-// renderCrmPacientes (acima), que ainda lê data-private/followup-pacientes
-// .local.json — infraestrutura legada de planilha, mantida por ora sem
-// remoção nesta etapa (decisão de escopo documentada no relatório M18: uma
-// substituição seria arriscada sem verificação mais ampla). Esta view é a
-// canônica recomendada daqui para frente.
-function renderCrmAcompanhamentoM15(container) {
-  const FILA_LABELS = {
-    atrasado: "Atrasados",
-    retomar_hoje: "Hoje",
-    retomar_semana: "Próximos 7 dias",
-    aguardando_data: "Aguardando data",
-    concluido: "Concluídos",
-  };
-
-  container.innerHTML = `
-    <div class="crm-subview-header">
-      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
-      <div>
-        <p class="eyebrow">Acompanhamento de pacientes</p>
-        <h2>Acompanhamento e WhatsApp</h2>
-        <p class="section-sub">Fila de contato de 6 meses — fonte oficial PostgreSQL/Núcleo M15.</p>
-      </div>
-    </div>
-    <div id="acompM15Body"><div class="crm-empty">Carregando…</div></div>
-  `;
-  document.querySelector("#crmBackBtn").addEventListener("click", () => {
-    state.crmView = "hub";
-    renderCrmView();
-  });
-
-  const body = document.querySelector("#acompM15Body");
-  const cli = window.SoproM15;
-  if (!cli) {
-    body.innerHTML = `<div class="m15-aviso">Núcleo M15 indisponível nesta página.</div>`;
-    return;
-  }
-  if (!cli.hasToken()) {
-    body.innerHTML = `<div class="m15-panel"><p class="m15-muted">Entre pela Central de Cadastros ou pelo Núcleo administrativo (mesma sessão) para ver a fila de acompanhamento.</p></div>`;
-    return;
-  }
-
-  cli.api("/followups/fila").then((data) => {
-    const totais = data.totais || {};
-    const kpisHtml = Object.keys(FILA_LABELS).map((key) => `
-      <div class="kpi-card">
-        <span class="kpi-label">${FILA_LABELS[key]}</span>
-        <strong class="kpi-value">${totais[key] ?? 0}</strong>
-      </div>`).join("");
-
-    const filasAcionaveis = ["atrasado", "retomar_hoje", "retomar_semana"];
-    const itensHtml = filasAcionaveis.flatMap((key) => (data.filas?.[key] || [])).map((item) => `
-      <tr>
-        <td>${escapeHtml(item.pessoa?.public_code || "—")}</td>
-        <td>${escapeHtml(item.pessoa?.nome_completo || "—")}</td>
-        <td><span class="badge">${escapeHtml(FILA_LABELS[item.fila] || item.fila)}</span></td>
-        <td>${item.aviso_consentimento ? '<span class="badge">Sem consentimento</span>' : "OK"}</td>
-        <td>
-          ${item.whatsapp_permitido
-            ? `<button type="button" class="m15-btn m15-btn-sec acomp-wa-btn" data-followup-id="${escapeHtml(item.id)}">WhatsApp</button>`
-            : `<span class="fp-wa-btn fp-wa-disabled">Indisponível</span>`}
-        </td>
-      </tr>`).join("");
-
-    body.innerHTML = `
-      <div class="conciliacao-kpis">${kpisHtml}</div>
-      <article class="panel">
-        <div class="panel-header">
-          <h3>Contatos a realizar</h3>
-          <span>Atrasados, hoje e próximos 7 dias</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Paciente</th><th>Nome</th><th>Fila</th><th>Consentimento</th><th>Ação</th></tr></thead>
-            <tbody>${itensHtml || '<tr><td colspan="5" class="crm-empty">Nenhum contato pendente nas filas próximas.</td></tr>'}</tbody>
-          </table>
-        </div>
-      </article>`;
-
-    body.querySelectorAll(".acomp-wa-btn").forEach((btn) => {
-      btn.addEventListener("click", () => abrirWhatsappFollowup(btn.dataset.followupId, cli, body));
-    });
-  }).catch((err) => {
-    body.innerHTML = `<div class="m15-erro">Erro ao carregar fila: ${escapeHtml(err.message || String(err))}</div>`;
-  });
-}
-
-function abrirWhatsappFollowup(followupId, cli, body) {
-  cli.api(`/followups/${followupId}/whatsapp-url`).then((resp) => {
-    const overlay = document.createElement("div");
-    overlay.className = "m15-modal-overlay";
-    overlay.innerHTML = `
-      <div class="m15-modal">
-        <h3>Enviar WhatsApp</h3>
-        <p class="m15-muted">Revise a mensagem antes de abrir o WhatsApp. Abrir o link NÃO conclui o contato — confirme depois de enviar.</p>
-        <textarea id="acompWaMsg" rows="5" style="width:100%">${escapeHtml(resp.mensagem_sugerida || "")}</textarea>
-        <div class="m15-modal-actions">
-          <button type="button" class="m15-btn m15-btn-sec" id="acompWaCancelar">Cancelar</button>
-          <a class="m15-btn" id="acompWaAbrir" href="${resp.url}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp</a>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    overlay.querySelector("#acompWaCancelar").addEventListener("click", () => overlay.remove());
-    overlay.querySelector("#acompWaAbrir").addEventListener("click", () => {
-      setTimeout(() => {
-        overlay.remove();
-        if (window.confirm("Você enviou a mensagem pelo WhatsApp? Isso registra o contato como realizado.")) {
-          cli.api(`/followups/${followupId}/whatsapp-confirmacao`, { method: "POST", body: JSON.stringify({}) })
-            .then(() => { renderCrmAcompanhamentoM15(body.closest("#crmView")); })
-            .catch((err) => window.alert("Erro ao confirmar contato: " + (err.message || err)));
-        }
-      }, 400);
-    });
-  }).catch((err) => window.alert("Erro ao gerar link do WhatsApp: " + (err.message || err)));
-}
-
-function renderCrmFollowupDetalhe(container) {
-  const fp   = state.followupPacientes;
-  const espi = Array.isArray(fp?.espirometria) ? fp.espirometria : [];
-  const cons = Array.isArray(fp?.consultas)    ? fp.consultas    : [];
-
-  const urgOrder = { atrasado: 0, hoje: 1, em_breve: 2, futuro: 3, sem_data: 4 };
-  const all = [...espi, ...cons];
-
-  let activeFilter = "todos";
-  let searchTerm   = "";
-
-  const TODAY      = todayIso();
-  const THIS_MONTH = TODAY.slice(0, 7);
-  const WEEK_END   = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-
-  function scCls(r) {
-    const m = { atrasado: "fpc-atrasado", hoje: "fpc-hoje", em_breve: "fpc-breve", futuro: "fpc-futuro" };
-    return m[r.status_followup] || "fpc-semdata";
-  }
-  function sbCls(r) {
-    const m = { atrasado: "status-atrasado", hoje: "status-hoje", em_breve: "status-breve", futuro: "status-futuro" };
-    return m[r.status_followup] || "status-sem-data";
-  }
-  function slbl(r) {
-    if (r.status_followup === "atrasado") return "Atrasado";
-    if (r.status_followup === "hoje")     return "Hoje";
-    if (r.status_followup === "em_breve") return fmtFull(r.data_followup);
-    if (r.status_followup === "futuro")   return fmtFull(r.data_followup) || "Futuro";
-    return "Sem data";
-  }
-
-  function fmtFull(iso) {
-    if (!iso) return "";
-    const [y, m, d] = iso.split("-");
-    return `${d}/${m}/${y}`;
-  }
-
-  function filtrar(records) {
-    let f = records;
-    switch (activeFilter) {
-      case "hoje":      f = f.filter(r => r.data_followup === TODAY); break;
-      case "proximos7": f = f.filter(r => r.data_followup > TODAY && r.data_followup <= WEEK_END); break;
-      case "mes":       f = f.filter(r => r.data_followup && r.data_followup.startsWith(THIS_MONTH)); break;
-      case "atrasados": f = f.filter(r => r.status_followup === "atrasado"); break;
-      case "espi":      f = f.filter(r => r.tipo_followup === "espirometria"); break;
-      case "consulta":  f = f.filter(r => r.tipo_followup === "consulta"); break;
-      case "wa":        f = f.filter(r => r.whatsapp_url); break;
-    }
-    if (searchTerm) {
-      const t = searchTerm.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-      f = f.filter(r =>
-        (r.nome || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").includes(t)
-      );
-    }
-    return f;
-  }
-
-  function metaRow(label, value) {
-    if (!value) return "";
-    return `<div class="fpc-meta-row"><span class="fpc-label">${label}</span><span>${escapeHtml(String(value))}</span></div>`;
-  }
-
-  function card(r) {
-    const tipo = r.tipo_followup === "espirometria" ? "🫁 Espirometria" : "💊 Consulta";
-    const wa   = r.whatsapp_url
-      ? `<a class="fp-wa-btn fpc-wa" href="${r.whatsapp_url}" target="_blank" rel="noopener noreferrer" title="Abrir WhatsApp">WhatsApp</a>`
-      : `<span class="fpc-no-wa">Sem telefone</span>`;
-    const cCls = r.consentimento_whatsapp === "Confirmado" ? "fpc-consent-ok" : "fpc-consent-nd";
-    const cTxt = escapeHtml(r.consentimento_whatsapp || "Confirmado");
-    return `
-      <article class="fpc ${scCls(r)}">
-        <div class="fpc-header">
-          <div>
-            <div class="fpc-nome">${escapeHtml(r.nome || "—")}</div>
-            <div class="fpc-tipo">${tipo}</div>
-          </div>
-          <span class="fp-status ${sbCls(r)}">${slbl(r)}</span>
-        </div>
-        <div class="fpc-meta">
-          ${metaRow("Exame/Consulta", r.data_base   ? fmtFull(r.data_base)   : "")}
-          ${metaRow("Próx. contato",  r.data_followup ? fmtFull(r.data_followup) : "")}
-          ${metaRow("Motivo",         r.motivo)}
-          ${metaRow("Responsável",    r.responsavel)}
-          ${metaRow("Canal",          r.canal || "WhatsApp")}
-          <div class="fpc-meta-row"><span class="fpc-label">Consentimento</span><span class="${cCls}">${cTxt}</span></div>
-        </div>
-        <div class="fpc-actions">${wa}</div>
-      </article>`;
-  }
-
-  function renderCards() {
-    const sorted   = [...all].sort((a, b) => (urgOrder[a.status_followup] ?? 4) - (urgOrder[b.status_followup] ?? 4));
-    const filtered = filtrar(sorted);
-    document.querySelector("#fpCards").innerHTML = filtered.length
-      ? `<div class="fpc-grid">${filtered.map(card).join("")}</div>`
-      : `<p class="fp-detalhe-empty">Nenhum registro encontrado para este filtro.</p>`;
-    document.querySelector("#fpResultCount").textContent =
-      `${filtered.length} de ${all.length} registros`;
-  }
-
-  const FILTERS = [
-    { key: "todos",      label: "Todos",           cnt: all.length },
-    { key: "atrasados",  label: "Atrasados",        cnt: all.filter(r => r.status_followup === "atrasado").length },
-    { key: "hoje",       label: "Hoje",             cnt: all.filter(r => r.data_followup === TODAY).length },
-    { key: "proximos7",  label: "Próximos 7 dias",  cnt: all.filter(r => r.data_followup > TODAY && r.data_followup <= WEEK_END).length },
-    { key: "mes",        label: "Este mês",         cnt: all.filter(r => r.data_followup && r.data_followup.startsWith(THIS_MONTH)).length },
-    { key: "espi",       label: "Espirometria",     cnt: espi.length },
-    { key: "consulta",   label: "Consulta",         cnt: cons.length },
-    { key: "wa",         label: "Com WhatsApp",     cnt: all.filter(r => r.whatsapp_url).length },
-  ];
-
-  const filterBtns = FILTERS.map(f =>
-    `<button class="fp-filter-btn${f.key === "todos" ? " active" : ""}" data-filter="${f.key}">
-      ${f.label}<span class="fp-filter-count">${f.cnt}</span>
-    </button>`
-  ).join("");
-
-  container.innerHTML = `
-    <div class="crm-subview-header">
-      <button class="crm-back-btn" id="crmBackBtn">← Pacientes</button>
-      <div>
-        <p class="eyebrow">B2C · Clínico</p>
-        <h2>CRM Pacientes e Follow-ups</h2>
-        <p class="section-sub">Todos os registros com follow-up — envio assistido via WhatsApp</p>
-      </div>
-    </div>
-
-    <div class="crm-stats">
-      ${[
-        { key: "crmFollowupTotal",       label: "Total",         value: all.length,  hint: "pacientes" },
-        { key: "crmPacientesEspirometrias", label: "Espirometrias", value: espi.length, hint: "registros" },
-        { key: "crmPacientesConsultas",  label: "Consultas",     value: cons.length, hint: "registros" },
-        { key: "crmFollowupComWhatsapp", label: "Com WhatsApp",  value: all.filter(r => r.whatsapp_url).length, hint: "prontos para envio" }
-      ].map((item) => statCardHtml("crm-stat-card", item)).join("")}
-    </div>
-
-    <div class="fp-detalhe-toolbar">
-      <input type="search" id="fpSearch" class="fp-search" placeholder="Buscar por nome…" autocomplete="off" />
-      <span id="fpResultCount" class="fp-result-count"></span>
-    </div>
-
-    <div class="fp-filters" role="group" aria-label="Filtros de follow-up">
-      ${filterBtns}
-    </div>
-
-    <div id="fpCards" class="fp-cards-area" aria-live="polite"></div>
-
-    <div class="crm-private-note" style="margin-top:1.5rem">
-      <span>🔒</span>
-      <p>Dados de <code>data-private/followup-pacientes.local.json</code>. Gitignored — nunca enviado ao GitHub. Envio de WhatsApp é sempre assistido, nunca automático.</p>
-    </div>
-  `;
-
-  document.querySelector("#crmBackBtn").addEventListener("click", () => {
-    state.crmView = "pacientes";
-    renderCrmView();
-  });
-  document.querySelector("#fpSearch").addEventListener("input", e => {
-    searchTerm = e.target.value;
-    renderCards();
-  });
-  container.querySelectorAll(".fp-filter-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      container.querySelectorAll(".fp-filter-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      activeFilter = btn.dataset.filter;
-      renderCards();
-    });
-  });
-
-  renderCards();
-}
-
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -1947,12 +1545,12 @@ function renderCrmAutomacoes(container) {
     {
       id: "auto-followup",
       icon: "💬",
-      title: "Follow-up de pacientes",
-      subtitle: "Gera lista privada local para follow-up assistido via WhatsApp",
+      title: "Follow-up de pacientes (arquivo histórico)",
+      subtitle: "Extração de planilha mantida só como evidência de migração",
       risk: "baixo",
       dados: ["Pacientes (privado)", "Espirometrias", "Consultas"],
-      objetivo: "Lê CRM Espirometria e CRM Consultas. Gera arquivo privado local com nome, telefone e URL de WhatsApp pré-preenchida. Não envia mensagens — o envio é sempre assistido e revisado pelo operador.",
-      aviso: "O arquivo gerado (followup-pacientes.local.json) é privado e gitignored. Nunca é enviado ao GitHub. Nenhuma mensagem é disparada automaticamente.",
+      objetivo: "Extração legada das abas de planilha. NÃO faz mais parte do fluxo operacional: desde o M19 o acompanhamento de pacientes é servido pelo CRM Pacientes e Acompanhamento, direto do PostgreSQL/Núcleo M15. Use esta automação apenas para reconstruir o arquivo histórico de auditoria.",
+      aviso: "O painel não lê mais followup-pacientes.local.json. O arquivo continua privado e gitignored; nenhuma mensagem é disparada automaticamente.",
       steps: [
         {
           label: "1. Inspecionar estrutura das abas (seguro)",
@@ -2092,8 +1690,8 @@ async function submitToCommandCenter(action, formData) {
 // ── Relatórios CRM ───────────────────────────────────────────────────────────
 // Página de indicadores consolidados. Usa apenas dados agregados/seguros já
 // carregados em state (leads, crm, resumos de follow-up e contatos B2B) —
-// nunca state.followupPacientes / state.followupClinicas (privados, com nome
-// e telefone) nem qualquer campo pessoal.
+// nunca state.followupClinicas (privado, com nome e telefone) nem qualquer
+// campo pessoal. O detalhe por paciente vive só no CRM canônico, autenticado.
 
 const CRM_REPORT_ORIGENS_CONHECIDAS = ["Google", "Site", "Indicação"];
 

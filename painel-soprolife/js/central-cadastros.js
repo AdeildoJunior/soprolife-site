@@ -368,6 +368,14 @@
 
     wireMiniSearch(q, buscar, resultados, showSelected);
 
+    // Deep-link contextual (M19): o CRM abre a Central já com o paciente no
+    // campo de busca. Só o código público viaja — nunca nome nem telefone.
+    const preCodigo = (state.prefill || {}).person_codigo;
+    if (preCodigo && q && buscar) {
+      q.value = preCodigo;
+      buscar.click();
+    }
+
     if (novaBtn) {
       novaBtn.addEventListener("click", () => {
         picker.modoNova = !picker.modoNova;

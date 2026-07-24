@@ -8,7 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css?v=2026072301" />
+  <link rel="stylesheet" href="./css/style.css?v=2026072402" />
+  <!-- CRM Pacientes e Acompanhamento (M19): workspace canônico único. -->
+  <link rel="stylesheet" href="./css/crm-workspace.css?v=2026072402" />
   <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
   <script src="./js/vendor/chart.umd.min.js"></script>
 </head>
@@ -158,7 +160,7 @@
           <button type="button" class="nav-hub-card" data-section="crm">
             <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="6.5" r="2.5"/><path d="M1 15c0-3 2.5-4.5 6-4.5s6 1.5 6 4.5"/><circle cx="14" cy="5.5" r="2"/><path d="M17 13.5c0-2-1.5-3.5-3-3.5"/></svg></span>
             <strong>CRM</strong>
-            <span class="nav-hub-desc">Clínicas, pacientes e follow-ups</span>
+            <span class="nav-hub-desc">Clínicas, pacientes e acompanhamento</span>
           </button>
           <button type="button" class="nav-hub-card" data-section="leads">
             <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="14" height="13" rx="2"/><path d="M2 9h14M6 2v4M12 2v4"/></svg></span>
@@ -863,18 +865,22 @@
   <script src="./js/today-actions.js?v=2026070803"></script>
   <script src="./js/espirometria-financeiro.js?v=2026070902"></script>
   <script src="./js/marketing-freshness.js?v=2026071201"></script>
-  <script src="./js/app.js?v=2026072301"></script>
+  <script src="./js/app.js?v=2026072402"></script>
   <!-- Núcleo Operacional M15 (beta — go-live controlado M15.5A): habilitado
        globalmente por data/m15-config.json (enabled=true; rollback: false).
        A guarda de contexto seguro (m15-security.js) carrega ANTES do núcleo:
        login só em HTTPS ou loopback local; HTTP remoto fica bloqueado. -->
-  <script src="./js/m15-security.js?v=2026072301" defer></script>
-  <script src="./js/m15-datepicker.js?v=2026072301" defer></script>
-  <script src="./js/m15-nucleo.js?v=2026072301" defer></script>
+  <script src="./js/m15-security.js?v=2026072402" defer></script>
+  <script src="./js/m15-datepicker.js?v=2026072402" defer></script>
+  <script src="./js/m15-nucleo.js?v=2026072402" defer></script>
   <!-- Central de Cadastros (M16): fluxo canônico ÚNICO de entrada de dados.
        Depende do cliente compartilhado window.SoproM15 (script acima). -->
-  <script src="./js/central-cadastros.js?v=2026072301" defer></script>
+  <script src="./js/central-cadastros.js?v=2026072402" defer></script>
   <!-- Conciliação de exames extra-Pastore (M18). Depende de window.SoproM15. -->
-  <script src="./js/financeiro-conciliacao.js?v=2026072401" defer></script>
+  <script src="./js/financeiro-conciliacao.js?v=2026072402" defer></script>
+  <!-- CRM Pacientes e Acompanhamento (M19): ÚNICA implementação de
+       paciente/follow-up do painel. Substituiu a tela legada de planilha
+       e a parcial "Acompanhamento e WhatsApp". Depende de window.SoproM15. -->
+  <script src="./js/crm-workspace.js?v=2026072402" defer></script>
 </body>
 </html>
