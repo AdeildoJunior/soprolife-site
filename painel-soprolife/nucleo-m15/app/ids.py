@@ -25,6 +25,40 @@ PREFIXES = {
     "financial_entries": "LAN",
 }
 
+# Dicionário de apresentação (M19 §14): rótulo humano ao lado do código
+# técnico, idêntico em todas as telas. NUNCA renumera nem reusa código —
+# apenas padroniza como o código já emitido é exibido.
+ENTITY_LABELS = {
+    "people": "Pessoa",
+    "leads": "Lead",
+    "spirometry_exams": "Espirometria",
+    "consultations": "Consulta",
+    "partners": "Clínica",
+    "partner_units": "Unidade",
+    "partner_contacts": "Contato",
+    "partnerships": "Parceria",
+    "partner_referrals": "Encaminhamento",
+    "interactions": "Interação",
+    "followups": "Follow-up",
+    "financial_entries": "Lançamento",
+}
+
+# prefixo -> (tabela, rótulo)
+PREFIX_TO_ENTITY = {prefix: table for table, prefix in PREFIXES.items()}
+
+
+def code_dictionary() -> list[dict]:
+    """Dicionário de prefixos para uso uniforme em toda a interface."""
+    return [
+        {
+            "prefixo": prefix,
+            "entidade": table,
+            "rotulo": ENTITY_LABELS[table],
+            "formato": f"{prefix}-000000",
+        }
+        for table, prefix in sorted(PREFIXES.items(), key=lambda kv: kv[1])
+    ]
+
 
 def new_uuid() -> str:
     return str(uuid.uuid4())

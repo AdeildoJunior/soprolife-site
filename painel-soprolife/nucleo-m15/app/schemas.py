@@ -536,3 +536,50 @@ class IdentityDecision(StrictModel):
 
     decisao: Literal["pessoas_diferentes", "possivel_mesma_pessoa", "adiar"]
     observacao: str | None = Field(default=None, max_length=2000)
+
+
+# ------------------------------------------------------------------ CRM (M19)
+
+class CrmPacienteBusca(StrictModel):
+    """Busca da lista canônica de pacientes — nome sempre por corpo POST."""
+
+    q: str | None = Field(default=None, max_length=200)
+    fila: str | None = Field(default=None, max_length=40)
+    origem: str | None = Field(default=None, max_length=120)
+    status_acompanhamento: str | None = Field(default=None, max_length=40)
+    somente_sem_telefone: bool = False
+    pagina: int = Field(default=1, ge=1)
+    tamanho: int = Field(default=25, ge=1, le=100)
+
+
+class CrmContatoRegistro(StrictModel):
+    """Resultado explícito de uma tentativa de contato (M19 §9).
+
+    Cada envio cria exatamente UM registro auditável de tentativa; o efeito
+    no follow-up é derivado do resultado escolhido pelo operador.
+    """
+
+    followup_id: str | None = None
+    person_id: str | None = None
+    resultado: Literal[
+        "contato_realizado",
+        "nao_respondeu",
+        "reagendar",
+        "nao_deseja_contato",
+        "telefone_invalido",
+    ]
+    canal: Literal["whatsapp", "telefone", "email", "presencial", "outro"] = "whatsapp"
+    nova_data: date | None = None
+    observacao: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _coerencia(self):
+        if not self.followup_id and not self.person_id:
+            raise ValueError("Informe followup_id ou person_id.")
+        if self.resultado == "reagendar" and self.nova_data is None:
+            raise ValueError("Reagendar exige nova_data.")
+        if self.observacao and contains_pii_like(self.observacao):
+            raise ValueError(
+                "Observação operacional não pode conter telefone, CPF ou e-mail."
+            )
+        return self
