@@ -12,6 +12,7 @@ from .config import get_settings
 from .errors import install_error_handling
 from .routers import (
     admin_users,
+    attendances,
     auth,
     crm,
     finance,
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router, prefix=prefix)
     app.include_router(people.router, prefix=prefix)
     app.include_router(operations.router, prefix=prefix)
+    app.include_router(attendances.router, prefix=prefix)
     app.include_router(partners.router, prefix=prefix)
     app.include_router(followups.router, prefix=prefix)
     app.include_router(crm.router, prefix=prefix)

@@ -4589,13 +4589,14 @@ function renderParceriaPastore() {
   }
 }
 
-// M16 — o modal legado de staging (gravava na planilha "Parceria Pastore -
+// M16/M20 — o modal legado de staging (gravava na planilha "Parceria Pastore -
 // Atendimentos" via Apps Script) foi substituído pelo fluxo canônico: o botão
-// "+ Novo atendimento" abre a Central de Cadastros na aba Espirometria com o
-// parceiro Pastore pré-selecionado. Registro nasce direto no núcleo M15.
+// "+ Novo atendimento" abre a Central de Cadastros no fluxo único "Novo
+// atendimento" com o tipo Espirometria Pastore já selecionado (o parceiro é
+// definido automaticamente). Registro nasce direto no núcleo M15.
 function openNovoAtendimentoPastoreModal() {
   if (window.SoproCentral) {
-    window.SoproCentral.open("espirometria", { partner_name: "Pastore" });
+    window.SoproCentral.open("atendimento", { tipo: "espirometria_pastore" });
   }
 }
 

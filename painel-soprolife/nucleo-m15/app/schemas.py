@@ -444,6 +444,169 @@ class ConciliacaoItemCreate(StrictModel):
     _no_pii = field_validator("descricao")(_reject_finance_pii)
 
 
+# ------------------------------------------------- atendimento único (M20)
+
+TipoAtendimento = Literal[
+    "espirometria_soprolife",
+    "espirometria_pastore",
+    "consulta_soprolife",
+    "espirometria_consulta_soprolife",
+]
+
+TIPOS_COM_ESPIROMETRIA = (
+    "espirometria_soprolife",
+    "espirometria_pastore",
+    "espirometria_consulta_soprolife",
+)
+TIPOS_COM_CONSULTA = ("consulta_soprolife", "espirometria_consulta_soprolife")
+# Pastore só se aplica quando o tipo é explicitamente Espirometria Pastore.
+TIPO_PASTORE = "espirometria_pastore"
+
+
+class AtendimentoEspirometria(StrictModel):
+    data_exame: str = Field(min_length=4, max_length=40)
+    status: StatusExame = "Realizado"
+    broncodilatador: bool | None = None
+    modalidade: Literal["residencial", "cowork", "clinica_parceira"] | None = None
+    local_atendimento: str | None = Field(default=None, max_length=200)
+    partner_id: str | None = None
+    partner_unit_id: str | None = None
+    origem: str | None = Field(default=None, max_length=120)
+    responsavel: str | None = Field(default=None, max_length=120)
+    observacao: str | None = Field(default=None, max_length=4000)
+    # Acompanhamento explícito; sem isto vale a regra vigente do exame.
+    proximo_followup: date | None = None
+
+
+class AtendimentoConsulta(StrictModel):
+    """Consulta SoproLife. Retorno NUNCA é assumido — precisa ser escolhido."""
+
+    data_consulta: str = Field(min_length=4, max_length=40)
+    status: StatusConsulta = "Realizada"
+    modalidade: ModalidadeConsulta | None = None
+    profissional: str | None = Field(default=None, max_length=200)
+    origem: str | None = Field(default=None, max_length=120)
+    responsavel: str | None = Field(default=None, max_length=120)
+    observacao: str | None = Field(default=None, max_length=4000)
+    retorno: Literal["sem_retorno", "data", "intervalo_meses"] = "sem_retorno"
+    retorno_data: date | None = None
+    retorno_intervalo_meses: int | None = Field(default=None, ge=1, le=60)
+
+    @model_validator(mode="after")
+    def _retorno_coerente(self):
+        if self.retorno == "data" and self.retorno_data is None:
+            raise ValueError("retorno='data' exige retorno_data.")
+        if self.retorno == "intervalo_meses" and self.retorno_intervalo_meses is None:
+            raise ValueError("retorno='intervalo_meses' exige retorno_intervalo_meses.")
+        if self.retorno == "sem_retorno" and (
+            self.retorno_data is not None or self.retorno_intervalo_meses is not None
+        ):
+            raise ValueError("retorno='sem_retorno' não aceita data nem intervalo.")
+        return self
+
+
+class AtendimentoFinanceiroExame(StrictModel):
+    """Componente financeiro da espirometria — valor sempre explícito."""
+
+    valor: Money
+    status: StatusPagamento = "Recebido"
+    data_competencia: str | None = Field(default=None, max_length=40)
+    data_recebimento: date | None = None
+    forma_pagamento: FormaPagamento | None = None
+    origem_preco: OrigemPreco | None = None
+
+
+class AtendimentoFinanceiroConsulta(StrictModel):
+    """Componente financeiro da consulta — receita BRUTA da SoproLife.
+
+    O repasse ao médico é obrigação separada e auditável à parte: nunca
+    reduz nem substitui a receita bruta. Um repasse de 100% continua sendo
+    repasse — a receita bruta permanece dentro do controle da SoproLife.
+    """
+
+    valor_bruto: Money
+    status: StatusPagamento = "Recebido"
+    data_competencia: str | None = Field(default=None, max_length=40)
+    data_recebimento: date | None = None
+    forma_pagamento: FormaPagamento | None = None
+    origem_preco: OrigemPreco | None = None
+    # Regra de repasse: percentual determinístico OU valor explícito.
+    repasse_medico_percentual: Percent | None = None
+    repasse_medico_valor: Money | None = None
+    repasse_medico_status: StatusPagamento = "Pendente"
+
+    @model_validator(mode="after")
+    def _repasse_coerente(self):
+        if (
+            self.repasse_medico_percentual is not None
+            and self.repasse_medico_valor is not None
+        ):
+            raise ValueError(
+                "Informe o repasse por percentual OU por valor, nunca os dois."
+            )
+        if (
+            self.repasse_medico_valor is not None
+            and self.repasse_medico_valor > self.valor_bruto
+        ):
+            raise ValueError("Repasse ao médico não pode exceder a receita bruta.")
+        return self
+
+
+class AtendimentoFinanceiro(StrictModel):
+    espirometria: AtendimentoFinanceiroExame | None = None
+    consulta: AtendimentoFinanceiroConsulta | None = None
+
+
+class AtendimentoCreate(StrictModel):
+    """Fluxo único de novo atendimento (M20).
+
+    Um paciente já selecionado (person_id) + um tipo + os blocos que o tipo
+    exige. Nenhum valor monetário é inferido: o financeiro só existe quando
+    vem explícito no payload.
+    """
+
+    person_id: str
+    tipo: TipoAtendimento
+    espirometria: AtendimentoEspirometria | None = None
+    consulta: AtendimentoConsulta | None = None
+    financeiro: AtendimentoFinanceiro | None = None
+    idempotency_key: str | None = Field(default=None, min_length=4, max_length=64)
+
+    @model_validator(mode="after")
+    def _blocos_coerentes(self):
+        precisa_exame = self.tipo in TIPOS_COM_ESPIROMETRIA
+        precisa_consulta = self.tipo in TIPOS_COM_CONSULTA
+        if precisa_exame and self.espirometria is None:
+            raise ValueError(f"O tipo '{self.tipo}' exige o bloco 'espirometria'.")
+        if not precisa_exame and self.espirometria is not None:
+            raise ValueError(f"O tipo '{self.tipo}' não aceita o bloco 'espirometria'.")
+        if precisa_consulta and self.consulta is None:
+            raise ValueError(f"O tipo '{self.tipo}' exige o bloco 'consulta'.")
+        if not precisa_consulta and self.consulta is not None:
+            raise ValueError(f"O tipo '{self.tipo}' não aceita o bloco 'consulta'.")
+
+        exame = self.espirometria
+        if self.tipo == TIPO_PASTORE:
+            if not (exame and exame.partner_id):
+                raise ValueError("Espirometria Pastore exige o parceiro.")
+            if not exame.partner_unit_id:
+                raise ValueError("Espirometria Pastore exige a unidade operacional.")
+        elif exame is not None and (exame.partner_id or exame.partner_unit_id):
+            # Atendimento SoproLife (inclusive o combinado) NUNCA é Pastore.
+            raise ValueError(
+                "Atendimento SoproLife não aceita parceiro/unidade — "
+                "use o tipo 'espirometria_pastore'."
+            )
+
+        fin = self.financeiro
+        if fin is not None:
+            if fin.espirometria is not None and not precisa_exame:
+                raise ValueError("Financeiro de espirometria sem espirometria no tipo.")
+            if fin.consulta is not None and not precisa_consulta:
+                raise ValueError("Financeiro de consulta sem consulta no tipo.")
+        return self
+
+
 class ConciliacaoLoteRequest(StrictModel):
     """Envio em lote — só commita se a soma bater com o pendente atual."""
 

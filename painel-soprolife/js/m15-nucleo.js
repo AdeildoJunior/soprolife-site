@@ -296,9 +296,14 @@
 
   // Cadastro novo é SEMPRE na Central de Cadastros — as abas do núcleo
   // mantêm listagem e edição; o botão abaixo leva à central com a aba certa.
-  function centralBtn(tab, label) {
+  /* Botão contextual: abre a Central no fluxo canônico. `prefill` leva o
+   * tipo/modo do "Novo atendimento" (M20) — nunca dado pessoal. */
+  function centralBtn(tab, label, prefill) {
+    var attrPrefill = prefill
+      ? ' data-m15-central-prefill="' + esc(JSON.stringify(prefill)) + '"' : "";
     return '<div class="m15-central-link">' +
-      '<button class="m15-btn" type="button" data-m15-central="' + esc(tab) + '">' +
+      '<button class="m15-btn" type="button" data-m15-central="' + esc(tab) + '"' +
+      attrPrefill + ">" +
       esc(label) + "</button>" +
       '<span class="m15-muted">Cadastros novos acontecem na Central de Cadastros — um único fluxo para toda a operação.</span>' +
       "</div>";
@@ -625,7 +630,10 @@
           "Nenhuma pessoa cadastrada. Use a Central de Cadastros."
         ) +
         '<div id="m15EditBox"></div>' +
-        (podeEditar ? centralBtn("paciente", "+ Nova pessoa / paciente") : "");
+        (podeEditar
+          ? centralBtn("atendimento", "+ Nova pessoa / paciente",
+                       { somente_paciente: true })
+          : "");
       document.getElementById("m15PessoasBuscar").addEventListener("click", function () {
         state.filters.pessoasQ = document.getElementById("m15PessoasQ").value;
         render();
@@ -792,12 +800,32 @@
 
   // ------------------------------------------- espirometrias e consultas
 
+  /* O status GRAVADO do registro entra na lista mesmo quando não é um dos
+   * valores oferecidos para registros novos. Sem isto, abrir e salvar um
+   * exame histórico (ex.: "Liberado") reescreveria o status silenciosamente
+   * para a primeira opção do select — o valor histórico tem de sobreviver. */
+  function statusComAtual(opcoes, atual) {
+    if (!atual) return opcoes;
+    var ja = opcoes.some(function (o) {
+      return String(Array.isArray(o) ? o[0] : o) === String(atual);
+    });
+    if (ja) return opcoes;
+    var rotulo = window.SoproStatus ? window.SoproStatus.espirometria(atual) : atual;
+    return opcoes.concat([[atual, rotulo + " (valor atual)"]]);
+  }
+
   function attendanceLoader(kind) {
     var isExam = kind === "espirometrias";
     var statusKey = isExam ? "espStatus" : "conStatus";
     var statusList = isExam
       ? ["Aguardando", "Realizado", "Laudo Liberado", "Cancelado", "Remarcado"]
       : ["Agendada", "Realizada", "Cancelada", "Remarcada", "Não compareceu"];
+    // Exibição SEMPRE pelo formatador único (M20): valor gravado intacto,
+    // rótulo normalizado. "Liberado" nunca é tocado.
+    var statusOpts = isExam && window.SoproStatus
+      ? window.SoproStatus.opcoesEspirometria(statusList) : statusList;
+    var statusRotulo = isExam && window.SoproStatus
+      ? window.SoproStatus.espirometria : function (v) { return v; };
     return function () {
       var status = state.filters[statusKey] || "";
       var podeEditar = can("operacional");
@@ -806,7 +834,7 @@
         var items = byId(data.itens);
         body().innerHTML =
           '<div class="m15-filtros"><select id="m15AttStatus">' +
-          optionsHtml([["", "todos os status"]].concat(statusList), status) +
+          optionsHtml([["", "todos os status"]].concat(statusOpts), status) +
           "</select></div>" +
           table(
             ["Código", "Data", "Status", isExam ? "Modalidade" : "Profissional", "Origem"]
@@ -819,7 +847,7 @@
                 "<strong>" + esc(e.public_code) + "</strong>" + sintBadge(e),
                 fmtDate(dt) + (assumed
                   ? ' <span class="m15-muted" title="Original: ' + esc(original) + '">(dia assumido)</span>' : ""),
-                pill(e.status),
+                pill(isExam ? (e.status_exibicao || statusRotulo(e.status)) : e.status),
                 esc(isExam ? (e.modalidade || "—") : (e.profissional || "—")),
                 esc(e.origem || "—"),
               ];
@@ -831,8 +859,9 @@
           ) +
           '<div id="m15EditBox"></div>' +
           (podeEditar
-            ? centralBtn(isExam ? "espirometria" : "consulta",
-                isExam ? "+ Nova espirometria" : "+ Nova consulta")
+            ? centralBtn("atendimento",
+                isExam ? "+ Nova espirometria" : "+ Nova consulta",
+                { tipo: isExam ? "espirometria_soprolife" : "consulta_soprolife" })
             : "");
         document.getElementById("m15AttStatus").addEventListener("change", function (ev) {
           state.filters[statusKey] = ev.target.value;
@@ -845,7 +874,7 @@
             openEdit(
               '<div class="m15-panel"><h3>Editar ' + esc(e.public_code) + "</h3>" +
               '<form class="m15-form" id="m15EditAtt">' +
-              fld("Status", sel("status", statusList, e.status), 3) +
+              fld("Status", sel("status", statusComAtual(statusOpts, e.status), e.status), 3) +
               fld("Data", dateInp("data", (isExam ? e.data_exame : e.data_consulta) || "",
                 { parcial: true }), { span: 3, help: HELP_DATA_PARCIAL }) +
               (isExam
@@ -857,7 +886,11 @@
               fld("Observação", inp("observacao", e.observacao || ""), true) +
               '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
               closeEditButton() + "</div></form>" +
-              '<p class="m15-muted">Marcar como ' + (isExam ? '"Realizado"' : '"Realizada"') +
+              '<p class="m15-muted">Marcar como ' +
+              (isExam
+                ? '"' + (window.SoproStatus
+                    ? window.SoproStatus.espirometria("Realizado") : "Realizado") + '"'
+                : '"Realizada"') +
               " agenda o follow-up de 6 meses automaticamente.</p></div>",
               function (box) {
                 wireClose(box);
@@ -865,7 +898,13 @@
                   ev2.preventDefault();
                   var f = ev2.target;
                   var payload = {};
-                  setIf(payload, "status", val(f, "status"));
+                  // Status só viaja quando o humano REALMENTE o mudou. Assim
+                  // um valor histórico fora do vocabulário atual (ex.:
+                  // "Liberado") continua exatamente como está ao editar
+                  // qualquer outro campo do registro.
+                  if (val(f, "status") !== e.status) {
+                    setIf(payload, "status", val(f, "status"));
+                  }
                   setIf(payload, isExam ? "data_exame" : "data_consulta", val(f, "data"));
                   if (isExam) {
                     setIf(payload, "responsavel", val(f, "responsavel"));
@@ -2191,7 +2230,10 @@
     var btn = ev.target.closest && ev.target.closest("[data-m15-central]");
     if (!btn) return;
     if (window.SoproCentral && typeof window.SoproCentral.open === "function") {
-      window.SoproCentral.open(btn.getAttribute("data-m15-central"));
+      var raw = btn.getAttribute("data-m15-central-prefill");
+      var prefill = null;
+      if (raw) { try { prefill = JSON.parse(raw); } catch (e) { prefill = null; } }
+      window.SoproCentral.open(btn.getAttribute("data-m15-central"), prefill);
     } else {
       toast("Central de Cadastros indisponível nesta página.", "erro");
     }

@@ -833,6 +833,208 @@ def cmd_seed_institucional(args) -> int:
         db.close()
 
 
+# ------------------------------------------- consolidação de parceiro (M20)
+
+FRASE_CONSOLIDACAO = "CONSOLIDAR PARCEIRO DUPLICADO"
+
+
+def _partner_snapshot(db, partner) -> dict:
+    """Mapa técnico do parceiro — sem nenhum dado de paciente."""
+    from sqlalchemy import select as _select
+
+    from .models import (
+        Followup as _F,
+        PartnerContact as _C,
+        PartnerReferral as _R,
+        PartnerUnit as _U,
+        PartnerUnitConfig as _Cfg,
+        Partnership as _P,
+        SpirometryExam as _E,
+    )
+
+    unidades = db.execute(_select(_U).where(_U.partner_id == partner.id)).scalars().all()
+    unit_ids = [u.id for u in unidades]
+    agendas = (
+        db.execute(_select(_Cfg).where(_Cfg.partner_unit_id.in_(unit_ids))).scalars().all()
+        if unit_ids else []
+    )
+    exames = db.execute(_select(_E).where(_E.partner_id == partner.id)).scalars().all()
+    return {
+        "public_code": partner.public_code,
+        "nome": partner.nome,
+        "arquivado": partner.arquivado,
+        "merged_into_partner_id": partner.merged_into_partner_id,
+        "unidades": sorted(f"{u.public_code}:{u.nome}:{'ativa' if u.ativo else 'inativa'}"
+                           for u in unidades),
+        "agendas": sorted(f"{c.dia_semana} {c.horario_inicio}-{c.horario_fim}"
+                          for c in agendas),
+        "exames": sorted(f"{e.public_code}@{e.partner_unit_id}" for e in exames),
+        "contatos": sorted(
+            c.public_code
+            for c in db.execute(_select(_C).where(_C.partner_id == partner.id)).scalars().all()
+        ),
+        "parcerias": sorted(
+            p.public_code
+            for p in db.execute(_select(_P).where(_P.partner_id == partner.id)).scalars().all()
+        ),
+        "encaminhamentos": len(
+            db.execute(_select(_R).where(_R.partner_id == partner.id)).scalars().all()
+        ),
+        "followups": len(
+            db.execute(_select(_F).where(_F.partner_id == partner.id)).scalars().all()
+        ),
+    }
+
+
+def _totais_globais(db) -> dict:
+    from sqlalchemy import func as _func, select as _select
+
+    from .models import (
+        Consultation as _Con,
+        FinancialEntry as _Fin,
+        Followup as _Fup,
+        Person as _Pes,
+        SpirometryExam as _Esp,
+    )
+
+    return {
+        "pessoas": db.execute(_select(_func.count()).select_from(_Pes)).scalar_one(),
+        "exames": db.execute(_select(_func.count()).select_from(_Esp)).scalar_one(),
+        "consultas": db.execute(_select(_func.count()).select_from(_Con)).scalar_one(),
+        "followups": db.execute(_select(_func.count()).select_from(_Fup)).scalar_one(),
+        "lancamentos": db.execute(_select(_func.count()).select_from(_Fin)).scalar_one(),
+        "soma_lancamentos": str(
+            db.execute(_select(_func.coalesce(_func.sum(_Fin.valor), 0))).scalar_one()
+        ),
+        "exames_com_unidade": db.execute(
+            _select(_func.count()).select_from(_Esp).where(_Esp.partner_unit_id.is_not(None))
+        ).scalar_one(),
+    }
+
+
+def cmd_consolidar_parceiro(args) -> int:
+    """Consolida uma duplicata de parceiro no canônico — dry-run por padrão.
+
+    Fail-closed: verifica TODOS os relacionamentos depois da migração e
+    antes do commit; qualquer divergência desfaz a transação inteira.
+    """
+    from .services.partner_merge import (
+        PartnerMergeError,
+        merge_partner,
+        resolve_partner,
+    )
+
+    db = _session()
+    try:
+        canonical, _ = resolve_partner(db, args.canonico)
+        duplicate, _ = resolve_partner(db, args.duplicata)
+        if canonical is None or duplicate is None:
+            print("ERRO: parceiro canônico ou duplicata não encontrado.", file=sys.stderr)
+            return 1
+        if canonical.id == duplicate.id:
+            print("ERRO: canônico e duplicata são o mesmo parceiro.", file=sys.stderr)
+            return 1
+
+        antes = {
+            "duplicata": _partner_snapshot(db, duplicate),
+            "canonico": _partner_snapshot(db, canonical),
+            "totais": _totais_globais(db),
+        }
+
+        # Portão de segurança: o canônico precisa ser mesmo o que carrega a
+        # operação real (unidade + exames). Sem isso, nada é executado.
+        if not antes["canonico"]["unidades"]:
+            print("ERRO: o parceiro canônico não tem unidade — abortado.", file=sys.stderr)
+            return 2
+        if len(antes["canonico"]["exames"]) < len(antes["duplicata"]["exames"]):
+            print("ERRO: a duplicata tem mais exames que o canônico — abortado.",
+                  file=sys.stderr)
+            return 2
+
+        if not args.executar:
+            print(json.dumps({"modo": "dry_run", "antes": antes},
+                             ensure_ascii=False, indent=2))
+            return 0
+
+        frase = input(f"Digite exatamente '{FRASE_CONSOLIDACAO}' para confirmar: ")
+        if frase.strip() != FRASE_CONSOLIDACAO:
+            print("ERRO: frase de confirmação incorreta — nada foi alterado.",
+                  file=sys.stderr)
+            return 2
+
+        resultado = merge_partner(db, duplicate, canonical)
+        depois = {
+            "duplicata": _partner_snapshot(db, duplicate),
+            "canonico": _partner_snapshot(db, canonical),
+            "totais": _totais_globais(db),
+        }
+
+        problemas = _verificar_consolidacao(db, antes, depois, duplicate, canonical)
+        if problemas:
+            db.rollback()
+            print(json.dumps({"modo": "abortado", "problemas": problemas,
+                              "antes": antes}, ensure_ascii=False, indent=2),
+                  file=sys.stderr)
+            return 3
+
+        db.commit()
+        print(json.dumps({"modo": "executado", "antes": antes, "depois": depois,
+                          "migracao": resultado}, ensure_ascii=False, indent=2))
+        return 0
+    except PartnerMergeError as exc:
+        db.rollback()
+        print(f"ERRO de consolidação: {exc}", file=sys.stderr)
+        return 3
+    except Exception as exc:
+        db.rollback()
+        print(f"ERRO inesperado: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        db.close()
+
+
+def _verificar_consolidacao(db, antes, depois, duplicate, canonical) -> list[str]:
+    """Portões pós-migração. Lista vazia = seguro para commit."""
+    from .services.partner_merge import resolve_partner
+
+    problemas: list[str] = []
+
+    exames_antes = set(antes["duplicata"]["exames"]) | set(antes["canonico"]["exames"])
+    if set(depois["canonico"]["exames"]) != exames_antes:
+        problemas.append("exames do canônico não conferem com a soma anterior")
+    if depois["duplicata"]["exames"]:
+        problemas.append("a duplicata ainda tem exame vinculado")
+    if any("@None" in e for e in depois["canonico"]["exames"]):
+        problemas.append("algum exame perdeu a unidade")
+    if depois["canonico"]["agendas"] != sorted(
+        set(antes["canonico"]["agendas"]) | set(antes["duplicata"]["agendas"])
+    ):
+        problemas.append("agendas da unidade mudaram")
+    if antes["totais"] != depois["totais"]:
+        problemas.append("totais globais (pessoas/exames/consultas/financeiro) mudaram")
+    if not duplicate.arquivado or duplicate.merged_into_partner_id != canonical.id:
+        problemas.append("a duplicata não ficou arquivada apontando para o canônico")
+    if canonical.arquivado:
+        problemas.append("o canônico ficou arquivado")
+
+    resolvido, _ = resolve_partner(db, antes["duplicata"]["public_code"])
+    if resolvido is None or resolvido.id != canonical.id:
+        problemas.append("o código antigo não resolve para o canônico")
+
+    contatos_esperados = len(
+        set(antes["canonico"]["contatos"]) | set(antes["duplicata"]["contatos"])
+    )
+    if len(depois["canonico"]["contatos"]) > contatos_esperados:
+        problemas.append("contatos duplicados no canônico")
+    if depois["duplicata"]["contatos"]:
+        problemas.append("a duplicata ainda tem contato vinculado")
+    if set(depois["canonico"]["parcerias"]) != set(
+        antes["canonico"]["parcerias"]) | set(antes["duplicata"]["parcerias"]
+    ):
+        problemas.append("parcerias não foram integralmente migradas")
+    return problemas
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="m15", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -1061,6 +1263,18 @@ def main(argv: list[str] | None = None) -> int:
                        help="Parceiros reais via arquivo privado (idempotente)")
     p.add_argument("--arquivo", required=True)
     p.set_defaults(func=cmd_seed_institucional)
+
+    p = sub.add_parser(
+        "consolidar-parceiro",
+        help="Consolida duplicata de parceiro no canônico (dry-run por padrão)",
+    )
+    p.add_argument("--duplicata", required=True,
+                   help="Código público, id ou id legado do parceiro obsoleto")
+    p.add_argument("--canonico", required=True,
+                   help="Código público, id ou id legado do parceiro canônico")
+    p.add_argument("--executar", action="store_true",
+                   help="Executa de verdade (pede a frase exata interativamente)")
+    p.set_defaults(func=cmd_consolidar_parceiro)
 
     args = parser.parse_args(argv)
     return args.func(args)

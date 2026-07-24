@@ -44,6 +44,16 @@
     timelineAberta: null,
   };
 
+  /* Atalhos contextuais para o fluxo único "Novo atendimento" (M20).
+   * O CRM NÃO reimplementa formulário de cadastro: só abre a Central com o
+   * paciente e o tipo já escolhidos. */
+  var CENTRAL_ATALHOS = [
+    ["espirometria_soprolife", "+ Espirometria"],
+    ["espirometria_pastore", "+ Espirometria Pastore"],
+    ["consulta_soprolife", "+ Consulta"],
+    ["espirometria_consulta_soprolife", "+ Espirometria + Consulta"],
+  ];
+
   // ------------------------------------------------------------ utilitários
 
   function cli() { return window.SoproM15 || null; }
@@ -320,7 +330,8 @@
       esc(fmtDate(k.data_referencia)) + ". Nenhum valor de demonstração é exibido aqui.</p></div>" +
       '<div class="crm-ws-nota crm-ws-nota-central"><span aria-hidden="true">📝</span>' +
       "<p>Para cadastrar paciente, exame, consulta, lead, parceiro ou lançamento, use a " +
-      '<button type="button" class="crm-ws-link" data-crm-ws-central="paciente">Central de Cadastros</button>' +
+      '<button type="button" class="crm-ws-link" data-crm-ws-central="atendimento" ' +
+      'data-crm-ws-tipo="somente_paciente">Central de Cadastros</button>' +
       " — este CRM não duplica formulários de cadastro.</p></div>";
   }
 
@@ -431,12 +442,13 @@
       botoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
         'data-crm-ws-reagendar="' + esc(p.proximo_contato.followup_id) + '">Reagendar</button>');
     }
-    botoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
-      'data-crm-ws-central="espirometria" data-crm-ws-codigo="' + esc(p.public_code) +
-      '">+ Espirometria</button>');
-    botoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
-      'data-crm-ws-central="consulta" data-crm-ws-codigo="' + esc(p.public_code) +
-      '">+ Consulta</button>');
+    // Botoes contextuais abrem o fluxo unico "Novo atendimento" (M20) com o
+    // tipo ja selecionado. So o codigo publico viaja — nunca nome ou telefone.
+    CENTRAL_ATALHOS.forEach(function (a) {
+      botoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
+        'data-crm-ws-central="atendimento" data-crm-ws-tipo="' + esc(a[0]) + '" ' +
+        'data-crm-ws-codigo="' + esc(p.public_code) + '">' + esc(a[1]) + "</button>");
+    });
     return '<div class="crm-ws-acoes">' + botoes.join("") + "</div>";
   }
 
@@ -950,16 +962,18 @@
             '<p class="m15-muted">Eventos financeiros ficam visíveis apenas para gestão.</p>') +
           '<div class="m15-modal-actions">' +
           '<button type="button" class="m15-btn m15-btn-sec" data-crm-ws-fechar>Fechar</button>' +
-          '<button type="button" class="m15-btn m15-btn-sec" data-crm-ws-central="espirometria" ' +
-          'data-crm-ws-codigo="' + esc(p.public_code) + '">+ Espirometria</button>' +
-          '<button type="button" class="m15-btn m15-btn-sec" data-crm-ws-central="consulta" ' +
-          'data-crm-ws-codigo="' + esc(p.public_code) + '">+ Consulta</button></div>',
+          CENTRAL_ATALHOS.map(function (a) {
+            return '<button type="button" class="m15-btn m15-btn-sec" ' +
+              'data-crm-ws-central="atendimento" data-crm-ws-tipo="' + esc(a[0]) + '" ' +
+              'data-crm-ws-codigo="' + esc(p.public_code) + '">' + esc(a[1]) + "</button>";
+          }).join("") + "</div>",
           function (overlay, fechar) {
             overlay.querySelectorAll("[data-crm-ws-central]").forEach(function (b) {
               b.addEventListener("click", function () {
                 fechar();
                 abrirCentral(b.getAttribute("data-crm-ws-central"),
-                             b.getAttribute("data-crm-ws-codigo"));
+                             b.getAttribute("data-crm-ws-codigo"),
+                             b.getAttribute("data-crm-ws-tipo"));
               });
             });
           }
@@ -968,12 +982,16 @@
       .catch(function (err) { toast(err.message || String(err), "erro"); });
   }
 
-  function abrirCentral(tab, codigoPessoa) {
+  function abrirCentral(tab, codigoPessoa, tipo) {
     if (!window.SoproCentral || typeof window.SoproCentral.open !== "function") {
       toast("Central de Cadastros indisponível nesta página.", "erro");
       return;
     }
-    window.SoproCentral.open(tab, codigoPessoa ? { person_codigo: codigoPessoa } : null);
+    var prefill = {};
+    if (codigoPessoa) prefill.person_codigo = codigoPessoa;
+    if (tipo === "somente_paciente") prefill.somente_paciente = true;
+    else if (tipo) prefill.tipo = tipo;
+    window.SoproCentral.open(tab, Object.keys(prefill).length ? prefill : null);
   }
 
   // ---------------------------------------------------------------- eventos
@@ -1067,7 +1085,8 @@
     container.querySelectorAll("[data-crm-ws-central]").forEach(function (b) {
       b.addEventListener("click", function () {
         abrirCentral(b.getAttribute("data-crm-ws-central"),
-                     b.getAttribute("data-crm-ws-codigo"));
+                     b.getAttribute("data-crm-ws-codigo"),
+                     b.getAttribute("data-crm-ws-tipo"));
       });
     });
     container.querySelectorAll("[data-crm-copiar]").forEach(function (b) {

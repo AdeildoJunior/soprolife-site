@@ -344,16 +344,22 @@ const leadSrc = trechoCentral("LOADERS.lead = function", "function loadLeadRecen
 caso("Central — Novo lead: responsável está antes da linha de datas",
      leadSrc.indexOf('fld("Responsável"') < leadSrc.indexOf('fld("1º contato"'));
 
-const espSrc = trechoCentral("LOADERS.espirometria = function", "function loadEspRecents(");
-['status: val(form, "status")', "idempotency_key: m15().idemKey()", '"modalidade"',
- '"local_atendimento"', '"partner_id"', '"partner_unit_id"', '"origem"',
- '"responsavel"', '"observacao"', "broncodilatador"].forEach((k) => {
+// M20: Espirometria e Consulta viraram blocos do fluxo único "Novo
+// atendimento"; os mesmos campos continuam sendo enviados, agora pelos
+// montadores montarEspirometria/montarConsulta.
+const espSrc = trechoCentral("function montarEspirometria(", "function montarConsulta(");
+['status: val(form, "esp_status")', '"modalidade"', '"local_atendimento"',
+ "partner_id", "partner_unit_id", '"origem"', '"responsavel"', '"observacao"',
+ "broncodilatador"].forEach((k) => {
   caso(`Central — Espirometria envia ${k}`, espSrc.indexOf(k) !== -1);
 });
+caso("Central — Novo atendimento envia idempotency_key",
+     trechoCentral("LOADERS.atendimento = function", "function montarEspirometria(")
+       .indexOf("idempotency_key: m15().idemKey()") !== -1);
 
-const conSrc = trechoCentral("LOADERS.consulta = function", "function loadConRecents(");
-['status: val(form, "status")', "idempotency_key: m15().idemKey()", '"modalidade"',
- '"profissional"', '"origem"', '"responsavel"', '"observacao"'].forEach((k) => {
+const conSrc = trechoCentral("function montarConsulta(", "function montarFinanceiro(");
+['status: val(form, "con_status")', '"modalidade"', '"profissional"',
+ '"observacao"'].forEach((k) => {
   caso(`Central — Consulta envia ${k}`, conSrc.indexOf(k) !== -1);
 });
 
@@ -416,8 +422,8 @@ const camposDataCentral = [
   ['dateInp(prefix + "_nasc", "")', "Central — pessoa inline (nascimento)"],
   ['dateInp("data_primeiro_contato", "", { parcial: true })', "Central — Leads (parcial)"],
   ['dateInp("data_retomada_manual", "")', "Central — Lead próxima ação"],
-  ['dateInp("data_exame", "", { parcial: true })', "Central — Espirometria (parcial)"],
-  ['dateInp("data_consulta", "", { parcial: true })', "Central — Consulta (parcial)"],
+  ['dateInp("esp_data", "", { parcial: true })', "Central — Espirometria (parcial)"],
+  ['dateInp("con_data", "", { parcial: true })', "Central — Consulta (parcial)"],
   ['dateInp("data_competencia", "", { parcial: true })', "Central — Financeiro competência (parcial)"],
   ['dateInp("data_recebimento", "")', "Central — Financeiro recebimento"],
 ];

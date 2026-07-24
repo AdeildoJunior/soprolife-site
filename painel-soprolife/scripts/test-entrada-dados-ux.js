@@ -59,8 +59,10 @@ console.log("Responsável (select fechado Adeildo/Luiz Faustino) — agora só n
 caso("central-cadastros.js define RESPONSAVEIS com Adeildo e Luiz Faustino",
      /const RESPONSAVEIS\s*=\s*\["Adeildo",\s*"Luiz Faustino"\]/.test(centralJsSrc));
 const ocorrenciasResponsavelDatalist = (centralJsSrc.match(/list="cadResp"/g) || []).length;
-caso("campo responsável usa a lista RESPONSAVEIS em pelo menos 3 abas (Lead, Espirometria, Consulta)",
-     ocorrenciasResponsavelDatalist >= 3, `encontrado: ${ocorrenciasResponsavelDatalist}`);
+// M20: Espirometria e Consulta deixaram de ser abas — viraram blocos do
+// fluxo único "Novo atendimento". A lista continua servindo Lead + exame.
+caso("campo responsável usa a lista RESPONSAVEIS no Lead e no Novo atendimento",
+     ocorrenciasResponsavelDatalist >= 2, `encontrado: ${ocorrenciasResponsavelDatalist}`);
 
 // ── Defaults fechados equivalentes aos da M12.1, agora centralizados ───────
 console.log();
@@ -70,15 +72,15 @@ caso("central-cadastros.js define ORIGENS com Google/Instagram/WhatsApp/Indicaç
 caso("aba Lead tem etapa padrão 'novo' e serviço de interesse padrão 'espirometria'",
      /LOADERS\.lead[\s\S]{0,3000}?sel\("etapa", LEAD_ETAPAS, "novo"\)/.test(centralJsSrc) &&
      /LOADERS\.lead[\s\S]{0,3000}?sel\("servico_interesse",[\s\S]{0,300}?\], "espirometria"\)/.test(centralJsSrc));
-caso("aba Paciente pré-preenche consentimento_whatsapp como 'concedido'",
-     /LOADERS\.paciente[\s\S]{0,3000}?consentimento_whatsapp[\s\S]{0,200}?"concedido"\)/.test(centralJsSrc));
+caso("cadastro de pessoa pré-preenche consentimento_whatsapp como 'concedido'",
+     /personPickerHtml[\s\S]{0,3000}?_consent"[\s\S]{0,200}?"concedido"\)/.test(centralJsSrc));
 
 // ── Seletor de pessoa reutilizável substitui os campos soltos de nome/tel ──
 console.log();
 console.log("Seletor de pessoa reutilizável (substitui nome/telefone soltos por aba)");
-caso("personPickerHtml existe e é usado por múltiplas abas (Lead, Espirometria, Consulta)",
+caso("personPickerHtml existe e é usado por Lead e Novo atendimento",
      /function personPickerHtml\(/.test(centralJsSrc) &&
-     (centralJsSrc.match(/personPickerHtml\(/g) || []).length >= 4);
+     (centralJsSrc.match(/personPickerHtml\(/g) || []).length >= 3);
 caso("seletor de pessoa avisa duplicado antes de criar (verificar-duplicados)",
      centralJsSrc.includes("/pessoas/verificar-duplicados"));
 

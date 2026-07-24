@@ -331,8 +331,9 @@ caso("app.js não contém mais o ACTION_MAP legado de Entrada de Dados",
      !/const ACTION_MAP\s*=\s*\{/.test(appJsSrc));
 caso("app.js não contém mais o helper f() de opção em branco do modal Pastore (modal removido)",
      !appJsSrc.includes('<option value="">—</option>${opts}</select>'));
+// M20: o deep-link passou a abrir o fluxo ÚNICO com o tipo Pastore.
 caso("openNovoAtendimentoPastoreModal virou deep-link para a Central (sem formulário próprio)",
-     /function openNovoAtendimentoPastoreModal\(\)\s*\{[\s\S]{0,300}?SoproCentral\.open\("espirometria"/.test(appJsSrc));
+     /function openNovoAtendimentoPastoreModal\(\)\s*\{[\s\S]{0,400}?SoproCentral\.open\("atendimento",\s*\{\s*tipo:\s*"espirometria_pastore"\s*\}\)/.test(appJsSrc));
 
 caso("Apps Script mantém _registrarEspirometriaFinanceiro (infra legada/import, não apagada)",
      /function _registrarEspirometriaFinanceiro\s*\(/.test(gsSrc));
@@ -357,10 +358,10 @@ caso("central-cadastros.js não contém URL do Apps Script",
      !/script\.google\.com/.test(centralJsSrc));
 caso("central-cadastros.js não usa fetch cru fora do cliente do núcleo (sem chamada direta a Sheets)",
      !/fetch\(["'`]https:\/\/script\.google\.com/.test(centralJsSrc));
-caso("aba Espirometria da Central usa idempotency_key (anti duplo-clique via API M15)",
-     /LOADERS\.espirometria[\s\S]{0,4000}?idempotency_key:\s*m15\(\)\.idemKey\(\)/.test(centralJsSrc));
-caso("aba Espirometria da Central inclui campo broncodilatador",
-     /LOADERS\.espirometria[\s\S]{0,4000}?broncodilatador/.test(centralJsSrc));
+caso("Novo atendimento usa idempotency_key (anti duplo-clique via API M15)",
+     /LOADERS\.atendimento[\s\S]{0,9000}?idempotency_key:\s*m15\(\)\.idemKey\(\)/.test(centralJsSrc));
+caso("bloco de espirometria do Novo atendimento inclui campo broncodilatador",
+     /function blocoEspirometriaHtml[\s\S]{0,4000}?broncodilatador/.test(centralJsSrc));
 caso("aba Financeiro da Central nunca inclui campo de nome/telefone do paciente no formulário",
      (() => {
        const inicio = centralJsSrc.indexOf("LOADERS.financeiro = function");

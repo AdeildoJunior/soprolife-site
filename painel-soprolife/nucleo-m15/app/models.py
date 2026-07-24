@@ -368,6 +368,19 @@ class Partner(Base, TimestampMixin, LegacyMixin):
     status: Mapped[str] = mapped_column(String(30), default="prospecto", nullable=False)
     cidade: Mapped[str | None] = mapped_column(String(120))
     observacao: Mapped[str | None] = mapped_column(Text)
+    # M20: duplicata consolidada. O registro NUNCA é apagado — sai das listas
+    # operacionais comuns e passa a resolver para o parceiro canônico, que
+    # herda o código público antigo como alias legado.
+    arquivado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    merged_into_partner_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("partners.id")
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "merged_into_partner_id IS NULL OR merged_into_partner_id <> id",
+            name="partner_nao_mescla_em_si",
+        ),
+    )
 
 
 class PartnerUnit(Base, TimestampMixin):

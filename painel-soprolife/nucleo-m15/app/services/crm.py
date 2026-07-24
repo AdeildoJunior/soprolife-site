@@ -35,6 +35,7 @@ from ..models import (
     PersonRelationship,
     SpirometryExam,
 )
+from ..status_display import exam_status_display
 from .followup import today_local
 
 # Janela usada para classificar "paciente reativado": um atendimento novo
@@ -336,6 +337,7 @@ def build_patient_rows(db: Session, *, com_financeiro: bool) -> list[dict]:
                 "public_code": ultimo_exame.public_code,
                 "data": ultimo_exame.data_exame.isoformat() if ultimo_exame.data_exame else None,
                 "status": ultimo_exame.status,
+                "status_exibicao": exam_status_display(ultimo_exame.status),
             } if ultimo_exame else None,
             "ultima_consulta": {
                 "public_code": ultima_consulta.public_code,
@@ -530,7 +532,7 @@ def build_timeline(db: Session, person: Person, *, com_financeiro: bool) -> list
             "public_code": exam.public_code,
             "entidade": "spirometry_exams",
             "entidade_id": exam.id,
-            "detalhe": exam.status,
+            "detalhe": exam_status_display(exam.status),
             "parceiro": partner_names.get(exam.partner_id) if exam.partner_id else None,
             "local": exam.local_atendimento,
         })

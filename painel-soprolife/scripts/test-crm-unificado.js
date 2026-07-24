@@ -125,12 +125,15 @@ const postsUnicos = [...new Set(postsDoWorkspace)].filter((p) => p !== "/crm/pac
 caso("o único endpoint de escrita do workspace é o registro de contato",
      postsUnicos.length === 1 && postsUnicos[0] === "/crm/contatos",
      JSON.stringify(postsUnicos));
+// M20: os atalhos passaram a apontar para o fluxo ÚNICO "Novo atendimento",
+// com o tipo pré-selecionado — nunca para abas de cadastro concorrentes.
 caso("os botões de criar fazem deep-link para a Central",
-     wsSrc.indexOf('window.SoproCentral.open(tab,') !== -1 &&
-     wsSrc.indexOf('data-crm-ws-central="espirometria"') !== -1 &&
-     wsSrc.indexOf('data-crm-ws-central="consulta"') !== -1);
+     wsSrc.indexOf("window.SoproCentral.open(tab,") !== -1 &&
+     wsSrc.indexOf('data-crm-ws-central="atendimento"') !== -1 &&
+     wsSrc.indexOf('"espirometria_soprolife"') !== -1 &&
+     wsSrc.indexOf('"consulta_soprolife"') !== -1);
 caso("o deep-link leva só o código público (nunca nome ou telefone)",
-     wsSrc.indexOf("{ person_codigo: codigoPessoa }") !== -1 &&
+     wsSrc.indexOf("prefill.person_codigo = codigoPessoa;") !== -1 &&
      centralSrc.indexOf("const preCodigo = (state.prefill || {}).person_codigo;") !== -1);
 
 // ───────────── E) WhatsApp assistido ────────────────────────────────────────
@@ -231,8 +234,8 @@ caso("index.html carrega o CSS e o JS do workspace",
 caso("o workspace carrega DEPOIS do núcleo M15 (depende da sessão)",
      indexSrc.indexOf("js/m15-nucleo.js") < indexSrc.indexOf("js/crm-workspace.js"));
 caso("cache-buster novo aplicado ao workspace",
-     /crm-workspace\.js\?v=2026072402/.test(indexSrc) &&
-     /crm-workspace\.css\?v=2026072402/.test(indexSrc));
+     /crm-workspace\.js\?v=2026072501/.test(indexSrc) &&
+     /crm-workspace\.css\?v=\d{10}/.test(indexSrc));
 
 caso("abas do workspace têm papel de tablist e estado acessível",
      wsCrmSrc.indexOf('role="tablist"') !== -1 &&

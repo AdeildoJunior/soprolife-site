@@ -865,22 +865,26 @@
   <script src="./js/today-actions.js?v=2026070803"></script>
   <script src="./js/espirometria-financeiro.js?v=2026070902"></script>
   <script src="./js/marketing-freshness.js?v=2026071201"></script>
-  <script src="./js/app.js?v=2026072402"></script>
+  <script src="./js/app.js?v=2026072501"></script>
+  <!-- Apresentação canônica de status de atendimento (M20): formatador
+       ÚNICO usado por Central, CRM, linha do tempo, listas, filtros e
+       inspeção técnica. Sem defer: precisa existir antes dos módulos. -->
+  <script src="./js/status-atendimento.js?v=2026072501"></script>
   <!-- Núcleo Operacional M15 (beta — go-live controlado M15.5A): habilitado
        globalmente por data/m15-config.json (enabled=true; rollback: false).
        A guarda de contexto seguro (m15-security.js) carrega ANTES do núcleo:
        login só em HTTPS ou loopback local; HTTP remoto fica bloqueado. -->
   <script src="./js/m15-security.js?v=2026072402" defer></script>
   <script src="./js/m15-datepicker.js?v=2026072402" defer></script>
-  <script src="./js/m15-nucleo.js?v=2026072402" defer></script>
+  <script src="./js/m15-nucleo.js?v=2026072501" defer></script>
   <!-- Central de Cadastros (M16): fluxo canônico ÚNICO de entrada de dados.
        Depende do cliente compartilhado window.SoproM15 (script acima). -->
-  <script src="./js/central-cadastros.js?v=2026072402" defer></script>
+  <script src="./js/central-cadastros.js?v=2026072501" defer></script>
   <!-- Conciliação de exames extra-Pastore (M18). Depende de window.SoproM15. -->
   <script src="./js/financeiro-conciliacao.js?v=2026072402" defer></script>
   <!-- CRM Pacientes e Acompanhamento (M19): ÚNICA implementação de
        paciente/follow-up do painel. Substituiu a tela legada de planilha
        e a parcial "Acompanhamento e WhatsApp". Depende de window.SoproM15. -->
-  <script src="./js/crm-workspace.js?v=2026072402" defer></script>
+  <script src="./js/crm-workspace.js?v=2026072501" defer></script>
 </body>
 </html>

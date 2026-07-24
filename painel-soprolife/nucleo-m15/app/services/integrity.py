@@ -39,6 +39,14 @@ def ensure_partner_exists(db: Session, partner_id: str) -> Partner:
     partner = db.get(Partner, partner_id)
     if partner is None:
         raise HTTPException(status_code=404, detail="Parceiro não encontrado.")
+    # M20: parceiro consolidado sai da operação — escrever nele voltaria a
+    # dividir a mesma parceria em dois registros.
+    if partner.arquivado:
+        raise _domain_error(
+            409, "parceiro_arquivado",
+            "Parceiro arquivado por consolidação — use o parceiro canônico.",
+            id=partner.merged_into_partner_id,
+        )
     return partner
 
 

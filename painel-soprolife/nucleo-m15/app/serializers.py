@@ -9,6 +9,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from zoneinfo import ZoneInfo
 
 from .config import get_settings
+from .status_display import exam_status_display
 from . import models as m
 
 # Política de arredondamento monetário do núcleo: ROUND_HALF_UP, 2 casas.
@@ -151,6 +152,8 @@ def ser_exam(e: m.SpirometryExam) -> dict:
         "partner_id": e.partner_id,
         "partner_unit_id": e.partner_unit_id,
         "status": e.status,
+        # Apresentação canônica (M20): o valor gravado nunca é reescrito.
+        "status_exibicao": exam_status_display(e.status),
         "broncodilatador": e.broncodilatador,
         "origem": e.origem,
         "responsavel": e.responsavel,
@@ -188,6 +191,8 @@ def ser_partner(p: m.Partner) -> dict:
         "status": p.status,
         "cidade": p.cidade,
         "observacao": p.observacao,
+        "arquivado": p.arquivado,
+        "merged_into_partner_id": p.merged_into_partner_id,
         **_legacy(p),
         **_stamps(p),
     }

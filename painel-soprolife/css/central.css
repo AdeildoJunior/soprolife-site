@@ -219,9 +219,126 @@
 
 .cad-login { max-width: 660px; }
 
+/* ------------------------------------------- Novo atendimento (M20) */
+
+.cad-passo {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border, #d7e2ea);
+}
+
+.cad-passo:first-of-type { margin-top: 0; padding-top: 0; border-top: 0; }
+
+.cad-passo-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--navy, #0d2a43);
+}
+
+.cad-passo-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  background: var(--teal, #1db7a6);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cad-acao-secundaria {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border, #d7e2ea);
+}
+
+.cad-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cad-check input { width: 16px; height: 16px; cursor: pointer; }
+
+.cad-tipos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.cad-tipo {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "radio nome" "radio desc";
+  align-items: start;
+  gap: 2px 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #d7e2ea);
+  border-radius: 10px;
+  background: var(--soft, #f5f9fb);
+  cursor: pointer;
+}
+
+.cad-tipo:focus-within {
+  outline: 2px solid var(--teal, #1db7a6);
+  outline-offset: 2px;
+}
+
+.cad-tipo input { grid-area: radio; margin-top: 3px; width: 16px; height: 16px; }
+.cad-tipo-nome { grid-area: nome; font-weight: 700; font-size: 13px; }
+.cad-tipo-desc { grid-area: desc; font-size: 11.5px; color: var(--muted, #64798b); }
+
+.cad-tipo:has(input:checked) {
+  border-color: var(--teal, #1db7a6);
+  background: rgba(29, 183, 166, .08);
+}
+
+.cad-bloco {
+  margin-top: 12px;
+  border: 1px solid var(--border, #d7e2ea);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fff;
+}
+
+.cad-bloco-titulo {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  color: var(--teal-dark, #0f8f83);
+}
+
+.cad-pastore-aviso {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border-left: 4px solid var(--teal, #1db7a6);
+  background: rgba(29, 183, 166, .08);
+  font-size: 12px;
+}
+
+.cad-pastore-aviso.cad-erro {
+  border-left-color: var(--danger, #d9534f);
+  background: rgba(217, 83, 79, .1);
+}
+
+.cad-so-pastore { grid-column: 1 / -1; }
+
 /* ------------------------------------------------------------ responsivo */
 
 @media (max-width: 820px) {
   .cad-picker-search input[type="search"] { min-width: 140px; }
   .cad-actions { flex-direction: column; align-items: stretch; }
+  .cad-tipos { grid-template-columns: 1fr; }
 }

@@ -22,6 +22,7 @@ from ..schemas import (
 )
 from ..security import ROLE_LEITURA, ROLE_OPERACIONAL, require_role
 from ..serializers import ser_consultation, ser_exam, ser_lead
+from ..status_display import exam_status_filter_values
 from ..services.followup import (
     due_after_attendance,
     schedule_followup,
@@ -177,7 +178,10 @@ def list_exams(
 ):
     stmt = select(SpirometryExam).order_by(SpirometryExam.created_at.desc())
     if status:
-        stmt = stmt.where(SpirometryExam.status == status)
+        # Filtrar por "Espirometria realizada" (ou por qualquer sinônimo em
+        # escopo) casa TODOS os valores armazenados que significam realizado.
+        # Qualquer outro status — inclusive "Liberado" — segue igualdade exata.
+        stmt = stmt.where(SpirometryExam.status.in_(exam_status_filter_values(status)))
     if modalidade:
         stmt = stmt.where(SpirometryExam.modalidade == modalidade)
     if person_id:

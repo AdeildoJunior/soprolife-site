@@ -27,15 +27,48 @@
     booted: false,
   };
 
+  /* Abas primárias canônicas (M20). Paciente, Espirometria e Consulta
+   * DEIXARAM de ser abas: viraram um fluxo único "Novo atendimento", porque
+   * o paciente é sempre o primeiro passo do mesmo cadastro — não um cadastro
+   * concorrente. O cadastro só de paciente é ação SECUNDÁRIA lá dentro. */
   const TABS = [
     ["lead", "Lead", "operacional"],
-    ["paciente", "Paciente", "operacional"],
-    ["espirometria", "Espirometria", "operacional"],
-    ["consulta", "Consulta", "operacional"],
+    ["atendimento", "Novo atendimento", "operacional"],
     ["clinica", "Clínica / Parceiro", "operacional"],
     ["contato-b2b", "Contato B2B", "operacional"],
     ["financeiro", "Financeiro", "gestor"],
   ];
+
+  /* Deep-links contextuais antigos continuam funcionando, mas abrem o fluxo
+   * único com o tipo certo pré-selecionado — sem formulário duplicado. */
+  const TAB_ALIASES = {
+    paciente: { tab: "atendimento", prefill: { somente_paciente: true } },
+    espirometria: { tab: "atendimento", prefill: { tipo: "espirometria_soprolife" } },
+    consulta: { tab: "atendimento", prefill: { tipo: "consulta_soprolife" } },
+  };
+
+  const TIPOS_ATENDIMENTO = [
+    ["espirometria_soprolife", "Espirometria SoproLife",
+     "Operação clínica e financeira da SoproLife."],
+    ["espirometria_pastore", "Espirometria Pastore",
+     "Exame realizado na unidade do parceiro Pastore."],
+    ["consulta_soprolife", "Consulta SoproLife",
+     "Receita bruta da SoproLife; repasse ao médico é lançamento separado."],
+    ["espirometria_consulta_soprolife", "Espirometria + Consulta SoproLife",
+     "Um paciente, um exame e uma consulta — criados juntos ou nenhum."],
+  ];
+
+  const TIPOS_COM_ESPIROMETRIA = [
+    "espirometria_soprolife", "espirometria_pastore",
+    "espirometria_consulta_soprolife",
+  ];
+  const TIPOS_COM_CONSULTA = ["consulta_soprolife", "espirometria_consulta_soprolife"];
+  const TIPO_PASTORE = "espirometria_pastore";
+
+  // Valores ARMAZENADOS do status do exame; a exibição passa pelo formatador
+  // único (SoproStatus) — nada aqui reescreve o que vai para o banco.
+  const STATUS_EXAME = ["Aguardando", "Realizado", "Laudo Liberado", "Cancelado", "Remarcado"];
+  const STATUS_CONSULTA = ["Agendada", "Realizada", "Cancelada", "Remarcada", "Não compareceu"];
 
   const RESPONSAVEIS = ["Adeildo", "Luiz Faustino"];
   const ORIGENS = [
@@ -673,6 +706,15 @@
     return `<span class="m15-pill ${esc(key)}">${esc(v || "—")}</span>`;
   }
 
+  // Status de espirometria SEMPRE pelo formatador único (M20).
+  function statusExame(v) {
+    return window.SoproStatus ? window.SoproStatus.espirometria(v) : v;
+  }
+
+  function pillExame(v) {
+    return pill(statusExame(v));
+  }
+
   // ------------------------------------------------------------------- abas
 
   const LOADERS = {};
@@ -743,358 +785,384 @@
         "Nenhum lead ainda."));
   }
 
-  // --------------------------------------------------------------- PACIENTE
+  // ------------------------------------------------------- NOVO ATENDIMENTO
 
-  LOADERS.paciente = function (bodyEl) {
-    bodyEl.innerHTML = `
-      <div class="m15-panel">
-        <h3>Novo paciente</h3>
-        <p class="cad-microcopy">Nome e WhatsApp são a base do cadastro. Duplicados são avisados antes de salvar — nunca fundidos automaticamente.</p>
-        <form class="m15-form" id="cadFormPac" novalidate>
-          ${fld("Nome completo", inp("nome_completo", "", 'required minlength="2" autocomplete="off"'), { span: 6, req: true })}
-          ${fld("WhatsApp", inp("whatsapp", "", 'type="tel" placeholder="(21) 99999-9999" autocomplete="off"'), 3)}
-          ${fld("Nascimento", dateInp("data_nascimento", ""), 3)}
-          ${fld("E-mail (opcional)", inp("email", "", 'type="email" autocomplete="off"'), 4)}
-          ${fld("Origem", inp("origem", "", 'list="cadOrigens"'), 4)}
-          ${fld("Consentimento WhatsApp", sel("consentimento_whatsapp",
-            [["", "não informado"], "concedido", "desconhecido", "revogado"], "concedido"), 4)}
-          <div class="m15-form-full cad-guardian" id="cadPacGuardian" hidden>
-            <p class="cad-picker-nova-titulo">Paciente menor de idade — responsável legal</p>
-            <div class="cad-picker-search">
-              <input id="cadPacGQ" type="search" placeholder="Buscar responsável existente (nome, telefone ou PES-…)">
-              <button type="button" class="m15-btn m15-btn-sec" id="cadPacGBuscar">Buscar</button>
-            </div>
-            <div class="cad-picker-results" id="cadPacGResultados" hidden></div>
-            <div class="cad-picker-selected" id="cadPacGSelecionada" hidden></div>
-            <div class="m15-form cad-subgrid">
-              ${fld("Nome do responsável (se novo)", inp("gnome", "", 'minlength="2" autocomplete="off"'), 6)}
-              ${fld("WhatsApp do responsável", inp("gfone", "", 'type="tel" autocomplete="off"'), 3)}
-              ${fld("Parentesco", sel("grel",
-                [["mother", "mãe"], ["father", "pai"], ["legal_guardian", "responsável legal"],
-                 ["grandparent", "avô/avó"], ["other", "outro"]], "mother"), 3)}
-            </div>
-          </div>
-          ${fld("Observações operacionais", inp("observacao", ""), 12)}
-          <div class="m15-form-full cad-dup-aviso" id="cadPacDup" hidden></div>
-          ${submitBtn("Salvar paciente")}
-        </form>
-        ${datalist("cadOrigens", ORIGENS)}
-      </div>
-      ${recentsPanel("Pessoas recentes", "Cadastro canônico único — sem duplicar identidades")}`;
+  /* Fluxo canônico ÚNICO (M20). Passo 1: paciente (existente ou novo).
+   * Passo 2: tipo do atendimento. Passo 3: os dados que o tipo exige.
+   *
+   * O paciente permanece entidade estável: a origem (SoproLife/Pastore)
+   * pertence ao ATENDIMENTO, nunca à identidade da pessoa. O mesmo paciente
+   * pode ter origens diferentes ao longo do tempo sem virar dois cadastros.
+   *
+   * "Cadastrar somente paciente" é ação SECUNDÁRIA daqui — não é aba. */
 
-    const form = bodyEl.querySelector("#cadFormPac");
-    markDirtyOn(form);
-    phoneMask(form.elements.whatsapp);
-    phoneMask(form.elements.gfone);
-
-    let dupConfirmado = false;
-    let guardianSelected = null;
-    form.elements.data_nascimento.addEventListener("change", () => {
-      const anos = idade(form.elements.data_nascimento.value);
-      bodyEl.querySelector("#cadPacGuardian").hidden = !(anos != null && anos < 18);
-    });
-    wireMiniSearch(
-      bodyEl.querySelector("#cadPacGQ"), bodyEl.querySelector("#cadPacGBuscar"),
-      bodyEl.querySelector("#cadPacGResultados"), (p) => {
-        guardianSelected = p;
-        const selEl = bodyEl.querySelector("#cadPacGSelecionada");
-        selEl.hidden = false;
-        selEl.innerHTML = `<span class="cad-chip-pessoa"><strong>${esc(p.nome_completo)}</strong> ${esc(p.public_code)}</span>`;
-      });
-
-    wireSubmit(form, () => {
-      const nome = val(form, "nome_completo");
-      const fone = val(form, "whatsapp");
-      const dupBox = bodyEl.querySelector("#cadPacDup");
-      const preCheck = dupConfirmado
-        ? Promise.resolve({ total: 0, candidatos: [] })
-        : api("/pessoas/verificar-duplicados", {
-            method: "POST",
-            body: JSON.stringify({ nome_completo: nome, telefones: fone ? [fone] : [] }),
-          });
-      return preCheck.then((dup) => {
-        if (dup.total > 0) {
-          dupBox.hidden = false;
-          dupBox.innerHTML =
-            `<strong>Possível duplicado (${dup.total}):</strong> ` +
-            dup.candidatos.map((c) =>
-              `<span class="cad-chip-pessoa">${esc(c.nome_completo)} · ${esc(c.public_code)} · ${esc(c.motivo === "telefone_igual" ? "telefone igual" : "nome igual")}</span>`).join(" ") +
-            ` <button type="button" class="m15-btn m15-btn-sec" id="cadPacDupOk">Criar mesmo assim</button>`;
-          dupBox.querySelector("#cadPacDupOk").addEventListener("click", () => {
-            dupConfirmado = true;
-            dupBox.hidden = true;
-            toast("Confirmação registrada — envie o formulário novamente para criar.");
-          });
-          throw new Error("Possível duplicado detectado — confirme antes de criar.");
-        }
-        const payload = { nome_completo: nome, contatos: [] };
-        if (fone) payload.contatos.push({ tipo: "whatsapp", valor: fone, principal: true });
-        const email = val(form, "email");
-        if (email) payload.contatos.push({ tipo: "email", valor: email, principal: !fone });
-        setIf(payload, "data_nascimento", val(form, "data_nascimento"));
-        setIf(payload, "consentimento_whatsapp", val(form, "consentimento_whatsapp"));
-        const origem = val(form, "origem");
-        const obs = [origem ? "Origem: " + origem : "", val(form, "observacao")]
-          .filter(Boolean).join(" · ");
-        setIf(payload, "observacao", obs);
-        return api("/pessoas", { method: "POST", body: JSON.stringify(payload) })
-          .then((pessoa) => {
-            const anos = idade(val(form, "data_nascimento"));
-            if (anos != null && anos < 18) {
-              const rel = val(form, "grel") || "mother";
-              const vincular = (gid) => api(`/pessoas/${pessoa.id}/responsaveis`, {
-                method: "POST",
-                body: JSON.stringify({
-                  guardian_person_id: gid, relationship_type: rel,
-                  is_legal_guardian: true, active: true,
-                }),
-              });
-              if (guardianSelected) return vincular(guardianSelected.id).then(() => pessoa);
-              const gnome = val(form, "gnome");
-              if (gnome) {
-                const gp = { nome_completo: gnome, contatos: [] };
-                const gfone = val(form, "gfone");
-                if (gfone) gp.contatos.push({ tipo: "whatsapp", valor: gfone, principal: true });
-                return api("/pessoas", { method: "POST", body: JSON.stringify(gp) })
-                  .then((g) => vincular(g.id)).then(() => pessoa);
-              }
-            }
-            return pessoa;
-          });
-      });
-    }, (pessoa) => {
-      successBanner(bodyEl, `<strong>Paciente ${esc(pessoa.public_code)} criado</strong> — ${esc(pessoa.nome_completo)}.` +
-        (pessoa.candidatos_identidade ? ` <em>${pessoa.candidatos_identidade} candidato(s) de identidade registrados para revisão humana.</em>` : ""));
-      form.reset();
-      dupConfirmado = false;
-      guardianSelected = null;
-      bodyEl.querySelector("#cadPacGuardian").hidden = true;
-      loadPacRecents(bodyEl);
-    });
-    return loadPacRecents(bodyEl);
-  };
-
-  function loadPacRecents(bodyEl) {
-    const panel = bodyEl.querySelector(".cad-recentes");
-    return api("/pessoas?tamanho=8").then((d) =>
-      fillRecents(panel, ["Código", "Nome", "Status", "Contatos", "Criado em"],
-        d.itens.map((p) => [
-          `<strong>${esc(p.public_code)}</strong>`, esc(p.nome_completo),
-          pill(p.nao_contatar ? "não contatar" : p.status),
-          esc((p.contatos || []).map((c) => c.tipo).join(", ") || "—"),
-          esc((p.created_at_local || "").slice(0, 10)),
-        ]),
-        "Nenhuma pessoa ainda."));
+  function resolvePastore() {
+    return api("/parceiros?tamanho=100").then((d) => {
+      const cands = (d.itens || []).filter(
+        (p) => !p.arquivado && /pastore/i.test(p.nome || ""));
+      if (cands.length === 0) {
+        return { erro: "Parceiro Pastore não encontrado no núcleo M15." };
+      }
+      if (cands.length > 1) {
+        // Fail-closed: mais de um Pastore selecionável é exatamente o
+        // problema que a consolidação M20 resolve — não adivinhar qual.
+        return { erro: "Mais de um parceiro Pastore ativo — consolide os duplicados antes." };
+      }
+      const partner = cands[0];
+      return api(`/unidades?tamanho=100&partner_id=${encodeURIComponent(partner.id)}`)
+        .then((u) => ({ partner, unidades: u.itens || [] }))
+        .catch(() => ({ partner, unidades: [] }));
+    }).catch((err) => ({ erro: err.message || String(err) }));
   }
 
-  // ----------------------------------------------------------- ESPIROMETRIA
+  function blocoEspirometriaHtml(pastore) {
+    const unidades = ((pastore && pastore.unidades) || [])
+      .map((u) => [u.id, `${u.public_code} — ${u.nome}`]);
+    return `
+      <div class="cad-bloco" id="cadAtBlocoEsp" hidden>
+        <h4 class="cad-bloco-titulo">Espirometria</h4>
+        <div class="cad-pastore-aviso" id="cadAtPastoreAviso" hidden></div>
+        <div class="m15-form cad-subgrid">
+          ${fld("Data do exame", dateInp("esp_data", "", { parcial: true }),
+            { span: 3, help: HELP_PARCIAL, req: true })}
+          ${fld("Status", sel("esp_status",
+            (window.SoproStatus
+              ? window.SoproStatus.opcoesEspirometria(STATUS_EXAME)
+              : STATUS_EXAME), "Realizado"), 3)}
+          ${fld("Broncodilatador", sel("esp_bd",
+            [["", "não informado"], ["false", "sem broncodilatador"],
+             ["true", "com broncodilatador"]], "false"), 3)}
+          ${fld("Modalidade", sel("esp_modalidade",
+            [["", "—"], ["residencial", "residencial (domiciliar)"], ["cowork", "cowork"],
+             ["clinica_parceira", "clínica parceira"]], ""), 3)}
+          <div class="cad-so-pastore" id="cadAtPastoreCampos" hidden>
+            <div class="m15-form cad-subgrid">
+              ${fld("Parceiro", inp("esp_parceiro_nome", "", "readonly"),
+                { span: 6, help: "Definido automaticamente pelo tipo do atendimento." })}
+              ${fld("Unidade operacional", sel("esp_unidade",
+                [["", "selecione a unidade…"]].concat(unidades), ""),
+                { span: 6, req: true })}
+            </div>
+          </div>
+          ${fld("Local / unidade de atendimento", inp("esp_local", "", 'list="cadLocais"'), 4)}
+          ${fld("Técnico / responsável", inp("esp_responsavel", "Adeildo", 'list="cadResp"'), 4)}
+          ${fld("Próximo acompanhamento", dateInp("esp_followup", ""),
+            { span: 4, help: "Opcional — sem data vale a regra vigente do exame." })}
+          ${fld("Origem", inp("esp_origem", "", 'list="cadOrigens"'), 4)}
+          ${fld("Valor da espirometria (R$)", inp("esp_valor", "",
+            'inputmode="decimal" placeholder="220,00"'),
+            { span: 4, help: "Opcional. Nenhum valor é inferido — em branco, nenhum lançamento." })}
+          ${fld("Status do pagamento", sel("esp_pgto_status",
+            ["Recebido", "Pendente", "Parcial", "Cortesia"], "Recebido"), 4)}
+          ${fld("Data de recebimento", dateInp("esp_pgto_data", ""), 4)}
+          ${fld("Forma de pagamento", sel("esp_pgto_forma",
+            [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"], "Pix"), 4)}
+          ${fld("Observações do exame", inp("esp_observacao", ""), 12)}
+        </div>
+      </div>`;
+  }
 
-  LOADERS.espirometria = function (bodyEl) {
-    return partnerOptions().catch(() => []).then((partners) => {
-      const pre = state.prefill || {};
+  function blocoConsultaHtml() {
+    return `
+      <div class="cad-bloco" id="cadAtBlocoCon" hidden>
+        <h4 class="cad-bloco-titulo">Consulta SoproLife</h4>
+        <p class="cad-microcopy">A receita bruta da consulta é da SoproLife. O repasse ao
+          médico é uma obrigação financeira SEPARADA: mesmo a 100%, a receita bruta
+          continua registrada e auditável dentro da SoproLife.</p>
+        <div class="m15-form cad-subgrid">
+          ${fld("Data da consulta", dateInp("con_data", "", { parcial: true }),
+            { span: 3, help: HELP_PARCIAL, req: true })}
+          ${fld("Status", sel("con_status", STATUS_CONSULTA, "Realizada"), 3)}
+          ${fld("Modalidade", sel("con_modalidade",
+            [["", "—"], ["teleconsulta", "teleconsulta"], ["residencial", "residencial"],
+             ["cowork", "cowork"], ["clinica_parceira", "clínica parceira"]], "teleconsulta"), 3)}
+          ${fld("Médico / profissional", inp("con_profissional", ""), 3)}
+          ${fld("Retorno", sel("con_retorno",
+            [["sem_retorno", "sem retorno programado"], ["data", "em uma data específica"],
+             ["intervalo_meses", "em um intervalo de meses"]], "sem_retorno"),
+            { span: 4, help: "Nenhum retorno é assumido — inclusive o de 6 meses." })}
+          ${fld("Data do retorno", dateInp("con_retorno_data", ""), 4)}
+          ${fld("Intervalo (meses)", inp("con_retorno_meses", "",
+            'type="number" min="1" max="60" placeholder="6"'), 4)}
+          ${fld("Receita bruta da consulta (R$)", inp("con_valor", "",
+            'inputmode="decimal" placeholder="300,00"'),
+            { span: 4, help: "Opcional. Em branco, nenhum lançamento é criado." })}
+          ${fld("Status do pagamento", sel("con_pgto_status",
+            ["Recebido", "Pendente", "Parcial", "Cortesia"], "Recebido"), 4)}
+          ${fld("Data de recebimento", dateInp("con_pgto_data", ""), 4)}
+          ${fld("Repasse ao médico", sel("con_repasse_modo",
+            [["", "não informado"], ["percentual", "percentual da consulta"],
+             ["valor", "valor fixo"]], ""),
+            { span: 4, help: "Lançamento separado — nunca abatido da receita bruta." })}
+          ${fld("Percentual do repasse (%)", inp("con_repasse_pct", "",
+            'type="number" min="0" max="100" step="0.01" placeholder="100"'), 4)}
+          ${fld("Valor do repasse (R$)", inp("con_repasse_valor", "",
+            'inputmode="decimal" placeholder="300,00"'), 4)}
+          ${fld("Observações da consulta", inp("con_observacao", ""), 12)}
+        </div>
+      </div>`;
+  }
+
+  LOADERS.atendimento = function (bodyEl) {
+    const pre = state.prefill || {};
+    return resolvePastore().then((pastore) => {
+      const tipoInicial = TIPOS_ATENDIMENTO.some((t) => t[0] === pre.tipo)
+        ? pre.tipo : "espirometria_soprolife";
+      const somentePacienteInicial = !!pre.somente_paciente;
+
       bodyEl.innerHTML = `
         <div class="m15-panel">
-          <h3>Nova espirometria</h3>
-          <p class="cad-microcopy">Comece pelo paciente: busque um existente ou cadastre na hora. Status "Realizado" agenda o follow-up de 6 meses automaticamente.</p>
-          <form class="m15-form" id="cadFormEsp" novalidate>
-            <div class="m15-form-full">${personPickerHtml("cadEspP")}</div>
-            ${fld("Data do exame", dateInp("data_exame", "", { parcial: true }), { span: 3, help: HELP_PARCIAL, req: true })}
-            ${fld("Status", sel("status",
-              ["Aguardando", "Realizado", "Laudo Liberado", "Cancelado", "Remarcado"], "Realizado"), 3)}
-            ${fld("Broncodilatador", sel("broncodilatador",
-              [["", "não informado"], ["false", "sem broncodilatador"], ["true", "com broncodilatador"]], "false"), 3)}
-            ${fld("Modalidade", sel("modalidade",
-              [["", "—"], ["residencial", "residencial (domiciliar)"], ["cowork", "cowork"],
-               ["clinica_parceira", "clínica parceira"]], ""), 3)}
-            ${fld("Local / unidade de atendimento", inp("local_atendimento", "", 'list="cadLocais"'), 4)}
-            ${fld("Parceiro (quando aplicável)", sel("partner_id", [["", "sem parceiro"]].concat(partners), pre.partner_id || ""), 4)}
-            ${fld("Unidade do parceiro", sel("partner_unit_id", [["", "sem unidade"]], ""), 4)}
-            ${fld("Origem", inp("origem", "", 'list="cadOrigens"'), 4)}
-            ${fld("Técnico / responsável", inp("responsavel", "Adeildo", 'list="cadResp"'), 4)}
-            ${fld("Próximo acompanhamento", dateInp("proximo_followup", ""), { span: 4, help: "Opcional — sem data, o follow-up de 6 meses é automático." })}
-            ${fld("Observações (laudo/resultado)", inp("observacao", ""), 12)}
-            ${submitBtn("Salvar espirometria")}
+          <h3>Novo atendimento</h3>
+          <p class="cad-microcopy">Um fluxo só: escolha o paciente, escolha o tipo e preencha
+            o que o tipo pede. O paciente é a identidade estável — a origem pertence ao
+            atendimento, então o mesmo paciente pode ter atendimentos SoproLife e Pastore
+            sem virar dois cadastros.</p>
+          <form class="m15-form" id="cadFormAtend" novalidate>
+
+            <div class="m15-form-full cad-passo">
+              <h4 class="cad-passo-titulo"><span class="cad-passo-num">1</span> Paciente</h4>
+              ${personPickerHtml("cadAtP")}
+              <div class="cad-acao-secundaria">
+                <label class="cad-check">
+                  <input type="checkbox" id="cadAtSoPaciente"${somentePacienteInicial ? " checked" : ""}>
+                  <span>Cadastrar somente paciente (sem atendimento)</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="m15-form-full cad-passo" id="cadAtPasso2">
+              <h4 class="cad-passo-titulo"><span class="cad-passo-num">2</span> Tipo de atendimento</h4>
+              <div class="cad-tipos" role="radiogroup" aria-label="Tipo de atendimento">
+                ${TIPOS_ATENDIMENTO.map((t) => `
+                  <label class="cad-tipo">
+                    <input type="radio" name="tipo" value="${esc(t[0])}"${t[0] === tipoInicial ? " checked" : ""}>
+                    <span class="cad-tipo-nome">${esc(t[1])}</span>
+                    <span class="cad-tipo-desc">${esc(t[2])}</span>
+                  </label>`).join("")}
+              </div>
+            </div>
+
+            <div class="m15-form-full cad-passo" id="cadAtPasso3">
+              <h4 class="cad-passo-titulo"><span class="cad-passo-num">3</span> Dados do atendimento</h4>
+              ${blocoEspirometriaHtml(pastore)}
+              ${blocoConsultaHtml()}
+            </div>
+
+            ${submitBtn("Salvar atendimento")}
           </form>
           ${datalist("cadOrigens", ORIGENS)}${datalist("cadResp", RESPONSAVEIS)}
           ${datalist("cadLocais", ["Domiciliar", "Clínica", "Empresa", "Parceiro", "Outro"])}
         </div>
-        ${recentsPanel("Espirometrias recentes", "Histórico do paciente e indicadores — na hora")}`;
+        ${recentsPanel("Atendimentos recentes", "Espirometrias e consultas — na hora")}`;
 
-      const form = bodyEl.querySelector("#cadFormEsp");
+      const form = bodyEl.querySelector("#cadFormAtend");
       markDirtyOn(form);
-      const picker = wirePersonPicker(form, "cadEspP");
-      wireUnitSelect(form, "partner_id", "partner_unit_id");
-      if (pre.partner_name) {
-        // deep-link contextual (ex.: Parcerias → Pastore): pré-seleciona o
-        // parceiro pelo nome sem depender de ID embutido em botão legado
-        const pSel = form.elements.partner_id;
-        const alvo = Array.from(pSel.options).find((o) =>
-          o.textContent.toLowerCase().includes(pre.partner_name.toLowerCase()));
-        if (alvo) {
-          pSel.value = alvo.value;
-          pSel.dispatchEvent(new Event("change"));
-          if (!form.elements.modalidade.value) form.elements.modalidade.value = "clinica_parceira";
+      const picker = wirePersonPicker(form, "cadAtP");
+      const soPacienteEl = bodyEl.querySelector("#cadAtSoPaciente");
+      const passo2 = bodyEl.querySelector("#cadAtPasso2");
+      const passo3 = bodyEl.querySelector("#cadAtPasso3");
+      const blocoEsp = bodyEl.querySelector("#cadAtBlocoEsp");
+      const blocoCon = bodyEl.querySelector("#cadAtBlocoCon");
+      const pastoreCampos = bodyEl.querySelector("#cadAtPastoreCampos");
+      const pastoreAviso = bodyEl.querySelector("#cadAtPastoreAviso");
+      const btnSalvar = form.querySelector('button[type="submit"]');
+
+      function tipoAtual() {
+        const marcado = form.querySelector('input[name="tipo"]:checked');
+        return marcado ? marcado.value : "";
+      }
+
+      function aplicarModo() {
+        const soPaciente = soPacienteEl.checked;
+        passo2.hidden = soPaciente;
+        passo3.hidden = soPaciente;
+        btnSalvar.textContent = soPaciente ? "Salvar paciente" : "Salvar atendimento";
+        if (soPaciente) return;
+        const tipo = tipoAtual();
+        const temEsp = TIPOS_COM_ESPIROMETRIA.indexOf(tipo) !== -1;
+        const temCon = TIPOS_COM_CONSULTA.indexOf(tipo) !== -1;
+        blocoEsp.hidden = !temEsp;
+        blocoCon.hidden = !temCon;
+        const ehPastore = tipo === TIPO_PASTORE;
+        pastoreCampos.hidden = !ehPastore;
+        pastoreAviso.hidden = !ehPastore;
+        if (ehPastore) {
+          if (pastore.erro) {
+            pastoreAviso.className = "cad-pastore-aviso cad-erro";
+            pastoreAviso.textContent = "Pastore indisponível: " + pastore.erro;
+          } else {
+            pastoreAviso.className = "cad-pastore-aviso";
+            pastoreAviso.textContent =
+              "Parceiro definido automaticamente. Repasse e preço do paciente NÃO são " +
+              "inferidos: dependem de valor confirmado e da regra da parceria.";
+            form.elements.esp_parceiro_nome.value = pastore.partner.nome;
+            if (!form.elements.esp_modalidade.value) {
+              form.elements.esp_modalidade.value = "clinica_parceira";
+            }
+          }
         }
       }
-      wireSubmit(form, () =>
-        picker.resolve().then((p) => {
+
+      soPacienteEl.addEventListener("change", () => { aplicarModo(); state.dirty = true; });
+      form.querySelectorAll('input[name="tipo"]').forEach((r) => {
+        r.addEventListener("change", aplicarModo);
+      });
+      aplicarModo();
+
+      wireSubmit(form, () => {
+        if (soPacienteEl.checked) {
+          // Ação secundária: cria a pessoa e NADA mais — sem atendimento.
+          return picker.resolve().then((pessoa) => ({ somentePaciente: true, pessoa }));
+        }
+        const tipo = tipoAtual();
+        if (!tipo) throw new Error("Escolha o tipo do atendimento.");
+        if (tipo === TIPO_PASTORE && pastore.erro) {
+          throw new Error("Pastore indisponível: " + pastore.erro);
+        }
+        return picker.resolve().then((pessoa) => {
           const payload = {
-            person_id: p.id,
-            status: val(form, "status"),
+            person_id: pessoa.id,
+            tipo,
             idempotency_key: m15().idemKey(),
           };
-          if (!val(form, "data_exame")) throw new Error("Informe a data do exame.");
-          payload.data_exame = val(form, "data_exame");
-          if (val(form, "broncodilatador") !== "") {
-            payload.broncodilatador = val(form, "broncodilatador") === "true";
+          if (TIPOS_COM_ESPIROMETRIA.indexOf(tipo) !== -1) {
+            payload.espirometria = montarEspirometria(form, tipo, pastore);
           }
-          setIf(payload, "modalidade", val(form, "modalidade"));
-          setIf(payload, "local_atendimento", val(form, "local_atendimento"));
-          setIf(payload, "partner_id", val(form, "partner_id"));
-          setIf(payload, "partner_unit_id", val(form, "partner_unit_id"));
-          setIf(payload, "origem", val(form, "origem"));
-          setIf(payload, "responsavel", val(form, "responsavel"));
-          setIf(payload, "observacao", val(form, "observacao"));
-          return api("/espirometrias", { method: "POST", body: JSON.stringify(payload) })
-            .then((exame) => {
-              const fupManual = val(form, "proximo_followup");
-              const extra = fupManual
-                ? api("/followups", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      patient_person_id: p.id, tipo: "manual", due_date: fupManual,
-                      responsavel: val(form, "responsavel") || undefined,
-                      observacao: "Acompanhamento definido no cadastro do exame " + exame.public_code,
-                    }),
-                  }).catch(() => null)
-                : Promise.resolve(null);
-              return extra.then(() => ({ exame, pessoa: p }));
-            });
-        }),
-      ({ exame, pessoa }) => {
-        const gestor = m15().can("gestor");
-        successBanner(bodyEl,
-          `<strong>Espirometria ${esc(exame.public_code)} criada</strong> para ${esc(pessoa.nome_completo)} (${esc(pessoa.public_code)}).` +
-          (exame.followup && exame.followup.id ? " Follow-up de 6 meses agendado." : "") +
-          (gestor ? ` <button type="button" class="m15-btn cad-btn-mini" id="cadEspFin">+ Lançamento financeiro vinculado</button>` : ""));
-        const finBtn = bodyEl.querySelector("#cadEspFin");
-        if (finBtn) {
-          finBtn.addEventListener("click", () => {
-            open("financeiro", {
-              spirometry_exam_id: exame.id,
-              vinculo_code: exame.public_code,
-              vinculo_pessoa: pessoa.nome_completo,
-              categoria: "Espirometria",
-            });
-          });
+          if (TIPOS_COM_CONSULTA.indexOf(tipo) !== -1) {
+            payload.consulta = montarConsulta(form);
+          }
+          const financeiro = montarFinanceiro(form, tipo);
+          if (financeiro) payload.financeiro = financeiro;
+          return api("/atendimentos", { method: "POST", body: JSON.stringify(payload) })
+            .then((criado) => ({ criado, pessoa }));
+        });
+      }, (res) => {
+        if (res.somentePaciente) {
+          successBanner(bodyEl,
+            `<strong>Paciente ${esc(res.pessoa.public_code)} criado</strong> — ` +
+            `${esc(res.pessoa.nome_completo)}. Nenhum atendimento foi criado.`);
+        } else {
+          const c = res.criado;
+          const partes = [];
+          if (c.espirometria) partes.push("Espirometria " + c.espirometria.public_code);
+          if (c.consulta) partes.push("Consulta " + c.consulta.public_code);
+          const lanc = (c.lancamentos || [])
+            .map((l) => `${l.public_code} (${l.componente}, ${l.tipo})`).join(", ");
+          successBanner(bodyEl,
+            `<strong>${esc(partes.join(" + "))} criada(s)</strong> para ` +
+            `${esc(res.pessoa.nome_completo)} (${esc(res.pessoa.public_code)}).` +
+            (lanc ? ` Lançamentos: ${esc(lanc)}.` : " Nenhum lançamento financeiro criado."));
         }
         form.reset();
         picker.resetState();
-        loadEspRecents(bodyEl);
+        aplicarModo();
+        loadAtendRecents(bodyEl);
       });
-      return loadEspRecents(bodyEl);
+      return loadAtendRecents(bodyEl);
     });
   };
 
-  function loadEspRecents(bodyEl) {
-    const panel = bodyEl.querySelector(".cad-recentes");
-    return api("/espirometrias?tamanho=8").then((d) =>
-      fillRecents(panel, ["Código", "Data", "Status", "BD", "Modalidade"],
-        d.itens.map((e) => [
-          `<strong>${esc(e.public_code)}</strong>`, fmtDate(e.data_exame), pill(e.status),
-          e.broncodilatador == null ? "—" : (e.broncodilatador ? "com BD" : "sem BD"),
-          esc(e.modalidade || "—"),
-        ]),
-        "Nenhuma espirometria ainda."));
+  function montarEspirometria(form, tipo, pastore) {
+    const bloco = { status: val(form, "esp_status") };
+    if (!val(form, "esp_data")) throw new Error("Informe a data do exame.");
+    bloco.data_exame = val(form, "esp_data");
+    if (val(form, "esp_bd") !== "") bloco.broncodilatador = val(form, "esp_bd") === "true";
+    setIf(bloco, "modalidade", val(form, "esp_modalidade"));
+    setIf(bloco, "local_atendimento", val(form, "esp_local"));
+    setIf(bloco, "origem", val(form, "esp_origem"));
+    setIf(bloco, "responsavel", val(form, "esp_responsavel"));
+    setIf(bloco, "observacao", val(form, "esp_observacao"));
+    setIf(bloco, "proximo_followup", val(form, "esp_followup"));
+    if (tipo === TIPO_PASTORE) {
+      const unidade = val(form, "esp_unidade");
+      if (!unidade) throw new Error("Espirometria Pastore exige a unidade operacional.");
+      bloco.partner_id = pastore.partner.id;
+      bloco.partner_unit_id = unidade;
+    }
+    return bloco;
   }
 
-  // --------------------------------------------------------------- CONSULTA
+  function montarConsulta(form) {
+    const bloco = { status: val(form, "con_status") };
+    if (!val(form, "con_data")) throw new Error("Informe a data da consulta.");
+    bloco.data_consulta = val(form, "con_data");
+    setIf(bloco, "modalidade", val(form, "con_modalidade"));
+    setIf(bloco, "profissional", val(form, "con_profissional"));
+    setIf(bloco, "observacao", val(form, "con_observacao"));
+    const retorno = val(form, "con_retorno") || "sem_retorno";
+    bloco.retorno = retorno;
+    if (retorno === "data") {
+      const d = val(form, "con_retorno_data");
+      if (!d) throw new Error("Informe a data do retorno da consulta.");
+      bloco.retorno_data = d;
+    } else if (retorno === "intervalo_meses") {
+      const meses = parseInt(val(form, "con_retorno_meses"), 10);
+      if (!meses || meses < 1) throw new Error("Informe o intervalo de retorno em meses.");
+      bloco.retorno_intervalo_meses = meses;
+    }
+    return bloco;
+  }
 
-  LOADERS.consulta = function (bodyEl) {
-    bodyEl.innerHTML = `
-      <div class="m15-panel">
-        <h3>Nova consulta</h3>
-        <p class="cad-microcopy">Consultas pagas diretamente ao médico não geram lançamento financeiro da SoproLife — registre apenas o atendimento.</p>
-        <form class="m15-form" id="cadFormCon" novalidate>
-          <div class="m15-form-full">${personPickerHtml("cadConP")}</div>
-          ${fld("Data da consulta", dateInp("data_consulta", "", { parcial: true }), { span: 3, help: HELP_PARCIAL, req: true })}
-          ${fld("Status", sel("status",
-            ["Agendada", "Realizada", "Cancelada", "Remarcada", "Não compareceu"], "Realizada"), 3)}
-          ${fld("Modalidade", sel("modalidade",
-            [["", "—"], ["teleconsulta", "teleconsulta"], ["residencial", "residencial"],
-             ["cowork", "cowork"], ["clinica_parceira", "clínica parceira"]], "teleconsulta"), 3)}
-          ${fld("Médico / profissional", inp("profissional", ""), 3)}
-          ${fld("Origem / parceiro", inp("origem", "", 'list="cadOrigens"'), 4)}
-          ${fld("Responsável", inp("responsavel", "Adeildo", 'list="cadResp"'), 4)}
-          ${fld("Pagamento", sel("pagamento_modelo",
-            [["", "—"], ["soprolife", "recebido pela SoproLife (lançar no Financeiro)"],
-             ["medico", "direto ao médico (sem lançamento SoproLife)"]], ""), 4)}
-          ${fld("Observações", inp("observacao", ""), 12)}
-          ${submitBtn("Salvar consulta")}
-        </form>
-        ${datalist("cadOrigens", ORIGENS)}${datalist("cadResp", RESPONSAVEIS)}
-      </div>
-      ${recentsPanel("Consultas recentes", "Histórico e indicadores — na hora")}`;
-
-    const form = bodyEl.querySelector("#cadFormCon");
-    markDirtyOn(form);
-    const picker = wirePersonPicker(form, "cadConP");
-    wireSubmit(form, () =>
-      picker.resolve().then((p) => {
-        const payload = {
-          person_id: p.id,
-          status: val(form, "status"),
-          idempotency_key: m15().idemKey(),
-        };
-        if (!val(form, "data_consulta")) throw new Error("Informe a data da consulta.");
-        payload.data_consulta = val(form, "data_consulta");
-        setIf(payload, "modalidade", val(form, "modalidade"));
-        setIf(payload, "profissional", val(form, "profissional"));
-        setIf(payload, "origem", val(form, "origem"));
-        setIf(payload, "responsavel", val(form, "responsavel"));
-        const pagto = val(form, "pagamento_modelo");
-        const obs = [
-          pagto === "medico" ? "Pagamento direto ao médico — sem lançamento SoproLife" :
-            (pagto === "soprolife" ? "Pagamento recebido pela SoproLife" : ""),
-          val(form, "observacao"),
-        ].filter(Boolean).join(" · ");
-        setIf(payload, "observacao", obs);
-        return api("/consultas", { method: "POST", body: JSON.stringify(payload) })
-          .then((consulta) => ({ consulta, pessoa: p, pagto }));
-      }),
-    ({ consulta, pessoa, pagto }) => {
-      const gestor = m15().can("gestor");
-      successBanner(bodyEl,
-        `<strong>Consulta ${esc(consulta.public_code)} criada</strong> para ${esc(pessoa.nome_completo)} (${esc(pessoa.public_code)}).` +
-        (pagto === "soprolife" && gestor
-          ? ` <button type="button" class="m15-btn cad-btn-mini" id="cadConFin">+ Lançamento financeiro vinculado</button>` : ""));
-      const finBtn = bodyEl.querySelector("#cadConFin");
-      if (finBtn) {
-        finBtn.addEventListener("click", () => {
-          open("financeiro", {
-            consultation_id: consulta.id,
-            vinculo_code: consulta.public_code,
-            vinculo_pessoa: pessoa.nome_completo,
-            categoria: "Consulta",
-          });
-        });
+  function montarFinanceiro(form, tipo) {
+    const financeiro = {};
+    if (TIPOS_COM_ESPIROMETRIA.indexOf(tipo) !== -1) {
+      const valor = parseMoneyBR(val(form, "esp_valor"));
+      if (valor) {
+        const comp = { valor, status: val(form, "esp_pgto_status") };
+        setIf(comp, "data_recebimento", val(form, "esp_pgto_data"));
+        setIf(comp, "forma_pagamento", val(form, "esp_pgto_forma"));
+        setIf(comp, "data_competencia", val(form, "esp_data"));
+        if (comp.status === "Recebido" && !comp.data_recebimento) {
+          throw new Error('Espirometria com pagamento "Recebido" exige a data de recebimento.');
+        }
+        financeiro.espirometria = comp;
       }
-      form.reset();
-      picker.resetState();
-      loadConRecents(bodyEl);
-    });
-    return loadConRecents(bodyEl);
-  };
+    }
+    if (TIPOS_COM_CONSULTA.indexOf(tipo) !== -1) {
+      const bruto = parseMoneyBR(val(form, "con_valor"));
+      const modo = val(form, "con_repasse_modo");
+      if (!bruto && modo) {
+        throw new Error("Repasse ao médico exige a receita bruta da consulta.");
+      }
+      if (bruto) {
+        const comp = { valor_bruto: bruto, status: val(form, "con_pgto_status") };
+        setIf(comp, "data_recebimento", val(form, "con_pgto_data"));
+        setIf(comp, "data_competencia", val(form, "con_data"));
+        if (comp.status === "Recebido" && !comp.data_recebimento) {
+          throw new Error('Consulta com pagamento "Recebido" exige a data de recebimento.');
+        }
+        if (modo === "percentual") {
+          const pct = val(form, "con_repasse_pct");
+          if (!pct) throw new Error("Informe o percentual do repasse ao médico.");
+          comp.repasse_medico_percentual = pct;
+        } else if (modo === "valor") {
+          const v = parseMoneyBR(val(form, "con_repasse_valor"));
+          if (!v) throw new Error("Informe o valor do repasse ao médico.");
+          comp.repasse_medico_valor = v;
+        }
+        financeiro.consulta = comp;
+      }
+    }
+    return Object.keys(financeiro).length ? financeiro : null;
+  }
 
-  function loadConRecents(bodyEl) {
+  function loadAtendRecents(bodyEl) {
     const panel = bodyEl.querySelector(".cad-recentes");
-    return api("/consultas?tamanho=8").then((d) =>
-      fillRecents(panel, ["Código", "Data", "Status", "Profissional", "Modalidade"],
-        d.itens.map((c) => [
-          `<strong>${esc(c.public_code)}</strong>`, fmtDate(c.data_consulta), pill(c.status),
-          esc(c.profissional || "—"), esc(c.modalidade || "—"),
-        ]),
-        "Nenhuma consulta ainda."));
+    return Promise.all([
+      api("/espirometrias?tamanho=5"),
+      api("/consultas?tamanho=5"),
+    ]).then(([exames, consultas]) => {
+      const linhas = (exames.itens || []).map((e) => [
+        `<strong>${esc(e.public_code)}</strong>`, "Espirometria", fmtDate(e.data_exame),
+        pillExame(e.status_exibicao || e.status),
+        esc(e.modalidade || "—"),
+      ]).concat((consultas.itens || []).map((c) => [
+        `<strong>${esc(c.public_code)}</strong>`, "Consulta", fmtDate(c.data_consulta),
+        pill(c.status), esc(c.profissional || "—"),
+      ]));
+      fillRecents(panel, ["Código", "Tipo", "Data", "Status", "Detalhe"], linhas,
+        "Nenhum atendimento ainda.");
+    });
   }
 
   // ------------------------------------------------------ CLÍNICA / PARCEIRO
@@ -1411,8 +1479,21 @@
   function open(tab, prefill) {
     if (state.dirty && !window.confirm("Há alterações não salvas. Sair mesmo assim?")) return;
     state.dirty = false;
+    prefill = prefill || null;
+    // Botão contextual antigo ("Novo paciente", "Nova espirometria", "Nova
+    // consulta") abre o fluxo ÚNICO já no modo/tipo certo — sem manter um
+    // segundo formulário vivo só por compatibilidade.
+    const alias = TAB_ALIASES[tab];
+    if (alias) {
+      tab = alias.tab;
+      prefill = Object.assign({}, alias.prefill, prefill || {});
+    }
+    if (prefill && prefill.partner_name && /pastore/i.test(prefill.partner_name)) {
+      prefill = Object.assign({}, prefill, { tipo: "espirometria_pastore" });
+      tab = "atendimento";
+    }
     state.tab = TABS.some((t) => t[0] === tab) ? tab : "lead";
-    state.prefill = prefill || null;
+    state.prefill = prefill;
     activateSection();
     render();
     const sec = sectionEl();

@@ -51,6 +51,7 @@ from ..serializers import (
     ser_referral,
 )
 from ..services.followup import sync_followup_for_origin
+from ..services.partner_merge import PartnerMergeError, resolve_partner
 from ..services.integrity import (
     ensure_consultation_of_person,
     ensure_contact_of_partner,
@@ -90,11 +91,20 @@ def _check_pcmso(db, request, user, payload, contexto: str) -> None:
 @router.get("/parceiros")
 def list_partners(
     status: str | None = None,
+    incluir_arquivados: bool = False,
     params: PageParams = Depends(),
     db: Session = Depends(get_db),
     _user: User = Depends(require_role(ROLE_LEITURA)),
 ):
+    """Listas operacionais comuns NÃO mostram parceiro arquivado (M20).
+
+    A duplicata consolidada continua no banco e na auditoria; só sai dos
+    seletores do dia a dia. `incluir_arquivados=true` é a porta explícita
+    para inspeção técnica.
+    """
     stmt = select(Partner).order_by(Partner.created_at.desc())
+    if not incluir_arquivados:
+        stmt = stmt.where(Partner.arquivado.is_(False))
     if status:
         stmt = stmt.where(Partner.status == status)
     return paginate(db, stmt, params, ser_partner)
@@ -140,8 +150,26 @@ def get_partner(
     db: Session = Depends(get_db),
     _user: User = Depends(require_role(ROLE_LEITURA)),
 ):
-    partner = ensure_partner_exists(db, partner_id)
+    """Aceita id, código público ou id legado e resolve para o canônico.
+
+    Um código de parceiro consolidado (M20) devolve o parceiro canônico,
+    identificando em `resolvido_de` de onde a referência veio.
+    """
+    try:
+        canonical, found = resolve_partner(db, partner_id)
+    except PartnerMergeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    if canonical is None:
+        raise HTTPException(status_code=404, detail="Parceiro não encontrado.")
+    partner = canonical
+    partner_id = partner.id
     data = ser_partner(partner)
+    if found is not None and found.id != partner.id:
+        data["resolvido_de"] = {
+            "id": found.id,
+            "public_code": found.public_code,
+            "arquivado": found.arquivado,
+        }
     # agregados limitados (máx. 50 cada) com total eficiente por count
     data["unidades"] = _limited(db, PartnerUnit, partner_id, ser_partner_unit)
     data["contatos"] = _limited(db, PartnerContact, partner_id, ser_partner_contact)
@@ -174,13 +202,22 @@ def update_partner(
 @router.get("/unidades")
 def list_units(
     partner_id: str | None = None,
+    incluir_inativas: bool = False,
     params: PageParams = Depends(),
     db: Session = Depends(get_db),
     _user: User = Depends(require_role(ROLE_LEITURA)),
 ):
+    """Seletores comuns só oferecem unidade ativa de parceiro não arquivado."""
     stmt = select(PartnerUnit).order_by(PartnerUnit.created_at.desc())
     if partner_id:
         stmt = stmt.where(PartnerUnit.partner_id == partner_id)
+    if not incluir_inativas:
+        stmt = stmt.where(
+            PartnerUnit.ativo.is_(True),
+            PartnerUnit.partner_id.in_(
+                select(Partner.id).where(Partner.arquivado.is_(False))
+            ),
+        )
     return paginate(db, stmt, params, ser_partner_unit)
 
 
