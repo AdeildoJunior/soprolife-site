@@ -312,19 +312,33 @@
   // ------------------------------------------------------------ estrutura
 
   // [id, rótulo, papel mínimo p/ VER a aba] — o servidor revalida tudo.
+  //
+  // M19: o Núcleo deixou de ser uma segunda aplicação operacional. As abas
+  // de Pessoas, Leads, Espirometrias, Consultas, Clínicas, Encaminhamentos,
+  // Follow-up e Financeiro saíram da navegação ordinária — a operação
+  // acontece em CRM Pacientes e Acompanhamento, Financeiro e Central de
+  // Cadastros. As listagens técnicas continuam existindo, agrupadas numa
+  // única aba de INSPEÇÃO restrita a administrador; tabelas, APIs e
+  // histórico de auditoria permanecem intactos.
   var TABS = [
-    ["visao", "Visão geral", "leitura"],
-    ["pessoas", "Pessoas", "leitura"],
-    ["leads", "Leads", "leitura"],
-    ["espirometrias", "Espirometrias", "leitura"],
-    ["consultas", "Consultas", "leitura"],
-    ["parceiros", "Clínicas e Parceiros", "leitura"],
-    ["encaminhamentos", "Pacientes de Parceiros", "leitura"],
-    ["followup", "Follow-up", "leitura"],
-    ["financeiro", "Financeiro", "leitura"],
+    ["visao", "Diagnóstico técnico", "leitura"],
+    ["dados", "Inspeção técnica de dados", "admin"],
     ["migracao", "Migração", "leitura"],
     ["auditoria", "Auditoria", "gestor"],
     ["admin", "Administração", "admin"],
+  ];
+
+  // Sub-abas da inspeção técnica: reaproveitam os mesmos carregadores, sem
+  // duplicar CRM nem Financeiro como sistema paralelo.
+  var SUBTABS_DADOS = [
+    ["pessoas", "Pessoas"],
+    ["leads", "Leads"],
+    ["espirometrias", "Espirometrias"],
+    ["consultas", "Consultas"],
+    ["parceiros", "Clínicas e Parceiros"],
+    ["encaminhamentos", "Pacientes de Parceiros"],
+    ["followup", "Follow-up"],
+    ["financeiro", "Financeiro"],
   ];
 
   // Selo honesto do modo de acesso — distingue HTTPS seguro, desenvolvimento
@@ -571,9 +585,11 @@
           { label: "Aguardando data", value: fila.totais.aguardando_data },
           { label: "Não contatar (ocultos)", value: fila.excluidos_nao_contatar },
         ]) + "</div>" +
-        '<div class="m15-aviso">Núcleo nativo (API M15 + PostgreSQL) é a fonte oficial da operação. ' +
-        "Cadastros novos acontecem na Central de Cadastros; o Google Sheets ficou como leitura/importação de legado " +
-        "(Automações e Migração). Registros de demonstração seguem marcados como “sintético”.</div>";
+        '<div class="m15-aviso">Área técnica. A operação do dia a dia acontece em ' +
+        "<strong>CRM Pacientes e Acompanhamento</strong> (pacientes, contato e follow-up), " +
+        "<strong>Financeiro</strong> (lançamentos e conciliação) e <strong>Central de Cadastros</strong> " +
+        "(único lugar de cadastro novo). Aqui ficam apenas migração, auditoria, administração e " +
+        "diagnóstico. Registros de demonstração seguem marcados como “sintético”.</div>";
     });
   };
 
@@ -2044,6 +2060,39 @@
               });
             }
           );
+        });
+      });
+    });
+  };
+
+  // ------------------------------------------------- inspeção técnica (admin)
+
+  // Não é um CRM paralelo: agrupa as listagens técnicas já existentes sob um
+  // rótulo honesto, sem oferecer fluxo ordinário de cadastro.
+  loaders.dados = function () {
+    var sub = state.dadosSub || SUBTABS_DADOS[0][0];
+    if (!SUBTABS_DADOS.some(function (t) { return t[0] === sub; })) sub = SUBTABS_DADOS[0][0];
+    state.dadosSub = sub;
+    var loader = loaders[sub];
+    return loader().then(function () {
+      var el = body();
+      if (!el) return;
+      var subtabs = SUBTABS_DADOS.map(function (t) {
+        return '<button class="m15-tab' + (t[0] === sub ? " active" : "") +
+          '" type="button" data-m15-dados-sub="' + t[0] + '">' + esc(t[1]) + "</button>";
+      }).join("");
+      el.insertAdjacentHTML("afterbegin",
+        '<div class="m15-aviso m15-aviso-tecnico"><strong>Inspeção técnica do sistema.</strong> ' +
+        "Leitura e correção pontual de registros pelo administrador. Não é a tela de operação: " +
+        "pacientes e acompanhamento ficam em <strong>CRM Pacientes e Acompanhamento</strong>, " +
+        "dinheiro em <strong>Financeiro</strong> e cadastro novo na <strong>Central de Cadastros</strong>." +
+        "</div>" +
+        '<div class="m15-tabs m15-subtabs" role="tablist" aria-label="Entidades técnicas">' +
+        subtabs + "</div>");
+      el.querySelectorAll("[data-m15-dados-sub]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          state.dadosSub = btn.getAttribute("data-m15-dados-sub");
+          render();
         });
       });
     });

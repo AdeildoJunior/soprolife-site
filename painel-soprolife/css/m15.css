@@ -712,3 +712,11 @@
   border: 1px dashed var(--teal, #1db7a6);
   border-radius: 10px;
 }
+
+/* M19 — inspeção técnica de dados (restrita a administrador). Sub-abas e
+   aviso honesto de que esta NÃO é a tela de operação. */
+.m15-subtabs { margin: 10px 0 14px; }
+.m15-aviso.m15-aviso-tecnico {
+  border-left: 3px solid var(--warning, #e7a93f);
+  background: #fffaf0;
+}

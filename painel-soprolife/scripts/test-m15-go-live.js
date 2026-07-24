@@ -181,8 +181,15 @@ console.log("D) Sessão em memória, RBAC e contratos preservados");
        /\["admin", "Administração", "admin"\]/.test(nucleoSrc));
   const tabsSrc = nucleoSrc.slice(nucleoSrc.indexOf("var TABS = ["),
                                   nucleoSrc.indexOf("function buildSection()"));
-  caso("demais abas continuam com papel mínimo leitura",
-       (tabsSrc.match(/"leitura"\]/g) || []).length === 10);
+  // M19: as abas operacionais saíram do Núcleo (viraram CRM/Financeiro/
+  // Central). Restaram diagnóstico e migração em leitura, inspeção técnica
+  // e administração em admin, e auditoria em gestor.
+  caso("abas de leitura restantes são só diagnóstico e migração",
+       (tabsSrc.match(/"leitura"\]/g) || []).length === 2 &&
+       /\["visao", "Diagnóstico técnico", "leitura"\]/.test(tabsSrc) &&
+       /\["migracao", "Migração", "leitura"\]/.test(tabsSrc));
+  caso("inspeção técnica de dados exige admin",
+       /\["dados", "Inspeção técnica de dados", "admin"\]/.test(tabsSrc));
   caso("can() continua fail-open na UI com autorização real no servidor",
        nucleoSrc.indexOf("papeis_efetivos.indexOf(role) !== -1") !== -1);
 
@@ -217,9 +224,9 @@ console.log("E) Estado visual de go-live e carregamento dos scripts");
        indexSrc.indexOf("js/m15-security.js") < indexSrc.indexOf("js/m15-nucleo.js"));
   caso("index.html mantém datepicker antes do núcleo",
        indexSrc.indexOf("js/m15-datepicker.js") < indexSrc.indexOf("js/m15-nucleo.js"));
-  caso("scripts M15 com cache-buster atualizado (?v=2026072301)",
-       /m15-security\.js\?v=2026072301/.test(indexSrc) &&
-       /m15-nucleo\.js\?v=2026072301/.test(indexSrc));
+  caso("scripts M15 com cache-buster atualizado (?v=2026072402)",
+       /m15-security\.js\?v=2026072402/.test(indexSrc) &&
+       /m15-nucleo\.js\?v=2026072402/.test(indexSrc));
 }
 
 console.log();

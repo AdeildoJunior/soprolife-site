@@ -46,6 +46,9 @@ run "node --check js/marketing-freshness.js" node --check painel-soprolife/js/ma
 run "node --check js/m15-nucleo.js"          node --check painel-soprolife/js/m15-nucleo.js
 run "node --check js/m15-datepicker.js"      node --check painel-soprolife/js/m15-datepicker.js
 run "node --check js/m15-security.js"        node --check painel-soprolife/js/m15-security.js
+run "node --check js/central-cadastros.js"   node --check painel-soprolife/js/central-cadastros.js
+run "node --check js/financeiro-conciliacao.js" node --check painel-soprolife/js/financeiro-conciliacao.js
+run "node --check js/crm-workspace.js"       node --check painel-soprolife/js/crm-workspace.js
 
 secao "2/10 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
@@ -57,6 +60,7 @@ run "test-espirometria-financeiro (M11)" node painel-soprolife/scripts/test-espi
 run "test-entrada-dados-ux (M12.1)"      node painel-soprolife/scripts/test-entrada-dados-ux.js
 run "test-m15-ui-calendar (M15.4A)"      node painel-soprolife/scripts/test-m15-ui-calendar.js
 run "test-m15-go-live (M15.5A)"          node painel-soprolife/scripts/test-m15-go-live.js
+run "test-crm-unificado (M19)"           node painel-soprolife/scripts/test-crm-unificado.js
 
 secao "3/10 Sintaxe Python"
 run "py_compile generate-saude-operacional" python3 -m py_compile painel-soprolife/scripts/generate-saude-operacional.py
