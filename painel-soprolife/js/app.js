@@ -1074,6 +1074,7 @@ function renderCrmView() {
     case "followup-detalhe":  renderCrmFollowupDetalhe(container);      break;
     case "relatorios":        renderCrmRelatorios(container);               break;
     case "automacoes-crm":    renderCrmAutomacoes(container);           break;
+    case "acompanhamento-m15": renderCrmAcompanhamentoM15(container);   break;
     default: renderCrmHub(container);
   }
 }
@@ -1161,6 +1162,14 @@ function renderCrmHub(container) {
               ? (state.followupPacientes.espirometria || []).length + (state.followupPacientes.consultas || []).length
               : "—" }
         ]
+      })}
+      ${crmModuleCard({
+        icon: "💬",
+        title: "Acompanhamento e WhatsApp",
+        subtitle: "Fila de contato de 6 meses — fonte oficial PostgreSQL/M15",
+        view: "acompanhamento-m15",
+        stats: [],
+        emptyLabel: "Fila ao vivo · núcleo M15"
       })}
       ${crmModuleCard({
         icon: "⚡",
@@ -1455,6 +1464,123 @@ function renderCrmPacientes(container) {
       renderCrmView();
     });
   }
+}
+
+// M18 — Acompanhamento e WhatsApp: fila de follow-up de 6 meses contra a
+// API nativa M15/PostgreSQL (window.SoproM15), fonte oficial. Diferente de
+// renderCrmPacientes (acima), que ainda lê data-private/followup-pacientes
+// .local.json — infraestrutura legada de planilha, mantida por ora sem
+// remoção nesta etapa (decisão de escopo documentada no relatório M18: uma
+// substituição seria arriscada sem verificação mais ampla). Esta view é a
+// canônica recomendada daqui para frente.
+function renderCrmAcompanhamentoM15(container) {
+  const FILA_LABELS = {
+    atrasado: "Atrasados",
+    retomar_hoje: "Hoje",
+    retomar_semana: "Próximos 7 dias",
+    aguardando_data: "Aguardando data",
+    concluido: "Concluídos",
+  };
+
+  container.innerHTML = `
+    <div class="crm-subview-header">
+      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
+      <div>
+        <p class="eyebrow">Acompanhamento de pacientes</p>
+        <h2>Acompanhamento e WhatsApp</h2>
+        <p class="section-sub">Fila de contato de 6 meses — fonte oficial PostgreSQL/Núcleo M15.</p>
+      </div>
+    </div>
+    <div id="acompM15Body"><div class="crm-empty">Carregando…</div></div>
+  `;
+  document.querySelector("#crmBackBtn").addEventListener("click", () => {
+    state.crmView = "hub";
+    renderCrmView();
+  });
+
+  const body = document.querySelector("#acompM15Body");
+  const cli = window.SoproM15;
+  if (!cli) {
+    body.innerHTML = `<div class="m15-aviso">Núcleo M15 indisponível nesta página.</div>`;
+    return;
+  }
+  if (!cli.hasToken()) {
+    body.innerHTML = `<div class="m15-panel"><p class="m15-muted">Entre pela Central de Cadastros ou pelo Núcleo administrativo (mesma sessão) para ver a fila de acompanhamento.</p></div>`;
+    return;
+  }
+
+  cli.api("/followups/fila").then((data) => {
+    const totais = data.totais || {};
+    const kpisHtml = Object.keys(FILA_LABELS).map((key) => `
+      <div class="kpi-card">
+        <span class="kpi-label">${FILA_LABELS[key]}</span>
+        <strong class="kpi-value">${totais[key] ?? 0}</strong>
+      </div>`).join("");
+
+    const filasAcionaveis = ["atrasado", "retomar_hoje", "retomar_semana"];
+    const itensHtml = filasAcionaveis.flatMap((key) => (data.filas?.[key] || [])).map((item) => `
+      <tr>
+        <td>${escapeHtml(item.pessoa?.public_code || "—")}</td>
+        <td>${escapeHtml(item.pessoa?.nome_completo || "—")}</td>
+        <td><span class="badge">${escapeHtml(FILA_LABELS[item.fila] || item.fila)}</span></td>
+        <td>${item.aviso_consentimento ? '<span class="badge">Sem consentimento</span>' : "OK"}</td>
+        <td>
+          ${item.whatsapp_permitido
+            ? `<button type="button" class="m15-btn m15-btn-sec acomp-wa-btn" data-followup-id="${escapeHtml(item.id)}">WhatsApp</button>`
+            : `<span class="fp-wa-btn fp-wa-disabled">Indisponível</span>`}
+        </td>
+      </tr>`).join("");
+
+    body.innerHTML = `
+      <div class="conciliacao-kpis">${kpisHtml}</div>
+      <article class="panel">
+        <div class="panel-header">
+          <h3>Contatos a realizar</h3>
+          <span>Atrasados, hoje e próximos 7 dias</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Paciente</th><th>Nome</th><th>Fila</th><th>Consentimento</th><th>Ação</th></tr></thead>
+            <tbody>${itensHtml || '<tr><td colspan="5" class="crm-empty">Nenhum contato pendente nas filas próximas.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </article>`;
+
+    body.querySelectorAll(".acomp-wa-btn").forEach((btn) => {
+      btn.addEventListener("click", () => abrirWhatsappFollowup(btn.dataset.followupId, cli, body));
+    });
+  }).catch((err) => {
+    body.innerHTML = `<div class="m15-erro">Erro ao carregar fila: ${escapeHtml(err.message || String(err))}</div>`;
+  });
+}
+
+function abrirWhatsappFollowup(followupId, cli, body) {
+  cli.api(`/followups/${followupId}/whatsapp-url`).then((resp) => {
+    const overlay = document.createElement("div");
+    overlay.className = "m15-modal-overlay";
+    overlay.innerHTML = `
+      <div class="m15-modal">
+        <h3>Enviar WhatsApp</h3>
+        <p class="m15-muted">Revise a mensagem antes de abrir o WhatsApp. Abrir o link NÃO conclui o contato — confirme depois de enviar.</p>
+        <textarea id="acompWaMsg" rows="5" style="width:100%">${escapeHtml(resp.mensagem_sugerida || "")}</textarea>
+        <div class="m15-modal-actions">
+          <button type="button" class="m15-btn m15-btn-sec" id="acompWaCancelar">Cancelar</button>
+          <a class="m15-btn" id="acompWaAbrir" href="${resp.url}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp</a>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector("#acompWaCancelar").addEventListener("click", () => overlay.remove());
+    overlay.querySelector("#acompWaAbrir").addEventListener("click", () => {
+      setTimeout(() => {
+        overlay.remove();
+        if (window.confirm("Você enviou a mensagem pelo WhatsApp? Isso registra o contato como realizado.")) {
+          cli.api(`/followups/${followupId}/whatsapp-confirmacao`, { method: "POST", body: JSON.stringify({}) })
+            .then(() => { renderCrmAcompanhamentoM15(body.closest("#crmView")); })
+            .catch((err) => window.alert("Erro ao confirmar contato: " + (err.message || err)));
+        }
+      }, 400);
+    });
+  }).catch((err) => window.alert("Erro ao gerar link do WhatsApp: " + (err.message || err)));
 }
 
 function renderCrmFollowupDetalhe(container) {

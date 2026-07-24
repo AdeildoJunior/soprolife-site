@@ -27,8 +27,15 @@ from ..models import (
 )
 from ..normalize import normalize_name
 from ..pagination import PageParams, paginate
-from ..schemas import FinanceSearch, FinancialEntryCreate, FinancialEntryUpdate, TransferCreate
+from ..schemas import (
+    ConciliacaoLoteRequest,
+    FinanceSearch,
+    FinancialEntryCreate,
+    FinancialEntryUpdate,
+    TransferCreate,
+)
 from ..security import ROLE_GESTOR, ROLE_LEITURA, require_role
+from ..serializers import money as _num_str
 from ..serializers import ser_financial_entry, ser_transfer
 from ..services.idempotency import idempotent_create
 from ..services.integrity import (
@@ -253,6 +260,176 @@ def create_entry(
           {"public_code": entry.public_code, "tipo": entry.tipo, "status": entry.status})
     db.commit()
     return ser_financial_entry(entry)
+
+
+# ---------------------------------------------------- conciliação extra-Pastore
+#
+# M18 — alvo histórico de conciliação bancária: R$ 3.044,79 recebidos em 13
+# exames de espirometria próprios da SoproLife fora da Pastore. Este total é
+# um controle de fechamento histórico (não um saldo bancário corrente) —
+# nunca substitui o lançamento financeiro como fonte de verdade monetária.
+TOTAL_ALVO_EXTRA_PASTORE = Decimal("3044.79")
+
+
+def _exames_extra_pastore(db: Session):
+    return db.execute(
+        select(SpirometryExam)
+        .where(SpirometryExam.partner_id.is_(None))
+        .order_by(SpirometryExam.data_exame.asc().nulls_last())
+    ).scalars().all()
+
+
+@router.get("/financeiro/conciliacao/extra-pastore")
+def conciliacao_extra_pastore(
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_LEITURA)),
+):
+    exames = _exames_extra_pastore(db)
+    entries_by_exam: dict[str, FinancialEntry] = {}
+    if exames:
+        exam_ids = [e.id for e in exames]
+        rows = db.execute(
+            select(FinancialEntry).where(FinancialEntry.spirometry_exam_id.in_(exam_ids))
+        ).scalars().all()
+        for row in rows:
+            entries_by_exam[row.spirometry_exam_id] = row
+
+    conciliados = []
+    pendentes = []
+    total_vinculado = Decimal("0.00")
+    for exam in exames:
+        entry = entries_by_exam.get(exam.id)
+        person = db.get(Person, exam.person_id)
+        item = {
+            "exam_id": exam.id,
+            "exam_public_code": exam.public_code,
+            "person_public_code": person.public_code if person else None,
+            "person_nome": person.nome_completo if person else None,
+            "data_exame": exam.data_exame.isoformat() if exam.data_exame else None,
+            "local_atendimento": exam.local_atendimento,
+        }
+        if entry:
+            total_vinculado += entry.valor
+            item.update({
+                "status": "conciliado",
+                "financial_public_code": entry.public_code,
+                "valor": _num_str(entry.valor),
+            })
+            conciliados.append(item)
+        else:
+            item.update({"status": "sem_lancamento", "financial_public_code": None, "valor": None})
+            pendentes.append(item)
+
+    total_vinculado = total_vinculado.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
+    total_pendente = (TOTAL_ALVO_EXTRA_PASTORE - total_vinculado).quantize(
+        MONEY_QUANT, rounding=ROUND_HALF_UP
+    )
+    return {
+        "total_alvo": _num_str(TOTAL_ALVO_EXTRA_PASTORE),
+        "total_vinculado": _num_str(total_vinculado),
+        "total_pendente": _num_str(total_pendente),
+        "total_exames": len(exames),
+        "exames_conciliados": len(conciliados),
+        "exames_pendentes": len(pendentes),
+        "conciliados": conciliados,
+        "pendentes": pendentes,
+        "rotulo": "Total histórico informado — exames próprios fora da Pastore",
+    }
+
+
+@router.post("/financeiro/conciliacao/extra-pastore/lote", status_code=201)
+def conciliar_lote_extra_pastore(
+    payload: ConciliacaoLoteRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    """Concilia N exames extra-Pastore numa única transação atômica.
+
+    Bloqueia o envio se a soma dos itens não bater com o pendente
+    recalculado NO SERVIDOR (nunca confia no total exibido no cliente) e
+    nunca preenche valores por média — cada item precisa vir com o valor
+    exato evidenciado.
+    """
+    exames = _exames_extra_pastore(db)
+    exam_ids = {e.id for e in exames}
+    ja_vinculados = {
+        row.spirometry_exam_id
+        for row in db.execute(
+            select(FinancialEntry).where(FinancialEntry.spirometry_exam_id.in_(exam_ids))
+        ).scalars().all()
+    }
+
+    seen_in_payload: set[str] = set()
+    soma = Decimal("0.00")
+    for item in payload.itens:
+        if item.spirometry_exam_id not in exam_ids:
+            raise HTTPException(422, detail={
+                "codigo": "exame_fora_do_escopo",
+                "mensagem": "spirometry_exam_id não é um exame extra-Pastore conhecido.",
+            })
+        if item.spirometry_exam_id in ja_vinculados:
+            raise HTTPException(409, detail={
+                "codigo": "exame_ja_conciliado",
+                "mensagem": "Este exame já tem lançamento financeiro vinculado.",
+            })
+        if item.spirometry_exam_id in seen_in_payload:
+            raise HTTPException(422, detail={
+                "codigo": "exame_duplicado_no_lote",
+                "mensagem": "O mesmo exame aparece mais de uma vez no lote.",
+            })
+        seen_in_payload.add(item.spirometry_exam_id)
+        soma += _q(item.valor)
+
+    soma = soma.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
+    total_vinculado_atual = Decimal("0.00")
+    for row in db.execute(
+        select(FinancialEntry).where(FinancialEntry.spirometry_exam_id.in_(exam_ids))
+    ).scalars().all():
+        total_vinculado_atual += row.valor
+    pendente_atual = (TOTAL_ALVO_EXTRA_PASTORE - total_vinculado_atual).quantize(
+        MONEY_QUANT, rounding=ROUND_HALF_UP
+    )
+
+    if payload.total_esperado.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP) != pendente_atual:
+        raise HTTPException(409, detail={
+            "codigo": "total_esperado_desatualizado",
+            "mensagem": "O pendente mudou no servidor — recarregue antes de enviar.",
+            "pendente_atual": _num_str(pendente_atual),
+        })
+    if soma != pendente_atual:
+        raise HTTPException(422, detail={
+            "codigo": "soma_nao_bate",
+            "mensagem": "A soma dos itens não bate com o valor pendente.",
+            "soma_informada": _num_str(soma),
+            "pendente_atual": _num_str(pendente_atual),
+        })
+
+    criados = []
+    for item in payload.itens:
+        entry = FinancialEntry(
+            public_code=allocate_public_code(db, "financial_entries"),
+            tipo="receita",
+            categoria="Espirometria",
+            descricao=item.descricao,
+            valor=_q(item.valor),
+            moeda="BRL",
+            status=item.status,
+            data_recebimento=item.data_recebimento,
+            forma_pagamento=item.forma_pagamento,
+            origem_preco=item.origem_preco,
+            spirometry_exam_id=item.spirometry_exam_id,
+        )
+        db.add(entry)
+        db.flush()
+        audit(db, "lancamento.criado", "financial_entries", entry.id, user.id,
+              request.state.request_id,
+              {"public_code": entry.public_code, "tipo": entry.tipo, "status": entry.status,
+               "marcador": "m18_conciliacao_lote"})
+        criados.append(ser_financial_entry(entry))
+
+    db.commit()
+    return {"criados": criados, "total_conciliado_no_lote": _num_str(soma)}
 
 
 @router.patch("/lancamentos/{entry_id}")

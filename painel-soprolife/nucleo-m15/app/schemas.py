@@ -430,6 +430,27 @@ class FinancialEntryUpdate(StrictModel):
     _no_pii = field_validator("categoria", "descricao")(_reject_finance_pii)
 
 
+class ConciliacaoItemCreate(StrictModel):
+    """Um item da conciliação de exames extra-Pastore — R$ evidenciado."""
+
+    spirometry_exam_id: str
+    valor: Money
+    status: StatusPagamento = "Recebido"
+    data_recebimento: date | None = None
+    forma_pagamento: FormaPagamento | None = None
+    origem_preco: OrigemPreco | None = None
+    descricao: str | None = Field(default=None, max_length=300)
+
+    _no_pii = field_validator("descricao")(_reject_finance_pii)
+
+
+class ConciliacaoLoteRequest(StrictModel):
+    """Envio em lote — só commita se a soma bater com o pendente atual."""
+
+    itens: list[ConciliacaoItemCreate] = Field(min_length=1, max_length=20)
+    total_esperado: Money
+
+
 class TransferCreate(StrictModel):
     partner_id: str
     partnership_id: str | None = None
