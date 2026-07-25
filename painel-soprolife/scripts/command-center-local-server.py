@@ -2,20 +2,22 @@
 """
 SoproLife Command Center — Servidor proxy local.
 
-Serve os arquivos estáticos do painel e atua como proxy seguro para o
-Apps Script, adicionando o token de autenticação server-side. Também publica
-a API M15 de loopback sob uma rota de mesma origem.
+Serve os arquivos estáticos do painel e publica a API M15 de loopback sob uma
+rota de mesma origem.
 
-O token e a URL do Apps Script nunca saem do servidor — o browser só
-vê a resposta final (ok/erro + id gerado).
+M23 — o proxy para o Apps Script foi DESATIVADO. Até o M22 este servidor
+guardava a URL e o token do Web App e encaminhava escritas do painel para o
+Google Sheets; com o PostgreSQL como fonte operacional única, esse caminho
+deixou de existir. A rota antiga permanece apenas para responder 410 a um
+cliente em cache, e nunca lê configuração com token nem contata a rede.
 
 Endpoints:
-  GET  /painel-soprolife/api/command-center/status  → {"configured": bool}
-  POST /painel-soprolife/api/command-center          → proxy para Apps Script
+  GET  /painel-soprolife/api/command-center/status  → {"configured": false, ...}
+  POST /painel-soprolife/api/command-center          → 410, rota desativada
   GET|POST|PATCH /painel-soprolife/api/m15/...       → http://127.0.0.1:8015/api/v1/...
 
-Logs do Apps Script mantêm action/resultado/status. Logs M15 mostram somente
-operação genérica, método, status, request_id sanitizado e duração.
+Logs M15 mostram somente operação genérica, método, status, request_id
+sanitizado e duração.
 Nunca imprime: token, URL, querystring, corpo, telefone, nomes ou CPF.
 
 Uso:
@@ -32,15 +34,12 @@ import re
 import socket
 import sys
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 HOST = os.environ.get("SOPROLIFE_PANEL_HOST", "127.0.0.1")
 PORT = int(os.environ.get("SOPROLIFE_PANEL_PORT", "8765"))
 
-_CONFIG_PATH = Path("painel-soprolife/data-private/command-center-config.local.json")
 _API_PATH    = "/painel-soprolife/api/command-center"
 _STATUS_PATH = "/painel-soprolife/api/command-center/status"
 _M15_PREFIX = "/painel-soprolife/api/m15"
@@ -112,12 +111,6 @@ _M15_MAX_REQUEST_BODY = 1024 * 1024
 _M15_MAX_RESPONSE_BODY = 4 * 1024 * 1024
 _M15_CONNECT_TIMEOUT = 3.0
 _M15_RESPONSE_TIMEOUT = 15.0
-
-
-def _audit_meta(value, fallback: str) -> str:
-    """Sanitiza metadado de auditoria: string curta, sem quebras, com fallback."""
-    v = " ".join(str(value or "").split())[:40]
-    return v or fallback
 
 
 def _m15_upstream() -> tuple[str, int, str]:
@@ -243,128 +236,42 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return
         self._handle_m15(method, m15)
 
-    # ── Status ─────────────────────────────────────────────────────────────
+    # ── Rota legada do Apps Script (M23 — desativada) ──────────────────────
+    #
+    # Até o M22 este servidor guardava a URL e o token do Apps Script e
+    # encaminhava escritas do painel para o Google Sheets. O M23 tornou o
+    # PostgreSQL a única fonte operacional: a rota continua existindo apenas
+    # para responder com honestidade a um cliente antigo em cache, e NUNCA
+    # contata o Apps Script nem lê a configuração com token.
+    #
+    # Toda escrita do Command Center passa pelo proxy M15 abaixo.
 
     def _handle_status(self):
-        configured = False
-        if _CONFIG_PATH.exists():
-            try:
-                cfg = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-                configured = bool(
-                    cfg.get("webAppUrl",  "").strip() and
-                    cfg.get("apiToken",   "").strip()
-                )
-            except Exception:
-                configured = False
-        self._json({"configured": configured})
-
-    # ── Proxy ──────────────────────────────────────────────────────────────
+        self._json({
+            "configured": False,
+            "decommissioned": True,
+            "canonical_source": "postgresql",
+            "detail": "Escrita via Apps Script foi desativada no M23. "
+                      "A fonte operacional é o PostgreSQL, pela API do Núcleo M15.",
+        })
 
     def _handle_proxy(self):
-        length = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(length)
-
-        try:
-            payload = json.loads(raw)
-        except Exception:
-            self._json({"ok": False, "error": "JSON inválido na requisição."}, 400)
-            return
-
-        action = str(payload.get("action", "")).strip()
-        data   = payload.get("data", {})
-
-        if not action:
-            self._json({"ok": False, "error": "Campo 'action' ausente."}, 400)
-            return
-
-        # Lê configuração server-side — token nunca vai ao browser
-        if not _CONFIG_PATH.exists():
-            self._json({"ok": False, "error": "Configuração não encontrada no servidor."}, 503)
-            print(f"[CC] ERRO  action={action!r}  config ausente", flush=True)
-            return
-
-        try:
-            cfg       = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-            web_url   = cfg.get("webAppUrl",  "").strip()
-            api_token = cfg.get("apiToken",   "").strip()
-        except Exception:
-            self._json({"ok": False, "error": "Erro ao ler configuração."}, 500)
-            return
-
-        if not web_url or not api_token:
-            self._json({"ok": False, "error": "Configuração incompleta."}, 503)
-            return
-
-        # Identidade de auditoria (M1 Etapa 4) — atributo do SERVIDOR, como o
-        # token: sobrescreve qualquer audit_* vindo do browser (nunca confiar
-        # no cliente). Lida da config local: instanceName → audit_origem
-        # (fallback: hostname), operatorName → audit_operador. Campos usados
-        # pelo Apps Script apenas na aba Log Auditoria — nunca contêm dado
-        # pessoal, só o nome da instância e do operador declarado na config.
-        if isinstance(data, dict):
+        # Drena o corpo para não deixar a conexão pendurada, mas NÃO o
+        # interpreta: não há destino para onde encaminhar.
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        if length > 0:
             try:
-                hostname = socket.gethostname()
+                self.rfile.read(length)
             except Exception:
-                hostname = ""
-            data["audit_origem"]   = _audit_meta(cfg.get("instanceName"), _audit_meta(hostname, "desconhecida"))
-            data["audit_operador"] = _audit_meta(cfg.get("operatorName"), "desconhecido")
-
-        # Adiciona token server-side e encaminha para o Apps Script
-        forward = json.dumps({
-            "token":  api_token,   # adicionado aqui, nunca no browser
-            "action": action,
-            "data":   data,
-        }).encode("utf-8")
-
-        result_raw = b""
-        result_status = 0
-        try:
-            req = urllib.request.Request(
-                web_url,
-                data=forward,
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result_raw    = resp.read()
-                result_status = resp.status
-
-        except urllib.error.HTTPError as exc:
-            # Apps Script pode retornar 4xx/5xx — tenta ler o corpo mesmo assim
-            try:
-                result_raw    = exc.read()
-                result_status = exc.code
-            except Exception:
-                self._json({"ok": False, "error": f"Erro HTTP {exc.code} do Apps Script."}, 502)
-                print(f"[CC] ERRO  action={action!r}  HTTP={exc.code}", flush=True)
-                return
-
-        except urllib.error.URLError as exc:
-            reason = type(exc.reason).__name__ if exc.reason else "URLError"
-            self._json({"ok": False, "error": "Não foi possível contatar o Apps Script."}, 502)
-            print(f"[CC] ERRO  action={action!r}  {reason}", flush=True)
-            return
-
-        except Exception as exc:
-            self._json({"ok": False, "error": "Erro interno do proxy."}, 500)
-            print(f"[CC] ERRO  action={action!r}  {type(exc).__name__}", flush=True)
-            return
-
-        # Log seguro: apenas action e resultado — sem token, URL, dados pessoais
-        try:
-            result_obj = json.loads(result_raw)
-            ok = result_obj.get("ok", False)
-            rid = result_obj.get("id", "")
-            print(f"[CC] ok={ok}  action={action!r}  id={rid!r}  http={result_status}", flush=True)
-        except Exception:
-            print(f"[CC] ERRO  action={action!r}  resposta não-JSON  http={result_status}", flush=True)
-
-        # Devolve a resposta do Apps Script ao browser sem modificação
-        self.send_response(200)
-        self.send_header("Content-Type",   "application/json")
-        self.send_header("Content-Length", str(len(result_raw)))
-        self.end_headers()
-        self.wfile.write(result_raw)
+                pass
+        print("[CC] rota legada do Apps Script recusada (M23)", flush=True)
+        self._json({
+            "ok": False,
+            "error": "Escrita via Google Sheets/Apps Script foi desativada no M23. "
+                     "Use a Central de Cadastros ou o CRM — ambos gravam no "
+                     "PostgreSQL pela API do Núcleo M15.",
+            "canonical_source": "postgresql",
+        }, 410)
 
     # ── Proxy M15 de mesma origem ────────────────────────────────────────
 
@@ -526,21 +433,12 @@ def main() -> None:
     _m15_upstream()
     server = http.server.ThreadingHTTPServer((HOST, PORT), _Handler)
 
-    cc_ok = _CONFIG_PATH.exists()
-    try:
-        if cc_ok:
-            cfg = json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
-            cc_ok = bool(cfg.get("webAppUrl", "").strip() and cfg.get("apiToken", "").strip())
-    except Exception:
-        cc_ok = False
-
     print("SoproLife — Servidor proxy local")
     print(f"Acesso:  http://{HOST}:{PORT}/painel-soprolife/")
-    print(f"API:     http://{HOST}:{PORT}{_API_PATH}")
-    print(f"Status:  http://{HOST}:{PORT}{_STATUS_PATH}")
     print(f"M15:     mesma origem em {_M15_PREFIX}/... (upstream loopback validado)")
     print()
-    print(f"Command Center: {'CONFIGURADO — escrita ativa' if cc_ok else 'SEM CONFIG — modo leitura'}")
+    print("Fonte operacional: PostgreSQL, pela API do Núcleo M15.")
+    print(f"Rota legada do Apps Script ({_API_PATH}): DESATIVADA no M23.")
     print()
     print("Pressione Ctrl+C para desligar.")
     print()

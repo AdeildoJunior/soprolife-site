@@ -230,6 +230,16 @@ def inspect_aba(service, spreadsheet_id: str, aba: str) -> None:
 
 
 def main() -> int:
+    # M23 — guarda de fonte canônica. O painel opera em modo
+    # postgresql_only: nenhum leitor de Google Sheets pode ser executado
+    # pelo pipeline automático nem pelo timer de produção. Só uma decisão
+    # humana explícita (SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1) libera
+    # este utilitário, e apenas para migração/forense pontual.
+    import sys as _sys, pathlib as _pathlib
+    _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent))
+    import data_source_mode
+    data_source_mode.block_legacy_sheets('inspect-crm-pacientes.py')
+
     print("SoproLife — Inspeção segura de abas CRM Pacientes")
     print("Modo: cabeçalhos + contagem de linhas + diagnóstico de datas")
     print("Nenhum valor de paciente (nome, telefone, dados clínicos) será impresso.\n")

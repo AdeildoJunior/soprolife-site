@@ -470,6 +470,16 @@ def _parse_indicators(rows: list) -> dict[str, float]:
 
 
 def main() -> int:
+    # M23 — guarda de fonte canônica. O painel opera em modo
+    # postgresql_only: nenhum leitor de Google Sheets pode ser executado
+    # pelo pipeline automático nem pelo timer de produção. Só uma decisão
+    # humana explícita (SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1) libera
+    # este utilitário, e apenas para migração/forense pontual.
+    import sys as _sys, pathlib as _pathlib
+    _sys.path.insert(0, str(_pathlib.Path(__file__).resolve().parent))
+    import data_source_mode
+    data_source_mode.block_legacy_sheets('read-sheets-summary-adc.py')
+
     parser = argparse.ArgumentParser(
         description="Conector Google Sheets via ADC — SoproLife (sem chave privada)"
     )

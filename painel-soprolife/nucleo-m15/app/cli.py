@@ -1035,6 +1035,38 @@ def _verificar_consolidacao(db, antes, depois, duplicate, canonical) -> list[str
     return problemas
 
 
+def cmd_exportar_snapshots(args) -> int:
+    """M23 — gera os snapshots do painel a partir do PostgreSQL.
+
+    Substitui os antigos leitores de Google Sheets na esteira automática.
+    Dry-run é o padrão; --write grava atomicamente. Um payload com qualquer
+    chave de PII aborta ANTES da gravação, preservando o snapshot anterior.
+    """
+    from .snapshots import export_snapshots
+
+    out_dir = pathlib.Path(args.saida).resolve()
+    db = _session()
+    try:
+        resultado = export_snapshots(db, out_dir, write=args.write)
+    except ValueError as exc:
+        print(f"ERRO: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        db.close()
+
+    if args.json:
+        print(json.dumps(resultado, ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"Fonte: PostgreSQL (Núcleo M15) — modo {resultado['modo']}")
+    print(f"Destino: {resultado['destino']}")
+    for item in resultado["gerados"]:
+        print(f"  {item['arquivo']}")
+    if not args.write:
+        print("\nDRY-RUN — nenhum arquivo foi gravado. Use --write para gravar.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="m15", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -1275,6 +1307,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--executar", action="store_true",
                    help="Executa de verdade (pede a frase exata interativamente)")
     p.set_defaults(func=cmd_consolidar_parceiro)
+
+    p = sub.add_parser(
+        "exportar-snapshots",
+        help="M23 — gera os snapshots do painel a partir do PostgreSQL",
+    )
+    p.add_argument("--saida", default="../data",
+                   help="Diretório de saída (padrão: painel-soprolife/data)")
+    p.add_argument("--write", action="store_true",
+                   help="Grava de verdade (sem isso é dry-run)")
+    p.add_argument("--json", action="store_true", help="Saída em JSON")
+    p.set_defaults(func=cmd_exportar_snapshots)
 
     args = parser.parse_args(argv)
     return args.func(args)

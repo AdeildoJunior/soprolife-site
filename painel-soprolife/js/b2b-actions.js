@@ -15,17 +15,43 @@ const _b2bSanitizar = (typeof acoesTextoSeguro === "function")
 // Vocabulário canônico de etapas (duplicado de propósito, como no resto do
 // projeto — cada módulo é instalável sozinho). Etapa é a única fonte de
 // verdade da fase comercial (skill soprolife-b2b-pcmso-crm).
-const B2B_CRM_ATIVAS = ["Não abordada", "Abordada", "Em conversa",
-  "Pediu apresentação", "Aguardando retorno", "Proposta enviada"];
-const B2B_CRM_PARCEIRO = "Parceiro ativo";
-const B2B_CRM_PERDIDAS = ["Sem interesse", "Não contatar / bloqueou",
-  "Sem canal válido", "Arquivada"];
+// M23 — vocabulário CANÔNICO do PostgreSQL (enum de status de parceiro na
+// API). O vocabulário anterior, livre, vinha da planilha e deixou de ser
+// fonte; ele sobrevive só como ALIAS de leitura para registros históricos.
+const B2B_CRM_ATIVAS = ["prospecto", "em_negociacao", "pausada"];
+const B2B_CRM_PARCEIRO = "ativa";
+const B2B_CRM_PERDIDAS = ["encerrada"];
+
+// Alias histórico → canônico. Mantido para que um registro antigo não seja
+// denunciado como "fora do padrão" só por ter nascido antes do M23.
+const B2B_CRM_ALIAS = {
+  "não abordada": "prospecto", "nao abordada": "prospecto",
+  "abordada": "em_negociacao", "em conversa": "em_negociacao",
+  "pediu apresentação": "em_negociacao", "pediu apresentacao": "em_negociacao",
+  "proposta enviada": "em_negociacao",
+  "aguardando retorno": "pausada",
+  "parceiro ativo": "ativa", "parceira": "ativa",
+  "sem interesse": "encerrada", "arquivada": "encerrada",
+  "não contatar / bloqueou": "encerrada", "sem canal válido": "encerrada",
+};
 
 const B2B_LEAD_SERVICOS = ["clínicas", "clinicas", "pcmso / empresa", "pcmso/empresa"];
-const B2B_LEAD_CONVERTIDO = ["convertido em clínica/parceiro", "parceiro ativo"];
-const B2B_LEAD_PERDIDO = ["desistiu", "perdido", "sem resposta", "não respondeu", "nao respondeu"];
+// Etapas canônicas de lead (enum EtapaLead da API), com os valores históricos
+// preservados para leitura de registros antigos.
+const B2B_LEAD_CONVERTIDO = ["convertido",
+  "convertido em clínica/parceiro", "parceiro ativo"];
+const B2B_LEAD_PERDIDO = ["perdido", "nao_respondeu",
+  "desistiu", "sem resposta", "não respondeu", "nao respondeu"];
 
 const B2B_MAX_ACOES = 10;
+
+// Resolve a etapa de uma clínica para o vocabulário canônico. Valor já
+// canônico passa direto; valor histórico é traduzido; valor desconhecido sai
+// intacto para ser DENUNCIADO adiante, nunca silenciado.
+function b2bEtapaClinica(c) {
+  const bruto = String((c && c.etapa) || "").trim();
+  return B2B_CRM_ALIAS[bruto.toLowerCase()] || bruto;
+}
 
 function b2bParseData(valor) {
   if (!valor) return null;
@@ -65,7 +91,7 @@ function buildB2BStats(payloads, agora) {
   const leadsAtivos = leadsB2B.filter((l) =>
     !B2B_LEAD_CONVERTIDO.includes(etapaLead(l)) && !B2B_LEAD_PERDIDO.includes(etapaLead(l)));
 
-  const etapaClin = (c) => String(c.etapa || "").trim();
+  const etapaClin = b2bEtapaClinica;
   const clinAtivas = clinicas.filter((c) => B2B_CRM_ATIVAS.includes(etapaClin(c)));
   const parceiros = clinicas.filter((c) => etapaClin(c) === B2B_CRM_PARCEIRO);
   const clinPerdidas = clinicas.filter((c) => B2B_CRM_PERDIDAS.includes(etapaClin(c)));
@@ -76,10 +102,10 @@ function buildB2BStats(payloads, agora) {
     // Dedup (regra do funil): lead convertido conta pela clínica, nunca duas vezes.
     totalOportunidades: clinAtivas.length + leadsAtivos.length,
     precisamFollowup: fu ? (Number(fu.atrasados || 0) + Number(fu.hoje || 0)) : null,
-    emConversa: clinAtivas.filter((c) => etapaClin(c) === "Em conversa").length +
-                leadsAtivos.filter((l) => etapaLead(l) === "em conversa").length,
-    aguardandoRetorno: clinAtivas.filter((c) => etapaClin(c) === "Aguardando retorno").length +
-                       leadsAtivos.filter((l) => etapaLead(l) === "aguardando retorno").length,
+    emConversa: clinAtivas.filter((c) => etapaClin(c) === "em_negociacao").length +
+                leadsAtivos.filter((l) => etapaLead(l) === "em_contato").length,
+    aguardandoRetorno: clinAtivas.filter((c) => etapaClin(c) === "pausada").length +
+                       leadsAtivos.filter((l) => etapaLead(l) === "aguardando_retomada").length,
     convertidas: parceiros.length + leadsConvertidos.length,
     semProximoPasso: clinAtivas.filter((c) => !temProx(c)).length +
                      leadsAtivos.filter((l) => !temProx(l)).length,
@@ -122,38 +148,32 @@ function buildB2BActions(payloads, agora) {
   }
 
   // ── Por clínica (nome institucional já permitido no summary seguro) ────
-  const etapaClin = (c) => String(c.etapa || "").trim();
+  const etapaClin = b2bEtapaClinica;
   const nomeClin = (c) => _b2bSanitizar(c.nome_clinica || c.clinica, "Clínica");
   const temProxC = (c) => c.tem_proxima_acao === true || Boolean(c.proximaAcao || c.proxima_acao);
   clinicas.forEach((c) => {
     const etapa = etapaClin(c);
     const nome = nomeClin(c);
     const prioAlta = String(c.prioridade || "").toLowerCase() === "alta";
-    if (etapa === "Proposta enviada") {
-      push(`B2B-PROP-${c.clinica_id || c.id || nome}`, "alta", "CRM B2B",
-        `Cobrar retorno da proposta — ${nome}`,
-        "Proposta enviada sem resposta registrada",
-        "Ligar/mandar mensagem cobrando a proposta com gentileza.");
-    } else if (etapa === "Pediu apresentação") {
-      push(`B2B-APRES-${c.clinica_id || c.id || nome}`, "alta", "CRM B2B",
-        `Enviar apresentação — ${nome}`,
-        "A clínica pediu apresentação e está esperando",
-        "Enviar a apresentação padrão e registrar a data do envio.");
-    } else if (etapa === "Em conversa") {
-      push(`B2B-CONV-${c.clinica_id || c.id || nome}`, prioAlta ? "alta" : "media", "CRM B2B",
-        `Manter conversa aquecida — ${nome}`,
-        "Negociação em andamento",
-        "Confirmar próximo contato e registrar a data no CRM.");
-    } else if (etapa === "Aguardando retorno") {
-      push(`B2B-AGRET-${c.clinica_id || c.id || nome}`, prioAlta ? "alta" : "media", "CRM B2B",
-        `Reforçar contato — ${nome}`,
-        "Aguardando retorno da clínica",
-        "Se o prazo combinado passou, fazer um follow-up educado.");
-    } else if (B2B_CRM_ATIVAS.includes(etapa) && !temProxC(c)) {
+    // Oportunidade ativa SEM próxima ação é sempre a lacuna mais urgente:
+    // com o enum canônico (menos granular que o vocabulário livre da
+    // planilha), a falta de próximo passo passa a valer para toda etapa
+    // ativa, e não só para as que não tinham nudge próprio.
+    if (B2B_CRM_ATIVAS.includes(etapa) && !temProxC(c)) {
       push(`B2B-SEMPASSO-${c.clinica_id || c.id || nome}`, "media", "CRM B2B",
         `Definir próximo passo — ${nome}`,
         "Oportunidade ativa sem próxima ação registrada",
-        "Abrir a planilha e registrar a próxima ação e a data.");
+        "Abrir a clínica no CRM e registrar a próxima ação e a data.");
+    } else if (etapa === "em_negociacao") {
+      push(`B2B-CONV-${c.clinica_id || c.id || nome}`, prioAlta ? "alta" : "media", "CRM B2B",
+        `Manter negociação aquecida — ${nome}`,
+        "Negociação em andamento",
+        "Confirmar o próximo contato e registrar a data no CRM.");
+    } else if (etapa === "pausada") {
+      push(`B2B-AGRET-${c.clinica_id || c.id || nome}`, prioAlta ? "alta" : "media", "CRM B2B",
+        `Reforçar contato — ${nome}`,
+        "Negociação pausada, aguardando retorno da clínica",
+        "Se o prazo combinado passou, fazer um follow-up educado.");
     } else if (etapa === B2B_CRM_PARCEIRO && !temProxC(c)) {
       push(`B2B-PARC-${c.clinica_id || c.id || nome}`, "baixa", "CRM B2B",
         `Alinhar rotina com o parceiro — ${nome}`,
@@ -166,7 +186,7 @@ function buildB2BActions(payloads, agora) {
       push(`B2B-ETAPA-${c.clinica_id || c.id || nome}`, "media", "CRM B2B",
         `Revisar etapa no CRM — ${nome}`,
         `Etapa "${etapa}" fora do padrão oficial (não entra nas contagens)`,
-        "Corrigir a etapa na planilha para um dos valores oficiais do dropdown.");
+        "Corrigir a etapa da clínica no CRM para um dos valores oficiais.");
     }
   });
 

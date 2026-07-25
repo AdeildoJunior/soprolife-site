@@ -3,6 +3,26 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../../" || exit 1
 
+# ---------------------------------------------------------------------------
+# M23 — guarda de fonte canônica.
+#
+# Este utilitário grava um snapshot do painel a partir de um arquivo derivado
+# de planilha. Desde o M23 esse mesmo arquivo é gerado pelo PostgreSQL
+# (nucleo-m15: app.cli exportar-snapshots), e deixar os dois caminhos vivos
+# significaria sobrescrever dado canônico com dado de planilha.
+#
+# Fail-closed: só roda com decisão humana explícita, para migração/forense.
+# ---------------------------------------------------------------------------
+if python3 painel-soprolife/scripts/data_source_mode.py --check >/dev/null 2>&1; then
+  echo "BLOQUEADO (M23): $(basename "$0") sobrescreveria um snapshot canônico."
+  echo
+  echo "A fonte operacional é o PostgreSQL. Regenere os snapshots com:"
+  echo "  bash painel-soprolife/scripts/update-local-data.sh"
+  echo
+  echo "Para migração/forense: export SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1"
+  exit 3
+fi
+
 SOURCE_PATH="${SOPROLIFE_CRM_CLINICAS_CONFIG:-$HOME/.config/soprolife/painel/crm-clinicas.json}"
 OUT_PATH="painel-soprolife/data/crm-clinicas.local.json"
 

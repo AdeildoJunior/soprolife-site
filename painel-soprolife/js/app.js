@@ -22,7 +22,6 @@ const state = {
   followupSummary: null,
   followupClinicas: null,
   ultimosLancamentos: null,
-  ccConfigured: false,
   custosInvestimentos: null,
   leadsFilter: "Ativos",
   crmFilter: "Ativos",
@@ -43,54 +42,50 @@ const slug = (text) =>
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, "-");
 
-// Etapas oficiais do funil de leads — mesma lista usada para criar um lead
-// (aba "Lead" na Central de Cadastros) e para mudar a etapa de um lead
-// existente (botão "Mudar etapa" na tabela de Leads e Agendamentos).
-// "Concluído" e "Perdido" foram adicionados por já constarem como opções
-// previstas no template inicial da planilha (soprolife-sheets-template.gs);
-// as demais etapas preservam exatamente a lista já usada em produção.
+// Etapas oficiais do funil de leads (M23). Estes são os valores CANÔNICOS
+// gravados no PostgreSQL — exatamente o enum EtapaLead da API
+// (nucleo-m15/app/schemas.py). O vocabulário anterior, em português livre,
+// vinha da planilha legada e deixou de existir como fonte no M23.
+//
+// A ordem define a ordem do funil visual; o rótulo é só apresentação e nunca
+// é gravado.
 const LEAD_ETAPA_OPTIONS = [
-  "Novo contato",
-  "Em conversa",
-  "Aguardando retorno",
-  "Agendado",
-  "Realizou consulta",
-  "Realizou espirometria",
-  "Realizou consulta e espirometria",
-  "Concluído",
-  "Não respondeu",
-  "Desistiu",
-  "Perdido",
-  // Etapas B2B / parcerias (leads de clínica, PCMSO, empresas) — ver vincularLeadAClinica.
-  "Reunião marcada",
-  "Proposta enviada",
-  "Parceria fechada",
-  "Parceiro ativo",
-  "Convertido em clínica/parceiro",
-  "Sem resposta",
+  "novo",
+  "em_contato",
+  "aguardando_retomada",
+  "agendado",
+  "convertido",
+  "nao_respondeu",
+  "perdido",
 ];
 
-// Etapas que, ao serem definidas via painel, disparam a conversão automática
-// do lead para os CRMs de atendimento no Apps Script (ver _updateLeadStage
-// em apps-script/command-center-api.gs).
-const LEAD_ETAPAS_CONVERSAO = [
-  "Realizou consulta",
-  "Realizou espirometria",
-  "Realizou consulta e espirometria",
-];
+const LEAD_ETAPA_LABELS = {
+  novo: "Novo contato",
+  em_contato: "Em contato",
+  aguardando_retomada: "Aguardando retomada",
+  agendado: "Agendado",
+  convertido: "Convertido",
+  nao_respondeu: "Não respondeu",
+  perdido: "Perdido",
+};
 
-// Serviços que caracterizam um lead B2B (clínica/parceiro/PCMSO) — mesma lista
-// usada no backend para decidir a rota de conversão (ver _CV_ROTA_B2B em
-// converter-lead-em-paciente.gs). Esses leads usam "Vincular a clínica" em vez
-// da conversão automática para paciente.
+function leadEtapaLabel(etapa) {
+  return LEAD_ETAPA_LABELS[etapa] || etapa || "—";
+}
+
+// Etapa que encerra o funil: o lead vira atendimento e sai da lista ativa.
+// No M22 e antes, a conversão era disparada pelo Apps Script; agora é apenas
+// o estado canônico gravado no banco.
+const LEAD_ETAPAS_CONVERSAO = ["convertido"];
+
+// Serviços que caracterizam um lead B2B (clínica/parceiro/PCMSO). Mantido
+// tolerante ao vocabulário histórico porque o campo servico_interesse aceita
+// texto livre vindo de registros antigos.
 const LEAD_SERVICOS_B2B = ["clínicas", "clinicas", "pcmso / empresa", "pcmso", "empresa"];
 
-// Etapas B2B terminais que sempre marcam um lead como convertido/arquivado,
-// independente de tipo_lead — ocultadas por padrão da lista principal de
-// Leads e Agendamentos (filtro "Ativos"). "Concluído" NÃO entra aqui: só é
-// terminal quando o lead é B2B (ver isLeadConvertido) — para leads de
-// paciente, "Concluído" é apenas mais uma etapa do funil.
-const LEAD_ETAPAS_TERMINAIS = ["Convertido em clínica/parceiro", "Parceiro ativo"];
+// Etapas terminais que marcam um lead como convertido/arquivado — ocultadas
+// por padrão da lista principal de Leads e Agendamentos (filtro "Ativos").
+const LEAD_ETAPAS_TERMINAIS = ["convertido", "perdido"];
 
 function isB2BLead(item) {
   const servico = (item.servico_interesse || item.servico || "").toLowerCase().trim();
@@ -98,15 +93,11 @@ function isB2BLead(item) {
 }
 
 // Regra de "convertido/arquivado" (oculto do filtro Ativos):
-//   status_operacional === "convertido"
-//   OU etapa em ["Convertido em clínica/parceiro", "Parceiro ativo"]
-//   OU (etapa === "Concluído" E tipo_lead === "b2b")
+//   status_operacional === "convertido" OU etapa terminal canônica.
 function isLeadConvertido(item) {
   if (item.status_operacional === "convertido") return true;
   const etapa = item.etapa || item.status || "";
-  if (LEAD_ETAPAS_TERMINAIS.includes(etapa)) return true;
-  if (etapa === "Concluído" && isB2BLead(item)) return true;
-  return false;
+  return LEAD_ETAPAS_TERMINAIS.includes(etapa);
 }
 
 const CHART_COLORS = [
@@ -242,90 +233,64 @@ function chartGradient(canvasEl, r, g, b, alphaTop = 0.25, alphaBottom = 0.02) {
   return gradient;
 }
 
-// Aliases de etapa: variantes encontradas na planilha → valor canônico do painel
+// M23 — vocabulário CANÔNICO de status de parceiro, idêntico ao enum aceito
+// por PATCH /parceiros/{id} (nucleo-m15/app/schemas.py). O painel exibe um
+// rótulo legível, mas SEMPRE grava e compara o valor canônico.
 const _ETAPA_ALIAS = {
-  "parceira":       "Parceiro ativo",
-  "parceiro":       "Parceiro ativo",
-  "parceiro ativo": "Parceiro ativo",
-  "implantação":    "Parceiro ativo",
-  "implantacao":    "Parceiro ativo",
-  "abordado":            "Abordada",
-  "abordada":            "Abordada",
-  "primeiro contato":    "Abordada",
-  "não abordado":        "Não abordada",
-  "nao abordado":        "Não abordada",
-  "não abordada":        "Não abordada",
-  "respondeu":           "Em conversa",
-  "em conversa":         "Em conversa",
-  "reunião":             "Pediu apresentação",
-  "reuniao":             "Pediu apresentação",
-  "pediu apresentação":  "Pediu apresentação",
-  "pediu apresentacao":  "Pediu apresentação",
-  "sem resposta":        "Aguardando retorno",
-  "aguardando retorno":  "Aguardando retorno",
-  "pausada":             "Aguardando retorno",
-  "proposta":            "Proposta enviada",
-  "proposta enviada":    "Proposta enviada",
-  "sem interesse":            "Sem interesse",
-  "não contatar / bloqueou":  "Não contatar / bloqueou",
-  "não contatar":             "Não contatar / bloqueou",
-  "bloqueou":                 "Não contatar / bloqueou",
-  "sem canal válido":         "Sem canal válido",
-  "sem canal valido":         "Sem canal válido",
-  "arquivada":                "Arquivada",
+  // Valores canônicos (identidade).
+  "prospecto":     "prospecto",
+  "em_negociacao": "em_negociacao",
+  "ativa":         "ativa",
+  "pausada":       "pausada",
+  "encerrada":     "encerrada",
+  // Vocabulário histórico da planilha legada: continua LEGÍVEL para registros
+  // antigos que ainda apareçam, mas nunca é gravado de volta.
+  "não abordada":        "prospecto",
+  "nao abordada":        "prospecto",
+  "abordada":            "em_negociacao",
+  "em conversa":         "em_negociacao",
+  "pediu apresentação":  "em_negociacao",
+  "proposta enviada":    "em_negociacao",
+  "aguardando retorno":  "pausada",
+  "parceiro ativo":      "ativa",
+  "parceira":            "ativa",
+  "sem interesse":       "encerrada",
+  "arquivada":           "encerrada",
 };
+
+const CRM_ETAPA_LABELS = {
+  prospecto: "Prospecto",
+  em_negociacao: "Em negociação",
+  ativa: "Parceiro ativo",
+  pausada: "Pausada",
+  encerrada: "Encerrada",
+};
+
+function crmEtapaLabel(etapa) {
+  return CRM_ETAPA_LABELS[etapa] || etapa || "—";
+}
 
 // Etapa terminal = fase comercial que já "fechou" (positiva ou negativa) e
 // por isso sai das listas de prospecção ativa (Atrasados, Alta prioridade,
 // Em conversa) — mesma ideia de isLeadConvertido()/LEAD_ETAPAS_TERMINAIS,
 // aplicada ao domínio de CRM Clínicas/PCMSO. Pessoa ≠ clínica, Status ≠
 // etapa, Próximo passo ≠ etapa: Etapa é a única fonte de verdade do funil.
-const CRM_ETAPA_TERMINAL_POSITIVA = "Parceiro ativo";
-const CRM_ETAPAS_TERMINAIS_NEGATIVAS = [
-  "Sem interesse",
-  "Não contatar / bloqueou",
-  "Sem canal válido",
-  "Arquivada",
-];
+const CRM_ETAPA_TERMINAL_POSITIVA = "ativa";
+const CRM_ETAPAS_TERMINAIS_NEGATIVAS = ["encerrada"];
 const CRM_ETAPAS_TERMINAIS = [CRM_ETAPA_TERMINAL_POSITIVA, ...CRM_ETAPAS_TERMINAIS_NEGATIVAS];
 
 // Etapas ativas do funil comercial (excluem as terminais, que têm blocos e
 // filtros próprios) — usadas no funil visual e no formulário de nova clínica.
-const CRM_ETAPAS_ATIVAS = [
-  "Não abordada",
-  "Abordada",
-  "Em conversa",
-  "Pediu apresentação",
-  "Aguardando retorno",
-  "Proposta enviada",
-];
+const CRM_ETAPAS_ATIVAS = ["prospecto", "em_negociacao", "pausada"];
 
-const _ETAPA_NEGATIVA_PATTERNS = [
-  [/sem interesse/i, "Sem interesse"],
-  [/n[aã]o contatar|bloqueou/i, "Não contatar / bloqueou"],
-  [/encerrar contato|n[aã]o insistir|perdid[oa]/i, "Arquivada"],
-  [/sem canal v[aá]lido|sem whatsapp|n[aã]o tem whatsapp/i, "Sem canal válido"],
-];
-
-// Heurística de apoio: se a Etapa não resolver para um valor terminal
-// conhecido, tenta inferir uma etapa terminal negativa a partir de texto
-// livre (Próximo passo/Observação). A cor da linha na planilha NÃO é usada
-// como fonte de verdade — a regra precisa estar em texto na coluna Etapa.
-function inferEtapaNegativaDeTexto(...textos) {
-  const joined = textos.filter(Boolean).join(" ").toLowerCase();
-  for (const [pattern, etapa] of _ETAPA_NEGATIVA_PATTERNS) {
-    if (pattern.test(joined)) return etapa;
-  }
-  return null;
-}
-
-function normalizeCrmEtapa(etapa, ...contextoTexto) {
-  const canon = _ETAPA_ALIAS[String(etapa).toLowerCase().trim()] ?? String(etapa).trim();
-  if (!CRM_ETAPAS_TERMINAIS.includes(canon)) {
-    const inferida = inferEtapaNegativaDeTexto(etapa, ...contextoTexto);
-    if (inferida) return inferida;
-  }
-  return canon;
+// M23 — a etapa vem da coluna canônica `status` do PostgreSQL. A heurística
+// anterior, que INFERIA etapa negativa a partir de texto livre da planilha
+// (Próximo passo / Observação), foi removida: adivinhar fase comercial a
+// partir de texto era necessário quando a fonte era uma planilha sem enum,
+// e é exatamente o tipo de suposição que o M23 elimina.
+function normalizeCrmEtapa(etapa) {
+  const bruto = String(etapa ?? "").toLowerCase().trim();
+  return _ETAPA_ALIAS[bruto] ?? String(etapa ?? "").trim();
 }
 
 function isCrmEtapaTerminal(etapa) {
@@ -336,30 +301,19 @@ function isCrmEtapaTerminalNegativa(etapa) {
   return CRM_ETAPAS_TERMINAIS_NEGATIVAS.includes(etapa);
 }
 
-// Transforma próximas ações genéricas de parceiros em algo operacional
-// (camada visual apenas — a planilha não é alterada)
-const _PROXIMA_ACAO_LABEL = {
-  "parceria fechada": "Alinhar agenda piloto e fluxo operacional — início previsto na segunda semana de julho",
-};
-
 function normalizeCrmRecord(item) {
   const bairro = item.bairro || "";
   const regiao = item.regiao || "";
-  const etapaRaw = item.etapa || "";
-  // Dado real não traz o texto de proxima_acao (texto livre, M2) — só o
-  // booleano tem_proxima_acao; o texto completo fica na planilha privada.
-  // O demo (crm-clinicas.json) continua trazendo o texto e renderiza igual.
-  const acaoRaw  = item.proxima_acao || item.proximaAcao ||
-    (item.tem_proxima_acao ? "Ação definida — ver planilha" : "");
-  const observacao = item.observacao || "";
   return {
     id: item.clinica_id || item.id || "",
     clinica: item.nome_clinica || item.clinica || "",
     bairro: regiao && regiao !== bairro ? `${regiao} · ${bairro}` : bairro,
     tipo: item.tipo_clinica || item.tipo || "",
-    etapa: normalizeCrmEtapa(etapaRaw, acaoRaw, observacao),
+    etapa: normalizeCrmEtapa(item.etapa || ""),
+    // Prioridade e próxima ação eram colunas de texto livre da planilha; o
+    // banco canônico não guarda esses campos e o painel não os inventa.
     prioridade: item.prioridade || "",
-    proximaAcao: _PROXIMA_ACAO_LABEL[acaoRaw.toLowerCase().trim()] ?? acaoRaw,
+    proximaAcao: item.proximaAcao || "",
     dataProximaAcao: item.data_proxima_acao || item.dataProximaAcao || "",
     responsavel: item.responsavel || "",
     ultimaInteracao: item.ultima_interacao || null,
@@ -484,7 +438,6 @@ async function init() {
       state.financeiro_summary = financeiroSummaryData;
     }
 
-    state.ccConfigured = await fetchCcStatus();
 
     const lancamentosData = await loadOptionalJson("./data/ultimos-lancamentos-summary.local.json");
     if (lancamentosData?.source?.safeToDisplay === true && lancamentosData?.source?.containsPersonalData === false) {
@@ -618,12 +571,12 @@ const CARD_GROUPS = [
 // como interpretar. Menções a dado agregado/seguro ficam só aqui, não no card.
 const METRIC_INFO = {
   // Painel geral / visão rápida
-  totalLeads: "Total de contatos comerciais/pacientes cadastrados na aba Leads da planilha. Dado agregado, sem exibir nome ou telefone neste resumo.",
+  totalLeads: "Total de leads cadastrados no PostgreSQL. Dado agregado, sem exibir nome ou telefone neste resumo.",
   leadsNovos: "Leads que ainda estão no início do funil e aguardam qualificação ou primeiro retorno.",
   leadsAgendados: "Leads que avançaram para uma etapa com agendamento ou intenção clara de atendimento.",
   leadsConcluidos: "Leads que já passaram pelo primeiro atendimento (espirometria, consulta ou teleconsulta) e migraram para o CRM de pacientes.",
   clinicasCadastradas: "Número de clínicas/parceiros B2B cadastrados para prospecção, parceria ou acompanhamento.",
-  tarefasPendentes: "Tarefas operacionais ainda abertas no painel ou na planilha de controle.",
+  tarefasPendentes: "Tarefas operacionais ainda abertas no painel.",
   receitaPrevista: "Estimativa de receita a partir dos lançamentos e agendamentos já registrados no controle financeiro.",
   receitaRecebida: "Receita já recebida, considerando os lançamentos financeiros confirmados. Quando o financeiro real está ativo, mostra a receita oficial de espirometrias pagas/confirmadas.",
   conteudosPlanejados: "Quantidade de conteúdos previstos no planejamento de marketing, como posts, campanhas ou materiais educativos.",
@@ -706,8 +659,8 @@ const METRIC_INFO = {
   lancamentosAltaPrioridade: "Eventos marcados como alta prioridade, que merecem atenção mais rápida.",
   lancamentosPendencias: "Eventos com erro ou pendência que ainda precisam ser resolvidos.",
   lancamentosStatusIndisponivel: "O gerador de últimos lançamentos ainda não foi executado neste ambiente.",
-  auditoriaTotal: "Total de escritas feitas pelo painel registradas na aba Log Auditoria da planilha.",
-  auditoriaErros: "Escritas que falharam ao gravar na planilha — se crescer, investigar o Apps Script.",
+  auditoriaTotal: "Total de escritas feitas pelo painel registradas na trilha de auditoria do PostgreSQL.",
+  auditoriaErros: "Escritas rejeitadas pela API — se crescer, investigar os logs do Núcleo M15.",
   auditoriaOperadores: "Quantos operadores distintos já fizeram alterações pelo painel.",
 };
 
@@ -1413,9 +1366,10 @@ function renderCrmAutomacoes(container) {
   const crm = state.crm;
   const fp  = state.followupSummary;
 
-  const sheetsOk   = rs?.googleSheets?.configured === true;
-  const sheetsName = rs?.googleSheets?.name ?? "—";
-  const sheetsAt   = fmtDate(rs?.googleSheets?.lastCheckedAt);
+  // M23 — a saúde da fonte é a do PostgreSQL, nunca a de uma planilha.
+  const fonteOk   = rs?.dataSource?.canonical === "postgresql";
+  const fonteName = rs?.dataSource?.name ?? "—";
+  const fonteAt   = fmtDate(rs?.dataSource?.lastCheckedAt);
 
   const crmLocal   = state.crm.length;
   const crmAt      = fmtDate(ds?.source?.generatedAt);
@@ -1440,10 +1394,10 @@ function renderCrmAutomacoes(container) {
   const statusBlock = `
     <div class="auto-status-grid">
       ${statusRow(
-        sheetsOk ? "✅" : "❌",
-        "Google Sheets",
-        sheetsOk ? sheetsName : "Não configurado",
-        sheetsOk ? `Verificado ${sheetsAt}` : "Execute gcloud auth application-default login"
+        fonteOk ? "✅" : "❌",
+        "Fonte operacional",
+        fonteOk ? fonteName : "Fonte canônica não declarada",
+        fonteOk ? `Verificado ${fonteAt}` : "Execute update-local-data.sh"
       )}
       ${statusRow(
         crmLocal > 0 ? "✅" : "ℹ️",
@@ -1475,10 +1429,10 @@ function renderCrmAutomacoes(container) {
       id: "auto-sync",
       icon: "🔄",
       title: "Sincronização do painel",
-      subtitle: "Atualiza todos os dados locais a partir do Google Sheets",
+      subtitle: "Regenera os snapshots do painel a partir do PostgreSQL",
       risk: "baixo",
       dados: ["Agrega dados", "CRM clínicas", "Sem dados pessoais"],
-      objetivo: "Executa os conectores de leitura (resumo + CRM clínicas), gera os arquivos .local.json e valida segurança. Nunca escreve na planilha.",
+      objetivo: "Gera os snapshots .local.json direto do PostgreSQL (fonte operacional única), atualiza Search Console/GA4 pela conta de serviço e valida segurança. Nenhum leitor de Google Sheets é executado.",
       steps: [
         {
           label: "Executar sincronização completa",
@@ -1496,19 +1450,19 @@ function renderCrmAutomacoes(container) {
       id: "auto-pcmso",
       icon: "🏢",
       title: "Promoção PCMSO → CRM Clínicas",
-      subtitle: "Promove registros qualificados da Base PCMSO para o CRM",
+      subtitle: "Utilitário legado — bloqueado no modo postgresql-only",
       risk: "medio",
       dados: ["CRM clínicas", "Base PCMSO", "Sem dados pessoais"],
-      objetivo: "Lê a aba 'Base Prospecção B2B PCMSO' e atualiza/cria registros na aba 'CRM Clinicas'. Nunca copia telefone, Instagram, pessoa de contato, observações, CPF ou e-mail.",
+      objetivo: "Promoção legada entre abas de planilha. Desde o M23 o painel opera em modo postgresql-only e este utilitário é BLOQUEADO fail-closed (exit 3): só roda com decisão humana explícita (SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1), para migração ou forense. Clínicas e parceiros novos nascem na Central de Cadastros, no PostgreSQL.",
       steps: [
         {
           label: "1. Pré-visualização (dry-run) — obrigatório antes do write",
-          hint: "Mostra o que seria criado ou atualizado. Não altera a planilha.",
+          hint: "Bloqueado sem o escape explícito. Não altera nada.",
           cmd: `${VENV} ${SCRIPTS}/promote-pcmso-to-crm.py --dry-run`,
         },
         {
           label: "2. Executar promoção (somente após revisar o dry-run)",
-          hint: "Escreve na planilha. Risco médio — valide o dry-run antes.",
+          hint: "Escrita legada em planilha. Bloqueada sem o escape explícito.",
           cmd: `${VENV} ${SCRIPTS}/promote-pcmso-to-crm.py --write`,
         },
         {
@@ -1526,11 +1480,11 @@ function renderCrmAutomacoes(container) {
       id: "auto-followup",
       icon: "💬",
       title: "Follow-up de pacientes (arquivo histórico)",
-      subtitle: "Extração de planilha mantida só como evidência de migração",
+      subtitle: "Utilitário legado — bloqueado no modo postgresql-only",
       risk: "baixo",
       dados: ["Pacientes (privado)", "Espirometrias", "Consultas"],
-      objetivo: "Extração legada das abas de planilha. NÃO faz mais parte do fluxo operacional: desde o M19 o acompanhamento de pacientes é servido pelo CRM Pacientes e Acompanhamento, direto do PostgreSQL/Núcleo M15. Use esta automação apenas para reconstruir o arquivo histórico de auditoria.",
-      aviso: "O painel não lê mais followup-pacientes.local.json. O arquivo continua privado e gitignored; nenhuma mensagem é disparada automaticamente.",
+      objetivo: "Extração legada das abas de planilha. Desde o M23 o painel opera em modo postgresql-only e este utilitário é BLOQUEADO fail-closed: só roda com decisão humana explícita (SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1), para migração ou forense. O acompanhamento de pacientes vive no CRM, direto do PostgreSQL.",
+      aviso: "Executar sem o escape explícito falha com exit 3. O timer de produção nunca consegue disparar este script.",
       steps: [
         {
           label: "1. Inspecionar estrutura das abas (seguro)",
@@ -1573,10 +1527,10 @@ function renderCrmAutomacoes(container) {
       id: "auto-resumo",
       icon: "📊",
       title: "Resumo Dashboard",
-      subtitle: "Atualiza os indicadores da visão geral a partir do Google Sheets",
+      subtitle: "Atualiza os indicadores da visão geral a partir do PostgreSQL",
       risk: "baixo",
       dados: ["Agrega indicadores", "Sem dados pessoais"],
-      objetivo: "Lê a aba 'Resumo Dashboard' do Google Sheets e gera o arquivo local de indicadores. Parte do update-local-data.sh mas pode ser executado isoladamente para diagnóstico.",
+      objetivo: "Conta os indicadores diretamente no banco canônico e grava o arquivo local. Parte do update-local-data.sh; pode ser executado isoladamente para diagnóstico.",
       steps: [
         {
           label: "Atualizar somente o resumo (incluído no sync completo)",
@@ -1758,31 +1712,60 @@ function renderAutomacaoCrmRegras() {
     </section>`;
 }
 
-async function fetchCcStatus() {
-  try {
-    const r = await fetch("/painel-soprolife/api/command-center/status");
-    if (!r.ok) return false;
-    const j = await r.json();
-    return j.configured === true;
-  } catch {
-    return false;
+// ── Escrita operacional (M23) ────────────────────────────────────────────────
+// Até o M22 estas ações passavam por um proxy local que encaminhava para o
+// Apps Script e gravava no Google Sheets. A partir do M23 o PostgreSQL é a
+// única fonte operacional: toda escrita vai pela API autenticada do Núcleo
+// M15, pela mesma sessão que a Central de Cadastros e o CRM já usam.
+//
+// Nenhuma credencial passa por aqui — window.SoproM15 guarda a sessão em
+// cookie HttpOnly e o csrf apenas em memória.
+
+function m15Session() {
+  const nucleo = window.SoproM15;
+  if (!nucleo || !nucleo.hasSession()) {
+    throw new Error(
+      "Entre no Núcleo Operacional para gravar. A escrita exige sessão "
+      + "autenticada — o painel não grava dado operacional sem identidade."
+    );
   }
+  return nucleo;
 }
 
-async function submitToCommandCenter(action, formData) {
-  if (!state.ccConfigured) {
-    throw new Error("Escrita não configurada. Inicie o servidor proxy local.");
+// Resolve um código público (LEA-000001, CLI-000002) para o identificador
+// interno esperado pelos endpoints de atualização.
+async function resolverCodigoPublico(codigo, entidadeEsperada) {
+  const nucleo = m15Session();
+  const resp = await nucleo.api(
+    "/crm/codigos/resolver?codigo=" + encodeURIComponent(codigo)
+  );
+  const achado = (resp?.resultados || []).find(
+    (r) => r.entidade === entidadeEsperada && r.id
+  );
+  if (!achado) {
+    throw new Error(`Código ${codigo} não encontrado no banco canônico.`);
   }
-  // Token adicionado pelo servidor proxy — nunca sai para o browser
-  const response = await fetch("/painel-soprolife/api/command-center", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, data: formData }),
+  return achado.id;
+}
+
+async function atualizarEtapaLeadNoBanco(publicCode, etapa) {
+  const nucleo = m15Session();
+  const id = await resolverCodigoPublico(publicCode, "leads");
+  await nucleo.api(`/leads/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ etapa }),
   });
-  if (!response.ok) throw new Error(`Erro HTTP ${response.status}`);
-  const json = await response.json();
-  if (!json.ok) throw new Error(json.error || "Erro desconhecido do servidor.");
-  return json;
+  return { message: "Etapa atualizada no banco." };
+}
+
+async function atualizarStatusParceiroNoBanco(publicCode, status) {
+  const nucleo = m15Session();
+  const id = await resolverCodigoPublico(publicCode, "partners");
+  await nucleo.api(`/parceiros/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+  return { message: "Etapa da clínica atualizada no banco." };
 }
 
 // ── Relatórios CRM ───────────────────────────────────────────────────────────
@@ -2059,7 +2042,9 @@ function renderCrmReportCharts(leads) {
     createChart("crmRelFunil", "#crmRelFunilChart", {
       type: "bar",
       data: {
-        labels: etapaOrdenadas,
+        // M23 — o valor canônico do banco é a chave de contagem; o eixo
+        // mostra o rótulo humano, nunca o enum cru.
+        labels: etapaOrdenadas.map(leadEtapaLabel),
         datasets: [{
           label: "Leads",
           data: etapaOrdenadas.map((e) => etapaCounts[e]),
@@ -2116,7 +2101,7 @@ function renderCrmReportCharts(leads) {
     createChart("crmRelClinicas", "#crmRelClinicasChart", {
       type: "bar",
       data: {
-        labels: clinicaEtapaLabels,
+        labels: clinicaEtapaLabels.map(crmEtapaLabel),
         datasets: [{
           label: "Clínicas",
           data: Object.values(clinicaEtapaCounts),
@@ -2500,35 +2485,38 @@ function resolveLeadWhatsApp(item) {
 // Badges de etapa terminal (positiva ou negativa) do CRM Clínicas recebem
 // tooltip explicando o que isso significa — mesmo padrão de
 // LEAD_ETAPA_BADGE_TIP/leadEtapaBadgeHtml, aplicado ao domínio de clínicas.
+// M23 — as dicas são indexadas pelo valor CANÔNICO do banco; o badge exibe
+// sempre o rótulo humano, nunca o enum cru.
 const CRM_ETAPA_BADGE_TIP = {
-  "Parceiro ativo": "Etapa terminal positiva: parceria já fechada. Não conta como atraso/alta prioridade da prospecção comum — aparece em Parceiros ativos.",
-  "Sem interesse": "Etapa terminal negativa: clínica sinalizou que não tem interesse. Fora do funil ativo.",
-  "Não contatar / bloqueou": "Etapa terminal negativa: clínica pediu para não ser contatada novamente ou bloqueou o contato. Fora do funil ativo.",
-  "Sem canal válido": "Etapa terminal negativa: não há telefone/WhatsApp válido para retomar contato. Fora do funil ativo.",
-  "Arquivada": "Etapa terminal negativa: contato encerrado/arquivado. Fora do funil ativo.",
+  "ativa": "Etapa terminal positiva: parceria já fechada. Não conta como atraso/alta prioridade da prospecção comum — aparece em Parceiros ativos.",
+  "encerrada": "Etapa terminal: contato encerrado ou sem interesse. Fora do funil ativo.",
+  "pausada": "Negociação pausada, aguardando retorno da clínica. Continua no funil ativo.",
 };
 
 function crmEtapaBadgeHtml(etapa) {
   const tip = CRM_ETAPA_BADGE_TIP[etapa];
-  if (!tip) return `<span class="badge ${slug(etapa)}">${escapeHtml(etapa)}</span>`;
+  const rotulo = crmEtapaLabel(etapa);
+  if (!tip) return `<span class="badge ${slug(etapa)}">${escapeHtml(rotulo)}</span>`;
   // title nativo (não o balão .has-tip::after) porque este badge fica dentro
   // de .table-wrap, que tem overflow:auto — um popup customizado ficaria
   // cortado ao rolar a tabela.
-  return `<span class="badge ${slug(etapa)}" tabindex="0" title="${escapeHtml(tip)}" aria-label="${escapeHtml(etapa)}. ${escapeHtml(tip)}">${escapeHtml(etapa)}</span>`;
+  return `<span class="badge ${slug(etapa)}" tabindex="0" title="${escapeHtml(tip)}" aria-label="${escapeHtml(rotulo)}. ${escapeHtml(tip)}">${escapeHtml(rotulo)}</span>`;
 }
 
 const LEAD_ETAPA_BADGE_TIP = {
-  "Parceiro ativo": "Contato B2B já vinculado a uma clínica/parceria ativa. Continua no histórico de leads, mas sai da lista de ativos.",
-  "Convertido em clínica/parceiro": "Leads que já viraram paciente, exame, consulta ou parceria B2B. Exemplo: Juan/Pastore aparece aqui como parceiro ativo.",
+  "convertido": "Lead que já virou atendimento, paciente ou parceria. Continua no histórico, mas sai da lista de ativos.",
+  "perdido": "Etapa terminal: o lead não avançou. Fora da lista de ativos.",
+  "aguardando_retomada": "Retomada agendada para uma data futura definida pelo operador.",
 };
 
 function leadEtapaBadgeHtml(etapa) {
   const tip = LEAD_ETAPA_BADGE_TIP[etapa];
-  if (!tip) return `<span class="badge ${slug(etapa)}">${escapeHtml(etapa)}</span>`;
+  const rotulo = leadEtapaLabel(etapa);
+  if (!tip) return `<span class="badge ${slug(etapa)}">${escapeHtml(rotulo)}</span>`;
   // Usa title nativo (não o balão .has-tip::after) porque este badge fica
   // dentro de .table-wrap, que tem overflow:auto — um popup customizado
   // ficaria cortado ao rolar a tabela. title escapa esse corte.
-  return `<span class="badge ${slug(etapa)}" tabindex="0" title="${escapeHtml(tip)}" aria-label="${escapeHtml(etapa)}. ${escapeHtml(tip)}">${escapeHtml(etapa)}</span>`;
+  return `<span class="badge ${slug(etapa)}" tabindex="0" title="${escapeHtml(tip)}" aria-label="${escapeHtml(rotulo)}. ${escapeHtml(tip)}">${escapeHtml(rotulo)}</span>`;
 }
 
 function renderLeadsTable() {
@@ -2557,7 +2545,7 @@ function renderLeadsTable() {
     // Resumo real não traz o texto de proxima_acao (texto livre, M2) — só o
     // booleano tem_proxima_acao; o texto completo fica na planilha privada.
     const acao      = item.proxima_acao || item.proximaAcao ||
-      (item.tem_proxima_acao ? "Ação definida — ver planilha" : "—");
+      (item.tem_proxima_acao ? "Ação definida" : "—");
     const dataField = item.data_proxima_acao || item.dataProximaAcao || "";
     const iso       = parseDateIso(dataField);
     const dataCls   = iso && iso < today ? "data-atrasada" : iso === today ? "data-hoje" : "";
@@ -2625,7 +2613,7 @@ function openLeadStageModal(lead, triggerBtn) {
   const current = lead.etapa || lead.status || "";
 
   const options = LEAD_ETAPA_OPTIONS.map((op) =>
-    `<option value="${escapeHtml(op)}"${op === current ? " selected" : ""}>${escapeHtml(op)}</option>`
+    `<option value="${escapeHtml(op)}"${op === current ? " selected" : ""}>${escapeHtml(leadEtapaLabel(op))}</option>`
   ).join("");
 
   const overlay = document.createElement("div");
@@ -2634,14 +2622,14 @@ function openLeadStageModal(lead, triggerBtn) {
     <div class="lead-stage-modal" role="dialog" aria-modal="true" aria-labelledby="leadStageTitle">
       <div class="lead-stage-modal-header">
         <div>
-          <p class="eyebrow">Mudar etapa <span class="legacy-write-tag" title="Este registro vive na planilha legada (Google Sheets); a alteração de etapa é administração de dados históricos. Cadastros novos: Central de Cadastros.">Fonte legada · Sheets</span></p>
+          <p class="eyebrow">Mudar etapa <span class="legacy-write-tag" title="A alteração é gravada no PostgreSQL pela API autenticada do Núcleo M15. Cadastros novos: Central de Cadastros.">Grava no PostgreSQL</span></p>
           <h4 id="leadStageTitle">${escapeHtml(nome)}</h4>
         </div>
         <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
       </div>
 
       <p class="lead-stage-current">
-        Etapa atual: <span class="badge ${slug(current || "—")}">${escapeHtml(current || "—")}</span>
+        Etapa atual: <span class="badge ${slug(current || "—")}">${escapeHtml(leadEtapaLabel(current))}</span>
       </p>
 
       <label class="cc-label" for="leadStageSelect">Nova etapa</label>
@@ -2695,16 +2683,14 @@ function openLeadStageModal(lead, triggerBtn) {
     result.hidden = true;
 
     try {
-      const resp = await submitToCommandCenter("updateLeadStage", {
-        lead_id: lead.lead_id,
-        etapa:   novaEtapa,
-      });
+      const resp = await atualizarEtapaLeadNoBanco(lead.lead_id, novaEtapa);
 
       result.className = "cc-result lead-stage-result cc-result-ok";
       result.textContent = resp.message || "Etapa atualizada com sucesso.";
       result.hidden = false;
 
-      applyLeadStageUpdate(lead.lead_id, novaEtapa, resp.converted === true);
+      // "convertido" é etapa terminal do funil: o lead sai desta lista.
+      applyLeadStageUpdate(lead.lead_id, novaEtapa, novaEtapa === "convertido");
 
       setTimeout(closeLeadStageModal, 1100);
     } catch (err) {
@@ -2767,7 +2753,7 @@ function openCrmStageModal(clinica, triggerBtn) {
 
   const etapaOpcoes = [...CRM_ETAPAS_ATIVAS, ...CRM_ETAPAS_TERMINAIS];
   const options = etapaOpcoes.map((op) =>
-    `<option value="${escapeHtml(op)}"${op === current ? " selected" : ""}>${escapeHtml(op)}</option>`
+    `<option value="${escapeHtml(op)}"${op === current ? " selected" : ""}>${escapeHtml(crmEtapaLabel(op))}</option>`
   ).join("");
 
   const overlay = document.createElement("div");
@@ -2776,14 +2762,14 @@ function openCrmStageModal(clinica, triggerBtn) {
     <div class="lead-stage-modal" role="dialog" aria-modal="true" aria-labelledby="crmStageTitle">
       <div class="lead-stage-modal-header">
         <div>
-          <p class="eyebrow">Mudar etapa <span class="legacy-write-tag" title="Este registro vive na planilha legada (Google Sheets); a alteração de etapa é administração de dados históricos. Cadastros novos: Central de Cadastros.">Fonte legada · Sheets</span></p>
+          <p class="eyebrow">Mudar etapa <span class="legacy-write-tag" title="A alteração é gravada no PostgreSQL pela API autenticada do Núcleo M15. Cadastros novos: Central de Cadastros.">Grava no PostgreSQL</span></p>
           <h4 id="crmStageTitle">${escapeHtml(nome)}</h4>
         </div>
         <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
       </div>
 
       <p class="lead-stage-current">
-        Etapa atual: <span class="badge ${slug(current || "—")}">${escapeHtml(current || "—")}</span>
+        Etapa atual: <span class="badge ${slug(current || "—")}">${escapeHtml(crmEtapaLabel(current))}</span>
       </p>
 
       <label class="cc-label" for="crmStageSelect">Nova etapa</label>
@@ -2837,10 +2823,7 @@ function openCrmStageModal(clinica, triggerBtn) {
     result.hidden = true;
 
     try {
-      const resp = await submitToCommandCenter("updateCrmClinicaEtapa", {
-        clinica_id: clinica.id,
-        etapa:      novaEtapa,
-      });
+      const resp = await atualizarStatusParceiroNoBanco(clinica.id, novaEtapa);
 
       result.className = "cc-result lead-stage-result cc-result-ok";
       result.textContent = resp.message || "Etapa atualizada com sucesso.";
@@ -2877,157 +2860,32 @@ function applyCrmStageUpdate(clinicaId, novaEtapa) {
   renderCrmTable(state.crmFilter || "Ativos");
 }
 
-// ─── Vincular lead B2B a clínica parceira — modal + chamada ao Command Center ──
+// ─── Vincular lead B2B a clínica parceira (M23) ───────────────────────────────
+// Até o M22 esta ação montava um registro B2B e o gravava no Google Sheets
+// via Apps Script. No M23 não existe mais destino de escrita fora do
+// PostgreSQL: a criação de contato B2B é a aba canônica "Contato B2B" da
+// Central de Cadastros, que grava pela API autenticada.
+//
+// O painel não duplica esse formulário aqui. Ele leva o operador ao fluxo
+// canônico já com o lead em contexto — um único lugar onde o contato B2B
+// nasce, com validação, idempotência e auditoria do backend.
 
-let _vincularClinicaTrigger = null;
-
-function closeVincularClinicaModal() {
-  const overlay = document.querySelector(".vincular-clinica-overlay");
-  if (overlay) overlay.remove();
-  document.removeEventListener("keydown", _vincularClinicaKeydown);
-  if (_vincularClinicaTrigger) {
-    _vincularClinicaTrigger.focus();
-    _vincularClinicaTrigger = null;
+function abrirVinculoB2BCanonico(lead, triggerBtn) {
+  const central = window.SoproCentral;
+  if (!central || typeof central.open !== "function") {
+    window.alert(
+      "A Central de Cadastros não está disponível nesta sessão. "
+      + "Entre no Núcleo Operacional para registrar o contato B2B."
+    );
+    return;
   }
-}
-
-function _vincularClinicaKeydown(event) {
-  if (event.key === "Escape") closeVincularClinicaModal();
-}
-
-function openVincularClinicaModal(lead, triggerBtn) {
-  closeVincularClinicaModal();
-  _vincularClinicaTrigger = triggerBtn || null;
-
-  const nome = lead.nome || lead.lead || lead.lead_id || "Lead";
-
-  const clinicaOptions = state.crm
-    .filter((c) => c.id)
-    .map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.clinica)} (${escapeHtml(c.id)})</option>`)
-    .join("");
-
-  const overlay = document.createElement("div");
-  overlay.className = "vincular-clinica-overlay lead-stage-overlay";
-  overlay.innerHTML = `
-    <div class="lead-stage-modal vincular-clinica-modal" role="dialog" aria-modal="true" aria-labelledby="vincularClinicaTitle">
-      <div class="lead-stage-modal-header">
-        <div>
-          <p class="eyebrow">Vincular a clínica <span class="legacy-write-tag" title="Este registro vive na planilha legada (Google Sheets); a alteração de etapa é administração de dados históricos. Cadastros novos: Central de Cadastros.">Fonte legada · Sheets</span></p>
-          <h4 id="vincularClinicaTitle">${escapeHtml(nome)}</h4>
-        </div>
-        <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
-      </div>
-
-      <label class="cc-label" for="vincularClinicaSelect">Clínica parceira</label>
-      <select id="vincularClinicaSelect" class="cc-select">
-        <option value="">Selecione uma clínica…</option>
-        ${clinicaOptions}
-      </select>
-
-      <label class="cc-label" for="vincularEtapaSelect">Etapa resultante</label>
-      <select id="vincularEtapaSelect" class="cc-select">
-        <option value="Convertido em clínica/parceiro">Convertido em clínica/parceiro</option>
-        <option value="Parceiro ativo">Parceiro ativo</option>
-      </select>
-
-      <label class="cc-label" for="vincularNomeContato">Nome do contato (opcional)</label>
-      <input type="text" id="vincularNomeContato" class="cc-select" placeholder="Ex.: Juan Valenciano" />
-
-      <label class="cc-label" for="vincularCargo">Cargo (opcional)</label>
-      <input type="text" id="vincularCargo" class="cc-select" placeholder="Ex.: Diretor médico" />
-
-      <label class="cc-label" for="vincularPapel">Papel (opcional)</label>
-      <input type="text" id="vincularPapel" class="cc-select" placeholder="Ex.: Contato principal / decisor técnico" />
-
-      <label class="cc-label" for="vincularProximaAcao">Próxima ação (opcional)</label>
-      <input type="text" id="vincularProximaAcao" class="cc-select" placeholder="Ex.: Reunião" />
-
-      <label class="cc-label" for="vincularDataProxima">Data da próxima ação (opcional)</label>
-      <input type="date" id="vincularDataProxima" class="cc-select" />
-
-      <label class="cc-label" for="vincularResponsavel">Responsável</label>
-      <input type="text" id="vincularResponsavel" class="cc-select" value="${escapeHtml(lead.responsavel || "")}" />
-
-      <div class="cc-result vincular-clinica-result" hidden></div>
-
-      <div class="lead-stage-actions">
-        <button type="button" class="lead-stage-cancel">Cancelar</button>
-        <button type="button" class="lead-stage-save">Confirmar vínculo</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(overlay);
-  document.addEventListener("keydown", _vincularClinicaKeydown);
-
-  const clinicaSelect = overlay.querySelector("#vincularClinicaSelect");
-  const etapaSelect   = overlay.querySelector("#vincularEtapaSelect");
-  const result        = overlay.querySelector(".vincular-clinica-result");
-  const saveBtn       = overlay.querySelector(".lead-stage-save");
-  const cancelBtn     = overlay.querySelector(".lead-stage-cancel");
-
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) closeVincularClinicaModal();
+  central.open("contato-b2b", {
+    lead_codigo: lead.lead_id || "",
+    origem_deep_link: "leads",
   });
-  overlay.querySelector(".lead-stage-close").addEventListener("click", closeVincularClinicaModal);
-  cancelBtn.addEventListener("click", closeVincularClinicaModal);
-
-  saveBtn.addEventListener("click", async () => {
-    const clinicaId  = clinicaSelect.value;
-    const responsavel = overlay.querySelector("#vincularResponsavel").value.trim();
-
-    if (!clinicaId) {
-      result.className = "cc-result vincular-clinica-result cc-result-err";
-      result.textContent = "Selecione uma clínica.";
-      result.hidden = false;
-      return;
-    }
-    if (!responsavel) {
-      result.className = "cc-result vincular-clinica-result cc-result-err";
-      result.textContent = "Informe o responsável.";
-      result.hidden = false;
-      return;
-    }
-
-    saveBtn.disabled = true;
-    cancelBtn.disabled = true;
-    saveBtn.textContent = "Vinculando…";
-    result.hidden = true;
-
-    try {
-      const resp = await submitToCommandCenter("vincularLeadAClinica", {
-        lead_id:            lead.lead_id,
-        clinica_id:         clinicaId,
-        etapa:              etapaSelect.value,
-        nome_contato:       overlay.querySelector("#vincularNomeContato").value.trim(),
-        cargo:              overlay.querySelector("#vincularCargo").value.trim(),
-        papel:              overlay.querySelector("#vincularPapel").value.trim(),
-        proxima_acao:       overlay.querySelector("#vincularProximaAcao").value.trim(),
-        data_proxima_acao:  overlay.querySelector("#vincularDataProxima").value,
-        responsavel,
-      });
-
-      result.className = "cc-result vincular-clinica-result cc-result-ok";
-      result.textContent = resp.message || "Lead vinculado com sucesso.";
-      result.hidden = false;
-
-      applyLeadStageUpdate(lead.lead_id, etapaSelect.value, false);
-      const item = state.leads.find((l) => l.lead_id === lead.lead_id);
-      if (item) item.status_operacional = "convertido";
-      renderLeadsTable();
-
-      setTimeout(closeVincularClinicaModal, 1400);
-    } catch (err) {
-      result.className = "cc-result vincular-clinica-result cc-result-err";
-      result.textContent = "Erro: " + err.message;
-      result.hidden = false;
-      saveBtn.disabled = false;
-      cancelBtn.disabled = false;
-      saveBtn.textContent = "Confirmar vínculo";
-    }
-  });
-
-  clinicaSelect.focus();
+  if (triggerBtn) triggerBtn.blur();
 }
+
 
 function renderSeoList() {
   const list = document.querySelector("#seoList");
@@ -4065,7 +3923,7 @@ function bindEvents() {
       const linkBtn = event.target.closest(".lead-link-btn");
       if (linkBtn) {
         const lead = state.leads.find((l) => l.lead_id === linkBtn.dataset.leadId);
-        if (lead) openVincularClinicaModal(lead, linkBtn);
+        if (lead) abrirVinculoB2BCanonico(lead, linkBtn);
       }
     });
   }
@@ -4333,10 +4191,10 @@ function renderFinance() {
       ];
       if (totais) {
         if (Number(totais.linhas_invalidas) > 0) {
-          linhas.push(`${totais.linhas_invalidas} linha(s) com valor/status inválido ficaram fora das somas — revisar na planilha.`);
+          linhas.push(`${totais.linhas_invalidas} lançamento(s) com valor/status inválido ficaram fora das somas — revisar no Financeiro.`);
         }
         if (Number(totais.linhas_inconsistentes) > 0) {
-          linhas.push(`${totais.linhas_inconsistentes} lançamento(s) com valor recebido diferente do esperado para o status — revisar na planilha.`);
+          linhas.push(`${totais.linhas_inconsistentes} lançamento(s) com valor recebido diferente do esperado para o status — revisar no Financeiro.`);
         }
         if (Number(totais.duplicados_ignorados) > 0) {
           linhas.push(`${totais.duplicados_ignorados} linha(s) duplicadas por id_atendimento foram deduplicadas (a mais recente vale).`);
@@ -6001,31 +5859,30 @@ function renderRuntimeStatus() {
   const container = document.querySelector("#runtimeStatus");
   if (!container) return;
 
-  const googleSheets = state.runtimeStatus?.googleSheets;
-  const configured = Boolean(
-    googleSheets?.configured &&
-    googleSheets?.safeToDisplay &&
-    googleSheets?.configValid !== false
-  );
+  // M23 — este card mostra a FONTE CANÔNICA. Antes anunciava o Google Sheets
+  // como fonte privada do painel; a planilha deixou de ser fonte e não pode
+  // mais aparecer aqui como origem do dado operacional.
+  const fonte = state.runtimeStatus?.dataSource;
+  const canonica = Boolean(fonte?.canonical === "postgresql" && fonte?.safeToDisplay);
 
-  const statusLabel = configured
-    ? "Configurado localmente"
-    : "Não configurado neste ambiente";
+  const statusLabel = canonica
+    ? (fonte.statusLabel || "Fonte única operacional")
+    : "Fonte canônica não declarada";
 
-  const badgeClass = configured ? "success" : "neutral";
+  const badgeClass = canonica ? "success" : "neutral";
 
-  const description = configured
-    ? "Fonte privada externa detectada. Nenhuma URL, ID, token ou dado real é exibido no painel."
-    : "Gere o status local seguro para indicar a configuração privada sem expor segredos.";
+  const description = canonica
+    ? "Todo dado operacional vive no PostgreSQL e é gravado pela API autenticada do Núcleo M15. Nenhuma credencial ou identificador privado é exibido no painel."
+    : "Rode a atualização local para declarar a fonte canônica. O painel não substitui dado operacional por exemplos.";
 
   container.innerHTML = `
     <div>
-      <span class="runtime-kicker">Fonte privada</span>
-      <strong>Google Sheets</strong>
+      <span class="runtime-kicker">Fonte operacional</span>
+      <strong>${escapeHtml(canonica ? (fonte.name || "PostgreSQL") : "PostgreSQL")}</strong>
       <p>${description}</p>
     </div>
     <div class="runtime-status-side">
-      <span class="runtime-badge ${badgeClass}">${statusLabel}</span>
+      <span class="runtime-badge ${badgeClass}">${escapeHtml(statusLabel)}</span>
       <small>Segredos fora do GitHub</small>
     </div>
   `;
@@ -6037,7 +5894,7 @@ function renderDataFreshness() {
   if (!container) return;
 
   const source = state.dashboardSummary?.source;
-  const runtimeGS = state.runtimeStatus?.googleSheets;
+  const runtimeSource = state.runtimeStatus?.dataSource;
 
   const isSafe = Boolean(
     source?.safeToDisplay &&
@@ -6056,13 +5913,15 @@ function renderDataFreshness() {
     return;
   }
 
-  const isGoogleSheets = Boolean(
-    runtimeGS?.configured &&
-    runtimeGS?.safeToDisplay &&
-    runtimeGS?.configValid !== false
+  // M23 — o rótulo da fonte vem da declaração canônica. Nenhuma tela pode
+  // voltar a apresentar o Google Sheets como origem do dado operacional.
+  const isPostgres = Boolean(
+    runtimeSource?.canonical === "postgresql" && runtimeSource?.safeToDisplay
   );
 
-  const sourceLabel = isGoogleSheets ? "Google Sheets via ADC" : "Arquivo local (preview)";
+  const sourceLabel = isPostgres
+    ? (runtimeSource.name || "PostgreSQL — Núcleo Operacional M15")
+    : "Arquivo local (preview)";
   const updatedAt = formatDateTime(source.generatedAt);
 
   const securityBadge = (!source.containsPersonalData && !source.containsHealthData)

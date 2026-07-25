@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Modo canônico de fonte de dados operacionais (M23)",
+  "descricao": "Decisão arquitetural permanente: PostgreSQL/API do Núcleo M15 é a ÚNICA fonte operacional do SoproLife Command Center. Google Sheets deixou de ser fonte de runtime, destino de sincronização, fallback ou dependência operacional. Este arquivo é o contrato lido pelos guardas de runtime (scripts/data_source_mode.py e js/data-source-mode.js).",
+  "versao": "1.0.0",
+  "modo": "postgresql_only",
+  "decidido_em": "2026-07-25",
+  "marco": "M23",
+
+  "fonte_canonica": {
+    "tipo": "postgresql",
+    "camada_de_acesso": "API FastAPI do Núcleo M15 (loopback) e CLI do mesmo pacote",
+    "backups": "fora do Git, em /opt/soprolife/backups (pg_dump custom-format verificado)",
+    "regra": "Nenhum dado de negócio pode viver em código-fonte, no Git ou em planilha."
+  },
+
+  "dominios_exclusivos_postgres": [
+    "pacientes",
+    "clinicas",
+    "leads",
+    "agendamentos",
+    "espirometrias",
+    "consultas",
+    "atendimentos",
+    "lancamentos_financeiros",
+    "custos_e_investimentos",
+    "parcerias",
+    "pastore_exames",
+    "pastore_fechamentos",
+    "crm_followup",
+    "tarefas",
+    "auditoria",
+    "documentos"
+  ],
+
+  "integracoes_permitidas": [
+    {
+      "id": "search_console",
+      "nome": "Google Search Console",
+      "escopo": "marketing_seo",
+      "acesso": "somente leitura",
+      "credencial": "conta de serviço dedicada fora do Git (SOPROLIFE_MARKETING_CREDENTIALS)",
+      "dado_de_negocio": false,
+      "nota": "Excluída do descomissionamento por decisão explícita do M23."
+    },
+    {
+      "id": "ga4",
+      "nome": "Google Analytics 4",
+      "escopo": "marketing_seo",
+      "acesso": "somente leitura",
+      "credencial": "conta de serviço dedicada fora do Git (SOPROLIFE_MARKETING_CREDENTIALS)",
+      "dado_de_negocio": false,
+      "nota": "Excluída do descomissionamento por decisão explícita do M23."
+    }
+  ],
+
+  "proibido_em_runtime": {
+    "google_sheets_leitura": true,
+    "google_sheets_escrita": true,
+    "apps_script_web_app": true,
+    "adc_pessoal_para_dados_de_negocio": true,
+    "fallback_de_exemplo_para_dado_operacional": true,
+    "csv_de_planilha_como_fonte": true
+  },
+
+  "escape_manual": {
+    "variavel": "SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION",
+    "valor_exigido": "1",
+    "para_que_serve": "Execução humana, pontual e forense de utilitários legados de migração — nunca produção.",
+    "nunca_definida_por": [
+      "soprolife-update-data.service",
+      "soprolife-update-data.timer",
+      "soprolife-operational-refresh.service",
+      "soprolife-operational-refresh.timer",
+      "soprolife-m15-api.service",
+      "soprolife-painel-loopback.service"
+    ],
+    "regra": "Se o timer de produção conseguir executar um leitor de planilha, o guarda falhou."
+  },
+
+  "modos_validos": ["postgresql_only", "legacy_sheets_migration"]
+}

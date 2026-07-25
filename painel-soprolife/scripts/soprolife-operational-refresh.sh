@@ -19,9 +19,14 @@
 # GARANTIAS:
 #   - NUNCA publica Apps Script (publicação é sempre humana, no editor);
 #   - NUNCA abre navegador nem executa autenticação;
-#   - detecta ADC ausente/expirado e explica o próximo passo humano;
 #   - snapshot válido anterior é sempre preservado em falha;
 #   - nenhuma saída contém token, credencial ou path privado.
+#
+# M23 — a credencial de produção de Search Console/GA4 é uma CONTA DE SERVIÇO
+# dedicada, somente leitura (SOPROLIFE_MARKETING_CREDENTIALS). O ADC pessoal
+# deixou de ser dependência: ele vence, e um login vencido não pode derrubar
+# a saúde do painel. Os modos de Apps Script/Manual das Abas são utilitários
+# LEGADOS e ficam bloqueados enquanto a fonte canônica for o PostgreSQL.
 #
 # Exit codes (core/contracts/freshness-contract.json):
 #   0=fresh · 10=stale · 11=autenticação · 12=schema · 13=indisponível
@@ -32,8 +37,26 @@ cd "$(dirname "$0")/../../" || exit 1
 
 MARKETING_SCRIPT="painel-soprolife/scripts/read-marketing-seo-adc.py"
 MANUAL_SCRIPT="painel-soprolife/scripts/generate-manual-abas-gs.py"
+# Credencial durável de produção (conta de serviço, somente leitura).
+MARKETING_CREDENTIAL="${SOPROLIFE_MARKETING_CREDENTIALS:-/opt/soprolife/secrets/marketing-readonly.json}"
+# ADC pessoal: aceito SOMENTE como conveniência de desenvolvimento local.
+# Nunca é requisito de produção e sua ausência não é falha.
 ADC_FILE="$HOME/.config/gcloud/application_default_credentials.json"
 SNAPSHOT="painel-soprolife/data/marketing-seo.local.json"
+MODE_SCRIPT="painel-soprolife/scripts/data_source_mode.py"
+
+# Bloqueia os modos legados de Apps Script quando a fonte canônica é o banco.
+bloquear_legado() {
+  if python3 "$MODE_SCRIPT" --check >/dev/null 2>&1; then
+    echo "BLOQUEADO (M23): '$1' é um utilitário legado de Google Sheets/Apps"
+    echo "Script e o painel opera em modo postgresql_only."
+    echo
+    echo "A fonte operacional é o PostgreSQL. Para uso humano pontual de"
+    echo "migração/forense, exporte SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1."
+    return 0
+  fi
+  return 1
+}
 
 # Python do venv quando existir (mesma regra do update-local-data.sh).
 VENV_PYTHON="$HOME/.local/share/soprolife/venvs/google-sheets/bin/python"
@@ -52,15 +75,26 @@ status_marketing() {
   else
     echo "  Snapshot preservado: não (nunca sincronizado neste ambiente)"
   fi
-  if [ ! -f "$ADC_FILE" ]; then
-    echo "  ADC: ausente — próxima sincronização exigirá login humano:"
-    echo "       gcloud auth application-default login (com escopos SC/GA4)"
+  if [ -f "$MARKETING_CREDENTIAL" ]; then
+    echo "  Credencial: conta de serviço dedicada (somente leitura)."
+  else
+    echo "  Credencial: conta de serviço ausente neste ambiente."
+    echo "       Produção: instalar a chave em /opt/soprolife/secrets/."
+    echo "       O ADC pessoal NÃO é requisito e não deve ser renovado."
   fi
   return $rc
 }
 
 status_manual() {
   titulo "Manual das Abas — manifesto / geração / publicação"
+  # M23 — utilitário legado da planilha. Em modo postgresql_only ele não
+  # descreve nenhuma fonte ativa, e mostrá-lo como estado operacional seria
+  # exatamente a informação enganosa que o M23 elimina.
+  if python3 "$MODE_SCRIPT" --check >/dev/null 2>&1; then
+    echo "  Legado: a fonte canônica é o PostgreSQL; o Manual das Abas descreve"
+    echo "  a planilha descomissionada e não é estado de produção."
+    return 0
+  fi
   python3 "$MANUAL_SCRIPT" --status
   echo "  Apps Script publicado nesta execução: não (nunca é automático)"
 }
@@ -78,15 +112,22 @@ check_manual() {
 refresh_marketing() {
   titulo "Marketing/SEO — sincronização (com rede, autorizada pelo humano)"
 
-  if [ ! -f "$ADC_FILE" ]; then
-    echo "AUTENTICAÇÃO NECESSÁRIA: ADC não encontrado."
+  if [ -f "$MARKETING_CREDENTIAL" ]; then
+    export SOPROLIFE_MARKETING_CREDENTIALS="$MARKETING_CREDENTIAL"
+    export SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT=1
+    echo "Credencial: conta de serviço dedicada (somente leitura)."
+  elif [ -f "$ADC_FILE" ]; then
+    echo "Credencial: ADC de desenvolvimento local (não é caminho de produção)."
+  else
+    echo "CREDENCIAL AUSENTE: nenhuma conta de serviço de leitura encontrada."
     echo
-    echo "Próximo passo humano (este comando NUNCA abre navegador sozinho):"
-    echo "  gcloud auth application-default login --no-launch-browser \\"
-    echo "    --scopes=\"https://www.googleapis.com/auth/webmasters.readonly,https://www.googleapis.com/auth/analytics.readonly\""
+    echo "Próximo passo humano (produção):"
+    echo "  instalar a chave da conta de serviço em"
+    echo "  /opt/soprolife/secrets/marketing-readonly.json (0600)."
     echo
-    echo "Snapshot atual foi preservado. Depois de autenticar, rode novamente:"
-    echo "  bash painel-soprolife/scripts/soprolife-operational-refresh.sh refresh-marketing"
+    echo "Isto afeta SOMENTE Marketing/SEO. Os dados operacionais vêm do"
+    echo "PostgreSQL e não dependem desta credencial."
+    echo "Snapshot atual foi preservado."
     return 11
   fi
 
@@ -128,9 +169,13 @@ resumo_final() {
   titulo "Resumo operacional"
   python3 "$MARKETING_SCRIPT" --status 2>/dev/null | sed 's/^/  /' || true
   echo
-  python3 "$MANUAL_SCRIPT" --status 2>/dev/null | sed 's/^/  /' || true
-  echo
-  echo "  Apps Script publicado nesta execução: não"
+  if python3 "$MODE_SCRIPT" --check >/dev/null 2>&1; then
+    echo "  Fonte operacional: PostgreSQL (Núcleo M15) — Sheets descomissionado."
+  else
+    python3 "$MANUAL_SCRIPT" --status 2>/dev/null | sed 's/^/  /' || true
+    echo
+    echo "  Apps Script publicado nesta execução: não"
+  fi
 }
 
 MODO="${1:-}"
@@ -143,8 +188,16 @@ case "$MODO" in
     ;;
   check)
     check_marketing; RC1=$?
-    check_manual;    RC2=$?
-    if [ "$RC2" -ne 0 ] && { [ "$RC1" -eq 0 ] || [ "$RC2" -gt "$RC1" ]; }; then RC1=$RC2; fi
+    # M23 — o Manual das Abas descreve a planilha legada. Em modo
+    # postgresql_only ele não é dependência e não pode contaminar a saúde
+    # geral do painel.
+    if ! python3 "$MODE_SCRIPT" --check >/dev/null 2>&1; then
+      check_manual; RC2=$?
+      if [ "$RC2" -ne 0 ] && { [ "$RC1" -eq 0 ] || [ "$RC2" -gt "$RC1" ]; }; then RC1=$RC2; fi
+    else
+      echo
+      echo "Manual das Abas: ignorado (utilitário legado; fonte canônica é o PostgreSQL)."
+    fi
     exit $RC1
     ;;
   refresh-marketing)
@@ -152,17 +205,24 @@ case "$MODO" in
     exit $?
     ;;
   check-manual)
+    bloquear_legado "check-manual" && exit 3
     check_manual
     exit $?
     ;;
   prepare-apps-script)
+    bloquear_legado "prepare-apps-script" && exit 3
     prepare_apps_script
     exit $?
     ;;
   all)
     status_marketing; RC=$?
-    status_manual
-    check_manual || RC=$?
+    if ! python3 "$MODE_SCRIPT" --check >/dev/null 2>&1; then
+      status_manual
+      check_manual || RC=$?
+    else
+      echo
+      echo "Manual das Abas: ignorado (utilitário legado; fonte canônica é o PostgreSQL)."
+    fi
     resumo_final
     exit $RC
     ;;

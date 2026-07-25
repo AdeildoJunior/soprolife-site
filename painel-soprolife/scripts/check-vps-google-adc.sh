@@ -1,16 +1,38 @@
 #!/usr/bin/env bash
 # check-vps-google-adc.sh
 #
-# Diagnóstico de disponibilidade do Google Sheets ADC na VPS.
+# Diagnóstico LEGADO de disponibilidade do Google Sheets ADC.
+#
+# M23 — o painel opera em modo postgresql_only e o Google Sheets deixou de ser
+# fonte, dependência e alvo de sincronização. Este diagnóstico não faz parte da
+# operação: um ADC ausente ou vencido NÃO é problema de produção e não deve ser
+# renovado. O script permanece apenas como ferramenta forense de migração e
+# recusa executar sem decisão humana explícita.
+#
 # Verifica pré-requisitos de forma segura — nunca imprime spreadsheet_id,
 # token, client_secret, refresh_token, URLs privadas ou dados pessoais.
 #
-# Uso:
-#   painel-soprolife/scripts/check-vps-google-adc.sh
+# Uso (somente migração/forense):
+#   SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1 \
+#     painel-soprolife/scripts/check-vps-google-adc.sh
 
 set -uo pipefail
 
 cd "$(dirname "$0")/../../" || exit 1
+
+# Guarda de fonte canônica (M23): fail-closed antes de qualquer verificação.
+if python3 painel-soprolife/scripts/data_source_mode.py --check >/dev/null 2>&1; then
+  echo "BLOQUEADO (M23): diagnóstico legado de Google Sheets ADC."
+  echo
+  echo "O painel opera em modo postgresql_only. O ADC pessoal não é mais"
+  echo "dependência de produção e não deve ser renovado."
+  echo
+  echo "Para uso humano pontual de migração/forense:"
+  echo "  export SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1"
+  echo
+  echo "Contrato: painel-soprolife/core/contracts/data-source-mode.json"
+  exit 3
+fi
 
 # ---------------------------------------------------------------------------
 # Caminhos (overridáveis por variáveis de ambiente)

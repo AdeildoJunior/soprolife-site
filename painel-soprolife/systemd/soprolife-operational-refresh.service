@@ -8,6 +8,13 @@
 #   - modo vem do EnvironmentFile (padrão: check — só leitura, sem rede);
 #   - NUNCA publica Apps Script nem abre navegador;
 #   - nenhum segredo em ExecStart, Environment ou journal.
+#
+# M23: os modos de Apps Script/Manual das Abas são utilitários LEGADOS e ficam
+# bloqueados enquanto a fonte canônica for o PostgreSQL. Esta unit trata
+# exclusivamente do frescor de Marketing/SEO (Search Console + GA4), que segue
+# ativo por conta de serviço dedicada, somente leitura. A saúde dos dados
+# OPERACIONAIS não passa por aqui: ela vem do timer soprolife-update-data,
+# que gera os snapshots direto do banco.
 
 [Unit]
 Description=SoproLife — Frescor operacional do painel (Marketing/SEO + Manual)
@@ -28,8 +35,13 @@ WorkingDirectory=/opt/soprolife/soprolife-site
 ExecStart=/usr/bin/flock -n /run/soprolife-operational-refresh.lock \
   /opt/soprolife/soprolife-site/painel-soprolife/scripts/soprolife-operational-refresh.sh $SOPROLIFE_REFRESH_MODE
 # Exit 10 (stale) não é falha da unidade: o estado vencido já fica visível no
-# painel e no exit do check manual. Exit 11 (autenticação) FALHA de propósito,
-# para aparecer no systemctl --failed até um humano renovar o ADC.
+# painel e no exit do check manual. Exit 11 (credencial de Marketing ausente)
+# FALHA de propósito, para aparecer no systemctl --failed até um humano
+# instalar a conta de serviço de leitura.
+#
+# M23: exit 11 diz respeito SOMENTE a Search Console/GA4. Ele não indica, e
+# não pode indicar, problema nos dados operacionais — esses vêm do PostgreSQL
+# por outra unit. Renovar ADC pessoal nunca é a correção.
 SuccessExitStatus=0 10
 TimeoutStartSec=600
 StandardOutput=journal

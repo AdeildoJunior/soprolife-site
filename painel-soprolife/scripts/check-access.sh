@@ -186,20 +186,33 @@ import sys
 path = Path("painel-soprolife/data/runtime-status.local.json")
 data = json.loads(path.read_text(encoding="utf-8"))
 
-allowed_root = {"googleSheets"}
+# M23 — a fonte canônica passou a ser o PostgreSQL. O bloco googleSheets
+# sobrevive apenas como DECLARAÇÃO de descomissionamento; qualquer campo que
+# volte a sugerir "planilha configurada como fonte" é rejeitado aqui.
+allowed_root = {"dataSource", "googleSheets", "marketing"}
+allowed_datasource = {
+    "mode", "canonical", "name", "type", "statusLabel", "writePath",
+    "safeToDisplay", "lastCheckedAt",
+}
 allowed_google = {
-    "configured",
-    "name",
-    "type",
-    "statusLabel",
-    "secretLocation",
-    "safeToDisplay",
-    "configValid",
-    "lastCheckedAt"
+    "decommissioned", "requiredForProduction", "name", "type", "statusLabel",
+    "safeToDisplay", "lastCheckedAt",
+}
+allowed_marketing = {
+    "searchConsole", "ga4", "credential", "safeToDisplay", "lastCheckedAt",
 }
 
 if set(data.keys()) - allowed_root:
     print("ERRO: runtime-status.local.json tem chaves raiz não permitidas.")
+    sys.exit(1)
+
+source = data.get("dataSource", {})
+if not isinstance(source, dict) or set(source.keys()) - allowed_datasource:
+    print("ERRO: bloco dataSource ausente ou com campos não permitidos.")
+    sys.exit(1)
+
+if source.get("canonical") != "postgresql":
+    print("ERRO: a fonte canônica declarada não é o PostgreSQL (M23).")
     sys.exit(1)
 
 google = data.get("googleSheets", {})
@@ -209,6 +222,15 @@ if not isinstance(google, dict):
 
 if set(google.keys()) - allowed_google:
     print("ERRO: runtime-status.local.json tem campos não permitidos.")
+    sys.exit(1)
+
+if google.get("decommissioned") is not True or google.get("requiredForProduction") is not False:
+    print("ERRO: Google Sheets voltou a aparecer como dependência de produção.")
+    sys.exit(1)
+
+marketing = data.get("marketing", {})
+if not isinstance(marketing, dict) or set(marketing.keys()) - allowed_marketing:
+    print("ERRO: bloco marketing com campos não permitidos.")
     sys.exit(1)
 
 text = json.dumps(data, ensure_ascii=False).lower()

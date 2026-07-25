@@ -215,6 +215,24 @@ _FILE_RULESETS = {
                                   "mes", "type", "official_source", "generator"],
         "chaves_permitidas_excecao": ["descricao", "alerta_nota", "consultas_nota", "nota"],
     },
+    # M23 — snapshots gerados pelo PostgreSQL (nucleo-m15/app/snapshots.py).
+    # Substituem os antigos summaries derivados de planilha. Nenhum campo de
+    # pessoa é lido do banco; os campos institucionais abaixo carregam nome de
+    # EMPRESA parceira, bairro/cidade da unidade e rótulos de enum — isentos
+    # apenas do detector de nome. Telefone, CPF, e-mail, token, termo clínico
+    # e chave proibida continuam sendo rejeitados normalmente.
+    "m23-snapshots": {
+        "campos_pessoa": [],
+        "campos_institucionais": [
+            "clinica", "nome_clinica", "nome", "unidade", "bairro", "cidade", "local",
+            "local_atendimento", "empresa", "periodo", "label", "value",
+            "variation", "type", "official_source", "generator", "nota",
+            "servico", "status", "etapa", "tipo", "origem", "canal",
+            "modalidade", "responsavel", "acao", "entidade", "categoria",
+            "dia_semana", "horario", "mes", "dia", "key",
+        ],
+        "chaves_permitidas_excecao": ["nota"],
+    },
     "custos-investimentos-summary": {
         "campos_pessoa": [],
         # nome/item = equipamento ou primeiro nome de sócio (permitido pelo

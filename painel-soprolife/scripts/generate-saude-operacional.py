@@ -212,26 +212,52 @@ def construir(estado, check_access_exit):
                "A auditoria automática encontrou um problema nos arquivos públicos do painel.",
                "Ver a saída do check-access.sh e corrigir ANTES de qualquer commit/deploy.")
 
-    # ── 4. Google Sheets ─────────────────────────────────────────────────────
+    # ── 4. Fonte operacional canônica (M23) ──────────────────────────────────
+    # Antes este indicador media a conexão com o Google Sheets. Desde o M23 a
+    # planilha não é fonte, não é dependência e não pode aparecer como saúde
+    # de produção: o que importa é se os snapshots do PostgreSQL chegaram.
     rt = estado["runtime-status"]
-    gs_cfg = None
+    canonica = None
+    sheets_decom = None
     if rt["valido"]:
-        gs = (rt["data"] or {}).get("googleSheets", {})
-        gs_cfg = bool(gs.get("configured")) if isinstance(gs, dict) else None
+        data_rt = rt["data"] or {}
+        src = data_rt.get("dataSource", {})
+        if isinstance(src, dict):
+            canonica = src.get("canonical")
+        gs = data_rt.get("googleSheets", {})
+        if isinstance(gs, dict):
+            sheets_decom = gs.get("decommissioned")
+
     derivados = ["leads", "resumo-dashboard", "followup-pacientes"]
     derivados_ok = all(estado[n]["existe"] and estado[n]["valido"] for n in derivados)
-    if gs_cfg is True and derivados_ok:
-        ind("google_sheets", "Google Sheets", "ok", "Configurado e gerando dados",
-            "Conexão com a planilha privada (leads, CRM, follow-ups).")
-    elif gs_cfg is True:
-        ind("google_sheets", "Google Sheets", "atencao", "Configurado, mas faltam derivados",
-            "Conexão com a planilha privada (leads, CRM, follow-ups).")
-    elif gs_cfg is False:
-        ind("google_sheets", "Google Sheets", "atencao", "Não configurado neste ambiente",
-            "Conexão com a planilha privada (leads, CRM, follow-ups).")
+    tip_fonte = ("PostgreSQL do Núcleo M15 — fonte única de leads, CRM, "
+                 "financeiro e follow-ups.")
+
+    if canonica == "postgresql" and derivados_ok:
+        ind("fonte_operacional", "Fonte operacional", "ok",
+            "PostgreSQL gerando os snapshots do painel", tip_fonte)
+    elif canonica == "postgresql":
+        ind("fonte_operacional", "Fonte operacional", "critico",
+            "PostgreSQL declarado, mas faltam snapshots derivados", tip_fonte)
+        alerta("ALERTA-FONTES-POSTGRES", "critico",
+               "Snapshots do banco não chegaram",
+               "A fonte canônica é o PostgreSQL, mas os arquivos derivados estão "
+               "ausentes ou inválidos. O painel NÃO substitui isso por exemplos.",
+               "Rodar a atualização local ou conferir o timer soprolife-update-data.")
     else:
-        ind("google_sheets", "Google Sheets", "desconhecido", "Status não disponível",
-            "Conexão com a planilha privada (leads, CRM, follow-ups).")
+        ind("fonte_operacional", "Fonte operacional", "desconhecido",
+            "Fonte canônica não declarada", tip_fonte)
+
+    # Declaração explícita: a planilha legada não é mais dependência.
+    if sheets_decom is True:
+        ind("google_sheets_legado", "Google Sheets (legado)", "ok",
+            "Descomissionado — não é dependência de produção",
+            "Integração desativada no M23. Autenticação de planilha não afeta "
+            "a saúde do painel.")
+    elif sheets_decom is not None:
+        ind("google_sheets_legado", "Google Sheets (legado)", "atencao",
+            "Ainda declarado como dependência",
+            "Integração deveria estar descomissionada desde o M23.")
 
     # ── 5/6. Search Console e GA4 (flags do marketing-seo) ──────────────────
     mkt = estado["marketing-seo"]
