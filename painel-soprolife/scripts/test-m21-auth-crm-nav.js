@@ -289,6 +289,13 @@ caso("o navegador não executa script nem credencial na atualização",
 caso("o CSS dos dois estados novos existe",
      styleCss.indexOf(".mf-refreshing") !== -1 &&
      styleCss.indexOf(".mf-credential") !== -1);
+caso("a orientação não afirma credencial instalada quando credentialKind é none",
+     /aval\.credentialKind === "service_account"/.test(appSrc) &&
+     /precisam ser\s+criados e instalados no servidor/.test(appSrc) &&
+     !/A conta de serviço de leitura já está configurada no servidor/.test(appSrc));
+caso("scripts de Marketing usam cache-buster da correção de credencial",
+     /marketing-freshness\.js\?v=2026072502/.test(indexSrc) &&
+     /app\.js\?v=2026072502/.test(indexSrc));
 
 // ───────────── G) unidade systemd e credencial durável ─────────────────────
 console.log();

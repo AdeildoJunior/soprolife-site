@@ -40,13 +40,13 @@
     "errorMessageSafe": "mensagem do catálogo fixo — NUNCA a exceção crua",
     "sourceAvailable": "boolean — a fonte respondeu na última tentativa",
     "authenticationRequired": "boolean — precisa de reautenticação humana",
-    "credentialPending": "boolean — conta de serviço aguarda acesso de leitura na propriedade",
+    "credentialPending": "boolean — identidade/credencial durável ou acesso de leitura ainda pendente",
     "publicationRequired": "boolean — precisa de publicação humana (Apps Script)",
     "warnings": "lista de mensagens seguras (sem segredo, sem path privado)"
   },
   "catalogo_erros": {
     "AUTH_REQUIRED": "Reautenticação necessária. Execute a renovação do ADC manualmente.",
-    "CREDENTIAL_PENDING": "Credencial de serviço configurada, aguardando concessão de acesso de leitura na propriedade do Google.",
+    "CREDENTIAL_PENDING": "Identidade/credencial durável ou acesso de leitura ainda pendente no Google.",
     "PERMISSION_DENIED": "Acesso negado pela API. Verifique permissões da conta.",
     "SOURCE_NOT_FOUND": "Fonte não encontrada. Verifique a configuração local.",
     "DEPENDENCY_MISSING": "Dependência local ausente. Instale os requisitos do conector.",

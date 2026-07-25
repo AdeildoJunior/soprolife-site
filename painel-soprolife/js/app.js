@@ -3237,12 +3237,18 @@ function renderMktHeader() {
           <summary>Como resolver</summary>
           ${aval.overall === MF_CREDENTIAL ? `
           <ol>
-            <li>A conta de serviço de leitura já está configurada no servidor.
-              Falta conceder a ela acesso <b>somente leitura</b> na propriedade:
-              Search Console (usuário com permissão de leitura) e GA4 (papel
-              Leitor/Viewer).</li>
-            <li>Feita a concessão, a atualização automática volta sozinha na
-              próxima execução do serviço agendado.</li>
+            ${aval.credentialKind === "service_account" ? `
+            <li>A identidade e a credencial de leitura estão instaladas no
+              servidor. Falta conceder acesso <b>somente leitura</b> nas
+              propriedades: Search Console (usuário restrito) e GA4 (papel
+              Viewer).</li>` : `
+            <li>A identidade dedicada e seu arquivo de credencial precisam ser
+              criados e instalados no servidor. Depois, conceda acesso
+              <b>somente leitura</b> nas propriedades: Search Console (usuário
+              restrito) e GA4 (papel Viewer).</li>`}
+            <li>Quando identidade, credencial e concessões estiverem prontas, a
+              atualização automática volta sozinha na próxima execução do
+              serviço agendado.</li>
           </ol>
           <p>Nenhuma ação no navegador é necessária e nenhuma credencial é
              executada por ele.</p>` : `

@@ -34,9 +34,9 @@ STALE = "stale"
 UNAVAILABLE = "unavailable"
 ERROR = "error"
 AUTH_REQUIRED_STATE = "authentication_required"
-# M21 — credencial durável presente, concessão de acesso pendente na
-# propriedade do Google. Distinto de authentication_required (ADC pessoal
-# vencido), que não deve mais aparecer em operação normal.
+# M21 — identidade/credencial durável ou concessão de acesso pendente no
+# Google. Distinto de authentication_required (ADC pessoal vencido), que não
+# deve mais aparecer em operação normal.
 CREDENTIAL_PENDING = "credential_pending"
 PUBLICATION_PENDING = "publication_pending"
 UNKNOWN = "unknown"
@@ -87,12 +87,11 @@ def pior_estado(estados) -> str:
 # ── Catálogo de erros (mensagens fixas e seguras) ──────────────────────────
 CATALOGO_ERROS = {
     "AUTH_REQUIRED": "Reautenticação necessária. Execute a renovação do ADC manualmente.",
-    # M21 — a credencial durável (conta de serviço) existe e funciona, mas a
-    # propriedade do Google ainda não concedeu acesso de leitura a ela. É uma
-    # pendência de configuração humana pontual, NÃO um login expirado.
+    # M21 — falta preparar a identidade/credencial durável ou conceder acesso
+    # à propriedade. É configuração pontual, NÃO login expirado.
     "CREDENTIAL_PENDING": (
-        "Credencial de serviço configurada, aguardando concessão de acesso de "
-        "leitura na propriedade do Google."
+        "Identidade/credencial durável ou acesso de leitura ainda pendente "
+        "no Google."
     ),
     "PERMISSION_DENIED": "Acesso negado pela API. Verifique permissões da conta.",
     "SOURCE_NOT_FOUND": "Fonte não encontrada. Verifique a configuração local.",

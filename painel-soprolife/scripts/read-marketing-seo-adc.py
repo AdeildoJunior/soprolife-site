@@ -840,7 +840,8 @@ def cmd_sync(args, mode):
             print("AVISO: sem credencial de serviço utilizável.")
             print("  Esperado: conta de serviço dedicada, somente leitura, em")
             print(f"  {_SA_DEFAULT_PATH} (ou {_ENV_SA_PATH}).")
-            print("  Falta apenas a concessão de acesso de leitura na propriedade.")
+            print("  Verifique criação/instalação da identidade e as concessões "
+                  "de leitura nas propriedades.")
         else:
             print("AVISO: falha ao obter credencial de leitura.")
             print("  Escopos necessários (somente leitura):")

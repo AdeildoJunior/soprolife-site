@@ -11,9 +11,9 @@ const MF_STALE = "stale";
 const MF_UNAVAILABLE = "unavailable";
 const MF_ERROR = "error";
 const MF_AUTH = "authentication_required";
-// M21 — credencial durável configurada, faltando apenas a concessão de acesso
-// de leitura na propriedade do Google. É pendência de configuração, não login
-// vencido: em operação normal com conta de serviço, MF_AUTH não deve aparecer.
+// M21 — identidade/credencial durável ou concessão de leitura pendente no
+// Google. É pendência de configuração, não login vencido: em operação normal
+// com conta de serviço, MF_AUTH não deve aparecer.
 const MF_CREDENTIAL = "credential_pending";
 // Estado exclusivamente de cliente: uma atualização foi pedida ao servidor e
 // ainda não há snapshot novo. Nunca vem do arquivo.
