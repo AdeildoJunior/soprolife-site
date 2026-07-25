@@ -154,21 +154,32 @@ console.log("C) Núcleo: bloqueio antes de senha/token, sem requisição /auth/*
   // render(): corpo também mostra o bloqueio (sem convite a login).
   const renderFn = nucleoSrc.slice(nucleoSrc.indexOf("function render() {"),
                                    nucleoSrc.indexOf("function checkApi()"));
+  // M21: a guarda de origem continua vindo ANTES de qualquer convite de
+  // login; o que mudou é que "estou autenticado?" passou a ser autenticado(),
+  // que aceita cookie de sessão OU token bearer da CLI.
   caso("render() mostra bloqueio antes do convite de login",
        renderFn.indexOf("!state.access.secure") !== -1 &&
-       renderFn.indexOf("!state.access.secure") < renderFn.indexOf("!state.token"));
+       renderFn.indexOf("!state.access.secure") < renderFn.indexOf("!autenticado()"));
 }
 
 // ─────────────── D) sessão, RBAC e superfícies preservadas ─────────────────
 console.log();
-console.log("D) Sessão em memória, RBAC e contratos preservados");
+console.log("D) Sessão de servidor, RBAC e contratos preservados");
 {
   caso("token nunca é gravado em storage (nenhum setItem no núcleo)",
        (nucleoSrc.match(/\.setItem\(/g) || []).length === 0);
   caso("limpeza do token legado preservada",
        nucleoSrc.indexOf('localStorage.removeItem("soproM15Token")') !== -1);
-  caso("sessão continua somente em memória (aviso na UI)",
-       nucleoSrc.indexOf("Sessão só em memória") !== -1);
+  // M21 — a sessão deixou de morrer no F5: passou a ser um cookie de mesma
+  // origem, HttpOnly/Secure/SameSite=Strict, com Path restrito. O que segue
+  // proibido é token em storage acessível ao JavaScript.
+  caso("sessão persistente por cookie de servidor (nada em storage do navegador)",
+       nucleoSrc.indexOf('api("/auth/sessao")') !== -1 &&
+       nucleoSrc.indexOf("restaurarSessao") !== -1 &&
+       !/localStorage\.setItem/.test(nucleoSrc) &&
+       !/sessionStorage\.(set|get)Item/.test(nucleoSrc));
+  caso("token bearer da CLI continua só em memória",
+       nucleoSrc.indexOf("nunca em storage persistente") !== -1);
   caso("logout (Sair) preservado", nucleoSrc.indexOf('id="m15Sair"') !== -1);
   caso("login continua no endpoint /auth/token via POST",
        nucleoSrc.indexOf('api("/auth/token"') !== -1);

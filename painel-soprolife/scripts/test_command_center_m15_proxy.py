@@ -479,5 +479,79 @@ class HardeningM153BTests(unittest.TestCase):
         self.assertIn("SOPROLIFE_M15_GO_LIVE=YES", deploy)
 
 
+class CookieDeSessaoTests(unittest.TestCase):
+    """M21 — o cookie de sessão precisa atravessar o proxy, e SÓ ele."""
+
+    COOKIE = "soprolife_m15_sessao"
+
+    def setUp(self):
+        FakeConnection.response = FakeResponse()
+        FakeConnection.connect_error = None
+        FakeConnection.instances = []
+        os.environ.pop("SOPROLIFE_M15_UPSTREAM", None)
+
+    def _run(self, method="GET", headers=None, response=None):
+        if response is not None:
+            FakeConnection.response = response
+        handler = Harness("/painel-soprolife/api/m15/auth/sessao", dict(headers or {}))
+        handler.command = method
+        with mock.patch.object(server.http.client, "HTTPConnection", FakeConnection):
+            getattr(handler, "do_" + method)()
+        return handler
+
+    def test_cookie_do_painel_e_repassado_para_a_api(self):
+        self._run(headers={"Cookie": f"{self.COOKIE}=abc.def.ghi"})
+        enviados = FakeConnection.instances[-1].request_args[3]
+        self.assertEqual(enviados.get("Cookie"), f"{self.COOKIE}=abc.def.ghi")
+
+    def test_cookies_de_terceiros_nao_chegam_a_api(self):
+        self._run(headers={
+            "Cookie": f"_ga=GA1.2.3; {self.COOKIE}=abc.def.ghi; outro=valor",
+        })
+        enviados = FakeConnection.instances[-1].request_args[3]
+        self.assertEqual(enviados.get("Cookie"), f"{self.COOKIE}=abc.def.ghi")
+        self.assertNotIn("_ga", enviados.get("Cookie", ""))
+        self.assertNotIn("outro", enviados.get("Cookie", ""))
+
+    def test_sem_cookie_do_painel_nenhum_cabecalho_cookie_e_enviado(self):
+        self._run(headers={"Cookie": "_ga=GA1.2.3; sessao_alheia=x"})
+        self.assertNotIn("Cookie", FakeConnection.instances[-1].request_args[3])
+
+    def test_cabecalho_csrf_e_repassado(self):
+        self._run(headers={"X-CSRF-Token": "token-csrf-sintetico"})
+        enviados = FakeConnection.instances[-1].request_args[3]
+        self.assertEqual(enviados.get("X-CSRF-Token"), "token-csrf-sintetico")
+
+    def test_set_cookie_da_api_chega_ao_navegador_com_flags_intactas(self):
+        bruto = (f"{self.COOKIE}=abc.def.ghi; HttpOnly; Secure; "
+                 "SameSite=strict; Path=/painel-soprolife/api/m15")
+        handler = self._run(response=FakeResponse(headers={
+            "Content-Type": "application/json", "Set-Cookie": bruto,
+        }))
+        enviados = [v for n, v in handler.output_headers if n == "Set-Cookie"]
+        # o proxy repassa o valor EXATO: não reescreve nenhum atributo
+        self.assertEqual(enviados, [bruto])
+
+    def test_set_cookie_de_nome_desconhecido_e_descartado(self):
+        handler = self._run(response=FakeResponse(headers={
+            "Content-Type": "application/json",
+            "Set-Cookie": "cookie_intruso=x; HttpOnly",
+        }))
+        self.assertEqual([v for n, v in handler.output_headers if n == "Set-Cookie"], [])
+
+    def test_set_cookie_com_quebra_de_linha_e_descartado(self):
+        self.assertFalse(server._allowed_set_cookie(
+            f"{self.COOKIE}=x\r\nX-Injetado: 1"))
+
+    def test_cabecalho_cookie_gigante_e_ignorado(self):
+        self.assertIsNone(server._filter_request_cookie("a=" + "x" * 5000))
+
+    def test_nome_de_cookie_invalido_no_ambiente_cai_no_padrao(self):
+        with mock.patch.dict(os.environ,
+                             {"SOPROLIFE_M15_SESSION_COOKIE": "nome invalido;"}):
+            self.assertEqual(server._m15_cookie_names(),
+                             frozenset({server._M15_DEFAULT_COOKIE}))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

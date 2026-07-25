@@ -48,10 +48,20 @@ caso("app.js não define mais renderCrmAcompanhamentoM15 (parcial do M18)",
      appSrc.indexOf("function renderCrmAcompanhamentoM15") === -1);
 caso("app.js não tem mais abrirWhatsappFollowup próprio",
      appSrc.indexOf("function abrirWhatsappFollowup") === -1);
-caso("as rotas antigas caem no workspace canônico",
-     /case "pacientes":[\s\S]{0,400}window\.SoproCrm\.abrir/.test(appSrc));
-caso("existe exatamente UM card de pacientes no hub do CRM",
-     (appSrc.match(/title: "Pacientes e Acompanhamento"/g) || []).length === 1 &&
+// M21 — o workspace canônico deixou de ser subview e passou a SER a página de
+// CRM. As rotas antigas continuam resolvendo, agora para o próprio hub.
+caso("as rotas antigas resolvem para o hub (que É o workspace canônico)",
+     /case "pacientes":[\s\S]{0,400}renderCrmHub\(container\)/.test(appSrc));
+caso("o hub monta o workspace canônico como conteúdo inicial do CRM",
+     appSrc.indexOf('id="crmWorkspace"') !== -1 &&
+     /SoproCrm\.abrir\(mount, null, \{ landing: true \}\)/.test(appSrc));
+// Checa CÓDIGO, não comentário: a função de card não existe mais e não é
+// chamada em lugar nenhum, e o grid de cards saiu do HTML gerado.
+caso("não existe mais nenhum card de atalho no hub do CRM",
+     !/function crmModuleCard\(/.test(appSrc) &&
+     !/\$\{crmModuleCard\(/.test(appSrc) &&
+     appSrc.indexOf('class="crm-hub-grid"') === -1 &&
+     appSrc.indexOf('title: "Pacientes e Acompanhamento"') === -1 &&
      appSrc.indexOf('title: "Acompanhamento e WhatsApp"') === -1);
 caso("o workspace é o único módulo que lista pacientes",
      wsSrc.indexOf("/crm/pacientes/busca") !== -1 &&

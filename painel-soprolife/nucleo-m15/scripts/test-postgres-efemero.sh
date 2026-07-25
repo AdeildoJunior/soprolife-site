@@ -35,7 +35,12 @@ cleanup
 
 ready=0
 for _ in $(seq 1 60); do
-  if "$RUNTIME" exec "$NAME" pg_isready -U postgres -d m15_teste >/dev/null 2>&1; then
+  # O entrypoint oficial abre primeiro um servidor temporário só no socket
+  # Unix para inicializar o cluster e depois o encerra. Testar 127.0.0.1 evita
+  # o falso "ready" nesse servidor temporário e a corrida "database is
+  # shutting down" no psql imediatamente seguinte.
+  if "$RUNTIME" exec "$NAME" pg_isready -h 127.0.0.1 -U postgres \
+       -d m15_teste >/dev/null 2>&1; then
     ready=1
     break
   fi
@@ -47,7 +52,7 @@ if [[ "$ready" != 1 ]]; then
   exit 1
 fi
 
-PG_MAJOR=$("$RUNTIME" exec "$NAME" psql -U postgres -d m15_teste -Atqc \
+PG_MAJOR=$("$RUNTIME" exec "$NAME" psql -h 127.0.0.1 -U postgres -d m15_teste -Atqc \
   "SHOW server_version_num" | cut -c1-2)
 if [[ "$PG_MAJOR" != 16 ]]; then
   echo "ERRO: servidor iniciado não é PostgreSQL 16 (major=$PG_MAJOR)." >&2

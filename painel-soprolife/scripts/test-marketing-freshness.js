@@ -35,7 +35,13 @@ caso("snapshot null → unknown", mf.mfAvaliar(null, AGORA).overall === mf.MF_UN
 
 console.log("── Selos honestos por estado ──");
 caso("fresh → 'Atualizado'", mf.mfRotulo(mf.MF_FRESH).label === "Atualizado");
-caso("stale → 'Desatualizado'", mf.mfRotulo(mf.MF_STALE).label === "Desatualizado");
+// M21 — vocabulário do painel: "Dados antigos" (stale) e "Falha temporária"
+// (error), mais os dois estados novos.
+caso("stale → 'Dados antigos'", mf.mfRotulo(mf.MF_STALE).label === "Dados antigos");
+caso("credential_pending → 'Credencial/configuração pendente'",
+     mf.mfRotulo(mf.MF_CREDENTIAL).label === "Credencial/configuração pendente");
+caso("refreshing → 'Atualizando'",
+     mf.mfRotulo(mf.MF_REFRESHING).label === "Atualizando");
 caso("auth → 'Reautenticação necessária'",
      mf.mfRotulo(mf.MF_AUTH).label === "Reautenticação necessária");
 caso("unavailable → 'Fonte indisponível'",

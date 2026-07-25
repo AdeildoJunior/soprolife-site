@@ -55,8 +55,13 @@ check_private_files() {
   echo
   echo "Verificando arquivos privados dentro da pasta servida..."
 
+  if [ ! -d painel-soprolife/data-private ]; then
+    echo "OK: diretório data-private ausente neste ambiente; nenhum arquivo privado servido."
+    return
+  fi
+
   local private_files
-  private_files=$(find painel-soprolife/data-private -type f ! -name 'README.local.txt' 2>/dev/null)
+  private_files=$(find painel-soprolife/data-private -type f ! -name 'README.local.txt' 2>/dev/null || true)
 
   if [ -z "$private_files" ]; then
     echo "OK: nenhum arquivo privado encontrado em painel-soprolife/data-private/."

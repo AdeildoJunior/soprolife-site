@@ -3,7 +3,8 @@
 SoproLife — Testes do contrato de frescor operacional (M14.3A.1).
 
 Valida, 100% offline e com relógio injetado (nunca depende da hora real):
-  - estados fresh/stale/unknown/authentication_required/unavailable/error;
+  - estados fresh/stale/unknown/authentication_required/credential_pending/
+    unavailable/error;
   - fixtures sintéticas de scripts/fixtures/freshness/;
   - snapshot legado v1 (formato de produção pré-M14.3A.1);
   - snapshot anterior preservado quando uma fonte falha;
@@ -176,7 +177,8 @@ caso("mapa estado→exit coerente",
      fc.exit_code_para(fc.FRESH) == 0 and fc.exit_code_para(fc.STALE) == 10 and
      fc.exit_code_para(fc.AUTH_REQUIRED_STATE) == 11 and
      fc.exit_code_para(fc.UNAVAILABLE) == 13 and fc.exit_code_para(fc.ERROR) == 14 and
-     fc.exit_code_para(fc.UNKNOWN) == 15)
+     fc.exit_code_para(fc.UNKNOWN) == 15 and
+     fc.exit_code_para(fc.CREDENTIAL_PENDING) == 16)
 
 print()
 if FALHAS:

@@ -49,6 +49,7 @@ run "node --check js/m15-security.js"        node --check painel-soprolife/js/m1
 run "node --check js/central-cadastros.js"   node --check painel-soprolife/js/central-cadastros.js
 run "node --check js/financeiro-conciliacao.js" node --check painel-soprolife/js/financeiro-conciliacao.js
 run "node --check js/crm-workspace.js"       node --check painel-soprolife/js/crm-workspace.js
+run "node --check test-m21-browser-e2e.js"   node --check painel-soprolife/scripts/test-m21-browser-e2e.js
 
 secao "2/10 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
@@ -61,6 +62,7 @@ run "test-entrada-dados-ux (M12.1)"      node painel-soprolife/scripts/test-entr
 run "test-m15-ui-calendar (M15.4A)"      node painel-soprolife/scripts/test-m15-ui-calendar.js
 run "test-m15-go-live (M15.5A)"          node painel-soprolife/scripts/test-m15-go-live.js
 run "test-crm-unificado (M19)"           node painel-soprolife/scripts/test-crm-unificado.js
+run "test-m21-auth-crm-nav (M21)"        node painel-soprolife/scripts/test-m21-auth-crm-nav.js
 
 secao "3/10 Sintaxe Python"
 run "py_compile generate-saude-operacional" python3 -m py_compile painel-soprolife/scripts/generate-saude-operacional.py
@@ -115,6 +117,8 @@ run "py_compile read-marketing-seo-adc"    python3 -m py_compile painel-soprolif
 run "test-freshness-contract (Python)"     python3 painel-soprolife/scripts/test-freshness-contract.py
 run "test-marketing-freshness (painel JS)" node painel-soprolife/scripts/test-marketing-freshness.js
 run "test-systemd-units (sintaxe + sem segredo)" python3 painel-soprolife/scripts/test-systemd-units.py
+run "test-command-center proxy cookie/CSRF (M21)" python3 painel-soprolife/scripts/test_command_center_m15_proxy.py
+run "test-marketing credencial durável (M21)" python3 painel-soprolife/scripts/test-marketing-credencial.py
 run "bash -n soprolife-operational-refresh"  bash -n painel-soprolife/scripts/soprolife-operational-refresh.sh
 run "bash -n install-operational-refresh"    bash -n painel-soprolife/scripts/install-operational-refresh.sh
 run "bash -n uninstall-operational-refresh"  bash -n painel-soprolife/scripts/uninstall-operational-refresh.sh

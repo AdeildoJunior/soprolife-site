@@ -102,6 +102,63 @@ inst = (RAIZ / "scripts" / "install-operational-refresh.sh").read_text(encoding=
 caso("dry-run é o padrão do instalador", "DRY_RUN=1" in inst)
 caso("enable exige flag explícita", "--enable-timer" in inst)
 
+print("── M21: atualização automática de Marketing ──")
+update_service = SYSTEMD / "soprolife-update-data.service"
+update_timer = SYSTEMD / "soprolife-update-data.timer"
+m15_service = SYSTEMD / "soprolife-m15-api.service"
+caso("unit de atualização existe", update_service.exists())
+caso("timer de atualização existe", update_timer.exists())
+caso("unit da API M15 existe", m15_service.exists())
+
+upd = parse_unit(update_service)
+upd_text = update_service.read_text(encoding="utf-8")
+upd_directives = "\n".join(
+    line for line in upd_text.splitlines() if not line.lstrip().startswith("#")
+)
+caso("atualização roda como soprolife, nunca root",
+     upd["Service"].get("User") == "soprolife" and
+     not re.search(r"(?m)^User=root$", upd_directives))
+caso("credencial durável é explícita e obrigatória",
+     "SOPROLIFE_MARKETING_CREDENTIALS=/opt/soprolife/secrets/marketing-readonly.json"
+     in upd_text and
+     "SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT=1" in upd_text)
+caso("fila manual privada é explícita",
+     "SOPROLIFE_MARKETING_REFRESH_QUEUE=/opt/soprolife/soprolife-site/"
+     "painel-soprolife/nucleo-m15/var/marketing-refresh-request.json" in upd_text)
+caso("execução de dados tem timeout e hardening",
+     upd["Service"].get("TimeoutStartSec") == "480" and
+     upd["Service"].get("NoNewPrivileges") == "true")
+caso("unit de atualização não contém segredo",
+     not SEGREDOS.search(upd_text))
+
+update_sh = (RAIZ / "scripts" / "update-local-data.sh").read_text(encoding="utf-8")
+caso("script tem lock não bloqueante",
+     "flock -n -E 99" in update_sh)
+caso("pedido só é consumido depois da tentativa de Marketing",
+     update_sh.index('echo "5/15 - Atualizando Marketing & SEO..."') <
+     update_sh.index('_MKT_ATTEMPTED=1') <
+     update_sh.index('rm -f -- "$_MKT_QUEUE"') <
+     update_sh.index('echo "6/15 - Atualizando Leads..."'))
+caso("pedido permanece pendente se conector não executa",
+     'if [ "$_MKT_REQUESTED" -eq 1 ] && [ "$_MKT_ATTEMPTED" -eq 1 ]' in update_sh
+     and "conector não chegou a executar" in update_sh)
+caso("ausência de flock falha fechado",
+     "atualização cancelada para evitar concorrência" in update_sh)
+
+m15_text = m15_service.read_text(encoding="utf-8")
+caso("API e timer usam exatamente a mesma fila",
+     "M15_MARKETING_REFRESH_QUEUE=/opt/soprolife/soprolife-site/"
+     "painel-soprolife/nucleo-m15/var/marketing-refresh-request.json" in m15_text)
+caso("fila fica no único diretório gravável da API",
+     "ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/"
+     "nucleo-m15/var" in m15_text)
+caso("unit da API não contém segredo", not SEGREDOS.search(m15_text))
+
+timer_cfg = parse_unit(update_timer)
+caso("timer automático continua persistente a cada 10 minutos",
+     timer_cfg["Timer"].get("OnUnitActiveSec") == "10min" and
+     timer_cfg["Timer"].get("Persistent") == "true")
+
 print()
 if FALHAS:
     print(f"RESULTADO: {FALHAS} falha(s).")

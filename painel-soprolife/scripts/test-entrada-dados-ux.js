@@ -32,6 +32,7 @@ const centralJsPath = path.resolve(__dirname, "../js/central-cadastros.js");
 const appJsSrc      = fs.readFileSync(appJsPath, "utf8");
 const efSrc         = fs.readFileSync(efPath, "utf8");
 const centralJsSrc  = fs.readFileSync(centralJsPath, "utf8");
+const indexSrc      = fs.readFileSync(path.resolve(__dirname, "../index.html"), "utf8");
 
 console.log("M16 — Central de Cadastros substitui a Entrada de Dados legada (checagens estáticas)");
 
@@ -50,8 +51,13 @@ caso("renderEntradaDados (tela de redirecionamento) foi removida de app.js (M17)
      !/function renderEntradaDados\(/.test(appJsSrc));
 caso("nenhuma view de CRM aponta mais para a tela de redirecionamento legada",
      !/case "central-cadastros":\s*renderEntradaDados/.test(appJsSrc));
-caso("card 'Central de Cadastros' do hub do CRM chama SoproCentral.open diretamente (sem redirect)",
-     /dataset\.crmView === "central-cadastros"[\s\S]{0,120}?window\.SoproCentral\.open\("lead"\)/.test(appJsSrc));
+// M21 — o card "Central de Cadastros" do hub do CRM foi REMOVIDO: a Central já
+// é item de sidebar, e o atalho duplicava esse destino. O que precisa
+// continuar verdadeiro é que não sobrou nenhum caminho de redirecionamento.
+caso("card 'Central de Cadastros' saiu do hub do CRM (destino já é item de sidebar)",
+     appJsSrc.indexOf('dataset.crmView === "central-cadastros"') === -1 &&
+     appJsSrc.indexOf('title: "Central de Cadastros"') === -1 &&
+     /data-section="central-cadastros"/.test(indexSrc));
 
 // ── Responsável: mesmo padrão fechado Adeildo/Luiz Faustino, agora 1 lugar ──
 console.log();
