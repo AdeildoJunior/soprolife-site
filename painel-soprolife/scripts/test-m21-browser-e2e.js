@@ -305,6 +305,148 @@ async function main() {
             "document.querySelector('.m15-session-user')?.textContent.includes('Teste Browser')"
           ));
 
+    console.log("── M22: formulário Pastore e fechamento mensal ──");
+    const setupM22 = await cdp.evaluate(`(async () => {
+      const partner = await window.SoproM15.api("/parceiros", {
+        method: "POST",
+        body: JSON.stringify({ nome: "Pastore", tipo: "clinica", status: "ativa" })
+      });
+      const unit = await window.SoproM15.api("/unidades", {
+        method: "POST",
+        body: JSON.stringify({ partner_id: partner.id, nome: "Pastore Ipanema" })
+      });
+      window.__m22 = { partner, unit };
+      window.SoproCentral.open("atendimento", { tipo: "espirometria_pastore" });
+      return { partner: partner.nome, unit: unit.nome };
+    })()`);
+    check("parceiro/unidade sintéticos preparados", setupM22.partner === "Pastore" &&
+          setupM22.unit === "Pastore Ipanema");
+    await waitFor(
+      () => cdp.evaluate(
+        "Boolean(document.querySelector('#cadFormAtend')) && " +
+        "document.querySelector('#cadAtBlocoEsp')?.textContent.includes('Pastore Ipanema')"
+      ),
+      "formulário Pastore",
+    );
+    const pastoreForm = await cdp.evaluate(`(() => {
+      const form = document.querySelector("#cadFormAtend");
+      const block = document.querySelector("#cadAtBlocoEsp");
+      const outputs = [...block.querySelectorAll("output")].map((o) => o.textContent.trim());
+      return {
+        text: block.textContent,
+        outputs,
+        paymentControls: ["esp_valor", "esp_pgto_status", "esp_pgto_data",
+          "esp_pgto_forma"].filter((name) => Boolean(form.elements[name])),
+        locationControl: Boolean(form.elements.esp_local),
+        modalityControl: Boolean(form.elements.esp_modalidade),
+        originControl: Boolean(form.elements.esp_origem),
+        unitSelector: Boolean(form.elements.esp_unidade),
+        genericLocationOptions: ["Domiciliar", "Clínica", "Empresa", "Parceiro", "Outro"]
+          .filter((label) => [...block.querySelectorAll("option")]
+            .some((option) => option.textContent.trim() === label)),
+      };
+    })()`);
+    check("Pastore e Pastore Ipanema aparecem somente leitura",
+          pastoreForm.outputs.includes("Pastore") &&
+          pastoreForm.outputs.includes("Pastore Ipanema"));
+    check("modalidade é exatamente Clínica parceira",
+          pastoreForm.outputs.includes("Clínica parceira"));
+    check("unidade única é selecionada sem seletor", !pastoreForm.unitSelector);
+    check("formulário Pastore não cria os quatro controles financeiros",
+          pastoreForm.paymentControls.length === 0,
+          JSON.stringify(pastoreForm.paymentControls));
+    check("formulário Pastore não cria local/modalidade/origem editáveis",
+          !pastoreForm.locationControl && !pastoreForm.modalityControl &&
+          !pastoreForm.originControl);
+    check("opções genéricas de local estão ausentes",
+          pastoreForm.genericLocationOptions.length === 0,
+          JSON.stringify(pastoreForm.genericLocationOptions));
+
+    const multiUnit = await cdp.evaluate(`(async () => {
+      const extra = await window.SoproM15.api("/unidades", {
+        method: "POST",
+        body: JSON.stringify({
+          partner_id: window.__m22.partner.id,
+          nome: "Pastore Unidade Sintética 002"
+        })
+      });
+      window.__m22.extraUnit = extra;
+      window.SoproCentral.open("atendimento", { tipo: "espirometria_pastore" });
+      return extra.id;
+    })()`);
+    await waitFor(
+      () => cdp.evaluate(
+        "document.querySelector('#cadFormAtend')?.elements.esp_unidade?.options.length === 3"
+      ),
+      "seletor de múltiplas unidades",
+    );
+    const unitOptions = await cdp.evaluate(
+      "[...document.querySelector('#cadFormAtend').elements.esp_unidade.options]" +
+      ".slice(1).map((o) => o.textContent.trim())"
+    );
+    check("múltiplas unidades mostram só as duas Pastore ativas",
+          JSON.stringify(unitOptions.sort()) === JSON.stringify(
+            ["Pastore Ipanema", "Pastore Unidade Sintética 002"].sort()
+          ));
+    await cdp.evaluate(`window.SoproM15.api("/unidades/${multiUnit}", {
+      method: "PATCH", body: JSON.stringify({ ativo: false })
+    })`);
+
+    const attendanceM22 = await cdp.evaluate(`(async () => {
+      const person = await window.SoproM15.api("/pessoas", {
+        method: "POST", body: JSON.stringify({ nome_completo: "Pessoa Browser M22 001" })
+      });
+      const attendance = await window.SoproM15.api("/atendimentos", {
+        method: "POST",
+        body: JSON.stringify({
+          person_id: person.id,
+          tipo: "espirometria_pastore",
+          espirometria: {
+            data_exame: "2026-07-14",
+            status: "Realizado",
+            partner_id: window.__m22.partner.id,
+            partner_unit_id: window.__m22.unit.id
+          },
+          idempotency_key: "m22-browser-attendance"
+        })
+      });
+      await window.SoproPastoreSettlement.refresh();
+      return attendance;
+    })()`);
+    check("salvar exame Pastore cria zero lançamento",
+          Array.isArray(attendanceM22.lancamentos) &&
+          attendanceM22.lancamentos.length === 0);
+    check("backend derivou unidade/local/modalidade/origem",
+          attendanceM22.espirometria.partner_unit_id &&
+          attendanceM22.espirometria.local_atendimento === "Pastore Ipanema" &&
+          attendanceM22.espirometria.modalidade === "clinica_parceira" &&
+          attendanceM22.espirometria.origem === "Pastore");
+    await waitFor(
+      () => cdp.evaluate(
+        "Boolean(document.querySelector('[data-pastore-create]'))"
+      ),
+      "exame elegível no fechamento mensal",
+    );
+    await cdp.evaluate("document.querySelector('[data-pastore-create]').click()");
+    await waitFor(
+      () => cdp.evaluate(
+        "document.querySelector('.pastore-settlement-row')?.textContent.includes('Incluído no fechamento')"
+      ),
+      "fechamento mensal criado pela UI",
+    );
+    const monthlyState = await cdp.evaluate(`(async () => {
+      const entries = await window.SoproM15.api("/lancamentos?tamanho=100");
+      const settlements = await window.SoproM15.api("/pastore/fechamentos");
+      return {
+        entries: entries.total,
+        value: settlements.fechamentos[0].valor_total,
+        items: settlements.fechamentos[0].itens.total,
+      };
+    })()`);
+    check("fechamento não infere valor", monthlyState.value === null);
+    check("fechamento preserva item individual", monthlyState.items === 1);
+    check("fechamento ainda não cria FinancialEntry", monthlyState.entries === 0);
+
     await cdp.evaluate(
       "document.querySelector('.sidebar .nav-item[data-section=\"crm\"]').click()"
     );
@@ -372,6 +514,41 @@ async function main() {
     check("árvore acessível nomeia Total de pacientes",
           [...axNames].some((name) =>
             String(name).toLocaleLowerCase("pt-BR").includes("total de pacientes")
+          ));
+
+    await cdp.evaluate(
+      "document.querySelector('.sidebar .nav-item[data-section=\"parcerias-pastore\"]').click()"
+    );
+    await waitFor(
+      () => cdp.evaluate(
+        "document.querySelector('#parcerias-pastore')?.classList.contains('active') && " +
+        "Boolean(document.querySelector('#pastoreSettlementRoot .pastore-settlement-panel'))"
+      ),
+      "Parcerias/Pastore para viewports",
+    );
+    for (const width of [1440, 1000, 800, 420]) {
+      await cdp.send("Emulation.setDeviceMetricsOverride", {
+        width, height: 1000, deviceScaleFactor: 1, mobile: width <= 420,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      const metrics = await cdp.evaluate(`({
+        inner: window.innerWidth,
+        body: document.body.scrollWidth,
+        root: document.documentElement.scrollWidth
+      })`);
+      check(`M22 viewport ${width}px sem overflow horizontal`,
+            metrics.body <= metrics.inner && metrics.root <= metrics.inner,
+            JSON.stringify(metrics));
+    }
+    const pastoreAx = (await cdp.send("Accessibility.getFullAXTree")).nodes || [];
+    const pastoreNames = new Set(
+      pastoreAx.map((node) => node.name && node.name.value).filter(Boolean)
+    );
+    check("árvore acessível nomeia Fechamento mensal Pastore",
+          pastoreNames.has("Fechamento mensal Pastore"));
+    check("árvore acessível nomeia indicadores Pastore",
+          [...pastoreNames].some((name) =>
+            String(name).includes("Pastore — aguardando fechamento")
           ));
 
     console.log("── Logout explícito ──");

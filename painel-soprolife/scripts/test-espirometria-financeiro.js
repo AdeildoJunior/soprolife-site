@@ -361,7 +361,8 @@ caso("central-cadastros.js não usa fetch cru fora do cliente do núcleo (sem ch
 caso("Novo atendimento usa idempotency_key (anti duplo-clique via API M15)",
      /LOADERS\.atendimento[\s\S]{0,9000}?idempotency_key:\s*m15\(\)\.idemKey\(\)/.test(centralJsSrc));
 caso("bloco de espirometria do Novo atendimento inclui campo broncodilatador",
-     /function blocoEspirometriaHtml[\s\S]{0,4000}?broncodilatador/.test(centralJsSrc));
+     /function blocoEspirometriaConteudoHtml[\s\S]{0,4000}?broncodilatador/
+       .test(centralJsSrc));
 caso("aba Financeiro da Central nunca inclui campo de nome/telefone do paciente no formulário",
      (() => {
        const inicio = centralJsSrc.indexOf("LOADERS.financeiro = function");

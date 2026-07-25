@@ -355,6 +355,9 @@ def test_espirometria_pastore_exige_unidade_operacional(client, auth, db, pastor
     )
     assert sem_unidade.status_code == 422
 
+    # M22: a resolução é fail-closed até a duplicata M20 estar consolidada.
+    merge_partner(db, pastore["duplicate"], pastore["canonical"])
+    db.commit()
     com_unidade = client.post(
         f"{API}/atendimentos",
         json={"person_id": pessoa["id"], "tipo": "espirometria_pastore",
@@ -368,6 +371,7 @@ def test_espirometria_pastore_exige_unidade_operacional(client, auth, db, pastor
 
 
 def test_espirometria_pastore_recusa_unidade_inativa(client, auth, db, pastore):
+    merge_partner(db, pastore["duplicate"], pastore["canonical"])
     pastore["unidade_boa"].ativo = False
     db.commit()
     pessoa = _pessoa(client, auth)
@@ -380,7 +384,23 @@ def test_espirometria_pastore_recusa_unidade_inativa(client, auth, db, pastore):
         headers=auth("operacional"),
     )
     assert resp.status_code == 422
-    assert resp.json()["erro"]["mensagem"]["codigo"] == "unidade_inativa"
+    assert resp.json()["erro"]["mensagem"]["codigo"] == "unidade_pastore_invalida"
+
+
+def test_espirometria_pastore_falha_fechada_com_duas_canonicas(
+    client, auth, db, pastore
+):
+    pessoa = _pessoa(client, auth)
+    resp = client.post(
+        f"{API}/atendimentos",
+        json={"person_id": pessoa["id"], "tipo": "espirometria_pastore",
+              "espirometria": {"data_exame": "2026-07-21",
+                               "partner_id": pastore["canonical"].id,
+                               "partner_unit_id": pastore["unidade_boa"].id}},
+        headers=auth("operacional"),
+    )
+    assert resp.status_code == 409
+    assert resp.json()["erro"]["mensagem"]["codigo"] == "pastore_canonica_ambigua"
 
 
 def test_consulta_soprolife_receita_bruta_pertence_a_soprolife(client, auth, db):

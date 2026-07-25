@@ -38,6 +38,7 @@ const appSrc = ler("js", "app.js");
 const statusSrc = ler("js", "status-atendimento.js");
 const indexSrc = ler("index.html");
 const cssSrc = ler("css", "central.css");
+const pastoreServiceSrc = ler("nucleo-m15", "app", "services", "pastore.py");
 
 // ── A) formatador único de status ──────────────────────────────────────────
 console.log();
@@ -144,8 +145,9 @@ caso("parceiro/unidade só entram no payload no tipo Pastore",
      /if \(tipo === TIPO_PASTORE\) \{[\s\S]{0,400}?bloco\.partner_id = pastore\.partner\.id;/
        .test(centralSrc));
 caso("resolução de Pastore é fail-closed quando há mais de um parceiro",
-     /Mais de um parceiro Pastore ativo/.test(centralSrc) &&
-     /!p\.arquivado/.test(centralSrc));
+     /\/pastore\/configuracao-atendimento/.test(centralSrc) &&
+     /len\(rows\) != 1/.test(pastoreServiceSrc) &&
+     /Partner\.arquivado\.is_\(False\)/.test(pastoreServiceSrc));
 caso("retorno da consulta nunca é assumido",
      /"sem_retorno", "sem retorno programado"/.test(centralSrc) &&
      /Nenhum retorno é assumido/.test(centralSrc));
