@@ -1,0 +1,130 @@
+.pastore-indicators {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.pastore-indicator {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #d7e2ea);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.pastore-indicator span,
+.pastore-indicator small { display: block; color: var(--muted, #64798b); }
+.pastore-indicator span { font-size: 12px; font-weight: 700; }
+.pastore-indicator strong { display: block; margin: 4px 0; font-size: 24px; color: var(--navy, #0d2a43); }
+.pastore-indicator small { font-size: 11px; }
+
+.pastore-settlement-panel {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--border, #d7e2ea);
+  border-radius: 14px;
+  background: var(--soft, #f5f9fb);
+}
+
+.pastore-settlement-panel > header,
+.pastore-settlement-row-head,
+.pastore-eligible-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pastore-settlement-panel h3,
+.pastore-settlement-panel h4,
+.pastore-settlement-panel p { margin-top: 0; }
+.pastore-settlement-panel > header p { margin-bottom: 0; color: var(--muted, #64798b); }
+
+.pastore-settlement-panel button {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--teal, #1db7a6);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pastore-settlement-panel button:focus-visible { outline: 3px solid #0d2a43; outline-offset: 2px; }
+.pastore-settlement-panel button:disabled { opacity: .55; cursor: not-allowed; }
+
+.pastore-settlement-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, .8fr) minmax(360px, 1.2fr);
+  gap: 14px;
+}
+
+.pastore-settlement-grid > article {
+  padding: 14px;
+  border: 1px solid var(--border, #d7e2ea);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.pastore-eligible-group,
+.pastore-settlement-row { padding: 10px 0; border-top: 1px solid var(--border, #d7e2ea); }
+.pastore-eligible-group:first-of-type,
+.pastore-settlement-row:first-of-type { border-top: 0; }
+.pastore-eligible-group span,
+.pastore-settlement-row-head span { display: block; color: var(--muted, #64798b); font-size: 12px; }
+
+.pastore-status { padding: 5px 8px; border-radius: 999px; background: #e8f5f3; font-weight: 700; }
+.pastore-status-recebido { background: #dff4e5; color: #17622f !important; }
+.pastore-status-cancelado { background: #fbe7e7; color: #992c2c !important; }
+
+.pastore-settlement-row dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+.pastore-settlement-row dl div { min-width: 0; }
+.pastore-settlement-row dt { color: var(--muted, #64798b); font-size: 11px; }
+.pastore-settlement-row dd { margin: 2px 0 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 700; }
+
+.pastore-settlement-actions summary { cursor: pointer; font-weight: 700; color: var(--teal-dark, #0f8f83); }
+.pastore-settlement-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--soft, #f5f9fb);
+}
+.pastore-settlement-form label { display: grid; gap: 4px; font-size: 11px; font-weight: 700; }
+.pastore-settlement-form input,
+.pastore-settlement-form select { min-width: 0; min-height: 38px; padding: 6px 8px; border: 1px solid var(--border, #d7e2ea); border-radius: 7px; background: #fff; }
+.pastore-settlement-form button { grid-column: 1 / -1; }
+.pastore-receive-form { border-left: 4px solid var(--teal, #1db7a6); }
+.pastore-receive-form > strong { grid-column: 1 / -1; font-size: 12px; }
+.pastore-live-status { min-height: 20px; margin: 8px 0; color: var(--teal-dark, #0f8f83); font-weight: 700; }
+.pastore-live-status.is-error { color: var(--danger, #b93636); }
+.pastore-settlement-empty { padding: 12px; color: var(--muted, #64798b); }
+
+@media (max-width: 1000px) {
+  .pastore-indicators { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pastore-settlement-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 800px) {
+  .pastore-settlement-form { grid-template-columns: 1fr; }
+  .pastore-settlement-row dl { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 520px) {
+  .pastore-indicators { grid-template-columns: 1fr; }
+  .pastore-settlement-panel { padding: 12px; }
+  .pastore-settlement-panel > header,
+  .pastore-settlement-row-head,
+  .pastore-eligible-group { align-items: stretch; flex-direction: column; }
+  .pastore-settlement-panel button { width: 100%; }
+  .pastore-settlement-row dl { grid-template-columns: 1fr; }
+}

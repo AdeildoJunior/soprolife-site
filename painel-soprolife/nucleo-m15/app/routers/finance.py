@@ -19,8 +19,11 @@ from ..ids import allocate_public_code
 from ..models import (
     Consultation,
     FinancialEntry,
+    Partner,
     PartnerReferral,
+    PartnerSettlement,
     PartnerTransfer,
+    PartnerUnit,
     Person,
     SpirometryExam,
     User,
@@ -115,6 +118,20 @@ def _entry_context(db: Session, entry: FinancialEntry) -> dict:
                 "public_code": ref.public_code,
                 "status": ref.status,
                 "pessoa": _person_ctx(ref.person_id),
+            }
+    if entry.partner_settlement_id:
+        settlement = db.get(PartnerSettlement, entry.partner_settlement_id)
+        if settlement:
+            partner = db.get(Partner, settlement.partner_id)
+            unit = db.get(PartnerUnit, settlement.partner_unit_id)
+            ctx["fechamento_parceiro"] = {
+                "partner_public_code": partner.public_code if partner else None,
+                "pagador": partner.nome if partner else None,
+                "unidade_public_code": unit.public_code if unit else None,
+                "competencia": (
+                    settlement.competencia.strftime("%Y-%m")
+                    if settlement.competencia else None
+                ),
             }
     return ctx
 
@@ -219,6 +236,17 @@ def create_entry(
         payload.consultation_id,
         payload.partner_referral_id,
     )
+    if payload.spirometry_exam_id:
+        exam = db.get(SpirometryExam, payload.spirometry_exam_id)
+        partner = db.get(Partner, exam.partner_id) if exam and exam.partner_id else None
+        if partner and partner.nome.strip().casefold() == "pastore":
+            raise HTTPException(status_code=422, detail={
+                "codigo": "pagamento_direto_pastore_proibido",
+                "mensagem": (
+                    "Exame Pastore não aceita lançamento financeiro direto; "
+                    "use o fechamento mensal da parceria."
+                ),
+            })
 
     def factory(key, fingerprint):
         entry = FinancialEntry(
@@ -452,10 +480,23 @@ def update_entry(
     updates = payload.model_dump(exclude_none=True)
     status_final = updates.get("status", entry.status)
     data_receb_final = updates.get("data_recebimento", entry.data_recebimento)
+    forma_final = updates.get("forma_pagamento", entry.forma_pagamento)
     if status_final == "Recebido" and data_receb_final is None:
         raise HTTPException(status_code=422, detail={
             "codigo": "recebido_sem_data",
             "mensagem": "Status 'Recebido' exige data_recebimento."})
+    if entry.partner_settlement_id and (
+        status_final != "Recebido"
+        or data_receb_final is None
+        or forma_final is None
+    ):
+        raise HTTPException(status_code=422, detail={
+            "codigo": "recibo_fechamento_invalido",
+            "mensagem": (
+                "Recibo de fechamento deve permanecer Recebido e conservar "
+                "data e forma de pagamento."
+            ),
+        })
     changed = []
     for field, value in updates.items():
         setattr(entry, field, value)

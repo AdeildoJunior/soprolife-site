@@ -797,68 +797,90 @@
    * "Cadastrar somente paciente" é ação SECUNDÁRIA daqui — não é aba. */
 
   function resolvePastore() {
-    return api("/parceiros?tamanho=100").then((d) => {
-      const cands = (d.itens || []).filter(
-        (p) => !p.arquivado && /pastore/i.test(p.nome || ""));
-      if (cands.length === 0) {
-        return { erro: "Parceiro Pastore não encontrado no núcleo M15." };
-      }
-      if (cands.length > 1) {
-        // Fail-closed: mais de um Pastore selecionável é exatamente o
-        // problema que a consolidação M20 resolve — não adivinhar qual.
-        return { erro: "Mais de um parceiro Pastore ativo — consolide os duplicados antes." };
-      }
-      const partner = cands[0];
-      return api(`/unidades?tamanho=100&partner_id=${encodeURIComponent(partner.id)}`)
-        .then((u) => ({ partner, unidades: u.itens || [] }))
-        .catch(() => ({ partner, unidades: [] }));
-    }).catch((err) => ({ erro: err.message || String(err) }));
+    // O backend aplica a resolução canônica fail-closed e devolve somente
+    // unidades ativas da Pastore; o navegador não tenta adivinhar por nome.
+    return api("/pastore/configuracao-atendimento")
+      .then((d) => ({
+        partner: d.partner,
+        unidades: d.unidades || [],
+        modalidade: d.modalidade,
+        origem: d.origem,
+      }))
+      .catch((err) => ({ erro: err.message || String(err) }));
   }
 
-  function blocoEspirometriaHtml(pastore) {
-    const unidades = ((pastore && pastore.unidades) || [])
-      .map((u) => [u.id, `${u.public_code} — ${u.nome}`]);
+  function pastoreReadonly(label, value, span) {
+    return `<div class="m15-field m15-span-${span || 4} cad-readonly-field">
+      <span class="m15-field-label">${esc(label)}</span>
+      <output>${esc(value || "—")}</output>
+    </div>`;
+  }
+
+  function blocoEspirometriaConteudoHtml(pastore, ehPastore) {
+    const commonStart = `
+      <h4 class="cad-bloco-titulo">Espirometria</h4>
+      ${ehPastore ? '<div class="cad-pastore-aviso" id="cadAtPastoreAviso"></div>' : ""}
+      <div class="m15-form cad-subgrid">
+        ${fld("Data do exame", dateInp("esp_data", "", { parcial: true }),
+          { span: 3, help: HELP_PARCIAL, req: true })}
+        ${fld("Status", sel("esp_status",
+          (window.SoproStatus
+            ? window.SoproStatus.opcoesEspirometria(STATUS_EXAME)
+            : STATUS_EXAME), "Realizado"), 3)}
+        ${fld("Broncodilatador", sel("esp_bd",
+          [["", "não informado"], ["false", "sem broncodilatador"],
+           ["true", "com broncodilatador"]], "false"), 3)}`;
+    const commonEnd = `
+        ${fld("Técnico / responsável", inp("esp_responsavel", "Adeildo", 'list="cadResp"'), 4)}
+        ${fld("Próximo acompanhamento", dateInp("esp_followup", ""),
+          { span: 4, help: "Opcional — sem data vale a regra vigente do exame." })}
+        ${fld("Observações do exame", inp("esp_observacao", ""), 12)}
+      </div>`;
+
+    if (!ehPastore) {
+      return commonStart + `
+        ${fld("Modalidade", sel("esp_modalidade",
+          [["", "—"], ["residencial", "residencial (domiciliar)"], ["cowork", "cowork"],
+           ["clinica_parceira", "clínica parceira"]], ""), 3)}
+        ${fld("Local / unidade de atendimento", inp("esp_local", "", 'list="cadLocais"'), 4)}
+        ${fld("Origem", inp("esp_origem", "", 'list="cadOrigens"'), 4)}
+        ${fld("Valor da espirometria (R$)", inp("esp_valor", "",
+          'inputmode="decimal" placeholder="220,00"'),
+          { span: 4, help: "Opcional. Nenhum valor é inferido — em branco, nenhum lançamento." })}
+        ${fld("Status do pagamento", sel("esp_pgto_status",
+          ["Recebido", "Pendente", "Parcial", "Cortesia"], "Recebido"), 4)}
+        ${fld("Data de recebimento", dateInp("esp_pgto_data", ""), 4)}
+        ${fld("Forma de pagamento", sel("esp_pgto_forma",
+          [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"], "Pix"), 4)}
+        ${datalist("cadLocais", ["Domiciliar", "Clínica", "Empresa", "Parceiro", "Outro"])}
+      ` + commonEnd;
+    }
+
+    let unitField = pastoreReadonly("Unidade operacional", "Nenhuma unidade ativa", 6);
+    const unidades = (pastore && pastore.unidades) || [];
+    if (unidades.length === 1) {
+      unitField = pastoreReadonly("Unidade operacional", unidades[0].nome, 6);
+    } else if (unidades.length > 1) {
+      unitField = fld(
+        "Unidade operacional",
+        sel("esp_unidade", [["", "selecione a unidade…"]].concat(
+          unidades.map((u) => [u.id, u.nome])
+        ), ""),
+        { span: 6, req: true, help: "Somente unidades Pastore ativas." }
+      );
+    }
+    return commonStart + `
+        ${pastoreReadonly("Parceiro", pastore && pastore.partner && pastore.partner.nome, 6)}
+        ${unitField}
+        ${pastoreReadonly("Modalidade", "Clínica parceira", 4)}
+        ${pastoreReadonly("Origem", (pastore && pastore.origem) || "Pastore", 4)}
+      ` + commonEnd;
+  }
+
+  function blocoEspirometriaHtml(pastore, ehPastore) {
     return `
       <div class="cad-bloco" id="cadAtBlocoEsp" hidden>
-        <h4 class="cad-bloco-titulo">Espirometria</h4>
-        <div class="cad-pastore-aviso" id="cadAtPastoreAviso" hidden></div>
-        <div class="m15-form cad-subgrid">
-          ${fld("Data do exame", dateInp("esp_data", "", { parcial: true }),
-            { span: 3, help: HELP_PARCIAL, req: true })}
-          ${fld("Status", sel("esp_status",
-            (window.SoproStatus
-              ? window.SoproStatus.opcoesEspirometria(STATUS_EXAME)
-              : STATUS_EXAME), "Realizado"), 3)}
-          ${fld("Broncodilatador", sel("esp_bd",
-            [["", "não informado"], ["false", "sem broncodilatador"],
-             ["true", "com broncodilatador"]], "false"), 3)}
-          ${fld("Modalidade", sel("esp_modalidade",
-            [["", "—"], ["residencial", "residencial (domiciliar)"], ["cowork", "cowork"],
-             ["clinica_parceira", "clínica parceira"]], ""), 3)}
-          <div class="cad-so-pastore" id="cadAtPastoreCampos" hidden>
-            <div class="m15-form cad-subgrid">
-              ${fld("Parceiro", inp("esp_parceiro_nome", "", "readonly"),
-                { span: 6, help: "Definido automaticamente pelo tipo do atendimento." })}
-              ${fld("Unidade operacional", sel("esp_unidade",
-                [["", "selecione a unidade…"]].concat(unidades), ""),
-                { span: 6, req: true })}
-            </div>
-          </div>
-          ${fld("Local / unidade de atendimento", inp("esp_local", "", 'list="cadLocais"'), 4)}
-          ${fld("Técnico / responsável", inp("esp_responsavel", "Adeildo", 'list="cadResp"'), 4)}
-          ${fld("Próximo acompanhamento", dateInp("esp_followup", ""),
-            { span: 4, help: "Opcional — sem data vale a regra vigente do exame." })}
-          ${fld("Origem", inp("esp_origem", "", 'list="cadOrigens"'), 4)}
-          ${fld("Valor da espirometria (R$)", inp("esp_valor", "",
-            'inputmode="decimal" placeholder="220,00"'),
-            { span: 4, help: "Opcional. Nenhum valor é inferido — em branco, nenhum lançamento." })}
-          ${fld("Status do pagamento", sel("esp_pgto_status",
-            ["Recebido", "Pendente", "Parcial", "Cortesia"], "Recebido"), 4)}
-          ${fld("Data de recebimento", dateInp("esp_pgto_data", ""), 4)}
-          ${fld("Forma de pagamento", sel("esp_pgto_forma",
-            [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"], "Pix"), 4)}
-          ${fld("Observações do exame", inp("esp_observacao", ""), 12)}
-        </div>
+        ${blocoEspirometriaConteudoHtml(pastore, ehPastore)}
       </div>`;
   }
 
@@ -944,14 +966,13 @@
 
             <div class="m15-form-full cad-passo" id="cadAtPasso3">
               <h4 class="cad-passo-titulo"><span class="cad-passo-num">3</span> Dados do atendimento</h4>
-              ${blocoEspirometriaHtml(pastore)}
+              ${blocoEspirometriaHtml(pastore, tipoInicial === TIPO_PASTORE)}
               ${blocoConsultaHtml()}
             </div>
 
             ${submitBtn("Salvar atendimento")}
           </form>
           ${datalist("cadOrigens", ORIGENS)}${datalist("cadResp", RESPONSAVEIS)}
-          ${datalist("cadLocais", ["Domiciliar", "Clínica", "Empresa", "Parceiro", "Outro"])}
         </div>
         ${recentsPanel("Atendimentos recentes", "Espirometrias e consultas — na hora")}`;
 
@@ -963,9 +984,8 @@
       const passo3 = bodyEl.querySelector("#cadAtPasso3");
       const blocoEsp = bodyEl.querySelector("#cadAtBlocoEsp");
       const blocoCon = bodyEl.querySelector("#cadAtBlocoCon");
-      const pastoreCampos = bodyEl.querySelector("#cadAtPastoreCampos");
-      const pastoreAviso = bodyEl.querySelector("#cadAtPastoreAviso");
       const btnSalvar = form.querySelector('button[type="submit"]');
+      let renderedPastore = tipoInicial === TIPO_PASTORE;
 
       function tipoAtual() {
         const marcado = form.querySelector('input[name="tipo"]:checked');
@@ -984,21 +1004,23 @@
         blocoEsp.hidden = !temEsp;
         blocoCon.hidden = !temCon;
         const ehPastore = tipo === TIPO_PASTORE;
-        pastoreCampos.hidden = !ehPastore;
-        pastoreAviso.hidden = !ehPastore;
+        if (temEsp && renderedPastore !== ehPastore) {
+          blocoEsp.innerHTML = blocoEspirometriaConteudoHtml(pastore, ehPastore);
+          renderedPastore = ehPastore;
+        }
         if (ehPastore) {
+          const pastoreAviso = bodyEl.querySelector("#cadAtPastoreAviso");
           if (pastore.erro) {
             pastoreAviso.className = "cad-pastore-aviso cad-erro";
             pastoreAviso.textContent = "Pastore indisponível: " + pastore.erro;
+          } else if (!pastore.unidades.length) {
+            pastoreAviso.className = "cad-pastore-aviso cad-erro";
+            pastoreAviso.textContent = "Pastore indisponível: nenhuma unidade operacional ativa.";
           } else {
             pastoreAviso.className = "cad-pastore-aviso";
             pastoreAviso.textContent =
-              "Parceiro definido automaticamente. Repasse e preço do paciente NÃO são " +
-              "inferidos: dependem de valor confirmado e da regra da parceria.";
-            form.elements.esp_parceiro_nome.value = pastore.partner.nome;
-            if (!form.elements.esp_modalidade.value) {
-              form.elements.esp_modalidade.value = "clinica_parceira";
-            }
+              "O paciente não paga a SoproLife. Este exame entra no fechamento mensal " +
+              "da Pastore sem criar recebimento ou valor individual.";
           }
         }
       }
@@ -1016,8 +1038,9 @@
         }
         const tipo = tipoAtual();
         if (!tipo) throw new Error("Escolha o tipo do atendimento.");
-        if (tipo === TIPO_PASTORE && pastore.erro) {
-          throw new Error("Pastore indisponível: " + pastore.erro);
+        if (tipo === TIPO_PASTORE && (pastore.erro || !pastore.unidades.length)) {
+          throw new Error("Pastore indisponível: " +
+            (pastore.erro || "nenhuma unidade operacional ativa."));
         }
         return picker.resolve().then((pessoa) => {
           const payload = {
@@ -1067,17 +1090,19 @@
     if (!val(form, "esp_data")) throw new Error("Informe a data do exame.");
     bloco.data_exame = val(form, "esp_data");
     if (val(form, "esp_bd") !== "") bloco.broncodilatador = val(form, "esp_bd") === "true";
-    setIf(bloco, "modalidade", val(form, "esp_modalidade"));
-    setIf(bloco, "local_atendimento", val(form, "esp_local"));
-    setIf(bloco, "origem", val(form, "esp_origem"));
     setIf(bloco, "responsavel", val(form, "esp_responsavel"));
     setIf(bloco, "observacao", val(form, "esp_observacao"));
     setIf(bloco, "proximo_followup", val(form, "esp_followup"));
     if (tipo === TIPO_PASTORE) {
-      const unidade = val(form, "esp_unidade");
+      const unidade = pastore.unidades.length === 1
+        ? pastore.unidades[0].id : val(form, "esp_unidade");
       if (!unidade) throw new Error("Espirometria Pastore exige a unidade operacional.");
       bloco.partner_id = pastore.partner.id;
       bloco.partner_unit_id = unidade;
+    } else {
+      setIf(bloco, "modalidade", val(form, "esp_modalidade"));
+      setIf(bloco, "local_atendimento", val(form, "esp_local"));
+      setIf(bloco, "origem", val(form, "esp_origem"));
     }
     return bloco;
   }
@@ -1104,6 +1129,8 @@
   }
 
   function montarFinanceiro(form, tipo) {
+    // Pastore não cria nem envia controles de pagamento do paciente.
+    if (tipo === TIPO_PASTORE) return null;
     const financeiro = {};
     if (TIPOS_COM_ESPIROMETRIA.indexOf(tipo) !== -1) {
       const valor = parseMoneyBR(val(form, "esp_valor"));

@@ -51,6 +51,23 @@ def install_error_handling(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def validation_exc(request: Request, exc: RequestValidationError):
         # fail-closed: entrada inválida nunca é aceita parcialmente
+        # M22: esta mensagem fixa é de domínio e não contém input/PII. O caso
+        # precisa ser explícito para um cliente obsoleto entender por que o
+        # bloco financeiro Pastore foi recusado, sem abrir os demais detalhes
+        # livres do Pydantic na resposta.
+        pastore_message = (
+            "Espirometria Pastore não aceita pagamento direto do paciente."
+        )
+        if any(
+            str((e.get("ctx") or {}).get("error", "")) == pastore_message
+            for e in exc.errors()
+        ):
+            return _envelope(
+                request,
+                422,
+                "pagamento_direto_pastore_proibido",
+                pastore_message,
+            )
         erros = [
             {"campo": ".".join(str(p) for p in e["loc"]), "tipo": e["type"]}
             for e in exc.errors()

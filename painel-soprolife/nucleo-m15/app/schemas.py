@@ -594,6 +594,10 @@ class AtendimentoCreate(StrictModel):
                 raise ValueError("Espirometria Pastore exige o parceiro.")
             if not exame.partner_unit_id:
                 raise ValueError("Espirometria Pastore exige a unidade operacional.")
+            if self.financeiro is not None:
+                raise ValueError(
+                    "Espirometria Pastore não aceita pagamento direto do paciente."
+                )
         elif exame is not None and (exame.partner_id or exame.partner_unit_id):
             # Atendimento SoproLife (inclusive o combinado) NUNCA é Pastore.
             raise ValueError(
@@ -608,6 +612,32 @@ class AtendimentoCreate(StrictModel):
             if fin.consulta is not None and not precisa_consulta:
                 raise ValueError("Financeiro de consulta sem consulta no tipo.")
         return self
+
+
+StatusFechamentoPastore = Literal[
+    "incluido", "enviado", "a_receber", "recebido", "cancelado"
+]
+
+
+class PastoreSettlementCreate(StrictModel):
+    partner_unit_id: str
+    competencia: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    observacao: str | None = Field(default=None, max_length=4000)
+
+
+class PastoreSettlementUpdate(StrictModel):
+    # "recebido" só nasce pelo endpoint de recebimento, que cria o recibo.
+    status: Literal["incluido", "enviado", "a_receber", "cancelado"] | None = None
+    valor_total: Money | None = None
+    data_envio: date | None = None
+    observacao: str | None = Field(default=None, max_length=4000)
+
+
+class PastoreSettlementReceive(StrictModel):
+    valor_confirmado: Money
+    data_recebimento: date
+    forma_pagamento: FormaPagamento
+    idempotency_key: str = Field(min_length=4, max_length=64)
 
 
 class ConciliacaoLoteRequest(StrictModel):

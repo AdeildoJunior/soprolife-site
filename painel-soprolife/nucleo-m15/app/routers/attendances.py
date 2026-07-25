@@ -47,7 +47,7 @@ from ..services.followup import (
     sync_followup_for_origin,
 )
 from ..services.idempotency import idempotent_create
-from ..services.integrity import ensure_partner_exists, ensure_unit_of_partner
+from ..services.pastore import canonical_pastore, pastore_unit
 
 router = APIRouter(tags=["atendimentos"])
 
@@ -188,26 +188,37 @@ def _create_attendance(
 
 def _criar_exame(db: Session, person: Person, payload: AtendimentoCreate) -> SpirometryExam:
     bloco = payload.espirometria
+    modalidade = bloco.modalidade
+    local_atendimento = bloco.local_atendimento
+    partner_id = bloco.partner_id
+    partner_unit_id = bloco.partner_unit_id
+    origem = bloco.origem
     if payload.tipo == TIPO_PASTORE:
-        partner = ensure_partner_exists(db, bloco.partner_id)
-        unit = ensure_unit_of_partner(db, bloco.partner_unit_id, partner.id)
-        if unit is None or not unit.ativo:
+        partner = canonical_pastore(db)
+        if bloco.partner_id != partner.id:
             raise _erro(
-                "unidade_inativa",
-                "A unidade operacional do parceiro precisa estar ativa.",
+                "parceiro_pastore_invalido",
+                "Espirometria Pastore exige o parceiro Pastore canônico.",
             )
+        unit = pastore_unit(db, bloco.partner_unit_id, partner)
+        # Estes campos são domínio derivado, não escolhas do cliente.
+        modalidade = "clinica_parceira"
+        local_atendimento = unit.nome
+        partner_id = partner.id
+        partner_unit_id = unit.id
+        origem = partner.nome
 
     def factory(key, fingerprint):
         exam = SpirometryExam(
             public_code=allocate_public_code(db, "spirometry_exams"),
             person_id=person.id,
-            modalidade=bloco.modalidade,
-            local_atendimento=bloco.local_atendimento,
-            partner_id=bloco.partner_id,
-            partner_unit_id=bloco.partner_unit_id,
+            modalidade=modalidade,
+            local_atendimento=local_atendimento,
+            partner_id=partner_id,
+            partner_unit_id=partner_unit_id,
             status=bloco.status,
             broncodilatador=bloco.broncodilatador,
-            origem=bloco.origem,
+            origem=origem,
             responsavel=bloco.responsavel,
             idempotency_key=key,
             idempotency_fingerprint=fingerprint,
@@ -274,6 +285,13 @@ def _criar_financeiro(
     consultation: Consultation | None,
 ) -> list[dict]:
     fin = payload.financeiro
+    if payload.tipo == TIPO_PASTORE:
+        if fin is not None:
+            raise _erro(
+                "pagamento_direto_pastore_proibido",
+                "Espirometria Pastore não aceita pagamento direto do paciente.",
+            )
+        return []
     if fin is None:
         return []
     lancamentos: list[dict] = []

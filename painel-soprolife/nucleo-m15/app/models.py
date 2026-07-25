@@ -580,15 +580,52 @@ class PartnerSettlement(Base, TimestampMixin):
     partnership_id: Mapped[str | None] = mapped_column(
         String(UUID_LEN), ForeignKey("partnerships.id")
     )
+    partner_unit_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("partner_units.id"), index=True
+    )
+    # Primeiro dia do mês de competência. O valor é derivado do mês dos
+    # exames incluídos, nunca da data do recebimento.
+    competencia: Mapped[date | None] = mapped_column(Date, index=True)
     periodo_inicio: Mapped[date | None] = mapped_column(Date)
     periodo_fim: Mapped[date | None] = mapped_column(Date)
     valor_total: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     status: Mapped[str] = mapped_column(String(20), default="aberto", nullable=False)
+    data_envio: Mapped[date | None] = mapped_column(Date)
     observacao: Mapped[str | None] = mapped_column(Text)
     __table_args__ = (
         CheckConstraint(
             "valor_total IS NULL OR valor_total >= 0", name="valor_total_nao_negativo"
         ),
+        UniqueConstraint(
+            "partner_id",
+            "partner_unit_id",
+            "competencia",
+            name="uq_partner_settlement_competencia_unidade",
+        ),
+    )
+
+
+class PartnerSettlementItem(Base):
+    """Exame individual pertencente a um fechamento mensal de parceiro.
+
+    O vínculo é não monetário. A unicidade global do exame impede que ele
+    participe de dois fechamentos; um fechamento cancelado deve ser reaberto
+    ou corrigido, preservando a trilha, em vez de duplicado.
+    """
+
+    __tablename__ = "partner_settlement_items"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    settlement_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("partner_settlements.id"), index=True, nullable=False
+    )
+    spirometry_exam_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("spirometry_exams.id"),
+        unique=True,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
 
 
@@ -621,6 +658,13 @@ class FinancialEntry(Base, TimestampMixin, LegacyMixin):
     )
     partner_referral_id: Mapped[str | None] = mapped_column(
         String(UUID_LEN), ForeignKey("partner_referrals.id")
+    )
+    # Recebimento agregado de parceiro: no máximo UM lançamento por
+    # fechamento. Nunca se liga aos pacientes/exames individualmente.
+    partner_settlement_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("partner_settlements.id"),
+        unique=True,
     )
     idempotency_key: Mapped[str | None] = mapped_column(String(64), unique=True)
     idempotency_fingerprint: Mapped[str | None] = mapped_column(String(FINGERPRINT_LEN))

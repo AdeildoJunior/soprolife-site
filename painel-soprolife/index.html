@@ -678,6 +678,7 @@
           </div>
         </article>
 
+        <div id="pastoreFinanceIndicatorRoot"></div>
         <div id="conciliacaoExtraPastoreRoot"></div>
       </section>
 
@@ -741,6 +742,7 @@
         <div id="parceria-agenda"     class="parceria-pane"></div>
         <div id="parceria-financeiro" class="parceria-pane" hidden></div>
         <div id="parceria-pacientes"  class="parceria-pane" hidden></div>
+        <div id="pastoreSettlementRoot"></div>
       </section>
 
 
@@ -919,6 +921,10 @@
   <!-- Central de Cadastros (M16): fluxo canônico ÚNICO de entrada de dados.
        Depende do cliente compartilhado window.SoproM15 (script acima). -->
   <script src="./js/central-cadastros.js?v=2026072501" defer></script>
+  <!-- M22: fechamento mensal da Pastore. O exame permanece não monetário;
+       o módulo cria um único recibo agregado somente após confirmação. -->
+  <link rel="stylesheet" href="./css/pastore-settlement.css?v=2026072501">
+  <script src="./js/pastore-settlement.js?v=2026072501" defer></script>
   <!-- Conciliação de exames extra-Pastore (M18). Depende de window.SoproM15. -->
   <script src="./js/financeiro-conciliacao.js?v=2026072402" defer></script>
   <!-- CRM Pacientes e Acompanhamento (M19): ÚNICA implementação de

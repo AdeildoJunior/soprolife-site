@@ -340,6 +340,7 @@ def ser_financial_entry(e: m.FinancialEntry) -> dict:
         "spirometry_exam_id": e.spirometry_exam_id,
         "consultation_id": e.consultation_id,
         "partner_referral_id": e.partner_referral_id,
+        "partner_settlement_id": e.partner_settlement_id,
         "idempotency_key": e.idempotency_key,
         **_legacy(e),
         **_stamps(e),

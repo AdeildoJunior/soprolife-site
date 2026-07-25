@@ -335,6 +335,18 @@
 
 .cad-so-pastore { grid-column: 1 / -1; }
 
+.cad-readonly-field output {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #d7e2ea);
+  border-radius: 8px;
+  background: var(--soft, #f5f9fb);
+  color: var(--navy, #0d2a43);
+  font-weight: 700;
+}
+
 /* ------------------------------------------------------------ responsivo */
 
 @media (max-width: 820px) {

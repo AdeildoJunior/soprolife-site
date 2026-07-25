@@ -22,6 +22,7 @@ from .routers import (
     marketing,
     operations,
     partners,
+    pastore,
     people,
 )
 
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(operations.router, prefix=prefix)
     app.include_router(attendances.router, prefix=prefix)
     app.include_router(partners.router, prefix=prefix)
+    app.include_router(pastore.router, prefix=prefix)
     app.include_router(followups.router, prefix=prefix)
     app.include_router(crm.router, prefix=prefix)
     app.include_router(marketing.router, prefix=prefix)
