@@ -1618,7 +1618,13 @@ validate_auditoria() {
 
   python3 - <<'PY'
 from pathlib import Path
-import json, re, sys
+import json, sys
+
+# Regras reais importadas de scripts/audit_summary_contract.py — fonte
+# única da verdade. NÃO duplicar o allowlist aqui: o M23 quebrou
+# exatamente porque o exportador e este check divergiram em silêncio.
+sys.path.insert(0, "painel-soprolife/scripts")
+from audit_summary_contract import validate_auditoria_payload
 
 path = Path("painel-soprolife/data/auditoria-summary.local.json")
 try:
@@ -1627,61 +1633,17 @@ except Exception as exc:
     print(f"  ERRO ao ler JSON: {exc}")
     sys.exit(1)
 
-source = data.get("source", {})
+erros = validate_auditoria_payload(data)
+if erros:
+    for e in erros:
+        print(f"  ERRO: {e}")
+    print(f"  {len(erros)} erro(s) encontrado(s).")
+    sys.exit(1)
+
+stats = data.get("stats", {})
 eventos = data.get("ultimos_eventos", [])
-
-if source.get("safeToDisplay") is not True:
-    print("  ERRO: auditoria-summary não marcado como safeToDisplay=true.")
-    sys.exit(1)
-if source.get("containsPersonalData") is not False:
-    print("  ERRO: auditoria-summary pode conter dado pessoal.")
-    sys.exit(1)
-
-# O summary de auditoria NUNCA carrega conteúdo de campo nem PII —
-# só os 6 campos da allowlist abaixo em cada evento.
-ALLOWED_EVENT_KEYS = {"timestamp", "acao", "entidade_tipo", "entidade_id",
-                      "operador", "resultado"}
-FORBIDDEN = [
-    "valor_anterior", "valor_novo", "derivado_de", "request_id",
-    "telefone", "whatsapp", "observacao", "observação",
-    "paciente_nome", "primeiro_nome", "nome completo", "laudo",
-    "pedido médico", "pedido medico", "cpf",
-    "access_token", "private_key", "client_secret",
-    "https://docs.google.com", "/spreadsheets/d/", "spreadsheet_id",
-]
-_CPF_RE  = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
-_FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
-
-errors = 0
-
-text = json.dumps(data, ensure_ascii=False).lower()
-for f in FORBIDDEN:
-    if f in text:
-        print(f"  ERRO: termo proibido '{f}' detectado em auditoria-summary.")
-        errors += 1
-if _CPF_RE.search(text):
-    print("  ERRO: padrão de CPF detectado em auditoria-summary.")
-    errors += 1
-
-for i, evt in enumerate(eventos):
-    extras = set(evt.keys()) - ALLOWED_EVENT_KEYS
-    if extras:
-        print(f"  ERRO: campo(s) fora da allowlist em evento [{i}]: {sorted(extras)}.")
-        errors += 1
-    for k, v in evt.items():
-        if k == "timestamp":
-            continue
-        if _FONE_RE.search(str(v)):
-            print(f"  ERRO: padrão de telefone no campo '{k}' do evento [{i}].")
-            errors += 1
-
-if errors == 0:
-    stats = data.get("stats", {})
-    print(f"  OK: auditoria-summary seguro — {stats.get('total_eventos', 0)} evento(s), "
-          f"{stats.get('erros', 0)} erro(s) de escrita, últimos={len(eventos)}.")
-else:
-    print(f"  {errors} erro(s) encontrado(s).")
-    sys.exit(1)
+print(f"  OK: auditoria-summary seguro — {stats.get('total_eventos', 0)} evento(s), "
+      f"{stats.get('erros', 0)} erro(s) de escrita, últimos={len(eventos)}.")
 PY
 }
 

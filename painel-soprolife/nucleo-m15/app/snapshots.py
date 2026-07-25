@@ -44,7 +44,9 @@ from .models import (
     PartnerSettlement,
     PartnerUnit,
     PartnerUnitConfig,
+    Role,
     SpirometryExam,
+    UserRole,
 )
 
 GENERATOR = "nucleo-m15/app/snapshots.py"
@@ -357,28 +359,86 @@ def build_contatos_b2b_summary(db: Session) -> dict:
     }
 
 
+#: Ordem de prioridade institucional para escolher UM papel por usuário
+#: quando há mais de um. Reflete a hierarquia real de app.security.ROLE_IMPLIES.
+_ROLE_PRIORIDADE = ("admin", "gestor", "operacional", "leitura")
+
+#: Fragmentos que, quando presentes no nome real da ação (dado do banco),
+#: sinalizam falha/rejeição/bloqueio. Não é inferência sobre o negócio —
+#: é o próprio texto de `acao` já gravado pela API no momento do evento.
+_ACAO_FALHA_FRAGMENTOS = ("falha", "erro", "rejeit", "bloqueado")
+
+
+def _resultado_from_acao(acao: str | None) -> str:
+    """Deriva 'resultado' do texto real de 'acao' — nunca fabrica sucesso.
+
+    O modelo AuditLog não tem uma coluna de resultado explícita. Se o nome
+    da ação não sinaliza falha/rejeição/bloqueio, o evento só existe na
+    trilha porque a transação correspondente foi commitada — dizer 'ok'
+    aqui é ler um fato do banco (a ação gravada), não inventar um veredito
+    que o banco não prova.
+    """
+    termo = (acao or "").lower()
+    if any(frag in termo for frag in _ACAO_FALHA_FRAGMENTOS):
+        return "falha"
+    return "ok"
+
+
 def build_auditoria_summary(db: Session) -> dict:
-    """Trilha de auditoria agregada. ``detalhes`` nunca é exportado."""
+    """Trilha de auditoria agregada, no contrato de segurança REAL validado
+    por scripts/check-access.sh (ALLOWED_EVENT_KEYS em
+    scripts/audit_summary_contract.py): cada evento carrega só
+    ``timestamp``, ``acao``, ``entidade_tipo``, ``entidade_id``,
+    ``operador`` e ``resultado``. ``detalhes`` e o UUID bruto de usuário
+    nunca são exportados — 'operador' é sempre um papel institucional
+    (admin/gestor/operacional/leitura), nunca nome pessoal nem UUID.
+    """
     total = db.scalar(select(func.count()).select_from(AuditLog)) or 0
+
+    # user_id (UUID interno, nunca exportado) -> papel institucional mais
+    # alto do usuário. Usuário sem papel ou não encontrado fica de fora do
+    # mapa: 'operador' vira None nesse evento — sem fonte confiável, não se
+    # inventa um valor.
+    papel_por_usuario: dict[str, str] = {}
+    for user_id, role_name in db.execute(
+        select(UserRole.user_id, Role.name).join(Role, Role.id == UserRole.role_id)
+    ).all():
+        atual = papel_por_usuario.get(user_id)
+        if atual is None or (
+            role_name in _ROLE_PRIORIDADE
+            and (atual not in _ROLE_PRIORIDADE
+                 or _ROLE_PRIORIDADE.index(role_name) < _ROLE_PRIORIDADE.index(atual))
+        ):
+            papel_por_usuario[user_id] = role_name
 
     por_acao = Counter()
     por_dia = Counter()
+    por_operador = Counter()
     erros = 0
-    for acao, ts in db.execute(select(AuditLog.acao, AuditLog.ts_utc)).all():
+    for acao, ts, user_id in db.execute(
+        select(AuditLog.acao, AuditLog.ts_utc, AuditLog.user_id)
+    ).all():
         por_acao[acao] += 1
         if ts:
             por_dia[ts.date().isoformat()] += 1
-        if "rejeit" in (acao or "") or "erro" in (acao or "") or "falha" in (acao or ""):
+        if _resultado_from_acao(acao) == "falha":
             erros += 1
+        operador = papel_por_usuario.get(user_id)
+        if operador:
+            por_operador[operador] += 1
 
     ultimos = [
-        {
+        _clean({
+            "timestamp": row.ts_utc.isoformat() if row.ts_utc else None,
             "acao": row.acao,
-            "entidade": row.entidade or "",
-            "ts": row.ts_utc.isoformat() if row.ts_utc else "",
-        }
+            "entidade_tipo": row.entidade,
+            "entidade_id": row.entidade_id,
+            "operador": papel_por_usuario.get(row.user_id),
+            "resultado": _resultado_from_acao(row.acao),
+        })
         for row in db.execute(
-            select(AuditLog.acao, AuditLog.entidade, AuditLog.ts_utc)
+            select(AuditLog.acao, AuditLog.entidade, AuditLog.entidade_id,
+                   AuditLog.user_id, AuditLog.ts_utc)
             .order_by(AuditLog.ts_utc.desc())
             .limit(_ULTIMOS_EVENTOS)
         ).all()
@@ -388,12 +448,15 @@ def build_auditoria_summary(db: Session) -> dict:
         "source": _source(
             "auditoria_summary",
             "Trilha append-only do PostgreSQL. O campo 'detalhes' e o "
-            "identificador de usuário nunca são exportados.",
+            "identificador de usuário nunca são exportados. 'operador' é o "
+            "papel institucional (admin/gestor/operacional/leitura) do "
+            "autor do evento, nunca nome pessoal ou UUID.",
         ),
         "stats": {
             "total_eventos": total,
             "erros": erros,
             "por_acao": dict(sorted(por_acao.items(), key=lambda kv: -kv[1])),
+            "por_operador": dict(sorted(por_operador.items(), key=lambda kv: -kv[1])),
         },
         "eventos_por_dia": [
             {"dia": d, "eventos": n} for d, n in sorted(por_dia.items())
@@ -625,6 +688,30 @@ def _load_pii_guard():
     return module
 
 
+# Caminho do contrato real de auditoria (mesma allowlist usada por
+# scripts/check-access.sh). Carregado do mesmo jeito que a guarda de PII:
+# check-access.sh vive fora do pacote da API.
+_AUDIT_CONTRACT_PATH = (
+    Path(__file__).resolve().parents[2] / "scripts" / "audit_summary_contract.py"
+)
+
+
+def _load_audit_contract():
+    """Carrega o contrato de auditoria compartilhado. Ausência é ERRO."""
+    import importlib.util
+
+    if not _AUDIT_CONTRACT_PATH.is_file():
+        raise RuntimeError(f"Contrato de auditoria não encontrado em {_AUDIT_CONTRACT_PATH}")
+    spec = importlib.util.spec_from_file_location(
+        "_m23_audit_contract", _AUDIT_CONTRACT_PATH
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Contrato de auditoria ilegível em {_AUDIT_CONTRACT_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _guard_rules(guard) -> dict:
     return guard._FILE_RULESETS[PII_RULESET]
 
@@ -679,15 +766,24 @@ def export_snapshots(db: Session, out_dir: Path, *, write: bool = False) -> dict
 
     guard = _load_pii_guard()
     rules = _guard_rules(guard)
+    audit_contract = _load_audit_contract()
 
     for name in SNAPSHOT_FILES:
         payload = BUILDERS[name](db)
         payloads[name] = payload
-        # Duas camadas: chaves proibidas (estrutural, aqui) e a guarda de PII
-        # compartilhada do painel (conteúdo: telefone, CPF, e-mail, token,
-        # termo clínico, URL de planilha).
+        # Camadas de validação antes de qualquer escrita: chaves proibidas
+        # (estrutural, aqui), a guarda de PII compartilhada do painel
+        # (conteúdo: telefone, CPF, e-mail, token, termo clínico, URL de
+        # planilha) e, para a auditoria especificamente, o MESMO contrato
+        # real que scripts/check-access.sh usa — a divergência entre essas
+        # duas pontas foi exatamente o que quebrou o primeiro deploy do M23.
         problemas.extend(validate_snapshot(name, payload))
         problemas.extend(guard.validate_summary(payload, rules, context=name))
+        if name == "auditoria-summary.local.json":
+            problemas.extend(
+                f"{name}: {msg}"
+                for msg in audit_contract.validate_auditoria_payload(payload)
+            )
         resultados.append({"arquivo": name, "chaves": sorted(payload.keys())})
 
     if problemas:

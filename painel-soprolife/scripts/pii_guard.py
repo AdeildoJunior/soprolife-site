@@ -228,8 +228,15 @@ _FILE_RULESETS = {
             "local_atendimento", "empresa", "periodo", "label", "value",
             "variation", "type", "official_source", "generator", "nota",
             "servico", "status", "etapa", "tipo", "origem", "canal",
-            "modalidade", "responsavel", "acao", "entidade", "categoria",
+            "modalidade", "responsavel", "acao", "categoria",
             "dia_semana", "horario", "mes", "dia", "key",
+            # Auditoria (M23, contrato real de scripts/check-access.sh via
+            # scripts/audit_summary_contract.py): entidade_tipo é nome de
+            # tabela/domínio (ex.: "leads", "partners"); operador é papel
+            # institucional (admin/gestor/operacional/leitura); resultado é
+            # "ok"/"falha" derivado do próprio texto de 'acao'; timestamp é
+            # ISO 8601. Nenhum é nome pessoal nem identificador de usuário.
+            "entidade_tipo", "entidade_id", "operador", "resultado", "timestamp",
         ],
         "chaves_permitidas_excecao": ["nota"],
     },

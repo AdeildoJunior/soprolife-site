@@ -16,6 +16,7 @@ Prova, sem rede e sem credencial, que:
 from __future__ import annotations
 
 import json
+import sys
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -34,10 +35,31 @@ from app.models import (
     PartnerUnitConfig,
     Person,
     SpirometryExam,
+    User,
 )
+from app.security import ensure_roles_exist, get_role, hash_password
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONTRACT = REPO_ROOT / "painel-soprolife" / "core" / "contracts" / "data-source-mode.json"
+
+# Mesmo módulo que scripts/check-access.sh importa em produção (mesmo
+# sys.path.insert relativo à raiz do repo). Este teste usa o contrato REAL,
+# não uma cópia fixture-only do allowlist — foi exatamente a divergência
+# entre as duas que derrubou o primeiro deploy do M23.
+sys.path.insert(0, str(REPO_ROOT / "painel-soprolife" / "scripts"))
+from audit_summary_contract import (  # noqa: E402
+    ALLOWED_EVENT_KEYS,
+    validate_auditoria_payload,
+)
+
+
+def _make_user_with_role(db, *, email: str, role: str) -> User:
+    ensure_roles_exist(db)
+    user = User(email=email, nome=f"Teste {role}", password_hash=hash_password("senha-teste-123"))
+    user.roles.append(get_role(db, role))
+    db.add(user)
+    db.commit()
+    return user
 
 
 # --------------------------------------------------------------------- fixtures
@@ -192,10 +214,119 @@ def test_leads_exportam_codigo_publico_sem_identificacao(povoado, tmp_path):
 def test_auditoria_nunca_exporta_detalhes(povoado, tmp_path):
     payload = snapshots.build_auditoria_summary(povoado)
     assert payload["stats"]["total_eventos"] == 1
-    # Nenhum evento exportado carrega a chave 'detalhes' nem seu conteúdo.
+    # Nenhum evento exportado carrega a chave 'detalhes' nem seu conteúdo,
+    # e nenhuma chave sai fora do contrato REAL validado por check-access.sh
+    # (não uma cópia fixture-only do allowlist — ver audit_summary_contract).
     for evento in payload["ultimos_eventos"]:
-        assert set(evento) == {"acao", "entidade", "ts"}
+        assert set(evento) <= ALLOWED_EVENT_KEYS, set(evento) - ALLOWED_EVENT_KEYS
     assert "nunca deve sair" not in json.dumps(payload, ensure_ascii=False)
+
+
+def test_auditoria_summary_passa_no_contrato_real_do_check_access(povoado, tmp_path):
+    """Regressão do M23: o primeiro deploy falhou porque o exportador e o
+    allowlist REAL de scripts/check-access.sh divergiram em silêncio. Este
+    teste roda o exportador de verdade e valida a saída com o MESMO
+    validador que check-access.sh usa em produção — não uma cópia."""
+    snapshots.export_snapshots(povoado, tmp_path, write=True)
+    caminho = tmp_path / "auditoria-summary.local.json"
+    payload = json.loads(caminho.read_text(encoding="utf-8"))
+
+    erros = validate_auditoria_payload(payload)
+    assert erros == [], erros
+
+    for evento in payload["ultimos_eventos"]:
+        assert set(evento) <= ALLOWED_EVENT_KEYS, set(evento) - ALLOWED_EVENT_KEYS
+
+
+def test_auditoria_contrato_real_rejeita_chave_extra():
+    """Prova a causa exata da falha do primeiro deploy: um evento com o
+    schema antigo/quebrado ({'acao', 'entidade', 'ts'}) precisa ser
+    REJEITADO pelo contrato real, exatamente como aconteceu em produção."""
+    payload_quebrado = {
+        "source": {"safeToDisplay": True, "containsPersonalData": False},
+        "ultimos_eventos": [
+            {"acao": "lead.criado", "entidade": "leads", "ts": "2026-01-01T00:00:00+00:00"},
+        ],
+    }
+    erros = validate_auditoria_payload(payload_quebrado)
+    assert erros, "o schema quebrado do primeiro deploy deveria falhar o contrato real"
+    assert any("entidade" in e and "ts" in e for e in erros)
+
+
+def test_auditoria_contrato_real_aceita_apenas_chaves_permitidas():
+    """Um evento com uma chave qualquer fora da allowlist falha, mesmo que
+    as demais chaves estejam corretas — sem exceção silenciosa."""
+    payload = {
+        "source": {"safeToDisplay": True, "containsPersonalData": False},
+        "ultimos_eventos": [
+            {"acao": "lead.criado", "entidade_tipo": "leads", "entidade_id": "l-1",
+             "operador": "operacional", "resultado": "ok",
+             "timestamp": "2026-01-01T00:00:00+00:00",
+             "campo_nao_permitido": "qualquer coisa"},
+        ],
+    }
+    erros = validate_auditoria_payload(payload)
+    assert erros
+    assert any("campo_nao_permitido" in e for e in erros)
+
+
+def test_auditoria_operador_e_papel_institucional_nunca_uuid_ou_nome(db):
+    """'operador' vem do papel institucional (admin/gestor/operacional/
+    leitura) do autor do evento — nunca o UUID interno nem o nome pessoal
+    do usuário, que jamais podem sair no summary seguro."""
+    usuario = _make_user_with_role(db, email="operador.teste@soprolife.local",
+                                   role="operacional")
+    db.add(AuditLog(acao="followup.criado", entidade="followups",
+                    entidade_id="fu-9", user_id=usuario.id,
+                    ts_utc=datetime.now(timezone.utc)))
+    db.commit()
+
+    payload = snapshots.build_auditoria_summary(db)
+    eventos = payload["ultimos_eventos"]
+    assert len(eventos) == 1
+    assert eventos[0]["operador"] == "operacional"
+    assert payload["stats"]["por_operador"] == {"operacional": 1}
+
+    texto = json.dumps(payload, ensure_ascii=False)
+    assert usuario.id not in texto
+    assert usuario.email not in texto
+    assert usuario.nome not in texto
+
+    erros = validate_auditoria_payload(payload)
+    assert erros == [], erros
+
+
+def test_auditoria_operador_ausente_quando_sem_usuario_ou_papel(db):
+    """Evento sem user_id: 'operador' não tem fonte confiável e não é
+    inventado — a chave fica ausente (o contrato permite eventos parciais,
+    só proíbe chaves extras)."""
+    db.add(AuditLog(acao="auth.token_emitido", entidade="users",
+                    entidade_id="u-1", ts_utc=datetime.now(timezone.utc)))
+    db.commit()
+
+    payload = snapshots.build_auditoria_summary(db)
+    evento = payload["ultimos_eventos"][0]
+    assert "operador" not in evento
+    assert payload["stats"]["por_operador"] == {}
+
+
+def test_auditoria_resultado_nao_fabrica_sucesso_para_falha(db):
+    """'resultado' é derivado do texto REAL de 'acao' já gravado pela API —
+    nunca 'ok' fabricado quando a própria ação sinaliza falha/rejeição."""
+    agora = datetime.now(timezone.utc)
+    db.add(AuditLog(acao="auth.falha", ts_utc=agora))
+    db.add(AuditLog(acao="pcmso.rejeitado", entidade="attendances",
+                    entidade_id="a-1", ts_utc=agora))
+    db.add(AuditLog(acao="followup.criado", entidade="followups",
+                    entidade_id="fu-1", ts_utc=agora))
+    db.commit()
+
+    payload = snapshots.build_auditoria_summary(db)
+    por_resultado = {e["acao"]: e["resultado"] for e in payload["ultimos_eventos"]}
+    assert por_resultado["auth.falha"] == "falha"
+    assert por_resultado["pcmso.rejeitado"] == "falha"
+    assert por_resultado["followup.criado"] == "ok"
+    assert payload["stats"]["erros"] == 2
 
 
 def test_financeiro_deriva_apenas_de_financial_entries(povoado):
