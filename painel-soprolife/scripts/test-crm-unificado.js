@@ -78,8 +78,11 @@ caso("state.followupPacientes deixou de existir no painel",
      appSrc.indexOf("state.followupPacientes") === -1);
 caso("nenhum módulo do CRM lê o JSON legado",
      wsSrc.indexOf("followup-pacientes.local.json") === -1);
-caso("o aviso de automação diz que o arquivo é histórico, não operacional",
-     appSrc.indexOf("O painel não lê mais followup-pacientes.local.json") !== -1);
+// M23 — antes bastava avisar que o arquivo era histórico. Agora o utilitário
+// legado é BLOQUEADO fail-closed, e a UI precisa dizer exatamente isso.
+caso("o aviso de automação diz que o utilitário legado está bloqueado",
+     appSrc.indexOf("Executar sem o escape explícito falha com exit 3") !== -1 &&
+     appSrc.indexOf("SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1") !== -1);
 caso("o script gerador continua existindo como evidência de migração",
      fs.existsSync(path.join(RAIZ, "scripts", "generate-followup-pacientes.py")));
 

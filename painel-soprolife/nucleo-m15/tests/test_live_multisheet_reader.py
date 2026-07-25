@@ -47,9 +47,31 @@ def _load_module():
     return mod
 
 
+@pytest.fixture(autouse=True)
+def _autorizar_utilitario_legado(monkeypatch):
+    """M23 — este módulo testa um utilitário LEGADO de Google Sheets.
+
+    Desde o M23 o painel opera em modo postgresql_only e o leitor multiaba
+    recusa executar (exit 3) sem decisão humana explícita. O teste declara
+    essa autorização, exatamente como um humano faria numa migração ou
+    perícia — e é justamente esse gesto explícito que a esteira automática
+    nunca executa, porque nenhuma unit systemd define esta variável.
+    """
+    monkeypatch.setenv("SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION", "1")
+
+
 @pytest.fixture()
 def mod():
     return _load_module()
+
+
+def test_leitor_legado_e_bloqueado_sem_autorizacao_humana(mod, monkeypatch):
+    """Sem o escape explícito, o leitor multiaba não roda — nem em teste."""
+    monkeypatch.delenv("SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION", raising=False)
+    monkeypatch.setattr(sys, "argv", ["read-multisheet-snapshot-adc.py", "--write"])
+    with pytest.raises(SystemExit) as exc:
+        mod.main()
+    assert exc.value.code == 3
 
 
 class _FixedDateTime:

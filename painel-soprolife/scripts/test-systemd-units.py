@@ -135,10 +135,48 @@ update_sh = (RAIZ / "scripts" / "update-local-data.sh").read_text(encoding="utf-
 caso("script tem lock não bloqueante",
      "flock -n -E 99" in update_sh)
 caso("pedido só é consumido depois da tentativa de Marketing",
-     update_sh.index('echo "5/15 - Atualizando Marketing & SEO..."') <
+     update_sh.index('echo "3/6 - Atualizando Marketing & SEO') <
      update_sh.index('_MKT_ATTEMPTED=1') <
      update_sh.index('rm -f -- "$_MKT_QUEUE"') <
-     update_sh.index('echo "6/15 - Atualizando Leads..."'))
+     update_sh.index('echo "4/6 - Atualizando timeline'))
+
+# ── M23: a unit de produção não pode depender de ADC pessoal ──────────────
+print()
+print("── M23 — fonte canônica PostgreSQL ──")
+# Só DIRETIVAS contam: o comentário da unit cita as variáveis de propósito,
+# para documentar o que foi removido e por quê.
+upd_directives_only = "\n".join(
+    linha for linha in upd_text.splitlines() if not linha.lstrip().startswith("#")
+)
+caso("unit não define CLOUDSDK_CONFIG (ADC pessoal removido)",
+     not re.search(r"(?m)^Environment=CLOUDSDK_CONFIG=", upd_directives_only))
+caso("unit não aponta para o venv de Google Sheets",
+     "venvs/google-sheets" not in upd_directives_only)
+caso("unit carrega o EnvironmentFile do núcleo (M15_DATABASE_URL)",
+     "EnvironmentFile=/opt/soprolife/secrets/m15.env" in upd_directives_only)
+caso("nenhuma unit libera o escape manual de migração legada",
+     not any(
+         re.search(r"(?m)^Environment=SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=",
+                   p.read_text(encoding="utf-8"))
+         for p in sorted(SYSTEMD.glob("*.service")) + sorted(SYSTEMD.glob("*.timer"))
+     ))
+caso("esteira gera snapshots a partir do PostgreSQL",
+     "exportar-snapshots" in update_sh)
+caso("esteira não executa nenhum leitor legado de planilha",
+     not any(nome in update_sh for nome in (
+         "read-sheets-summary-adc.py", "read-crm-clinicas-adc.py",
+         "read-leads-sheets.py", "read-financeiro-lancamentos-adc.py",
+         "read-parcerias-pastore-adc.py", "read-auditoria-adc.py",
+         "read-crm-contatos-b2b-adc.py", "generate-followup-pacientes.py",
+         "generate-followup-clinicas.py", "import-summary-csv.sh",
+         "sync-crm-clinicas.sh", "sync-dashboard-summary.sh")))
+caso("esteira preserva Search Console/GA4",
+     "read-marketing-seo-adc.py" in update_sh)
+caso("esteira nunca aponta para um JSON de exemplo/demo",
+     not any(demo in update_sh for demo in (
+         "data/leads.json", "data/crm-clinicas.json", "data/resumo.json",
+         "data/parcerias-pastore-summary.json", "data/saude-operacional.json",
+         "resumo-dashboard.csv", "SOPROLIFE_SUMMARY_CSV")))
 caso("pedido permanece pendente se conector não executa",
      'if [ "$_MKT_REQUESTED" -eq 1 ] && [ "$_MKT_ATTEMPTED" -eq 1 ]' in update_sh
      and "conector não chegou a executar" in update_sh)

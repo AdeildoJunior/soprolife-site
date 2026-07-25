@@ -288,42 +288,44 @@ class ProxyM15Tests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     server._m15_upstream()
 
-    def test_apps_script_existente_continua_funcionando(self):
-        class AppsResponse:
-            status = 200
+    def test_rota_apps_script_foi_desativada_no_m23(self):
+        """M23 — a escrita via Apps Script/Google Sheets deixou de existir.
 
-            def __enter__(self):
-                return self
+        Antes este teste provava que o encaminhamento para o Web App
+        continuava funcionando. Com o PostgreSQL como fonte operacional
+        única, o comportamento correto é recusar: um cliente antigo em cache
+        precisa receber um erro claro, nunca uma gravação em planilha.
+        """
+        payload = b'{"action":"registrar","data":{"campo":"valor"}}'
+        handler = Harness(
+            server._API_PATH,
+            {"Content-Length": str(len(payload)), "Content-Type": "application/json"},
+            payload,
+        )
+        handler.command = "POST"
+        handler.do_POST()
 
-            def __exit__(self, *_args):
-                return False
+        self.assertEqual(handler.statuses[-1], 410)
+        corpo = json.loads(handler.wfile.getvalue().decode("utf-8"))
+        self.assertFalse(corpo["ok"])
+        self.assertEqual(corpo["canonical_source"], "postgresql")
 
-            def read(self):
-                return b'{"ok":true,"id":"REG-001"}'
+    def test_servidor_nao_tem_mais_cliente_http_de_saida(self):
+        """Sem urllib.request não há como contatar o Apps Script."""
+        self.assertFalse(hasattr(server, "_CONFIG_PATH"))
+        fonte = (SCRIPT_DIR / "command-center-local-server.py").read_text(encoding="utf-8")
+        self.assertNotIn("urllib.request", fonte)
+        self.assertNotIn("apiToken", fonte)
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config = Path(temp_dir) / "config.json"
-            config.write_text(json.dumps({
-                "webAppUrl": "https://script.example/exec",
-                "apiToken": "token-server-side",
-                "instanceName": "instancia-sintetica",
-                "operatorName": "operador-sintetico",
-            }), encoding="utf-8")
-            payload = b'{"action":"registrar","data":{"campo":"valor"}}'
-            handler = Harness(
-                server._API_PATH,
-                {"Content-Length": str(len(payload)), "Content-Type": "application/json"},
-                payload,
-            )
-            handler.command = "POST"
-            with mock.patch.object(server, "_CONFIG_PATH", config), mock.patch.object(
-                server.urllib.request, "urlopen", return_value=AppsResponse()
-            ) as urlopen:
-                handler.do_POST()
-            self.assertEqual(handler.statuses[-1], 200)
-            forwarded = json.loads(urlopen.call_args.args[0].data)
-            self.assertEqual(forwarded["token"], "token-server-side")
-            self.assertEqual(forwarded["action"], "registrar")
+    def test_status_declara_rota_descomissionada(self):
+        handler = Harness(server._STATUS_PATH, {}, b"")
+        handler.command = "GET"
+        handler.do_GET()
+
+        corpo = json.loads(handler.wfile.getvalue().decode("utf-8"))
+        self.assertFalse(corpo["configured"])
+        self.assertTrue(corpo["decommissioned"])
+        self.assertEqual(corpo["canonical_source"], "postgresql")
 
 
 class FrontendConfigTests(unittest.TestCase):

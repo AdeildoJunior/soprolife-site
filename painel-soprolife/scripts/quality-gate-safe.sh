@@ -115,6 +115,14 @@ run "test-reconciliar-historico (estados/privacidade)" python3 painel-soprolife/
 run "test-manual-abas (manifesto → .gs em dia)" python3 painel-soprolife/scripts/test-manual-abas.py
 run "generate-manual-abas --check" python3 painel-soprolife/scripts/generate-manual-abas-gs.py --check
 
+secao "8a/10 M23 — PostgreSQL como fonte operacional exclusiva"
+run "data_source_mode --self-test (guarda fail-closed)" \
+  python3 painel-soprolife/scripts/data_source_mode.py --self-test
+run "test-m23-postgres-only (arquitetura sem Sheets)" \
+  python3 painel-soprolife/scripts/test-m23-postgres-only.py
+run "json.tool data-source-mode.json" \
+  python3 -m json.tool painel-soprolife/core/contracts/data-source-mode.json
+
 secao "8b/10 M14.3A.1 — contrato de frescor operacional (offline, clock injetado)"
 run "py_compile freshness_contract"        python3 -m py_compile painel-soprolife/scripts/freshness_contract.py
 run "py_compile read-marketing-seo-adc"    python3 -m py_compile painel-soprolife/scripts/read-marketing-seo-adc.py
