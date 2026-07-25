@@ -34,12 +34,16 @@ STALE = "stale"
 UNAVAILABLE = "unavailable"
 ERROR = "error"
 AUTH_REQUIRED_STATE = "authentication_required"
+# M21 — credencial durável presente, concessão de acesso pendente na
+# propriedade do Google. Distinto de authentication_required (ADC pessoal
+# vencido), que não deve mais aparecer em operação normal.
+CREDENTIAL_PENDING = "credential_pending"
 PUBLICATION_PENDING = "publication_pending"
 UNKNOWN = "unknown"
 
 ESTADOS_VALIDOS = {
     FRESH, STALE, UNAVAILABLE, ERROR,
-    AUTH_REQUIRED_STATE, PUBLICATION_PENDING, UNKNOWN,
+    AUTH_REQUIRED_STATE, CREDENTIAL_PENDING, PUBLICATION_PENDING, UNKNOWN,
 }
 
 # ── Exit codes padronizados ─────────────────────────────────────────────────
@@ -51,10 +55,13 @@ EXIT_UNAVAILABLE = 13
 EXIT_ERROR = 14
 EXIT_UNKNOWN = 15
 
+EXIT_CREDENTIAL_PENDING = 16
+
 EXIT_POR_ESTADO = {
     FRESH: EXIT_FRESH,
     STALE: EXIT_STALE,
     AUTH_REQUIRED_STATE: EXIT_AUTH_REQUIRED,
+    CREDENTIAL_PENDING: EXIT_CREDENTIAL_PENDING,
     UNAVAILABLE: EXIT_UNAVAILABLE,
     ERROR: EXIT_ERROR,
     PUBLICATION_PENDING: EXIT_STALE,
@@ -63,7 +70,7 @@ EXIT_POR_ESTADO = {
 
 # Ordem de severidade para agregar várias fontes (pior estado vence).
 _SEVERIDADE = [FRESH, STALE, PUBLICATION_PENDING, UNKNOWN,
-               UNAVAILABLE, ERROR, AUTH_REQUIRED_STATE]
+               UNAVAILABLE, ERROR, CREDENTIAL_PENDING, AUTH_REQUIRED_STATE]
 
 
 def pior_estado(estados) -> str:
@@ -80,6 +87,13 @@ def pior_estado(estados) -> str:
 # ── Catálogo de erros (mensagens fixas e seguras) ──────────────────────────
 CATALOGO_ERROS = {
     "AUTH_REQUIRED": "Reautenticação necessária. Execute a renovação do ADC manualmente.",
+    # M21 — a credencial durável (conta de serviço) existe e funciona, mas a
+    # propriedade do Google ainda não concedeu acesso de leitura a ela. É uma
+    # pendência de configuração humana pontual, NÃO um login expirado.
+    "CREDENTIAL_PENDING": (
+        "Credencial de serviço configurada, aguardando concessão de acesso de "
+        "leitura na propriedade do Google."
+    ),
     "PERMISSION_DENIED": "Acesso negado pela API. Verifique permissões da conta.",
     "SOURCE_NOT_FOUND": "Fonte não encontrada. Verifique a configuração local.",
     "DEPENDENCY_MISSING": "Dependência local ausente. Instale os requisitos do conector.",
@@ -91,6 +105,7 @@ CATALOGO_ERROS = {
 
 ESTADO_POR_ERRO = {
     "AUTH_REQUIRED": AUTH_REQUIRED_STATE,
+    "CREDENTIAL_PENDING": CREDENTIAL_PENDING,
     "PERMISSION_DENIED": AUTH_REQUIRED_STATE,
     "SOURCE_NOT_FOUND": UNAVAILABLE,
     "DEPENDENCY_MISSING": UNAVAILABLE,
@@ -185,6 +200,8 @@ def status_fonte(source_id: str, source_name: str, *,
         "errorMessageSafe": mensagem_segura(err) if err else None,
         "sourceAvailable": err is None,
         "authenticationRequired": ESTADO_POR_ERRO.get(err) == AUTH_REQUIRED_STATE if err else False,
+        # M21 — pendência de concessão de acesso, não de login expirado.
+        "credentialPending": ESTADO_POR_ERRO.get(err) == CREDENTIAL_PENDING if err else False,
         "publicationRequired": bool(publication_required),
         "warnings": list(warnings or []),
     }
@@ -201,8 +218,8 @@ def avaliar_frescor(fonte: dict, stale_after_hours, agora: datetime | None = Non
     last_success = fonte.get("lastSuccessAt")
     age = idade_segundos(last_success, agora)
 
-    if err and ESTADO_POR_ERRO.get(err) == AUTH_REQUIRED_STATE:
-        estado = AUTH_REQUIRED_STATE
+    if err and ESTADO_POR_ERRO.get(err) in (AUTH_REQUIRED_STATE, CREDENTIAL_PENDING):
+        estado = ESTADO_POR_ERRO[err]
     elif err in ("NOT_CONFIGURED", "DEPENDENCY_MISSING", "SOURCE_NOT_FOUND", "NETWORK_BLOCKED"):
         estado = UNAVAILABLE
     elif fonte.get("publicationRequired"):

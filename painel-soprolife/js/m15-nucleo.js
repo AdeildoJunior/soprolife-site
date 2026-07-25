@@ -10,10 +10,16 @@
  *   guarda não carregou). O restante do painel legado continua acessível.
  * - Backend: proxy de mesma origem → API própria em loopback
  *   (FastAPI + PostgreSQL/SQLite), ver nucleo-m15/README.md.
- * - Sessão: login por e-mail+senha (POST /auth/token) ou token colado
- *   (CLI emitir-token). Token mantido SOMENTE EM MEMÓRIA (nunca em
- *   localStorage/sessionStorage — reduz o impacto de XSS). Recarregar a
- *   página exige entrar de novo.
+ * - Sessão (M21): login por e-mail+senha (POST /auth/token) em um <form> de
+ *   verdade, compatível com gerenciador de senhas do navegador. A sessão vive
+ *   num cookie de mesma origem emitido pelo servidor — HttpOnly, Secure,
+ *   SameSite=Strict e Path restrito — então recarregar a página NÃO derruba
+ *   mais o login: GET /auth/sessao restaura a identidade no carregamento.
+ *   NENHUM token vai para localStorage/sessionStorage; o cookie é invisível
+ *   ao JavaScript e o csrf vive só em memória. "Sair" chama POST /auth/logout,
+ *   que revoga a sessão no servidor e apaga o cookie.
+ *   O token colado da CLI continua existindo para uso avançado e continua
+ *   somente em memória.
  * - Papéis: a UI oculta ações fora do papel (via /auth/me), mas a
  *   autorização REAL é sempre do servidor (require_role).
  * - Busca de pessoas via POST (corpo) — nome nunca vai para a URL/logs.
@@ -28,7 +34,11 @@
     apiBase: "/painel-soprolife/api/m15",
     tab: "visao",
     filters: {},
-    token: "", // em memória apenas; some ao recarregar (decisão de segurança)
+    token: "", // token bearer da CLI — em memória apenas, nunca persistido
+    // M21 — sessão de navegador: o cookie é HttpOnly (invisível aqui). Só o
+    // csrf fica em memória, e apenas para os métodos que mudam estado.
+    sessao: false,
+    csrf: "",
     user: null, // {id, nome, papeis, papeis_efetivos} via /auth/me
     // Contexto de acesso (M15.5A) — fail-closed: nasce bloqueado e só muda
     // depois que a guarda js/m15-security.js classifica a origem real.
@@ -55,7 +65,11 @@
       esc(blockedMessage()) + "</div>";
   }
 
-  function getToken() { return state.token; }
+  // Autenticado por qualquer um dos dois caminhos: cookie de sessão (normal)
+  // ou token bearer colado da CLI (avançado).
+  function autenticado() { return !!state.token || state.sessao === true; }
+
+  var STATE_CHANGING = { POST: 1, PATCH: 1, PUT: 1, DELETE: 1 };
 
   function can(role) {
     // Sem identidade resolvida (ex.: /auth/me falhou), não esconde nada:
@@ -99,10 +113,18 @@
       ));
     }
     options = options || {};
-    options.headers = Object.assign({
-      "Authorization": "Bearer " + getToken(),
-      "Content-Type": "application/json",
-    }, options.headers || {});
+    var base = { "Content-Type": "application/json" };
+    // Bearer só quando existe de fato: mandar "Bearer " vazio faria a API
+    // recusar antes de chegar a olhar o cookie de sessão.
+    if (state.token) base.Authorization = "Bearer " + state.token;
+    var metodo = String(options.method || "GET").toUpperCase();
+    if (!state.token && state.csrf && STATE_CHANGING[metodo]) {
+      base["X-CSRF-Token"] = state.csrf;
+    }
+    options.headers = Object.assign(base, options.headers || {});
+    // same-origin: o cookie de sessão viaja para o proxy do próprio painel e
+    // para mais nenhum lugar.
+    options.credentials = "same-origin";
     return fetch(state.apiBase + path, options).then(function (resp) {
       return resp.json().catch(function () { return {}; }).then(function (body) {
         if (!resp.ok) {
@@ -408,66 +430,93 @@
       area.innerHTML = blockedNotice();
       return;
     }
-    if (state.token && state.user) {
+    if (autenticado() && state.user) {
+      var origem = state.token
+        ? "Token da CLI — vive apenas em memória nesta aba."
+        : (state.sessaoPersistente
+          ? "Sessão salva neste dispositivo — continua após recarregar e reabrir o navegador."
+          : "Sessão deste navegador — continua após recarregar; encerra ao fechar o navegador.");
       area.innerHTML =
         '<div class="m15-session">' +
         '  <span class="m15-session-user"><strong>Conectado:</strong> ' + esc(state.user.nome) +
         '    <span class="m15-pill">' + esc((state.user.papeis || []).join(", ")) + "</span></span>" +
-        '  <button class="m15-btn m15-btn-sec" id="m15Sair">Sair</button>' +
+        '  <button class="m15-btn m15-btn-sec" id="m15Sair" type="button">Sair</button>' +
         '  <span class="m15-muted" id="m15ApiStatus"></span>' +
-        '  <span class="m15-muted">Sessão só em memória — recarregou, entre de novo.</span>' +
+        '  <span class="m15-muted">' + esc(origem) + "</span>" +
         "</div>";
       document.getElementById("m15Sair").addEventListener("click", function () {
-        state.token = "";
-        state.user = null;
-        renderAuthArea();
-        renderTabs();
-        render();
-        notifySession();
+        encerrarSessao();
       });
     } else {
+      // FORMULÁRIO REAL (M21): <form> com submit de verdade, name e
+      // autocomplete padrão, para que Chrome e Firefox reconheçam o par de
+      // credenciais e ofereçam salvar depois do login bem-sucedido.
+      // O campo de token da CLI fica fora deste form, dentro de <details>,
+      // para não confundir a heurística do gerenciador de senhas.
       area.innerHTML =
         '<div class="m15-login">' +
-        '  <div class="m15-login-grid">' +
-        '    <label class="m15-field"><span class="m15-field-label">E-mail</span>' +
-        '      <input type="email" id="m15Email" placeholder="voce@soprolife.com.br" autocomplete="off"></label>' +
-        '    <label class="m15-field"><span class="m15-field-label">Senha</span>' +
-        '      <input type="password" id="m15Senha" placeholder="••••••••••" autocomplete="off"></label>' +
-        '    <button class="m15-btn" id="m15Entrar">Entrar</button>' +
-        "  </div>" +
+        '  <form class="m15-login-grid" id="m15LoginForm" method="post" action="#" autocomplete="on">' +
+        '    <label class="m15-field" for="m15Email"><span class="m15-field-label">E-mail</span>' +
+        '      <input type="email" id="m15Email" name="email" autocomplete="username" ' +
+        '        required placeholder="voce@soprolife.com.br"></label>' +
+        '    <label class="m15-field" for="m15Senha"><span class="m15-field-label">Senha</span>' +
+        '      <input type="password" id="m15Senha" name="password" autocomplete="current-password" ' +
+        '        required placeholder="••••••••••"></label>' +
+        '    <button class="m15-btn" id="m15Entrar" type="submit">Entrar</button>' +
+        '    <label class="m15-field m15-field-check m15-login-manter" for="m15Manter">' +
+        '      <input type="checkbox" id="m15Manter" name="manter_conectado" value="1">' +
+        '      <span>Manter conectado neste dispositivo</span></label>' +
+        "  </form>" +
         '  <span class="m15-muted m15-login-status" id="m15ApiStatus">Proxy/API: verificando…</span>' +
         '  <details class="m15-login-alt">' +
         '    <summary>Entrar com token da CLI (avançado)</summary>' +
         '    <div class="m15-login-grid">' +
-        '      <label class="m15-field"><span class="m15-field-label">Token da API ' +
+        '      <label class="m15-field" for="m15Token"><span class="m15-field-label">Token da API ' +
         "(python -m app.cli emitir-token)</span>" +
-        '        <input type="password" id="m15Token" placeholder="cole o token da API aqui" autocomplete="off"></label>' +
-        '      <button class="m15-btn m15-btn-sec" id="m15TokenSave">Usar token</button>' +
+        '        <input type="password" id="m15Token" autocomplete="off" ' +
+        '          placeholder="cole o token da API aqui"></label>' +
+        '      <button class="m15-btn m15-btn-sec" id="m15TokenSave" type="button">Usar token</button>' +
         "    </div>" +
-        '    <span class="m15-muted">O token vive apenas em memória — nunca em localStorage/sessionStorage.</span>' +
+        '    <span class="m15-muted">O token colado vive apenas em memória — nunca em ' +
+        "localStorage/sessionStorage.</span>" +
         "  </details>" +
+        '  <span class="m15-muted">Sem "manter conectado", a sessão termina quando o ' +
+        "navegador fecha. Nenhum token é gravado no navegador em nenhum dos casos.</span>" +
         "</div>";
-      var doLogin = function () {
-        var email = document.getElementById("m15Email").value.trim();
-        var senha = document.getElementById("m15Senha").value;
+
+      var form = document.getElementById("m15LoginForm");
+      form.addEventListener("submit", function (ev) {
+        ev.preventDefault(); // navegação é nossa; o submit real dispara o gerenciador
+        var campoEmail = document.getElementById("m15Email");
+        var campoSenha = document.getElementById("m15Senha");
+        var email = campoEmail.value.trim();
+        var senha = campoSenha.value;
         if (!email || !senha) { toast("Informe e-mail e senha.", "erro"); return; }
         var btn = document.getElementById("m15Entrar");
         btn.disabled = true;
-        // senha só trafega no corpo do POST via proxy local — nunca em URL
+        var manter = !!document.getElementById("m15Manter").checked;
+        // senha só trafega no corpo do POST via proxy local — nunca em URL.
+        // O campo NÃO é limpo aqui: o navegador precisa ver o par credencial
+        // + resposta de sucesso para oferecer salvar. Ele é limpo depois.
         api("/auth/token", {
-          method: "POST", body: JSON.stringify({ email: email, password: senha }),
+          method: "POST",
+          body: JSON.stringify({ email: email, password: senha, manter_conectado: manter }),
         }).then(function (resp) {
-          state.token = resp.token;
-          document.getElementById("m15Senha").value = "";
+          // Sessão por cookie: o token bearer da resposta é deliberadamente
+          // IGNORADO no navegador — nada de credencial em memória longa.
+          state.token = "";
+          state.sessao = true;
+          state.csrf = resp && resp.csrf ? resp.csrf : "";
+          state.sessaoPersistente = !!(resp && resp.sessao && resp.sessao.persistente);
           return afterAuth();
         }).catch(function (err) {
           btn.disabled = false;
           toast("Erro no login: " + (err.message || err), "erro");
+        }).finally(function () {
+          // Só depois de a resposta terminar: gerenciadores de senha veem o
+          // submit completo, mas a credencial nunca permanece no DOM.
+          campoSenha.value = "";
         });
-      };
-      document.getElementById("m15Entrar").addEventListener("click", doLogin);
-      document.getElementById("m15Senha").addEventListener("keydown", function (ev) {
-        if (ev.key === "Enter") doLogin();
       });
       document.getElementById("m15TokenSave").addEventListener("click", function () {
         var tokenInput = document.getElementById("m15Token");
@@ -475,10 +524,51 @@
         state.token = tokenInput.value.trim();
         tokenInput.value = "";
         if (!state.token) { toast("Cole um token primeiro.", "erro"); return; }
+        state.sessao = false;
+        state.csrf = "";
         afterAuth();
       });
       checkApi();
     }
+  }
+
+  // Encerra a sessão de verdade: o servidor revoga a linha e apaga o cookie.
+  // Depois disso outro usuário pode entrar no mesmo navegador sem herdar nada.
+  function encerrarSessao(mensagem) {
+    var eraSessao = state.sessao === true;
+    var limpar = function () {
+      state.token = "";
+      state.sessao = false;
+      state.csrf = "";
+      state.sessaoPersistente = false;
+      state.user = null;
+      renderAuthArea();
+      renderTabs();
+      render();
+      notifySession();
+      if (mensagem) toast(mensagem, "erro");
+    };
+    if (!eraSessao) { limpar(); return Promise.resolve(); }
+    return api("/auth/logout", { method: "POST" })
+      .catch(function () { /* sair nunca falha para o operador */ })
+      .then(limpar);
+  }
+
+  // Restauração automática ao carregar a página (o que faz o F5 não deslogar).
+  function restaurarSessao() {
+    if (!state.access.secure) return Promise.resolve(false);
+    return api("/auth/sessao").then(function (resp) {
+      state.sessao = true;
+      state.csrf = resp && resp.csrf ? resp.csrf : "";
+      state.sessaoPersistente = !!(resp && resp.sessao && resp.sessao.persistente);
+      state.user = (resp && resp.usuario) || null;
+      return true;
+    }).catch(function () {
+      state.sessao = false;
+      state.csrf = "";
+      state.user = null;
+      return false; // sem sessão viva: segue no formulário de login
+    });
   }
 
   // Ouvintes externos de sessão (Central de Cadastros) — avisados a cada
@@ -496,6 +586,9 @@
     }).catch(function () {
       state.user = null; // segue sem ocultar ações; servidor decide (403)
     }).then(function () {
+      // Sucesso confirmado: só AGORA o formulário (e com ele o campo de
+      // senha) sai do DOM. A senha nunca entrou em state.
+
       renderAuthArea();
       renderTabs();
       render();
@@ -1993,7 +2086,7 @@
       var items = byId(data.itens);
       body().innerHTML =
         '<div class="m15-aviso">Administração de usuários — exclusiva do papel admin. ' +
-        "Senhas nunca aparecem em URL, log ou auditoria; redefinir senha derruba os tokens antigos na hora.</div>" +
+        "Senhas nunca aparecem em URL, log ou auditoria; redefinir senha derruba tokens e sessões antigos na hora.</div>" +
         table(
           ["E-mail", "Nome", "Papéis", "Estado", "Criado em", "Ações"],
           data.itens.map(function (u) {
@@ -2048,7 +2141,7 @@
             fld("Estado", sel("ativo", [["true", "ativo"], ["false", "inativo"]], u.ativo ? "true" : "false"), 6) +
             '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
             closeEditButton() + "</div></form>" +
-            '<p class="m15-muted">Inativar derruba os tokens do usuário imediatamente. ' +
+            '<p class="m15-muted">Inativar derruba tokens e sessões do usuário imediatamente. ' +
             "O último admin ativo nunca pode ser rebaixado ou inativado.</p></div>",
             function (box) {
               wireClose(box);
@@ -2080,7 +2173,7 @@
             fld("Confirmar", inp("senha2", "", 'type="password" required minlength="10" autocomplete="new-password"'), 6) +
             '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Redefinir senha</button> ' +
             closeEditButton() + "</div></form>" +
-            '<p class="m15-muted">Todos os tokens antigos deste usuário serão revogados imediatamente.</p></div>',
+            '<p class="m15-muted">Todos os tokens e sessões antigos deste usuário serão revogados imediatamente.</p></div>',
             function (box) {
               wireClose(box);
               box.querySelector("#m15FormSenha").addEventListener("submit", function (ev) {
@@ -2145,14 +2238,22 @@
       body().innerHTML = blockedNotice();
       return;
     }
-    if (!state.token) {
+    if (!autenticado()) {
       body().innerHTML =
         '<div class="m15-empty">Entre com e-mail e senha (ou cole um token da CLI) para operar o núcleo M15.</div>';
       return;
     }
     var loader = loaders[state.tab] || loaders.visao;
     body().innerHTML = '<div class="m15-empty">Carregando…</div>';
-    loader().then(function () { attachDates(); }).catch(showError);
+    loader().then(function () { attachDates(); }).catch(function (err) {
+      // Sessão vencida ou revogada no servidor: cai fechado, com mensagem
+      // clara, em vez de deixar a tela travada num erro genérico.
+      if (err && err.status === 401 && state.sessao) {
+        encerrarSessao("Sua sessão expirou. Entre novamente.");
+        return;
+      }
+      showError(err);
+    });
   }
 
   function checkApi() {
@@ -2212,6 +2313,15 @@
       render();
     });
     render();
+
+    // M21 — restaura a sessão do cookie ANTES de qualquer interação: é isso
+    // que faz recarregar a página manter o mesmo usuário conectado.
+    restaurarSessao().then(function (ok) {
+      renderAuthArea();
+      renderTabs();
+      render();
+      if (ok) notifySession();
+    });
   }
 
   function boot() {
@@ -2239,36 +2349,41 @@
     }
   });
 
-  // Cliente compartilhado do núcleo M15 — usado pela Central de Cadastros.
-  // O token continua SOMENTE em memória, dentro deste módulo; a Central
-  // nunca vê a credencial, apenas dispara chamadas autenticadas.
+  // Cliente compartilhado do núcleo M15 — usado pela Central de Cadastros,
+  // pelo CRM de pacientes e pela conciliação financeira. Nenhum consumidor vê
+  // a credencial: o cookie de sessão é HttpOnly e o token da CLI, quando
+  // existe, fica nesta variável de módulo. hasToken() continua sendo o nome
+  // histórico da pergunta "estou autenticado?" para não quebrar consumidores.
   window.SoproM15 = {
     api: api,
     can: can,
     idemKey: idemKey,
-    hasToken: function () { return !!state.token; },
+    hasToken: autenticado,
+    hasSession: function () { return state.sessao === true; },
     getUser: function () { return state.user; },
     access: function () { classifyAccess(); return state.access; },
-    login: function (email, senha) {
+    login: function (email, senha, manterConectado) {
       return api("/auth/token", {
-        method: "POST", body: JSON.stringify({ email: email, password: senha }),
+        method: "POST",
+        body: JSON.stringify({
+          email: email, password: senha, manter_conectado: !!manterConectado,
+        }),
       }).then(function (resp) {
-        state.token = resp.token;
+        state.token = "";
+        state.sessao = true;
+        state.csrf = resp && resp.csrf ? resp.csrf : "";
+        state.sessaoPersistente = !!(resp && resp.sessao && resp.sessao.persistente);
         return afterAuth();
       });
     },
     useToken: function (token) {
       state.token = (token || "").trim();
+      state.sessao = false;
+      state.csrf = "";
       return afterAuth();
     },
-    logout: function () {
-      state.token = "";
-      state.user = null;
-      renderAuthArea();
-      renderTabs();
-      render();
-      notifySession();
-    },
+    restore: restaurarSessao,
+    logout: function () { return encerrarSessao(); },
     onSessionChange: function (cb) {
       if (typeof cb === "function") sessionListeners.push(cb);
     },

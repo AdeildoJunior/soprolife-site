@@ -9,6 +9,7 @@
     "unavailable",
     "error",
     "authentication_required",
+    "credential_pending",
     "publication_pending",
     "unknown"
   ],
@@ -20,7 +21,8 @@
     "12": "schema_invalid — arquivo/payload não cumpre o contrato",
     "13": "unavailable — fonte indisponível ou não configurada",
     "14": "error — erro de sincronização não classificado",
-    "15": "unknown — estado não determinável (ex.: nunca sincronizado)"
+    "15": "unknown — estado não determinável (ex.: nunca sincronizado)",
+    "16": "credential_pending — identidade durável configurada, aguardando concessão de leitura"
   },
   "campos_por_fonte": {
     "sourceId": "identificador estável da fonte (kebab-case, ex.: search-console)",
@@ -38,11 +40,13 @@
     "errorMessageSafe": "mensagem do catálogo fixo — NUNCA a exceção crua",
     "sourceAvailable": "boolean — a fonte respondeu na última tentativa",
     "authenticationRequired": "boolean — precisa de reautenticação humana",
+    "credentialPending": "boolean — conta de serviço aguarda acesso de leitura na propriedade",
     "publicationRequired": "boolean — precisa de publicação humana (Apps Script)",
     "warnings": "lista de mensagens seguras (sem segredo, sem path privado)"
   },
   "catalogo_erros": {
     "AUTH_REQUIRED": "Reautenticação necessária. Execute a renovação do ADC manualmente.",
+    "CREDENTIAL_PENDING": "Credencial de serviço configurada, aguardando concessão de acesso de leitura na propriedade do Google.",
     "PERMISSION_DENIED": "Acesso negado pela API. Verifique permissões da conta.",
     "SOURCE_NOT_FOUND": "Fonte não encontrada. Verifique a configuração local.",
     "DEPENDENCY_MISSING": "Dependência local ausente. Instale os requisitos do conector.",
@@ -57,6 +61,7 @@
     "Gravação sempre atômica: temporário no mesmo diretório + validação + rename.",
     "Arquivo que não valida contra o contrato nunca substitui snapshot válido.",
     "Erro de autenticação aparece como 'reautenticação necessária', nunca como queda de tráfego.",
+    "Conta de serviço sem concessão na propriedade aparece como credential_pending, nunca como ADC expirado.",
     "GA4 e Search Console têm estados independentes.",
     "Gerar código (.gs) não é publicar: estado remoto do Google é publication_pending/unknown até registro humano.",
     "ageSeconds é sempre calculado na leitura com relógio injetável nos testes."

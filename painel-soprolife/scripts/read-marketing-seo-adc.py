@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
 """
-SoproLife OS Local Core — Marketing & SEO connector (ADC).
+SoproLife OS Local Core — Marketing & SEO connector (leitura).
 
-Lê dados agregados do Google Search Console e GA4 usando
-Application Default Credentials (gcloud). Nunca imprime
-property ID, URLs privadas, tokens ou credenciais.
+Lê dados agregados do Google Search Console e GA4. Nunca imprime property ID,
+URLs privadas, tokens ou credenciais.
+
+M21 — credencial DURÁVEL de leitura (a mudança que faz o timer parar de
+depender de um login humano que vence):
+  ordem de resolução, primeira que existir ganha —
+    1. SOPROLIFE_MARKETING_CREDENTIALS  (caminho explícito de conta de serviço)
+    2. /opt/soprolife/secrets/marketing-readonly.json   (padrão de produção)
+    3. GOOGLE_APPLICATION_CREDENTIALS   (honrado por google.auth.default)
+    4. ADC pessoal do gcloud            (SÓ desenvolvimento)
+  Com SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT=1 (o que a unit de produção
+  define) o passo 4 é PROIBIDO: sem conta de serviço o conector falha fechado
+  com CREDENTIAL_PENDING em vez de voltar a depender de ADC pessoal.
+  O tipo da credencial ("service_account" / "personal_adc") entra no snapshot
+  como diagnóstico; o e-mail, o project e a chave privada NUNCA entram.
 
 M14.3A.1 — contrato de frescor operacional:
   - snapshot schema v2 com sourceStatus por fonte (freshness-contract.json);
@@ -14,7 +26,10 @@ M14.3A.1 — contrato de frescor operacional:
     "sem tráfego";
   - exit codes padronizados (ver core/contracts/freshness-contract.json).
 
-Pré-requisito:
+Pré-requisito de produção (uma vez, por humano):
+    conta de serviço dedicada com acesso SOMENTE LEITURA concedido em
+    Search Console e GA4; chave em /opt/soprolife/secrets/ fora do Git.
+Pré-requisito de desenvolvimento (fallback):
     gcloud auth application-default login \\
         --scopes=https://www.googleapis.com/auth/webmasters.readonly,\\
                  https://www.googleapis.com/auth/analytics.readonly
@@ -28,14 +43,17 @@ Flags:
     --max-age-hours N   limite de frescor na avaliação (padrão: 26h)
     --output PATH       snapshot alternativo (testes/fixtures)
     --no-network        proíbe qualquer chamada externa (modos de teste)
+    --credential-check  só resolve e classifica a credencial (sem rede)
 
 Exit codes: 0=fresh · 10=stale · 11=autenticação · 12=schema · 13=indisponível
-            14=erro · 15=desconhecido
+            14=erro · 15=desconhecido · 16=credencial pendente
 """
 
 import argparse
 import json
+import os
 import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -67,6 +85,102 @@ _OUT_PUBLIC  = Path("painel-soprolife/data/marketing-seo.local.json")
 SC_SCOPE  = "https://www.googleapis.com/auth/webmasters.readonly"
 GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
 
+# ── Credencial durável de leitura (M21) ─────────────────────────────────────
+# Caminho padrão de produção. Fica FORA do Git por construção (/opt), com
+# permissão restrita, e nunca é lido pelo navegador.
+_SA_DEFAULT_PATH = Path("/opt/soprolife/secrets/marketing-readonly.json")
+_ENV_SA_PATH = "SOPROLIFE_MARKETING_CREDENTIALS"
+_ENV_REQUIRE_SA = "SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT"
+
+CRED_SERVICE_ACCOUNT = "service_account"
+CRED_PERSONAL_ADC = "personal_adc"
+CRED_NONE = "none"
+
+
+def _service_account_path():
+    """Caminho da conta de serviço, se houver. Nunca lê o conteúdo aqui."""
+    bruto = os.environ.get(_ENV_SA_PATH, "").strip()
+    if bruto:
+        p = Path(bruto).expanduser()
+        return p if p.is_file() else None
+    if _SA_DEFAULT_PATH.is_file():
+        return _SA_DEFAULT_PATH
+    gac = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
+    if gac:
+        p = Path(gac).expanduser()
+        return p if p.is_file() else None
+    return None
+
+
+def _requer_service_account() -> bool:
+    return os.environ.get(_ENV_REQUIRE_SA, "").strip() in ("1", "true", "yes", "sim")
+
+
+def _classificar_arquivo_credencial(path):
+    """Devolve o campo `type` do JSON — só o tipo, nunca e-mail nem chave."""
+    try:
+        dados = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(dados, dict):
+        return None
+    tipo = dados.get("type")
+    return tipo if isinstance(tipo, str) else None
+
+
+def _credencial_tem_permissao_restrita(path) -> bool:
+    """Aceita 0600/0640 etc.; qualquer acesso para `other` falha fechado."""
+    try:
+        return (Path(path).stat().st_mode & 0o007) == 0
+    except OSError:
+        return False
+
+
+def resolver_credencial(scopes, google_auth_default):
+    """Resolve a credencial de leitura e devolve (credentials, kind, erro).
+
+    Fail-closed: quando a conta de serviço é obrigatória e não existe (ou não
+    é de fato service_account), NÃO cai para ADC pessoal — devolve
+    CREDENTIAL_PENDING, que a UI mostra como "Credencial/configuração
+    pendente" em vez de "Reautenticação necessária".
+    """
+    sa_path = _service_account_path()
+    exige_sa = _requer_service_account()
+
+    if sa_path is not None:
+        if not _credencial_tem_permissao_restrita(sa_path):
+            return None, CRED_NONE, "CREDENTIAL_PENDING"
+        tipo = _classificar_arquivo_credencial(sa_path)
+        if tipo != "service_account":
+            # Arquivo existe mas não é conta de serviço: nunca usar às cegas.
+            return None, CRED_NONE, "CREDENTIAL_PENDING"
+        try:
+            from google.oauth2 import service_account
+        except ImportError:
+            return None, CRED_NONE, "DEPENDENCY_MISSING"
+        try:
+            creds = service_account.Credentials.from_service_account_file(
+                str(sa_path), scopes=list(scopes)
+            )
+        except Exception:
+            # Mensagem crua omitida de propósito: pode conter caminho/identidade.
+            return None, CRED_NONE, "CREDENTIAL_PENDING"
+        return creds, CRED_SERVICE_ACCOUNT, None
+
+    if exige_sa:
+        return None, CRED_NONE, "CREDENTIAL_PENDING"
+
+    # Desenvolvimento: ADC pessoal do gcloud. Vence com o tempo — por isso
+    # produção define SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT=1.
+    try:
+        creds, _proj = google_auth_default(scopes=list(scopes))
+    except Exception as exc:
+        codigo = fc.classificar_erro(exc)
+        return None, CRED_PERSONAL_ADC, (
+            codigo if codigo != "SYNC_FAILED" else "AUTH_REQUIRED"
+        )
+    return creds, CRED_PERSONAL_ADC, None
+
 # chave no snapshot, sourceId do contrato, nome de exibição
 _SOURCES_DEF = [
     ("searchConsole", "search-console", "Search Console"),
@@ -74,6 +188,17 @@ _SOURCES_DEF = [
 ]
 
 DEFAULT_STALE_HOURS = 26  # sincronização diária + margem
+
+# Retentativa limitada (M21): erro transitório de rede/quota não deve deixar o
+# painel "antigo" por 10 minutos inteiros, mas também não pode martelar a API.
+# Erro de credencial/permissão NÃO é retentado — não melhora tentando de novo.
+RETRY_MAX_TENTATIVAS = 3
+RETRY_BACKOFF_SEGUNDOS = (2, 6)      # espera entre tentativas (limitada)
+RETRY_NAO_RETENTAR = frozenset({
+    "AUTH_REQUIRED", "CREDENTIAL_PENDING", "PERMISSION_DENIED",
+    "NOT_CONFIGURED", "DEPENDENCY_MISSING", "NETWORK_BLOCKED",
+    "SOURCE_NOT_FOUND",
+})
 
 FORBIDDEN_OUTPUT = [
     "cpf", "refresh_token", "access_token", "client_secret",
@@ -413,7 +538,8 @@ def _warnings_seguros(raw_warnings, nome_fonte):
     return vistos
 
 
-def _montar_snapshot(cfg, prev, resultados, periodo, agora_iso, stale_h):
+def _montar_snapshot(cfg, prev, resultados, periodo, agora_iso, stale_h,
+                     cred_kind=CRED_NONE):
     """Monta o snapshot v2 preservando a última versão válida por fonte.
 
     resultados: {key: {"ok": bool, "data": dict, "raw_warnings": [...],
@@ -427,6 +553,8 @@ def _montar_snapshot(cfg, prev, resultados, periodo, agora_iso, stale_h):
         "schemaVersion": 2,
         "generatedAt": agora_iso,
         "lastAttemptAt": agora_iso,
+        # Diagnóstico de credencial (M21): só o TIPO, nunca e-mail/chave/projeto.
+        "credentialKind": cred_kind,
         "staleAfterHours": stale_h,
         "periodStart": periodo[0],
         "periodEnd": periodo[1],
@@ -456,6 +584,13 @@ def _montar_snapshot(cfg, prev, resultados, periodo, agora_iso, stale_h):
             err = res.get("error_code") or "SYNC_FAILED"
             if not configuradas.get(key):
                 err = "NOT_CONFIGURED"
+            # M21 — com credencial durável, 403/permissão significa "acesso
+            # ainda não concedido à conta de serviço", não "login vencido".
+            # Assim "Reautenticação necessária" deixa de aparecer em operação
+            # normal, como o contrato desta etapa exige.
+            elif (cred_kind == CRED_SERVICE_ACCOUNT
+                  and err in ("PERMISSION_DENIED", "AUTH_REQUIRED")):
+                err = "CREDENTIAL_PENDING"
             pblock = prev_status.get(key) or {}
             meta["sourceStatus"][key] = fc.status_fonte(
                 sid, nome,
@@ -554,12 +689,75 @@ def cmd_status(args, modo):
     return aval["exit"]
 
 
+def _com_retentativa(nome_fonte, consulta, dormir=None):
+    """Executa `consulta()` com backoff limitado. Devolve (dados, warnings).
+
+    Só retenta o que faz sentido retentar: falha de credencial, permissão ou
+    configuração é definitiva nesta execução. `dormir` é injetável para teste.
+    """
+    dormir = dormir or time.sleep
+    dados, warnings = {}, []
+    for tentativa in range(1, RETRY_MAX_TENTATIVAS + 1):
+        dados, warnings = consulta()
+        if dados:
+            if tentativa > 1:
+                print(f"  {nome_fonte}: sucesso na tentativa {tentativa}.")
+            return dados, warnings
+        codigo = fc.classificar_erro(" ".join(str(w) for w in warnings))
+        if codigo in RETRY_NAO_RETENTAR or tentativa == RETRY_MAX_TENTATIVAS:
+            return dados, warnings
+        espera = RETRY_BACKOFF_SEGUNDOS[min(tentativa - 1,
+                                            len(RETRY_BACKOFF_SEGUNDOS) - 1)]
+        print(f"  {nome_fonte}: falha transitória — nova tentativa em {espera}s "
+              f"({tentativa}/{RETRY_MAX_TENTATIVAS}).")
+        dormir(espera)
+    return dados, warnings
+
+
+def cmd_credential_check():
+    """Diagnóstico offline da credencial: existe? é conta de serviço? é exigida?
+
+    Não faz nenhuma chamada de rede e não imprime caminho completo, e-mail,
+    projeto nem qualquer parte da chave privada.
+    """
+    print("SoproLife — diagnóstico de credencial de Marketing (offline)")
+    sa_path = _service_account_path()
+    exige = _requer_service_account()
+    print(f"conta de serviço obrigatória: {'sim' if exige else 'não (dev)'}")
+    if sa_path is None:
+        print("arquivo de credencial: ausente")
+        if exige:
+            print("estado: credential_pending — configure a conta de serviço "
+                  "de leitura antes de esperar dados novos.")
+            return fc.EXIT_CREDENTIAL_PENDING
+        print("estado: usará ADC pessoal do gcloud (apenas desenvolvimento).")
+        return fc.EXIT_FRESH
+    tipo = _classificar_arquivo_credencial(sa_path)
+    print(f"arquivo de credencial: presente (tipo {tipo or 'ilegível'})")
+    if tipo != "service_account":
+        print("estado: credential_pending — o arquivo não é uma conta de serviço.")
+        return fc.EXIT_CREDENTIAL_PENDING
+    try:
+        modo = oct(sa_path.stat().st_mode & 0o777)
+    except OSError:
+        modo = "?"
+    print(f"permissão do arquivo: {modo} (não deve haver acesso 'other')")
+    if not _credencial_tem_permissao_restrita(sa_path):
+        print("estado: credential_pending — restrinja o arquivo para 0640 ou 0600.")
+        return fc.EXIT_CREDENTIAL_PENDING
+    print("estado: conta de serviço de leitura configurada.")
+    return fc.EXIT_FRESH
+
+
 def cmd_sync(args, mode):
     """--dry-run / --write: consulta as fontes e (no write) grava o snapshot."""
-    print("SoproLife OS Local Core — Marketing & SEO connector (ADC)")
+    print("SoproLife OS Local Core — Marketing & SEO connector (leitura)")
     print(f"mode: {mode}")
-    print("auth: Application Default Credentials")
     print()
+
+    # Tipo de credencial resolvido; preenchido antes de qualquer chamada e
+    # gravado no snapshot como diagnóstico (sem identidade nem chave).
+    ctx = {"credencial": CRED_NONE}
 
     out_path = Path(args.output) if args.output else _OUT_PUBLIC
     prev = _carregar_snapshot(out_path)
@@ -573,7 +771,8 @@ def cmd_sync(args, mode):
         stale_h = args.max_age_hours or float(cfg["staleAfterHours"])
 
     def _finalizar(resultados, periodo):
-        payload = _montar_snapshot(cfg, prev, resultados, periodo, agora_iso, stale_h)
+        payload = _montar_snapshot(cfg, prev, resultados, periodo, agora_iso,
+                                   stale_h, ctx["credencial"])
         aval = _avaliar_snapshot(payload, max_age_hours=args.max_age_hours)
         print()
         if mode == "write":
@@ -632,25 +831,33 @@ def cmd_sync(args, mode):
     if configuradas["ga4"]:
         scopes.append(GA4_SCOPE)
 
-    try:
-        credentials, _ = google_auth_default(scopes=scopes)
-    except Exception as exc:
-        print("AVISO: falha na autenticação ADC.")
-        print()
-        print("Execute para autenticar com os escopos corretos:")
-        for s in scopes:
-            print(f"    {s}")
-        print("  gcloud auth application-default login --scopes=<escopos acima>")
-        return _falha_total(fc.classificar_erro(exc) if fc.classificar_erro(exc) != "SYNC_FAILED"
-                            else "AUTH_REQUIRED", raw=str(exc))
+    credentials, cred_kind, cred_erro = resolver_credencial(scopes, google_auth_default)
+    ctx["credencial"] = cred_kind
+    print(f"credencial: {cred_kind}"
+          + (" (leitura, durável)" if cred_kind == CRED_SERVICE_ACCOUNT else ""))
+    if credentials is None:
+        if cred_erro == "CREDENTIAL_PENDING":
+            print("AVISO: sem credencial de serviço utilizável.")
+            print("  Esperado: conta de serviço dedicada, somente leitura, em")
+            print(f"  {_SA_DEFAULT_PATH} (ou {_ENV_SA_PATH}).")
+            print("  Falta apenas a concessão de acesso de leitura na propriedade.")
+        else:
+            print("AVISO: falha ao obter credencial de leitura.")
+            print("  Escopos necessários (somente leitura):")
+            for s in scopes:
+                print(f"    {s}")
+        return _falha_total(cred_erro or "AUTH_REQUIRED")
 
     resultados = {}
 
     if configuradas["searchConsole"]:
         print("Consultando Search Console...")
-        sc_data, sc_warn = _fetch_search_console(
-            build, credentials, str(cfg.get("searchConsoleSiteUrl", "")).strip(),
-            start_date, end_date, top_limit
+        sc_data, sc_warn = _com_retentativa(
+            "Search Console",
+            lambda: _fetch_search_console(
+                build, credentials, str(cfg.get("searchConsoleSiteUrl", "")).strip(),
+                start_date, end_date, top_limit
+            ),
         )
         ok = bool(sc_data)
         resultados["searchConsole"] = {
@@ -667,9 +874,12 @@ def cmd_sync(args, mode):
 
     if configuradas["ga4"]:
         print("Consultando GA4...")
-        ga4_data, ga4_warn = _fetch_ga4(
-            credentials, str(cfg.get("ga4PropertyId", "")).strip(),
-            start_date, end_date, top_limit
+        ga4_data, ga4_warn = _com_retentativa(
+            "GA4",
+            lambda: _fetch_ga4(
+                credentials, str(cfg.get("ga4PropertyId", "")).strip(),
+                start_date, end_date, top_limit
+            ),
         )
         ok = bool(ga4_data)
         resultados["ga4"] = {
@@ -704,6 +914,8 @@ def main():
                        help="Mostra frescor do snapshot local (sem rede)")
     group.add_argument("--check",   action="store_true",
                        help="Valida contrato + frescor (sem rede; exit codes)")
+    group.add_argument("--credential-check", action="store_true",
+                       help="Diagnostica a credencial de leitura (sem rede)")
     parser.add_argument("--max-age-hours", type=float, default=None,
                         help=f"Limite de frescor em horas (padrão {DEFAULT_STALE_HOURS})")
     parser.add_argument("--output", default=None,
@@ -712,6 +924,8 @@ def main():
                         help="Proíbe chamadas externas (modos de teste)")
     args = parser.parse_args()
 
+    if args.credential_check:
+        return cmd_credential_check()
     if args.status:
         return cmd_status(args, "status")
     if args.check:

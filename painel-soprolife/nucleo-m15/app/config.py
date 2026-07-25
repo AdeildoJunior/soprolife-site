@@ -3,11 +3,13 @@
 Regras de produção (M15_ENV=prod):
 - M15_AUTH_SECRET obrigatório, >=32 caracteres e >=10 símbolos distintos;
 - bind deve ser sempre loopback;
-- CORS apenas com origens http(s) explícitas — nunca "*".
+- CORS apenas com origens http(s) explícitas — nunca "*";
+- cookie de sessão sempre Secure (M21) — HTTPS não é negociável em prod.
 """
 
 import secrets
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -19,6 +21,13 @@ MIN_SECRET_LEN = 32
 MIN_SECRET_DISTINCT = 10
 TTL_MIN_MINUTES = 5
 TTL_MAX_MINUTES = 720
+
+# Sessão de navegador (M21). A duração é ajustável por configuração, mas o
+# teto persistente é fixo em 7 dias: nenhuma variável de ambiente pode
+# transformar "manter conectado" em credencial eterna.
+SESSION_MIN_MINUTES = 5
+SESSION_MAX_MINUTES = 720          # sem "manter conectado" (morre com o navegador)
+SESSION_PERSISTENT_MAX_DAYS = 7    # com "manter conectado" — teto absoluto
 
 
 class Settings(BaseSettings):
@@ -35,6 +44,20 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://127.0.0.1:8765", "http://localhost:8765"]
     display_timezone: str = "America/Sao_Paulo"
 
+    # ------------------------------------------- sessão de navegador (M21)
+    # Cookie assinado, HttpOnly, SameSite=Strict, Path restrito ao prefixo
+    # público da API. Nunca guarda o token bearer nem a senha.
+    session_cookie_name: str = "soprolife_m15_sessao"
+    session_cookie_path: str = "/painel-soprolife/api/m15"
+    # Em prod o validador abaixo força True; em dev loopback (http) o padrão
+    # False permite desenvolver sem TLS sem jamais afrouxar produção.
+    session_cookie_secure: bool = False
+    session_ttl_minutes: int = 720               # sessão de navegador
+    session_persistent_days: int = 7             # "manter conectado" (teto 7)
+    # Pedido manual de Marketing. Contém apenas timestamp/origem, fica no
+    # diretório privado e gravável da API; o timer consome o mesmo caminho.
+    marketing_refresh_queue: Path = Path("./var/marketing-refresh-request.json")
+
     @field_validator("token_ttl_minutes")
     @classmethod
     def _ttl_em_faixa(cls, v: int) -> int:
@@ -44,6 +67,42 @@ class Settings(BaseSettings):
                 f"{TTL_MAX_MINUTES} minutos."
             )
         return v
+
+    @field_validator("session_ttl_minutes")
+    @classmethod
+    def _sessao_em_faixa(cls, v: int) -> int:
+        if not (SESSION_MIN_MINUTES <= v <= SESSION_MAX_MINUTES):
+            raise ValueError(
+                f"M15_SESSION_TTL_MINUTES deve estar entre {SESSION_MIN_MINUTES} "
+                f"e {SESSION_MAX_MINUTES} minutos."
+            )
+        return v
+
+    @field_validator("session_persistent_days")
+    @classmethod
+    def _persistente_em_faixa(cls, v: int) -> int:
+        if not (1 <= v <= SESSION_PERSISTENT_MAX_DAYS):
+            raise ValueError(
+                "M15_SESSION_PERSISTENT_DAYS deve estar entre 1 e "
+                f"{SESSION_PERSISTENT_MAX_DAYS} dias."
+            )
+        return v
+
+    @field_validator("session_cookie_name")
+    @classmethod
+    def _nome_cookie_valido(cls, v: str) -> str:
+        if not v or any(c in v for c in ' ;,="\\\t\r\n'):
+            raise ValueError("M15_SESSION_COOKIE_NAME contém caracteres inválidos.")
+        return v
+
+    @field_validator("session_cookie_path")
+    @classmethod
+    def _path_cookie_valido(cls, v: str) -> str:
+        if not v.startswith("/") or any(c in v for c in ' ;,"\\\t\r\n'):
+            raise ValueError(
+                "M15_SESSION_COOKIE_PATH deve ser um caminho absoluto simples."
+            )
+        return v.rstrip("/") or "/"
 
     @field_validator("cors_origins")
     @classmethod
@@ -88,6 +147,9 @@ class Settings(BaseSettings):
                         "Em prod, CORS não-loopback exige HTTPS; HTTP só é aceito "
                         "para origem local."
                     )
+            # M21 — em produção o cookie de sessão é SEMPRE Secure. Não há
+            # variável de ambiente capaz de desligar isso.
+            object.__setattr__(self, "session_cookie_secure", True)
         return self
 
     def resolved_auth_secret(self) -> str:

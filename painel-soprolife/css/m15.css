@@ -453,6 +453,32 @@
 
 .m15-login .m15-field-label { color: var(--muted, #6d7b8a); font-weight: 600; }
 
+/* "Manter conectado neste dispositivo" (M21): ocupa a linha inteira abaixo do
+   par e-mail/senha, para não competir com os campos que o gerenciador de
+   senhas precisa reconhecer. */
+.m15-login-manter {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.m15-login-manter input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--teal-dark, #0f8f83);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.m15-login-manter input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--teal-dark, #0f8f83);
+  outline-offset: 2px;
+}
+
 .m15-login-alt { margin-top: 10px; }
 
 .m15-login-alt summary {

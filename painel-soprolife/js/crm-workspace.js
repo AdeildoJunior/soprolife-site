@@ -42,6 +42,8 @@
     filtroIndicadores: { meses: 12, origem: "todas" },
     charts: {},
     timelineAberta: null,
+    // M21 — true quando o workspace é a própria página de CRM (sem "voltar").
+    landing: false,
   };
 
   /* Atalhos contextuais para o fluxo único "Novo atendimento" (M20).
@@ -204,7 +206,12 @@
 
   // ------------------------------------------------------------------ render
 
-  function containerEl() { return document.querySelector("#crmView"); }
+  // M21 — o workspace passou a ser a PÁGINA de CRM, montada em #crmWorkspace
+  // (um container próprio dentro de #crmView). Re-renderizar só ele preserva
+  // o que existe abaixo na página; #crmView fica como fallback histórico.
+  function containerEl() {
+    return document.querySelector("#crmWorkspace") || document.querySelector("#crmView");
+  }
 
   function render(container) {
     container = container || containerEl();
@@ -212,15 +219,19 @@
     destruirCharts();
 
     var c = cli();
-    var cabecalho =
-      '<div class="crm-subview-header">' +
-      '  <button class="crm-back-btn" id="crmWsVoltar" type="button">← CRM</button>' +
-      "  <div>" +
-      '    <p class="eyebrow">Relacionamento com pacientes</p>' +
-      "    <h2>CRM Pacientes e Acompanhamento</h2>" +
-      '    <p class="section-sub">Fonte oficial: PostgreSQL / Núcleo M15. Cadastros novos ficam na Central de Cadastros.</p>' +
-      "  </div>" +
-      "</div>";
+    // No modo landing (M21) o workspace É a página: não há "voltar" para onde
+    // ir, e o cabeçalho da seção já está montado pelo hub — repeti-lo aqui
+    // duplicaria o título na tela.
+    var cabecalho = state.landing
+      ? ""
+      : '<div class="crm-subview-header">' +
+        '  <button class="crm-back-btn" id="crmWsVoltar" type="button">← CRM</button>' +
+        "  <div>" +
+        '    <p class="eyebrow">Relacionamento com pacientes</p>' +
+        "    <h2>CRM Pacientes e Acompanhamento</h2>" +
+        '    <p class="section-sub">Fonte oficial: PostgreSQL / Núcleo M15. Cadastros novos ficam na Central de Cadastros.</p>' +
+        "  </div>" +
+        "</div>";
 
     if (!c) {
       container.innerHTML = cabecalho +
@@ -1104,8 +1115,9 @@
 
   // ------------------------------------------------------------------ API
 
-  function abrir(container, view) {
+  function abrir(container, view, opcoes) {
     if (view) state.view = view;
+    if (opcoes && typeof opcoes.landing === "boolean") state.landing = opcoes.landing;
     recarregar(container || containerEl());
   }
 

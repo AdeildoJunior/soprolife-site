@@ -1,3 +1,24 @@
+# SoproLife — Atualização automática dos dados do painel.
+#
+# ESTE ARQUIVO REFLETE A UNIT REAL DE PRODUÇÃO (M21). A versão anterior no Git
+# ainda declarava User=root/HOME=/root, enquanto a VPS já rodava como o usuário
+# soprolife — a divergência foi corrigida aqui para que o Git deixe de mentir
+# sobre o que está instalado.
+#
+# Mudança do M21: a credencial de leitura de Search Console/GA4 passa a ser uma
+# CONTA DE SERVIÇO dedicada, em /opt/soprolife/secrets/marketing-readonly.json,
+# apontada explicitamente por SOPROLIFE_MARKETING_CREDENTIALS.
+# SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT=1 impede o retorno silencioso ao
+# ADC pessoal: sem a conta de serviço, o conector falha fechado com estado
+# "credencial pendente" em vez de voltar a depender de um login que vence.
+#
+# CLOUDSDK_CONFIG continua apontando para o gcloud do usuário soprolife porque
+# os conectores de Google Sheets (Leads, CRM, financeiro, Pastore) seguem
+# usando ADC — eles NÃO fazem parte do escopo desta etapa e não foram alterados.
+#
+# Nenhum segredo aparece em ExecStart, Environment ou journal: apenas o
+# CAMINHO da credencial, nunca o conteúdo.
+
 [Unit]
 Description=SoproLife — Atualização automática dos dados do painel
 Documentation=https://github.com/soprolife/soprolife-site
@@ -6,12 +27,37 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=root
-Environment=HOME=/root
+User=soprolife
+Group=soprolife
 WorkingDirectory=/opt/soprolife/soprolife-site
-ExecStart=/opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
+Environment=HOME=/home/soprolife
+Environment=CLOUDSDK_CONFIG=/home/soprolife/.config/gcloud
+Environment=PATH=/home/soprolife/.local/share/soprolife/venvs/google-sheets/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=SOPROLIFE_MARKETING_CREDENTIALS=/opt/soprolife/secrets/marketing-readonly.json
+Environment=SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT=1
+Environment=SOPROLIFE_MARKETING_REFRESH_QUEUE=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15/var/marketing-refresh-request.json
+Environment=SOPROLIFE_UPDATE_LOCK=/run/soprolife-update/update-local-data.lock
+RuntimeDirectory=soprolife-update
+RuntimeDirectoryPreserve=yes
+ExecStart=/bin/bash /opt/soprolife/soprolife-site/painel-soprolife/scripts/update-local-data.sh
 StandardOutput=journal
 StandardError=journal
+# Uma execução nunca pode ficar pendurada até o próximo disparo do timer.
+TimeoutStartSec=480
+# Journal limitado: falha repetida não inunda o log.
+LogRateLimitIntervalSec=60
+LogRateLimitBurst=300
+
+NoNewPrivileges=true
+PrivateTmp=true
+# ProtectSystem=full deixa /usr, /boot e /etc somente-leitura; /opt e /home
+# continuam graváveis. NÃO usar "strict" aqui: o script escreve em vários
+# caminhos e um ReadWritePaths incompleto derrubaria o timer silenciosamente.
+ProtectSystem=full
+ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/data
+ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/data-private
+ReadWritePaths=/home/soprolife/.config
+ReadWritePaths=/home/soprolife/.local
 
 [Install]
 WantedBy=multi-user.target

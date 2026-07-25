@@ -19,6 +19,7 @@ from .routers import (
     followups,
     health,
     imports_audit,
+    marketing,
     operations,
     partners,
     people,
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(partners.router, prefix=prefix)
     app.include_router(followups.router, prefix=prefix)
     app.include_router(crm.router, prefix=prefix)
+    app.include_router(marketing.router, prefix=prefix)
     app.include_router(finance.router, prefix=prefix)
     app.include_router(imports_audit.router, prefix=prefix)
     app.include_router(admin_users.router, prefix=prefix)

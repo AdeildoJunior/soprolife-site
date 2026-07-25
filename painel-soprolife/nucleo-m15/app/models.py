@@ -89,6 +89,35 @@ class UserRole(Base):
     role_id: Mapped[int] = mapped_column(Integer, ForeignKey("roles.id"), primary_key=True)
 
 
+class AuthSession(Base):
+    """Sessão de navegador (M21) — nunca guarda o segredo, só o hash dele.
+
+    O cookie enviado ao navegador é "id.segredo.assinatura"; aqui ficam
+    somente sha256(segredo) e sha256(csrf), de modo que um vazamento desta
+    tabela não permite montar um cookie válido. `revoked_at` dá ao logout
+    poder real de invalidação (o token bearer stateless não tinha isso) e
+    `password_fingerprint` mantém a revogação automática já existente ao
+    redefinir a senha. Nenhuma coluna aceita PII.
+    """
+
+    __tablename__ = "auth_sessions"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(FINGERPRINT_LEN), nullable=False)
+    csrf_hash: Mapped[str] = mapped_column(String(FINGERPRINT_LEN), nullable=False)
+    password_fingerprint: Mapped[str] = mapped_column(String(32), nullable=False)
+    persistente: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_motivo: Mapped[str | None] = mapped_column(String(40))
+
+
 class AuditLog(Base):
     """Trilha append-only: sem endpoint de update/delete; nunca guardar PII em detalhes."""
 

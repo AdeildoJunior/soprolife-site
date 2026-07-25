@@ -86,9 +86,19 @@
 
         <div class="nav-group-label">Sistema</div>
 
+        <!-- M21 — "Automação CRM" é o destino canônico ÚNICO das regras de
+             acompanhamento, lembrete e reativação (antes um card dentro da
+             página de CRM). O item abaixo, "Fontes de dados", é outra página:
+             infraestrutura técnica (integrações, saúde operacional, auditoria).
+             Dois itens, duas páginas distintas — nenhum destino duplicado. -->
+        <button class="nav-item" data-section="automacoes-crm">
+          <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5a6.5 6.5 0 1 1-6.28 8.2"/><polyline points="2.2,7.4 2.6,10.9 6.1,10.4"/><path d="M9 6v3l2.2 1.4"/></svg>
+          Automação CRM
+        </button>
+
         <button class="nav-item" data-section="automacoes">
           <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="3"/><path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.2 3.2l1.4 1.4M13.4 13.4l1.4 1.4M3.2 14.8l1.4-1.4M13.4 4.6l1.4-1.4"/></svg>
-          Automações
+          Fontes de dados
         </button>
 
         <button class="nav-item" data-section="lancamentos">
@@ -117,7 +127,7 @@
 
         <div class="top-actions">
           <input id="globalSearch" type="search" placeholder="Buscar no painel..." aria-label="Buscar no painel" />
-          <button id="refreshBtn" title="Recarregar dados do painel">
+          <button id="refreshBtn" title="Recarrega esta página com os dados já sincronizados. Não busca dados novos nas fontes externas.">
             <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4v5h5"/><path d="M17 14v-5h-5"/><path d="M15.5 6.5A7 7 0 1 0 16 9"/></svg>
             Atualizar
           </button>
@@ -197,10 +207,15 @@
             <strong>Documentos</strong>
             <span class="nav-hub-desc">Compliance e validades</span>
           </button>
+          <button type="button" class="nav-hub-card" data-section="automacoes-crm">
+            <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2.5a6.5 6.5 0 1 1-6.28 8.2"/><polyline points="2.2,7.4 2.6,10.9 6.1,10.4"/><path d="M9 6v3l2.2 1.4"/></svg></span>
+            <strong>Automação CRM</strong>
+            <span class="nav-hub-desc">Acompanhamento, lembrete e reativação</span>
+          </button>
           <button type="button" class="nav-hub-card" data-section="automacoes">
             <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="3"/><path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.2 3.2l1.4 1.4M13.4 13.4l1.4 1.4M3.2 14.8l1.4-1.4M13.4 4.6l1.4-1.4"/></svg></span>
-            <strong>Automações</strong>
-            <span class="nav-hub-desc">Fontes de dados e integrações</span>
+            <strong>Fontes de dados</strong>
+            <span class="nav-hub-desc">Integrações e saúde operacional</span>
           </button>
           <button type="button" class="nav-hub-card" data-section="lancamentos">
             <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="4" r="1.5"/><circle cx="5" cy="9" r="1.5"/><circle cx="5" cy="14" r="1.5"/><line x1="8" y1="4" x2="15" y2="4"/><line x1="8" y1="9" x2="15" y2="9"/><line x1="8" y1="14" x2="15" y2="14"/></svg></span>
@@ -437,6 +452,14 @@
             <span id="marketingDataLabel" class="safe-label">Dados demonstrativos</span>
             <div id="mktSourceBadges" hidden></div>
             <span id="mktPeriod" class="mkt-period" hidden></span>
+            <!-- M21: pede ao SERVIDOR uma atualização das fontes. Não é o
+                 mesmo que recarregar a página — recarregar não busca dado
+                 novo no Google. -->
+            <button type="button" id="mktRefreshBtn" class="mkt-refresh-btn"
+              title="Pede ao servidor uma nova leitura de Search Console e GA4. Recarregar a página não faz isso.">
+              Atualizar dados
+            </button>
+            <span id="mktRefreshMsg" class="mkt-refresh-msg" role="status" aria-live="polite" hidden></span>
           </div>
         </div>
 
@@ -669,6 +692,14 @@
           <div class="parceria-title-side">
             <span class="safe-label" id="parceriaPastoreStatusLabel">Estrutura inicial da parceria</span>
             <div id="parceriaPastoreChips" class="parceria-chips"></div>
+            <!-- M21 — Parcerias é o destino canônico de gestão de parceiros, e
+                 por isso passa a dar acesso à lista B2B de clínicas/parceiros
+                 (antes só alcançável por um card de atalho no CRM). Mesma e
+                 única implementação: nada foi duplicado. -->
+            <button type="button" id="parceriaClinicasBtn" class="mkt-refresh-btn"
+              title="Abre a lista de clínicas e parceiros (prospecção B2B e PCMSO).">
+              Clínicas e parceiros (B2B)
+            </button>
           </div>
         </div>
 
@@ -739,6 +770,14 @@
         <div id="ci-pendencias"   class="ci-pane" hidden></div>
       </section>
 
+
+      <!-- M21 — Automação CRM: destino canônico ÚNICO das regras de
+           acompanhamento, lembrete e reativação. Antes era um card dentro da
+           página de CRM; agora é um item de Sistema. Não há segunda
+           implementação: o conteúdo é renderizado por renderCrmAutomacoes(). -->
+      <section class="section" id="automacoes-crm">
+        <div id="automacoesCrmView"></div>
+      </section>
 
       <section class="section" id="automacoes">
         <div class="section-heading">

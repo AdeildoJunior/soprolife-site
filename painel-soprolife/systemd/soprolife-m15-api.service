@@ -16,6 +16,7 @@ EnvironmentFile=/opt/soprolife/secrets/m15.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=M15_API_HOST=127.0.0.1
 Environment=M15_API_PORT=8015
+Environment=M15_MARKETING_REFRESH_QUEUE=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15/var/marketing-refresh-request.json
 ExecStart=/opt/soprolife/venvs/m15/bin/python -m app.serve
 Restart=on-failure
 RestartSec=5s

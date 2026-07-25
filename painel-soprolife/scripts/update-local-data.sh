@@ -4,6 +4,32 @@ set -euo pipefail
 cd "$(dirname "$0")/../../" || exit 1
 
 # ---------------------------------------------------------------------------
+# Exclusão mútua (M21): o timer dispara a cada 10 minutos e uma execução lenta
+# não pode se sobrepor à seguinte — duas escritas concorrentes nos mesmos
+# snapshots é o caminho mais curto para corromper dados válidos.
+# Reexecuta o script uma única vez sob flock; sem o lock, sai em silêncio
+# (exit 0) porque "já está atualizando" não é falha.
+# ---------------------------------------------------------------------------
+_LOCK_FILE="${SOPROLIFE_UPDATE_LOCK:-${TMPDIR:-/tmp}/soprolife-update-local-data.lock}"
+if [ -z "${SOPROLIFE_UPDATE_LOCKED:-}" ]; then
+  if command -v flock >/dev/null 2>&1; then
+    export SOPROLIFE_UPDATE_LOCKED=1
+    # -E 99: código exclusivo para "lock ocupado", para não confundir com um
+    # exit 1 legítimo do próprio script.
+    _rc=0
+    flock -n -E 99 "$_LOCK_FILE" "$0" "$@" || _rc=$?
+    if [ "$_rc" -eq 99 ]; then
+      echo "INFO: outra atualização já está em execução — nada a fazer."
+      exit 0
+    fi
+    exit "$_rc"
+  else
+    echo "ERRO: flock indisponível — atualização cancelada para evitar concorrência."
+    exit 1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Pré-requisitos do conector Google Sheets via ADC
 # ---------------------------------------------------------------------------
 _VENV_PYTHON="$HOME/.local/share/soprolife/venvs/google-sheets/bin/python"
@@ -17,6 +43,10 @@ _CSV_PATH="${SOPROLIFE_SUMMARY_CSV:-$HOME/.config/soprolife/painel/resumo-dashbo
 # Pré-requisitos do conector Marketing & SEO
 _MARKETING_CONFIG="painel-soprolife/data-private/marketing-seo-config.local.json"
 _MARKETING_SCRIPT="painel-soprolife/scripts/read-marketing-seo-adc.py"
+# M21 — credencial DURÁVEL de leitura (conta de serviço dedicada). Fora do Git,
+# fora do repositório, nunca enviada ao navegador. Quando existe, é ela que
+# vale; o ADC pessoal deixa de ser dependência da atualização automática.
+_MARKETING_CREDENTIAL="${SOPROLIFE_MARKETING_CREDENTIALS:-/opt/soprolife/secrets/marketing-readonly.json}"
 
 # Python a usar para Marketing & SEO: venv se disponível, senão system python3
 if [ -f "$_VENV_PYTHON" ]; then
@@ -38,6 +68,18 @@ fi
 
 echo "Atualizando dados locais seguros do Painel SoproLife..."
 echo
+
+# M21 — detecta o pedido manual enfileirado pela tela de Marketing. A marca
+# permanece enquanto a consulta está rodando e só é consumida DEPOIS do passo
+# de Marketing; assim a UI não anuncia conclusão antes do snapshot terminar.
+_MKT_QUEUE="${SOPROLIFE_MARKETING_REFRESH_QUEUE:-painel-soprolife/nucleo-m15/var/marketing-refresh-request.json}"
+_MKT_REQUESTED=0
+_MKT_ATTEMPTED=0
+if [ -f "$_MKT_QUEUE" ]; then
+  echo "Pedido manual de atualização encontrado na fila."
+  _MKT_REQUESTED=1
+  echo
+fi
 
 echo "1/15 - Atualizando status seguro da fonte Google Sheets..."
 painel-soprolife/scripts/generate-runtime-status.sh
@@ -139,20 +181,48 @@ if [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "(Crie $_MARKETING_CONFIG a partir de"
   echo " painel-soprolife/config-examples/marketing-seo.local.example.json)"
 elif [ ! -f "$_MARKETING_SCRIPT" ]; then
-  echo "AVISO: script de Marketing & SEO não encontrado ($MARKETING_SCRIPT)."
-elif [ ! -f "$_ADC_CONFIG" ]; then
-  echo "AVISO: ADC não configurado (gcloud). Marketing & SEO pulado."
-  echo "  Execute: gcloud auth application-default login"
+  echo "AVISO: script de Marketing & SEO não encontrado ($_MARKETING_SCRIPT)."
+elif [ ! -f "$_MARKETING_CREDENTIAL" ] && [ ! -f "$_ADC_CONFIG" ] && \
+     [ "${SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT:-}" != "1" ]; then
+  # Nem credencial durável, nem ADC de desenvolvimento: nada a tentar.
+  echo "AVISO: nenhuma credencial de leitura disponível. Marketing & SEO pulado."
+  echo "  Produção: conta de serviço de leitura em /opt/soprolife/secrets/."
+  echo "  Diagnóstico: $_MARKETING_PYTHON $_MARKETING_SCRIPT --credential-check"
 else
-  echo "Fonte: Google Search Console + GA4 via ADC"
+  # M21 — a credencial durável (conta de serviço, somente leitura) tem
+  # precedência sobre o ADC pessoal, que vence e derrubava a atualização
+  # automática. O script decide e informa o TIPO de credencial usado.
+  if [ -f "$_MARKETING_CREDENTIAL" ]; then
+    echo "Fonte: Google Search Console + GA4 (conta de serviço, somente leitura)"
+    export SOPROLIFE_MARKETING_CREDENTIALS="$_MARKETING_CREDENTIAL"
+    export SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT=1
+  elif [ "${SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT:-}" = "1" ]; then
+    # Produção sem a chave ainda precisa EXECUTAR o conector: ele grava o
+    # estado credential_pending e preserva o último snapshot válido. Pular
+    # aqui deixaria para sempre a mensagem antiga de ADC pessoal expirado.
+    echo "Fonte: conta de serviço obrigatória (configuração pendente)"
+    export SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT=1
+  else
+    echo "Fonte: Google Search Console + GA4 via ADC de desenvolvimento"
+  fi
   echo
+  _MKT_ATTEMPTED=1
   if ! "$_MARKETING_PYTHON" "$_MARKETING_SCRIPT" --write 2>&1; then
     echo
-    echo "AVISO: Marketing & SEO atualização falhou — usando dados demonstrativos."
-    echo "  Diagnóstico: $_MARKETING_PYTHON $_MARKETING_SCRIPT --dry-run"
+    echo "AVISO: Marketing & SEO atualização falhou — último snapshot válido preservado."
+    echo "  Diagnóstico: $_MARKETING_PYTHON $_MARKETING_SCRIPT --credential-check"
   else
     echo "Marketing & SEO atualizado com dados reais/agregados."
   fi
+fi
+
+if [ "$_MKT_REQUESTED" -eq 1 ] && [ "$_MKT_ATTEMPTED" -eq 1 ]; then
+  # A tentativa terminou (com sucesso ou preservando o último snapshot).
+  # Remover só esta marca mínima não toca em nenhum dado válido.
+  rm -f -- "$_MKT_QUEUE"
+  echo "Pedido manual de Marketing consumido após a tentativa."
+elif [ "$_MKT_REQUESTED" -eq 1 ]; then
+  echo "Pedido manual de Marketing mantido na fila: conector não chegou a executar."
 fi
 
 echo

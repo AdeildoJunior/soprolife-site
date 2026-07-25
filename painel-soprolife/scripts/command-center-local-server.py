@@ -52,7 +52,61 @@ _M15_FORWARD_HEADERS = {
     "idempotency-key": "Idempotency-Key",
     "x-request-id": "X-Request-ID",
     "accept": "Accept",
+    # M21 — cabeçalho anti-CSRF da sessão de navegador. Vai junto do cookie.
+    "x-csrf-token": "X-CSRF-Token",
 }
+
+# M21 — sessão persistente. O cookie precisa atravessar este proxy nos dois
+# sentidos, mas SÓ o cookie do painel: qualquer outro cookie que exista na
+# mesma origem é descartado antes de chegar à API, e qualquer Set-Cookie com
+# nome fora da allowlist é descartado antes de chegar ao navegador.
+_M15_COOKIE_NAME_RE = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}$")
+_M15_DEFAULT_COOKIE = "soprolife_m15_sessao"
+
+def _m15_cookie_names() -> frozenset:
+    """Nome do cookie de sessão; env inválido cai no padrão (fail-safe)."""
+    nome = os.environ.get("SOPROLIFE_M15_SESSION_COOKIE", "").strip()
+    if not nome or not _M15_COOKIE_NAME_RE.fullmatch(nome):
+        nome = _M15_DEFAULT_COOKIE
+    return frozenset({nome})
+
+
+_M15_COOKIE_NAMES = _m15_cookie_names()
+_M15_MAX_COOKIE_HEADER = 4096
+
+
+def _filter_request_cookie(raw: str | None) -> str | None:
+    """Devolve só os pares cookie cujo nome está na allowlist do painel."""
+    if not raw or len(raw) > _M15_MAX_COOKIE_HEADER:
+        return None
+    mantidos = []
+    for par in raw.split(";"):
+        nome, sep, valor = par.strip().partition("=")
+        if not sep:
+            continue
+        nome = nome.strip()
+        if nome in _M15_COOKIE_NAMES and _M15_COOKIE_NAME_RE.fullmatch(nome):
+            mantidos.append(f"{nome}={valor.strip()}")
+    return "; ".join(mantidos) or None
+
+
+def _upstream_set_cookies(response) -> list:
+    """Set-Cookie da API, tolerante à interface (múltiplos ou único)."""
+    headers = getattr(response, "headers", None)
+    if headers is not None and hasattr(headers, "get_all"):
+        return list(headers.get_all("Set-Cookie") or [])
+    unico = response.getheader("Set-Cookie")
+    return [unico] if unico else []
+
+
+def _allowed_set_cookie(raw: str) -> bool:
+    """Aceita Set-Cookie da API somente para o cookie de sessão do painel."""
+    if not raw or len(raw) > _M15_MAX_COOKIE_HEADER:
+        return False
+    if "\n" in raw or "\r" in raw:
+        return False
+    nome = raw.split("=", 1)[0].strip()
+    return nome in _M15_COOKIE_NAMES and bool(_M15_COOKIE_NAME_RE.fullmatch(nome))
 _M15_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _M15_MAX_REQUEST_BODY = 1024 * 1024
 _M15_MAX_RESPONSE_BODY = 4 * 1024 * 1024
@@ -362,6 +416,11 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                     continue
             headers[target] = value
 
+        # M21 — repassa apenas o cookie de sessão do painel (allowlist).
+        cookie = _filter_request_cookie(self.headers.get("cookie"))
+        if cookie:
+            headers["Cookie"] = cookie
+
         try:
             connection = http.client.HTTPConnection(host, port, timeout=_M15_CONNECT_TIMEOUT)
             connection.connect()
@@ -392,6 +451,12 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             upstream_request_id = _safe_request_id(response.getheader("X-Request-ID"))
             if upstream_request_id != "-":
                 self.send_header("X-Request-ID", upstream_request_id)
+            # M21 — devolve ao navegador só o Set-Cookie da sessão do painel,
+            # exatamente como a API o emitiu (HttpOnly/Secure/SameSite/Path
+            # são decididos lá; o proxy não reescreve atributo nenhum).
+            for cookie_header in _upstream_set_cookies(response):
+                if _allowed_set_cookie(cookie_header):
+                    self.send_header("Set-Cookie", cookie_header)
             self.send_header("Content-Length", str(len(result_raw)))
             self.end_headers()
             self.wfile.write(result_raw)

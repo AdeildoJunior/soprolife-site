@@ -45,6 +45,9 @@ class StrictModel(BaseModel):
 class TokenRequest(StrictModel):
     email: str = Field(min_length=3, max_length=200)
     password: str = Field(min_length=1, max_length=200)
+    # M21 — "Manter conectado neste dispositivo". Ausente = sessão que morre
+    # com o navegador (padrão conservador).
+    manter_conectado: bool = False
 
 
 # ------------------------------------------------------ administração (M15.3A)

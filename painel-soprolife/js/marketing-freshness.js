@@ -11,20 +11,30 @@ const MF_STALE = "stale";
 const MF_UNAVAILABLE = "unavailable";
 const MF_ERROR = "error";
 const MF_AUTH = "authentication_required";
+// M21 — credencial durável configurada, faltando apenas a concessão de acesso
+// de leitura na propriedade do Google. É pendência de configuração, não login
+// vencido: em operação normal com conta de serviço, MF_AUTH não deve aparecer.
+const MF_CREDENTIAL = "credential_pending";
+// Estado exclusivamente de cliente: uma atualização foi pedida ao servidor e
+// ainda não há snapshot novo. Nunca vem do arquivo.
+const MF_REFRESHING = "refreshing";
 const MF_UNKNOWN = "unknown";
 
 const MF_DEFAULT_STALE_HOURS = 26;
 
 // Ordem de severidade — o pior estado agrega o conjunto.
-const MF_SEVERIDADE = [MF_FRESH, MF_STALE, MF_UNKNOWN, MF_UNAVAILABLE, MF_ERROR, MF_AUTH];
+const MF_SEVERIDADE = [MF_FRESH, MF_STALE, MF_UNKNOWN, MF_UNAVAILABLE, MF_ERROR,
+                       MF_CREDENTIAL, MF_AUTH];
 
 // Selo por estado: rótulo exibido + classe CSS. Textos fixos e seguros.
 const MF_ROTULOS = {
   [MF_FRESH]:       { label: "Atualizado",               cls: "mf-fresh" },
-  [MF_STALE]:       { label: "Desatualizado",            cls: "mf-stale" },
+  [MF_REFRESHING]:  { label: "Atualizando",              cls: "mf-refreshing" },
+  [MF_STALE]:       { label: "Dados antigos",            cls: "mf-stale" },
   [MF_AUTH]:        { label: "Reautenticação necessária", cls: "mf-auth" },
+  [MF_CREDENTIAL]:  { label: "Credencial/configuração pendente", cls: "mf-credential" },
   [MF_UNAVAILABLE]: { label: "Fonte indisponível",       cls: "mf-unavailable" },
-  [MF_ERROR]:       { label: "Erro de sincronização",    cls: "mf-error" },
+  [MF_ERROR]:       { label: "Falha temporária",         cls: "mf-error" },
   [MF_UNKNOWN]:     { label: "Estado desconhecido",      cls: "mf-unknown" },
 };
 
@@ -98,7 +108,9 @@ function mfAvaliarFonte(bloco, staleAfterHours, nowMs) {
   const age = successMs === null ? null : Math.max(0, Math.floor((nowMs - successMs) / 1000));
 
   let estado;
-  if (bloco?.authenticationRequired || err === "AUTH_REQUIRED" || err === "PERMISSION_DENIED") {
+  if (bloco?.credentialPending || err === "CREDENTIAL_PENDING") {
+    estado = MF_CREDENTIAL;
+  } else if (bloco?.authenticationRequired || err === "AUTH_REQUIRED" || err === "PERMISSION_DENIED") {
     estado = MF_AUTH;
   } else if (["NOT_CONFIGURED", "DEPENDENCY_MISSING", "SOURCE_NOT_FOUND", "NETWORK_BLOCKED"].includes(err)) {
     estado = MF_UNAVAILABLE;
@@ -160,11 +172,31 @@ function mfAvaliar(snapshot, nowMs) {
     fontes,
     generatedAt: meta.generatedAt || null,
     lastAttemptAt: meta.lastAttemptAt || meta.generatedAt || null,
+    // M21 — tipo de credencial usado na última tentativa (service_account /
+    // personal_adc / none). Diagnóstico: nunca identidade, nunca chave.
+    credentialKind: meta.credentialKind || null,
     period: (meta.periodStart && meta.periodEnd)
       ? { start: meta.periodStart, end: meta.periodEnd, lookbackDays: meta.lookbackDays || null }
       : null,
     staleAfterHours,
   };
+}
+
+// Cadência do serviço agendado (soprolife-update-data.timer): 10 minutos.
+const MF_INTERVALO_MINUTOS = 10;
+
+/**
+ * Próxima atualização agendada, estimada a partir da última TENTATIVA.
+ * A cadência real é do timer; isto é só previsão honesta para a UI.
+ * @returns {{iso: string, atrasada: boolean}|null}
+ */
+function mfProximaAtualizacao(lastAttemptAt, nowMs, intervaloMinutos) {
+  const base = mfParseIso(lastAttemptAt);
+  if (base === null) return null;
+  const passo = (Number(intervaloMinutos) > 0 ? Number(intervaloMinutos)
+    : MF_INTERVALO_MINUTOS) * 60000;
+  const agora = Number.isFinite(nowMs) ? nowMs : Date.now();
+  return { iso: new Date(base + passo).toISOString(), atrasada: base + passo < agora };
 }
 
 // Formata ISO UTC como data/hora local curta e segura (sem depender de lib).
@@ -179,8 +211,9 @@ function mfFormatarDataHora(iso) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     MF_FRESH, MF_STALE, MF_UNAVAILABLE, MF_ERROR, MF_AUTH, MF_UNKNOWN,
-    MF_DEFAULT_STALE_HOURS, MF_FONTES,
+    MF_CREDENTIAL, MF_REFRESHING, MF_INTERVALO_MINUTOS,
+    MF_DEFAULT_STALE_HOURS, MF_FONTES, MF_ROTULOS,
     mfAvaliar, mfAvaliarFonte, mfSourceStatusLegado, mfPiorEstado,
-    mfRotulo, mfParseIso, mfFormatarDataHora,
+    mfRotulo, mfParseIso, mfFormatarDataHora, mfProximaAtualizacao,
   };
 }

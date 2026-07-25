@@ -15,6 +15,10 @@ const state = {
   runtimeStatus: null,
   dashboardSummary: null,
   crmView: "hub",
+  // M21 — contadores do CRM canônico mostrados em Automação CRM (só leitura).
+  crmKpisAutomacao: null,
+  // M21 — pedido de atualização de Marketing em curso (estado "Atualizando").
+  mktRefreshPendente: false,
   followupSummary: null,
   followupClinicas: null,
   ultimosLancamentos: null,
@@ -1030,27 +1034,14 @@ function renderFollowupB2B() {
   `;
 }
 
-function crmModuleCard({ icon, title, subtitle, view, stats, emptyLabel = "Em breve" }) {
-  const statsHtml = stats.length > 0
-    ? `<div class="crm-module-stats">${stats.map((s) => `
-        <div class="crm-module-stat">
-          <strong>${s.value}</strong>
-          <span>${s.label}</span>
-        </div>
-      `).join("")}</div>`
-    : `<div class="crm-module-stats crm-module-stats-empty"><span>${emptyLabel}</span></div>`;
-
-  return `
-    <article class="crm-module-card" data-crm-view="${view}" tabindex="0" role="button">
-      <div class="crm-module-icon">${icon}</div>
-      <h3 class="crm-module-title">${title}</h3>
-      <p class="crm-module-subtitle">${subtitle}</p>
-      ${statsHtml}
-      <div class="crm-module-cta">Ver detalhes →</div>
-    </article>
-  `;
-}
-
+/* M21 — os quatro cards de atalho do CRM (Central de Cadastros, Clínicas e
+ * Parceiros, Pacientes e Acompanhamento, Automações CRM) foram REMOVIDOS, não
+ * escondidos: crmModuleCard() e o grid .crm-hub-grid deixaram de existir.
+ * Motivos: Central de Cadastros já é item de sidebar; Clínicas e Parceiros
+ * pertence a Parcerias (que ganhou a ação de abrir a lista B2B); a própria
+ * página de CRM já é Pacientes e Acompanhamento; e a automação de CRM passou a
+ * ser um destino de sidebar em Sistema ("Automação CRM").
+ */
 function renderCrmView() {
   const container = document.querySelector("#crmView");
   if (!container) return;
@@ -1060,22 +1051,35 @@ function renderCrmView() {
     // M19 — uma única implementação de paciente/acompanhamento, servida pelo
     // workspace canônico (PostgreSQL/Núcleo M15). As telas legadas de
     // planilha ("pacientes" e "followup-detalhe") e a parcial "acompanhamento
-    // -m15" foram removidas; os nomes antigos caem aqui por compatibilidade
-    // de navegação.
+    // -m15" foram removidas.
+    // M21 — o workspace deixou de ser subview: ele É a página de CRM. Os
+    // nomes antigos continuam resolvendo, agora para o próprio hub, para que
+    // deep-links salvos não quebrem.
     case "pacientes":
     case "followup-detalhe":
     case "acompanhamento-m15":
     case "pacientes-acompanhamento":
-      if (window.SoproCrm) {
-        window.SoproCrm.abrir(container);
-      } else {
-        container.innerHTML = `<div class="crm-empty">Workspace de CRM indisponível nesta página.</div>`;
-      }
+      state.crmView = "hub";
+      renderCrmHub(container);
       break;
     case "relatorios":        renderCrmRelatorios(container);               break;
-    case "automacoes-crm":    renderCrmAutomacoes(container);           break;
+    // M21 — "Automação CRM" virou destino de sidebar em Sistema. O nome antigo
+    // de subview resolve para lá, em vez de abrir uma segunda implementação.
+    case "automacoes-crm":
+      state.crmView = "hub";
+      renderCrmHub(container);
+      irParaSecao("automacoes-crm");
+      break;
     default: renderCrmHub(container);
   }
+}
+
+/* Troca de seção programática: reaproveita o item de sidebar (uma única
+ * implementação de navegação), então qualquer alias de rota antigo cai na
+ * mesma troca de classes que um clique humano. */
+function irParaSecao(sectionId) {
+  const navItem = document.querySelector(`.nav-item[data-section="${sectionId}"]`);
+  if (navItem) navItem.click();
 }
 
 // M19 — ponte mínima para o workspace canônico de CRM voltar ao hub sem
@@ -1128,47 +1132,18 @@ function renderCrmHub(container) {
 
   container.innerHTML = `
     <div class="crm-hub-header">
-      <p class="eyebrow">Relacionamento</p>
+      <p class="eyebrow">Relacionamento com pacientes</p>
       <h2>CRM SoproLife</h2>
-      <p class="section-sub">Relacionamento, parcerias, pacientes e recorrência</p>
+      <p class="section-sub">Pacientes, contatos a realizar, acompanhamento e recorrência.
+        Fonte oficial: PostgreSQL / Núcleo M15.</p>
     </div>
     ${marcoHtml}
-    <div class="crm-hub-grid">
-      ${crmModuleCard({
-        icon: "📝",
-        title: "Central de Cadastros",
-        subtitle: "Leads, pacientes, exames, consultas, parceiros e financeiro",
-        view: "central-cadastros",
-        stats: [],
-        emptyLabel: "Fluxo único · núcleo M15"
-      })}
-      ${crmModuleCard({
-        icon: "🏥",
-        title: "Clínicas e Parceiros",
-        subtitle: "Prospecção B2B, parcerias e PCMSO",
-        view: "clinicas",
-        stats: [
-          { label: "Cadastradas", value: state.crm.length },
-          { label: "Em prospecção", value: emProspeccao },
-          { label: "Prio. alta", value: countCrmPrioridade("Alta") }
-        ]
-      })}
-      ${crmModuleCard({
-        icon: "🩺",
-        title: "Pacientes e Acompanhamento",
-        subtitle: "Pacientes, contatos a realizar, WhatsApp assistido, histórico e indicadores",
-        view: "pacientes-acompanhamento",
-        stats: [],
-        emptyLabel: "Fonte oficial · PostgreSQL/M15"
-      })}
-      ${crmModuleCard({
-        icon: "⚡",
-        title: "Automações CRM",
-        subtitle: "Lembretes, reativação e tarefas automáticas",
-        view: "automacoes-crm",
-        stats: []
-      })}
-    </div>
+
+    <!-- M21 — o CRM começa pela operação real de pacientes (KPIs, filas de
+         contato, gráficos de acompanhamento e origem, atividade recente),
+         servida pelo workspace canônico. Nenhum card de atalho duplica
+         destino de sidebar. -->
+    <div id="crmWorkspace"></div>
 
     <div class="crm-hub-report-header">
       <div>
@@ -1220,22 +1195,17 @@ function renderCrmHub(container) {
     </div>
   `;
 
-  container.querySelectorAll("[data-crm-view]").forEach((card) => {
-    // M17 — o card "Central de Cadastros" abre a Central diretamente
-    // (window.SoproCentral.open), sem passar por nenhuma view intermediária.
-    const activate = () => {
-      if (card.dataset.crmView === "central-cadastros") {
-        if (window.SoproCentral) window.SoproCentral.open("lead");
-        return;
-      }
-      state.crmView = card.dataset.crmView;
-      renderCrmView();
-    };
-    card.addEventListener("click", activate);
-    card.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") activate();
-    });
-  });
+  // M21 — monta o workspace canônico de pacientes DENTRO do hub. Ele é a
+  // primeira coisa útil da página; os relatórios agregados ficam abaixo, em
+  // um container próprio que o workspace nunca reescreve.
+  const mount = container.querySelector("#crmWorkspace");
+  if (mount) {
+    if (window.SoproCrm && typeof window.SoproCrm.abrir === "function") {
+      window.SoproCrm.abrir(mount, null, { landing: true });
+    } else {
+      mount.innerHTML = `<div class="crm-empty">Workspace de CRM indisponível nesta página.</div>`;
+    }
+  }
 
   const filterIdToKey = { crmReportPeriodo: "periodo", crmReportTipo: "tipo", crmReportOrigem: "origem" };
   Object.keys(filterIdToKey).forEach((id) => {
@@ -1362,6 +1332,16 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+/* Automação CRM (M21) — destino canônico ÚNICO, agora em Sistema.
+ *
+ * Antes era o card "Automações CRM" dentro da página de CRM. O conteúdo é o
+ * mesmo módulo (nenhuma segunda implementação foi criada): as regras de
+ * acompanhamento, lembrete e reativação vêm primeiro, e as rotinas manuais
+ * assistidas que já existiam continuam abaixo, intactas.
+ *
+ * Nada aqui dispara envio automático de WhatsApp: o painel só monta mensagem
+ * para revisão humana, e este M21 não habilita envio automático.
+ */
 function renderCrmAutomacoes(container) {
   // ── helpers internos ────────────────────────────────────────────────────────
 
@@ -1610,14 +1590,19 @@ function renderCrmAutomacoes(container) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   container.innerHTML = `
-    <div class="crm-subview-header">
-      <button class="crm-back-btn" id="crmBackBtn">← CRM</button>
+    <div class="section-heading">
       <div>
-        <p class="eyebrow">CRM SoproLife</p>
-        <h2>Automações CRM</h2>
-        <p class="section-sub">Central de status, orientação e comandos seguros. Nenhuma ação é executada automaticamente por este painel.</p>
+        <p class="eyebrow">Sistema · CRM</p>
+        <h2>Automação CRM</h2>
+        <span>Regras de acompanhamento, lembrete e reativação de pacientes,
+          mais o status do que está pendente de automação.</span>
+      </div>
+      <div class="section-actions">
+        <span class="safe-badge">Nada é disparado automaticamente</span>
       </div>
     </div>
+
+    ${renderAutomacaoCrmRegras()}
 
     <section class="auto-status-card">
       <h3 class="auto-status-title">Status atual dos dados locais</h3>
@@ -1654,10 +1639,123 @@ function renderCrmAutomacoes(container) {
     });
   });
 
-  document.querySelector("#crmBackBtn").addEventListener("click", () => {
-    state.crmView = "hub";
-    renderCrmView();
+  // M21 — esta página é destino de sidebar, não subview: não há "← CRM".
+}
+
+/* Renderiza a seção Automação CRM e, quando há sessão do Núcleo, busca os
+ * contadores reais do CRM (uma chamada, só leitura). Sem sessão, a página
+ * abre igual e diz que os contadores dependem de login. */
+function renderAutomacaoCrmSection() {
+  const container = document.querySelector("#automacoesCrmView");
+  if (!container) return;
+  renderCrmAutomacoes(container);
+
+  const m15 = window.SoproM15;
+  if (!m15 || !m15.hasToken()) return;
+  m15.api("/crm/kpis").then((kpis) => {
+    state.crmKpisAutomacao = kpis;
+    // Só re-renderiza se a seção ainda estiver aberta — evita sobrescrever
+    // uma navegação que o operador já fez.
+    const secao = document.querySelector("#automacoes-crm");
+    if (secao && secao.classList.contains("active")) renderCrmAutomacoes(container);
+  }).catch(() => {
+    // Falha de leitura não pode esconder as regras; contadores seguem "—".
   });
+}
+
+/* Regras de automação de CRM — o conteúdo próprio desta página.
+ *
+ * Os números de pendência vêm do CRM canônico (API do Núcleo M15) quando há
+ * sessão; sem sessão, a página mostra as REGRAS mesmo assim e diz honestamente
+ * que os contadores precisam de login. Nenhum número é inventado.
+ */
+function renderAutomacaoCrmRegras() {
+  const k = state.crmKpisAutomacao || null;
+  const num = (v) => (typeof v === "number" ? String(v) : "—");
+
+  const pendencias = [
+    ["Contatos de hoje", num(k?.contatos_hoje), "vencendo hoje"],
+    ["Contatos atrasados", num(k?.contatos_atrasados), "passaram da data"],
+    ["Próximos 7 dias", num(k?.proximos_7), "a programar"],
+    ["Sem telefone válido", num(k?.sem_telefone), "sem canal de contato"],
+  ].map(([rotulo, valor, sub]) => `
+    <div class="auto-status-row">
+      <span class="auto-status-icon">${valor !== "0" && valor !== "—" ? "⚠️" : "✅"}</span>
+      <div class="auto-status-body">
+        <strong>${escapeHtml(rotulo)}</strong>
+        <span>${escapeHtml(valor)}</span>
+        <small>${escapeHtml(sub)}</small>
+      </div>
+    </div>`).join("");
+
+  const regra = ({ icon, titulo, quando, acao, estado, obs }) => `
+    <article class="auto-regra">
+      <div class="auto-regra-head">
+        <span class="auto-regra-icon" aria-hidden="true">${icon}</span>
+        <h4>${escapeHtml(titulo)}</h4>
+        <span class="auto-regra-estado">${escapeHtml(estado)}</span>
+      </div>
+      <dl class="auto-regra-corpo">
+        <dt>Quando</dt><dd>${escapeHtml(quando)}</dd>
+        <dt>O que acontece</dt><dd>${escapeHtml(acao)}</dd>
+      </dl>
+      ${obs ? `<p class="auto-regra-obs">${escapeHtml(obs)}</p>` : ""}
+    </article>`;
+
+  return `
+    <section class="auto-status-card">
+      <h3 class="auto-status-title">Pendências de automação agora</h3>
+      ${k ? "" : `<p class="auto-regra-obs">Entre no Núcleo administrativo
+        (mesma sessão) para ver os contadores reais do CRM. As regras abaixo
+        valem independentemente do login.</p>`}
+      <div class="auto-status-grid">${pendencias}</div>
+    </section>
+
+    <section class="auto-status-card">
+      <h3 class="auto-status-title">Regras ativas</h3>
+      <div class="auto-regras">
+        ${regra({
+          icon: "📅",
+          titulo: "Acompanhamento após atendimento",
+          quando: "Um exame ou consulta é registrado com data de retorno explícita.",
+          acao: "O CRM cria um acompanhamento com vencimento nessa data e ele "
+            + "aparece nas filas de contato (hoje, atrasados, próximos dias).",
+          estado: "Ativa",
+          obs: "Nenhum retorno é presumido: sem escolha explícita do operador, "
+            + "nenhum acompanhamento é criado.",
+        })}
+        ${regra({
+          icon: "🔔",
+          titulo: "Lembrete de contato a realizar",
+          quando: "Um acompanhamento vence hoje ou já passou da data.",
+          acao: "O paciente entra na fila correspondente do CRM e o operador "
+            + "registra o resultado do contato, que fica auditável.",
+          estado: "Ativa",
+          obs: "O lembrete é visual, na fila do CRM. Nenhuma mensagem sai sozinha.",
+        })}
+        ${regra({
+          icon: "♻️",
+          titulo: "Reativação de paciente",
+          quando: "Um paciente sem atendimento recente volta a ser atendido "
+            + "ou contatado com sucesso.",
+          acao: "Ele é contado como reativado no mês corrente, nos indicadores "
+            + "do CRM.",
+          estado: "Ativa (indicador)",
+          obs: "Regra de medição, não de disparo: nada é enviado ao paciente.",
+        })}
+        ${regra({
+          icon: "💬",
+          titulo: "WhatsApp assistido",
+          quando: "O operador escolhe abrir o WhatsApp de um paciente com "
+            + "consentimento registrado e telefone válido.",
+          acao: "O painel monta a mensagem a partir de um modelo e abre o "
+            + "WhatsApp para REVISÃO humana. Abrir não conclui o acompanhamento.",
+          estado: "Envio automático DESLIGADO",
+          obs: "Envio automático não é habilitado nesta etapa. Quando for, "
+            + "passará por decisão explícita e ficará controlado aqui.",
+        })}
+      </div>
+    </section>`;
 }
 
 async function fetchCcStatus() {
@@ -3041,19 +3139,29 @@ function mktSourceTip(source, medium) {
 
 /* ──────────────────────────────────────────────────────────────────────────── */
 
+// Classes de estado do selo de Marketing — removidas todas antes de aplicar a
+// atual, para o selo nunca acumular dois estados contraditórios.
+const MKT_STATE_CLASSES = ["safe-label-real", "mf-fresh", "mf-refreshing", "mf-stale",
+                           "mf-auth", "mf-credential", "mf-unavailable", "mf-error",
+                           "mf-unknown"];
+
 function renderMktHeader() {
   const m = state.marketingSeo;
   const aval = mfAvaliar(m);
+  // "Atualizando" é estado de cliente: existe um pedido na fila do servidor e
+  // ainda não chegou snapshot novo. Não substitui o diagnóstico da fonte —
+  // apenas informa que uma nova leitura está a caminho.
+  const atualizando = state.mktRefreshPendente === true;
+  const rotulo = atualizando ? mfRotulo(MF_REFRESHING) : aval.rotulo;
 
   // Selo principal: estado de frescor honesto (nunca "dados reais" com
   // snapshot vencido, erro de auth ou fonte indisponível).
   const label = document.querySelector("#marketingDataLabel");
   if (label) {
-    label.textContent = aval.rotulo.label;
-    label.classList.remove("safe-label-real", "mf-fresh", "mf-stale", "mf-auth",
-                           "mf-unavailable", "mf-error", "mf-unknown");
-    label.classList.add(aval.rotulo.cls);
-    if (aval.overall === MF_FRESH) label.classList.add("safe-label-real");
+    label.textContent = rotulo.label;
+    MKT_STATE_CLASSES.forEach((c) => label.classList.remove(c));
+    label.classList.add(rotulo.cls);
+    if (!atualizando && aval.overall === MF_FRESH) label.classList.add("safe-label-real");
   }
 
   // Selos por fonte: GA4 e Search Console têm estados independentes.
@@ -3072,11 +3180,24 @@ function renderMktHeader() {
     badgesEl.hidden = badges.length === 0;
   }
 
-  // Data/hora da última sincronização + período coberto (conceitos separados).
+  // Última sincronização BEM-SUCEDIDA, período coberto e próxima atualização
+  // agendada — três conceitos distintos, nunca misturados num só rótulo.
   const periodEl = document.querySelector("#mktPeriod");
   if (periodEl) {
     const partes = [];
-    partes.push(`Sincronizado: ${mfFormatarDataHora(aval.generatedAt)}`);
+    const ultimoSucesso = [aval.fontes.searchConsole, aval.fontes.ga4]
+      .map((f) => mfParseIso(f?.lastSuccessAt))
+      .filter((v) => v !== null)
+      .sort((a, b) => b - a)[0];
+    partes.push(`Última atualização com sucesso: ${
+      ultimoSucesso ? mfFormatarDataHora(new Date(ultimoSucesso).toISOString()) : "—"}`);
+    partes.push(`Última tentativa: ${mfFormatarDataHora(aval.lastAttemptAt)}`);
+    const proxima = mfProximaAtualizacao(aval.lastAttemptAt);
+    if (proxima) {
+      partes.push(proxima.atrasada
+        ? "Próxima atualização: a qualquer momento"
+        : `Próxima atualização: ${mfFormatarDataHora(proxima.iso)}`);
+    }
     if (aval.period) {
       partes.push(`Dados cobrem: ${aval.period.start} → ${aval.period.end}`);
     }
@@ -3090,6 +3211,13 @@ function renderMktHeader() {
   if (bannerEl) {
     if (aval.overall === MF_FRESH) {
       bannerEl.hidden = true;
+    } else if (atualizando) {
+      bannerEl.innerHTML = `
+        <strong>${escapeHtml(mfRotulo(MF_REFRESHING).label)}</strong> —
+        o servidor recebeu o pedido e vai reler Search Console e GA4 na próxima
+        execução do serviço agendado. Os números abaixo continuam sendo a última
+        versão válida até a nova leitura terminar.`;
+      bannerEl.hidden = false;
     } else {
       const msgs = [];
       for (const f of MF_FONTES) {
@@ -3106,20 +3234,112 @@ function renderMktHeader() {
         ${msgs.length ? escapeHtml(msgs.join(" ")) : "Snapshot fora do limite de frescor."}
         ${ultimaOk ? `Mostrando a última versão válida (${escapeHtml(mfFormatarDataHora(new Date(ultimaOk).toISOString()))}).` : "Nenhuma versão válida disponível ainda."}
         <details class="mkt-howto">
-          <summary>Como atualizar</summary>
+          <summary>Como resolver</summary>
+          ${aval.overall === MF_CREDENTIAL ? `
           <ol>
-            <li>No servidor (ou máquina local), execute:
-              <code>bash painel-soprolife/scripts/soprolife-operational-refresh.sh refresh-marketing</code></li>
-            <li>Se aparecer "reautenticação necessária", renove o ADC manualmente
-              (<code>gcloud auth application-default login</code> com os escopos do
-              Search Console/GA4) e repita o passo 1.</li>
-            <li>Recarregue esta página.</li>
+            <li>A conta de serviço de leitura já está configurada no servidor.
+              Falta conceder a ela acesso <b>somente leitura</b> na propriedade:
+              Search Console (usuário com permissão de leitura) e GA4 (papel
+              Leitor/Viewer).</li>
+            <li>Feita a concessão, a atualização automática volta sozinha na
+              próxima execução do serviço agendado.</li>
           </ol>
-          <p>Nenhuma credencial é executada pelo navegador.</p>
+          <p>Nenhuma ação no navegador é necessária e nenhuma credencial é
+             executada por ele.</p>` : `
+          <ol>
+            <li>Use o botão <b>Atualizar dados</b> acima: ele pede ao servidor
+              uma nova leitura das fontes. Recarregar a página não busca dado
+              novo no Google.</li>
+            <li>Se o estado persistir, verifique no servidor:
+              <code>python3 painel-soprolife/scripts/read-marketing-seo-adc.py --credential-check</code></li>
+            <li>A atualização automática roda a cada 10 minutos pelo serviço
+              agendado; a última versão válida nunca é apagada por uma falha.</li>
+          </ol>
+          <p>Nenhuma credencial é executada pelo navegador.</p>`}
         </details>`;
       bannerEl.hidden = false;
     }
   }
+
+  const msgEl = document.querySelector("#mktRefreshMsg");
+  if (msgEl) {
+    if (atualizando) {
+      msgEl.textContent = "Atualização pedida ao servidor — aguardando nova leitura.";
+      msgEl.hidden = false;
+    } else {
+      msgEl.hidden = true;
+    }
+  }
+}
+
+/* ── Atualização manual das fontes de Marketing (M21) ──────────────────────
+ * O botão ENFILEIRA uma atualização no servidor; o navegador não executa
+ * script nem toca credencial. Recarregar a página continua sendo apenas
+ * recarregar a página — nunca é anunciado como atualização de fonte.
+ */
+const MKT_REFRESH_URL = "/marketing/refresh";
+const MKT_REFRESH_STATUS_URL = "/marketing/refresh-status";
+const MKT_POLL_INTERVALO_MS = 20000;
+// O timer roda a cada 10 min; 40 tentativas cobrem uma janela completa com
+// margem, sem polling infinito (~13 min).
+const MKT_POLL_MAX = 40;
+
+async function pedirAtualizacaoMarketing() {
+  const btn = document.querySelector("#mktRefreshBtn");
+  const msgEl = document.querySelector("#mktRefreshMsg");
+  if (btn) btn.disabled = true;
+  try {
+    const m15 = window.SoproM15;
+    if (!m15 || !m15.hasToken()) {
+      throw new Error("Entre no Núcleo para pedir uma atualização.");
+    }
+    const body = await m15.api(MKT_REFRESH_URL, { method: "POST" });
+    if (body.ok !== true) throw new Error("Pedido não confirmado.");
+    state.mktRefreshPendente = true;
+    state.mktGeneratedAtNoPedido = state.marketingSeo?.meta?.generatedAt || null;
+    renderMktHeader();
+    acompanharAtualizacaoMarketing();
+  } catch (err) {
+    if (msgEl) {
+      msgEl.textContent = "Não foi possível pedir a atualização agora. "
+        + "O serviço agendado continua rodando normalmente.";
+      msgEl.hidden = false;
+    }
+    if (btn) btn.disabled = false;
+  }
+}
+
+function acompanharAtualizacaoMarketing() {
+  let tentativas = 0;
+  const parar = () => {
+    state.mktRefreshPendente = false;
+    const btn = document.querySelector("#mktRefreshBtn");
+    if (btn) btn.disabled = false;
+    renderMarketingSection();
+  };
+  const tick = async () => {
+    tentativas += 1;
+    let consumido = false;
+    try {
+      const m15 = window.SoproM15;
+      const st = m15 && m15.hasToken()
+        ? await m15.api(MKT_REFRESH_STATUS_URL)
+        : null;
+      consumido = st && st.ok === true && st.pending === false;
+    } catch (err) {
+      consumido = false; // rede instável não encerra o acompanhamento
+    }
+    if (consumido) {
+      // O serviço rodou: recarrega só o snapshot de Marketing.
+      const novo = await loadOptionalJson("./data/marketing-seo.local.json");
+      if (novo) state.marketingSeo = novo;
+      parar();
+      return;
+    }
+    if (tentativas >= MKT_POLL_MAX) { parar(); return; }
+    window.setTimeout(tick, MKT_POLL_INTERVALO_MS);
+  };
+  window.setTimeout(tick, MKT_POLL_INTERVALO_MS);
 }
 
 function renderMktKpiStrip() {
@@ -3774,6 +3994,11 @@ function bindEvents() {
         state.crmView = "hub";
         renderCrmView();
       }
+      // M21 — Automação CRM é destino de sidebar: renderiza ao abrir e busca
+      // os contadores reais do CRM quando existe sessão.
+      if (button.dataset.section === "automacoes-crm") {
+        renderAutomacaoCrmSection();
+      }
     });
   });
 
@@ -3786,9 +4011,30 @@ function bindEvents() {
     });
   });
 
+  // Este botão RECARREGA A PÁGINA. Ele nunca busca dado novo nas fontes
+  // externas — quem faz isso é o serviço agendado no servidor (e, sob pedido,
+  // o botão "Atualizar dados" da tela de Marketing).
   document.querySelector("#refreshBtn").addEventListener("click", () => {
     window.location.reload();
   });
+
+  const mktRefreshBtn = document.querySelector("#mktRefreshBtn");
+  if (mktRefreshBtn) {
+    mktRefreshBtn.addEventListener("click", pedirAtualizacaoMarketing);
+  }
+
+  // M21 — Parcerias abre a lista B2B de clínicas/parceiros (rota "clinicas",
+  // implementação única, sem card de atalho no CRM).
+  const parceriaClinicasBtn = document.querySelector("#parceriaClinicasBtn");
+  if (parceriaClinicasBtn) {
+    parceriaClinicasBtn.addEventListener("click", () => {
+      // A ordem importa: o clique no item de sidebar reseta crmView para "hub",
+      // então a view desejada é definida DEPOIS da troca de seção.
+      irParaSecao("crm");
+      state.crmView = "clinicas";
+      renderCrmView();
+    });
+  }
 
   document.querySelector("#globalSearch").addEventListener("input", (event) => {
     const term = event.target.value.toLowerCase().trim();

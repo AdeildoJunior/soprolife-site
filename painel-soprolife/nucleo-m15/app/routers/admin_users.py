@@ -21,7 +21,15 @@ from ..db import get_db
 from ..models import Role, User, UserRole
 from ..pagination import PageParams, paginate
 from ..schemas import AdminPasswordReset, AdminUserCreate, AdminUserUpdate
-from ..security import ROLE_ADMIN, get_role, hash_password, require_role
+from ..security import (
+    REVOKE_DESATIVADO,
+    REVOKE_SENHA,
+    ROLE_ADMIN,
+    get_role,
+    hash_password,
+    require_role,
+    revoke_user_sessions,
+)
 from ..serializers import ser_user
 
 router = APIRouter(prefix="/admin/usuarios", tags=["administracao"])
@@ -145,12 +153,18 @@ def update_user(
         user.ativo = payload.ativo
         changed.append("ativo")
 
+    sessoes_revogadas = 0
     if changed:
+        # M21 — desativar derruba as sessões de navegador na hora, além do
+        # bloqueio já feito na validação da credencial.
+        if "ativo" in changed and not user.ativo:
+            sessoes_revogadas = revoke_user_sessions(db, user.id, REVOKE_DESATIVADO)
         acao = "usuario.atualizado"
         if "ativo" in changed:
             acao = "usuario.reativado" if user.ativo else "usuario.desativado"
         audit(db, acao, "users", user.id, admin.id, request.state.request_id,
-              {"campos": changed, "papel": payload.papel, "ativo": user.ativo})
+              {"campos": changed, "papel": payload.papel, "ativo": user.ativo,
+               "sessoes_revogadas": sessoes_revogadas})
         db.commit()
     return ser_user(user)
 
@@ -163,11 +177,17 @@ def reset_password(
     db: Session = Depends(get_db),
     admin: User = Depends(require_role(ROLE_ADMIN)),
 ):
-    """Nova senha por corpo POST. Tokens antigos caem imediatamente
-    (fingerprint da credencial muda) — sem tabela de sessões."""
+    """Nova senha por corpo POST. Tokens bearer antigos caem imediatamente
+    (o fingerprint da credencial muda) e as sessões de navegador vivas são
+    revogadas explicitamente na mesma transação (M21)."""
     user = _user_or_404(db, user_id)
     user.password_hash = hash_password(payload.senha)
+    sessoes_revogadas = revoke_user_sessions(db, user.id, REVOKE_SENHA)
     audit(db, "usuario.senha_redefinida", "users", user.id, admin.id,
-          request.state.request_id)
+          request.state.request_id, {"sessoes_revogadas": sessoes_revogadas})
     db.commit()
-    return {"id": user.id, "tokens_revogados": True}
+    return {
+        "id": user.id,
+        "tokens_revogados": True,
+        "sessoes_revogadas": sessoes_revogadas,
+    }
