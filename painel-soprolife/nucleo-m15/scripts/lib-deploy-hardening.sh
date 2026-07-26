@@ -15,6 +15,16 @@
 #    validar PID, usuário, comando, cgroup e listener; qualquer conflito
 #    desconhecido falha fechado sem matar nada.
 #
+# 3) soprolife_validar_unit_update_data / soprolife_estado_timer (M23.1):
+#    o deploy oficial (deploy-producao-vps.sh) só instalava as units da API e
+#    do proxy loopback; soprolife-update-data.service ficava de fora, e um
+#    deploy real precisou de cópia manual do operador depois do script
+#    "concluído" (achado do terceiro deploy do M23). Estas funções permitem
+#    que o script valide o conteúdo da unit instalada — sem depender de
+#    systemd real — e capture/compare o estado enabled/active do timer antes
+#    e depois da instalação, para provar que nenhum efeito colateral ativou
+#    o pipeline sozinho.
+#
 # Este arquivo é carregado via source pelo deploy e pelos testes. Nenhuma
 # função imprime segredos: as URLs de health locais não têm querystring nem
 # token. Variáveis SOPROLIFE_* permitem injetar dublês nos testes de shell;
@@ -162,4 +172,54 @@ soprolife_garantir_porta_loopback_livre() {
   echo "ERRO: processo legado não liberou 127.0.0.1:8765 após SIGTERM;" \
     "intervenção manual necessária (fail-closed)." >&2
   return 1
+}
+
+soprolife_validar_unit_update_data() {
+  # Confirma que a unit soprolife-update-data.service instalada no destino
+  # ($1) preserva os contornos exigidos pelo M23: usuário/grupo de serviço,
+  # EnvironmentFile do núcleo M15, interpretadores dedicados de API e
+  # Marketing, e ausência de qualquer variável que reative ADC pessoal
+  # (CLOUDSDK_CONFIG) ou o escape manual de migração legada de Sheets.
+  # Falha fechada: unit ausente, ilegível ou sem um requisito é erro.
+  local target="$1"
+  local conteudo
+  conteudo="$(soprolife_priv cat "$target" 2>/dev/null)" || {
+    echo "ERRO: não foi possível ler a unit instalada em $target." >&2
+    return 1
+  }
+  local requerido
+  for requerido in \
+    'User=soprolife' \
+    'Group=soprolife' \
+    'EnvironmentFile=/opt/soprolife/secrets/m15.env' \
+    'SOPROLIFE_M15_PYTHON=' \
+    'SOPROLIFE_MARKETING_PYTHON='
+  do
+    if ! grep -qF -- "$requerido" <<<"$conteudo"; then
+      echo "ERRO: unit de atualização instalada não contém '$requerido'." >&2
+      return 1
+    fi
+  done
+  local proibido
+  for proibido in 'CLOUDSDK_CONFIG' 'SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION'; do
+    if grep -qF -- "$proibido" <<<"$conteudo"; then
+      echo "ERRO: unit de atualização instalada contém '$proibido'" \
+        "(escape legado não pode estar ativo em produção)." >&2
+      return 1
+    fi
+  done
+  return 0
+}
+
+soprolife_estado_timer() {
+  # Imprime "enabled-state:active-state" de uma unit (tipicamente o timer de
+  # atualização), usando soprolife_priv para aceitar dublês nos testes.
+  # "desconhecido" substitui um código de saída não-zero do systemctl (por
+  # exemplo, unit ainda não instalada) sem derrubar o script chamador.
+  local unit="$1" habilitado ativo
+  habilitado="$(soprolife_priv systemctl is-enabled "$unit" 2>/dev/null)" || \
+    habilitado="desconhecido"
+  ativo="$(soprolife_priv systemctl is-active "$unit" 2>/dev/null)" || \
+    ativo="desconhecido"
+  printf '%s:%s' "$habilitado" "$ativo"
 }

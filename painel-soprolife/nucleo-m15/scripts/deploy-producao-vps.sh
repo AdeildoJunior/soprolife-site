@@ -33,6 +33,13 @@ readonly UNIT_SOURCE="$EXPECTED_REPO/painel-soprolife/systemd/soprolife-m15-api.
 readonly UNIT_TARGET="/etc/systemd/system/soprolife-m15-api.service"
 readonly LOOPBACK_UNIT_SOURCE="$EXPECTED_REPO/painel-soprolife/systemd/soprolife-painel-loopback.service"
 readonly LOOPBACK_UNIT_TARGET="/etc/systemd/system/soprolife-painel-loopback.service"
+# M23.1: a esteira automática (soprolife-update-data.service) ficava de fora
+# deste script — o terceiro deploy do M23 só ficou completo porque o operador
+# copiou a unit manualmente depois do script "concluído". Instalar, validar e
+# fazer backup dela aqui fecha essa lacuna.
+readonly UPDATE_UNIT_SOURCE="$EXPECTED_REPO/painel-soprolife/systemd/soprolife-update-data.service"
+readonly UPDATE_UNIT_TARGET="/etc/systemd/system/soprolife-update-data.service"
+readonly UPDATE_TIMER_UNIT="soprolife-update-data.timer"
 readonly HARDENING_LIB="$M15_DIR/scripts/lib-deploy-hardening.sh"
 readonly GO_LIVE_LIB="$M15_DIR/scripts/lib-go-live-gate.sh"
 readonly DB_ROLE="soprolife_m15"
@@ -155,6 +162,11 @@ read -r CONFIRMATION
 
 sudo -v
 
+# Estado do timer de atualização ANTES de qualquer mutação (M23.1): captura
+# enabled/active para provar depois que instalar a unit de atualização não
+# teve efeito colateral sobre o timer (nem ligou, nem desligou nada sozinho).
+ESTADO_TIMER_ANTES="$(soprolife_estado_timer "$UPDATE_TIMER_UNIT")"
+
 # O backup é a primeira alteração persistente do procedimento.
 sudo install -d -o root -g root -m 0700 "$BACKUP_DIR"
 TEMP_BUNDLE="$(mktemp /tmp/soprolife-m15-bundle.XXXXXX)"
@@ -171,6 +183,10 @@ fi
 if sudo test -f "$LOOPBACK_UNIT_TARGET"; then
   sudo cp -a "$LOOPBACK_UNIT_TARGET" \
     "$BACKUP_DIR/soprolife-painel-loopback.service.before"
+fi
+if sudo test -f "$UPDATE_UNIT_TARGET"; then
+  sudo cp -a "$UPDATE_UNIT_TARGET" \
+    "$BACKUP_DIR/soprolife-update-data.service.before"
 fi
 if sudo test -f "$ENV_FILE"; then
   sudo cp -a "$ENV_FILE" "$BACKUP_DIR/m15.env.before"
@@ -320,7 +336,19 @@ run_m15_env "$VENV_DIR/bin/alembic" check
 
 sudo install -o root -g root -m 0644 "$UNIT_SOURCE" "$UNIT_TARGET"
 sudo install -o root -g root -m 0644 "$LOOPBACK_UNIT_SOURCE" "$LOOPBACK_UNIT_TARGET"
+sudo install -o root -g root -m 0644 "$UPDATE_UNIT_SOURCE" "$UPDATE_UNIT_TARGET"
 sudo systemctl daemon-reload
+
+# M23.1: valida a unit de atualização recém-instalada e prova que instalá-la
+# não teve efeito colateral sobre o timer. Não habilita, não inicia e não para
+# o timer — o pipeline automático só muda de estado se o operador já o tiver
+# decidido antes desta execução (item 8 do hardening M23.1).
+soprolife_validar_unit_update_data "$UPDATE_UNIT_TARGET" || \
+  fail "unit de atualização instalada não passou na validação de hardening"
+ESTADO_TIMER_DEPOIS="$(soprolife_estado_timer "$UPDATE_TIMER_UNIT")"
+[[ "$ESTADO_TIMER_ANTES" == "$ESTADO_TIMER_DEPOIS" ]] || \
+  fail "estado do timer de atualização mudou sozinho (antes=$ESTADO_TIMER_ANTES," \
+       "depois=$ESTADO_TIMER_DEPOIS) — instalar a unit não deveria alterá-lo"
 
 # Restart (e não apenas enable --now) garante que API já ativa passe a rodar
 # o código do commit implantado. Units Type=simple retornam antes do processo

@@ -486,9 +486,13 @@ except Exception as exc:
 
 clinicas = data.get("clinicas", [])
 
-# Campos permitidos: apenas dados comerciais/institucionais B2B
+# Campos permitidos: apenas dados comerciais/institucionais B2B.
+# etapa_terminal (M23.1): booleano derivado da etapa, escrito por
+# generate-followup-clinicas.py e consumido pelo próprio gerador para
+# separar prospecção ativa de etapas terminais (ganho/perdido) — allowlist
+# estava incompleta, não é campo sensível nem obsoleto.
 ALLOWED_FIELDS = {
-    "nome_clinica", "etapa", "prioridade", "proxima_acao",
+    "nome_clinica", "etapa", "etapa_terminal", "prioridade", "proxima_acao",
     "data_proxima_acao", "status_followup", "tem_whatsapp",
     "telefone_whatsapp", "whatsapp_url",
 }

@@ -183,8 +183,11 @@ sudo systemctl restart soprolife-painel.service
 worktree limpo antes de executá-lo. Alternativamente, faça um novo commit de
 reversão pelo fluxo Git normal. Para rollback apenas do unit/proxy, restaure os
 arquivos `.before` do diretório privado informado pelo deploy (inclusive
-`soprolife-painel-loopback.service.before`, quando existir), rode
-`systemctl daemon-reload` e reinicie somente o serviço afetado.
+`soprolife-painel-loopback.service.before` e `soprolife-update-data.service.before`
+— M23.1 —, quando existirem), rode `systemctl daemon-reload` e reinicie
+somente o serviço afetado. Restaurar `soprolife-update-data.service.before`
+não muda por si só o enabled/active do timer; se o timer também precisar
+voltar ao estado anterior, faça isso explicitamente.
 
 O banco **não é apagado automaticamente**. Se rollback de schema/dados for
 realmente necessário, pare a API, crie outro dump, restaure o dump verificado

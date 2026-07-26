@@ -316,6 +316,96 @@ executa_conflito
 RC=$?
 caso "legado que não libera a porta falha fechado (rc 1)" 1 "$RC"
 
+# ── soprolife_validar_unit_update_data (M23.1 — lacuna do deploy) ──────────
+
+echo "── soprolife_validar_unit_update_data ──"
+
+UNIT_TMP="$TMP_DIR/soprolife-update-data.service"
+
+cat >"$UNIT_TMP" <<'UNIT'
+[Service]
+User=soprolife
+Group=soprolife
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python
+UNIT
+(export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+caso "unit válida é aceita (rc 0)" 0 $?
+
+cat >"$UNIT_TMP" <<'UNIT'
+[Service]
+Group=soprolife
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python
+UNIT
+(export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+caso "unit sem User=soprolife é rejeitada (rc 1)" 1 $?
+
+cat >"$UNIT_TMP" <<'UNIT'
+[Service]
+User=soprolife
+Group=soprolife
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=CLOUDSDK_CONFIG=/home/soprolife/.config/gcloud
+Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python
+UNIT
+(export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+caso "unit com CLOUDSDK_CONFIG (ADC pessoal) é rejeitada (rc 1)" 1 $?
+
+cat >"$UNIT_TMP" <<'UNIT'
+[Service]
+User=soprolife
+Group=soprolife
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1
+Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python
+UNIT
+(export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+caso "unit com escape legado de Sheets é rejeitada (rc 1)" 1 $?
+
+(export SOPROLIFE_PRIV_MODE=direct
+ soprolife_validar_unit_update_data "$TMP_DIR/nao-existe.service") >/dev/null 2>&1
+caso "unit ausente falha fechado (rc 1)" 1 $?
+
+# ── soprolife_estado_timer (M23.1 — provar que instalar a unit não liga/desliga o timer sozinho) ──
+
+echo "── soprolife_estado_timer ──"
+
+cat >"$STUB_DIR/systemctl" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  is-enabled) echo "${STUB_TIMER_ENABLED-enabled}"; exit "${STUB_TIMER_ENABLED_RC:-0}" ;;
+  is-active) echo "${STUB_TIMER_ACTIVE-active}"; exit "${STUB_TIMER_ACTIVE_RC:-0}" ;;
+  *) echo "${STUB_MAINPID:-0}" ;;
+esac
+EOF
+chmod 0755 "$STUB_DIR/systemctl"
+
+RESULT="$(
+  export PATH="$STUB_DIR:$PATH"
+  export SOPROLIFE_PRIV_MODE=direct
+  export STUB_TIMER_ENABLED=enabled
+  export STUB_TIMER_ACTIVE=active
+  soprolife_estado_timer soprolife-update-data.timer
+)"
+caso "timer habilitado e ativo é relatado corretamente" "enabled:active" "$RESULT"
+
+RESULT="$(
+  export PATH="$STUB_DIR:$PATH"
+  export SOPROLIFE_PRIV_MODE=direct
+  export STUB_TIMER_ENABLED=disabled
+  export STUB_TIMER_ENABLED_RC=1
+  export STUB_TIMER_ACTIVE=inactive
+  export STUB_TIMER_ACTIVE_RC=3
+  soprolife_estado_timer soprolife-update-data.timer
+)"
+caso "timer desabilitado/inativo também é relatado (sem falhar a captura)" \
+  "desconhecido:desconhecido" "$RESULT"
+
 echo
 if (( FALHAS )); then
   echo "RESULTADO: $FALHAS falha(s)."

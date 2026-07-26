@@ -207,6 +207,40 @@ caso("timer automático continua persistente a cada 10 minutos",
      timer_cfg["Timer"].get("OnUnitActiveSec") == "10min" and
      timer_cfg["Timer"].get("Persistent") == "true")
 
+# ── M23.1: o deploy oficial precisa instalar a unit de atualização ────────
+# Achado do terceiro deploy do M23: deploy-producao-vps.sh instalava a API e
+# o proxy loopback, mas não soprolife-update-data.service — o operador teve
+# de copiá-la manualmente depois do script "concluído". Estas checagens
+# provam estaticamente que a lacuna foi fechada: backup antes de sobrescrever,
+# instalação como root:root 0644, validação de hardening pós-instalação, e
+# prova de que o timer não muda de estado sozinho como efeito colateral.
+print()
+print("── M23.1 — deploy oficial instala a unit de atualização ──")
+deploy_script = (RAIZ / "nucleo-m15" / "scripts" / "deploy-producao-vps.sh").read_text(
+    encoding="utf-8")
+caso("script referencia a unit de atualização como fonte",
+     'UPDATE_UNIT_SOURCE="$EXPECTED_REPO/painel-soprolife/systemd/'
+     'soprolife-update-data.service"' in deploy_script)
+caso("script faz backup da unit anterior antes de sobrescrever",
+     'cp -a "$UPDATE_UNIT_TARGET" \\\n    "$BACKUP_DIR/soprolife-update-data.service.before"'
+     in deploy_script)
+caso("script instala a unit de atualização como root:root 0644",
+     'sudo install -o root -g root -m 0644 "$UPDATE_UNIT_SOURCE" "$UPDATE_UNIT_TARGET"'
+     in deploy_script)
+caso("script recarrega o systemd depois de instalar as 3 units",
+     deploy_script.index('install -o root -g root -m 0644 "$UPDATE_UNIT_SOURCE"') <
+     deploy_script.index("systemctl daemon-reload"))
+caso("script valida a unit de atualização instalada",
+     "soprolife_validar_unit_update_data" in deploy_script)
+caso("script prova que o timer não mudou de estado sozinho",
+     "soprolife_estado_timer" in deploy_script and
+     "ESTADO_TIMER_ANTES" in deploy_script and
+     "ESTADO_TIMER_DEPOIS" in deploy_script)
+caso("script não habilita nem inicia o pipeline automático sozinho",
+     "systemctl enable soprolife-update-data" not in deploy_script and
+     "systemctl start soprolife-update-data" not in deploy_script and
+     "systemctl restart soprolife-update-data" not in deploy_script)
+
 print()
 if FALHAS:
     print(f"RESULTADO: {FALHAS} falha(s).")
