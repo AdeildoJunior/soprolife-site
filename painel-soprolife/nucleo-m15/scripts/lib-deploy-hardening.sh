@@ -179,9 +179,9 @@ soprolife_garantir_porta_loopback_livre() {
 }
 
 soprolife_validar_unit_update_data() {
-  # Confirma que a unit soprolife-update-data.service instalada no destino
-  # ($1) preserva os contornos exigidos pelo M23: usuário/grupo de serviço,
-  # EnvironmentFile do núcleo M15, interpretadores dedicados de API e
+  # Confirma que o ARQUIVO da unit soprolife-update-data.service instalado no
+  # destino ($1) preserva os contornos exigidos pelo M23: usuário/grupo de
+  # serviço, EnvironmentFile do núcleo M15, interpretadores dedicados de API e
   # Marketing, e ausência de qualquer variável que reative ADC pessoal
   # (CLOUDSDK_CONFIG) ou o escape manual de migração legada de Sheets.
   #
@@ -194,19 +194,75 @@ soprolife_validar_unit_update_data() {
   # continuação de linha, múltiplos pares por Environment=) e só olha
   # diretivas Environment=/EnvironmentFile= ativas.
   #
-  # Falha fechada em: unit ausente ou ilegível; linha ativa que não é
-  # Chave=Valor; diretiva ativa fora de seção; Environment= com citação aberta
-  # ou par sem 'NOME=VALOR'; Environment=/EnvironmentFile= fora de [Service];
-  # requisito ausente; qualquer atribuição ativa das variáveis proibidas.
-  # Nunca imprime VALOR de diretiva (só nome/linha): a unit aponta caminhos de
-  # credencial, e mensagem de erro não é lugar de eco de configuração.
+  # L-1 (achado da revisão crítica final): isto valida só o ARQUIVO — não vê
+  # drop-ins em /etc/systemd/system/<unit>.d/*.conf. Use
+  # `soprolife_validar_unit_update_data_efetiva` (abaixo) depois do
+  # daemon-reload para validar a configuração REALMENTE carregada.
   local target="$1"
   local conteudo
   conteudo="$(soprolife_priv cat "$target" 2>/dev/null)" || {
     echo "ERRO: não foi possível ler a unit instalada em $target." >&2
     return 1
   }
-  SOPROLIFE_UNIT_ALVO="$target" SOPROLIFE_UNIT_CONTEUDO="$conteudo" python3 - <<'PY'
+  soprolife_validar_conteudo_unit "$target" "$conteudo"
+}
+
+soprolife_conteudo_efetivo_unit() {
+  # Imprime a configuração MERGIDA que o systemd realmente carrega para a
+  # unit ($1): o arquivo principal MAIS todo drop-in ativo em
+  # <unit>.d/*.conf, na ordem em que o systemd os aplica. `systemctl cat`
+  # é a própria ferramenta do systemd para isto — cada fragmento vem
+  # precedido de uma linha "# /caminho/do/fragmento" que o parser de
+  # `soprolife_validar_conteudo_unit` já trata como comentário, então os
+  # fragmentos concatenados são validados como uma única configuração ativa.
+  soprolife_priv systemctl cat "$1" 2>/dev/null
+}
+
+soprolife_validar_unit_update_data_efetiva() {
+  # M23.2 (achado L-1 da revisão crítica final): a validação anterior só lia
+  # o ARQUIVO da unit recém-instalada; um drop-in systemd em
+  # /etc/systemd/system/<unit>.d/*.conf — o mecanismo PADRÃO de override —
+  # reativando CLOUDSDK_CONFIG (ADC pessoal) ou
+  # SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION (escape legado de Sheets) passava
+  # disfarçado: o arquivo instalado ficava limpo, o deploy reportava o
+  # pipeline como "hardened", mas a unit CARREGADA pelo systemd continuava
+  # com o escape ativo.
+  #
+  # Correção: chamar isto DEPOIS de `systemctl daemon-reload`, com o NOME da
+  # unit (não o caminho do arquivo) — usa `systemctl cat`, que imprime a
+  # configuração efetiva (arquivo + drop-ins) exatamente como o systemd a
+  # interpreta, e roda o MESMO parser fail-closed de
+  # `soprolife_validar_unit_update_data` sobre o resultado. Drop-ins
+  # limpos (só comentário, ou diretivas alheias ao contrato) continuam
+  # aceitos; qualquer atribuição ATIVA das variáveis proibidas — em
+  # QUALQUER fragmento — falha fechado, mesmo que um fragmento posterior
+  # tente "resetar" o ambiente (a proibição conta toda ocorrência ativa,
+  # nunca só o estado final). Nunca imprime VALOR de diretiva.
+  local unit="$1"
+  local conteudo
+  conteudo="$(soprolife_conteudo_efetivo_unit "$unit")"
+  if [[ -z "$conteudo" ]]; then
+    echo "ERRO: não foi possível obter a configuração efetiva de '$unit' via" \
+      "'systemctl cat' (unit ausente, ilegível ou não carregada — rode" \
+      "'systemctl daemon-reload' antes)." >&2
+    return 1
+  fi
+  soprolife_validar_conteudo_unit "$unit (configuração efetiva)" "$conteudo"
+}
+
+soprolife_validar_conteudo_unit() {
+  # Parser fail-closed compartilhado entre soprolife_validar_unit_update_data
+  # (só o arquivo) e soprolife_validar_unit_update_data_efetiva (arquivo +
+  # drop-ins via `systemctl cat`). $1 = rótulo p/ mensagens de erro,
+  # $2 = conteúdo já lido (nunca ecoa VALOR de diretiva, só nome/linha).
+  #
+  # Falha fechada em: conteúdo vazio; linha ativa que não é Chave=Valor;
+  # diretiva ativa fora de seção; Environment= com citação aberta ou par sem
+  # 'NOME=VALOR'; Environment=/EnvironmentFile= fora de [Service]; requisito
+  # ausente; qualquer atribuição ativa das variáveis proibidas.
+  local rotulo="$1"
+  local conteudo="$2"
+  SOPROLIFE_UNIT_ALVO="$rotulo" SOPROLIFE_UNIT_CONTEUDO="$conteudo" python3 - <<'PY'
 import os
 import shlex
 import sys

@@ -260,6 +260,26 @@ caso("teste de hardening exercita a unit REAL do repositório",
      in (RAIZ / "nucleo-m15" / "scripts" / "test-deploy-hardening.sh").read_text(
          encoding="utf-8"))
 
+# ── M23.2 — achado L-1: validar a CONFIGURAÇÃO EFETIVA, não só o arquivo ──
+# A validação anterior só lia o arquivo recém-instalado; um drop-in systemd
+# em /etc/systemd/system/<unit>.d/*.conf (o mecanismo padrão de override)
+# reativando o escape legado passava disfarçado. Provamos estaticamente que
+# o deploy oficial também valida a configuração MERGIDA (arquivo + drop-ins)
+# via `systemctl cat`, depois do daemon-reload e antes de seguir em frente.
+caso("script valida a configuração efetiva (arquivo + drop-ins) da unit",
+     "soprolife_validar_unit_update_data_efetiva" in deploy_script)
+caso("validação efetiva roda DEPOIS do daemon-reload e da validação do arquivo",
+     deploy_script.index("systemctl daemon-reload") <
+     deploy_script.index("soprolife_validar_unit_update_data ") <
+     deploy_script.index("soprolife_validar_unit_update_data_efetiva"))
+caso("validação efetiva usa o NOME da unit, não o caminho do arquivo",
+     'soprolife_validar_unit_update_data_efetiva "$UPDATE_UNIT_NAME"' in deploy_script)
+caso("configuração efetiva é obtida via 'systemctl cat', que inclui drop-ins",
+     "soprolife_conteudo_efetivo_unit()" in lib_hardening and
+     "systemctl cat" in lib_hardening)
+caso("parser de diretivas é compartilhado entre validação de arquivo e efetiva",
+     lib_hardening.count("soprolife_validar_conteudo_unit") >= 3)
+
 print()
 if FALHAS:
     print(f"RESULTADO: {FALHAS} falha(s).")

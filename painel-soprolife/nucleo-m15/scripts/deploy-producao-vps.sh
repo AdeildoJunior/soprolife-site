@@ -39,6 +39,7 @@ readonly LOOPBACK_UNIT_TARGET="/etc/systemd/system/soprolife-painel-loopback.ser
 # fazer backup dela aqui fecha essa lacuna.
 readonly UPDATE_UNIT_SOURCE="$EXPECTED_REPO/painel-soprolife/systemd/soprolife-update-data.service"
 readonly UPDATE_UNIT_TARGET="/etc/systemd/system/soprolife-update-data.service"
+readonly UPDATE_UNIT_NAME="soprolife-update-data.service"
 readonly UPDATE_TIMER_UNIT="soprolife-update-data.timer"
 readonly HARDENING_LIB="$M15_DIR/scripts/lib-deploy-hardening.sh"
 readonly GO_LIVE_LIB="$M15_DIR/scripts/lib-go-live-gate.sh"
@@ -345,6 +346,14 @@ sudo systemctl daemon-reload
 # decidido antes desta execução (item 8 do hardening M23.1).
 soprolife_validar_unit_update_data "$UPDATE_UNIT_TARGET" || \
   fail "unit de atualização instalada não passou na validação de hardening"
+# M23.2 (achado L-1 da revisão crítica final): o check acima só prova o
+# ARQUIVO instalado; um drop-in systemd em
+# /etc/systemd/system/soprolife-update-data.service.d/*.conf reativando o
+# escape legado ficaria invisível para ele. Depois do daemon-reload,
+# `systemctl cat` expõe a configuração REALMENTE carregada (arquivo +
+# drop-ins) e o mesmo parser fail-closed valida esse resultado.
+soprolife_validar_unit_update_data_efetiva "$UPDATE_UNIT_NAME" || \
+  fail "configuração efetiva (arquivo + drop-ins) da unit de atualização não passou na validação de hardening"
 ESTADO_TIMER_DEPOIS="$(soprolife_estado_timer "$UPDATE_TIMER_UNIT")"
 [[ "$ESTADO_TIMER_ANTES" == "$ESTADO_TIMER_DEPOIS" ]] || \
   fail "estado do timer de atualização mudou sozinho (antes=$ESTADO_TIMER_ANTES," \

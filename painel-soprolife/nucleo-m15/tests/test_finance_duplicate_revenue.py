@@ -459,6 +459,98 @@ def test_linha_historica_ambigua_sem_categoria_retorna_409_seguro(
     assert detalhe["lancamento_existente"] == "LAN-909090"
 
 
+def test_patch_metadado_em_receita_historica_ambigua_e_permitido(
+    client, auth, person, db
+):
+    """M-1 (revisão pós-M23.1): PATCH de metadado numa linha histórica
+    ambígua (categoria NULL, ambos os vínculos) não deve mais ficar
+    permanentemente travado — a linha só não pode ser RECLASSIFICADA
+    implicitamente."""
+    _, exam_id = _vinculo_sem_receita(client, auth, person, "exame")
+    _, consultation_id = _vinculo_sem_receita(client, auth, person, "consulta")
+    historica = _linha(
+        "LAN-909092",
+        tipo="receita",
+        categoria=None,
+        exam_id=exam_id,
+        consultation_id=consultation_id,
+    )
+    db.add(historica)
+    db.commit()
+    entry_id = historica.id
+
+    response = client.patch(
+        f"/api/v1/lancamentos/{entry_id}",
+        json={
+            "status": "Recebido",
+            "data_recebimento": "2026-07-20",
+            "forma_pagamento": "Pix",
+        },
+        headers=auth("gestor"),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "Recebido"
+    assert body["forma_pagamento"] == "Pix"
+    # Categoria NÃO foi inferida nem alterada — segue exatamente como estava.
+    assert body["categoria"] is None
+
+
+def test_patch_reclassificacao_ambigua_explicita_continua_bloqueada(
+    client, auth, person, db
+):
+    """M-1: uma vez que o caller TOCA em categoria (mesmo enviando None de
+    volta), a validação completa de ambiguidade continua rodando — só o
+    PATCH que não menciona categoria é isento."""
+    _, exam_id = _vinculo_sem_receita(client, auth, person, "exame")
+    _, consultation_id = _vinculo_sem_receita(client, auth, person, "consulta")
+    historica = _linha(
+        "LAN-909093",
+        tipo="receita",
+        categoria=None,
+        exam_id=exam_id,
+        consultation_id=consultation_id,
+    )
+    db.add(historica)
+    db.commit()
+    entry_id = historica.id
+
+    resposta_null = client.patch(
+        f"/api/v1/lancamentos/{entry_id}",
+        json={"categoria": None, "status": "Recebido"},
+        headers=auth("gestor"),
+    )
+    assert resposta_null.status_code == 422, resposta_null.text
+    assert (
+        resposta_null.json()["erro"]["mensagem"]["codigo"]
+        == "categoria_obrigatoria_vinculo_ambiguo"
+    )
+
+    resposta_ambigua = client.patch(
+        f"/api/v1/lancamentos/{entry_id}",
+        json={"categoria": "  ", "status": "Recebido"},
+        headers=auth("gestor"),
+    )
+    assert resposta_ambigua.status_code == 422, resposta_ambigua.text
+    assert (
+        resposta_ambigua.json()["erro"]["mensagem"]["codigo"]
+        == "categoria_obrigatoria_vinculo_ambiguo"
+    )
+
+    # Categoria explícita e não ambígua resolve normalmente.
+    resposta_explicita = client.patch(
+        f"/api/v1/lancamentos/{entry_id}",
+        json={
+            "categoria": "Espirometria",
+            "status": "Recebido",
+            "data_recebimento": "2026-07-20",
+        },
+        headers=auth("gestor"),
+    )
+    assert resposta_explicita.status_code == 200, resposta_explicita.text
+    assert resposta_explicita.json()["categoria"] == "Espirometria"
+
+
 def test_payload_409_nao_expoe_pii(client, auth, person):
     alvo = _atendimento_com_receita(client, auth, person, "exame")
     response = client.post(

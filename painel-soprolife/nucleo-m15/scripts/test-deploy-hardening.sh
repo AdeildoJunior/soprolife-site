@@ -506,6 +506,102 @@ UNIT
 (export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
 caso "EnvironmentFile opcional ('-') não satisfaz o requisito (rc 1)" 1 $?
 
+# ── soprolife_validar_unit_update_data_efetiva (M23.2 — achado L-1) ────────
+# A validação anterior só lia o ARQUIVO recém-instalado; um drop-in systemd
+# em /etc/systemd/system/<unit>.d/*.conf — o mecanismo PADRÃO de override —
+# reativando o escape legado ficava invisível. `systemctl cat` é dublado
+# aqui para devolver a saída MERGIDA (arquivo + drop-ins, com as linhas
+# "# /caminho" que o systemd realmente imprime) e a função sob teste roda o
+# MESMO parser fail-closed sobre esse resultado.
+
+echo "── soprolife_validar_unit_update_data_efetiva ──"
+
+UNIDADE_EFETIVA="soprolife-update-data.service"
+EFETIVA_TMP="$TMP_DIR/systemctl-cat-efetiva.txt"
+
+cat >"$STUB_DIR/systemctl" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  cat)
+    if [[ -n "${STUB_SYSTEMCTL_CAT_FILE:-}" && -f "$STUB_SYSTEMCTL_CAT_FILE" ]]; then
+      cat "$STUB_SYSTEMCTL_CAT_FILE"
+    fi
+    ;;
+  *) echo "${STUB_MAINPID:-0}" ;;
+esac
+EOF
+chmod 0755 "$STUB_DIR/systemctl"
+
+UNIT_BASE='# /etc/systemd/system/soprolife-update-data.service
+[Service]
+User=soprolife
+Group=soprolife
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python'
+
+executa_efetiva() {
+  (
+    export PATH="$STUB_DIR:$PATH"
+    export SOPROLIFE_PRIV_MODE=direct
+    export STUB_SYSTEMCTL_CAT_FILE="$EFETIVA_TMP"
+    soprolife_validar_unit_update_data_efetiva "$UNIDADE_EFETIVA"
+  ) >/dev/null 2>&1
+}
+
+# Caso 1: sem nenhum drop-in — equivalente ao arquivo puro, deve aceitar.
+printf '%s\n' "$UNIT_BASE" >"$EFETIVA_TMP"
+executa_efetiva
+caso "sem drop-in nenhum: configuração efetiva aceita (rc 0)" 0 $?
+
+# Caso 2: drop-in limpo (só comentário + ajuste inofensivo) deve aceitar.
+printf '%s\n\n# /etc/systemd/system/soprolife-update-data.service.d/99-local.conf\n[Service]\n# Ajuste local inofensivo, sem relação com o contrato de segredo.\nTimeoutStartSec=120\n' \
+  "$UNIT_BASE" >"$EFETIVA_TMP"
+executa_efetiva
+caso "drop-in limpo (comentário + diretiva inofensiva) é aceito (rc 0)" 0 $?
+
+# Caso 3: drop-in reativa CLOUDSDK_CONFIG (ADC pessoal) — o arquivo principal
+# continua limpo; só a config EFETIVA expõe o escape.
+printf '%s\n\n# /etc/systemd/system/soprolife-update-data.service.d/98-adc.conf\n[Service]\nEnvironment=CLOUDSDK_CONFIG=/home/soprolife/.config/gcloud\n' \
+  "$UNIT_BASE" >"$EFETIVA_TMP"
+executa_efetiva
+caso "drop-in com CLOUDSDK_CONFIG ativo é recusado (rc 1)" 1 $?
+
+# Caso 4: drop-in reativa o escape legado de migração de Sheets.
+printf '%s\n\n# /etc/systemd/system/soprolife-update-data.service.d/97-legado.conf\n[Service]\nEnvironment=SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1\n' \
+  "$UNIT_BASE" >"$EFETIVA_TMP"
+executa_efetiva
+caso "drop-in com escape legado de Sheets ativo é recusado (rc 1)" 1 $?
+
+# Caso 5 (semântica de reset): um drop-in anterior ativa a variável proibida
+# e um drop-in POSTERIOR reseta Environment= por completo — a proibição
+# conta toda ocorrência ativa, nunca só o estado final, então continua
+# recusado mesmo depois do reset.
+printf '%s\n\n# .../98-adc.conf\n[Service]\nEnvironment=CLOUDSDK_CONFIG=/home/soprolife/.config/gcloud\n\n# .../99-reset.conf\n[Service]\nEnvironment=\nEnvironment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python\nEnvironment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python\n' \
+  "$UNIT_BASE" >"$EFETIVA_TMP"
+executa_efetiva
+caso "variável proibida ativada e depois resetada por outro drop-in continua recusada (rc 1)" 1 $?
+
+# Caso 6 (semântica de reset legítima): um drop-in substitui só os
+# interpretadores por um valor errado e OUTRO drop-in reseta e redefine
+# corretamente — nada proibido envolvido, deve aceitar com o valor FINAL.
+printf '%s\n\n# .../50-experimental.conf\n[Service]\nEnvironment=SOPROLIFE_M15_PYTHON=/tmp/errado/python\n\n# .../60-correcao.conf\n[Service]\nEnvironment=\nEnvironment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python\nEnvironment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python\n' \
+  "$UNIT_BASE" >"$EFETIVA_TMP"
+executa_efetiva
+caso "reset+redefinição legítima entre drop-ins é aceita com o valor final (rc 0)" 0 $?
+
+# Caso 7: diretiva malformada dentro do PRÓPRIO drop-in falha fechado.
+printf '%s\n\n# .../96-malformado.conf\n[Service]\nEstaLinhaNaoTemIgual\n' \
+  "$UNIT_BASE" >"$EFETIVA_TMP"
+executa_efetiva
+caso "diretiva malformada num drop-in falha fechado (rc 1)" 1 $?
+
+# Caso 8: `systemctl cat` não devolve nada (unit ausente/não carregada) falha
+# fechado em vez de aceitar um "arquivo vazio" por omissão.
+: >"$EFETIVA_TMP"
+executa_efetiva
+caso "'systemctl cat' vazio (unit ausente/não carregada) falha fechado (rc 1)" 1 $?
+
 # ── soprolife_estado_timer (M23.1 — provar que instalar a unit não liga/desliga o timer sozinho) ──
 
 echo "── soprolife_estado_timer ──"

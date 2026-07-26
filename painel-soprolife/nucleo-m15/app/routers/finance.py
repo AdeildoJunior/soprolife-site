@@ -757,24 +757,42 @@ def update_entry(
     # vêm sempre da linha gravada.
     categoria_informada = "categoria" in payload.model_fields_set
     categoria_bruta = payload.categoria if categoria_informada else entry.categoria
-    categoria_final = _categoria_final(
-        tipo=entry.tipo,
-        categoria=categoria_bruta,
-        spirometry_exam_id=entry.spirometry_exam_id,
-        consultation_id=entry.consultation_id,
-        contexto="lancamentos.update",
-    )
-    if (
-        categoria_final is None
+    # M-1 (revisão pós-M23.1): uma receita histórica (pré-M23.1) com AMBOS os
+    # vínculos e categoria NULL/vazia é ambígua por construção — _categoria_final
+    # recusa inferir qual componente é o dono. Antes desta correção, isto também
+    # bloqueava qualquer PATCH de metadado (status/recebimento) nessa linha,
+    # mesmo sem o caller tocar em categoria, deixando-a permanentemente
+    # inatualizável. Um PATCH que não menciona categoria não deve inferir nem
+    # alterar a classificação: só uma reclassificação EXPLÍCITA roda a
+    # canonicalização/ambiguidade completas.
+    receita_historica_ambigua_intocada = (
+        not categoria_informada
+        and entry.tipo == "receita"
+        and entry.spirometry_exam_id
+        and entry.consultation_id
         and canonizar_categoria(categoria_bruta) is None
-        and (categoria_informada or categoria_bruta is not None)
-    ):
-        # Só espaços/invisíveis num lançamento sem componente inferível:
-        # apagar classificação por PATCH não é correção de metadado.
-        raise HTTPException(status_code=422, detail={
-            "codigo": "categoria_invalida",
-            "mensagem": "Categoria informada é vazia depois da normalização.",
-        })
+    )
+    if receita_historica_ambigua_intocada:
+        categoria_final = entry.categoria
+    else:
+        categoria_final = _categoria_final(
+            tipo=entry.tipo,
+            categoria=categoria_bruta,
+            spirometry_exam_id=entry.spirometry_exam_id,
+            consultation_id=entry.consultation_id,
+            contexto="lancamentos.update",
+        )
+        if (
+            categoria_final is None
+            and canonizar_categoria(categoria_bruta) is None
+            and (categoria_informada or categoria_bruta is not None)
+        ):
+            # Só espaços/invisíveis num lançamento sem componente inferível:
+            # apagar classificação por PATCH não é correção de metadado.
+            raise HTTPException(status_code=422, detail={
+                "codigo": "categoria_invalida",
+                "mensagem": "Categoria informada é vazia depois da normalização.",
+            })
     # Canonicaliza o ESTADO FINAL mesmo quando o PATCH só corrige metadados.
     # Assim uma linha legada " espirometria " não permanece fora do contrato
     # depois de ser tocada, e uma receita vinculada sem categoria ganha a forma
