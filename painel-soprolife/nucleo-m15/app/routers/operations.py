@@ -170,6 +170,7 @@ def update_lead(
 def list_exams(
     status: str | None = None,
     modalidade: str | None = None,
+    public_code: str | None = None,
     person_id: str | None = None,
     partner_id: str | None = None,
     params: PageParams = Depends(),
@@ -184,6 +185,11 @@ def list_exams(
         stmt = stmt.where(SpirometryExam.status.in_(exam_status_filter_values(status)))
     if modalidade:
         stmt = stmt.where(SpirometryExam.modalidade == modalidade)
+    if public_code:
+        # Código institucional, sem nome/telefone na query. A UI de laudos
+        # usa busca exata para localizar exames além da lista recente sem
+        # colocar identificador de paciente em URL ou log.
+        stmt = stmt.where(SpirometryExam.public_code == public_code.strip().upper())
     if person_id:
         stmt = stmt.where(SpirometryExam.person_id == person_id)
     if partner_id:

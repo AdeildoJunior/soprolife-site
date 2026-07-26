@@ -8,6 +8,7 @@ import threading
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import sessionmaker
@@ -28,7 +29,6 @@ pytestmark = pytest.mark.skipif(
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 OLD_HEAD = "b8c4e6d21a90"
-NEW_HEAD = "c9d5f7a31b42"
 
 
 def _alembic_config() -> Config:
@@ -76,6 +76,7 @@ def test_postgres_migracao_aborta_conflito_e_depois_preserva_linha_valida(
     fixture sintética conflitante pelo próprio teste, o mesmo banco sobe e a
     linha válida permanece byte a byte igual."""
     cfg = _alembic_config()
+    expected_head = ScriptDirectory.from_config(cfg).get_current_head()
     command.downgrade(cfg, OLD_HEAD)
     SessionLocal = sessionmaker(bind=pg_engine, expire_on_commit=False)
     session = SessionLocal()
@@ -160,7 +161,10 @@ def test_postgres_migracao_aborta_conflito_e_depois_preserva_linha_valida(
     final.close()
     indexes = {ix["name"] for ix in inspect(pg_engine).get_indexes("financial_entries")}
     assert valid_after == valid_before
-    assert final_revision == NEW_HEAD
+    # `upgrade head` precisa alcançar a head única ATUAL. M24A adicionou uma
+    # revisão depois da migração M23.1 exercitada aqui; fixar a antiga revisão
+    # M23.1 como "head" produziria falso negativo mesmo com o banco correto.
+    assert final_revision == expected_head
     assert "uq_financial_entries_receita_espirometria" in indexes
     assert "uq_financial_entries_receita_consulta" in indexes
 

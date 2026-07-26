@@ -50,8 +50,11 @@ run "node --check js/central-cadastros.js"   node --check painel-soprolife/js/ce
 run "node --check js/financeiro-conciliacao.js" node --check painel-soprolife/js/financeiro-conciliacao.js
 run "node --check js/pastore-settlement.js" node --check painel-soprolife/js/pastore-settlement.js
 run "node --check js/crm-workspace.js"       node --check painel-soprolife/js/crm-workspace.js
+run "node --check js/report-workflow.js"     node --check painel-soprolife/js/report-workflow.js
 run "node --check test-m21-browser-e2e.js"   node --check painel-soprolife/scripts/test-m21-browser-e2e.js
 run "node --check test-m22-pastore.js"       node --check painel-soprolife/scripts/test-m22-pastore.js
+run "node --check test-m24a-report-workflow.js" node --check painel-soprolife/scripts/test-m24a-report-workflow.js
+run "node --check test-m24a-browser-e2e.js"  node --check painel-soprolife/scripts/test-m24a-browser-e2e.js
 
 secao "2/10 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
@@ -67,6 +70,7 @@ run "test-crm-unificado (M19)"           node painel-soprolife/scripts/test-crm-
 run "test-m20-atendimento (M20)"         node painel-soprolife/scripts/test-m20-atendimento.js
 run "test-m21-auth-crm-nav (M21)"        node painel-soprolife/scripts/test-m21-auth-crm-nav.js
 run "test-m22-pastore (M22)"              node painel-soprolife/scripts/test-m22-pastore.js
+run "test-m24a-report-workflow (M24A)"     node painel-soprolife/scripts/test-m24a-report-workflow.js
 
 secao "3/10 Sintaxe Python"
 run "py_compile generate-saude-operacional" python3 -m py_compile painel-soprolife/scripts/generate-saude-operacional.py

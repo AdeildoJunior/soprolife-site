@@ -112,8 +112,13 @@
         "Login bloqueado em origem HTTP insegura. Abra o endereço HTTPS privado do painel."
       ));
     }
-    options = options || {};
-    var base = { "Content-Type": "application/json" };
+    options = Object.assign({}, options || {});
+    var responseType = options.responseType || "json";
+    delete options.responseType;
+    // FormData precisa preservar o boundary gerado pelo navegador. Definir
+    // Content-Type manualmente quebraria o upload multipart dos laudos.
+    var isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+    var base = isFormData ? {} : { "Content-Type": "application/json" };
     // Bearer só quando existe de fato: mandar "Bearer " vazio faria a API
     // recusar antes de chegar a olhar o cookie de sessão.
     if (state.token) base.Authorization = "Bearer " + state.token;
@@ -126,6 +131,27 @@
     // para mais nenhum lugar.
     options.credentials = "same-origin";
     return fetch(state.apiBase + path, options).then(function (resp) {
+      if (responseType === "blob") {
+        if (!resp.ok) {
+          return resp.json().catch(function () { return {}; }).then(function (body) {
+            var msg = (body && body.erro && body.erro.mensagem) ||
+              (body && body.error) || ("HTTP " + resp.status);
+            var err = new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+            err.status = resp.status;
+            if (resp.status === 401 && (state.sessao || state.token)) {
+              return encerrarSessao("Sua sessão expirou. Entre novamente.").then(
+                function () { throw err; }
+              );
+            }
+            throw err;
+          });
+        }
+        var contentType = (resp.headers.get("Content-Type") || "").toLowerCase();
+        if (contentType.indexOf("application/pdf") !== 0) {
+          throw new Error("A API não devolveu um PDF válido para visualização.");
+        }
+        return resp.blob();
+      }
       return resp.json().catch(function () { return {}; }).then(function (body) {
         if (!resp.ok) {
           var msg = (body && body.erro && body.erro.mensagem) || ("HTTP " + resp.status);
@@ -136,6 +162,13 @@
         return body;
       });
     });
+  }
+
+  // Entrega autenticada de conteúdo binário. Usa exatamente a mesma sessão,
+  // cookie HttpOnly, token em memória, origem e tratamento de 401 do cliente
+  // JSON; o consumidor recebe somente um Blob, nunca uma URL pública.
+  function apiBlob(path, options) {
+    return api(path, Object.assign({}, options || {}, { responseType: "blob" }));
   }
 
   // ------------------------------------------------------------ utilitários
@@ -2356,6 +2389,7 @@
   // histórico da pergunta "estou autenticado?" para não quebrar consumidores.
   window.SoproM15 = {
     api: api,
+    apiBlob: apiBlob,
     can: can,
     idemKey: idemKey,
     hasToken: autenticado,

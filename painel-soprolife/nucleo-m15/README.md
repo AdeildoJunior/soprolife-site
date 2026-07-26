@@ -133,6 +133,14 @@ Idempotente; não inventa telefone, e-mail, datas nem percentuais.
 bash scripts/test-postgres-efemero.sh
 ```
 
+## Laudos PDF seguros (M24A)
+
+O fluxo de laudos exige `M15_REPORTS_STORAGE_DIR` absoluto, privado e fora do
+Git. Configuração, permissões, backup/restore coordenado, retenção, LGPD,
+pré-requisitos de implantação, rollback e decisões ainda pendentes estão no
+runbook `../docs/m24a-laudos-pdf-operacao.md`. Nenhum template clínico ou
+provedor de assinatura é presumido por esta etapa.
+
 ## Snapshot multiaba M15.6B
 
 O envelope bruto privado versionado pode ser validado e simulado com:

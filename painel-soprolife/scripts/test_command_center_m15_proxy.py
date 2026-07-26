@@ -247,6 +247,156 @@ class ProxyM15Tests(unittest.TestCase):
         self.assertEqual(handler.statuses[-1], 413)
         self.assertEqual(FakeConnection.instances, [])
 
+    def test_upload_multipart_de_laudo_tem_limite_dedicado_e_preserva_boundary(self):
+        body = b"x" * (server._M15_MAX_REQUEST_BODY + 1)
+        content_type = "multipart/form-data; boundary=fronteira-sintetica-m24a"
+        handler = self.run_m15(
+            "POST",
+            "/painel-soprolife/api/m15/laudos",
+            {"Content-Type": content_type},
+            body,
+        )
+        self.assertEqual(handler.statuses[-1], 200)
+        method, target, sent_body, sent_headers = (
+            FakeConnection.instances[-1].request_args
+        )
+        self.assertEqual((method, target), ("POST", "/api/v1/laudos"))
+        self.assertEqual(sent_body, body)
+        self.assertEqual(sent_headers["Content-Type"], content_type)
+        self.assertGreater(
+            server._M15_MAX_REPORT_REQUEST_BODY,
+            server._M15_MAX_REQUEST_BODY,
+        )
+
+    def test_limite_ampliado_nao_se_aplica_a_json_nem_multipart_em_outra_rota(self):
+        body = b"x" * (server._M15_MAX_REQUEST_BODY + 1)
+        for path, content_type in (
+            ("/painel-soprolife/api/m15/laudos", "application/json"),
+            (
+                "/painel-soprolife/api/m15/pessoas",
+                "multipart/form-data; boundary=nao-e-laudo",
+            ),
+        ):
+            with self.subTest(path=path, content_type=content_type):
+                FakeConnection.instances = []
+                handler = Harness(
+                    path,
+                    {
+                        "Content-Type": content_type,
+                        "Content-Length": str(len(body)),
+                    },
+                    body,
+                )
+                handler.command = "POST"
+                with mock.patch.object(
+                    server.http.client, "HTTPConnection", FakeConnection
+                ):
+                    handler.do_POST()
+                self.assertEqual(handler.statuses[-1], 413)
+                self.assertEqual(FakeConnection.instances, [])
+
+    def test_entrega_pdf_autenticada_preserva_conteudo_e_headers_seguros(self):
+        document_id = "11111111-1111-4111-8111-111111111111"
+        version_id = "22222222-2222-4222-8222-222222222222"
+        pdf = b"%PDF-" + b"x" * server._M15_MAX_RESPONSE_BODY
+        disposition = 'inline; filename="laudo-ESP-000001-v2-rascunho.pdf"'
+        FakeConnection.response = FakeResponse(
+            body=pdf,
+            headers={
+                "Content-Type": "application/pdf",
+                "Content-Disposition": disposition,
+            },
+        )
+        handler = self.run_m15(
+            "GET",
+            (
+                "/painel-soprolife/api/m15/laudos/"
+                f"{document_id}/versoes/{version_id}/conteudo?modo=inline"
+            ),
+        )
+        self.assertEqual(handler.statuses[-1], 200)
+        self.assertEqual(handler.wfile.getvalue(), pdf)
+        self.assertEqual(handler.response_headers["content-type"], "application/pdf")
+        self.assertEqual(
+            handler.response_headers["content-disposition"], disposition
+        )
+        self.assertEqual(
+            handler.response_headers["cache-control"], "private, no-store"
+        )
+        self.assertEqual(
+            handler.response_headers["x-content-type-options"], "nosniff"
+        )
+        self.assertGreater(
+            server._M15_MAX_REPORT_RESPONSE_BODY,
+            server._M15_MAX_RESPONSE_BODY,
+        )
+
+    def test_pdf_so_e_aceito_na_rota_exata_de_conteudo(self):
+        FakeConnection.response = FakeResponse(
+            body=b"%PDF-sintetico",
+            headers={"Content-Type": "application/pdf"},
+        )
+        self.assertEqual(
+            self.run_m15(
+                "GET", "/painel-soprolife/api/m15/laudos/templates"
+            ).statuses[-1],
+            502,
+        )
+        # Mesmo com 36 caracteres, hífens fora do formato UUID não ganham o
+        # limite/resposta binária privilegiados.
+        self.assertEqual(
+            self.run_m15(
+                "GET",
+                (
+                    "/painel-soprolife/api/m15/laudos/"
+                    "111111111111111111111111111111111---/versoes/"
+                    "22222222-2222-4222-8222-222222222222/conteudo"
+                ),
+            ).statuses[-1],
+            502,
+        )
+
+    def test_erro_json_da_entrega_pdf_preserva_status(self):
+        document_id = "11111111-1111-4111-8111-111111111111"
+        version_id = "22222222-2222-4222-8222-222222222222"
+        FakeConnection.response = FakeResponse(
+            status=401,
+            body='{"erro":{"mensagem":"Não autenticado."}}'.encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        handler = self.run_m15(
+            "GET",
+            (
+                "/painel-soprolife/api/m15/laudos/"
+                f"{document_id}/versoes/{version_id}/conteudo"
+            ),
+        )
+        self.assertEqual(handler.statuses[-1], 401)
+        self.assertEqual(
+            json.loads(handler.wfile.getvalue())["erro"]["mensagem"],
+            "Não autenticado.",
+        )
+
+    def test_content_disposition_inseguro_nao_e_repassado(self):
+        document_id = "11111111-1111-4111-8111-111111111111"
+        version_id = "22222222-2222-4222-8222-222222222222"
+        FakeConnection.response = FakeResponse(
+            body=b"%PDF-sintetico",
+            headers={
+                "Content-Type": "application/pdf",
+                "Content-Disposition": "inline; filename=\"ok.pdf\"\r\nX-Injetado: 1",
+            },
+        )
+        handler = self.run_m15(
+            "GET",
+            (
+                "/painel-soprolife/api/m15/laudos/"
+                f"{document_id}/versoes/{version_id}/conteudo"
+            ),
+        )
+        self.assertEqual(handler.statuses[-1], 200)
+        self.assertNotIn("content-disposition", handler.response_headers)
+
     def test_resposta_invalida_e_excedente(self):
         FakeConnection.response = FakeResponse(headers={"Content-Type": "text/html"})
         self.assertEqual(self.run_m15().statuses[-1], 502)

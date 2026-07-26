@@ -381,7 +381,11 @@ def download_report_version(
     return Response(
         content=data,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'{disposition}; filename="{safe_name}"'},
+        headers={
+            "Content-Disposition": f'{disposition}; filename="{safe_name}"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

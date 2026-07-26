@@ -16,6 +16,10 @@ Endpoints:
   POST /painel-soprolife/api/command-center          → 410, rota desativada
   GET|POST|PATCH /painel-soprolife/api/m15/...       → http://127.0.0.1:8015/api/v1/...
 
+M24A: o upload multipart e a entrega PDF continuam na mesma rota autenticada.
+Somente os endpoints exatos de laudo recebem limites binários próprios; todas
+as demais respostas do proxy permanecem JSON e com os limites anteriores.
+
 Logs M15 mostram somente operação genérica, método, status, request_id
 sanitizado e duração.
 Nunca imprime: token, URL, querystring, corpo, telefone, nomes ou CPF.
@@ -109,8 +113,22 @@ def _allowed_set_cookie(raw: str) -> bool:
 _M15_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _M15_MAX_REQUEST_BODY = 1024 * 1024
 _M15_MAX_RESPONSE_BODY = 4 * 1024 * 1024
+# O backend aceita PDFs de até 25 MiB. Um MiB adicional cobre o envelope
+# multipart; só POST /laudos recebe esse teto, nunca as rotas JSON comuns.
+_M15_MAX_REPORT_REQUEST_BODY = 26 * 1024 * 1024
+_M15_MAX_REPORT_RESPONSE_BODY = 26 * 1024 * 1024
 _M15_CONNECT_TIMEOUT = 3.0
 _M15_RESPONSE_TIMEOUT = 15.0
+_M15_REPORT_CONTENT_RE = re.compile(
+    r"^/laudos/"
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/versoes/"
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/conteudo$"
+)
+_M15_SAFE_DISPOSITION_RE = re.compile(
+    r'^(?:inline|attachment); filename="[A-Za-z0-9._-]{1,180}"$'
+)
 
 
 def _m15_upstream() -> tuple[str, int, str]:
@@ -167,6 +185,24 @@ def _m15_public_path(raw_target: str) -> tuple[str, str] | None:
 def _safe_request_id(value: str | None) -> str:
     value = (value or "").strip()
     return value if _M15_REQUEST_ID_RE.fullmatch(value) else "-"
+
+
+def _is_report_upload(method: str, suffix: str, content_type: str | None) -> bool:
+    return (
+        method == "POST"
+        and suffix == "/laudos"
+        and (content_type or "").lower().startswith("multipart/form-data;")
+    )
+
+
+def _is_report_content(method: str, suffix: str) -> bool:
+    return method == "GET" and bool(_M15_REPORT_CONTENT_RE.fullmatch(suffix))
+
+
+def _safe_content_disposition(value: str | None) -> str | None:
+    if not value or len(value) > 220 or "\r" in value or "\n" in value:
+        return None
+    return value if _M15_SAFE_DISPOSITION_RE.fullmatch(value) else None
 
 
 # ── Handler ───────────────────────────────────────────────────────────────────
@@ -306,7 +342,13 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             self._m15_error(400, "Content-Length inválido.")
             self._m15_log(method, 400, request_id, started)
             return
-        if length > _M15_MAX_REQUEST_BODY:
+        report_upload = _is_report_upload(
+            method, suffix, self.headers.get("Content-Type")
+        )
+        request_limit = (
+            _M15_MAX_REPORT_REQUEST_BODY if report_upload else _M15_MAX_REQUEST_BODY
+        )
+        if length > request_limit:
             self._m15_error(413, "Corpo da requisição excede o limite.")
             self._m15_log(method, 413, request_id, started)
             return
@@ -336,25 +378,47 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             connection.request(method, upstream_target, body=body, headers=headers)
             response = connection.getresponse()
             status = response.status
-            result_raw = response.read(_M15_MAX_RESPONSE_BODY + 1)
-            if len(result_raw) > _M15_MAX_RESPONSE_BODY:
+            report_content = _is_report_content(method, suffix)
+            response_limit = (
+                _M15_MAX_REPORT_RESPONSE_BODY
+                if report_content
+                else _M15_MAX_RESPONSE_BODY
+            )
+            result_raw = response.read(response_limit + 1)
+            if len(result_raw) > response_limit:
                 self._m15_error(502, "Resposta da API excede o limite.")
                 status = 502
                 return
             content_type = response.getheader("Content-Type") or ""
-            if not content_type.lower().startswith("application/json"):
-                self._m15_error(502, "Resposta inválida da API.")
-                status = 502
-                return
-            try:
-                json.loads(result_raw)
-            except (TypeError, ValueError):
-                self._m15_error(502, "Resposta inválida da API.")
-                status = 502
-                return
+            is_pdf = (
+                report_content
+                and 200 <= status < 300
+                and content_type.lower().startswith("application/pdf")
+            )
+            if not is_pdf:
+                if not content_type.lower().startswith("application/json"):
+                    self._m15_error(502, "Resposta inválida da API.")
+                    status = 502
+                    return
+                try:
+                    json.loads(result_raw)
+                except (TypeError, ValueError):
+                    self._m15_error(502, "Resposta inválida da API.")
+                    status = 502
+                    return
 
             self.send_response(status)
             self.send_header("Content-Type", content_type)
+            if is_pdf:
+                disposition = _safe_content_disposition(
+                    response.getheader("Content-Disposition")
+                )
+                if disposition:
+                    self.send_header("Content-Disposition", disposition)
+                # Laudo clínico autenticado nunca deve virar cache público ou
+                # ser interpretado como outro tipo de conteúdo.
+                self.send_header("Cache-Control", "private, no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
             upstream_request_id = _safe_request_id(response.getheader("X-Request-ID"))
             if upstream_request_id != "-":
                 self.send_header("X-Request-ID", upstream_request_id)
