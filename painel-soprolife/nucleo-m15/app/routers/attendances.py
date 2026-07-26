@@ -35,6 +35,9 @@ from ..models import (
     User,
 )
 from ..schemas import (
+    CATEGORIA_CONSULTA,
+    CATEGORIA_ESPIROMETRIA,
+    CATEGORIA_REPASSE_MEDICO,
     TIPO_PASTORE,
     TIPOS_COM_CONSULTA,
     TIPOS_COM_ESPIROMETRIA,
@@ -52,10 +55,6 @@ from ..services.pastore import canonical_pastore, pastore_unit
 router = APIRouter(tags=["atendimentos"])
 
 CENTAVOS = Decimal("0.01")
-
-CATEGORIA_ESPIROMETRIA = "Espirometria"
-CATEGORIA_CONSULTA = "Consulta"
-CATEGORIA_REPASSE_MEDICO = "Repasse ao médico"
 
 
 def _apply_date(obj, prefix: str, raw: str | None) -> None:

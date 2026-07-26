@@ -396,3 +396,61 @@ def test_fluxo_canonico_completo(client, auth):
     assert erro.status_code == 404
     depois = client.get("/api/v1/espirometrias?tamanho=1", headers=auth("leitura")).json()["total"]
     assert antes == depois
+
+
+# ------------------- M23.1: cadastro "apenas a pessoa" não cria atendimento
+
+
+def test_cadastro_apenas_pessoa_nao_cria_nenhum_atendimento(client, auth):
+    """Central de Cadastros: '+ Cadastrar nova pessoa' com a opção 'Cadastrar
+    apenas a pessoa, sem criar exame ou consulta' deve chamar SOMENTE
+    POST /pessoas. Prova pelo backend (não pela UI) que nenhuma espirometria,
+    consulta ou lançamento financeiro nasce como efeito colateral: a linha do
+    tempo do paciente deve conter exatamente o evento de cadastro."""
+    pessoa = _criar_pessoa(client, auth, "Somente Pessoa 001", "(21) 0000-9003")
+
+    timeline = client.get(
+        f"/api/v1/crm/pacientes/{pessoa['id']}/timeline", headers=auth("leitura")
+    ).json()
+    assert len(timeline["eventos"]) == 1
+    assert timeline["eventos"][0]["tipo"] == "cadastro"
+
+    esp = client.get(
+        f"/api/v1/espirometrias?person_id={pessoa['id']}", headers=auth("leitura")
+    ).json()
+    assert esp["total"] == 0
+    con = client.get(
+        f"/api/v1/consultas?person_id={pessoa['id']}", headers=auth("leitura")
+    ).json()
+    assert con["total"] == 0
+    lanc = client.post(
+        "/api/v1/lancamentos/busca",
+        json={"q": pessoa["public_code"]},
+        headers=auth("leitura"),
+    ).json()
+    assert lanc["total"] == 0
+
+
+def test_busca_de_pessoa_existente_nunca_cria_duplicata(client, auth):
+    """Selecionar uma pessoa já existente (fluxo de busca) nunca deve chamar
+    POST /pessoas de novo — GET/busca são inertes por natureza; o contrato
+    real é que o total de pessoas não muda ao simplesmente localizar e
+    reutilizar quem já existe (o que a Central faz via picker.resolve(),
+    que só cria quando modoNova está ativo)."""
+    pessoa = _criar_pessoa(client, auth, "Ja Existe 001", "(21) 0000-9004")
+    total_antes = client.get("/api/v1/pessoas", headers=auth("leitura")).json()["total"]
+
+    encontrada = client.post(
+        "/api/v1/pessoas/busca",
+        json={"q": "Ja Existe 001", "tamanho": 8},
+        headers=auth("operacional"),
+    ).json()
+    assert any(p["id"] == pessoa["id"] for p in encontrada["itens"])
+
+    por_codigo = client.get(
+        f"/api/v1/pessoas/{pessoa['id']}", headers=auth("leitura")
+    ).json()
+    assert por_codigo["id"] == pessoa["id"]
+
+    total_depois = client.get("/api/v1/pessoas", headers=auth("leitura")).json()["total"]
+    assert total_antes == total_depois

@@ -253,12 +253,6 @@
   font-weight: 700;
 }
 
-.cad-acao-secundaria {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border, #d7e2ea);
-}
-
 .cad-check {
   display: inline-flex;
   align-items: center;
@@ -268,6 +262,13 @@
 }
 
 .cad-check input { width: 16px; height: 16px; cursor: pointer; }
+
+.cad-check-somente-pessoa {
+  display: flex;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border, #d7e2ea);
+}
 
 .cad-tipos {
   display: grid;
@@ -319,7 +320,8 @@
   color: var(--teal-dark, #0f8f83);
 }
 
-.cad-pastore-aviso {
+.cad-pastore-aviso,
+.cad-financeiro-aviso {
   margin-bottom: 10px;
   padding: 8px 10px;
   border-radius: 8px;

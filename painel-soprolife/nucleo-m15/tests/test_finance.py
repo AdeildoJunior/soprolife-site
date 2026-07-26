@@ -284,3 +284,143 @@ def test_idempotencia_mesma_chave_payload_diferente_409(client, auth, person):
     conflito = client.post("/api/v1/espirometrias", json=alterado, headers=auth("operacional"))
     assert conflito.status_code == 409
     assert "Idempotency" in conflito.json()["erro"]["mensagem"]
+
+
+# --------------- M23.1: proteção de duplicidade no backend (não só na UI)
+
+
+def test_receita_de_exame_ja_criada_pelo_atendimento_bloqueia_duplicata_manual(
+    client, auth, person
+):
+    """Um exame criado via /atendimentos com financeiro.espirometria já tem
+    sua receita própria — o formulário manual não pode criar outra."""
+    criado = client.post(
+        "/api/v1/atendimentos",
+        json={
+            "person_id": person["id"],
+            "tipo": "espirometria_soprolife",
+            "espirometria": {"data_exame": "10/01/2026", "status": "Realizado",
+                              "modalidade": "residencial"},
+            "financeiro": {"espirometria": {"valor": "220.00", "status": "Recebido",
+                                             "data_recebimento": "2026-01-10"}},
+        },
+        headers=auth("operacional"),
+    ).json()
+    exame_id = criado["espirometria"]["id"]
+    lancamento_existente = criado["lancamentos"][0]["public_code"]
+
+    dup = client.post(
+        "/api/v1/lancamentos",
+        json={
+            "tipo": "receita", "categoria": "Espirometria", "valor": "220.00",
+            "spirometry_exam_id": exame_id,
+        },
+        headers=auth("gestor"),
+    )
+    assert dup.status_code == 409, dup.text
+    detalhe = dup.json()["erro"]["mensagem"]
+    assert detalhe["codigo"] == "receita_ja_existe"
+    assert detalhe["lancamento_existente"] == lancamento_existente
+
+    # a receita não dobrou no banco
+    total = client.post(
+        "/api/v1/lancamentos/busca", json={"q": lancamento_existente},
+        headers=auth("leitura"),
+    ).json()["total"]
+    assert total == 1
+
+    # outra categoria/tipo para o MESMO exame continua permitida (1:N —
+    # ex.: um ajuste avulso não é a mesma receita e não deve ser bloqueado)
+    ajuste = client.post(
+        "/api/v1/lancamentos",
+        json={
+            "tipo": "despesa", "categoria": "Ajuste", "valor": "10.00",
+            "spirometry_exam_id": exame_id,
+        },
+        headers=auth("gestor"),
+    )
+    assert ajuste.status_code == 201, ajuste.text
+
+
+def test_receita_de_consulta_ja_criada_bloqueia_duplicata_mas_repasse_separado_passa(
+    client, auth, person
+):
+    criado = client.post(
+        "/api/v1/atendimentos",
+        json={
+            "person_id": person["id"],
+            "tipo": "consulta_soprolife",
+            "consulta": {"data_consulta": "10/01/2026", "status": "Realizada",
+                         "modalidade": "teleconsulta", "retorno": "sem_retorno"},
+            "financeiro": {"consulta": {"valor_bruto": "300.00", "status": "Recebido",
+                                         "data_recebimento": "2026-01-10"}},
+        },
+        headers=auth("operacional"),
+    ).json()
+    consulta_id = criado["consulta"]["id"]
+    bruto_existente = next(
+        l["public_code"] for l in criado["lancamentos"] if l["componente"] == "consulta_bruto"
+    )
+
+    dup = client.post(
+        "/api/v1/lancamentos",
+        json={
+            "tipo": "receita", "categoria": "Consulta", "valor": "300.00",
+            "consultation_id": consulta_id,
+        },
+        headers=auth("gestor"),
+    )
+    assert dup.status_code == 409, dup.text
+    assert dup.json()["erro"]["mensagem"]["lancamento_existente"] == bruto_existente
+
+    # repasse ao médico é uma obrigação SEPARADA — não é a mesma receita e
+    # continua permitido mesmo com a receita bruta já lançada
+    repasse = client.post(
+        "/api/v1/lancamentos",
+        json={
+            "tipo": "repasse", "categoria": "Repasse ao médico", "valor": "150.00",
+            "consultation_id": consulta_id,
+        },
+        headers=auth("gestor"),
+    )
+    assert repasse.status_code == 201, repasse.text
+
+
+def test_receita_pastore_manual_continua_bloqueada_pelo_guarda_existente(client, auth, person):
+    """Regressão: a proteção nova de duplicidade não pode enfraquecer o
+    bloqueio já existente de pagamento direto de exame Pastore."""
+    partner = client.post(
+        "/api/v1/parceiros",
+        json={"nome": "Pastore", "tipo": "clinica", "status": "ativa"},
+        headers=auth("operacional"),
+    ).json()
+    unit = client.post(
+        "/api/v1/unidades",
+        json={"partner_id": partner["id"], "nome": "Pastore Regressao"},
+        headers=auth("operacional"),
+    ).json()
+    criado = client.post(
+        "/api/v1/atendimentos",
+        json={
+            "person_id": person["id"],
+            "tipo": "espirometria_pastore",
+            "espirometria": {
+                "data_exame": "10/01/2026", "status": "Realizado",
+                "partner_id": partner["id"], "partner_unit_id": unit["id"],
+            },
+        },
+        headers=auth("operacional"),
+    ).json()
+    exame_id = criado["espirometria"]["id"]
+    assert criado["lancamentos"] == []
+
+    resp = client.post(
+        "/api/v1/lancamentos",
+        json={
+            "tipo": "receita", "categoria": "Espirometria", "valor": "220.00",
+            "spirometry_exam_id": exame_id,
+        },
+        headers=auth("gestor"),
+    )
+    assert resp.status_code == 422
+    assert resp.json()["erro"]["mensagem"]["codigo"] == "pagamento_direto_pastore_proibido"

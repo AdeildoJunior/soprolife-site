@@ -31,6 +31,8 @@ from ..models import (
 from ..normalize import normalize_name
 from ..pagination import PageParams, paginate
 from ..schemas import (
+    CATEGORIA_CONSULTA,
+    CATEGORIA_ESPIROMETRIA,
     ConciliacaoLoteRequest,
     FinanceSearch,
     FinancialEntryCreate,
@@ -222,6 +224,53 @@ def search_entries(
     return paginate(db, stmt, params, _ser)
 
 
+def _bloquear_receita_duplicada(
+    db: Session,
+    *,
+    spirometry_exam_id: str | None,
+    consultation_id: str | None,
+    tipo: str,
+    categoria: str | None,
+) -> None:
+    """M23.1 — proteção de duplicidade no BACKEND (não só no navegador).
+
+    Um exame ou consulta que já tem a receita própria (a que o atendimento
+    cria sozinho: mesmo vínculo + tipo="receita" + a categoria própria do
+    componente) não pode ganhar um lançamento equivalente pelo formulário
+    manual. Isto NÃO impede outros lançamentos ligados ao mesmo exame/consulta
+    (repasse, ajuste, categoria diferente) — o contrato é 1:N de propósito;
+    só a receita própria repetida é bloqueada.
+    """
+    if tipo != "receita":
+        return
+    if spirometry_exam_id and categoria == CATEGORIA_ESPIROMETRIA:
+        vinculo, rotulo = FinancialEntry.spirometry_exam_id, "exame"
+        alvo_id = spirometry_exam_id
+    elif consultation_id and categoria == CATEGORIA_CONSULTA:
+        vinculo, rotulo = FinancialEntry.consultation_id, "consulta"
+        alvo_id = consultation_id
+    else:
+        return
+    existente = db.execute(
+        select(FinancialEntry).where(
+            vinculo == alvo_id,
+            FinancialEntry.tipo == "receita",
+            FinancialEntry.categoria == categoria,
+        )
+    ).scalars().first()
+    if existente is not None:
+        raise HTTPException(status_code=409, detail={
+            "codigo": "receita_ja_existe",
+            "mensagem": (
+                f"Este {rotulo} já tem um lançamento de receita "
+                f"({existente.public_code}) — atualize o existente em vez de "
+                "criar outro."
+            ),
+            "lancamento_existente": existente.public_code,
+            "lancamento_existente_id": existente.id,
+        })
+
+
 @router.post("/lancamentos", status_code=201)
 def create_entry(
     payload: FinancialEntryCreate,
@@ -247,6 +296,13 @@ def create_entry(
                     "use o fechamento mensal da parceria."
                 ),
             })
+    _bloquear_receita_duplicada(
+        db,
+        spirometry_exam_id=payload.spirometry_exam_id,
+        consultation_id=payload.consultation_id,
+        tipo=payload.tipo,
+        categoria=payload.categoria,
+    )
 
     def factory(key, fingerprint):
         entry = FinancialEntry(

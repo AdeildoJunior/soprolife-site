@@ -362,6 +362,45 @@ async function main() {
           pastoreForm.genericLocationOptions.length === 0,
           JSON.stringify(pastoreForm.genericLocationOptions));
 
+    // M23.1: "Data do exame" perdia o calendário quando o operador trocava
+    // AO VIVO para Espirometria Pastore (aplicarModo() substituía
+    // blocoEsp.innerHTML sem chamar attachDates de novo). Abre a aba com o
+    // tipo padrão (SoproLife) e replica o gesto real: clicar no rádio
+    // Pastore, disparando a mesma troca dinâmica que expôs o bug.
+    await cdp.evaluate(`window.SoproCentral.open("atendimento", {})`);
+    await waitFor(
+      () => cdp.evaluate("Boolean(document.querySelector('#cadFormAtend'))"),
+      "formulário Novo atendimento (tipo padrão SoproLife)",
+    );
+    await cdp.evaluate(`(() => {
+      const radio = document.querySelector(
+        '#cadFormAtend input[name="tipo"][value="espirometria_pastore"]');
+      radio.checked = true;
+      radio.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await waitFor(
+      () => cdp.evaluate(
+        "document.querySelector('#cadAtBlocoEsp')?.textContent.includes('Pastore Ipanema')"
+      ),
+      "bloco de espirometria re-renderizado ao vivo para Pastore",
+    );
+    const pastoreDatePicker = await cdp.evaluate(`(() => {
+      const form = document.querySelector("#cadFormAtend");
+      const holder = form.elements.esp_data;
+      const wrapper = holder ? holder.closest(".m15-date") : null;
+      return {
+        attached: holder ? holder.getAttribute("data-m15-date-attached") : null,
+        holderType: holder ? holder.type : null,
+        hasCalendarButton: Boolean(wrapper &&
+          wrapper.querySelector('button[aria-label="Abrir calendário"]')),
+      };
+    })()`);
+    check("M23.1: troca ao vivo para Pastore preserva o calendário em " +
+          "'Data do exame' (regressão do bug corrigido — navegador real)",
+          pastoreDatePicker.attached === "1" && pastoreDatePicker.holderType === "hidden" &&
+          pastoreDatePicker.hasCalendarButton,
+          JSON.stringify(pastoreDatePicker));
+
     const multiUnit = await cdp.evaluate(`(async () => {
       const extra = await window.SoproM15.api("/unidades", {
         method: "POST",

@@ -112,18 +112,37 @@ caso("os formulários antigos foram REMOVIDOS (sem implementação duplicada)",
      !/LOADERS\.consulta\s*=/.test(centralSrc) &&
      /LOADERS\.atendimento\s*=/.test(centralSrc));
 
-// ── C) ação secundária "Cadastrar somente paciente" ────────────────────────
+// ── C) cadastro de pessoa nova × cadastro só da pessoa (M23.1) ─────────────
 console.log();
-console.log("C) Cadastrar somente paciente é ação secundária, não aba");
+console.log("C) Nova pessoa tem verbo próprio; \"só a pessoa\" só existe dentro desse fluxo");
 
-caso("checkbox de ação secundária existe dentro do fluxo",
-     /Cadastrar somente paciente \(sem atendimento\)/.test(centralSrc) &&
-     /id="cadAtSoPaciente"/.test(centralSrc) &&
-     /class="cad-acao-secundaria"/.test(centralSrc));
-caso("no modo somente paciente nenhum atendimento é criado",
-     /if \(soPacienteEl\.checked\) \{[\s\S]{0,300}?somentePaciente: true/.test(centralSrc));
-caso("modo somente paciente esconde os passos 2 e 3",
-     /passo2\.hidden = soPaciente;[\s\S]{0,80}?passo3\.hidden = soPaciente;/.test(centralSrc));
+caso("botão do seletor de pessoa diz \"+ Cadastrar nova pessoa\" (não mais \"+ Nova pessoa\")",
+     /\+ Cadastrar nova pessoa/.test(centralSrc) &&
+     !/>\+ Nova pessoa</.test(centralSrc));
+caso("\"cadastrar apenas a pessoa\" só é renderizado quando o chamador pede (opts.somentePessoaOpcao)",
+     /opts\.somentePessoaOpcao \? `[\s\S]{0,200}?Cadastrar apenas a pessoa, sem criar exame ou consulta/
+       .test(centralSrc) &&
+     /id="\$\{prefix\}SoPessoa"/.test(centralSrc));
+caso("o checkbox mora DENTRO da caixa de pessoa nova, não solto como ação flutuante",
+     (() => {
+       const boxStart = centralSrc.indexOf('id="${prefix}NovaBox"');
+       const boxCheckbox = centralSrc.indexOf('id="${prefix}SoPessoa"');
+       const boxEnd = centralSrc.indexOf("</div>`}", boxStart);
+       return boxStart !== -1 && boxCheckbox > boxStart && boxCheckbox < boxEnd;
+     })());
+caso("só o fluxo de Novo atendimento pede a opção (Lead não a usa)",
+     /personPickerHtml\("cadAtP", \{ somentePessoaOpcao: true \}\)/.test(centralSrc) &&
+     /personPickerHtml\("cadLeadP"\)/.test(centralSrc));
+caso("a opção só conta como ativa quando a pessoa é NOVA (picker.somentePessoaAtivo)",
+     /picker\.somentePessoaAtivo = function \(\) \{[\s\S]{0,120}?return picker\.modoNova && !!\(soPessoaEl && soPessoaEl\.checked\)/
+       .test(centralSrc));
+caso("no modo \"somente pessoa\" nenhum atendimento/exame/consulta/lançamento é criado",
+     /if \(picker\.somentePessoaAtivo\(\)\) \{[\s\S]{0,300}?somentePessoa: true/.test(centralSrc));
+caso("modo \"somente pessoa\" esconde os passos 2 e 3 e troca o rótulo do botão",
+     /const soPessoa = picker\.somentePessoaAtivo\(\);[\s\S]{0,200}?passo2\.hidden = soPessoa;[\s\S]{0,80}?passo3\.hidden = soPessoa;[\s\S]{0,120}?"Salvar pessoa" : "Salvar atendimento"/
+       .test(centralSrc));
+caso("busca de pessoa existente nunca aciona a criação (resolve só retorna a selecionada)",
+     /if \(picker\.selected\) return Promise\.resolve\(picker\.selected\);/.test(centralSrc));
 
 // ── D) tipos de atendimento ────────────────────────────────────────────────
 console.log();

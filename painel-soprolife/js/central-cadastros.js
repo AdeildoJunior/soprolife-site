@@ -215,6 +215,11 @@
         })
         .catch((err) => {
           btn.disabled = false;
+          if (status) status.hidden = true;
+          // Conflitos já tratados com uma ação própria na tela (ex.: banner
+          // de "lançamento duplicado" com botão de atualizar) não repetem o
+          // erro genérico por cima.
+          if (err && err.silencioso) return;
           const msg = (err && err.message) || String(err);
           if (status) {
             status.hidden = false;
@@ -232,6 +237,39 @@
     box.innerHTML = html;
     container.prepend(box);
     box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // M23.1 — proteção de duplicidade: quando o backend recusa (409) uma
+  // segunda receita para o mesmo exame/consulta, oferece atualizar o
+  // lançamento existente com os dados (status/recebimento/forma) que o
+  // operador já tinha preenchido, em vez de só avisar e deixar por conta
+  // dele procurar o código na lista.
+  function mostrarConflitoReceita(container, detalhe, dadosParaAtualizar) {
+    const box = document.createElement("div");
+    box.className = "cad-dup-aviso";
+    box.innerHTML =
+      `<strong>Lançamento duplicado evitado:</strong> ${esc(detalhe.mensagem)}` +
+      `<button type="button" class="m15-btn m15-btn-sec" id="cadFinAtualizarExistente">` +
+      `Atualizar ${esc(detalhe.lancamento_existente)} com estes dados</button>`;
+    container.prepend(box);
+    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    box.querySelector("#cadFinAtualizarExistente").addEventListener("click", () => {
+      const btn = box.querySelector("#cadFinAtualizarExistente");
+      btn.disabled = true;
+      api(`/lancamentos/${encodeURIComponent(detalhe.lancamento_existente_id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(dadosParaAtualizar),
+      }).then((atualizado) => {
+        box.remove();
+        successBanner(container,
+          `<strong>Lançamento ${esc(atualizado.public_code)} atualizado</strong> — ` +
+          `${fmtMoneyBR(atualizado.valor)} (${esc(atualizado.status)}).`);
+        loadFinRecents(container);
+      }).catch((err) => {
+        btn.disabled = false;
+        toast("Erro ao atualizar: " + (err.message || err), "erro");
+      });
+    });
   }
 
   function markDirtyOn(form) {
@@ -289,13 +327,18 @@
         <input id="${prefix}Q" type="search" placeholder="Buscar por nome, telefone ou PES-…"
           aria-label="Buscar pessoa por nome, telefone ou código">
         <button type="button" class="m15-btn m15-btn-sec" id="${prefix}Buscar">Buscar</button>
-        ${opts.semCriar ? "" : `<button type="button" class="m15-btn m15-btn-sec" id="${prefix}Nova">+ Nova pessoa</button>`}
+        ${opts.semCriar ? "" : `<button type="button" class="m15-btn m15-btn-sec" id="${prefix}Nova">+ Cadastrar nova pessoa</button>`}
       </div>
       <div class="cad-picker-results" id="${prefix}Resultados" hidden></div>
       <div class="cad-picker-selected" id="${prefix}Selecionada" hidden></div>
       ${opts.semCriar ? "" : `
       <div class="cad-picker-nova" id="${prefix}NovaBox" hidden>
         <p class="cad-picker-nova-titulo">Nova pessoa — criada junto com este cadastro</p>
+        ${opts.somentePessoaOpcao ? `
+        <label class="cad-check cad-check-somente-pessoa">
+          <input type="checkbox" id="${prefix}SoPessoa">
+          <span>Cadastrar apenas a pessoa, sem criar exame ou consulta</span>
+        </label>` : ""}
         <div class="m15-form cad-subgrid">
           ${fld("Nome completo", inp(prefix + "_nome", "", 'minlength="2" autocomplete="off"'), { span: 6, req: true })}
           ${fld("WhatsApp", inp(prefix + "_fone", "", 'type="tel" placeholder="(21) 99999-9999" autocomplete="off"'), 3)}
@@ -380,6 +423,11 @@
     const selecionada = root.querySelector("#" + prefix + "Selecionada");
     const novaBtn = root.querySelector("#" + prefix + "Nova");
     const novaBox = root.querySelector("#" + prefix + "NovaBox");
+    const soPessoaEl = opts.somentePessoaOpcao ? root.querySelector("#" + prefix + "SoPessoa") : null;
+
+    function notifyChange() {
+      if (opts.onChange) opts.onChange();
+    }
 
     function showSelected(p) {
       picker.selected = p;
@@ -394,9 +442,11 @@
         picker.selected = null;
         selecionada.hidden = true;
         q.focus();
+        notifyChange();
       });
       state.dirty = true;
       if (opts.onSelect) opts.onSelect(p);
+      notifyChange();
     }
 
     wireMiniSearch(q, buscar, resultados, showSelected);
@@ -419,7 +469,11 @@
           const nome = root.querySelector(`[name="${prefix}_nome"]`);
           if (nome) nome.focus();
         }
+        notifyChange();
       });
+      if (soPessoaEl) {
+        soPessoaEl.addEventListener("change", notifyChange);
+      }
       const fone = root.querySelector(`[name="${prefix}_fone"]`);
       if (fone) phoneMask(fone);
       const gfone = root.querySelector(`[name="${prefix}_gfone"]`);
@@ -447,8 +501,17 @@
       }
     }
 
+    // Só faz sentido "cadastrar apenas a pessoa" dentro do fluxo de pessoa
+    // NOVA — uma pessoa já existente não pode ser "só cadastrada" de novo,
+    // então o resultado ignora o checkbox quando uma pessoa existente foi
+    // selecionada (mesmo que o checkbox tenha ficado marcado de uma
+    // interação anterior, hidden dentro da novaBox).
+    picker.somentePessoaAtivo = function () {
+      return picker.modoNova && !!(soPessoaEl && soPessoaEl.checked);
+    };
+
     // Volta o seletor ao estado inicial (busca) após um envio bem-sucedido —
-    // sem isto, "+ Nova pessoa" continuava marcado como aberto internamente
+    // sem isto, "+ Cadastrar nova pessoa" continuava marcado como aberto internamente
     // e o SEGUNDO clique (para o próximo cadastro na mesma aba) o FECHAVA em
     // vez de abrir, quebrando o próximo envio silenciosamente.
     picker.resetState = function () {
@@ -459,6 +522,7 @@
       if (novaBox) novaBox.hidden = true;
       if (selecionada) selecionada.hidden = true;
       if (resultados) resultados.hidden = true;
+      if (soPessoaEl) soPessoaEl.checked = false;
       if (q) q.value = "";
       const dupAviso = root.querySelector("#" + prefix + "DupAviso");
       if (dupAviso) dupAviso.hidden = true;
@@ -943,13 +1007,7 @@
 
             <div class="m15-form-full cad-passo">
               <h4 class="cad-passo-titulo"><span class="cad-passo-num">1</span> Paciente</h4>
-              ${personPickerHtml("cadAtP")}
-              <div class="cad-acao-secundaria">
-                <label class="cad-check">
-                  <input type="checkbox" id="cadAtSoPaciente"${somentePacienteInicial ? " checked" : ""}>
-                  <span>Cadastrar somente paciente (sem atendimento)</span>
-                </label>
-              </div>
+              ${personPickerHtml("cadAtP", { somentePessoaOpcao: true })}
             </div>
 
             <div class="m15-form-full cad-passo" id="cadAtPasso2">
@@ -978,8 +1036,10 @@
 
       const form = bodyEl.querySelector("#cadFormAtend");
       markDirtyOn(form);
-      const picker = wirePersonPicker(form, "cadAtP");
-      const soPacienteEl = bodyEl.querySelector("#cadAtSoPaciente");
+      const picker = wirePersonPicker(form, "cadAtP", {
+        somentePessoaOpcao: true,
+        onChange: () => aplicarModo(),
+      });
       const passo2 = bodyEl.querySelector("#cadAtPasso2");
       const passo3 = bodyEl.querySelector("#cadAtPasso3");
       const blocoEsp = bodyEl.querySelector("#cadAtBlocoEsp");
@@ -993,11 +1053,11 @@
       }
 
       function aplicarModo() {
-        const soPaciente = soPacienteEl.checked;
-        passo2.hidden = soPaciente;
-        passo3.hidden = soPaciente;
-        btnSalvar.textContent = soPaciente ? "Salvar paciente" : "Salvar atendimento";
-        if (soPaciente) return;
+        const soPessoa = picker.somentePessoaAtivo();
+        passo2.hidden = soPessoa;
+        passo3.hidden = soPessoa;
+        btnSalvar.textContent = soPessoa ? "Salvar pessoa" : "Salvar atendimento";
+        if (soPessoa) return;
         const tipo = tipoAtual();
         const temEsp = TIPOS_COM_ESPIROMETRIA.indexOf(tipo) !== -1;
         const temCon = TIPOS_COM_CONSULTA.indexOf(tipo) !== -1;
@@ -1007,6 +1067,11 @@
         if (temEsp && renderedPastore !== ehPastore) {
           blocoEsp.innerHTML = blocoEspirometriaConteudoHtml(pastore, ehPastore);
           renderedPastore = ehPastore;
+          // attachDates só roda uma vez no carregamento inicial da aba; sem
+          // chamar de novo aqui, o "Data do exame" recém-injetado ao trocar
+          // para/de Pastore ficava sem o calendário (attachAll é idempotente
+          // via data-m15-date-attached, então repetir a chamada é seguro).
+          attachDates(blocoEsp);
         }
         if (ehPastore) {
           const pastoreAviso = bodyEl.querySelector("#cadAtPastoreAviso");
@@ -1025,16 +1090,29 @@
         }
       }
 
-      soPacienteEl.addEventListener("change", () => { aplicarModo(); state.dirty = true; });
       form.querySelectorAll('input[name="tipo"]').forEach((r) => {
         r.addEventListener("change", aplicarModo);
       });
+
+      // Deep-link contextual (M4/M19): abre direto no fluxo de pessoa nova
+      // com "somente pessoa" já marcado — outras telas (CRM, aba Pessoas)
+      // usam este atalho para "cadastrar só a pessoa" sem duplicar formulário.
+      if (somentePacienteInicial) {
+        const novaBtn = bodyEl.querySelector("#cadAtPNova");
+        if (novaBtn && !picker.modoNova) novaBtn.click();
+        const soPessoaEl = bodyEl.querySelector("#cadAtPSoPessoa");
+        if (soPessoaEl) {
+          soPessoaEl.checked = true;
+          soPessoaEl.dispatchEvent(new Event("change"));
+        }
+      }
       aplicarModo();
 
       wireSubmit(form, () => {
-        if (soPacienteEl.checked) {
-          // Ação secundária: cria a pessoa e NADA mais — sem atendimento.
-          return picker.resolve().then((pessoa) => ({ somentePaciente: true, pessoa }));
+        if (picker.somentePessoaAtivo()) {
+          // Ação secundária: cria a pessoa e NADA mais — sem atendimento,
+          // sem espirometria, sem consulta, sem lançamento financeiro.
+          return picker.resolve().then((pessoa) => ({ somentePessoa: true, pessoa }));
         }
         const tipo = tipoAtual();
         if (!tipo) throw new Error("Escolha o tipo do atendimento.");
@@ -1060,9 +1138,9 @@
             .then((criado) => ({ criado, pessoa }));
         });
       }, (res) => {
-        if (res.somentePaciente) {
+        if (res.somentePessoa) {
           successBanner(bodyEl,
-            `<strong>Paciente ${esc(res.pessoa.public_code)} criado</strong> — ` +
+            `<strong>Pessoa ${esc(res.pessoa.public_code)} criada</strong> — ` +
             `${esc(res.pessoa.nome_completo)}. Nenhum atendimento foi criado.`);
         } else {
           const c = res.criado;
@@ -1351,6 +1429,9 @@
     bodyEl.innerHTML = `
       <div class="m15-panel">
         <h3>Novo lançamento financeiro</h3>
+        <div class="cad-financeiro-aviso">Atendimentos SoproLife geram lançamentos financeiros
+          automaticamente. Use este formulário para despesas, repasses, ajustes e receitas
+          avulsas. Exames Pastore entram no fechamento mensal.</div>
         <p class="cad-microcopy">O financeiro NÃO guarda nome, telefone ou CPF. O paciente entra por vínculo técnico (exame/consulta) e o nome exibido é derivado da relação.</p>
         <form class="m15-form" id="cadFormFin" novalidate>
           ${fld("Tipo", sel("tipo", [["receita", "receita"], ["despesa", "despesa"], ["repasse", "repasse"]], "receita"), 2)}
@@ -1462,7 +1543,26 @@
       if (payload.status === "Recebido" && !payload.data_recebimento) {
         throw new Error('Status "Recebido" exige a data de recebimento.');
       }
-      return api("/lancamentos", { method: "POST", body: JSON.stringify(payload) });
+      return api("/lancamentos", { method: "POST", body: JSON.stringify(payload) })
+        .catch((err) => {
+          // M23.1: o backend recusa (409) uma receita duplicada do mesmo
+          // exame/consulta. A mensagem chega como JSON dentro de err.message
+          // (ver m15-nucleo.js api()); em vez de mostrar o JSON cru, oferece
+          // atualizar o lançamento existente com os dados já preenchidos.
+          let detalhe = null;
+          try { detalhe = JSON.parse(err.message); } catch (_e) { /* mensagem simples */ }
+          if (detalhe && detalhe.codigo === "receita_ja_existe") {
+            mostrarConflitoReceita(bodyEl, detalhe, {
+              status: payload.status,
+              data_recebimento: payload.data_recebimento,
+              forma_pagamento: payload.forma_pagamento,
+            });
+            const silencioso = new Error(detalhe.mensagem);
+            silencioso.silencioso = true;
+            throw silencioso;
+          }
+          throw err;
+        });
     }, (lanc) => {
       successBanner(bodyEl, `<strong>Lançamento ${esc(lanc.public_code)} criado</strong> — ${fmtMoneyBR(lanc.valor)} (${esc(lanc.status)}).`);
       form.reset();

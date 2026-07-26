@@ -465,6 +465,14 @@ TIPOS_COM_CONSULTA = ("consulta_soprolife", "espirometria_consulta_soprolife")
 # Pastore só se aplica quando o tipo é explicitamente Espirometria Pastore.
 TIPO_PASTORE = "espirometria_pastore"
 
+# Categorias da receita PRÓPRIA de um exame/consulta (o lançamento que o
+# atendimento cria sozinho). Compartilhadas entre attendances.py (quem cria)
+# e finance.py (quem bloqueia duplicata manual da mesma receita — M23.1)
+# para as duas nunca divergirem por um literal digitado diferente.
+CATEGORIA_ESPIROMETRIA = "Espirometria"
+CATEGORIA_CONSULTA = "Consulta"
+CATEGORIA_REPASSE_MEDICO = "Repasse ao médico"
+
 
 class AtendimentoEspirometria(StrictModel):
     data_exame: str = Field(min_length=4, max_length=40)
