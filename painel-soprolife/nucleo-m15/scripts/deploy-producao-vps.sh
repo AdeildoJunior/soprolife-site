@@ -23,6 +23,12 @@ readonly EXPECTED_REPO="/opt/soprolife/soprolife-site"
 readonly M15_DIR="$EXPECTED_REPO/painel-soprolife/nucleo-m15"
 readonly ENV_FILE="/opt/soprolife/secrets/m15.env"
 readonly VENV_DIR="/opt/soprolife/venvs/m15"
+# Venv DEDICADO do conector Marketing & SEO (Search Console + GA4, somente
+# leitura). Separado do venv da API de propósito: as bibliotecas do Google
+# não entram no ambiente que serve a fonte operacional, e uma falha de
+# instalação aqui não tem como derrubar a API nem os snapshots.
+readonly MARKETING_VENV_DIR="/opt/soprolife/venvs/marketing"
+readonly MARKETING_LOCK="$EXPECTED_REPO/painel-soprolife/requirements-marketing.lock"
 readonly UNIT_SOURCE="$EXPECTED_REPO/painel-soprolife/systemd/soprolife-m15-api.service"
 readonly UNIT_TARGET="/etc/systemd/system/soprolife-m15-api.service"
 readonly LOOPBACK_UNIT_SOURCE="$EXPECTED_REPO/painel-soprolife/systemd/soprolife-painel-loopback.service"
@@ -265,6 +271,36 @@ if [[ ! -x "$VENV_DIR/bin/python" ]]; then
 fi
 sudo -u soprolife "$VENV_DIR/bin/pip" install -r "$M15_DIR/requirements.lock"
 sudo -u soprolife "$VENV_DIR/bin/pip" check
+
+# --------------------------------------------------------------------------
+# Venv do Marketing & SEO (Search Console + GA4).
+#
+# NÃO é fatal: Marketing é integração externa opcional e o conector já falha
+# fechado preservando o último snapshot válido. Derrubar o deploy da fonte
+# operacional por causa de um pacote de marketing seria trocar um problema
+# pequeno por um grande. A falha fica VISÍVEL no log e o passo 3 da esteira a
+# reporta a cada execução — não some.
+#
+# Sem este bloco, o conector cai no python3 do PATH (o venv da API, sem as
+# bibliotecas do Google) e falha com "No module named 'googleapiclient'" —
+# exatamente o 2º incidente do M23.
+# --------------------------------------------------------------------------
+if [[ ! -x "$MARKETING_VENV_DIR/bin/python" ]]; then
+  sudo -u soprolife python3 -m venv "$MARKETING_VENV_DIR" \
+    || echo "AVISO: venv de Marketing não pôde ser criado — Search Console/GA4 ficarão indisponíveis."
+fi
+if [[ -x "$MARKETING_VENV_DIR/bin/python" ]]; then
+  if sudo -u soprolife "$MARKETING_VENV_DIR/bin/pip" install -r "$MARKETING_LOCK" \
+     && sudo -u soprolife "$MARKETING_VENV_DIR/bin/pip" check \
+     && sudo -u soprolife "$MARKETING_VENV_DIR/bin/python" -c \
+          'import googleapiclient.discovery, google.oauth2.service_account, google.analytics.data_v1beta'; then
+    echo "OK: venv de Marketing pronto ($MARKETING_VENV_DIR)."
+  else
+    echo "AVISO: dependências de Marketing não instaladas — Search Console/GA4"
+    echo "       ficarão em estado 'indisponível'. A fonte operacional"
+    echo "       (PostgreSQL) não é afetada."
+  fi
+fi
 
 run_m15_env() {
   sudo -u soprolife bash -c '

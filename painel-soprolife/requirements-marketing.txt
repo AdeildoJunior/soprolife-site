@@ -1,0 +1,16 @@
+# SoproLife — dependências DIRETAS do conector Marketing & SEO (M23).
+#
+# Search Console + GA4, SOMENTE LEITURA, por conta de serviço dedicada.
+# Nenhum pacote aqui dá acesso a Google Sheets: o M23 descomissionou a
+# planilha como fonte e ela não volta por esta porta. Não adicionar
+# gspread, google-auth-oauthlib (fluxo interativo) nem qualquer cliente de
+# Drive/Sheets.
+#
+# Versões fechadas do fecho transitivo: requirements-marketing.lock.
+# Instalação em produção: painel-soprolife/nucleo-m15/scripts/deploy-producao-vps.sh
+# cria /opt/soprolife/venvs/marketing a partir do .lock. Nunca instalar à mão.
+
+google-api-python-client==2.197.0   # googleapiclient.discovery — Search Console v3
+google-auth==2.55.0                 # google.oauth2.service_account, google.auth.default
+google-auth-httplib2==0.4.0         # transporte exigido pelo cliente do Search Console
+google-analytics-data==0.23.0       # google.analytics.data_v1beta — GA4

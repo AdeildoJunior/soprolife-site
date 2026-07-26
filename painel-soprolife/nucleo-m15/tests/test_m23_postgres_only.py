@@ -259,7 +259,7 @@ def test_auditoria_contrato_real_aceita_apenas_chaves_permitidas():
     payload = {
         "source": {"safeToDisplay": True, "containsPersonalData": False},
         "ultimos_eventos": [
-            {"acao": "lead.criado", "entidade_tipo": "leads", "entidade_id": "l-1",
+            {"acao": "lead.criado", "entidade_tipo": "leads",
              "operador": "operacional", "resultado": "ok",
              "timestamp": "2026-01-01T00:00:00+00:00",
              "campo_nao_permitido": "qualquer coisa"},
@@ -268,6 +268,10 @@ def test_auditoria_contrato_real_aceita_apenas_chaves_permitidas():
     erros = validate_auditoria_payload(payload)
     assert erros
     assert any("campo_nao_permitido" in e for e in erros)
+    # O evento sem a chave extra é aceito — a rejeição é da chave, não do
+    # schema inteiro.
+    payload["ultimos_eventos"][0].pop("campo_nao_permitido")
+    assert validate_auditoria_payload(payload) == []
 
 
 def test_auditoria_operador_e_papel_institucional_nunca_uuid_ou_nome(db):

@@ -16,7 +16,8 @@ O que ENTRA no summary:
   - contagens por dia (últimos 14 dias), por ação, por operador e por origem;
   - total de eventos e total de erros (resultado != ok) — saúde do write-path;
   - últimos N eventos (padrão 20) APENAS com: timestamp, acao, entidade_tipo,
-    entidade_id, operador, resultado.
+    operador, resultado — nenhum identificador de registro (ver
+    scripts/audit_summary_contract.py, ALLOWED_EVENT_KEYS).
 
 O que NUNCA entra (mesmo a aba sendo desenhada sem PII):
   - valor_anterior / valor_novo / campo (menos superfície — ver spec M1 §7);
@@ -80,7 +81,13 @@ CANONICAL_AUDITORIA = [
 
 # Campos da aba que o summary usa. Tudo fora desta lista é lido mas nunca
 # exportado (allowlist default-fechada, mesmo princípio do Apps Script).
-SUMMARY_FIELDS = ["timestamp", "acao", "entidade_tipo", "entidade_id", "operador", "resultado"]
+#
+# entidade_id saiu no 2º incidente do M23: identificador de registro não é
+# exportável para o navegador. Este leitor é legado (só migração/forense
+# manual, bloqueado fail-closed na esteira), mas se ele voltasse a gravar a
+# chave o check-access.sh rejeitaria o arquivo — os dois produtores do
+# auditoria-summary precisam obedecer ao MESMO contrato.
+SUMMARY_FIELDS = ["timestamp", "acao", "entidade_tipo", "operador", "resultado"]
 
 _CPF_RE = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
 _FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")

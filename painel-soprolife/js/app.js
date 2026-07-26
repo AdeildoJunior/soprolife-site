@@ -5786,9 +5786,16 @@ function renderB2BAcoes() {
 
 // ── Auditoria M1 — card "Últimas alterações" (seção Automações) ───────────────
 
-// Rótulos amigáveis por slug de ação da aba Log Auditoria. Slug desconhecido
-// cai no próprio slug (novas ações aparecem sem quebrar o card).
+// Rótulos amigáveis por slug de ação. Slug desconhecido cai no próprio slug
+// (novas ações aparecem sem quebrar o card).
+//
+// Dois conjuntos convivem de propósito: os slugs com underscore vêm da trilha
+// HISTÓRICA importada da aba Log Auditoria, que continua no banco e ainda
+// aparece nos eventos mais antigos; os slugs com ponto são os da API do
+// Núcleo M15, únicos gerados desde o M23. Remover os antigos deixaria o
+// histórico ilegível.
 const AUDITORIA_ACAO_LABELS = {
+  // Trilha histórica (origem Google Sheets, somente leitura).
   update_lead_stage:            "Etapa de lead alterada",
   update_crm_clinica_etapa:     "Etapa de clínica alterada",
   mirror_etapa_pcmso:           "Espelhamento na base PCMSO",
@@ -5802,6 +5809,69 @@ const AUDITORIA_ACAO_LABELS = {
   registrar_atendimento_pastore:"Atendimento Pastore",
   upsert_contato_b2b:           "Contato B2B atualizado",
   teste_apagar:                 "Teste (apagar)",
+  // Núcleo M15 / PostgreSQL (M23 em diante).
+  "auth.token_emitido":         "Sessão iniciada",
+  "auth.logout":                "Sessão encerrada",
+  "auth.falha":                 "Falha de autenticação",
+  "auth.bloqueado_rate_limit":  "Login bloqueado por limite",
+  "pessoa.criada":              "Pessoa cadastrada",
+  "pessoa.atualizada":          "Pessoa atualizada",
+  "pessoa.contato_adicionado":  "Contato de pessoa adicionado",
+  "pessoa.consentimento_registrado": "Consentimento registrado",
+  "lead.criado":                "Lead criado",
+  "lead.atualizado":            "Lead atualizado",
+  "espirometria.criada":        "Espirometria registrada",
+  "espirometria.atualizada":    "Espirometria atualizada",
+  "consulta.criada":            "Consulta registrada",
+  "consulta.atualizada":        "Consulta atualizada",
+  "atendimento.criado":         "Atendimento registrado",
+  "followup.criado":            "Follow-up criado",
+  "followup.concluido":         "Follow-up concluído",
+  "followup.nova_tentativa":    "Follow-up reagendado",
+  "followup.whatsapp_confirmado": "Follow-up confirmado por WhatsApp",
+  "interacao.criada":           "Interação registrada",
+  "crm.contato_registrado":     "Contato de CRM registrado",
+  "lancamento.criado":          "Lançamento criado",
+  "lancamento.atualizado":      "Lançamento atualizado",
+  "repasse.criado":             "Repasse registrado",
+  "parceiro.criado":            "Parceiro cadastrado",
+  "parceiro.atualizado":        "Parceiro atualizado",
+  "parceiro.consolidado":       "Parceiro consolidado",
+  "parceiro.recebeu_consolidacao": "Parceiro recebeu consolidação",
+  "unidade.criada":             "Unidade cadastrada",
+  "unidade.atualizada":         "Unidade atualizada",
+  "contato_parceiro.criado":    "Contato de parceiro cadastrado",
+  "contato_parceiro.atualizado":"Contato de parceiro atualizado",
+  "parceria.criada":            "Parceria criada",
+  "parceria.atualizada":        "Parceria atualizada",
+  "encaminhamento.criado":      "Encaminhamento criado",
+  "encaminhamento.atualizado":  "Encaminhamento atualizado",
+  "encaminhamento.financeiro_atualizado": "Encaminhamento — financeiro atualizado",
+  "usuario.criado":             "Usuário criado",
+  "usuario.senha_redefinida":   "Senha de usuário redefinida",
+  "pcmso.rejeitado":            "Escrita PCMSO rejeitada",
+};
+
+// Rótulos por TIPO de entidade (nome da tabela auditada). Substituem o antigo
+// entidade_id no detalhe do evento: o snapshot deixou de exportar o
+// identificador da linha (M23, 2º incidente), e o tipo é o contexto que
+// realmente ajuda a ler a trilha. Tipo desconhecido cai no próprio valor.
+const AUDITORIA_ENTIDADE_LABELS = {
+  people:             "Pessoa",
+  leads:              "Lead",
+  followups:          "Follow-up",
+  interactions:       "Interação",
+  spirometry_exams:   "Espirometria",
+  consultations:      "Consulta",
+  financial_entries:  "Lançamento",
+  partner_transfers:  "Repasse",
+  partners:           "Parceiro",
+  partner_units:      "Unidade",
+  partner_contacts:   "Contato de parceiro",
+  partnerships:       "Parceria",
+  partner_referrals:  "Encaminhamento",
+  users:              "Usuário",
+  attendances:        "Atendimento",
 };
 
 function renderAuditoria() {
@@ -5840,7 +5910,11 @@ function renderAuditoria() {
       ${eventos.map((evt) => {
         const acaoLabel = AUDITORIA_ACAO_LABELS[evt.acao] || evt.acao || "Ação desconhecida";
         const ok = String(evt.resultado || "").toLowerCase().startsWith("ok");
-        const detalhe = [evt.entidade_id, evt.operador ? `por ${evt.operador}` : ""]
+        // M23 (2º incidente): o snapshot não traz mais entidade_id — um
+        // identificador de linha do banco não é exportável para o navegador
+        // e não dizia nada ao leitor. O contexto útil é o TIPO da entidade.
+        const entidadeLabel = AUDITORIA_ENTIDADE_LABELS[evt.entidade_tipo] || evt.entidade_tipo;
+        const detalhe = [entidadeLabel, evt.operador ? `por ${evt.operador}` : ""]
           .filter(Boolean).map((v) => escapeHtml(String(v))).join(" · ");
         return `
           <li class="auditoria-event">

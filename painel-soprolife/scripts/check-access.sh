@@ -769,7 +769,7 @@ else:
 PY
   else
     echo "  INFO: $summary_file não existe ainda."
-    echo "  Execute: python3 painel-soprolife/scripts/read-leads-sheets.py --write"
+    echo "  Gere com: painel-soprolife/scripts/update-local-data.sh"
     echo "  Painel usará leads.json demonstrativo enquanto o arquivo não existir."
   fi
 }
@@ -887,7 +887,7 @@ else:
 PY
   else
     echo "  INFO: $summary_file não existe ainda."
-    echo "  Execute: python3 painel-soprolife/scripts/read-crm-contatos-b2b-adc.py --write"
+    echo "  Gere com: painel-soprolife/scripts/update-local-data.sh"
   fi
 }
 
@@ -960,7 +960,9 @@ else:
 PY
   else
     echo "  INFO: $private_file não existe ainda."
-    echo "        Gere com: painel-soprolife/scripts/read-financeiro-lancamentos-adc.py --write"
+    echo "        Artefato LEGADO da era Google Sheets — o M23 não o regenera."
+    echo "        O dado financeiro operacional vem do PostgreSQL; o resumo"
+    echo "        público sai de painel-soprolife/scripts/update-local-data.sh."
   fi
 
   # Resumo público
@@ -1025,14 +1027,14 @@ else:
     sys.exit(1)
 PY
 
-    # Guarda de PII compartilhada (M2) — desde a M14.2 o arquivo é gerado por
-    # read-financeiro-lancamentos-adc.py (que já valida na geração); esta
-    # validação na leitura continua como redundância.
+    # Guarda de PII compartilhada (M2) — desde o M23 o arquivo é gerado pelo
+    # exportador do PostgreSQL (app.cli exportar-snapshots), que já valida na
+    # geração; esta validação na leitura continua como redundância.
     python3 painel-soprolife/scripts/pii_guard.py \
       --check-file "$summary_file" --ruleset financeiro-summary | sed 's/^/  /'
   else
     echo "  INFO: $summary_file não existe ainda."
-    echo "        Gere com: painel-soprolife/scripts/read-financeiro-lancamentos-adc.py --write"
+    echo "        Gere com: painel-soprolife/scripts/update-local-data.sh"
   fi
 }
 
@@ -1521,7 +1523,9 @@ else:
 PY
   else
     echo "  INFO: $private_file não existe ainda."
-    echo "        Gere com: python3 painel-soprolife/scripts/read-parcerias-pastore-adc.py --write"
+    echo "        Artefato LEGADO da era Google Sheets — o M23 não o regenera."
+    echo "        O resumo público de Pastore sai do PostgreSQL via"
+    echo "        painel-soprolife/scripts/update-local-data.sh."
   fi
 
   # O resumo NUNCA pode ter nome, telefone, WhatsApp, CPF, e-mail ou observação.
@@ -1606,7 +1610,7 @@ validate_auditoria() {
   if [ ! -f "$summary_file" ]; then
     echo "  INFO: $summary_file não existe ainda."
     echo "        (normal antes da primeira escrita auditada — M1 publicado)"
-    echo "        Execute: python3 painel-soprolife/scripts/read-auditoria-adc.py --write"
+    echo "        Gere com: painel-soprolife/scripts/update-local-data.sh"
     return
   fi
 

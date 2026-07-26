@@ -27,6 +27,13 @@
 # impede retorno silencioso ao ADC pessoal: sem a conta de serviço o conector
 # falha fechado com estado "credencial pendente".
 #
+# SOPROLIFE_MARKETING_PYTHON aponta o venv DEDICADO de Marketing. Sem ela, o
+# conector herdava o "python3" do PATH acima — que é o venv da API M15 — e
+# quebrava com "No module named 'googleapiclient'" (2º incidente do M23),
+# porque as bibliotecas do Google não estão nem devem estar no venv que serve
+# a API. Os dois ambientes são separados de propósito: uma falha de
+# instalação do Marketing não pode chegar perto da fonte operacional.
+#
 # Nenhum segredo aparece em ExecStart, Environment ou journal: apenas o
 # CAMINHO da credencial, nunca o conteúdo.
 
@@ -49,6 +56,7 @@ Environment=PATH=/opt/soprolife/venvs/m15/bin:/usr/local/sbin:/usr/local/bin:/us
 # no journal — só o caminho do arquivo.
 EnvironmentFile=/opt/soprolife/secrets/m15.env
 Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python
 Environment=SOPROLIFE_MARKETING_CREDENTIALS=/opt/soprolife/secrets/marketing-readonly.json
 Environment=SOPROLIFE_MARKETING_REQUIRE_SERVICE_ACCOUNT=1
 Environment=SOPROLIFE_MARKETING_REFRESH_QUEUE=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15/var/marketing-refresh-request.json

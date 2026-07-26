@@ -235,8 +235,12 @@ _FILE_RULESETS = {
             # tabela/domínio (ex.: "leads", "partners"); operador é papel
             # institucional (admin/gestor/operacional/leitura); resultado é
             # "ok"/"falha" derivado do próprio texto de 'acao'; timestamp é
-            # ISO 8601. Nenhum é nome pessoal nem identificador de usuário.
-            "entidade_tipo", "entidade_id", "operador", "resultado", "timestamp",
+            # ISO 8601. Todos de domínio fechado — nenhum é nome pessoal nem
+            # identificador de registro.
+            # entidade_id NÃO consta aqui de propósito: o resumo público de
+            # auditoria deixou de exportar identificador de linha no 2º
+            # incidente do M23. Recolocá-lo aqui reabriria o vazamento.
+            "entidade_tipo", "operador", "resultado", "timestamp",
         ],
         "chaves_permitidas_excecao": ["nota"],
     },

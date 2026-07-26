@@ -125,6 +125,16 @@ caso("credencial durável é explícita e obrigatória",
 caso("fila manual privada é explícita",
      "SOPROLIFE_MARKETING_REFRESH_QUEUE=/opt/soprolife/soprolife-site/"
      "painel-soprolife/nucleo-m15/var/marketing-refresh-request.json" in upd_text)
+# 2º incidente do M23: sem esta variável o conector de Marketing herdava o
+# "python3" do PATH — que a própria unit aponta para o venv da API M15, onde
+# as bibliotecas do Google não existem. Interpretador implícito é bug.
+caso("interpretador de Marketing é explícito, nunca herdado do PATH",
+     "SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python"
+     in upd_text)
+_venvs = dict(re.findall(
+    r"(?m)^Environment=(SOPROLIFE_(?:M15|MARKETING)_PYTHON)=(\S+)$", upd_text))
+caso("Marketing e API M15 usam venvs DIFERENTES",
+     len(_venvs) == 2 and len(set(_venvs.values())) == 2, str(_venvs))
 caso("execução de dados tem timeout e hardening",
      upd["Service"].get("TimeoutStartSec") == "480" and
      upd["Service"].get("NoNewPrivileges") == "true")

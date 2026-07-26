@@ -76,7 +76,29 @@ fi
 _MARKETING_CONFIG="painel-soprolife/data-private/marketing-seo-config.local.json"
 _MARKETING_SCRIPT="painel-soprolife/scripts/read-marketing-seo-adc.py"
 _MARKETING_CREDENTIAL="${SOPROLIFE_MARKETING_CREDENTIALS:-/opt/soprolife/secrets/marketing-readonly.json}"
-_MARKETING_PYTHON="python3"
+
+# Interpretador do conector de Marketing. ATÉ O M23 isto era um "python3"
+# solto, resolvido pelo PATH — e a unit do M23 passou a pôr o venv do núcleo
+# M15 na frente do PATH. Resultado no 2º deploy: "No module named
+# 'googleapiclient'", porque o venv do M15 (requirements.lock da API) não tem
+# nem deve ter as bibliotecas do Google.
+#
+# A resolução agora é EXPLÍCITA, nunca herdada do PATH:
+#   1. SOPROLIFE_MARKETING_PYTHON  (a unit de produção define);
+#   2. /opt/soprolife/venvs/marketing/bin/python  (venv dedicado do deploy);
+#   3. python3 do sistema  (desenvolvimento local).
+#
+# O venv é dedicado de propósito: as dependências do Google não entram no
+# venv que serve a API, então um problema de instalação do Marketing não tem
+# como derrubar a fonte operacional.
+_MARKETING_VENV_PYTHON="/opt/soprolife/venvs/marketing/bin/python"
+if [ -n "${SOPROLIFE_MARKETING_PYTHON:-}" ]; then
+  _MARKETING_PYTHON="$SOPROLIFE_MARKETING_PYTHON"
+elif [ -x "$_MARKETING_VENV_PYTHON" ]; then
+  _MARKETING_PYTHON="$_MARKETING_VENV_PYTHON"
+else
+  _MARKETING_PYTHON="python3"
+fi
 
 _FALHAS=0
 
@@ -153,12 +175,14 @@ else
   else
     echo "Fonte: credencial de desenvolvimento local"
   fi
+  echo "Interpretador: $_MARKETING_PYTHON"
   echo
   _MKT_ATTEMPTED=1
   if ! "$_MARKETING_PYTHON" "$_MARKETING_SCRIPT" --write 2>&1; then
     echo
     echo "AVISO: Marketing & SEO falhou — último snapshot válido preservado."
     echo "  Diagnóstico: $_MARKETING_PYTHON $_MARKETING_SCRIPT --credential-check"
+    echo "  Dependências: $_MARKETING_PYTHON -c 'import googleapiclient'"
     echo "  (não afeta os dados operacionais, que vêm do PostgreSQL)"
   else
     echo "Marketing & SEO atualizado."

@@ -1,3 +1,16 @@
+# SoproLife — dependências dos leitores LEGADOS de Google Sheets.
+#
+# ESCOPO (M23): apenas migração e forense manual. Estes leitores não rodam
+# mais na esteira automática — scripts/data_source_mode.py os bloqueia
+# fail-closed e o PostgreSQL é a única fonte operacional. Este arquivo NÃO é
+# instalado por nenhum deploy; existe para quem precisar reabrir uma planilha
+# histórica à mão, com autorização explícita.
+#
+# O conector Marketing & SEO (Search Console + GA4) NÃO usa este arquivo: ele
+# tem venv e lock próprios, sem nenhum pacote de Sheets/Drive —
+#   painel-soprolife/requirements-marketing.txt
+#   painel-soprolife/requirements-marketing.lock
+
 google-api-python-client
 google-auth
 google-auth-oauthlib

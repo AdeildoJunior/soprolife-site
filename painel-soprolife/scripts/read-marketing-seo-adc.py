@@ -232,8 +232,11 @@ def _load_google_libs():
     except ImportError as exc:
         print(f"AVISO: dependências google-api-python-client não instaladas — {exc}")
         print()
-        print("Instale com:")
-        print("  pip install -r painel-soprolife/requirements-google.txt")
+        print(f"Interpretador em uso: {sys.executable}")
+        print("O conector precisa rodar no venv dedicado de Marketing, que o")
+        print("deploy cria a partir de painel-soprolife/requirements-marketing.lock:")
+        print("  /opt/soprolife/venvs/marketing/bin/python")
+        print("Em produção, reexecute o deploy — não instale pacotes à mão.")
         return None, None
 
 
@@ -352,12 +355,12 @@ def _fetch_ga4(credentials, property_id, start_date, end_date, top_limit):
         if import_err:
             warnings.append(
                 f"GA4: falha ao importar biblioteca — {import_err}. "
-                "Execute: pip install google-analytics-data"
+                "Rode o conector no venv dedicado de Marketing."
             )
         else:
             warnings.append(
                 "GA4: biblioteca 'google-analytics-data' não instalada. "
-                "Execute: pip install google-analytics-data"
+                "Rode o conector no venv dedicado de Marketing."
             )
         return result, warnings
 

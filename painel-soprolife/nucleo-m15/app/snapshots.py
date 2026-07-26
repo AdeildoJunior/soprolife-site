@@ -388,10 +388,15 @@ def build_auditoria_summary(db: Session) -> dict:
     """Trilha de auditoria agregada, no contrato de segurança REAL validado
     por scripts/check-access.sh (ALLOWED_EVENT_KEYS em
     scripts/audit_summary_contract.py): cada evento carrega só
-    ``timestamp``, ``acao``, ``entidade_tipo``, ``entidade_id``,
-    ``operador`` e ``resultado``. ``detalhes`` e o UUID bruto de usuário
-    nunca são exportados — 'operador' é sempre um papel institucional
-    (admin/gestor/operacional/leitura), nunca nome pessoal nem UUID.
+    ``timestamp``, ``acao``, ``entidade_tipo``, ``operador`` e
+    ``resultado``.
+
+    NENHUM identificador de registro sai daqui. ``detalhes``, o UUID de
+    usuário e o ``entidade_id`` da linha auditada ficam no banco:
+    'operador' é sempre um papel institucional (admin/gestor/operacional/
+    leitura) e 'entidade_tipo' é o nome da tabela — ambos de domínio
+    fechado. O que o painel precisa de granularidade está em ``stats``,
+    como contagem, não como ponteiro para um registro.
     """
     total = db.scalar(select(func.count()).select_from(AuditLog)) or 0
 
@@ -414,30 +419,37 @@ def build_auditoria_summary(db: Session) -> dict:
     por_acao = Counter()
     por_dia = Counter()
     por_operador = Counter()
+    por_entidade = Counter()
+    por_resultado = Counter()
     erros = 0
-    for acao, ts, user_id in db.execute(
-        select(AuditLog.acao, AuditLog.ts_utc, AuditLog.user_id)
+    for acao, entidade, ts, user_id in db.execute(
+        select(AuditLog.acao, AuditLog.entidade, AuditLog.ts_utc, AuditLog.user_id)
     ).all():
         por_acao[acao] += 1
         if ts:
             por_dia[ts.date().isoformat()] += 1
-        if _resultado_from_acao(acao) == "falha":
+        resultado = _resultado_from_acao(acao)
+        por_resultado[resultado] += 1
+        if resultado == "falha":
             erros += 1
+        if entidade:
+            por_entidade[entidade] += 1
         operador = papel_por_usuario.get(user_id)
         if operador:
             por_operador[operador] += 1
 
+    # AuditLog.entidade_id NÃO entra na projeção: o que não é lido do banco
+    # não pode escapar por descuido em uma edição futura.
     ultimos = [
         _clean({
             "timestamp": row.ts_utc.isoformat() if row.ts_utc else None,
             "acao": row.acao,
             "entidade_tipo": row.entidade,
-            "entidade_id": row.entidade_id,
             "operador": papel_por_usuario.get(row.user_id),
             "resultado": _resultado_from_acao(row.acao),
         })
         for row in db.execute(
-            select(AuditLog.acao, AuditLog.entidade, AuditLog.entidade_id,
+            select(AuditLog.acao, AuditLog.entidade,
                    AuditLog.user_id, AuditLog.ts_utc)
             .order_by(AuditLog.ts_utc.desc())
             .limit(_ULTIMOS_EVENTOS)
@@ -447,16 +459,20 @@ def build_auditoria_summary(db: Session) -> dict:
     return {
         "source": _source(
             "auditoria_summary",
-            "Trilha append-only do PostgreSQL. O campo 'detalhes' e o "
-            "identificador de usuário nunca são exportados. 'operador' é o "
-            "papel institucional (admin/gestor/operacional/leitura) do "
-            "autor do evento, nunca nome pessoal ou UUID.",
+            "Trilha append-only do PostgreSQL. Nenhum identificador de "
+            "registro é exportado: 'detalhes', o identificador de usuário e "
+            "o identificador da entidade auditada ficam no banco. 'operador' "
+            "é o papel institucional (admin/gestor/operacional/leitura) do "
+            "autor do evento e 'entidade_tipo' é o nome da tabela — nunca "
+            "nome pessoal, UUID ou ponteiro para um registro.",
         ),
         "stats": {
             "total_eventos": total,
             "erros": erros,
             "por_acao": dict(sorted(por_acao.items(), key=lambda kv: -kv[1])),
             "por_operador": dict(sorted(por_operador.items(), key=lambda kv: -kv[1])),
+            "por_entidade": dict(sorted(por_entidade.items(), key=lambda kv: -kv[1])),
+            "por_resultado": dict(sorted(por_resultado.items(), key=lambda kv: -kv[1])),
         },
         "eventos_por_dia": [
             {"dia": d, "eventos": n} for d, n in sorted(por_dia.items())
