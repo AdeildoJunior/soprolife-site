@@ -26,6 +26,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -631,6 +632,42 @@ class PartnerSettlementItem(Base):
 
 # ---------------------------------------------------------------- financeiro
 
+# M23.1 — predicados dos dois índices parciais de receita própria. Entradas
+# novas chegam ao banco já com a categoria canônica exata; lower + trim de
+# whitespace ASCII faz o backstop também abranger variantes históricas de
+# caixa/espaço. PostgreSQL e SQLite dão nomes diferentes à função chr/char,
+# por isso os predicados são explícitos por dialeto. NULL/vazio era o bypass
+# de "categoria ausente" e, com o vínculo técnico, é a receita própria.
+_SQLITE_CATEGORY_TRIM = (
+    "trim(categoria, ' ' || char(9) || char(10) || char(11) "
+    "|| char(12) || char(13))"
+)
+_POSTGRES_CATEGORY_TRIM = (
+    "btrim(categoria, ' ' || chr(9) || chr(10) || chr(11) "
+    "|| chr(12) || chr(13))"
+)
+RECEITA_ESPIROMETRIA_INDEX_PREDICATE_SQLITE = (
+    "tipo = 'receita' AND spirometry_exam_id IS NOT NULL AND "
+    f"(categoria IS NULL OR {_SQLITE_CATEGORY_TRIM} = '' "
+    f"OR lower({_SQLITE_CATEGORY_TRIM}) = 'espirometria')"
+)
+RECEITA_ESPIROMETRIA_INDEX_PREDICATE_POSTGRES = (
+    "tipo = 'receita' AND spirometry_exam_id IS NOT NULL AND "
+    f"(categoria IS NULL OR {_POSTGRES_CATEGORY_TRIM} = '' "
+    f"OR lower({_POSTGRES_CATEGORY_TRIM}) = 'espirometria')"
+)
+RECEITA_CONSULTA_INDEX_PREDICATE_SQLITE = (
+    "tipo = 'receita' AND consultation_id IS NOT NULL AND "
+    f"(categoria IS NULL OR {_SQLITE_CATEGORY_TRIM} = '' "
+    f"OR lower({_SQLITE_CATEGORY_TRIM}) = 'consulta')"
+)
+RECEITA_CONSULTA_INDEX_PREDICATE_POSTGRES = (
+    "tipo = 'receita' AND consultation_id IS NOT NULL AND "
+    f"(categoria IS NULL OR {_POSTGRES_CATEGORY_TRIM} = '' "
+    f"OR lower({_POSTGRES_CATEGORY_TRIM}) = 'consulta')"
+)
+
+
 class FinancialEntry(Base, TimestampMixin, LegacyMixin):
     """Fonte financeira canônica. Vinculada só por IDs técnicos — sem PII."""
 
@@ -670,6 +707,20 @@ class FinancialEntry(Base, TimestampMixin, LegacyMixin):
     idempotency_fingerprint: Mapped[str | None] = mapped_column(String(FINGERPRINT_LEN))
     __table_args__ = (
         CheckConstraint("valor > 0", name="valor_positivo"),
+        Index(
+            "uq_financial_entries_receita_espirometria",
+            "spirometry_exam_id",
+            unique=True,
+            sqlite_where=text(RECEITA_ESPIROMETRIA_INDEX_PREDICATE_SQLITE),
+            postgresql_where=text(RECEITA_ESPIROMETRIA_INDEX_PREDICATE_POSTGRES),
+        ),
+        Index(
+            "uq_financial_entries_receita_consulta",
+            "consultation_id",
+            unique=True,
+            sqlite_where=text(RECEITA_CONSULTA_INDEX_PREDICATE_SQLITE),
+            postgresql_where=text(RECEITA_CONSULTA_INDEX_PREDICATE_POSTGRES),
+        ),
     )
 
 

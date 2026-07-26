@@ -23,7 +23,11 @@
 #    que o script valide o conteúdo da unit instalada — sem depender de
 #    systemd real — e capture/compare o estado enabled/active do timer antes
 #    e depois da instalação, para provar que nenhum efeito colateral ativou
-#    o pipeline sozinho.
+#    o pipeline sozinho. A validação analisa a CONFIGURAÇÃO ATIVA (seções,
+#    comentários e continuação de linha como o systemd os lê), nunca a prosa
+#    do arquivo: a unit real documenta em comentário quais variáveis foram
+#    removidas, e a primeira versão desta função reprovava a própria unit de
+#    produção por causa desse texto.
 #
 # Este arquivo é carregado via source pelo deploy e pelos testes. Nenhuma
 # função imprime segredos: as URLs de health locais não têm querystring nem
@@ -180,35 +184,192 @@ soprolife_validar_unit_update_data() {
   # EnvironmentFile do núcleo M15, interpretadores dedicados de API e
   # Marketing, e ausência de qualquer variável que reative ADC pessoal
   # (CLOUDSDK_CONFIG) ou o escape manual de migração legada de Sheets.
-  # Falha fechada: unit ausente, ilegível ou sem um requisito é erro.
+  #
+  # M23.1 (correção do bloqueador da revisão crítica): a versão anterior fazia
+  # grep de substring no ARQUIVO INTEIRO. A unit real de produção documenta em
+  # comentário que CLOUDSDK_CONFIG foi REMOVIDO — a prosa citava o nome da
+  # variável e derrubava todo deploy oficial com um falso positivo. O que
+  # importa é a CONFIGURAÇÃO ATIVA, não o texto explicativo: a validação agora
+  # interpreta a unit como o systemd interpreta (seções, comentários,
+  # continuação de linha, múltiplos pares por Environment=) e só olha
+  # diretivas Environment=/EnvironmentFile= ativas.
+  #
+  # Falha fechada em: unit ausente ou ilegível; linha ativa que não é
+  # Chave=Valor; diretiva ativa fora de seção; Environment= com citação aberta
+  # ou par sem 'NOME=VALOR'; Environment=/EnvironmentFile= fora de [Service];
+  # requisito ausente; qualquer atribuição ativa das variáveis proibidas.
+  # Nunca imprime VALOR de diretiva (só nome/linha): a unit aponta caminhos de
+  # credencial, e mensagem de erro não é lugar de eco de configuração.
   local target="$1"
   local conteudo
   conteudo="$(soprolife_priv cat "$target" 2>/dev/null)" || {
     echo "ERRO: não foi possível ler a unit instalada em $target." >&2
     return 1
   }
-  local requerido
-  for requerido in \
-    'User=soprolife' \
-    'Group=soprolife' \
-    'EnvironmentFile=/opt/soprolife/secrets/m15.env' \
-    'SOPROLIFE_M15_PYTHON=' \
-    'SOPROLIFE_MARKETING_PYTHON='
-  do
-    if ! grep -qF -- "$requerido" <<<"$conteudo"; then
-      echo "ERRO: unit de atualização instalada não contém '$requerido'." >&2
-      return 1
-    fi
-  done
-  local proibido
-  for proibido in 'CLOUDSDK_CONFIG' 'SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION'; do
-    if grep -qF -- "$proibido" <<<"$conteudo"; then
-      echo "ERRO: unit de atualização instalada contém '$proibido'" \
-        "(escape legado não pode estar ativo em produção)." >&2
-      return 1
-    fi
-  done
-  return 0
+  SOPROLIFE_UNIT_ALVO="$target" SOPROLIFE_UNIT_CONTEUDO="$conteudo" python3 - <<'PY'
+import os
+import shlex
+import sys
+
+ALVO = os.environ.get("SOPROLIFE_UNIT_ALVO", "(unit)")
+CONTEUDO = os.environ.get("SOPROLIFE_UNIT_CONTEUDO", "")
+
+PROIBIDAS = ("CLOUDSDK_CONFIG", "SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION")
+PROIBIDAS_UP = {nome.upper() for nome in PROIBIDAS}
+ENV_FILE_OBRIGATORIO = "/opt/soprolife/secrets/m15.env"
+INTERPRETADORES = ("SOPROLIFE_M15_PYTHON", "SOPROLIFE_MARKETING_PYTHON")
+
+
+def erro(mensagem):
+    print(f"ERRO: {mensagem}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def diretivas_ativas(texto):
+    """Diretivas ATIVAS como (secao, chave, valor, linha).
+
+    Ignora linhas vazias e comentários ('#' ou ';' no início, a única forma
+    de comentário que o systemd reconhece — não existe comentário no fim de
+    linha). Junta continuações terminadas em '\\'.
+    """
+    secao = None
+    pendente = None  # (secao, corpo_parcial, linha_inicial)
+    saida = []
+    for numero, bruta in enumerate(texto.splitlines(), start=1):
+        linha = bruta.strip()
+        if pendente is None:
+            if not linha or linha[0] in "#;":
+                continue
+            if linha.startswith("["):
+                if not linha.endswith("]") or len(linha) < 3:
+                    erro(f"unit {ALVO}: cabeçalho de seção malformado na linha {numero}.")
+                secao = linha[1:-1].strip()
+                continue
+            if secao is None:
+                erro(f"unit {ALVO}: diretiva fora de qualquer seção na linha {numero}.")
+            corpo, inicial = linha, numero
+        else:
+            if not linha or linha[0] in "#;":
+                erro(
+                    f"unit {ALVO}: continuação de linha ambígua na linha {numero} "
+                    "(comentário/linha vazia dentro de uma diretiva continuada)."
+                )
+            secao, parcial, inicial = pendente
+            pendente = None
+            corpo = f"{parcial} {linha}"
+        if corpo.endswith("\\"):
+            pendente = (secao, corpo[:-1].rstrip(), inicial)
+            continue
+        chave, sep, valor = corpo.partition("=")
+        if not sep or not chave.strip():
+            erro(f"unit {ALVO}: linha {inicial} não é 'Chave=Valor'.")
+        saida.append((secao, chave.strip(), valor.strip(), inicial))
+    if pendente is not None:
+        erro(f"unit {ALVO}: continuação de linha ('\\') sem linha seguinte.")
+    return saida
+
+
+def nomes_de_environment(valor, linha):
+    """Nomes atribuídos por uma diretiva Environment=.
+
+    O systemd aceita vários pares por diretiva, com citação: devolve a lista
+    de nomes; devolve None para Environment= vazia (que reseta a lista).
+    """
+    if valor == "":
+        return None
+    if "\\" in valor:
+        erro(
+            f"unit {ALVO}: Environment= contém sequência de escape ambígua "
+            f"na linha {linha}; recusada por segurança."
+        )
+    try:
+        tokens = shlex.split(valor)
+    except ValueError:
+        erro(f"unit {ALVO}: Environment= com citação não fechada na linha {linha}.")
+    if not tokens:
+        erro(f"unit {ALVO}: Environment= sem atribuição utilizável na linha {linha}.")
+    nomes = []
+    for token in tokens:
+        nome, sep, _ = token.partition("=")
+        if not sep or not nome.strip():
+            erro(
+                f"unit {ALVO}: Environment= malformada na linha {linha} "
+                "(par sem a forma 'NOME=VALOR')."
+            )
+        nomes.append(nome.strip())
+    return nomes
+
+
+diretivas = diretivas_ativas(CONTEUDO)
+if not any(secao == "Service" for secao, _c, _v, _l in diretivas):
+    erro(f"unit {ALVO}: nenhuma diretiva ativa em [Service].")
+
+env_efetivo = {}      # nome -> (valor, linha) com semântica de reset
+env_qualquer = {}     # nome -> linha, em QUALQUER Environment= ativa
+env_files = []        # caminhos acumulados
+env_files_vistos = []
+usuario = grupo = None
+
+for secao, chave, valor, linha in diretivas:
+    if chave in ("Environment", "EnvironmentFile") and secao != "Service":
+        erro(
+            f"unit {ALVO}: {chave}= na seção [{secao}] (linha {linha}) — "
+            "ambiente só tem efeito em [Service]; recusado por segurança."
+        )
+    if chave == "Environment":
+        nomes = nomes_de_environment(valor, linha)
+        if nomes is None:
+            env_efetivo.clear()
+            continue
+        pares = shlex.split(valor)
+        for nome, par in zip(nomes, pares):
+            env_efetivo[nome] = (par.partition("=")[2], linha)
+            env_qualquer.setdefault(nome, linha)
+    elif chave == "EnvironmentFile":
+        if valor == "":
+            env_files.clear()
+            continue
+        env_files.append(valor)
+        env_files_vistos.append((valor, linha))
+    elif secao == "Service" and chave == "User":
+        usuario = valor  # systemd aplica a ÚLTIMA atribuição
+    elif secao == "Service" and chave == "Group":
+        grupo = valor
+
+# Proibições: qualquer atribuição ativa conta, mesmo que resetada depois.
+for nome, linha in env_qualquer.items():
+    if nome.upper() in PROIBIDAS_UP:
+        erro(
+            f"unit {ALVO}: Environment= ativa atribui '{nome}' na linha {linha} "
+            "(escape legado não pode estar ativo em produção)."
+        )
+for caminho, linha in env_files_vistos:
+    alvo_arquivo = caminho.lstrip("-").upper()
+    for proibida in PROIBIDAS_UP:
+        if proibida in alvo_arquivo:
+            erro(
+                f"unit {ALVO}: EnvironmentFile= ativa na linha {linha} carrega "
+                f"arquivo nomeado por '{proibida}' (escape legado)."
+            )
+
+# Requisitos: precisam estar ATIVOS em [Service], não apenas citados.
+if usuario != "soprolife":
+    erro(f"unit {ALVO}: [Service] não define 'User=soprolife' ativo (efetivo: {usuario!r}).")
+if grupo != "soprolife":
+    erro(f"unit {ALVO}: [Service] não define 'Group=soprolife' ativo (efetivo: {grupo!r}).")
+if ENV_FILE_OBRIGATORIO not in env_files:
+    erro(
+        f"unit {ALVO}: [Service] não carrega 'EnvironmentFile={ENV_FILE_OBRIGATORIO}' "
+        "ativo (obrigatório e não opcional)."
+    )
+for variavel in INTERPRETADORES:
+    valor, _linha = env_efetivo.get(variavel, (None, None))
+    if not valor:
+        erro(
+            f"unit {ALVO}: [Service] não define '{variavel}=' ativo com valor "
+            "(interpretador implícito é bug conhecido do M23)."
+        )
+PY
 }
 
 soprolife_estado_timer() {

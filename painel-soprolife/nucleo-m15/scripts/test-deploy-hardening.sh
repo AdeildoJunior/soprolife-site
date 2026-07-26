@@ -371,6 +371,141 @@ caso "unit com escape legado de Sheets é rejeitada (rc 1)" 1 $?
  soprolife_validar_unit_update_data "$TMP_DIR/nao-existe.service") >/dev/null 2>&1
 caso "unit ausente falha fechado (rc 1)" 1 $?
 
+# ── Bloqueador da revisão crítica do M23.1 ─────────────────────────────────
+# A validação anterior fazia grep de substring no arquivo inteiro e a unit
+# REAL de produção documenta em comentário que CLOUDSDK_CONFIG foi removido.
+# Resultado: todo deploy oficial abortava num falso positivo. O caso abaixo é
+# o que faltava — validar o arquivo que o deploy realmente instala, não só
+# fixtures sintéticas sem prosa.
+
+UNIT_REAL="$SCRIPT_DIR/../../systemd/soprolife-update-data.service"
+(export SOPROLIFE_PRIV_MODE=direct
+ soprolife_validar_unit_update_data "$UNIT_REAL") >/dev/null 2>&1
+caso "unit REAL do repositório é aceita (rc 0)" 0 $?
+grep -q 'CLOUDSDK_CONFIG' "$UNIT_REAL"
+caso "a unit REAL de fato cita CLOUDSDK_CONFIG em prosa (o falso positivo)" 0 $?
+grep -q '^Environment=CLOUDSDK_CONFIG=' "$UNIT_REAL"
+caso "a unit REAL não tem Environment=CLOUDSDK_CONFIG ativo" 1 $?
+
+cat >"$UNIT_TMP" <<'UNIT'
+# CLOUDSDK_CONFIG foi REMOVIDO: era a variável que mantinha vivo o ADC pessoal.
+# SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION NÃO é definida aqui nem em outra unit.
+[Unit]
+Description=Comentário citando CLOUDSDK_CONFIG de propósito
+[Service]
+User=soprolife
+Group=soprolife
+; comentário estilo ponto-e-vírgula também citando SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python
+UNIT
+(export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+caso "comentário explicativo com as duas variáveis é aceito (rc 0)" 0 $?
+
+# Variantes ATIVAS que precisam continuar sendo recusadas.
+unit_com_linha() {
+  # Monta uma unit válida acrescentando a linha recebida em [Service].
+  cat >"$UNIT_TMP" <<UNIT
+[Service]
+User=soprolife
+Group=soprolife
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python
+$1
+UNIT
+  (export SOPROLIFE_PRIV_MODE=direct
+   soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+}
+
+unit_com_linha 'Environment="CLOUDSDK_CONFIG=/home/soprolife/.config/gcloud"'
+caso "Environment=CLOUDSDK_CONFIG citada com aspas é recusada (rc 1)" 1 $?
+
+unit_com_linha 'Environment=   CLOUDSDK_CONFIG=/home/soprolife/.config/gcloud'
+caso "Environment= com espaços antes da variável proibida é recusada (rc 1)" 1 $?
+
+unit_com_linha 'Environment=OUTRA=1 CLOUDSDK_CONFIG=/x'
+caso "variável proibida como 2º par da mesma Environment= é recusada (rc 1)" 1 $?
+
+unit_com_linha 'Environment=CLOUDSDK_CONFIG=/x
+Environment='
+caso "proibida atribuída e depois resetada continua recusada (rc 1)" 1 $?
+
+unit_com_linha 'Environment="SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1"'
+caso "escape legado de Sheets citado com aspas é recusado (rc 1)" 1 $?
+
+unit_com_linha 'Environment=CLOUDSDK_CONFIG=/x \'
+caso "continuação de linha sem próxima linha falha fechado (rc 1)" 1 $?
+
+unit_com_linha 'Environment=CLOUDSDK_CONFIG=/um \
+   /dois'
+caso "atribuição proibida quebrada em continuação é recusada (rc 1)" 1 $?
+
+unit_com_linha 'Environment=CLOUDSDK\x5fCONFIG=/x'
+caso "escape systemd em nome de variável falha fechado (rc 1)" 1 $?
+
+unit_com_linha 'Environment=CLOUDSDK_CONFIG="/aberta'
+caso "Environment= com citação não fechada falha fechado (rc 1)" 1 $?
+
+unit_com_linha 'EnvironmentFile=/opt/soprolife/secrets/cloudsdk_config.env'
+caso "EnvironmentFile nomeado pela variável proibida é recusado (rc 1)" 1 $?
+
+unit_com_linha 'User=root'
+caso "User=root sobrescrevendo soprolife é recusado (rc 1)" 1 $?
+
+unit_com_linha 'EstaLinhaNaoTemIgual'
+caso "linha ativa que não é Chave=Valor falha fechado (rc 1)" 1 $?
+
+cat >"$UNIT_TMP" <<'UNIT'
+User=soprolife
+Group=soprolife
+UNIT
+(export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+caso "diretiva ativa fora de seção falha fechado (rc 1)" 1 $?
+
+cat >"$UNIT_TMP" <<'UNIT'
+[Service
+User=soprolife
+UNIT
+(export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+caso "cabeçalho de seção malformado falha fechado (rc 1)" 1 $?
+
+cat >"$UNIT_TMP" <<'UNIT'
+[Unit]
+Environment=CLOUDSDK_CONFIG=/x
+[Service]
+User=soprolife
+Group=soprolife
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python
+UNIT
+(export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+caso "Environment= fora de [Service] falha fechado (rc 1)" 1 $?
+
+cat >"$UNIT_TMP" <<'UNIT'
+[Service]
+User=soprolife
+Group=soprolife
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=
+UNIT
+(export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+caso "interpretador de Marketing sem valor é recusado (rc 1)" 1 $?
+
+cat >"$UNIT_TMP" <<'UNIT'
+[Service]
+User=soprolife
+Group=soprolife
+EnvironmentFile=-/opt/soprolife/secrets/m15.env
+Environment=SOPROLIFE_M15_PYTHON=/opt/soprolife/venvs/m15/bin/python
+Environment=SOPROLIFE_MARKETING_PYTHON=/opt/soprolife/venvs/marketing/bin/python
+UNIT
+(export SOPROLIFE_PRIV_MODE=direct; soprolife_validar_unit_update_data "$UNIT_TMP") >/dev/null 2>&1
+caso "EnvironmentFile opcional ('-') não satisfaz o requisito (rc 1)" 1 $?
+
 # ── soprolife_estado_timer (M23.1 — provar que instalar a unit não liga/desliga o timer sozinho) ──
 
 echo "── soprolife_estado_timer ──"

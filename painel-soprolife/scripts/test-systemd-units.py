@@ -241,6 +241,25 @@ caso("script não habilita nem inicia o pipeline automático sozinho",
      "systemctl start soprolife-update-data" not in deploy_script and
      "systemctl restart soprolife-update-data" not in deploy_script)
 
+# ── M23.1 — correção do bloqueador: validar CONFIGURAÇÃO, não prosa ───────
+# A primeira versão da validação fazia grep de substring no arquivo inteiro e
+# a unit real documenta em comentário que CLOUDSDK_CONFIG foi REMOVIDO: todo
+# deploy oficial abortava num falso positivo. Aqui provamos estaticamente que
+# a validação passou a interpretar diretivas ativas.
+lib_hardening = (RAIZ / "nucleo-m15" / "scripts" / "lib-deploy-hardening.sh").read_text(
+    encoding="utf-8")
+caso("validação da unit não faz mais grep de substring no arquivo inteiro",
+     "for proibido in 'CLOUDSDK_CONFIG'" not in lib_hardening)
+caso("validação da unit interpreta diretivas ativas (seções/comentários)",
+     "def diretivas_ativas(" in lib_hardening and
+     "def nomes_de_environment(" in lib_hardening)
+caso("validação da unit exige Environment=/EnvironmentFile= em [Service]",
+     'ambiente só tem efeito em [Service]' in lib_hardening)
+caso("teste de hardening exercita a unit REAL do repositório",
+     'UNIT_REAL="$SCRIPT_DIR/../../systemd/soprolife-update-data.service"'
+     in (RAIZ / "nucleo-m15" / "scripts" / "test-deploy-hardening.sh").read_text(
+         encoding="utf-8"))
+
 print()
 if FALHAS:
     print(f"RESULTADO: {FALHAS} falha(s).")

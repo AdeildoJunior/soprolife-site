@@ -9,12 +9,21 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..audit import audit
 from ..dates import parse_incomplete_date
 from ..db import get_db
 from ..domain import ensure_sem_pcmso
+from ..finance_categories import (
+    CATEGORIA_CONSULTA,
+    CATEGORIA_ESPIROMETRIA,
+    canonizar_categoria,
+    categoria_efetiva_de_receita,
+    e_receita_propria_do_componente,
+    mesma_categoria,
+)
 from ..ids import allocate_public_code
 from ..models import (
     Consultation,
@@ -31,8 +40,6 @@ from ..models import (
 from ..normalize import normalize_name
 from ..pagination import PageParams, paginate
 from ..schemas import (
-    CATEGORIA_CONSULTA,
-    CATEGORIA_ESPIROMETRIA,
     ConciliacaoLoteRequest,
     FinanceSearch,
     FinancialEntryCreate,
@@ -224,6 +231,118 @@ def search_entries(
     return paginate(db, stmt, params, _ser)
 
 
+def _categoria_final(
+    *,
+    tipo: str,
+    categoria: str | None,
+    spirometry_exam_id: str | None,
+    consultation_id: str | None,
+    contexto: str,
+) -> str | None:
+    """Categoria que será PERSISTIDA, já canônica (M23.1).
+
+    Aplica o contrato único de app/finance_categories.py: grafia canônica
+    exata para as categorias conhecidas, categoria livre preservada, e a
+    decisão documentada sobre categoria ausente (receita com exatamente um
+    vínculo de atendimento é canonizada para a receita própria daquele
+    componente). Ambiguidade — receita sem categoria ligada a exame E
+    consulta — é recusada em vez de adivinhada.
+    """
+    if canonizar_categoria(categoria) is None and tipo == "receita" and (
+        spirometry_exam_id and consultation_id
+    ):
+        raise HTTPException(status_code=422, detail={
+            "codigo": "categoria_obrigatoria_vinculo_ambiguo",
+            "mensagem": (
+                "Receita ligada a exame e consulta ao mesmo tempo precisa de "
+                "categoria explícita — a categoria própria não é inferível."
+            ),
+            "contexto": contexto,
+        })
+    final = categoria_efetiva_de_receita(
+        tipo=tipo,
+        categoria=categoria,
+        spirometry_exam_id=spirometry_exam_id,
+        consultation_id=consultation_id,
+    )
+    if final is not None and len(final) > 60:
+        raise HTTPException(status_code=422, detail={
+            "codigo": "categoria_muito_longa_normalizada",
+            "mensagem": "Categoria excede 60 caracteres depois da normalização.",
+            "contexto": contexto,
+        })
+    return final
+
+
+def _receita_propria_existente(
+    db: Session,
+    *,
+    spirometry_exam_id: str | None,
+    consultation_id: str | None,
+    categoria_canonica: str,
+    ignorar_id: str | None,
+) -> FinancialEntry | None:
+    """Linha já gravada que É a receita própria deste componente.
+
+    A comparação de categoria acontece em Python pelo contrato canônico, não
+    por `==` em SQL: linhas legadas gravadas com caixa/espaço diferentes — ou
+    sem categoria, quando o vínculo já as identifica — contam como a MESMA
+    receita. Um exame/consulta tem pouquíssimos lançamentos, então varrer o
+    vínculo é barato e não depende de collation do banco.
+    """
+    if (
+        spirometry_exam_id
+        and mesma_categoria(categoria_canonica, CATEGORIA_ESPIROMETRIA)
+    ):
+        vinculo, alvo_id = FinancialEntry.spirometry_exam_id, spirometry_exam_id
+    elif (
+        consultation_id
+        and mesma_categoria(categoria_canonica, CATEGORIA_CONSULTA)
+    ):
+        vinculo, alvo_id = FinancialEntry.consultation_id, consultation_id
+    else:  # pragma: no cover - chamado apenas após classificação canônica
+        return None
+    stmt = select(FinancialEntry).where(
+        vinculo == alvo_id,
+        FinancialEntry.tipo == "receita",
+    )
+    if ignorar_id is not None:
+        stmt = stmt.where(FinancialEntry.id != ignorar_id)
+    for linha in db.execute(stmt).scalars().all():
+        # O índice parcial considera categoria NULL/vazia como a receita
+        # própria de CADA vínculo presente. A API nova recusa a combinação
+        # ambígua (exame + consulta sem categoria), mas uma linha histórica
+        # assim ainda pode existir antes do M23.1. Espelhar o índice aqui é
+        # essencial para que sua colisão seja traduzida para o 409 seguro em
+        # vez de escapar como IntegrityError.
+        if canonizar_categoria(linha.categoria) is None:
+            return linha
+        efetiva = categoria_efetiva_de_receita(
+            tipo=linha.tipo,
+            categoria=linha.categoria,
+            spirometry_exam_id=linha.spirometry_exam_id,
+            consultation_id=linha.consultation_id,
+        )
+        if mesma_categoria(efetiva, categoria_canonica):
+            return linha
+    return None
+
+
+def _conflito_receita(rotulo: str, existente: FinancialEntry) -> HTTPException:
+    """409 seguro: identifica o lançamento existente só por código público e
+    id técnico — nunca nome, telefone ou qualquer dado do paciente."""
+    return HTTPException(status_code=409, detail={
+        "codigo": "receita_ja_existe",
+        "mensagem": (
+            f"Este {rotulo} já tem um lançamento de receita "
+            f"({existente.public_code}) — atualize o existente em vez de "
+            "criar outro."
+        ),
+        "lancamento_existente": existente.public_code,
+        "lancamento_existente_id": existente.id,
+    })
+
+
 def _bloquear_receita_duplicada(
     db: Session,
     *,
@@ -231,6 +350,7 @@ def _bloquear_receita_duplicada(
     consultation_id: str | None,
     tipo: str,
     categoria: str | None,
+    ignorar_id: str | None = None,
 ) -> None:
     """M23.1 — proteção de duplicidade no BACKEND (não só no navegador).
 
@@ -240,35 +360,69 @@ def _bloquear_receita_duplicada(
     manual. Isto NÃO impede outros lançamentos ligados ao mesmo exame/consulta
     (repasse, ajuste, categoria diferente) — o contrato é 1:N de propósito;
     só a receita própria repetida é bloqueada.
+
+    Correção da revisão crítica: a equivalência é decidida pelo contrato
+    canônico (caixa, espaço, forma Unicode e invisível não contam; categoria ausente
+    de vínculo único é a receita própria), e o MESMO guarda roda no POST e no
+    PATCH — `ignorar_id` exclui da busca o próprio lançamento em edição.
     """
-    if tipo != "receita":
+    canonica, rotulo = e_receita_propria_do_componente(
+        tipo=tipo,
+        categoria=categoria,
+        spirometry_exam_id=spirometry_exam_id,
+        consultation_id=consultation_id,
+    )
+    if canonica is None:
         return
-    if spirometry_exam_id and categoria == CATEGORIA_ESPIROMETRIA:
-        vinculo, rotulo = FinancialEntry.spirometry_exam_id, "exame"
-        alvo_id = spirometry_exam_id
-    elif consultation_id and categoria == CATEGORIA_CONSULTA:
-        vinculo, rotulo = FinancialEntry.consultation_id, "consulta"
-        alvo_id = consultation_id
-    else:
-        return
-    existente = db.execute(
-        select(FinancialEntry).where(
-            vinculo == alvo_id,
-            FinancialEntry.tipo == "receita",
-            FinancialEntry.categoria == categoria,
-        )
-    ).scalars().first()
+    existente = _receita_propria_existente(
+        db,
+        spirometry_exam_id=spirometry_exam_id,
+        consultation_id=consultation_id,
+        categoria_canonica=canonica,
+        ignorar_id=ignorar_id,
+    )
     if existente is not None:
-        raise HTTPException(status_code=409, detail={
-            "codigo": "receita_ja_existe",
-            "mensagem": (
-                f"Este {rotulo} já tem um lançamento de receita "
-                f"({existente.public_code}) — atualize o existente em vez de "
-                "criar outro."
-            ),
-            "lancamento_existente": existente.public_code,
-            "lancamento_existente_id": existente.id,
-        })
+        raise _conflito_receita(rotulo, existente)
+
+
+def _traduzir_conflito_de_unicidade(
+    db: Session,
+    exc: Exception,
+    *,
+    spirometry_exam_id: str | None,
+    consultation_id: str | None,
+    tipo: str,
+    categoria: str | None,
+    ignorar_id: str | None = None,
+) -> None:
+    """Converte a violação do índice único de receita própria na MESMA
+    resposta 409 de domínio (M23.1 — Fase 4).
+
+    O guarda de aplicação é SELECT-então-INSERT: duas requisições simultâneas
+    podem passar as duas pelo SELECT. O índice parcial único no banco é o
+    backstop real; aqui a corrida perdedora recebe `receita_ja_existe` com o
+    código público do lançamento vencedor em vez de um erro genérico. Só
+    traduz conflitos de unicidade (IntegrityError ou o 409 textual da
+    idempotência): 409 de domínio já estruturado passa intacto.
+    """
+    if isinstance(exc, HTTPException):
+        # idempotent_create traduz uma IntegrityError que não foi causada pela
+        # própria chave para este 409 textual. Outros 409 (inclusive mesma
+        # idempotency key + payload diferente) preservam seu contrato original.
+        if not (
+            exc.status_code == 409
+            and exc.detail == "Conflito de unicidade ao criar o registro."
+        ):
+            return
+    db.rollback()
+    _bloquear_receita_duplicada(
+        db,
+        spirometry_exam_id=spirometry_exam_id,
+        consultation_id=consultation_id,
+        tipo=tipo,
+        categoria=categoria,
+        ignorar_id=ignorar_id,
+    )
 
 
 @router.post("/lancamentos", status_code=201)
@@ -296,19 +450,34 @@ def create_entry(
                     "use o fechamento mensal da parceria."
                 ),
             })
-    _bloquear_receita_duplicada(
-        db,
-        spirometry_exam_id=payload.spirometry_exam_id,
-        consultation_id=payload.consultation_id,
+    # Categoria canônica ANTES de qualquer decisão: o guarda de duplicidade, o
+    # índice único do banco e a linha gravada precisam ver exatamente a mesma
+    # grafia. A ordem importa — a proibição de pagamento direto Pastore acima
+    # continua sendo avaliada primeiro e não é afetada por esta normalização.
+    categoria_canonica = _categoria_final(
         tipo=payload.tipo,
         categoria=payload.categoria,
+        spirometry_exam_id=payload.spirometry_exam_id,
+        consultation_id=payload.consultation_id,
+        contexto="lancamentos.create",
     )
-
     def factory(key, fingerprint):
+        # O guarda pertence à criação, não ao preflight da requisição:
+        # idempotent_create precisa consultar primeiro uma chave já existente
+        # para que o replay exato continue devolvendo a linha original. Em uma
+        # criação nova (com ou sem chave), o factory sempre passa por aqui; a
+        # corrida após este SELECT continua fechada pelos índices únicos.
+        _bloquear_receita_duplicada(
+            db,
+            spirometry_exam_id=payload.spirometry_exam_id,
+            consultation_id=payload.consultation_id,
+            tipo=payload.tipo,
+            categoria=categoria_canonica,
+        )
         entry = FinancialEntry(
             public_code=allocate_public_code(db, "financial_entries"),
             tipo=payload.tipo,
-            categoria=payload.categoria,
+            categoria=categoria_canonica,
             descricao=payload.descricao,
             valor=_q(payload.valor),
             moeda=payload.moeda,
@@ -331,18 +500,28 @@ def create_entry(
         db.flush()
         return entry
 
-    entry, ja_existia = idempotent_create(
-        db, FinancialEntry, payload.idempotency_key,
-        payload.model_dump(mode="json"), factory,
-    )
-    if ja_existia:
-        data = ser_financial_entry(entry)
-        data["idempotente"] = True
-        return data
-    audit(db, "lancamento.criado", "financial_entries", entry.id, user.id,
-          request.state.request_id,
-          {"public_code": entry.public_code, "tipo": entry.tipo, "status": entry.status})
-    db.commit()
+    try:
+        entry, ja_existia = idempotent_create(
+            db, FinancialEntry, payload.idempotency_key,
+            payload.model_dump(mode="json"), factory,
+        )
+        if ja_existia:
+            data = ser_financial_entry(entry)
+            data["idempotente"] = True
+            return data
+        audit(db, "lancamento.criado", "financial_entries", entry.id, user.id,
+              request.state.request_id,
+              {"public_code": entry.public_code, "tipo": entry.tipo, "status": entry.status})
+        db.commit()
+    except (IntegrityError, HTTPException) as exc:
+        _traduzir_conflito_de_unicidade(
+            db, exc,
+            spirometry_exam_id=payload.spirometry_exam_id,
+            consultation_id=payload.consultation_id,
+            tipo=payload.tipo,
+            categoria=categoria_canonica,
+        )
+        raise
     return ser_financial_entry(entry)
 
 
@@ -490,29 +669,61 @@ def conciliar_lote_extra_pastore(
         })
 
     criados = []
-    for item in payload.itens:
-        entry = FinancialEntry(
-            public_code=allocate_public_code(db, "financial_entries"),
-            tipo="receita",
-            categoria="Espirometria",
-            descricao=item.descricao,
-            valor=_q(item.valor),
-            moeda="BRL",
-            status=item.status,
-            data_recebimento=item.data_recebimento,
-            forma_pagamento=item.forma_pagamento,
-            origem_preco=item.origem_preco,
-            spirometry_exam_id=item.spirometry_exam_id,
-        )
-        db.add(entry)
-        db.flush()
-        audit(db, "lancamento.criado", "financial_entries", entry.id, user.id,
-              request.state.request_id,
-              {"public_code": entry.public_code, "tipo": entry.tipo, "status": entry.status,
-               "marcador": "m18_conciliacao_lote"})
-        criados.append(ser_financial_entry(entry))
-
-    db.commit()
+    try:
+        for item in payload.itens:
+            categoria = _categoria_final(
+                tipo="receita",
+                categoria=CATEGORIA_ESPIROMETRIA,
+                spirometry_exam_id=item.spirometry_exam_id,
+                consultation_id=None,
+                contexto="financeiro.conciliacao.extra_pastore.lote",
+            )
+            # A consulta ampla `ja_vinculados` acima preserva o contrato
+            # histórico da conciliação. Este guarda adicional mantém este
+            # POST alternativo sob o MESMO predicado canônico de /lancamentos.
+            _bloquear_receita_duplicada(
+                db,
+                spirometry_exam_id=item.spirometry_exam_id,
+                consultation_id=None,
+                tipo="receita",
+                categoria=categoria,
+            )
+            entry = FinancialEntry(
+                public_code=allocate_public_code(db, "financial_entries"),
+                tipo="receita",
+                categoria=categoria,
+                descricao=item.descricao,
+                valor=_q(item.valor),
+                moeda="BRL",
+                status=item.status,
+                data_recebimento=item.data_recebimento,
+                forma_pagamento=item.forma_pagamento,
+                origem_preco=item.origem_preco,
+                spirometry_exam_id=item.spirometry_exam_id,
+            )
+            db.add(entry)
+            db.flush()
+            audit(db, "lancamento.criado", "financial_entries", entry.id, user.id,
+                  request.state.request_id,
+                  {"public_code": entry.public_code, "tipo": entry.tipo,
+                   "status": entry.status, "marcador": "m18_conciliacao_lote"})
+            criados.append(ser_financial_entry(entry))
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        # Duas conciliações concorrentes podem passar juntas pelos SELECTs.
+        # O índice vence a corrida; localizamos qual item já foi gravado para
+        # devolver o 409 público seguro em vez de propagar um 500 do banco.
+        for item in payload.itens:
+            _traduzir_conflito_de_unicidade(
+                db,
+                exc,
+                spirometry_exam_id=item.spirometry_exam_id,
+                consultation_id=None,
+                tipo="receita",
+                categoria=CATEGORIA_ESPIROMETRIA,
+            )
+        raise
     return {"criados": criados, "total_conciliado_no_lote": _num_str(soma)}
 
 
@@ -528,12 +739,56 @@ def update_entry(
 
     Valor e tipo são imutáveis: correção monetária é um NOVO lançamento,
     preservando a trilha da fonte financeira canônica.
+
+    M23.1 (correção da revisão crítica): o que é validado é o ESTADO FINAL da
+    linha, não só o payload. Criar como "Outro" e depois trocar a categoria
+    para "Espirometria"/"Consulta" era um contorno completo do bloqueio de
+    duplicidade — o PATCH nunca chamava o guarda. Agora a categoria pedida é
+    canonizada e o MESMO guarda do POST roda sobre o estado final, excluindo
+    da busca o próprio lançamento em edição.
     """
     entry = db.get(FinancialEntry, entry_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Lançamento não encontrado.")
     _check_pcmso(db, request, user, payload, "lancamentos.update")
     updates = payload.model_dump(exclude_none=True)
+    # Estado final efetivo: linha existente + mudanças pedidas. valor/tipo e os
+    # vínculos não são atualizáveis (não existem em FinancialEntryUpdate), então
+    # vêm sempre da linha gravada.
+    categoria_informada = "categoria" in payload.model_fields_set
+    categoria_bruta = payload.categoria if categoria_informada else entry.categoria
+    categoria_final = _categoria_final(
+        tipo=entry.tipo,
+        categoria=categoria_bruta,
+        spirometry_exam_id=entry.spirometry_exam_id,
+        consultation_id=entry.consultation_id,
+        contexto="lancamentos.update",
+    )
+    if (
+        categoria_final is None
+        and canonizar_categoria(categoria_bruta) is None
+        and (categoria_informada or categoria_bruta is not None)
+    ):
+        # Só espaços/invisíveis num lançamento sem componente inferível:
+        # apagar classificação por PATCH não é correção de metadado.
+        raise HTTPException(status_code=422, detail={
+            "codigo": "categoria_invalida",
+            "mensagem": "Categoria informada é vazia depois da normalização.",
+        })
+    # Canonicaliza o ESTADO FINAL mesmo quando o PATCH só corrige metadados.
+    # Assim uma linha legada " espirometria " não permanece fora do contrato
+    # depois de ser tocada, e uma receita vinculada sem categoria ganha a forma
+    # própria canônica quando a inferência é inequívoca.
+    if categoria_informada or categoria_final != entry.categoria:
+        updates["categoria"] = categoria_final
+    _bloquear_receita_duplicada(
+        db,
+        spirometry_exam_id=entry.spirometry_exam_id,
+        consultation_id=entry.consultation_id,
+        tipo=entry.tipo,
+        categoria=categoria_final,
+        ignorar_id=entry.id,
+    )
     status_final = updates.get("status", entry.status)
     data_receb_final = updates.get("data_recebimento", entry.data_recebimento)
     forma_final = updates.get("forma_pagamento", entry.forma_pagamento)
@@ -559,7 +814,18 @@ def update_entry(
         changed.append(field)
     audit(db, "lancamento.atualizado", "financial_entries", entry.id, user.id,
           request.state.request_id, {"campos": changed, "status": entry.status})
-    db.commit()
+    conflito_args = {
+        "spirometry_exam_id": entry.spirometry_exam_id,
+        "consultation_id": entry.consultation_id,
+        "tipo": entry.tipo,
+        "categoria": categoria_final,
+        "ignorar_id": entry.id,
+    }
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        _traduzir_conflito_de_unicidade(db, exc, **conflito_args)
+        raise
     return ser_financial_entry(entry)
 
 

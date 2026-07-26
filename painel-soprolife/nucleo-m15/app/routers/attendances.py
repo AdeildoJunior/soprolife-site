@@ -24,6 +24,11 @@ from ..audit import audit
 from ..dates import add_months, parse_incomplete_date
 from ..db import get_db
 from ..domain import ensure_sem_pcmso
+from ..finance_categories import (
+    CATEGORIA_CONSULTA,
+    CATEGORIA_ESPIROMETRIA,
+    CATEGORIA_REPASSE_MEDICO,
+)
 from ..ids import allocate_public_code
 from ..models import (
     Consultation,
@@ -35,9 +40,6 @@ from ..models import (
     User,
 )
 from ..schemas import (
-    CATEGORIA_CONSULTA,
-    CATEGORIA_ESPIROMETRIA,
-    CATEGORIA_REPASSE_MEDICO,
     TIPO_PASTORE,
     TIPOS_COM_CONSULTA,
     TIPOS_COM_ESPIROMETRIA,

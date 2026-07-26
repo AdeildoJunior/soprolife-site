@@ -10,6 +10,10 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .finance_categories import CATEGORIA_CONSULTA as _CATEGORIA_CONSULTA
+from .finance_categories import CATEGORIA_ESPIROMETRIA as _CATEGORIA_ESPIROMETRIA
+from .finance_categories import CATEGORIA_REPASSE_MEDICO as _CATEGORIA_REPASSE_MEDICO
+from .finance_categories import canonizar_categoria
 from .normalize import contains_clinical_info, contains_pii_like
 
 # Dinheiro: Decimal com 2 casas (quantização ROUND_HALF_UP na camada de
@@ -389,6 +393,18 @@ def _reject_finance_pii(v: str | None) -> str | None:
     return v
 
 
+def _normalize_finance_category(v):
+    """Normaliza ANTES dos limites e do detector de PII.
+
+    Assim caracteres invisíveis/NFKC não escondem telefone, CPF ou outro dado
+    que o validador precisa enxergar, e o max_length é aplicado à forma que
+    realmente seria persistida.
+    """
+    if v is not None and not isinstance(v, str):
+        return v  # o validador de tipo do Pydantic produz o 422 apropriado
+    return canonizar_categoria(v)
+
+
 class FinancialEntryCreate(StrictModel):
     """Financeiro é separado dos dados pessoais: só IDs técnicos.
 
@@ -413,6 +429,9 @@ class FinancialEntryCreate(StrictModel):
     partner_referral_id: str | None = None
     idempotency_key: str | None = Field(default=None, min_length=4, max_length=64)
 
+    _categoria_canonica = field_validator("categoria", mode="before")(
+        _normalize_finance_category
+    )
     _no_pii = field_validator("categoria", "descricao")(_reject_finance_pii)
 
 
@@ -430,6 +449,9 @@ class FinancialEntryUpdate(StrictModel):
     forma_pagamento: FormaPagamento | None = None
     origem_preco: OrigemPreco | None = None
 
+    _categoria_canonica = field_validator("categoria", mode="before")(
+        _normalize_finance_category
+    )
     _no_pii = field_validator("categoria", "descricao")(_reject_finance_pii)
 
 
@@ -469,9 +491,13 @@ TIPO_PASTORE = "espirometria_pastore"
 # atendimento cria sozinho). Compartilhadas entre attendances.py (quem cria)
 # e finance.py (quem bloqueia duplicata manual da mesma receita — M23.1)
 # para as duas nunca divergirem por um literal digitado diferente.
-CATEGORIA_ESPIROMETRIA = "Espirometria"
-CATEGORIA_CONSULTA = "Consulta"
-CATEGORIA_REPASSE_MEDICO = "Repasse ao médico"
+#
+# M23.1 (correção da revisão crítica): a definição mora em
+# app/finance_categories.py junto do contrato de normalização; aqui só
+# reexportamos para não quebrar quem já importava de schemas.
+CATEGORIA_ESPIROMETRIA = _CATEGORIA_ESPIROMETRIA
+CATEGORIA_CONSULTA = _CATEGORIA_CONSULTA
+CATEGORIA_REPASSE_MEDICO = _CATEGORIA_REPASSE_MEDICO
 
 
 class AtendimentoEspirometria(StrictModel):
