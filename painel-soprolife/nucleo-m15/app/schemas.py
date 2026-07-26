@@ -813,3 +813,38 @@ class CrmContatoRegistro(StrictModel):
                 "Observação operacional não pode conter telefone, CPF ou e-mail."
             )
         return self
+
+
+# ------------------------------------------------------------ M24A — laudos
+#
+# Texto clínico (texto_tooltip/texto_completo) é AUTORADO PELO administrador
+# do template, não digitado livremente por quem compõe um laudo — por isso
+# não passa pelos guardas de PII/clínico usados em campos operacionais
+# (esses guardas existem para impedir que um dado de PACIENTE vaze num
+# campo que não é clínico; aqui o campo é literalmente o texto clínico).
+
+ReportPlacement = Literal["topo", "rodape"]
+CODIGO_TEMPLATE_RE = r"^[A-Z0-9][A-Z0-9_-]{1,19}$"
+
+
+class ReportTemplateCreate(StrictModel):
+    codigo: str = Field(min_length=2, max_length=20, pattern=CODIGO_TEMPLATE_RE)
+    titulo: str = Field(min_length=2, max_length=200)
+    texto_tooltip: str | None = Field(default=None, max_length=240)
+    texto_completo: str = Field(default="", max_length=8000)
+    ativo: bool = True
+
+
+class ReportTemplateUpdate(StrictModel):
+    titulo: str | None = Field(default=None, min_length=2, max_length=200)
+    texto_tooltip: str | None = Field(default=None, max_length=240)
+    texto_completo: str | None = Field(default=None, max_length=8000)
+    ativo: bool | None = None
+
+
+class ReportDocumentCompose(StrictModel):
+    """Corpo de POST .../compor — gera uma nova versão de RASCUNHO."""
+
+    template_id: str
+    page_number: int = Field(ge=1, le=300)
+    placement: ReportPlacement

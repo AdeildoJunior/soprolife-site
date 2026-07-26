@@ -457,3 +457,69 @@ def ser_user(u: m.User) -> dict:
         "papeis": sorted(r.name for r in u.roles),
         **_stamps(u),
     }
+
+
+# ------------------------------------------------------------ M24A — laudos
+
+def ser_report_template(t: m.ReportTemplate) -> dict:
+    return {
+        "id": t.id,
+        "codigo": t.codigo,
+        "titulo": t.titulo,
+        "texto_tooltip": t.texto_tooltip,
+        "texto_completo": t.texto_completo,
+        "versao": t.versao,
+        "ativo": t.ativo,
+        **_stamps(t),
+    }
+
+
+def ser_report_document_version(v: m.ReportDocumentVersion) -> dict:
+    """NUNCA inclui storage_path — é um detalhe interno de armazenamento,
+    nunca um caminho de sistema de arquivos exposto na API (item 11)."""
+    return {
+        "id": v.id,
+        "report_document_id": v.report_document_id,
+        "kind": v.kind,
+        "version_number": v.version_number,
+        "sha256": v.sha256,
+        "size_bytes": v.size_bytes,
+        "page_count": v.page_count,
+        "mime_type": v.mime_type,
+        "template_id": v.template_id,
+        "page_number": v.page_number,
+        "placement": v.placement,
+        "created_by_user_id": v.created_by_user_id,
+        "created_at": iso(v.created_at),
+    }
+
+
+def ser_report_signature(s: m.ReportSignature) -> dict:
+    return {
+        "id": s.id,
+        "report_document_version_id": s.report_document_version_id,
+        "provider": s.provider,
+        "status": s.status,
+        "requested_at": iso(s.requested_at),
+        "completed_at": iso(s.completed_at),
+        "error_message": s.error_message,
+    }
+
+
+def ser_report_document(doc: m.ReportDocument, *, versions: list[m.ReportDocumentVersion] | None = None) -> dict:
+    return {
+        "id": doc.id,
+        "spirometry_exam_id": doc.spirometry_exam_id,
+        "status": doc.status,
+        "signature_status": doc.signature_status,
+        "original_filename_display": doc.original_filename_display,
+        "current_version_id": doc.current_version_id,
+        "superseded_by_id": doc.superseded_by_id,
+        "created_by_user_id": doc.created_by_user_id,
+        "reviewer_user_id": doc.reviewer_user_id,
+        "finalized_by_user_id": doc.finalized_by_user_id,
+        "submitted_for_review_at": iso(doc.submitted_for_review_at),
+        "finalized_at": iso(doc.finalized_at),
+        **_stamps(doc),
+        "versoes": [ser_report_document_version(v) for v in versions] if versions is not None else None,
+    }

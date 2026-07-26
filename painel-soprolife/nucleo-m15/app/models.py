@@ -936,3 +936,161 @@ class MigrationDecision(Base):
     decidido_por: Mapped[str | None] = mapped_column(String(UUID_LEN))
     detalhes: Mapped[dict | None] = mapped_column(JSON)
     ts_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# ------------------------------------------------------------ M24A — laudos
+#
+# ReportDocument = um "caso" de laudo (1 exame -> N documentos ao longo do
+# tempo; uma correção depois de finalizado nasce como um NOVO documento que
+# supersede o anterior — o documento finalizado antigo nunca é mutado).
+# ReportDocumentVersion = cada arquivo PDF de fato gravado em disco (o
+# original enviado, cada rascunho composto, e a versão finalizada) — nunca é
+# sobrescrita, sempre um arquivo novo (app/services/report_storage.py).
+# ReportTemplate = registro de abreviações/textos de interpretação — nasce
+# vazio/administrável; texto clínico de produção é decisão humana (item 17).
+# ReportSignature = fronteira de integração de assinatura digital (ICP-
+# Brasil futura) — nenhum provedor real está conectado nesta etapa; o único
+# status possível hoje é "pendente".
+
+STATUS_LAUDO_RASCUNHO = "rascunho"
+STATUS_LAUDO_EM_REVISAO = "em_revisao"
+STATUS_LAUDO_FINALIZADO = "finalizado"
+STATUS_LAUDO_VALUES = (STATUS_LAUDO_RASCUNHO, STATUS_LAUDO_EM_REVISAO, STATUS_LAUDO_FINALIZADO)
+
+VERSAO_TIPO_ORIGINAL = "original"
+VERSAO_TIPO_RASCUNHO = "rascunho"
+VERSAO_TIPO_FINALIZADO = "finalizado"
+VERSAO_TIPO_VALUES = (VERSAO_TIPO_ORIGINAL, VERSAO_TIPO_RASCUNHO, VERSAO_TIPO_FINALIZADO)
+
+# "signing-required" (item 7 do pedido M24A) é representado aqui como o
+# único valor hoje alcançável de signature_status: um laudo finalizado
+# SEMPRE entra em ASSINATURA_PENDENTE, porque nenhum provedor ICP-Brasil
+# real está configurado nesta etapa. ASSINADA/REJEITADA existem só para o
+# adapter futuro (app/services/signature_provider.py) — nenhum caminho de
+# código nesta etapa consegue gravá-los.
+SIGNATURE_STATUS_PENDENTE = "assinatura_pendente"
+SIGNATURE_STATUS_ASSINADA = "assinada"
+SIGNATURE_STATUS_REJEITADA = "rejeitada"
+SIGNATURE_STATUS_VALUES = (
+    SIGNATURE_STATUS_PENDENTE, SIGNATURE_STATUS_ASSINADA, SIGNATURE_STATUS_REJEITADA,
+)
+
+
+class ReportTemplate(Base, TimestampMixin):
+    """Registro de templates de interpretação — abreviação + texto completo.
+
+    Nasce vazio/administrável (item 9 do M24A): esta tabela só guarda a
+    ESTRUTURA. Nenhum texto clínico de produção é semeado por esta etapa.
+    """
+
+    __tablename__ = "report_templates"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    codigo: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    titulo: Mapped[str] = mapped_column(String(200), nullable=False)
+    texto_tooltip: Mapped[str | None] = mapped_column(String(240))
+    texto_completo: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    versao: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    criado_por: Mapped[str | None] = mapped_column(String(UUID_LEN))
+
+
+class ReportDocument(Base, TimestampMixin):
+    """Um "caso" de laudo PDF vinculado a UM exame de espirometria."""
+
+    __tablename__ = "report_documents"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    spirometry_exam_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("spirometry_exams.id"), index=True, nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), default=STATUS_LAUDO_RASCUNHO, nullable=False)
+    # Preenchido apenas quando `status == finalizado`. Representa o
+    # "signing-required" do item 7 — sempre PENDENTE nesta etapa.
+    signature_status: Mapped[str | None] = mapped_column(String(20))
+    # Nome de arquivo original — SÓ para exibição/auditoria humana, sempre
+    # saneado (app/services/upload_names.py). NUNCA usado para montar um
+    # caminho de armazenamento (app/services/report_storage.py usa só IDs).
+    original_filename_display: Mapped[str | None] = mapped_column(String(180))
+    # Sem FK de verdade de propósito: report_document_versions referencia
+    # report_documents (não o contrário) — declarar os dois lados como FK
+    # criaria uma dependência circular entre as tabelas. A referência é
+    # validada na camada de aplicação (sempre aponta para uma versão desta
+    # mesma linha); a integridade "de verdade" já está garantida pelo lado
+    # versão->documento, que é obrigatório e indexado.
+    current_version_id: Mapped[str | None] = mapped_column(String(UUID_LEN))
+    superseded_by_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_documents.id")
+    )
+    created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
+    reviewer_user_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
+    finalized_by_user_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
+    submitted_for_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {STATUS_LAUDO_VALUES!r}", name="status_valido",
+        ),
+    )
+
+
+class ReportDocumentVersion(Base):
+    """Um arquivo PDF de fato gravado — imutável desde a criação da linha.
+
+    `storage_path` é um caminho INTERNO relativo à raiz configurada
+    (M15_REPORTS_STORAGE_DIR); nunca é devolvido bruto por uma resposta de
+    API (item 11 do M24A) — só serve para o serviço de armazenamento montar
+    o caminho absoluto.
+    """
+
+    __tablename__ = "report_document_versions"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    report_document_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_documents.id"), index=True, nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # original|rascunho|finalizado
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(300), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(40), default="application/pdf", nullable=False)
+    template_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("report_templates.id"))
+    page_number: Mapped[int | None] = mapped_column(Integer)
+    placement: Mapped[str | None] = mapped_column(String(20))
+    created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        UniqueConstraint("report_document_id", "version_number", name="uq_versao_numero"),
+        CheckConstraint(f"kind IN {VERSAO_TIPO_VALUES!r}", name="kind_valido"),
+        CheckConstraint("size_bytes > 0", name="size_bytes_positivo"),
+        CheckConstraint("page_count > 0", name="page_count_positivo"),
+    )
+
+
+class ReportSignature(Base, TimestampMixin):
+    """Fronteira de assinatura digital (ICP-Brasil futura) — M24A item 12.
+
+    Nenhum provedor real está conectado nesta etapa. `status` só pode ser
+    PENDENTE em qualquer caminho de código atual; ASSINADA/REJEITADA existem
+    só para o adapter futuro (app/services/signature_provider.py) poder
+    gravar um resultado real quando um provedor/certificado existir.
+    """
+
+    __tablename__ = "report_signatures"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    report_document_version_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("report_document_versions.id"),
+        unique=True,
+        nullable=False,
+    )
+    provider: Mapped[str | None] = mapped_column(String(60))
+    status: Mapped[str] = mapped_column(String(20), default=SIGNATURE_STATUS_PENDENTE, nullable=False)
+    external_reference: Mapped[str | None] = mapped_column(String(120))
+    requested_by_user_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verification_metadata: Mapped[dict | None] = mapped_column(JSON)
+    error_message: Mapped[str | None] = mapped_column(String(300))
+    __table_args__ = (
+        CheckConstraint(f"status IN {SIGNATURE_STATUS_VALUES!r}", name="status_valido"),
+    )

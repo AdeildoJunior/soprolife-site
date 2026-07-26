@@ -58,6 +58,18 @@ class Settings(BaseSettings):
     # diretório privado e gravável da API; o timer consome o mesmo caminho.
     marketing_refresh_queue: Path = Path("./var/marketing-refresh-request.json")
 
+    # M24A — raiz de armazenamento dos PDFs de laudo (original + versões
+    # geradas). NUNCA dentro do Git, nunca dentro de um diretório de
+    # snapshot público. Sem valor: o serviço de laudos falha fechado (não
+    # existe default dentro do repositório). Validado de verdade em
+    # `resolved_reports_storage_dir()`, chamado só quando a feature de
+    # laudos é usada — não trava o resto da API se M24A não estiver em uso.
+    reports_storage_dir: Path | None = None
+    # Tamanho máximo aceito para um PDF enviado (bytes). 25 MiB cobre um
+    # laudo de espirometria com imagens de curva sem abrir espaço para
+    # abuso de armazenamento.
+    reports_max_upload_bytes: int = 25 * 1024 * 1024
+
     @field_validator("token_ttl_minutes")
     @classmethod
     def _ttl_em_faixa(cls, v: int) -> int:
@@ -159,6 +171,61 @@ class Settings(BaseSettings):
         if not hasattr(self, "_ephemeral_secret"):
             object.__setattr__(self, "_ephemeral_secret", secrets.token_hex(32))
         return self._ephemeral_secret
+
+    def resolved_reports_storage_dir(self) -> Path:
+        """Raiz de armazenamento de laudos PDF — fail-closed.
+
+        Chamado sob demanda pelo serviço de laudos (não no boot da API
+        inteira), mas SEMPRE antes de qualquer leitura/escrita de arquivo.
+        Recusa: ausente, caminho relativo, dentro da árvore de trabalho do
+        Git (repositório), ou symlink. Cria o diretório com permissão
+        restritiva (0700) se ainda não existir.
+        """
+        if not self.reports_storage_dir:
+            raise ValueError(
+                "M15_REPORTS_STORAGE_DIR não configurado — armazenamento de "
+                "laudos recusado (fail-closed)."
+            )
+        raw = Path(self.reports_storage_dir)
+        if not raw.is_absolute():
+            raise ValueError(
+                "M15_REPORTS_STORAGE_DIR deve ser um caminho absoluto."
+            )
+        if raw.exists() and raw.is_symlink():
+            raise ValueError(
+                "M15_REPORTS_STORAGE_DIR não pode ser um symlink."
+            )
+        repo_root = _find_git_repo_root()
+        resolved = raw.resolve() if raw.exists() else raw
+        if repo_root is not None:
+            try:
+                resolved.relative_to(repo_root)
+            except ValueError:
+                pass
+            else:
+                raise ValueError(
+                    "M15_REPORTS_STORAGE_DIR não pode estar dentro do "
+                    "repositório Git — laudos ficam fora do Git sempre."
+                )
+        raw.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            raw.chmod(0o700)
+        except OSError:
+            pass
+        if raw.is_symlink():
+            raise ValueError(
+                "M15_REPORTS_STORAGE_DIR resolveu para um symlink após a "
+                "criação — recusado."
+            )
+        return raw.resolve()
+
+
+def _find_git_repo_root() -> Path | None:
+    """Sobe a árvore de diretórios a partir deste arquivo até achar `.git`."""
+    for parent in Path(__file__).resolve().parents:
+        if (parent / ".git").exists():
+            return parent
+    return None
 
 
 @lru_cache

@@ -94,7 +94,11 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
 def test_m23_1_tem_exatamente_uma_nova_head(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     cfg = _alembic_config(f"sqlite:///{tmp_path}/heads.db")
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["c9d5f7a31b42"]
+    # M24A (5f0aea639d3d) é a head atual, revisa c9d5f7a31b42 (M23.1) — o
+    # valor esperado aqui é atualizado a cada nova migration; o que a
+    # asserção realmente prova é continuar existindo EXATAMENTE uma head
+    # (sem ponto de ramificação acidental).
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["5f0aea639d3d"]
 
 
 def _popular_financeiro_pre_m23_1(engine, *, com_conflitos: bool):
