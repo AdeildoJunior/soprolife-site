@@ -1,7 +1,7 @@
 {
   "enabled": true,
-  "reports_enabled": false,
-  "reports_mode": "disabled",
+  "reports_enabled": true,
+  "reports_mode": "pilot",
   "api_base": "/painel-soprolife/api/m15",
-  "nota": "Go-live controlado do Núcleo Operacional M15 (M15.5A). enabled=true torna o Núcleo M15 visível globalmente, mas reports_enabled=false mantém M24C independente, oculto e inutilizável. O login com credenciais reais só funciona em HTTPS ou em loopback de desenvolvimento (guarda de contexto seguro em js/m15-security.js); origens HTTP remotas ficam bloqueadas. O acesso à API usa o proxy de mesma origem; desenvolvimento local deve usar scripts/command-center-local-server.py. Rollback geral: enabled=false. Laudos exigem decisão clínica, jurídica, de assinatura e habilitação separada. Consulte painel-soprolife/docs/m24c-medical-assignment-workflow.md."
+  "nota": "Go-live controlado do Núcleo Operacional M15 (M15.5A). enabled=true torna o Núcleo M15 visível globalmente. reports_mode=pilot/reports_enabled=true são a decisão de ativação versionada do piloto interno controlado de laudos (M24D), mas por si só NÃO habilitam nada em produção: o backend só serve o piloto quando M15_REPORTS_ENABLED=true e M15_REPORTS_MODE=pilot também estiverem presentes no ambiente de deploy, com a autorização dedicada SOPROLIFE_REPORTS_PILOT_AUTHORIZATION=\"HABILITAR PILOTO DE LAUDOS\", storage privado provisionado, backup verificado e validação HTTPS pré/pós-deploy (scripts/reports_go_live_gate.py::check_pilot_preflight/postflight). O login com credenciais reais só funciona em HTTPS ou em loopback de desenvolvimento (guarda de contexto seguro em js/m15-security.js); origens HTTP remotas ficam bloqueadas. O acesso à API usa o proxy de mesma origem; desenvolvimento local deve usar scripts/command-center-local-server.py. Rollback geral: enabled=false. Rollback específico de laudos: reports_mode=disabled/reports_enabled=false. Consulte painel-soprolife/docs/m24d-reports-pilot.md e painel-soprolife/docs/m24c-medical-assignment-workflow.md."
 }
