@@ -53,18 +53,48 @@ class ReportsGateResult:
     storage_root: pathlib.Path | None = None
 
 
-def _read_target_frontend_flag(repo_root: pathlib.Path) -> bool:
+REPORTS_MODES = ("disabled", "pilot", "production")
+
+
+def _load_target_frontend_config(repo_root: pathlib.Path) -> dict:
     config_path = repo_root / "painel-soprolife/data/m15-config.json"
     try:
         config = json.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError) as exc:
         raise ReportsGateError("versioned_frontend_config_invalid") from exc
+    if not isinstance(config, dict):
+        raise ReportsGateError("versioned_frontend_config_invalid")
+    return config
+
+
+def _read_target_frontend_flag(repo_root: pathlib.Path) -> bool:
+    config = _load_target_frontend_config(repo_root)
     enabled = config.get("reports_enabled")
     if enabled is not True and enabled is not False:
         raise ReportsGateError("versioned_reports_flag_not_boolean")
     if config.get("api_base") != REPORTS_API_BASE:
         raise ReportsGateError("versioned_api_base_invalid")
     return enabled
+
+
+def read_target_frontend_mode(repo_root: pathlib.Path) -> str:
+    """M24D — modo alvo versionado (disabled/pilot/production), validado
+    fail-closed contra ``reports_enabled`` no MESMO arquivo antes de
+    qualquer gate rodar: ``disabled`` exige ``enabled=false``; ``pilot`` e
+    ``production`` exigem ``enabled=true``. Isso deixa o deploy escolher o
+    gate certo sem depender de nenhum gate já ter rodado."""
+
+    repo_root = repo_root.resolve(strict=True)
+    config = _load_target_frontend_config(repo_root)
+    mode = config.get("reports_mode")
+    if mode not in REPORTS_MODES:
+        raise ReportsGateError("versioned_reports_mode_invalid")
+    enabled = _read_target_frontend_flag(repo_root)
+    if mode == "disabled" and enabled is not False:
+        raise ReportsGateError("versioned_reports_mode_flag_mismatch")
+    if mode in ("pilot", "production") and enabled is not True:
+        raise ReportsGateError("versioned_reports_mode_flag_mismatch")
+    return mode
 
 
 def _parse_backend_flag(value: str | None) -> bool:
@@ -195,9 +225,18 @@ def check_https_workspace(
     base_url: str,
     *,
     expected_enabled: bool | None,
+    expected_mode: str | None = None,
     http_get=None,
 ) -> bool:
-    """Prove frontend workspace/API agreement over verified HTTPS."""
+    """Prove frontend workspace/API agreement over verified HTTPS.
+
+    ``expected_enabled``/``expected_mode`` are ``None`` by default, which
+    accepts whatever is CURRENTLY served as long as it is internally
+    consistent — this is what lets preflight run against a currently
+    disabled deployment on the way to a first pilot activation. Callers
+    that need to prove the POST-deploy state (postflight) pass the exact
+    target values.
+    """
 
     base = https_transport.validar_base_url(base_url)
     getter = http_get or https_transport.http_get
@@ -225,8 +264,19 @@ def check_https_workspace(
         raise ReportsGateError("reports_https_frontend_flag_invalid")
     if config.get("api_base") != REPORTS_API_BASE:
         raise ReportsGateError("reports_https_api_base_invalid")
+    served_mode = config.get("reports_mode")
+    if served_mode is not None:
+        if served_mode not in REPORTS_MODES:
+            raise ReportsGateError("reports_https_frontend_mode_invalid")
+        mode_expects_enabled = served_mode in ("pilot", "production")
+        if mode_expects_enabled is not frontend_enabled:
+            raise ReportsGateError("reports_https_frontend_mode_flag_mismatch")
+    elif expected_mode is not None:
+        raise ReportsGateError("reports_https_frontend_mode_invalid")
     if expected_enabled is not None and frontend_enabled is not expected_enabled:
         raise ReportsGateError("reports_https_target_flag_mismatch")
+    if expected_mode is not None and served_mode != expected_mode:
+        raise ReportsGateError("reports_https_target_mode_mismatch")
 
     api_status, api_body = getter(base + REPORTS_API_PATH, deadline)
     api_payload = _json_object(api_body, "reports_https_api_response_invalid")
@@ -443,12 +493,71 @@ def check_pilot_preflight(
     )
     if not https_base_url:
         raise ReportsGateError("reports_https_base_url_missing")
+    # M24D — a primeira ativação do piloto parte de um release atualmente
+    # SERVIDO como disabled (nunca houve laudos em produção antes). O
+    # preflight aceita esse estado — ou um piloto já ativo — desde que
+    # frontend e API concordem entre si; só o postflight (depois do deploy)
+    # exige o novo estado servido enabled=true e reports_mode="pilot".
     check_https_workspace(
         https_base_url,
-        expected_enabled=True,
+        expected_enabled=None,
+        expected_mode=None,
         http_get=http_get,
     )
     return ReportsGateResult(enabled=True, storage_root=storage_root)
+
+
+def verify_storage_and_unit_contract(
+    *,
+    repo_root: pathlib.Path,
+    storage_root_value: str | None,
+    effective_unit_text: str,
+    expected_uid: int,
+    expected_gid: int,
+) -> pathlib.Path:
+    """M24D — checagem de preparação (sem autorização/backup/HTTPS): prova
+    que a raiz de storage e a ``ReadWritePaths`` efetiva já satisfazem o
+    contrato exato que o gate do piloto vai exigir depois. Usado pelo
+    script de preparação para verificar seu próprio trabalho antes de
+    imprimir o caminho do manifesto — nunca autoriza nem habilita nada."""
+
+    repo_root = repo_root.resolve(strict=True)
+    storage_root = _validate_storage_root(
+        storage_root_value,
+        repo_root=repo_root,
+        expected_uid=expected_uid,
+        expected_gid=expected_gid,
+    )
+    _validate_exact_readwritepath(effective_unit_text, storage_root=storage_root)
+    return storage_root
+
+
+def check_pilot_postflight(
+    *,
+    mode_value: str | None,
+    backend_flag: str | None,
+    https_base_url: str | None,
+    http_get=None,
+) -> bool:
+    """M24D — só deve ser chamado pelo deploy quando o modo alvo é "pilot".
+    Ao contrário do preflight (que aceita um release atualmente servido
+    como disabled), o postflight sempre EXIGE que o estado agora SERVIDO
+    esteja com reports_enabled=true e reports_mode="pilot" concordando
+    entre frontend e API — nunca aceita "ainda desabilitado" aqui.
+    """
+
+    enabled = _parse_backend_flag(backend_flag)
+    if mode_value != "pilot" or not enabled:
+        raise ReportsGateError("reports_pilot_mode_not_selected")
+    if not https_base_url:
+        raise ReportsGateError("reports_https_base_url_missing")
+    check_https_workspace(
+        https_base_url,
+        expected_enabled=True,
+        expected_mode="pilot",
+        http_get=http_get,
+    )
+    return True
 
 
 def _service_ids() -> tuple[int, int]:
@@ -458,17 +567,47 @@ def _service_ids() -> tuple[int, int]:
         raise ReportsGateError("reports_service_identity_missing") from exc
 
 
+# M24D — fases de PREPARAÇÃO (verify-*) recebem argumentos diferentes das
+# fases de gate (REPO_ROOT sozinho); por isso a validação de argc é por fase.
+_PHASES_WITH_REPO_ROOT_ONLY = {
+    "preflight",
+    "postflight",
+    "preflight-pilot",
+    "postflight-pilot",
+    "read-target-mode",
+}
+_PHASES_WITH_REPO_AND_STORAGE_ROOT = {"verify-storage-contract"}
+_PHASES_WITH_SINGLE_PATH_ARG = {"verify-backup-manifest"}
+
+
 def main(argv: list[str]) -> int:
-    phases = {"preflight", "postflight", "preflight-pilot", "postflight-pilot"}
-    if len(argv) != 3 or argv[1] not in phases:
+    all_phases = (
+        _PHASES_WITH_REPO_ROOT_ONLY
+        | _PHASES_WITH_REPO_AND_STORAGE_ROOT
+        | _PHASES_WITH_SINGLE_PATH_ARG
+    )
+    phase = argv[1] if len(argv) >= 2 else None
+    usage_error = phase not in all_phases
+    if not usage_error:
+        if phase in _PHASES_WITH_REPO_ROOT_ONLY and len(argv) != 3:
+            usage_error = True
+        elif phase in _PHASES_WITH_REPO_AND_STORAGE_ROOT and len(argv) != 4:
+            usage_error = True
+        elif phase in _PHASES_WITH_SINGLE_PATH_ARG and len(argv) != 3:
+            usage_error = True
+    if usage_error:
         print(
             "usage: reports_go_live_gate.py "
-            "preflight|postflight|preflight-pilot|postflight-pilot REPO_ROOT",
+            "preflight|postflight|preflight-pilot|postflight-pilot|"
+            "read-target-mode REPO_ROOT\n"
+            "   or: reports_go_live_gate.py verify-storage-contract "
+            "REPO_ROOT STORAGE_ROOT\n"
+            "   or: reports_go_live_gate.py verify-backup-manifest "
+            "MANIFEST_PATH",
             file=sys.stderr,
         )
         return 2
-    phase = argv[1]
-    repo_root = pathlib.Path(argv[2])
+    repo_root = pathlib.Path(argv[2]) if len(argv) > 2 else None
     try:
         if phase == "preflight":
             uid, gid = _service_ids()
@@ -514,17 +653,34 @@ def main(argv: list[str]) -> int:
             )
             print("true" if result.enabled else "false")
         elif phase == "postflight-pilot":
-            mode = os.environ.get("M15_REPORTS_MODE")
-            enabled = _parse_backend_flag(os.environ.get("M15_REPORTS_ENABLED"))
-            if enabled and mode != "pilot":
-                raise ReportsGateError("reports_pilot_mode_not_selected")
-            result_enabled = enabled and mode == "pilot"
-            https_base_url = os.environ.get("SOPROLIFE_M15_HTTPS_BASE_URL")
-            if https_base_url:
-                check_https_workspace(
-                    https_base_url, expected_enabled=result_enabled
-                )
-            print("true" if result_enabled else "false")
+            check_pilot_postflight(
+                mode_value=os.environ.get("M15_REPORTS_MODE"),
+                backend_flag=os.environ.get("M15_REPORTS_ENABLED"),
+                https_base_url=os.environ.get("SOPROLIFE_M15_HTTPS_BASE_URL"),
+            )
+            print("true")
+        elif phase == "read-target-mode":
+            print(read_target_frontend_mode(repo_root))
+        elif phase == "verify-storage-contract":
+            # M24D — usado pelo script de preparação (não pelo deploy): só
+            # prova que storage + ReadWritePaths já estão corretos, sem
+            # autorização, backup ou HTTPS. Nunca decide habilitar nada.
+            uid, gid = _service_ids()
+            unit_text = sys.stdin.read()
+            verify_storage_and_unit_contract(
+                repo_root=repo_root,
+                storage_root_value=argv[3],
+                effective_unit_text=unit_text,
+                expected_uid=uid,
+                expected_gid=gid,
+            )
+            print("true")
+        elif phase == "verify-backup-manifest":
+            uid, gid = _service_ids()
+            _validate_backup_manifest(
+                argv[2], expected_uid=uid, expected_gid=gid
+            )
+            print("true")
         else:
             expected = _parse_backend_flag(
                 os.environ.get("M15_REPORTS_ENABLED")

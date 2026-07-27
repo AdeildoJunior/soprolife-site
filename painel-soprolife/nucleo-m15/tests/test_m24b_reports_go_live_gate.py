@@ -88,8 +88,12 @@ def _enabled_check(repo, root, *, unit_text=None, **overrides):
     return gate.check_preflight(**values)
 
 
-def test_default_release_is_accepted_as_reports_disabled():
-    repo_root = Path(__file__).resolve().parents[3]
+def test_default_release_is_accepted_as_reports_disabled(tmp_path):
+    # M24D: usa um repositório SINTÉTICO com reports_enabled=false — o
+    # repositório real deste branch pode estar com o piloto ativado
+    # (reports_mode=pilot), e este teste prova o comportamento do gate
+    # único para um release desligado, não o estado atual do checkout.
+    repo_root = _repo(tmp_path, reports_enabled=False)
     result = gate.check_preflight(
         repo_root=repo_root,
         backend_flag=None,

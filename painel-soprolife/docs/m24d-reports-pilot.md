@@ -42,14 +42,73 @@ Qualquer condição ausente recusa a habilitação (`ReportsGateError`) antes de
 qualquer mutação. Nenhuma etapa do gate cria diretório, altera unidade ou
 escreve configuração — ele só decide.
 
-## Storage recomendado
+## Preparação (antes da ativação — não habilita nada)
 
 ```
 /opt/soprolife/private/reports   soprolife:soprolife   0700 (diretórios) / 0600 (arquivos)
 ```
 
-Ver `systemd/soprolife-m15-api-reports-pilot.override.conf.example` para o
-drop-in de `ReadWritePaths` correspondente — não aplicado por este milestone.
+A raiz de storage e o drop-in systemd em
+`systemd/soprolife-m15-api-reports-pilot.override.conf.example` são
+PRÉ-REQUISITOS DE PREPARAÇÃO seguros: eles concedem a *capacidade* da unit
+gravar nesta raiz específica, mas não ativam laudos por si só — a API
+continua servindo `relatorios_desabilitados` até a ativação completa (ver
+abaixo). Por isso a ordem é preparar primeiro, ativar depois: o gate
+`preflight-pilot` exige que o drop-in já esteja instalado e carregado
+(`systemctl cat` efetivo) para poder validar a `ReadWritePaths` exata —
+instalá-lo "depois" do preflight aprovar não é possível.
+
+`nucleo-m15/scripts/prepare-reports-pilot-vps.sh [STORAGE_ROOT] [BACKUP_DEST_ROOT]`
+faz exatamente essa preparação, de forma idempotente e interativa:
+
+1. cria a raiz de storage (`soprolife:soprolife`, `0700`);
+2. instala o drop-in exato e roda `systemctl daemon-reload`;
+3. verifica a `ReadWritePaths` efetiva (raiz exata, sem pai mais amplo);
+4. roda o backup coordenado (PostgreSQL + storage) e verifica o manifesto
+   gerado (ver seção seguinte);
+5. imprime `MANIFEST_PATH=...` para uso em
+   `SOPROLIFE_REPORTS_BACKUP_MANIFEST` no deploy autorizado seguinte.
+
+Este script NUNCA altera `m15.env`, nunca habilita `M15_REPORTS_ENABLED`,
+nunca reinicia nem habilita `soprolife-m15-api.service`, nunca altera
+`painel-soprolife/data/m15-config.json`, e nunca faz deploy de código. O
+restart que torna a raiz REALMENTE gravável pelo processo em execução
+acontece no deploy autorizado seguinte (que já reinicia a API de qualquer
+forma).
+
+## Ativação no deploy oficial
+
+`nucleo-m15/scripts/deploy-producao-vps.sh` lê o `reports_mode` alvo
+versionado (`data/m15-config.json`, campo `reports_mode`) e escolhe o gate:
+
+- `disabled` → gate único de sempre (M24B/M24C);
+- `pilot` → `soprolife_reports_go_live_pilot_preflight` antes de qualquer
+  mutação (prompt, sudo, backup) e
+  `soprolife_reports_go_live_pilot_postflight` depois do deploy;
+- `production` → o MESMO gate único de sempre, que mantém o bloqueio
+  incondicional.
+
+**Primeira ativação (transição segura disabled → pilot):** o preflight do
+piloto aceita o release atualmente SERVIDO como `disabled` (nunca houve
+laudos em produção antes), desde que frontend e API concordem entre si —
+ele não exige que o piloto já esteja ativo antes de rodar. O postflight,
+por outro lado, sempre exige que o NOVO estado servido esteja com
+`reports_enabled=true` e `reports_mode="pilot"`.
+
+Quando `pilot` é o modo alvo, o `EnvironmentFile` gravado contém:
+
+```
+M15_REPORTS_MODE=pilot
+M15_REPORTS_ENABLED=true
+M15_REPORTS_STORAGE_DIR=<raiz autorizada exata>
+```
+
+Releases `disabled` gravam explicitamente:
+
+```
+M15_REPORTS_MODE=disabled
+M15_REPORTS_ENABLED=false
+```
 
 ## Backup coordenado
 

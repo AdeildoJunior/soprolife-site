@@ -45,3 +45,10 @@ soprolife_reports_go_live_pilot_preflight() {
 soprolife_reports_go_live_pilot_postflight() {
   soprolife_reports_gate_py postflight-pilot "$1" </dev/null
 }
+
+# M24D — lê e valida (fail-closed) o modo alvo versionado
+# (disabled/pilot/production) ANTES de qualquer gate rodar, para que o
+# deploy escolha o gate certo sem depender de nenhum gate já ter executado.
+soprolife_reports_go_live_read_target_mode() {
+  soprolife_reports_gate_py read-target-mode "$1" </dev/null
+}

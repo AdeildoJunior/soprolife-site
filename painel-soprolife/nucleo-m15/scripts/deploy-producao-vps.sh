@@ -151,14 +151,38 @@ if [[ "$M15_FLAG" == "true" ]]; then
   GO_LIVE_MODE=1
 fi
 
-# M24B: o gate independente de laudos sempre roda antes de prompt, sudo,
-# backup ou qualquer outra mutação. Ausência da variável backend significa
-# false; valores ambíguos falham fechados no gate Python. A autorização geral
+# M24B/M24D: o gate independente de laudos sempre roda antes de prompt,
+# sudo, backup ou qualquer outra mutação. A autorização geral
 # SOPROLIFE_M15_GO_LIVE nunca é consultada por este contrato.
-REPORTS_GO_LIVE_MODE="$(
-  soprolife_reports_go_live_preflight \
-    "$REPO_ROOT" "soprolife-m15-api.service"
-)" || fail "release reprovado pelo gate independente de laudos"
+#
+# O modo alvo versionado (disabled/pilot/production) decide QUAL gate roda:
+#   disabled   → gate único de sempre (M24B/M24C), que já devolve "false"
+#                sem mutação nem bloqueio;
+#   pilot      → gate dedicado do piloto (M24D): autorização própria,
+#                storage, ReadWritePaths e backup verificado;
+#   production → o MESMO gate único de sempre, que mantém o bloqueio
+#                incondicional (M24C_PRODUCTION_BLOCKER) enquanto não houver
+#                assinatura qualificada nem aprovação jurídica/clínica.
+REPORTS_TARGET_MODE="$(
+  soprolife_reports_go_live_read_target_mode "$REPO_ROOT"
+)" || fail "modo alvo de laudos (M15_REPORTS_MODE do release) inválido ou inconsistente"
+case "$REPORTS_TARGET_MODE" in
+  disabled|production)
+    REPORTS_GO_LIVE_MODE="$(
+      soprolife_reports_go_live_preflight \
+        "$REPO_ROOT" "soprolife-m15-api.service"
+    )" || fail "release reprovado pelo gate independente de laudos"
+    ;;
+  pilot)
+    REPORTS_GO_LIVE_MODE="$(
+      soprolife_reports_go_live_pilot_preflight \
+        "$REPO_ROOT" "soprolife-m15-api.service"
+    )" || fail "release reprovado pelo gate dedicado do piloto de laudos"
+    ;;
+  *)
+    fail "modo alvo de laudos desconhecido: $REPORTS_TARGET_MODE"
+    ;;
+esac
 [[ "$REPORTS_GO_LIVE_MODE" == "true" || "$REPORTS_GO_LIVE_MODE" == "false" ]] || \
   fail "gate independente de laudos devolveu estado inválido"
 
@@ -289,8 +313,14 @@ chmod 0600 "$TEMP_ENV"
   printf 'M15_API_PORT=8015\n'
   printf "M15_CORS_ORIGINS='[\"http://127.0.0.1:8765\",\"http://localhost:8765\"]'\n"
   printf 'M15_DISPLAY_TIMEZONE=America/Sao_Paulo\n'
+  # M24D — o EnvironmentFile grava sempre os DOIS: modo alvo e flag geral.
+  # Em pilot, isso já foi comprovado true pelo gate dedicado acima (ele
+  # nunca devolve "true" sem autorização completa); em disabled/production,
+  # a flag é exatamente o que o gate único devolveu (sempre "false" para
+  # disabled; production nunca chega a "true" — o gate bloqueia antes).
+  printf 'M15_REPORTS_MODE=%s\n' "$REPORTS_TARGET_MODE"
   printf 'M15_REPORTS_ENABLED=%s\n' "$REPORTS_GO_LIVE_MODE"
-  if [[ "$REPORTS_GO_LIVE_MODE" == "true" ]]; then
+  if [[ "$REPORTS_TARGET_MODE" == "pilot" && "$REPORTS_GO_LIVE_MODE" == "true" ]]; then
     printf 'M15_REPORTS_STORAGE_DIR=%s\n' "${M15_REPORTS_STORAGE_DIR-}"
   fi
 } >"$TEMP_ENV"
@@ -456,7 +486,12 @@ if (( GO_LIVE_MODE )); then
     fail "validação HTTPS pós-deploy do go-live falhou"
 fi
 
-if [[ "$REPORTS_GO_LIVE_MODE" == "true" ]]; then
+if [[ "$REPORTS_TARGET_MODE" == "pilot" ]]; then
+  # M24D — exige o estado servido pós-deploy: enabled=true E
+  # reports_mode="pilot" concordando entre frontend e API.
+  soprolife_reports_go_live_pilot_postflight "$REPO_ROOT" || \
+    fail "validação HTTPS pós-deploy do piloto de laudos falhou"
+elif [[ "$REPORTS_GO_LIVE_MODE" == "true" ]]; then
   soprolife_reports_go_live_postflight "$REPO_ROOT" || \
     fail "validação HTTPS pós-deploy específica de laudos falhou"
 fi
@@ -468,10 +503,16 @@ if (( GO_LIVE_MODE )); then
 else
   echo "Implantação técnica concluída; feature flag permanece false."
 fi
-if [[ "$REPORTS_GO_LIVE_MODE" == "true" ]]; then
-  echo "Gate técnico específico de laudos validado; decisões clínicas continuam externas."
-else
-  echo "Laudos permanecem desabilitados pelo gate específico."
-fi
+case "$REPORTS_TARGET_MODE" in
+  pilot)
+    echo "Piloto interno de laudos validado (modo pilot); decisões clínicas continuam externas."
+    ;;
+  production)
+    echo "Laudos em modo produção permanecem bloqueados pelo gate específico."
+    ;;
+  *)
+    echo "Laudos permanecem desabilitados pelo gate específico."
+    ;;
+esac
 echo "Backup verificado: $BACKUP_DIR"
 echo "Nenhum usuário, dado demo ou dado real foi criado/importado."

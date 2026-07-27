@@ -44,7 +44,13 @@ def test_api_recusa_antes_de_autenticacao_ou_parser_quando_flag_esta_off(
 def test_habilitar_o_nucleo_nao_habilita_relatorios_no_frontend():
     config = json.loads((PANEL_ROOT / "data" / "m15-config.json").read_text())
     assert config["enabled"] is True
-    assert config["reports_enabled"] is False
+    # M24D: reports_enabled é um campo próprio, nunca derivado do `enabled`
+    # geral do M15 — a única coisa que decide seu valor é reports_mode
+    # (disabled<->false; pilot/production<->true), ativado por um commit
+    # de decisão separado (ver docs/m24d-reports-pilot.md), nunca por
+    # efeito colateral de ligar o Núcleo M15 inteiro.
+    assert config["reports_mode"] in ("disabled", "pilot", "production")
+    assert config["reports_enabled"] == (config["reports_mode"] != "disabled")
 
     workflow = (PANEL_ROOT / "js" / "report-workflow.js").read_text()
     assert "config.reports_enabled === true" in workflow

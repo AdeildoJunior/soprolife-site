@@ -1,14 +1,30 @@
 # M24D — drop-in de exemplo para o piloto interno controlado de laudos.
 #
-# NÃO aplicar automaticamente. Instalar apenas depois que
-# scripts/reports_go_live_gate.py preflight-pilot aprovar TODAS as
-# condições independentes (modo, autorização dedicada, storage, backup
-# verificado, HTTPS). Instalação real:
+# Este drop-in (e a raiz de storage abaixo) são PRÉ-REQUISITOS DE
+# PREPARAÇÃO, seguros de aplicar por si só: eles só concedem à unit a
+# CAPACIDADE de gravar nesta raiz específica. Instalá-los NÃO habilita
+# laudos — a API continua servindo `relatorios_desabilitados` até que a
+# ativação completa e separada aconteça (M15_REPORTS_MODE=pilot +
+# M15_REPORTS_ENABLED=true + SOPROLIFE_REPORTS_PILOT_AUTHORIZATION exata +
+# HTTPS pré/pós), dentro de deploy-producao-vps.sh.
 #
-#   sudo cp soprolife-m15-api-reports-pilot.override.conf.example \
-#     /etc/systemd/system/soprolife-m15-api.service.d/reports-pilot.conf
-#   sudo systemctl daemon-reload
-#   sudo systemctl restart soprolife-m15-api
+# Por isso a ORDEM correta é PREPARAR primeiro, ATIVAR depois — nunca o
+# contrário: scripts/reports_go_live_gate.py preflight-pilot exige que este
+# drop-in JÁ esteja instalado e carregado (`systemctl cat` efetivo) para
+# poder validar a ReadWritePaths exata; ele não pode ser instalado "depois"
+# do preflight aprovar.
+#
+# Instalação (preparação apenas — não habilita nem reinicia a API):
+#
+#   bash nucleo-m15/scripts/prepare-reports-pilot-vps.sh
+#
+# Esse script cria a raiz de storage (soprolife:soprolife, 0700), instala
+# exatamente este drop-in, roda `systemctl daemon-reload`, verifica a
+# ReadWritePaths efetiva e produz o backup coordenado verificado. Ele NUNCA
+# toca em m15.env, nunca reinicia nem habilita a unit, e nunca altera o
+# config do frontend. O restart que torna a raiz REALMENTE gravável pelo
+# processo em execução acontece no próximo deploy autorizado (que já
+# reinicia a API de qualquer forma), não aqui.
 #
 # A raiz abaixo é a ÚNICA path de laudos aceita: precisa ser absoluta, fora
 # do Git, sem ancestral symlink, modo 0700, dono soprolife:soprolife, e ser

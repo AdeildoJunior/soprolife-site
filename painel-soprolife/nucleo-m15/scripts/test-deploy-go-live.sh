@@ -17,6 +17,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 # shellcheck source=lib-go-live-gate.sh
 source "$SCRIPT_DIR/lib-go-live-gate.sh"
+# shellcheck source=lib-reports-go-live-gate.sh
+source "$SCRIPT_DIR/lib-reports-go-live-gate.sh"
 
 FALHAS=0
 TMP_DIR="$(mktemp -d)"
@@ -173,6 +175,32 @@ else
   caso "gate de laudos precede prompt e sudo (zero mutação pré-gate)" 0 1
 fi
 
+# M24D — o deploy escolhe o gate certo a partir do modo alvo versionado, e o
+# gate dedicado do piloto precede prompt, sudo, backup e qualquer mutação
+# exatamente como o gate único já fazia.
+fiacao "deploy lê o modo alvo versionado antes de qualquer gate" \
+  'soprolife_reports_go_live_read_target_mode'
+fiacao "deploy chama o gate dedicado do piloto em modo pilot" \
+  'soprolife_reports_go_live_pilot_preflight'
+fiacao "deploy chama o postflight dedicado do piloto" \
+  'soprolife_reports_go_live_pilot_postflight'
+fiacao "EnvironmentFile grava M15_REPORTS_MODE sempre" \
+  "M15_REPORTS_MODE=%s"
+
+MODE_READ_LINE="$(grep -n 'soprolife_reports_go_live_read_target_mode' "$DEPLOY" | head -1 | cut -d: -f1)"
+PILOT_GATE_LINE="$(grep -n 'soprolife_reports_go_live_pilot_preflight' "$DEPLOY" | tail -1 | cut -d: -f1)"
+BACKUP_LINE="$(grep -n '^sudo install -d -o root -g root -m 0700 "\$BACKUP_DIR"$' "$DEPLOY" | head -1 | cut -d: -f1)"
+if [[ -n "$MODE_READ_LINE" && -n "$PILOT_GATE_LINE" && -n "$PROMPT_LINE" \
+      && -n "$SUDO_LINE" && -n "$BACKUP_LINE" ]] \
+   && (( MODE_READ_LINE < PILOT_GATE_LINE \
+         && PILOT_GATE_LINE < PROMPT_LINE \
+         && PILOT_GATE_LINE < SUDO_LINE \
+         && PILOT_GATE_LINE < BACKUP_LINE )); then
+  caso "gate do piloto precede prompt, sudo e backup (zero mutação pré-gate)" 0 0
+else
+  caso "gate do piloto precede prompt, sudo e backup (zero mutação pré-gate)" 0 1
+fi
+
 # As proteções existentes não podem ter sido removidas pela ponte.
 for padrao in \
   'pg_dump --format=custom' \
@@ -198,17 +226,17 @@ SAIDA="$(soprolife_go_live_flag_config \
   "$REPO_ROOT/painel-soprolife/data/m15-config.json" 2>/dev/null)"
 caso "data/m15-config.json deste release lê 'true'" "true" "$SAIDA"
 
-REPORTS_FLAG="$(python3 - "$REPO_ROOT/painel-soprolife/data/m15-config.json" <<'PY'
-import json, pathlib, sys
-value = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")).get(
-    "reports_enabled"
-)
-if value is not False:
-    raise SystemExit(1)
-print("false")
-PY
-)"
-caso "reports_enabled deste release permanece false" "false" "$REPORTS_FLAG"
+# M24D — reports_mode e reports_enabled do release alvo precisam sempre
+# concordar entre si (disabled<->false; pilot/production<->true); a mesma
+# validação fail-closed que o deploy usa para escolher o gate certo. Não
+# fixamos qual dos três valores está no tip: a ativação controlada do
+# piloto é exatamente um commit posterior que muda esse valor sem tocar em
+# nenhum outro arquivo (ver teste dedicado de escopo do commit de ativação).
+if soprolife_reports_go_live_read_target_mode "$REPO_ROOT" >/dev/null 2>&1; then
+  caso "reports_mode/reports_enabled do release concordam entre si" 0 0
+else
+  caso "reports_mode/reports_enabled do release concordam entre si" 0 1
+fi
 
 if soprolife_go_live_checar_fonte_alvo "$REPO_ROOT" >/dev/null 2>&1; then
   caso "release integrado passa no check-source do gate" 0 0

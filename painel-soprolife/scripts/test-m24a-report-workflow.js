@@ -44,10 +44,17 @@ function check(label, condition, detail = "") {
 
 console.log("A) Feature gate e integração no painel");
 check(
-  "backend e frontend continuam default-off",
+  "backend continua default-off por código (independente do release ativo)",
   /reports_enabled: bool = False/.test(backendConfig)
-    && publicConfig.reports_enabled === false
+    && /reports_mode: Literal\["disabled", "pilot", "production"\] = "disabled"/.test(
+      backendConfig
+    )
     && envExample.includes("M15_REPORTS_ENABLED=false")
+);
+check(
+  "config pública do release não deriva reports_enabled de `enabled`",
+  ["disabled", "pilot", "production"].includes(publicConfig.reports_mode)
+    && publicConfig.reports_enabled === (publicConfig.reports_mode !== "disabled")
 );
 check(
   "entrada inteira começa oculta",
@@ -289,8 +296,9 @@ check(
     && css.includes("report-pilot-warning")
 );
 check(
-  "config pública traz reports_mode e mantém o padrão seguro",
-  publicConfig.reports_mode === "disabled"
+  "config pública traz reports_mode consistente com reports_enabled",
+  ["disabled", "pilot", "production"].includes(publicConfig.reports_mode)
+    && publicConfig.reports_enabled === (publicConfig.reports_mode !== "disabled")
 );
 check(
   "F2/F3/F4 fechados: autoverificação, recuperação e oráculo de existência",
