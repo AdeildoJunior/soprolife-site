@@ -3,14 +3,26 @@
 import re
 import uuid
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException as FastAPIHTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 # request_id aceito do cliente: curto, formato seguro; qualquer outra coisa
 # é substituída por um id gerado (evita log/coluna estourada e injeção).
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+REPORT_UPLOAD_MULTIPART_OVERHEAD_BYTES = 64 * 1024
+
+
+class ReportDomainError(FastAPIHTTPException):
+    """Erro M24A seguro: código de máquina + mensagem humana sempre textual."""
+
+    def __init__(self, status_code: int, codigo: str, mensagem: str):
+        self.status_code = status_code
+        self.codigo = codigo
+        self.mensagem = mensagem
+        super().__init__(status_code=status_code, detail=mensagem)
 
 
 def _new_request_id() -> str:
@@ -40,12 +52,102 @@ def install_error_handling(app: FastAPI) -> None:
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):
         request.state.request_id = resolve_request_id(request.headers.get("X-Request-ID"))
+        if request.url.path.startswith("/api/v1/laudos"):
+            # Esta borda roda antes do parser multipart. Assim, feature
+            # desabilitada e Content-Length obviamente excessivo não fazem o
+            # servidor materializar o upload antes de recusá-lo.
+            from .config import get_settings
+
+            settings = get_settings()
+            if not settings.reports_enabled:
+                return _envelope(
+                    request,
+                    503,
+                    "relatorios_desabilitados",
+                    "O recurso de laudos está desabilitado.",
+                )
+            if (
+                request.method == "POST"
+                and request.url.path == "/api/v1/laudos"
+            ):
+                max_request = (
+                    settings.reports_max_upload_bytes
+                    + REPORT_UPLOAD_MULTIPART_OVERHEAD_BYTES
+                )
+                declared_raw = request.headers.get("content-length")
+                if declared_raw is not None:
+                    try:
+                        declared = int(declared_raw)
+                    except ValueError:
+                        return _envelope(
+                            request,
+                            400,
+                            "content_length_invalido",
+                            "O tamanho declarado do upload é inválido.",
+                        )
+                    if declared < 0 or declared > max_request:
+                        return _envelope(
+                            request,
+                            413,
+                            "pdf_excede_tamanho_maximo",
+                            "O PDF excede o tamanho máximo permitido.",
+                        )
+                # Content-Length pode estar ausente ou mentir. Limita também
+                # o stream ASGI antes de Starlette concluir o parser/spool do
+                # multipart. O teto inclui overhead fechado para boundary e
+                # campos, preservando um arquivo com exatamente o máximo.
+                original_receive = request._receive
+                received = 0
+
+                async def limited_receive():
+                    nonlocal received
+                    message = await original_receive()
+                    if message.get("type") == "http.request":
+                        received += len(message.get("body", b""))
+                        if received > max_request:
+                            request.state.report_upload_too_large = True
+                            raise ReportDomainError(
+                                413,
+                                "pdf_excede_tamanho_maximo",
+                                "O PDF excede o tamanho máximo permitido.",
+                            )
+                    return message
+
+                request._receive = limited_receive
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
         return response
 
-    @app.exception_handler(HTTPException)
-    async def http_exc(request: Request, exc: HTTPException):
+    @app.exception_handler(ReportDomainError)
+    async def report_domain_exc(request: Request, exc: ReportDomainError):
+        return _envelope(
+            request,
+            exc.status_code,
+            exc.codigo,
+            exc.mensagem,
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exc(request: Request, exc: StarletteHTTPException):
+        if getattr(request.state, "report_upload_too_large", False):
+            return _envelope(
+                request,
+                413,
+                "pdf_excede_tamanho_maximo",
+                "O PDF excede o tamanho máximo permitido.",
+            )
+        # FastAPI converte exceções do receive durante o parse para um 400
+        # encadeado. Recupera o limite M24A original sem expor a cadeia.
+        cause = exc.__cause__
+        while cause is not None:
+            if isinstance(cause, ReportDomainError):
+                return _envelope(
+                    request,
+                    cause.status_code,
+                    cause.codigo,
+                    cause.mensagem,
+                )
+            cause = cause.__cause__
         return _envelope(request, exc.status_code, f"http_{exc.status_code}", exc.detail)
 
     @app.exception_handler(RequestValidationError)

@@ -129,6 +129,21 @@
       : { secure: false, mode: "blocked" };
   }
 
+  function reportsFeatureEnabled(config) {
+    if (config && config.reports_enabled === true) return true;
+    // Opt-in exclusivo para E2E/desenvolvimento isolado em loopback. Não há
+    // override localStorage em hostname remoto ou produção.
+    const loopback = ["127.0.0.1", "::1", "localhost"].includes(
+      window.location.hostname
+    );
+    if (!loopback) return false;
+    try {
+      return window.localStorage.getItem("soproM24AReports") === "on";
+    } catch (error) {
+      return false;
+    }
+  }
+
   function announce(message, kind) {
     state.notice = message || "";
     state.noticeKind = kind || "";
@@ -481,10 +496,16 @@
       content = can("gestor") ? `
         <p>A finalização é irreversível para este documento. O PDF final será
           preservado e continuará com assinatura digital pendente.</p>
-        <button type="button" class="m15-btn report-finalize-btn"
-          data-report-finalize ${state.busy ? "disabled" : ""}>
-          Finalizar laudo
-        </button>` : `
+        <div class="report-lifecycle-buttons">
+          <button type="button" class="m15-btn m15-btn-sec"
+            data-report-adjustment ${state.busy ? "disabled" : ""}>
+            Devolver para ajuste
+          </button>
+          <button type="button" class="m15-btn report-finalize-btn"
+            data-report-finalize ${state.busy ? "disabled" : ""}>
+            Finalizar laudo
+          </button>
+        </div>` : `
         <p>Documento aguardando o papel gestor, conforme o contrato privilegiado
           existente. Composição e nova submissão ficam bloqueadas.</p>`;
     } else if (doc.status === "finalizado") {
@@ -879,14 +900,16 @@
     }
   }
 
-  async function transition(path, successMessage, preferredDocumentId) {
+  async function transition(path, successMessage, preferredDocumentId, payload) {
     const c = client();
     const examId = state.selectedExamId;
     const epoch = ++state.requestEpoch;
     state.busy = true;
     render();
     try {
-      const result = await c.api(path, { method: "POST" });
+      const options = { method: "POST" };
+      if (payload) options.body = JSON.stringify(payload);
+      const result = await c.api(path, options);
       if (epoch !== state.requestEpoch || examId !== state.selectedExamId) return result;
       state.busy = false;
       announce(successMessage, "success");
@@ -914,6 +937,7 @@
         aria-labelledby="${titleId}" aria-describedby="${descId}">
         <h3 id="${titleId}">${esc(options.title)}</h3>
         <p id="${descId}">${esc(options.description)}</p>
+        ${options.formHtml || ""}
         <div class="report-modal-error" role="alert" hidden></div>
         <div class="m15-modal-actions">
           <button type="button" class="m15-btn m15-btn-sec" data-report-modal-cancel>
@@ -975,7 +999,7 @@
       confirm.disabled = true;
       cancel.disabled = true;
       try {
-        await options.onConfirm();
+        await options.onConfirm(modal);
         submitting = false;
         close();
       } catch (error) {
@@ -1054,6 +1078,30 @@
       });
       return;
     }
+    if (target.matches("[data-report-adjustment]")) {
+      openConfirm({
+        title: "Devolver o laudo para ajuste?",
+        description: "Escolha somente um motivo técnico. Não informe nome, CPF ou qualquer dado de paciente.",
+        formHtml: `
+          <label for="reportAdjustmentReason">
+            Motivo técnico
+            <select id="reportAdjustmentReason" required>
+              <option value="ajuste_de_composicao">Ajuste de composição</option>
+              <option value="ajuste_de_template">Ajuste de template</option>
+              <option value="ajuste_de_pagina">Ajuste de página</option>
+              <option value="correcao_tecnica">Correção técnica</option>
+            </select>
+          </label>`,
+        confirmLabel: "Voltar para rascunho",
+        onConfirm: (modal) => transition(
+          `/laudos/${encodeURIComponent(doc.id)}/devolver-para-ajuste`,
+          "Documento devolvido para ajuste técnico.",
+          doc.id,
+          { reason_code: modal.querySelector("#reportAdjustmentReason").value }
+        ),
+      });
+      return;
+    }
     if (target.matches("[data-report-corrective]")) {
       openConfirm({
         title: "Abrir uma versão corretiva?",
@@ -1121,6 +1169,7 @@
       config = {};
     }
     if (config.enabled !== true ||
+        !reportsFeatureEnabled(config) ||
         config.api_base !== "/painel-soprolife/api/m15") {
       return;
     }

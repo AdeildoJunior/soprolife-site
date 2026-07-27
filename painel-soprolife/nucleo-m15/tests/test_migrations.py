@@ -76,6 +76,60 @@ def test_ciclo_repetido_upgrade_downgrade(tmp_path, monkeypatch):
     engine.dispose()
 
 
+def test_m24a_remove_filename_sintetico_e_migration_e_reversivel(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("M15_DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path}/m24a-privacy.db"
+    cfg = _alembic_config(url)
+    command.upgrade(cfg, "5f0aea639d3d")
+    engine = create_engine(url)
+    synthetic_id = "10000000-0000-0000-0000-000000000001"
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO report_documents (
+                    id, spirometry_exam_id, status,
+                    original_filename_display, created_by_user_id,
+                    created_at, updated_at
+                ) VALUES (
+                    :id, :exam_id, 'rascunho',
+                    'TESTE-APAGAR-nome-potencial.pdf', :user_id,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {
+                "id": synthetic_id,
+                "exam_id": "20000000-0000-0000-0000-000000000001",
+                "user_id": "30000000-0000-0000-0000-000000000001",
+            },
+        )
+    command.upgrade(cfg, "head")
+    columns = {column["name"] for column in inspect(engine).get_columns("report_documents")}
+    assert "original_filename_display" not in columns
+    assert "corrects_document_id" in columns
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT count(*) FROM report_documents WHERE id=:id"),
+            {"id": synthetic_id},
+        ).scalar_one() == 1
+
+    command.downgrade(cfg, "5f0aea639d3d")
+    columns = {column["name"] for column in inspect(engine).get_columns("report_documents")}
+    assert "original_filename_display" in columns
+    with engine.connect() as connection:
+        assert connection.execute(
+            text(
+                "SELECT original_filename_display FROM report_documents WHERE id=:id"
+            ),
+            {"id": synthetic_id},
+        ).scalar_one() is None
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
 def test_preseed_das_sequencias(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     url = f"sqlite:///{tmp_path}/migracao5.db"
@@ -91,14 +145,14 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
     engine.dispose()
 
 
-def test_m23_1_tem_exatamente_uma_nova_head(tmp_path, monkeypatch):
+def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     cfg = _alembic_config(f"sqlite:///{tmp_path}/heads.db")
-    # M24A (5f0aea639d3d) é a head atual, revisa c9d5f7a31b42 (M23.1) — o
+    # A correção M24A (8d4b1a2c9f70) é a head atual — o
     # valor esperado aqui é atualizado a cada nova migration; o que a
     # asserção realmente prova é continuar existindo EXATAMENTE uma head
     # (sem ponto de ramificação acidental).
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["5f0aea639d3d"]
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["8d4b1a2c9f70"]
 
 
 def _popular_financeiro_pre_m23_1(engine, *, com_conflitos: bool):

@@ -18,6 +18,8 @@ const reports = read("nucleo-m15", "app", "routers", "reports.py");
 const operations = read("nucleo-m15", "app", "routers", "operations.py");
 const runbook = read("docs", "m24a-laudos-pdf-operacao.md");
 const envExample = read("nucleo-m15", ".env.example");
+const publicConfig = JSON.parse(read("data", "m15-config.json"));
+const backendConfig = read("nucleo-m15", "app", "config.py");
 
 let failures = 0;
 function check(label, condition, detail = "") {
@@ -36,11 +38,15 @@ check("sidebar possui exatamente um destino de laudos", sidebarEntries.length ==
 check("seção clínica é distinta de Documentos institucionais",
       /<section id="laudos-espirometria" class="section"/.test(index) &&
       /<section id="documentos" class="section"/.test(index));
-check("entrada respeita a feature flag M15", (index.match(/data-report-entry/g) || []).length === 3 &&
-      /config\.enabled !== true/.test(workflow));
+check("entrada respeita flag de laudos independente e default-off",
+      (index.match(/data-report-entry/g) || []).length === 3 &&
+      publicConfig.enabled === true && publicConfig.reports_enabled === false &&
+      /config\.enabled !== true/.test(workflow) &&
+      /config\.reports_enabled === true/.test(workflow) &&
+      /reports_enabled: bool = False/.test(backendConfig));
 check("CSS e módulo M24A estão versionados no index",
-      /report-workflow\.css\?v=2026072601/.test(index) &&
-      /report-workflow\.js\?v=2026072601/.test(index));
+      /report-workflow\.css\?v=2026072602/.test(index) &&
+      /report-workflow\.js\?v=2026072602/.test(index));
 check("layout reutiliza section-title, panel, safe-label e botões M15",
       ["section-title", "panel report-panel", "safe-label", "m15-btn"]
         .every((token) => index.includes(token) || workflow.includes(token)));
@@ -61,8 +67,10 @@ check("apiBlob está exportado pelo cliente M15",
 check("401 do PDF encerra sessão/token expirado",
       /responseType === "blob"[\s\S]{0,800}?resp\.status === 401/.test(m15) &&
       /encerrarSessao\("Sua sessão expirou/.test(m15));
-check("nenhum estado de laudo vai para storage do navegador",
-      !/localStorage|sessionStorage|indexedDB/.test(workflow));
+check("storage do navegador só contém opt-in loopback, nunca estado de laudo",
+      /localStorage\.getItem\("soproM24AReports"\)/.test(workflow) &&
+      !/localStorage\.setItem|sessionStorage|indexedDB/.test(workflow) &&
+      workflow.includes('"127.0.0.1", "::1", "localhost"'));
 const workflowWithoutFeatureConfig = workflow.replaceAll("data/m15-config.json", "");
 check("nenhum JSON público/privado é carregado para laudos",
       !/data-private|\.local\.json|(?:^|[\"'])\.?\/?data\/[^\"']+\.json/.test(
@@ -71,8 +79,8 @@ check("nenhum JSON público/privado é carregado para laudos",
 check("único fetch direto do módulo é a configuração pública da feature",
       (workflow.match(/\bfetch\(/g) || []).length === 1 &&
       /fetch\(CONFIG_URL/.test(workflow));
-check("nenhuma URL absoluta ou host de backend existe no módulo",
-      !/https?:\/\/|127\.0\.0\.1|localhost/.test(workflow));
+check("nenhuma URL absoluta ou host de backend remoto existe no módulo",
+      !/https?:\/\//.test(workflow));
 
 console.log("\nC) Localização, upload e contrato API/frontend");
 check("busca aceita somente código ESP institucional",
@@ -94,6 +102,7 @@ for (const endpoint of [
   "/compor",
   "/revisao",
   "/finalizar",
+  "/devolver-para-ajuste",
   "/nova-versao-corretiva",
 ]) {
   check(`frontend cobre endpoint ${endpoint}`, workflow.includes(endpoint));
@@ -123,6 +132,13 @@ check("backend e proxy marcam PDF como private/no-store + nosniff",
       reports.includes('"X-Content-Type-Options": "nosniff"') &&
       proxy.includes('"Cache-Control", "private, no-store"') &&
       proxy.includes('"X-Content-Type-Options", "nosniff"'));
+check("cada entrega bem-sucedida é auditada antes da Response",
+      /laudo_conteudo_entregue/.test(reports) &&
+      /db\.commit\(\)[\s\S]{0,100}?return Response/.test(reports));
+check("erros da API exibem mensagem humana e preservam código",
+      /function readableApiError/.test(m15) &&
+      /err\.code = detail\.code/.test(m15) &&
+      !/new Error\(typeof msg === "string" \? msg : JSON\.stringify\(msg\)\)/.test(m15));
 check("proxy aceita PDF somente na rota exata de conteúdo",
       /_M15_REPORT_CONTENT_RE/.test(proxy) &&
       /report_content\s+and 200 <= status < 300/.test(proxy) &&
@@ -154,7 +170,7 @@ console.log("\nF) RBAC e ciclo de vida na interface");
 check("upload/composição exigem operacional",
       (workflow.match(/can\("operacional"\)/g) || []).length >= 3);
 check("finalização só aparece com can gestor",
-      /doc\.status === "em_revisao"[\s\S]{0,160}?can\("gestor"\)/.test(workflow));
+      /doc\.status === "em_revisao"[\s\S]{0,240}?can\("gestor"\)/.test(workflow));
 check("botão de finalizar só existe no estado em revisão",
       /data-report-finalize/.test(workflow) &&
       !/doc\.status === "rascunho"[\s\S]{0,200}?data-report-finalize/.test(workflow));
@@ -169,6 +185,11 @@ check("correção chama novo documento e explica imutabilidade",
       workflow.includes("não terá PDF, hash, data ou estado alterados"));
 check("documento sucedido continua identificado como finalizado/imutável",
       workflow.includes("Seu PDF,") && workflow.includes("permanecem imutáveis"));
+check("gestor pode devolver revisão com motivo técnico fechado",
+      workflow.includes("Devolver para ajuste") &&
+      workflow.includes("data-report-adjustment") &&
+      workflow.includes("ajuste_de_composicao") &&
+      workflow.includes("reason_code"));
 
 console.log("\nG) Acessibilidade, diálogo e responsividade");
 check("status assíncrono usa aria-live polite",
@@ -209,7 +230,8 @@ check("movimento reduzido é respeitado",
 console.log("\nH) Operação, LGPD e decisões não inventadas");
 check("env example documenta raiz absoluta e fora do Git",
       envExample.includes("M15_REPORTS_STORAGE_DIR=/opt/soprolife/private/m15-reports") &&
-      envExample.includes("fora do repositório Git"));
+      envExample.includes("fora do repositório Git") &&
+      envExample.includes("M15_REPORTS_ENABLED=false"));
 for (const topic of [
   "Backup coordenado",
   "Restauração e ensaio",

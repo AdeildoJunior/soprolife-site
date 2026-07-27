@@ -1006,10 +1006,6 @@ class ReportDocument(Base, TimestampMixin):
     # Preenchido apenas quando `status == finalizado`. Representa o
     # "signing-required" do item 7 — sempre PENDENTE nesta etapa.
     signature_status: Mapped[str | None] = mapped_column(String(20))
-    # Nome de arquivo original — SÓ para exibição/auditoria humana, sempre
-    # saneado (app/services/upload_names.py). NUNCA usado para montar um
-    # caminho de armazenamento (app/services/report_storage.py usa só IDs).
-    original_filename_display: Mapped[str | None] = mapped_column(String(180))
     # Sem FK de verdade de propósito: report_document_versions referencia
     # report_documents (não o contrário) — declarar os dois lados como FK
     # criaria uma dependência circular entre as tabelas. A referência é
@@ -1020,6 +1016,12 @@ class ReportDocument(Base, TimestampMixin):
     superseded_by_id: Mapped[str | None] = mapped_column(
         String(UUID_LEN), ForeignKey("report_documents.id")
     )
+    # Invariante inverso e persistido da cadeia corretiva. A unicidade
+    # garante no banco que um predecessor finalizado tenha no máximo UM
+    # sucessor, inclusive sob duas transações concorrentes.
+    corrects_document_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_documents.id")
+    )
     created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
     reviewer_user_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
     finalized_by_user_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
@@ -1028,6 +1030,10 @@ class ReportDocument(Base, TimestampMixin):
     __table_args__ = (
         CheckConstraint(
             f"status IN {STATUS_LAUDO_VALUES!r}", name="status_valido",
+        ),
+        UniqueConstraint(
+            "corrects_document_id",
+            name="uq_report_documents_corrects_document_id",
         ),
     )
 
@@ -1054,6 +1060,13 @@ class ReportDocumentVersion(Base):
     page_count: Mapped[int] = mapped_column(Integer, nullable=False)
     mime_type: Mapped[str] = mapped_column(String(40), default="application/pdf", nullable=False)
     template_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("report_templates.id"))
+    # Evidência clínica imutável da composição. `template_id` identifica o
+    # registro editável; estes quatro campos congelam o conteúdo efetivamente
+    # usado por esta versão e são copiados sem alteração para a finalizada.
+    template_code_snapshot: Mapped[str | None] = mapped_column(String(20))
+    template_version_snapshot: Mapped[int | None] = mapped_column(Integer)
+    template_text_snapshot: Mapped[str | None] = mapped_column(Text)
+    template_text_sha256: Mapped[str | None] = mapped_column(String(64))
     page_number: Mapped[int | None] = mapped_column(Integer)
     placement: Mapped[str | None] = mapped_column(String(20))
     created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
@@ -1063,6 +1076,21 @@ class ReportDocumentVersion(Base):
         CheckConstraint(f"kind IN {VERSAO_TIPO_VALUES!r}", name="kind_valido"),
         CheckConstraint("size_bytes > 0", name="size_bytes_positivo"),
         CheckConstraint("page_count > 0", name="page_count_positivo"),
+        CheckConstraint(
+            "("
+            "template_code_snapshot IS NULL AND "
+            "template_version_snapshot IS NULL AND "
+            "template_text_snapshot IS NULL AND "
+            "template_text_sha256 IS NULL"
+            ") OR ("
+            "template_code_snapshot IS NOT NULL AND "
+            "template_version_snapshot IS NOT NULL AND "
+            "template_version_snapshot > 0 AND "
+            "template_text_snapshot IS NOT NULL AND "
+            "template_text_sha256 IS NOT NULL"
+            ")",
+            name="template_snapshot_completo",
+        ),
     )
 
 

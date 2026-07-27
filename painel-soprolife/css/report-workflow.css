@@ -616,6 +616,12 @@
   margin: 0 0 12px;
 }
 
+.report-lifecycle-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .report-finalize-btn {
   background: #8d2f36 !important;
 }
@@ -675,6 +681,18 @@
   color: var(--muted, #6d7b8a);
   font-size: .8rem;
   line-height: 1.6;
+}
+
+.report-modal > label {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  color: var(--navy, #0b1f36);
+  font-size: .76rem;
+}
+
+.report-modal > label select {
+  width: 100%;
 }
 
 .report-modal-error {

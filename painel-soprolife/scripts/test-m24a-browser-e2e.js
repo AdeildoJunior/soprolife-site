@@ -282,6 +282,8 @@ async function main() {
     M15_REPORTS_STORAGE_DIR: reportsPath,
     M15_MARKETING_REFRESH_QUEUE: path.join(temp, "marketing-request.json"),
   };
+  // A primeira subida prova o default real; não herda opt-in do shell.
+  delete commonEnv.M15_REPORTS_ENABLED;
   const alembic = path.join(path.dirname(PYTHON), "alembic");
   const children = [];
   let cdp;
@@ -313,11 +315,11 @@ async function main() {
       );
     }
 
-    const api = spawnLogged(PYTHON, ["-m", "app.serve"], {
+    const defaultApi = spawnLogged(PYTHON, ["-m", "app.serve"], {
       cwd: M15_DIR,
       env: commonEnv,
     });
-    children.push(api);
+    children.push(defaultApi);
     const proxy = spawnLogged("python3", [PROXY], {
       cwd: ROOT,
       env: {
@@ -375,6 +377,64 @@ async function main() {
       behavior: "allow",
       downloadPath: downloadsPath,
     });
+
+    console.log("── Flags M24A: default desligado e opt-in isolado ──");
+    await waitFor(
+      () => cdp.evaluate(
+        "document.readyState === 'complete' && Boolean(window.SoproM15) && " +
+        "Boolean(document.querySelector('#m15LoginForm'))"
+      ),
+      "painel carregado com configuração padrão"
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const defaultFlags = await cdp.evaluate(`(async () => {
+      const entries = [...document.querySelectorAll("[data-report-entry]")];
+      const response = await fetch("/painel-soprolife/api/m15/laudos");
+      const body = await response.json();
+      return {
+        entriesHidden: entries.length === 3 && entries.every((entry) => entry.hidden),
+        apiStatus: response.status,
+        apiCode: body?.erro?.codigo
+      };
+    })()`);
+    check("menu e workspace M24A ficam ocultos no frontend padrão",
+      defaultFlags.entriesHidden, JSON.stringify(defaultFlags));
+    check("backend M24A padrão recusa uso operacional antes da autenticação",
+      defaultFlags.apiStatus === 503 &&
+      defaultFlags.apiCode === "relatorios_desabilitados",
+      JSON.stringify(defaultFlags));
+
+    stop(defaultApi);
+    await new Promise((resolve) => {
+      if (defaultApi.exitCode !== null) resolve();
+      else defaultApi.once("exit", resolve);
+    });
+    const enabledApi = spawnLogged(PYTHON, ["-m", "app.serve"], {
+      cwd: M15_DIR,
+      env: { ...commonEnv, M15_REPORTS_ENABLED: "true" },
+    });
+    children.push(enabledApi);
+    await waitFor(async () => {
+      try {
+        const response = await fetch(`${base}/api/m15/health`);
+        return response.ok;
+      } catch (error) {
+        return false;
+      }
+    }, "API reiniciada com flag backend explícita");
+
+    await cdp.evaluate(
+      'localStorage.setItem("soproM24AReports", "on"); location.reload()'
+    );
+    await waitFor(
+      () => cdp.evaluate(
+        "Boolean(window.SoproM15) && " +
+        "!document.querySelector(" +
+        "'.sidebar .nav-item[data-section=\"laudos-espirometria\"]'" +
+        ").hidden && Boolean(document.querySelector('#m15LoginForm'))"
+      ),
+      "opt-in frontend exclusivo do E2E"
+    );
 
     console.log("── Preparação sintética pela API autenticada ──");
     await login(cdp, USERS.admin[0]);

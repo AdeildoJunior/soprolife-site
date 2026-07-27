@@ -4,6 +4,20 @@ Este runbook cobre somente configuração e governança do armazenamento de
 laudos. Ele não autoriza implantação, acesso à VPS, uso de dados reais,
 definição de conteúdo clínico ou contratação de assinatura digital.
 
+## Feature flag independente
+
+M24A permanece desligado nesta entrega. O backend usa
+`M15_REPORTS_ENABLED=false` por padrão e recusa todas as rotas `/laudos` antes
+do parser multipart enquanto a flag estiver desligada. O frontend exige
+separadamente `reports_enabled=true` em `data/m15-config.json`; o valor
+versionado é `false`. `enabled=true` para o restante do Núcleo M15 não habilita
+laudos.
+
+O opt-in por `localStorage` existe somente em hostname loopback para E2E e
+desenvolvimento isolado; não funciona em origem remota. Não altere nenhuma das
+duas flags para produção enquanto os itens de NO-GO deste runbook estiverem
+pendentes.
+
 ## Configuração de `M15_REPORTS_STORAGE_DIR`
 
 `M15_REPORTS_STORAGE_DIR` é obrigatório para enviar, compor, visualizar ou
@@ -12,7 +26,7 @@ nas operações de arquivo. O valor precisa:
 
 - ser um caminho absoluto;
 - ficar fora de qualquer worktree/repositório Git;
-- não ser, nem resolver para, um link simbólico;
+- não conter ancestral, raiz ou diretório interno que seja link simbólico;
 - pertencer ao usuário e grupo do serviço;
 - estar no mesmo filesystem em que os arquivos temporários e finais serão
   publicados por hard link atômico;
@@ -39,10 +53,12 @@ arquivos PDF                       soprolife:soprolife  0600
 /opt/soprolife/secrets/m15.env     root:soprolife       0640
 ```
 
-O serviço já usa `UMask=0077`, e a camada de armazenamento reaplica `0700` e
-`0600`. ACLs que concedam leitura a outros usuários, diretório world-readable,
-symlink, volume público ou montagem compartilhada sem controle são condição
-de **NO-GO**.
+O serviço já usa `UMask=0077`, mas a correção não depende dele: a camada cria
+cada diretório ausente com modo efetivo `0700`, publica cada PDF `0600` e
+verifica novamente contenção, symlinks e modos depois de criar. Raiz final ou
+diretório interno preexistente com qualquer bit de grupo/outros é recusado; a
+aplicação não tenta “consertá-lo” silenciosamente. Falha de `mkdir`, `chmod` ou
+`stat` interrompe a operação e vira 503 sem caminho na resposta ou log.
 
 `ProtectSystem=strict` torna o filesystem somente leitura para a unit. Portanto
 o caminho escolhido deve aparecer, de forma exata e sem curinga amplo, em
@@ -60,17 +76,31 @@ ambiente de homologação. Não faça esse teste com PDF de paciente.
 
 ## Organização e metadados
 
-O nome enviado pelo navegador nunca compõe o caminho. A árvore interna usa
-somente UUIDs gerados pelo servidor:
+O nome enviado pelo navegador é ignorado: não entra no banco, metadados da API,
+auditoria ou workspace. A árvore interna usa somente UUIDs gerados pelo
+servidor:
 
 ```text
 <raiz>/laudos/<exam_uuid>/<document_uuid>/<version_uuid>.pdf
 ```
 
 O banco guarda o caminho relativo, SHA-256, tamanho, páginas e ciclo de vida.
-A API não devolve caminho de filesystem nem URL pública de documento. Preview
-e download passam por sessão autenticada e viram `Blob` temporário no
-navegador, com cache privado desativado.
+Antes de compor, finalizar, criar corretiva, visualizar ou baixar, um caminho
+único relê os bytes, valida novamente a estrutura e conteúdo ativo, recalcula
+SHA-256/tamanho/páginas e exige igualdade com a linha. Arquivo ausente,
+corrompido, substituído ou divergente falha fechado. Metadados de uma versão
+nova são sempre calculados dos mesmos bytes publicados.
+
+Cada versão composta também congela código, versão, texto exato e SHA-256 do
+template. Editar `ReportTemplate` depois não muda a evidência do rascunho ou da
+versão final. A API não devolve caminho de filesystem nem URL pública.
+Preview/download usam sessão autenticada, geram `Blob` temporário e desativam
+cache.
+
+PDFs com `OpenAction`, `AA`, JavaScript, `EmbeddedFiles`, `Launch`, RichMedia
+ou URI externa em ação automática são recusados por travessia cycle-safe antes
+e depois da composição. O bloco clínico só é composto quando todas as linhas
+cabem no mediabox acima do rodapé; não há truncamento nem página automática.
 
 Não copie a árvore para `data/`, `data-private/`, snapshots JSON públicos,
 logs, tickets, mensagens ou artefatos do navegador. Nome de arquivo, PDF,
@@ -149,20 +179,19 @@ aprovada e resposta a incidente. A matriz técnica atual é:
 | --- | --- |
 | `leitura` | listar metadados, visualizar e baixar PDF autenticado |
 | `operacional` | capacidades de leitura, upload, composição, revisão e corretiva |
-| `gestor` | capacidades operacionais e finalização irreversível |
+| `gestor` | capacidades operacionais, devolução técnica revisão→rascunho e finalização irreversível |
 | `admin` | hierarquia completa e administração de templates |
 
 `gestor` é o papel privilegiado já existente no contrato técnico. Isso não
 define quem é o médico responsável, quem pode assinar legalmente nem qual CRM
 deve constar no laudo.
 
-A trilha append-only registra upload, composição, submissão, finalização,
-corretiva e administração de templates com usuário, horário e IDs técnicos,
-sem PDF ou PII nos detalhes. Preview e download são autenticados e submetidos
-a RBAC, mas esta etapa não criou evento append-only para cada leitura. Antes
-de go-live, segurança, privacidade e área clínica devem aprovar a exigência,
-granularidade e retenção da auditoria de leitura; access log com URL não é
-substituto aceitável.
+A trilha append-only registra upload, composição, submissão, devolução técnica,
+finalização, corretiva, administração de templates e cada entrega inline ou
+download bem-sucedida. O evento de entrega contém somente IDs técnicos da
+versão/documento, modo e estado institucional; nunca paciente, filename, texto,
+caminho, bytes ou URL autenticada. A gravação é confirmada antes de servir o
+PDF. Access log com URL não é substituto aceitável.
 
 Não habilite access log detalhado nem registre querystring, corpo multipart,
 nome original, caminho, identificador de paciente ou conteúdo PDF. A revisão
@@ -177,19 +206,21 @@ incidente LGPD.
 M24A é **NO-GO** enquanto qualquer item abaixo estiver pendente:
 
 - PostgreSQL 16, backup coordenado e restauração ensaiada;
-- Alembic em `5f0aea639d3d` com exatamente um head;
+- Alembic em `8d4b1a2c9f70` com exatamente um head;
 - raiz privada provisionada, não symlink, `soprolife:soprolife` `0700`;
 - `M15_REPORTS_STORAGE_DIR` no EnvironmentFile e o mesmo caminho na allowlist
   `ReadWritePaths` efetiva;
 - capacidade/monitoramento de disco e alerta de falha de backup;
 - proxy da mesma origem com limites dedicados ao upload e à resposta PDF;
+- `M15_REPORTS_ENABLED=false` e `reports_enabled=false` preservados até a
+  autorização explícita de feature enablement;
 - HTTPS privado, cookie seguro, CSRF e RBAC revisados;
 - usuários mínimos e revisão de papéis concluídos;
 - templates clínicos aprovados cadastrados por admin — nunca semeados por
   esta entrega;
 - aceite explícito de que toda finalização mostrará
   **assinatura digital pendente** enquanto não houver provedor real;
-- plano de incidente, retenção/exclusão e expectativa de auditoria de leitura
+- plano de incidente, retenção/exclusão e governança da auditoria de leitura
   aprovados;
 - suíte SQLite, PostgreSQL 16 efêmero, migrações, Chrome E2E e quality gate
   verdes no commit candidato.
@@ -202,14 +233,14 @@ ativar a funcionalidade por conta própria.
 Rollback de interface/código não é autorização para apagar banco ou storage.
 
 1. interrompa novas ações no fluxo e preserve os logs seguros;
-2. se necessário, desative o M15 pelo controle existente, ciente de que a flag
-   é ampla e oculta também outras funções do Núcleo;
+2. preserve/desative primeiro as duas flags exclusivas de laudos; não é
+   necessário desligar o restante do Núcleo M15;
 3. reverta código e unit pelo procedimento Git/systemd aprovado;
 4. preserve tabelas M24A, PDFs, backups e o EnvironmentFile;
 5. valide o sistema anterior antes de reabrir acesso.
 
-Não execute downgrade Alembic em produção com laudos. O downgrade
-`5f0aea639d3d` é exercitado apenas em banco efêmero/vazio; com dados, a
+Não execute downgrade Alembic em produção com laudos. Os downgrades
+`8d4b1a2c9f70` e `5f0aea639d3d` são exercitados apenas em banco efêmero; com dados, a
 estratégia segura é restaurar o par coordenado banco+storage em ambiente novo
 e promover somente após reconciliação. Remover `ReadWritePaths` ou a variável
 enquanto a versão antiga ainda precisa servir PDFs também quebra

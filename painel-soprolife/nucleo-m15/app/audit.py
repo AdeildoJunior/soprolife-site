@@ -17,7 +17,8 @@ ALLOWED_KEYS = {
     "candidatos_identidade", "nova_data", "resultado", "modo", "source_type",
     "total", "validas", "rejeitadas", "ambiguas", "sha256", "batch_id",
     "decisao", "contexto", "campo", "marcador", "codigo", "fila", "papel",
-    "ativo",
+    "ativo", "report_version_id", "delivery_mode", "institutional_status",
+    "reason_code",
 }
 
 _MAX_STR = 120

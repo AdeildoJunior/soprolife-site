@@ -9,16 +9,24 @@ remove exclusivamente o container descartável `m15-pg-teste`.
 import os
 import pathlib
 import threading
+import time
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, func, inspect, select, text
 from sqlalchemy.orm import sessionmaker
 
 from app.db import Base
-from app.ids import allocate_public_code
-from app.models import FinancialEntry, Person
+from app.ids import allocate_public_code, new_uuid
+from app.models import (
+    FinancialEntry,
+    Person,
+    ReportDocument,
+    ReportDocumentVersion,
+    SpirometryExam,
+    User,
+)
 from app.normalize import normalize_name
 from app.services.followup import schedule_followup
 from app.services.idempotency import idempotent_create, payload_fingerprint
@@ -208,3 +216,174 @@ def test_followup_nulo_concorrente_pg(pg_engine):
     assert len(ids) == 1
     motivos = sorted(o.split(":")[1] for o in outcome)
     assert motivos == ["criado", "ja_existente"]
+
+
+def _setup_report_concurrency(pg_engine, suffix: str, *, finalized: bool = False):
+    session = sessionmaker(bind=pg_engine, expire_on_commit=False)()
+    user = User(
+        email=f"m24a-concurrency-{suffix}@teste.local",
+        nome=f"Teste M24A {suffix}",
+        password_hash="hash-sintetico-nao-utilizavel",
+    )
+    person = Person(
+        public_code=allocate_public_code(session, "people"),
+        nome_completo=f"Pessoa Sintetica M24A {suffix}",
+        nome_normalizado=f"pessoa sintetica m24a {suffix}",
+    )
+    session.add_all([user, person])
+    session.flush()
+    exam = SpirometryExam(
+        public_code=allocate_public_code(session, "spirometry_exams"),
+        person_id=person.id,
+    )
+    session.add(exam)
+    session.flush()
+    document = ReportDocument(
+        spirometry_exam_id=exam.id,
+        status="finalizado" if finalized else "rascunho",
+        signature_status="assinatura_pendente" if finalized else None,
+        created_by_user_id=user.id,
+    )
+    session.add(document)
+    session.flush()
+    original = ReportDocumentVersion(
+        report_document_id=document.id,
+        kind="original",
+        version_number=1,
+        storage_path=f"laudos/{exam.id}/{document.id}/{new_uuid()}.pdf",
+        sha256="a" * 64,
+        size_bytes=1,
+        page_count=1,
+        created_by_user_id=user.id,
+    )
+    session.add(original)
+    session.flush()
+    document.current_version_id = original.id
+    session.commit()
+    result = (document.id, exam.id, user.id)
+    session.close()
+    return result
+
+
+def test_numeros_de_versao_concorrentes_sao_serializados_pg(pg_engine):
+    """O mesmo lock usado por /compor produz v2 e v3, nunca duas v2."""
+
+    document_id, exam_id, user_id = _setup_report_concurrency(
+        pg_engine, new_uuid()
+    )
+    SessionLocal = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    barrier = threading.Barrier(2)
+    created_numbers: list[int] = []
+    errors: list[Exception] = []
+
+    def worker(marker: str):
+        session = SessionLocal()
+        try:
+            barrier.wait(timeout=10)
+            session.execute(
+                select(ReportDocument)
+                .where(ReportDocument.id == document_id)
+                .with_for_update()
+            ).scalar_one()
+            current = session.execute(
+                select(func.max(ReportDocumentVersion.version_number)).where(
+                    ReportDocumentVersion.report_document_id == document_id
+                )
+            ).scalar_one()
+            # Mantém o primeiro lock por um instante para tornar a disputa
+            # explícita; o segundo worker precisa aguardar a transação.
+            time.sleep(0.15)
+            version = ReportDocumentVersion(
+                report_document_id=document_id,
+                kind="rascunho",
+                version_number=int(current) + 1,
+                storage_path=f"laudos/{exam_id}/{document_id}/{new_uuid()}.pdf",
+                sha256=marker * 64,
+                size_bytes=1,
+                page_count=1,
+                created_by_user_id=user_id,
+            )
+            session.add(version)
+            session.commit()
+            created_numbers.append(version.version_number)
+        except Exception as exc:  # pragma: no cover - diagnóstico
+            session.rollback()
+            errors.append(exc)
+        finally:
+            session.close()
+
+    threads = [
+        threading.Thread(target=worker, args=("b",)),
+        threading.Thread(target=worker, args=("c",)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert not errors, errors
+    assert sorted(created_numbers) == [2, 3]
+
+
+def test_predecessor_finalizado_tem_um_unico_sucessor_concorrente_pg(pg_engine):
+    """Duas corretivas simultâneas: uma cria e a outra encontra a existente."""
+
+    predecessor_id, exam_id, user_id = _setup_report_concurrency(
+        pg_engine, new_uuid(), finalized=True
+    )
+    SessionLocal = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    barrier = threading.Barrier(2)
+    outcomes: list[str] = []
+    errors: list[Exception] = []
+
+    def worker():
+        session = SessionLocal()
+        try:
+            barrier.wait(timeout=10)
+            predecessor = session.execute(
+                select(ReportDocument)
+                .where(ReportDocument.id == predecessor_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).scalar_one()
+            if predecessor.superseded_by_id:
+                outcomes.append("ja_existente")
+                session.rollback()
+                return
+            successor = ReportDocument(
+                spirometry_exam_id=exam_id,
+                status="rascunho",
+                corrects_document_id=predecessor_id,
+                created_by_user_id=user_id,
+            )
+            session.add(successor)
+            session.flush()
+            predecessor.superseded_by_id = successor.id
+            time.sleep(0.15)
+            session.commit()
+            outcomes.append("criado")
+        except Exception as exc:  # pragma: no cover - diagnóstico
+            session.rollback()
+            errors.append(exc)
+        finally:
+            session.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert not errors, errors
+    assert sorted(outcomes) == ["criado", "ja_existente"]
+
+    session = SessionLocal()
+    try:
+        successors = session.execute(
+            select(ReportDocument).where(
+                ReportDocument.corrects_document_id == predecessor_id
+            )
+        ).scalars().all()
+        assert len(successors) == 1
+        predecessor = session.get(ReportDocument, predecessor_id)
+        assert predecessor.superseded_by_id == successors[0].id
+    finally:
+        session.close()

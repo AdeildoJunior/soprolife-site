@@ -848,3 +848,14 @@ class ReportDocumentCompose(StrictModel):
     template_id: str
     page_number: int = Field(ge=1, le=300)
     placement: ReportPlacement
+
+
+class ReportReviewAdjustment(StrictModel):
+    """Motivo técnico fechado — não aceita prosa livre nem dado de paciente."""
+
+    reason_code: Literal[
+        "ajuste_de_composicao",
+        "ajuste_de_template",
+        "ajuste_de_pagina",
+        "correcao_tecnica",
+    ]

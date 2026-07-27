@@ -7,7 +7,9 @@ Regras de produção (M15_ENV=prod):
 - cookie de sessão sempre Secure (M21) — HTTPS não é negociável em prod.
 """
 
+import os
 import secrets
+import stat
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -58,6 +60,10 @@ class Settings(BaseSettings):
     # diretório privado e gravável da API; o timer consome o mesmo caminho.
     marketing_refresh_queue: Path = Path("./var/marketing-refresh-request.json")
 
+    # M24A permanece independente do restante do Núcleo M15 e desabilitado
+    # por padrão. Um deploy de código ou a ativação global do M15 nunca
+    # habilita a API de laudos por efeito colateral.
+    reports_enabled: bool = False
     # M24A — raiz de armazenamento dos PDFs de laudo (original + versões
     # geradas). NUNCA dentro do Git, nunca dentro de um diretório de
     # snapshot público. Sem valor: o serviço de laudos falha fechado (não
@@ -178,8 +184,10 @@ class Settings(BaseSettings):
         Chamado sob demanda pelo serviço de laudos (não no boot da API
         inteira), mas SEMPRE antes de qualquer leitura/escrita de arquivo.
         Recusa: ausente, caminho relativo, dentro da árvore de trabalho do
-        Git (repositório), ou symlink. Cria o diretório com permissão
-        restritiva (0700) se ainda não existir.
+        Git (repositório), qualquer componente symlink ou modo com acesso de
+        grupo/outros. Resolve ancestrais antes da checagem de contenção,
+        cria cada componente ausente com modo efetivo 0700 e repete todas as
+        pós-condições depois da criação.
         """
         if not self.reports_storage_dir:
             raise ValueError(
@@ -191,33 +199,25 @@ class Settings(BaseSettings):
             raise ValueError(
                 "M15_REPORTS_STORAGE_DIR deve ser um caminho absoluto."
             )
-        if raw.exists() and raw.is_symlink():
-            raise ValueError(
-                "M15_REPORTS_STORAGE_DIR não pode ser um symlink."
-            )
+        _assert_no_symlink_components(raw)
+
+        # `strict=False` resolve todos os ancestrais existentes mesmo quando
+        # o componente final ainda não existe. Isso fecha o escape em que um
+        # ancestral symlink apontava para dentro do worktree.
+        resolved_before_creation = raw.resolve(strict=False)
         repo_root = _find_git_repo_root()
-        resolved = raw.resolve() if raw.exists() else raw
-        if repo_root is not None:
-            try:
-                resolved.relative_to(repo_root)
-            except ValueError:
-                pass
-            else:
-                raise ValueError(
-                    "M15_REPORTS_STORAGE_DIR não pode estar dentro do "
-                    "repositório Git — laudos ficam fora do Git sempre."
-                )
-        raw.mkdir(parents=True, exist_ok=True, mode=0o700)
-        try:
-            raw.chmod(0o700)
-        except OSError:
-            pass
-        if raw.is_symlink():
-            raise ValueError(
-                "M15_REPORTS_STORAGE_DIR resolveu para um symlink após a "
-                "criação — recusado."
-            )
-        return raw.resolve()
+        _assert_outside_git_worktree(resolved_before_creation, repo_root)
+
+        _create_private_directory_chain(resolved_before_creation)
+
+        # Pós-condições repetidas depois de mkdir: uma troca concorrente por
+        # symlink, um modo efetivo permissivo ou um escape via resolução
+        # interrompe a operação. Nenhum chmod/mkdir/stat é ignorado.
+        _assert_no_symlink_components(resolved_before_creation)
+        resolved_after_creation = resolved_before_creation.resolve(strict=True)
+        _assert_outside_git_worktree(resolved_after_creation, repo_root)
+        _assert_private_directory(resolved_after_creation)
+        return resolved_after_creation
 
 
 def _find_git_repo_root() -> Path | None:
@@ -226,6 +226,86 @@ def _find_git_repo_root() -> Path | None:
         if (parent / ".git").exists():
             return parent
     return None
+
+
+def _assert_outside_git_worktree(path: Path, repo_root: Path | None) -> None:
+    if repo_root is None:
+        return
+    try:
+        path.relative_to(repo_root.resolve(strict=True))
+    except ValueError:
+        return
+    raise ValueError(
+        "M15_REPORTS_STORAGE_DIR não pode estar dentro do repositório Git."
+    )
+
+
+def _assert_no_symlink_components(path: Path) -> None:
+    """Recusa qualquer symlink existente na cadeia lexical do caminho."""
+    current = Path(path.anchor)
+    for component in path.parts[1:]:
+        current = current / component
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(mode):
+            raise ValueError(
+                "M15_REPORTS_STORAGE_DIR não pode conter symlink."
+            )
+
+
+def _assert_private_directory(path: Path) -> None:
+    mode = path.stat().st_mode
+    if not stat.S_ISDIR(mode):
+        raise ValueError(
+            "M15_REPORTS_STORAGE_DIR precisa apontar para um diretório."
+        )
+    if stat.S_IMODE(mode) & 0o077:
+        raise ValueError(
+            "M15_REPORTS_STORAGE_DIR possui permissões de grupo/outros."
+        )
+
+
+def _create_private_directory_chain(path: Path) -> None:
+    """Cria todos os componentes ausentes com modo efetivo 0700.
+
+    `Path.mkdir(parents=True, mode=...)` aplica `mode` apenas à folha e
+    depende do umask para os pais. Aqui cada componente recebe fchmod/chmod
+    explícito e é verificado antes de o próximo ser criado.
+    """
+    missing: list[Path] = []
+    cursor = path
+    while True:
+        try:
+            mode = cursor.lstat().st_mode
+        except FileNotFoundError:
+            missing.append(cursor)
+            parent = cursor.parent
+            if parent == cursor:
+                raise ValueError(
+                    "Não foi possível localizar um ancestral do armazenamento."
+                )
+            cursor = parent
+            continue
+        if stat.S_ISLNK(mode):
+            raise ValueError(
+                "M15_REPORTS_STORAGE_DIR não pode conter symlink."
+            )
+        if not stat.S_ISDIR(mode):
+            raise ValueError(
+                "Ancestral do armazenamento não é um diretório."
+            )
+        break
+
+    for directory in reversed(missing):
+        os.mkdir(directory, 0o700)
+        os.chmod(directory, 0o700)
+        _assert_private_directory(directory)
+
+    # Uma raiz preexistente também precisa chegar já privada; não tentamos
+    # "consertar" silenciosamente uma configuração insegura.
+    _assert_private_directory(path)
 
 
 @lru_cache

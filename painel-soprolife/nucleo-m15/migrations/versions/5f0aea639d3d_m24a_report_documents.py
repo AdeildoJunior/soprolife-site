@@ -1,6 +1,6 @@
 """m24a — laudos PDF: templates, documentos, versões e fronteira de assinatura
 
-Cria cinco tabelas novas (report_templates, report_documents,
+Cria quatro tabelas novas (report_templates, report_documents,
 report_document_versions, report_signatures) para o fluxo seguro de
 recebimento/revisão/composição/finalização de laudos em PDF. Nenhuma tabela
 ou linha de negócio existente é lida, alterada ou apagada — a migration só

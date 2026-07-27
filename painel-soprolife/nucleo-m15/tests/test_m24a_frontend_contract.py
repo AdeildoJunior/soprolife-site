@@ -27,6 +27,7 @@ def _minimal_pdf(pages: int = 1) -> bytes:
 @pytest.fixture(autouse=True)
 def _reports_storage(monkeypatch, tmp_path):
     monkeypatch.setenv("M15_REPORTS_STORAGE_DIR", str(tmp_path / "reports"))
+    monkeypatch.setenv("M15_REPORTS_ENABLED", "true")
     monkeypatch.setenv(
         "M15_AUTH_SECRET",
         "m24a-frontend-contract-secret-only-for-tests-0123456789abcdef",

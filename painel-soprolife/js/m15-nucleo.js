@@ -104,6 +104,20 @@
       : "";
   }
 
+  function readableApiError(body, status) {
+    var envelope = body && body.erro;
+    var raw = envelope && envelope.mensagem;
+    var message = typeof raw === "string" ? raw :
+      (raw && typeof raw.mensagem === "string" ? raw.mensagem : "");
+    if (!message && body && typeof body.error === "string") message = body.error;
+    if (!message) message = "A operação foi recusada pela API (HTTP " + status + ").";
+    return {
+      message: message,
+      code: (envelope && envelope.codigo) ||
+        (raw && typeof raw.codigo === "string" ? raw.codigo : "http_" + status)
+    };
+  }
+
   function api(path, options) {
     // Guarda de contexto seguro (M15.5A): em origem bloqueada NENHUMA
     // requisição de autenticação sai do navegador — nem senha, nem token.
@@ -134,9 +148,9 @@
       if (responseType === "blob") {
         if (!resp.ok) {
           return resp.json().catch(function () { return {}; }).then(function (body) {
-            var msg = (body && body.erro && body.erro.mensagem) ||
-              (body && body.error) || ("HTTP " + resp.status);
-            var err = new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+            var detail = readableApiError(body, resp.status);
+            var err = new Error(detail.message);
+            err.code = detail.code;
             err.status = resp.status;
             if (resp.status === 401 && (state.sessao || state.token)) {
               return encerrarSessao("Sua sessão expirou. Entre novamente.").then(
@@ -154,8 +168,9 @@
       }
       return resp.json().catch(function () { return {}; }).then(function (body) {
         if (!resp.ok) {
-          var msg = (body && body.erro && body.erro.mensagem) || ("HTTP " + resp.status);
-          var err = new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+          var detail = readableApiError(body, resp.status);
+          var err = new Error(detail.message);
+          err.code = detail.code;
           err.status = resp.status;
           throw err;
         }

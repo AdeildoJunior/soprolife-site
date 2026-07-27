@@ -135,11 +135,19 @@ bash scripts/test-postgres-efemero.sh
 
 ## Laudos PDF seguros (M24A)
 
-O fluxo de laudos exige `M15_REPORTS_STORAGE_DIR` absoluto, privado e fora do
-Git. Configuração, permissões, backup/restore coordenado, retenção, LGPD,
-pré-requisitos de implantação, rollback e decisões ainda pendentes estão no
-runbook `../docs/m24a-laudos-pdf-operacao.md`. Nenhum template clínico ou
-provedor de assinatura é presumido por esta etapa.
+M24A possui feature flag independente e permanece desabilitado por padrão:
+`M15_REPORTS_ENABLED=false` no backend e `reports_enabled=false` na
+configuração pública. Ativar o restante do Núcleo não expõe menu, workspace ou
+API operacional de laudos. Não habilite essas flags até as decisões clínicas e
+de produto listadas no runbook serem aprovadas.
+
+Um futuro uso também exige `M15_REPORTS_STORAGE_DIR` absoluto, privado e fora
+do Git. A implementação valida estrutura/conteúdo ativo e integridade
+SHA-256/tamanho/páginas em toda releitura, cria diretórios 0700 e arquivos
+0600, congela o template por versão e audita cada entrega bem-sucedida sem PII.
+Configuração, backup/restore coordenado, retenção, LGPD, implantação e rollback
+estão em `../docs/m24a-laudos-pdf-operacao.md`. Nenhum template clínico,
+médico/CRM, rodapé jurídico ou provedor de assinatura é presumido.
 
 ## Snapshot multiaba M15.6B
 
