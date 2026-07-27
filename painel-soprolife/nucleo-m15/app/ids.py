@@ -23,6 +23,7 @@ PREFIXES = {
     "interactions": "INT",
     "followups": "FUP",
     "financial_entries": "LAN",
+    "report_documents": "LAU",
 }
 
 # Dicionário de apresentação (M19 §14): rótulo humano ao lado do código
@@ -41,6 +42,7 @@ ENTITY_LABELS = {
     "interactions": "Interação",
     "followups": "Follow-up",
     "financial_entries": "Lançamento",
+    "report_documents": "Laudo",
 }
 
 # prefixo -> (tabela, rótulo)

@@ -10,6 +10,7 @@ import os
 import pathlib
 import threading
 import time
+from datetime import datetime, timezone
 
 import pytest
 from alembic import command
@@ -22,12 +23,16 @@ from app.ids import allocate_public_code, new_uuid
 from app.models import (
     FinancialEntry,
     Person,
+    PhysicianProfile,
+    ReportAssignment,
+    ReportAssignmentEvent,
     ReportDocument,
     ReportDocumentVersion,
     SpirometryExam,
     User,
 )
 from app.normalize import normalize_name
+from app.security import ROLE_MEDICO, ensure_roles_exist, get_role
 from app.services.followup import schedule_followup
 from app.services.idempotency import idempotent_create, payload_fingerprint
 
@@ -79,7 +84,7 @@ def test_fk_ciclica_e_preseed_pg(pg_engine):
     assert "fk_partner_referrals_financial_entry_id_financial_entries" in fks
     with pg_engine.connect() as conn:
         count = conn.execute(text("SELECT count(*) FROM code_sequences")).scalar()
-        assert count == 12
+        assert count == 13
 
 
 def test_audit_append_only_trigger_pg(pg_engine):
@@ -239,8 +244,10 @@ def _setup_report_concurrency(pg_engine, suffix: str, *, finalized: bool = False
     session.add(exam)
     session.flush()
     document = ReportDocument(
+        public_code=allocate_public_code(session, "report_documents"),
         spirometry_exam_id=exam.id,
         status="finalizado" if finalized else "rascunho",
+        origin_type="coworking",
         signature_status="assinatura_pendente" if finalized else None,
         created_by_user_id=user.id,
     )
@@ -350,8 +357,12 @@ def test_predecessor_finalizado_tem_um_unico_sucessor_concorrente_pg(pg_engine):
                 session.rollback()
                 return
             successor = ReportDocument(
+                public_code=allocate_public_code(
+                    session, "report_documents"
+                ),
                 spirometry_exam_id=exam_id,
                 status="rascunho",
+                origin_type="coworking",
                 corrects_document_id=predecessor_id,
                 created_by_user_id=user_id,
             )
@@ -387,3 +398,403 @@ def test_predecessor_finalizado_tem_um_unico_sucessor_concorrente_pg(pg_engine):
         assert predecessor.superseded_by_id == successors[0].id
     finally:
         session.close()
+
+
+def _setup_m24c_assignment_context(
+    pg_engine, *, tag: str, crm_numbers: tuple[str, str]
+) -> dict[str, str]:
+    session = sessionmaker(bind=pg_engine, expire_on_commit=False)()
+    ensure_roles_exist(session)
+    verifier = User(
+        email=f"verifier-{tag}@teste.local",
+        nome=f"TESTE APAGAR Verificador {tag}",
+        password_hash="hash-sintetico-nao-utilizavel",
+    )
+    first_user = User(
+        email=f"medico-a-{tag}@teste.local",
+        nome=f"TESTE APAGAR Médico A {tag}",
+        password_hash="hash-sintetico-nao-utilizavel",
+    )
+    second_user = User(
+        email=f"medico-b-{tag}@teste.local",
+        nome=f"TESTE APAGAR Médico B {tag}",
+        password_hash="hash-sintetico-nao-utilizavel",
+    )
+    physician_role = get_role(session, ROLE_MEDICO)
+    first_user.roles.append(physician_role)
+    second_user.roles.append(physician_role)
+    person = Person(
+        public_code=allocate_public_code(session, "people"),
+        nome_completo=f"Pessoa Sintética M24C {tag}",
+        nome_normalizado=f"pessoa sintetica m24c {tag}",
+    )
+    session.add_all([verifier, first_user, second_user, person])
+    session.flush()
+    exam = SpirometryExam(
+        public_code=allocate_public_code(session, "spirometry_exams"),
+        person_id=person.id,
+    )
+    session.add(exam)
+    session.flush()
+    document = ReportDocument(
+        public_code=allocate_public_code(session, "report_documents"),
+        spirometry_exam_id=exam.id,
+        status="atribuido",
+        origin_type="coworking",
+        created_by_user_id=verifier.id,
+    )
+    now = datetime.now(timezone.utc)
+    first_profile = PhysicianProfile(
+        user_id=first_user.id,
+        professional_name=f"TESTE APAGAR Profissional A {tag}",
+        crm_number=crm_numbers[0],
+        crm_state="AC",
+        active=True,
+        verification_status="verified",
+        verified_at=now,
+        verified_by_user_id=verifier.id,
+    )
+    second_profile = PhysicianProfile(
+        user_id=second_user.id,
+        professional_name=f"TESTE APAGAR Profissional B {tag}",
+        crm_number=crm_numbers[1],
+        crm_state="AC",
+        active=True,
+        verification_status="verified",
+        verified_at=now,
+        verified_by_user_id=verifier.id,
+    )
+    session.add_all([document, first_profile, second_profile])
+    session.commit()
+    result = {
+        "verifier_id": verifier.id,
+        "document_id": document.id,
+        "first_profile_id": first_profile.id,
+        "second_profile_id": second_profile.id,
+        "first_user_id": first_user.id,
+        "second_user_id": second_user.id,
+    }
+    session.close()
+    return result
+
+
+def test_uma_atribuicao_ativa_por_documento_sob_concorrencia_pg(pg_engine):
+    context = _setup_m24c_assignment_context(
+        pg_engine,
+        tag="assignment-race",
+        crm_numbers=("710001", "710002"),
+    )
+    SessionLocal = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    barrier = threading.Barrier(2)
+    created: list[str] = []
+    errors: list[Exception] = []
+
+    def worker(profile_id: str):
+        session = SessionLocal()
+        try:
+            barrier.wait(timeout=10)
+            assignment = ReportAssignment(
+                report_document_id=context["document_id"],
+                physician_profile_id=profile_id,
+                active=True,
+                assigned_by_user_id=context["verifier_id"],
+                reason_code="initial_assignment",
+            )
+            session.add(assignment)
+            session.commit()
+            created.append(assignment.id)
+        except Exception as exc:
+            session.rollback()
+            errors.append(exc)
+        finally:
+            session.close()
+
+    threads = [
+        threading.Thread(
+            target=worker, args=(context["first_profile_id"],)
+        ),
+        threading.Thread(
+            target=worker, args=(context["second_profile_id"],)
+        ),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert len(created) == 1
+    assert len(errors) == 1
+    session = SessionLocal()
+    try:
+        active_count = session.scalar(
+            select(func.count())
+            .select_from(ReportAssignment)
+            .where(
+                ReportAssignment.report_document_id
+                == context["document_id"],
+                ReportAssignment.active.is_(True),
+            )
+        )
+        assert active_count == 1
+    finally:
+        session.close()
+
+
+def test_crm_uf_ativo_unico_sob_concorrencia_pg(pg_engine):
+    session = sessionmaker(bind=pg_engine, expire_on_commit=False)()
+    ensure_roles_exist(session)
+    verifier = User(
+        email="verifier-crm-race@teste.local",
+        nome="TESTE APAGAR Verificador CRM",
+        password_hash="hash-sintetico-nao-utilizavel",
+    )
+    users = [
+        User(
+            email=f"crm-race-{index}@teste.local",
+            nome=f"TESTE APAGAR Médico CRM {index}",
+            password_hash="hash-sintetico-nao-utilizavel",
+        )
+        for index in range(2)
+    ]
+    physician_role = get_role(session, ROLE_MEDICO)
+    for user in users:
+        user.roles.append(physician_role)
+    session.add_all([verifier, *users])
+    session.commit()
+    verifier_id = verifier.id
+    user_ids = [user.id for user in users]
+    session.close()
+
+    SessionLocal = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    barrier = threading.Barrier(2)
+    created: list[str] = []
+    errors: list[Exception] = []
+
+    def worker(index: int):
+        worker_session = SessionLocal()
+        try:
+            barrier.wait(timeout=10)
+            profile = PhysicianProfile(
+                user_id=user_ids[index],
+                professional_name=f"TESTE APAGAR CRM Concorrente {index}",
+                crm_number="720001",
+                crm_state="AL",
+                active=True,
+                verification_status="verified",
+                verified_at=datetime.now(timezone.utc),
+                verified_by_user_id=verifier_id,
+            )
+            worker_session.add(profile)
+            worker_session.commit()
+            created.append(profile.id)
+        except Exception as exc:
+            worker_session.rollback()
+            errors.append(exc)
+        finally:
+            worker_session.close()
+
+    threads = [threading.Thread(target=worker, args=(index,)) for index in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert len(created) == 1
+    assert len(errors) == 1
+
+
+def test_postgres_recusa_atribuicao_inativa_e_crm_nao_normalizado(pg_engine):
+    context = _setup_m24c_assignment_context(
+        pg_engine,
+        tag="profile-guard",
+        crm_numbers=("730001", "730002"),
+    )
+    SessionLocal = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    session = SessionLocal()
+    try:
+        profile = session.get(
+            PhysicianProfile, context["first_profile_id"]
+        )
+        profile.active = False
+        session.commit()
+        session.add(
+            ReportAssignment(
+                report_document_id=context["document_id"],
+                physician_profile_id=profile.id,
+                active=True,
+                assigned_by_user_id=context["verifier_id"],
+                reason_code="initial_assignment",
+            )
+        )
+        with pytest.raises(Exception, match="active verified explicit"):
+            session.commit()
+        session.rollback()
+
+        invalid_user = User(
+            email="crm-invalid-pg@teste.local",
+            nome="TESTE APAGAR CRM Inválido",
+            password_hash="hash-sintetico-nao-utilizavel",
+        )
+        session.add(invalid_user)
+        session.flush()
+        session.add(
+            PhysicianProfile(
+                user_id=invalid_user.id,
+                professional_name="TESTE APAGAR CRM Inválido",
+                crm_number="CRM-123",
+                crm_state="AC",
+                active=False,
+                verification_status="pending",
+            )
+        )
+        with pytest.raises(Exception, match="digits only"):
+            session.commit()
+        session.rollback()
+    finally:
+        session.close()
+
+
+def test_evidencia_m24c_e_append_only_no_postgres(pg_engine):
+    context = _setup_m24c_assignment_context(
+        pg_engine,
+        tag="immutability",
+        crm_numbers=("740001", "740002"),
+    )
+    SessionLocal = sessionmaker(bind=pg_engine, expire_on_commit=False)
+    session = SessionLocal()
+    assignment = ReportAssignment(
+        report_document_id=context["document_id"],
+        physician_profile_id=context["first_profile_id"],
+        active=True,
+        assigned_by_user_id=context["verifier_id"],
+        reason_code="initial_assignment",
+    )
+    session.add(assignment)
+    session.flush()
+    event = ReportAssignmentEvent(
+        report_document_id=context["document_id"],
+        assignment_id=assignment.id,
+        event_type="assigned",
+        physician_profile_id=context["first_profile_id"],
+        reason_code="initial_assignment",
+        performed_by_user_id=context["verifier_id"],
+    )
+    version = ReportDocumentVersion(
+        report_document_id=context["document_id"],
+        kind="original",
+        version_number=1,
+        storage_path=(
+            f"laudos/{context['document_id']}/{new_uuid()}.pdf"
+        ),
+        sha256="d" * 64,
+        size_bytes=1,
+        page_count=1,
+        physician_profile_id_snapshot=context["first_profile_id"],
+        physician_name_snapshot="TESTE APAGAR Snapshot",
+        physician_crm_number_snapshot="740001",
+        physician_crm_state_snapshot="AC",
+        origin_type_snapshot="coworking",
+        created_by_user_id=context["verifier_id"],
+    )
+    session.add_all([event, version])
+    session.commit()
+    assignment_id = assignment.id
+    event_id = event.id
+    version_id = version.id
+    session.close()
+
+    with pg_engine.connect() as connection:
+        with pytest.raises(Exception, match="immutable clinical evidence"):
+            connection.execute(
+                text(
+                    "UPDATE report_document_versions "
+                    "SET sha256=:hash WHERE id=:id"
+                ),
+                {"hash": "e" * 64, "id": version_id},
+            )
+        connection.rollback()
+        with pytest.raises(Exception, match="immutable clinical evidence"):
+            connection.execute(
+                text(
+                    "UPDATE report_assignment_events "
+                    "SET reason_code='assignment_correction' WHERE id=:id"
+                ),
+                {"id": event_id},
+            )
+        connection.rollback()
+        connection.execute(
+            text(
+                "UPDATE report_assignments "
+                "SET active=false, ended_at=now() WHERE id=:id"
+            ),
+            {"id": assignment_id},
+        )
+        connection.commit()
+        with pytest.raises(Exception, match="invalid assignment rewrite"):
+            connection.execute(
+                text(
+                    "UPDATE report_assignments "
+                    "SET reason_code='assignment_correction' WHERE id=:id"
+                ),
+                {"id": assignment_id},
+            )
+        connection.rollback()
+        with pytest.raises(Exception, match="assignment cannot be deleted"):
+            connection.execute(
+                text("DELETE FROM report_assignments WHERE id=:id"),
+                {"id": assignment_id},
+            )
+        connection.rollback()
+
+
+def test_estados_origem_e_assinatura_incompleta_falham_no_postgres(pg_engine):
+    context = _setup_m24c_assignment_context(
+        pg_engine,
+        tag="state-guards",
+        crm_numbers=("750001", "750002"),
+    )
+    with pg_engine.connect() as connection:
+        for suffix, status, origin, signature_status, signed_at in (
+            ("status", "estado_inventado", "coworking", None, None),
+            ("origin", "atribuido", "origem_livre", None, None),
+            ("signed", "assinado", "assinatura_pendente", None, None),
+            (
+                "fake-sig",
+                "atribuido",
+                "coworking",
+                "assinada",
+                None,
+            ),
+            (
+                "pending",
+                "assinatura_pendente",
+                "coworking",
+                "assinatura_pendente",
+                None,
+            ),
+        ):
+            with pytest.raises(Exception):
+                connection.execute(
+                    text(
+                        """
+                        INSERT INTO report_documents (
+                            id, public_code, spirometry_exam_id, status,
+                            origin_type, signature_status, signed_at,
+                            created_by_user_id, created_at, updated_at
+                        )
+                        SELECT
+                            :id, :code, spirometry_exam_id, :status,
+                            :origin, :signature_status, :signed_at,
+                            created_by_user_id, now(), now()
+                        FROM report_documents WHERE id=:source
+                        """
+                    ),
+                    {
+                        "id": new_uuid(),
+                        "code": f"LAU-{suffix.upper()}",
+                        "status": status,
+                        "origin": origin,
+                        "signature_status": signature_status,
+                        "signed_at": signed_at,
+                        "source": context["document_id"],
+                    },
+                )
+            connection.rollback()

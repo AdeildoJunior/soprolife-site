@@ -140,7 +140,21 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
     with engine.connect() as conn:
         prefixes = sorted(r[0] for r in conn.execute(text("SELECT prefix FROM code_sequences")))
     assert prefixes == sorted(
-        ["PES", "LEA", "ESP", "CON", "CLI", "UNI", "CTT", "PAR", "ENC", "INT", "FUP", "LAN"]
+        [
+            "PES",
+            "LEA",
+            "ESP",
+            "CON",
+            "CLI",
+            "UNI",
+            "CTT",
+            "PAR",
+            "ENC",
+            "INT",
+            "FUP",
+            "LAN",
+            "LAU",
+        ]
     )
     engine.dispose()
 
@@ -148,11 +162,70 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
 def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     cfg = _alembic_config(f"sqlite:///{tmp_path}/heads.db")
-    # A correção M24A (8d4b1a2c9f70) é a head atual — o
+    # A migração M24C (4c9e2f7a6b31) é a head atual — o
     # valor esperado aqui é atualizado a cada nova migration; o que a
     # asserção realmente prova é continuar existindo EXATAMENTE uma head
     # (sem ponto de ramificação acidental).
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["8d4b1a2c9f70"]
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["4c9e2f7a6b31"]
+
+
+def test_downgrade_m24c_falha_fechado_com_perfil_profissional(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("M15_DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path}/m24c-downgrade-guard.db"
+    cfg = _alembic_config(url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO users (
+                    id, email, nome, password_hash, ativo,
+                    created_at, updated_at
+                ) VALUES (
+                    :id, 'perfil-m24c@teste.local',
+                    'TESTE APAGAR Perfil Migração',
+                    'hash-sintetico-nao-utilizavel', true,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {"id": "24c10000-0000-4000-8000-000000000001"},
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO physician_profiles (
+                    id, user_id, professional_name, crm_number, crm_state,
+                    active, verification_status, created_at, updated_at
+                ) VALUES (
+                    :id, :user_id, 'TESTE APAGAR Perfil',
+                    '810001', 'AC', false, 'pending',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {
+                "id": "24c10000-0000-4000-8000-000000000002",
+                "user_id": "24c10000-0000-4000-8000-000000000001",
+            },
+        )
+    engine.dispose()
+
+    with pytest.raises(RuntimeError, match="Downgrade M24C recusado"):
+        command.downgrade(cfg, "8d4b1a2c9f70")
+
+    engine = create_engine(url)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one() == "4c9e2f7a6b31"
+        assert connection.execute(
+            text("SELECT count(*) FROM physician_profiles")
+        ).scalar_one() == 1
+    engine.dispose()
 
 
 def _popular_financeiro_pre_m23_1(engine, *, com_conflitos: bool):

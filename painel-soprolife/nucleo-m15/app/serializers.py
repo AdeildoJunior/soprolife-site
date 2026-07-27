@@ -459,7 +459,24 @@ def ser_user(u: m.User) -> dict:
     }
 
 
-# ------------------------------------------------------------ M24A — laudos
+# ------------------------------------------------------------ M24C — laudos
+
+
+def ser_physician_profile(p: m.PhysicianProfile) -> dict:
+    return {
+        "id": p.id,
+        "user_id": p.user_id,
+        "professional_name": p.professional_name,
+        "crm_number": p.crm_number,
+        "crm_state": p.crm_state,
+        "rqe": p.rqe,
+        "active": p.active,
+        "verification_status": p.verification_status,
+        "verified_at": iso(p.verified_at),
+        "verified_by_user_id": p.verified_by_user_id,
+        **_stamps(p),
+    }
+
 
 def ser_report_template(t: m.ReportTemplate) -> dict:
     return {
@@ -470,14 +487,20 @@ def ser_report_template(t: m.ReportTemplate) -> dict:
         "texto_completo": t.texto_completo,
         "versao": t.versao,
         "ativo": t.ativo,
+        "status": t.status,
+        "clinically_approved": t.clinically_approved,
+        "supersedes_template_id": t.supersedes_template_id,
+        "approved_at": iso(t.approved_at),
         **_stamps(t),
     }
 
 
-def ser_report_document_version(v: m.ReportDocumentVersion) -> dict:
+def ser_report_document_version(
+    v: m.ReportDocumentVersion, *, include_clinical: bool = False
+) -> dict:
     """NUNCA inclui storage_path — é um detalhe interno de armazenamento,
     nunca um caminho de sistema de arquivos exposto na API (item 11)."""
-    return {
+    data = {
         "id": v.id,
         "report_document_id": v.report_document_id,
         "kind": v.kind,
@@ -489,13 +512,33 @@ def ser_report_document_version(v: m.ReportDocumentVersion) -> dict:
         "template_id": v.template_id,
         "template_code_snapshot": v.template_code_snapshot,
         "template_version_snapshot": v.template_version_snapshot,
-        "template_text_snapshot": v.template_text_snapshot,
-        "template_text_sha256": v.template_text_sha256,
         "page_number": v.page_number,
         "placement": v.placement,
-        "created_by_user_id": v.created_by_user_id,
         "created_at": iso(v.created_at),
+        "physician_profile_id_snapshot": v.physician_profile_id_snapshot,
+        "physician_name_snapshot": v.physician_name_snapshot,
+        "physician_crm_number_snapshot": v.physician_crm_number_snapshot,
+        "physician_crm_state_snapshot": v.physician_crm_state_snapshot,
+        "physician_rqe_snapshot": v.physician_rqe_snapshot,
+        "origin_type_snapshot": v.origin_type_snapshot,
+        "origin_label_snapshot": v.origin_label_snapshot,
+        "origin_partner_unit_id_snapshot": v.origin_partner_unit_id_snapshot,
+        "footer_code_snapshot": v.footer_code_snapshot,
+        "footer_version_snapshot": v.footer_version_snapshot,
+        "footer_text_sha256": v.footer_text_sha256,
+        "issued_at_snapshot": iso(v.issued_at_snapshot),
     }
+    if include_clinical:
+        data.update(
+            {
+                "template_text_snapshot": v.template_text_snapshot,
+                "template_text_sha256": v.template_text_sha256,
+                "interpretation_text_snapshot": v.interpretation_text_snapshot,
+                "interpretation_text_sha256": v.interpretation_text_sha256,
+                "footer_text_snapshot": v.footer_text_snapshot,
+            }
+        )
+    return data
 
 
 def ser_report_signature(s: m.ReportSignature) -> dict:
@@ -507,23 +550,50 @@ def ser_report_signature(s: m.ReportSignature) -> dict:
         "requested_at": iso(s.requested_at),
         "completed_at": iso(s.completed_at),
         "error_message": s.error_message,
+        # M24C não possui adapter autorizado nem endpoint de liberação.
+        "releasable": False,
     }
 
 
-def ser_report_document(doc: m.ReportDocument, *, versions: list[m.ReportDocumentVersion] | None = None) -> dict:
+def ser_report_assignment(a: m.ReportAssignment) -> dict:
+    return {
+        "id": a.id,
+        "report_document_id": a.report_document_id,
+        "physician_profile_id": a.physician_profile_id,
+        "active": a.active,
+        "assigned_at": iso(a.assigned_at),
+        "ended_at": iso(a.ended_at),
+        "reason_code": a.reason_code,
+        "supersedes_assignment_id": a.supersedes_assignment_id,
+    }
+
+
+def ser_report_document(
+    doc: m.ReportDocument,
+    *,
+    versions: list[m.ReportDocumentVersion] | None = None,
+    include_clinical: bool = False,
+) -> dict:
     return {
         "id": doc.id,
+        "public_code": doc.public_code,
         "spirometry_exam_id": doc.spirometry_exam_id,
         "status": doc.status,
         "signature_status": doc.signature_status,
+        # Um status isolado nunca prova assinatura qualificada verificável.
+        "releasable": False,
+        "origin_type": doc.origin_type,
+        "origin_label": doc.origin_label,
+        "origin_partner_unit_id": doc.origin_partner_unit_id,
         "current_version_id": doc.current_version_id,
         "superseded_by_id": doc.superseded_by_id,
         "corrects_document_id": doc.corrects_document_id,
-        "created_by_user_id": doc.created_by_user_id,
-        "reviewer_user_id": doc.reviewer_user_id,
-        "finalized_by_user_id": doc.finalized_by_user_id,
-        "submitted_for_review_at": iso(doc.submitted_for_review_at),
-        "finalized_at": iso(doc.finalized_at),
+        "clinical_started_at": iso(doc.clinical_started_at),
+        "ready_for_signature_at": iso(doc.ready_for_signature_at),
+        "signed_at": iso(doc.signed_at),
         **_stamps(doc),
-        "versoes": [ser_report_document_version(v) for v in versions] if versions is not None else None,
+        "versoes": [
+            ser_report_document_version(v, include_clinical=include_clinical)
+            for v in versions
+        ] if versions is not None else None,
     }

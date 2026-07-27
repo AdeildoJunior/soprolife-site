@@ -1160,7 +1160,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--email", required=True)
     p.add_argument("--nome", required=True)
     p.add_argument("--papel", default="operacional",
-                   choices=["admin", "gestor", "operacional", "leitura"])
+                   choices=[
+                       "admin",
+                       "gestor",
+                       "operacional",
+                       "leitura",
+                       "medico",
+                   ])
     p.set_defaults(func=cmd_criar_usuario)
 
     p = sub.add_parser("emitir-token", help="Emite token de acesso")

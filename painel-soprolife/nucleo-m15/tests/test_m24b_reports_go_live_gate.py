@@ -201,12 +201,14 @@ def test_missing_or_broad_readwritepaths_are_rejected(tmp_path):
     assert str(caught.value) == "systemd_broad_writable_parent_forbidden"
 
 
-def test_exact_private_path_passes_only_in_fully_synthetic_fixture(tmp_path):
+def test_m24c_bloqueia_enable_mesmo_com_precondicoes_tecnicas_sinteticas(
+    tmp_path,
+):
     repo = _repo(tmp_path, reports_enabled=True)
     root = _private_root(tmp_path)
-    result = _enabled_check(repo, root)
-    assert result.enabled is True
-    assert result.storage_root == root
+    with pytest.raises(gate.ReportsGateError) as caught:
+        _enabled_check(repo, root)
+    assert str(caught.value) == gate.M24C_PRODUCTION_BLOCKER
 
 
 def test_backup_attestation_is_independent_and_exact(tmp_path):

@@ -1,9 +1,12 @@
-"""M24A — contrato executável entre o fluxo do painel e a API de laudos.
+"""Contrato executável entre a interface M24C e a API de laudos.
 
-Os testes usam somente pessoa, exame, texto e PDF sintéticos. Além do shape
-consumido pelo navegador, cobrem a entrega binária autenticada, os estados
-que governam o RBAC visual e a correção sem mutar o PDF finalizado.
+Somente dados marcadamente sintéticos são usados. O contrato prova que a
+fila do médico é mínima, a identidade do paciente aparece apenas no
+workspace atribuído e o navegador nunca recebe um estado liberável sem
+assinatura qualificada.
 """
+
+from __future__ import annotations
 
 import io
 
@@ -11,11 +14,25 @@ import pytest
 from pypdf import PdfWriter
 
 from app.config import get_settings
+from app.models import User
+from app.security import (
+    ROLE_MEDICO,
+    ensure_roles_exist,
+    get_role,
+    hash_password,
+    issue_token,
+)
 
-SYNTH_TEMPLATE_TEXT = "TESTE - APAGAR: conteúdo sintético sem interpretação clínica."
+
+SYNTH_TEMPLATE_TEXT = (
+    "TESTE - APAGAR: conteúdo controlado sem interpretação clínica."
+)
+SYNTH_INTERPRETATION = (
+    "TESTE - APAGAR: interpretação sintética sem validade clínica."
+)
 
 
-def _minimal_pdf(pages: int = 1) -> bytes:
+def _minimal_pdf(pages: int = 2) -> bytes:
     writer = PdfWriter()
     for _ in range(pages):
         writer.add_blank_page(width=595, height=842)
@@ -30,11 +47,45 @@ def _reports_storage(monkeypatch, tmp_path):
     monkeypatch.setenv("M15_REPORTS_ENABLED", "true")
     monkeypatch.setenv(
         "M15_AUTH_SECRET",
-        "m24a-frontend-contract-secret-only-for-tests-0123456789abcdef",
+        "m24c-frontend-contract-secret-only-for-tests-0123456789abcdef",
     )
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture()
+def physician(db, client, auth):
+    ensure_roles_exist(db)
+    user = User(
+        email="medico-ui@teste.local",
+        nome="TESTE APAGAR Médico UI",
+        password_hash=hash_password("senha-ui-sintetica-123"),
+    )
+    user.roles.append(get_role(db, ROLE_MEDICO))
+    db.add(user)
+    db.commit()
+    headers = {
+        "Authorization": f"Bearer {issue_token(user.id, user.password_hash)}"
+    }
+    response = client.patch(
+        f"/api/v1/laudos/admin/medicos/{user.id}",
+        json={
+            "grant_physician_role": True,
+            "professional_name": "TESTE APAGAR Profissional UI",
+            "crm_number": "600001",
+            "crm_state": "SC",
+            "verification_status": "verified",
+            "active": True,
+        },
+        headers=auth("admin"),
+    )
+    assert response.status_code == 200, response.text
+    return {
+        "user": user,
+        "headers": headers,
+        "profile": response.json()["profile"],
+    }
 
 
 @pytest.fixture()
@@ -61,11 +112,13 @@ def template(client, auth):
     response = client.post(
         "/api/v1/laudos/templates",
         json={
-            "codigo": "TST-UI",
+            "codigo": "TESTE_UI_M24C",
             "titulo": "TESTE - APAGAR",
             "texto_tooltip": "Ajuda curta sintética",
             "texto_completo": SYNTH_TEMPLATE_TEXT,
             "ativo": True,
+            "status": "approved",
+            "clinically_approved": True,
         },
         headers=auth("admin"),
     )
@@ -73,215 +126,231 @@ def template(client, auth):
     return response.json()
 
 
-def _upload(client, auth, exam_id: str, pages: int = 1):
-    return client.post(
+@pytest.fixture()
+def assigned_case(client, auth, physician, exam, template):
+    response = client.post(
         "/api/v1/laudos",
-        data={"exam_id": exam_id},
-        files={"file": ("teste-sintetico.pdf", _minimal_pdf(pages), "application/pdf")},
+        data={
+            "exam_code": exam["public_code"],
+            "physician_profile_id": physician["profile"]["id"],
+            "origin_type": "coworking",
+            "origin_label": "unidade-ui-teste",
+            "origin_partner_unit_id": "",
+        },
+        files={
+            "file": (
+                "teste-sintetico.pdf",
+                _minimal_pdf(),
+                "application/pdf",
+            )
+        },
         headers=auth("operacional"),
     )
+    assert response.status_code == 201, response.text
+    return {
+        "document": response.json(),
+        "physician": physician,
+        "exam": exam,
+        "template": template,
+    }
 
 
-def _compose(client, auth, document_id: str, template_id: str):
+def _compose(client, case):
     return client.post(
-        f"/api/v1/laudos/{document_id}/compor",
-        json={"template_id": template_id, "page_number": 1, "placement": "rodape"},
-        headers=auth("operacional"),
+        f"/api/v1/laudos/{case['document']['id']}/compor",
+        json={
+            "template_id": case["template"]["id"],
+            "interpretation_text": SYNTH_INTERPRETATION,
+            "page_number": 2,
+            "placement": "rodape",
+        },
+        headers=case["physician"]["headers"],
     )
 
 
-def test_busca_do_painel_por_codigo_institucional_e_exata(client, auth, person, exam):
+def test_busca_do_painel_por_codigo_institucional_e_exata(
+    client, auth, person, exam
+):
     other = client.post(
         "/api/v1/atendimentos",
         json={
             "person_id": person["id"],
             "tipo": "espirometria_soprolife",
-            "espirometria": {"data_exame": "2026-07-21", "status": "Realizado"},
+            "espirometria": {
+                "data_exame": "2026-07-21",
+                "status": "Realizado",
+            },
         },
         headers=auth("operacional"),
     )
     assert other.status_code == 201, other.text
-
     response = client.get(
         "/api/v1/espirometrias",
-        params={"public_code": f" {exam['public_code'].lower()} ", "tamanho": 50},
-        headers=auth("leitura"),
+        params={
+            "public_code": f" {exam['public_code'].lower()} ",
+            "tamanho": 50,
+        },
+        headers=auth("operacional"),
     )
     assert response.status_code == 200
     assert [item["public_code"] for item in response.json()["itens"]] == [
         exam["public_code"]
     ]
-    assert response.json()["itens"][0]["id"] == exam["id"]
 
 
-def test_shapes_consumidos_pelo_frontend_e_metadados_sem_caminho(
-    client, auth, exam, template
+def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
+    client, auth, assigned_case, person
 ):
-    upload = _upload(client, auth, exam["id"], pages=2)
-    assert upload.status_code == 201, upload.text
-    document_id = upload.json()["id"]
-
-    documents = client.get(
+    document_id = assigned_case["document"]["id"]
+    operational = client.get(
         "/api/v1/laudos",
-        params={"exam_id": exam["id"]},
-        headers=auth("leitura"),
+        params={"exam_code": assigned_case["exam"]["public_code"]},
+        headers=auth("operacional"),
+    )
+    physician_queue = client.get(
+        "/api/v1/laudos/meus",
+        headers=assigned_case["physician"]["headers"],
     )
     detail = client.get(
         f"/api/v1/laudos/{document_id}",
-        headers=auth("leitura"),
+        headers=assigned_case["physician"]["headers"],
     )
-    templates = client.get("/api/v1/laudos/templates", headers=auth("leitura"))
-
-    assert documents.status_code == detail.status_code == templates.status_code == 200
-    assert documents.json()[0]["status"] == "rascunho"
-    body = detail.json()
-    assert {
-        "id",
-        "spirometry_exam_id",
+    assert (
+        operational.status_code
+        == physician_queue.status_code
+        == detail.status_code
+        == 200
+    )
+    queue_row = physician_queue.json()[0]
+    assert set(queue_row) == {
+        "report_code",
+        "document_id",
+        "exam_code",
+        "exam_date",
+        "origin_type",
+        "origin_label",
+        "assignment_timestamp",
         "status",
         "signature_status",
-        "current_version_id",
-        "superseded_by_id",
-        "submitted_for_review_at",
-        "finalized_at",
-        "created_at_utc",
-        "versoes",
-    } <= body.keys()
-    version = body["versoes"][0]
-    assert {
-        "id",
-        "kind",
-        "version_number",
-        "sha256",
-        "size_bytes",
-        "page_count",
-        "template_id",
-        "page_number",
-        "placement",
-        "created_at",
-    } <= version.keys()
-    assert version["page_count"] == 2
+        "releasable",
+    }
+    assert "patient" not in operational.text
+    assert person["nome_completo"] not in operational.text
+    assert "patient" not in physician_queue.text
+    assert person["nome_completo"] not in physician_queue.text
+    assert detail.json()["patient"]["full_name"] == person["nome_completo"]
+    assert detail.json()["exam"]["public_code"] == assigned_case["exam"][
+        "public_code"
+    ]
     assert "storage_path" not in detail.text
-    assert "content_url" not in detail.text
+    assert "original_filename" not in detail.text
 
-    assert templates.json() == [template]
+
+def test_catalogo_clinico_entrega_somente_template_aprovado(
+    client, auth, assigned_case
+):
+    response = client.get(
+        "/api/v1/laudos/templates",
+        headers=assigned_case["physician"]["headers"],
+    )
+    assert response.status_code == 200
+    assert response.json() == [assigned_case["template"]]
+    template = response.json()[0]
     assert {
         "codigo",
         "titulo",
         "texto_tooltip",
         "texto_completo",
         "ativo",
-    } <= templates.json()[0].keys()
+        "status",
+        "clinically_approved",
+        "versao",
+    } <= template.keys()
+    assert template["status"] == "approved"
+    assert template["clinically_approved"] is True
 
 
-def test_preview_inline_e_download_exigem_sessao_e_nao_cacheiam(
-    client, auth, exam
+def test_preview_inline_e_download_exigem_medico_atribuido(
+    client, auth, assigned_case
 ):
-    upload = _upload(client, auth, exam["id"])
-    assert upload.status_code == 201, upload.text
-    document = upload.json()
+    document = assigned_case["document"]
     path = (
         f"/api/v1/laudos/{document['id']}/versoes/"
         f"{document['current_version_id']}/conteudo"
     )
-
     assert client.get(path).status_code == 401
-
-    inline = client.get(path, headers=auth("leitura"))
+    assert client.get(path, headers=auth("operacional")).status_code == 403
+    inline = client.get(
+        path, headers=assigned_case["physician"]["headers"]
+    )
     assert inline.status_code == 200
     assert inline.content.startswith(b"%PDF-")
-    assert inline.headers["content-type"] == "application/pdf"
     assert inline.headers["content-disposition"].startswith("inline;")
     assert inline.headers["cache-control"] == "private, no-store"
     assert inline.headers["x-content-type-options"] == "nosniff"
-
     download = client.get(
         path,
         params={"modo": "download"},
-        headers=auth("leitura"),
+        headers=assigned_case["physician"]["headers"],
     )
     assert download.status_code == 200
     assert download.content == inline.content
     assert download.headers["content-disposition"].startswith("attachment;")
-    assert exam["public_code"] in download.headers["content-disposition"]
 
 
-def test_estados_e_rbac_que_controlam_acoes_da_interface(
-    client, auth, exam, template
+def test_interface_consome_apenas_elaboracao_e_assinatura_pendente(
+    client, auth, assigned_case
 ):
-    upload = _upload(client, auth, exam["id"])
-    document_id = upload.json()["id"]
-    compose = _compose(client, auth, document_id, template["id"])
-    assert compose.status_code == 200, compose.text
-    assert compose.json()["status"] == "rascunho"
+    composed = _compose(client, assigned_case)
+    assert composed.status_code == 200, composed.text
+    assert composed.json()["status"] == "em_elaboracao"
+    assert composed.json()["releasable"] is False
+    assert composed.json()["versoes"][0]["kind"] == "rascunho"
 
-    review = client.post(
-        f"/api/v1/laudos/{document_id}/revisao",
-        headers=auth("operacional"),
+    for role in ("operacional", "gestor", "admin"):
+        denied = client.post(
+            f"/api/v1/laudos/{assigned_case['document']['id']}/"
+            "preparar-assinatura",
+            headers=auth(role),
+        )
+        assert denied.status_code == 403, role
+
+    prepared = client.post(
+        f"/api/v1/laudos/{assigned_case['document']['id']}/"
+        "preparar-assinatura",
+        headers=assigned_case["physician"]["headers"],
     )
-    assert review.status_code == 200
-    assert review.json()["status"] == "em_revisao"
-
-    forbidden = client.post(
-        f"/api/v1/laudos/{document_id}/finalizar",
-        headers=auth("operacional"),
+    assert prepared.status_code == 200, prepared.text
+    body = prepared.json()
+    assert body["status"] == "assinatura_pendente"
+    assert body["signature_status"] == "assinatura_pendente"
+    assert body["releasable"] is False
+    assert body["signature"]["provider"] == "unconfigured"
+    assert body["signature"]["releasable"] is False
+    assert body["versoes"][0]["kind"] == "assinatura_pendente"
+    assert body["versoes"][0]["footer_text_snapshot"].endswith(
+        "MODELO DE TESTE — DOCUMENTO NÃO ASSINADO E SEM VALIDADE PARA LIBERAÇÃO"
     )
-    assert forbidden.status_code == 403
-
-    finalized = client.post(
-        f"/api/v1/laudos/{document_id}/finalizar",
-        headers=auth("gestor"),
-    )
-    assert finalized.status_code == 200
-    assert finalized.json()["status"] == "finalizado"
-    assert finalized.json()["signature_status"] == "assinatura_pendente"
 
 
-def test_corretiva_preserva_pdf_hash_e_marcos_do_finalizado(
-    client, auth, exam, template
+def test_corretiva_e_assinatura_legada_falham_fechado(
+    client, auth, assigned_case
 ):
-    upload = _upload(client, auth, exam["id"])
-    document_id = upload.json()["id"]
-    assert _compose(client, auth, document_id, template["id"]).status_code == 200
+    assert _compose(client, assigned_case).status_code == 200
     assert client.post(
-        f"/api/v1/laudos/{document_id}/revisao",
-        headers=auth("operacional"),
+        f"/api/v1/laudos/{assigned_case['document']['id']}/"
+        "preparar-assinatura",
+        headers=assigned_case["physician"]["headers"],
     ).status_code == 200
+    correction = client.post(
+        f"/api/v1/laudos/{assigned_case['document']['id']}/"
+        "nova-versao-corretiva",
+        json={"reason_code": "clinical_correction"},
+        headers=assigned_case["physician"]["headers"],
+    )
+    assert correction.status_code == 409
+    assert correction.json()["erro"]["codigo"] == "laudo_nao_assinado"
     assert client.post(
-        f"/api/v1/laudos/{document_id}/finalizar",
+        f"/api/v1/laudos/{assigned_case['document']['id']}/finalizar",
         headers=auth("gestor"),
-    ).status_code == 200
-
-    before = client.get(
-        f"/api/v1/laudos/{document_id}",
-        headers=auth("leitura"),
-    ).json()
-    old_current = next(
-        version
-        for version in before["versoes"]
-        if version["id"] == before["current_version_id"]
-    )
-
-    corrective = client.post(
-        f"/api/v1/laudos/{document_id}/nova-versao-corretiva",
-        headers=auth("operacional"),
-    )
-    assert corrective.status_code == 201
-    assert corrective.json()["status"] == "rascunho"
-    assert corrective.json()["id"] != document_id
-
-    after = client.get(
-        f"/api/v1/laudos/{document_id}",
-        headers=auth("leitura"),
-    ).json()
-    after_current = next(
-        version
-        for version in after["versoes"]
-        if version["id"] == after["current_version_id"]
-    )
-    assert after["status"] == "finalizado"
-    assert after["superseded_by_id"] == corrective.json()["id"]
-    assert after["finalized_at"] == before["finalized_at"]
-    assert after["current_version_id"] == before["current_version_id"]
-    assert after_current["sha256"] == old_current["sha256"]
-    assert after_current["size_bytes"] == old_current["size_bytes"]
+    ).status_code == 404

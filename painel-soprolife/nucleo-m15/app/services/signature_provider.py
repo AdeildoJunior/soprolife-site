@@ -3,7 +3,7 @@
 Define o CONTRATO que um provedor ICP-Brasil real (ex.: um HSM em nuvem, um
 serviço de assinatura qualificada) precisa implementar para assinar um
 laudo finalizado. NENHUM provedor real está conectado nesta etapa — a
-única implementação existente (`NullSignatureProvider`) nunca assina nada e
+única implementação existente (`UnconfiguredSignatureProvider`) nunca assina nada e
 nunca finge sucesso.
 
 Regras que este módulo protege (nunca violar em uma implementação futura):
@@ -13,10 +13,10 @@ Regras que este módulo protege (nunca violar em uma implementação futura):
 - nenhum PDF pode se autodeclarar "assinado digitalmente" sem uma
   assinatura real verificável de um provedor real;
 - `request_signature` só pode devolver status "assinada" depois de uma
-  confirmação real do provedor — nunca antimicipadamente.
+  confirmação real do provedor — nunca antecipadamente.
 - até um provedor real ser configurado (certificado, credenciais, contrato
   jurídico com uma Autoridade Certificadora), a única implementação válida
-  em produção é `NullSignatureProvider`.
+  em produção é `UnconfiguredSignatureProvider`.
 """
 
 from abc import ABC, abstractmethod
@@ -66,12 +66,12 @@ class SignatureProvider(ABC):
         raise NotImplementedError
 
 
-class NullSignatureProvider(SignatureProvider):
+class UnconfiguredSignatureProvider(SignatureProvider):
     """Único provedor existente nesta etapa. NUNCA assina — sempre recusa
     a solicitação de forma explícita e auditável, sem exceção nem
     caminho oculto de sucesso simulado."""
 
-    name = "nenhum_configurado"
+    name = "unconfigured"
 
     def request_signature(
         self, *, document_bytes: bytes, document_sha256: str, requested_by_user_id: str
@@ -100,4 +100,9 @@ def get_signature_provider() -> SignatureProvider:
     isto por um provedor real é uma decisão de produto/infra em aberto
     (custódia de certificado, contrato com AC, credenciais) e nunca deve
     acontecer sem uma implementação de `SignatureProvider` auditada."""
-    return NullSignatureProvider()
+    return UnconfiguredSignatureProvider()
+
+
+# Compatibilidade nominal para importações M24A. O alias aponta para a
+# implementação fail-closed; não existe provedor de teste com sucesso.
+NullSignatureProvider = UnconfiguredSignatureProvider

@@ -67,7 +67,10 @@ def publication_context(db, tmp_path, monkeypatch):
     db.add(exam)
     db.flush()
     document = ReportDocument(
+        public_code="LAU-990001",
         spirometry_exam_id=exam.id,
+        status=reports_router.STATUS_ATRIBUIDO,
+        origin_type="coworking",
         created_by_user_id=user.id,
     )
     db.add(document)
@@ -164,41 +167,6 @@ def test_duplicate_version_race_never_removes_preexisting_valid_version(
     assert first_path.read_bytes() == first_bytes
     assert _files(publication_context.root) == [first_path]
     assert db.scalar(select(func.count()).select_from(ReportDocumentVersion)) == 1
-
-
-def test_corrective_uniqueness_commit_failure_cleans_only_new_file(
-    db, publication_context, monkeypatch
-):
-    context = publication_context
-    with report_publication_transaction(db) as publication:
-        original = _store(db, context, publication)
-        context.document.current_version_id = original.id
-        context.document.status = reports_router.STATUS_FINALIZADO
-        publication.commit()
-    existing_path = context.root / original.storage_path
-    existing_bytes = existing_path.read_bytes()
-
-    def duplicate_corrective_commit():
-        raise IntegrityError(
-            "synthetic corrective uniqueness",
-            {},
-            RuntimeError("race"),
-        )
-
-    monkeypatch.setattr(db, "commit", duplicate_corrective_commit)
-    request = SimpleNamespace(state=SimpleNamespace(request_id="synthetic"))
-    with pytest.raises(ReportDomainError) as caught:
-        reports_router.open_corrective_version(
-            context.document.id,
-            request=request,
-            db=db,
-            user=context.user,
-        )
-    assert caught.value.codigo == "laudo_ja_possui_corretiva"
-    assert existing_path.read_bytes() == existing_bytes
-    assert _files(context.root) == [existing_path]
-    assert db.scalar(select(func.count()).select_from(ReportDocumentVersion)) == 1
-    assert db.scalar(select(func.count()).select_from(ReportDocument)) == 1
 
 
 def test_cleanup_success_fsyncs_parent_and_removes_exact_file(
@@ -307,8 +275,8 @@ def test_success_has_no_database_row_with_missing_file(db, publication_context):
     [
         reports_router.upload_report_document,
         reports_router.compose_report_document,
-        reports_router.finalize_report_document,
-        reports_router.open_corrective_version,
+        reports_router.prepare_report_signature,
+        reports_router.open_corrective_document,
     ],
 )
 def test_all_file_publishing_routes_use_the_same_transaction_contract(route):

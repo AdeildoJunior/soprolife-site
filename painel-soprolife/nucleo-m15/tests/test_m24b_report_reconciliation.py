@@ -66,7 +66,10 @@ def reconciliation_context(db, tmp_path, monkeypatch):
     db.add(exam)
     db.flush()
     document = ReportDocument(
+        public_code="LAU-980001",
         spirometry_exam_id=exam.id,
+        status="atribuido",
+        origin_type="coworking",
         created_by_user_id=user.id,
     )
     db.add(document)

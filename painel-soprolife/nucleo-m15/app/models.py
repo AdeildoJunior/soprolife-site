@@ -938,7 +938,7 @@ class MigrationDecision(Base):
     ts_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-# ------------------------------------------------------------ M24A — laudos
+# ------------------------------------------------------------ M24C — laudos
 #
 # ReportDocument = um "caso" de laudo (1 exame -> N documentos ao longo do
 # tempo; uma correção depois de finalizado nasce como um NOVO documento que
@@ -952,15 +952,38 @@ class MigrationDecision(Base):
 # Brasil futura) — nenhum provedor real está conectado nesta etapa; o único
 # status possível hoje é "pendente".
 
+STATUS_LAUDO_ATRIBUIDO = "atribuido"
+STATUS_LAUDO_EM_ELABORACAO = "em_elaboracao"
+STATUS_LAUDO_ASSINATURA_PENDENTE = "assinatura_pendente"
+STATUS_LAUDO_ASSINADO = "assinado"
+# Estados legados M24A permanecem reconhecidos para que a migration seja
+# aditiva e não reescreva evidência preexistente. Nenhum endpoint M24C cria
+# novos documentos nesses estados.
 STATUS_LAUDO_RASCUNHO = "rascunho"
 STATUS_LAUDO_EM_REVISAO = "em_revisao"
 STATUS_LAUDO_FINALIZADO = "finalizado"
-STATUS_LAUDO_VALUES = (STATUS_LAUDO_RASCUNHO, STATUS_LAUDO_EM_REVISAO, STATUS_LAUDO_FINALIZADO)
+STATUS_LAUDO_VALUES = (
+    STATUS_LAUDO_ATRIBUIDO,
+    STATUS_LAUDO_EM_ELABORACAO,
+    STATUS_LAUDO_ASSINATURA_PENDENTE,
+    STATUS_LAUDO_ASSINADO,
+    STATUS_LAUDO_RASCUNHO,
+    STATUS_LAUDO_EM_REVISAO,
+    STATUS_LAUDO_FINALIZADO,
+)
 
 VERSAO_TIPO_ORIGINAL = "original"
 VERSAO_TIPO_RASCUNHO = "rascunho"
+VERSAO_TIPO_ASSINATURA_PENDENTE = "assinatura_pendente"
+VERSAO_TIPO_ASSINADO = "assinado"
 VERSAO_TIPO_FINALIZADO = "finalizado"
-VERSAO_TIPO_VALUES = (VERSAO_TIPO_ORIGINAL, VERSAO_TIPO_RASCUNHO, VERSAO_TIPO_FINALIZADO)
+VERSAO_TIPO_VALUES = (
+    VERSAO_TIPO_ORIGINAL,
+    VERSAO_TIPO_RASCUNHO,
+    VERSAO_TIPO_ASSINATURA_PENDENTE,
+    VERSAO_TIPO_ASSINADO,
+    VERSAO_TIPO_FINALIZADO,
+)
 
 # "signing-required" (item 7 do pedido M24A) é representado aqui como o
 # único valor hoje alcançável de signature_status: um laudo finalizado
@@ -975,6 +998,92 @@ SIGNATURE_STATUS_VALUES = (
     SIGNATURE_STATUS_PENDENTE, SIGNATURE_STATUS_ASSINADA, SIGNATURE_STATUS_REJEITADA,
 )
 
+BRAZIL_UF_VALUES = (
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT",
+    "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO",
+    "RR", "SC", "SP", "SE", "TO",
+)
+PHYSICIAN_VERIFICATION_VALUES = ("pending", "verified", "rejected")
+REPORT_ORIGIN_VALUES = (
+    "pastore",
+    "coworking",
+    "residencial",
+    "clinica_parceira",
+    "empresa_pcmso",
+    "outro",
+)
+REPORT_ASSIGNMENT_REASON_VALUES = (
+    "initial_assignment",
+    "assignment_correction",
+    "physician_unavailable",
+    "profile_suspended",
+    "operational_redistribution",
+    "corrective_document",
+)
+REPORT_ASSIGNMENT_EVENT_VALUES = ("assigned", "reassigned", "corrective_assigned")
+REPORT_TEMPLATE_STATUS_VALUES = ("draft", "approved", "retired")
+REPORT_FOOTER_STATUS_VALUES = ("test", "draft", "approved", "retired")
+
+
+class PhysicianProfile(Base, TimestampMixin):
+    """Perfil profissional um-para-um, separado da conta de autenticação."""
+
+    __tablename__ = "physician_profiles"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id"), nullable=False, unique=True, index=True
+    )
+    professional_name: Mapped[str] = mapped_column(String(220), nullable=False)
+    crm_number: Mapped[str] = mapped_column(String(12), nullable=False)
+    crm_state: Mapped[str] = mapped_column(String(2), nullable=False)
+    rqe: Mapped[str | None] = mapped_column(String(30))
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    verification_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verified_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "length(trim(professional_name)) >= 2",
+            name="professional_name_present",
+        ),
+        CheckConstraint(
+            "length(crm_number) BETWEEN 1 AND 12",
+            name="crm_number_length",
+        ),
+        CheckConstraint(
+            f"crm_state IN {BRAZIL_UF_VALUES!r}",
+            name="crm_state_valid",
+        ),
+        CheckConstraint(
+            f"verification_status IN {PHYSICIAN_VERIFICATION_VALUES!r}",
+            name="verification_status_valid",
+        ),
+        CheckConstraint(
+            "("
+            "verification_status = 'verified' AND "
+            "verified_at IS NOT NULL AND verified_by_user_id IS NOT NULL"
+            ") OR ("
+            "verification_status <> 'verified' AND "
+            "verified_at IS NULL AND verified_by_user_id IS NULL"
+            ")",
+            name="verification_evidence_complete",
+        ),
+    )
+
+
+Index(
+    "uq_physician_profiles_active_crm_uf",
+    PhysicianProfile.crm_state,
+    PhysicianProfile.crm_number,
+    unique=True,
+    sqlite_where=PhysicianProfile.active.is_(True),
+    postgresql_where=PhysicianProfile.active.is_(True),
+)
+
 
 class ReportTemplate(Base, TimestampMixin):
     """Registro de templates de interpretação — abreviação + texto completo.
@@ -985,13 +1094,76 @@ class ReportTemplate(Base, TimestampMixin):
 
     __tablename__ = "report_templates"
     id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
-    codigo: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    codigo: Mapped[str] = mapped_column(String(48), nullable=False)
     titulo: Mapped[str] = mapped_column(String(200), nullable=False)
     texto_tooltip: Mapped[str | None] = mapped_column(String(240))
     texto_completo: Mapped[str] = mapped_column(Text, nullable=False, default="")
     versao: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
+    clinically_approved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    supersedes_template_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_templates.id")
+    )
+    approved_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     criado_por: Mapped[str | None] = mapped_column(String(UUID_LEN))
+    __table_args__ = (
+        UniqueConstraint("codigo", "versao", name="uq_report_template_code_version"),
+        UniqueConstraint(
+            "supersedes_template_id",
+            name="uq_report_template_supersedes_template_id",
+        ),
+        CheckConstraint("versao > 0", name="version_positive"),
+        CheckConstraint(
+            f"status IN {REPORT_TEMPLATE_STATUS_VALUES!r}",
+            name="status_valid",
+        ),
+        CheckConstraint(
+            "("
+            "clinically_approved = true AND status = 'approved' AND "
+            "approved_by_user_id IS NOT NULL AND approved_at IS NOT NULL"
+            ") OR ("
+            "clinically_approved = false AND status <> 'approved' AND "
+            "approved_by_user_id IS NULL AND approved_at IS NULL"
+            ")",
+            name="clinical_approval_evidence",
+        ),
+    )
+
+
+class ReportFooterTemplate(Base, TimestampMixin):
+    """Texto institucional versionado; M24C semeia somente o modelo TEST."""
+
+    __tablename__ = "report_footer_templates"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    code: Mapped[str] = mapped_column(String(40), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    body_template: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="test")
+    production_approved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    __table_args__ = (
+        UniqueConstraint("code", "version", name="uq_report_footer_code_version"),
+        CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint(
+            f"status IN {REPORT_FOOTER_STATUS_VALUES!r}",
+            name="status_valid",
+        ),
+        CheckConstraint(
+            "production_approved = false OR status = 'approved'",
+            name="production_approval_coherent",
+        ),
+    )
 
 
 class ReportDocument(Base, TimestampMixin):
@@ -999,10 +1171,18 @@ class ReportDocument(Base, TimestampMixin):
 
     __tablename__ = "report_documents"
     id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    public_code: Mapped[str] = mapped_column(String(12), unique=True, nullable=False)
     spirometry_exam_id: Mapped[str] = mapped_column(
         String(UUID_LEN), ForeignKey("spirometry_exams.id"), index=True, nullable=False
     )
-    status: Mapped[str] = mapped_column(String(20), default=STATUS_LAUDO_RASCUNHO, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24), default=STATUS_LAUDO_ATRIBUIDO, nullable=False
+    )
+    origin_type: Mapped[str | None] = mapped_column(String(30))
+    origin_label: Mapped[str | None] = mapped_column(String(120))
+    origin_partner_unit_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("partner_units.id")
+    )
     # Preenchido apenas quando `status == finalizado`. Representa o
     # "signing-required" do item 7 — sempre PENDENTE nesta etapa.
     signature_status: Mapped[str | None] = mapped_column(String(20))
@@ -1027,6 +1207,12 @@ class ReportDocument(Base, TimestampMixin):
     finalized_by_user_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
     submitted_for_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    clinical_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ready_for_signature_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    correction_reason_code: Mapped[str | None] = mapped_column(String(40))
     __table_args__ = (
         CheckConstraint(
             f"status IN {STATUS_LAUDO_VALUES!r}", name="status_valido",
@@ -1034,6 +1220,143 @@ class ReportDocument(Base, TimestampMixin):
         UniqueConstraint(
             "corrects_document_id",
             name="uq_report_documents_corrects_document_id",
+        ),
+        CheckConstraint(
+            f"origin_type IS NULL OR origin_type IN {REPORT_ORIGIN_VALUES!r}",
+            name="origin_type_valid",
+        ),
+        CheckConstraint(
+            "("
+            "status = 'assinado' AND signature_status = 'assinada' AND "
+            "signed_at IS NOT NULL"
+            ") OR status <> 'assinado'",
+            name="signed_state_complete",
+        ),
+        CheckConstraint(
+            "("
+            "status NOT IN ("
+            "'atribuido', 'em_elaboracao', "
+            "'assinatura_pendente', 'assinado'"
+            ")"
+            ") OR ("
+            "status = 'atribuido' AND "
+            "clinical_started_at IS NULL AND "
+            "ready_for_signature_at IS NULL AND "
+            "signed_at IS NULL AND signature_status IS NULL"
+            ") OR ("
+            "status = 'em_elaboracao' AND "
+            "clinical_started_at IS NOT NULL AND "
+            "ready_for_signature_at IS NULL AND "
+            "signed_at IS NULL AND signature_status IS NULL"
+            ") OR ("
+            "status = 'assinatura_pendente' AND "
+            "clinical_started_at IS NOT NULL AND "
+            "ready_for_signature_at IS NOT NULL AND "
+            "signed_at IS NULL AND "
+            "signature_status = 'assinatura_pendente'"
+            ") OR ("
+            "status = 'assinado' AND "
+            "clinical_started_at IS NOT NULL AND "
+            "ready_for_signature_at IS NOT NULL AND "
+            "signed_at IS NOT NULL AND signature_status = 'assinada'"
+            ")",
+            name="clinical_state_coherent",
+        ),
+    )
+
+
+class ReportAssignment(Base):
+    """Atribuição atual + histórico preservado; nunca apaga linhas antigas."""
+
+    __tablename__ = "report_assignments"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    report_document_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_documents.id"), nullable=False, index=True
+    )
+    physician_profile_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("physician_profiles.id"), nullable=False, index=True
+    )
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    assigned_by_user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id"), nullable=False
+    )
+    reason_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    supersedes_assignment_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_assignments.id")
+    )
+    __table_args__ = (
+        UniqueConstraint(
+            "supersedes_assignment_id",
+            name="uq_report_assignment_supersedes_assignment_id",
+        ),
+        CheckConstraint(
+            f"reason_code IN {REPORT_ASSIGNMENT_REASON_VALUES!r}",
+            name="reason_code_valid",
+        ),
+        CheckConstraint(
+            "(active = true AND ended_at IS NULL) OR "
+            "(active = false AND ended_at IS NOT NULL)",
+            name="active_period_coherent",
+        ),
+        CheckConstraint(
+            "("
+            "reason_code IN ('initial_assignment', 'corrective_document') AND "
+            "supersedes_assignment_id IS NULL"
+            ") OR ("
+            "reason_code NOT IN ('initial_assignment', 'corrective_document') AND "
+            "supersedes_assignment_id IS NOT NULL"
+            ")",
+            name="reason_supersession_coherent",
+        ),
+    )
+
+
+Index(
+    "uq_report_assignments_one_active_per_document",
+    ReportAssignment.report_document_id,
+    unique=True,
+    sqlite_where=ReportAssignment.active.is_(True),
+    postgresql_where=ReportAssignment.active.is_(True),
+)
+
+
+class ReportAssignmentEvent(Base):
+    """Evento técnico append-only; sem texto livre, paciente ou dado clínico."""
+
+    __tablename__ = "report_assignment_events"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    report_document_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_documents.id"), nullable=False, index=True
+    )
+    assignment_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_assignments.id"), nullable=False, unique=True
+    )
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    physician_profile_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("physician_profiles.id"), nullable=False
+    )
+    previous_physician_profile_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("physician_profiles.id")
+    )
+    reason_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    performed_by_user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    __table_args__ = (
+        CheckConstraint(
+            f"event_type IN {REPORT_ASSIGNMENT_EVENT_VALUES!r}",
+            name="event_type_valid",
+        ),
+        CheckConstraint(
+            f"reason_code IN {REPORT_ASSIGNMENT_REASON_VALUES!r}",
+            name="reason_code_valid",
         ),
     )
 
@@ -1067,6 +1390,28 @@ class ReportDocumentVersion(Base):
     template_version_snapshot: Mapped[int | None] = mapped_column(Integer)
     template_text_snapshot: Mapped[str | None] = mapped_column(Text)
     template_text_sha256: Mapped[str | None] = mapped_column(String(64))
+    interpretation_text_snapshot: Mapped[str | None] = mapped_column(Text)
+    interpretation_text_sha256: Mapped[str | None] = mapped_column(String(64))
+    physician_profile_id_snapshot: Mapped[str | None] = mapped_column(String(UUID_LEN))
+    physician_name_snapshot: Mapped[str | None] = mapped_column(String(220))
+    physician_crm_number_snapshot: Mapped[str | None] = mapped_column(String(12))
+    physician_crm_state_snapshot: Mapped[str | None] = mapped_column(String(2))
+    physician_rqe_snapshot: Mapped[str | None] = mapped_column(String(30))
+    origin_type_snapshot: Mapped[str | None] = mapped_column(String(30))
+    origin_label_snapshot: Mapped[str | None] = mapped_column(String(120))
+    origin_partner_unit_id_snapshot: Mapped[str | None] = mapped_column(
+        String(UUID_LEN)
+    )
+    footer_template_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_footer_templates.id")
+    )
+    footer_code_snapshot: Mapped[str | None] = mapped_column(String(40))
+    footer_version_snapshot: Mapped[int | None] = mapped_column(Integer)
+    footer_text_snapshot: Mapped[str | None] = mapped_column(Text)
+    footer_text_sha256: Mapped[str | None] = mapped_column(String(64))
+    issued_at_snapshot: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     page_number: Mapped[int | None] = mapped_column(Integer)
     placement: Mapped[str | None] = mapped_column(String(20))
     created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
@@ -1090,6 +1435,51 @@ class ReportDocumentVersion(Base):
             "template_text_sha256 IS NOT NULL"
             ")",
             name="template_snapshot_completo",
+        ),
+        CheckConstraint(
+            "("
+            "interpretation_text_snapshot IS NULL AND "
+            "interpretation_text_sha256 IS NULL"
+            ") OR ("
+            "interpretation_text_snapshot IS NOT NULL AND "
+            "interpretation_text_sha256 IS NOT NULL"
+            ")",
+            name="interpretation_snapshot_complete",
+        ),
+        CheckConstraint(
+            "("
+            "physician_profile_id_snapshot IS NULL AND "
+            "physician_name_snapshot IS NULL AND "
+            "physician_crm_number_snapshot IS NULL AND "
+            "physician_crm_state_snapshot IS NULL AND "
+            "origin_type_snapshot IS NULL"
+            ") OR ("
+            "physician_profile_id_snapshot IS NOT NULL AND "
+            "physician_name_snapshot IS NOT NULL AND "
+            "physician_crm_number_snapshot IS NOT NULL AND "
+            f"physician_crm_state_snapshot IN {BRAZIL_UF_VALUES!r} AND "
+            f"origin_type_snapshot IN {REPORT_ORIGIN_VALUES!r}"
+            ")",
+            name="physician_origin_snapshot_complete",
+        ),
+        CheckConstraint(
+            "("
+            "footer_template_id IS NULL AND "
+            "footer_code_snapshot IS NULL AND "
+            "footer_version_snapshot IS NULL AND "
+            "footer_text_snapshot IS NULL AND "
+            "footer_text_sha256 IS NULL AND "
+            "issued_at_snapshot IS NULL"
+            ") OR ("
+            "footer_template_id IS NOT NULL AND "
+            "footer_code_snapshot IS NOT NULL AND "
+            "footer_version_snapshot IS NOT NULL AND "
+            "footer_version_snapshot > 0 AND "
+            "footer_text_snapshot IS NOT NULL AND "
+            "footer_text_sha256 IS NOT NULL AND "
+            "issued_at_snapshot IS NOT NULL"
+            ")",
+            name="footer_snapshot_complete",
         ),
     )
 

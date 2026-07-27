@@ -11,9 +11,8 @@
   <link rel="stylesheet" href="./css/style.css?v=2026072402" />
   <!-- CRM Pacientes e Acompanhamento (M19): workspace canônico único. -->
   <link rel="stylesheet" href="./css/crm-workspace.css?v=2026072402" />
-  <!-- M24A — fluxo autenticado de laudos; classes isoladas report-* e
-       componentes visuais alinhados ao painel/Núcleo M15. -->
-  <link rel="stylesheet" href="./css/report-workflow.css?v=2026072602" />
+  <!-- M24C — fila médica atribuída e fluxo clínico autenticado. -->
+  <link rel="stylesheet" href="./css/report-workflow.css?v=2026072701" />
   <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
   <script src="./js/vendor/chart.umd.min.js"></script>
 </head>
@@ -193,7 +192,7 @@
           <button type="button" class="nav-hub-card" data-section="laudos-espirometria" data-report-entry hidden>
             <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><polyline points="11,2 11,7 16,7"/><path d="M5 11h2l1-2 2 4 1-2h2"/></svg></span>
             <strong>Laudos de espirometria</strong>
-            <span class="nav-hub-desc">PDF, revisão clínica e versões</span>
+            <span class="nav-hub-desc">Atribuição médica, prévia e assinatura pendente</span>
           </button>
           <button type="button" class="nav-hub-card" data-section="marketing">
             <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1,14 6,8 10,11 17,4"/><polyline points="12,4 17,4 17,9"/></svg></span>
@@ -556,10 +555,10 @@
       <section id="laudos-espirometria" class="section" data-report-entry hidden>
         <div class="section-title">
           <div>
-            <p class="eyebrow">Fluxo clínico protegido</p>
+            <p class="eyebrow">Fluxo clínico atribuído e protegido</p>
             <h2>Laudos de espirometria</h2>
           </div>
-          <span class="safe-label">PDF autenticado · fora do Git</span>
+          <span class="safe-label">Médico atribuído · PDF autenticado · assinatura pendente</span>
         </div>
         <div id="reportWorkflowRoot" class="report-workflow-root">
           <div class="report-state" role="status">Carregando o fluxo seguro de laudos…</div>
@@ -945,10 +944,10 @@
   <script src="./js/m15-security.js?v=2026072402" defer></script>
   <script src="./js/m15-datepicker.js?v=2026072402" defer></script>
   <script src="./js/m15-nucleo.js?v=2026072501" defer></script>
-  <!-- M24A: feature independente e desabilitada por padrão; quando
+  <!-- M24C: feature independente e desabilitada por padrão; quando
        explicitamente habilitada, consome window.SoproM15 (sessão/CSRF) e
        usa Blob autenticado, nunca URL pública de documento. -->
-  <script src="./js/report-workflow.js?v=2026072602" defer></script>
+  <script src="./js/report-workflow.js?v=2026072701" defer></script>
   <!-- Central de Cadastros (M16): fluxo canônico ÚNICO de entrada de dados.
        Depende do cliente compartilhado window.SoproM15 (script acima). -->
   <script src="./js/central-cadastros.js?v=2026072501" defer></script>

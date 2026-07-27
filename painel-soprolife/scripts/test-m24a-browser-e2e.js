@@ -1,14 +1,9 @@
 #!/usr/bin/env node
-/* M24A browser/E2E sem dependência npm.
+/* M24C browser/E2E sem dependência npm.
  *
- * Sobe SQLite + API + proxy em portas loopback efêmeras e dirige o Google
- * Chrome real via DevTools Protocol. O fluxo usa somente usuários, pessoa,
- * exame, template e PDF marcadamente sintéticos; banco, storage, download e
- * perfil do navegador ficam em diretório temporário removido ao terminar.
- *
- * Uso:
- *   M15_TEST_PYTHON=/caminho/venv/bin/python \
- *     node painel-soprolife/scripts/test-m24a-browser-e2e.js
+ * Sobe SQLite + API + proxy em loopback efêmero e dirige Google Chrome real
+ * por CDP. Somente usuários, pessoa, exame, texto e PDFs sintéticos são
+ * criados; banco, storage e perfil Chrome ficam em diretório temporário.
  */
 "use strict";
 
@@ -25,23 +20,33 @@ const PROXY = path.join(
 );
 const PYTHON = process.env.M15_TEST_PYTHON;
 const CHROME = process.env.M24A_CHROME || "/usr/bin/google-chrome";
-const PASSWORD = "senha-browser-m24a-sintetica-123";
+const PASSWORD = "senha-browser-m24c-sintetica-123";
 const USERS = {
-  admin: ["admin-m24a-browser@teste.local", "Admin Browser M24A", "admin"],
-  operacional: [
-    "oper-m24a-browser@teste.local", "Operacional Browser M24A", "operacional",
+  admin: [
+    "admin-m24c-browser@teste.local",
+    "TESTE APAGAR Admin Browser M24C",
+    "admin",
   ],
-  gestor: ["gestor-m24a-browser@teste.local", "Gestor Browser M24A", "gestor"],
+  operacional: [
+    "oper-m24c-browser@teste.local",
+    "TESTE APAGAR Operacional Browser M24C",
+    "operacional",
+  ],
+  medico: [
+    "medico-m24c-browser@teste.local",
+    "TESTE APAGAR Médico Browser M24C",
+    "medico",
+  ],
 };
 
 let failures = 0;
 function check(label, condition, detail = "") {
   if (condition) {
     console.log(`  PASS: ${label}`);
-  } else {
-    failures += 1;
-    console.log(`  FAIL: ${label}${detail ? ` — ${detail}` : ""}`);
+    return;
   }
+  failures += 1;
+  console.log(`  FAIL: ${label}${detail ? ` — ${detail}` : ""}`);
 }
 
 function freePort() {
@@ -55,7 +60,7 @@ function freePort() {
   });
 }
 
-async function waitFor(fn, label, timeoutMs = 25000) {
+async function waitFor(fn, label, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
   while (Date.now() < deadline) {
@@ -118,10 +123,12 @@ class Cdp {
       returnByValue: true,
     });
     if (result.exceptionDetails) {
-      const description = result.exceptionDetails.exception &&
-        result.exceptionDetails.exception.description;
-      throw new Error(description || result.exceptionDetails.text ||
-        "Runtime.evaluate falhou");
+      const exception = result.exceptionDetails.exception;
+      throw new Error(
+        (exception && exception.description)
+          || result.exceptionDetails.text
+          || "Runtime.evaluate falhou"
+      );
     }
     return result.result ? result.result.value : undefined;
   }
@@ -132,19 +139,25 @@ class Cdp {
 }
 
 function spawnLogged(command, args, options) {
-  const proc = childProcess.spawn(command, args, {
+  const processHandle = childProcess.spawn(command, args, {
     ...options,
     stdio: ["ignore", "pipe", "pipe"],
   });
   let log = "";
-  proc.stdout.on("data", (chunk) => { log += chunk; });
-  proc.stderr.on("data", (chunk) => { log += chunk; });
-  proc.getLog = () => log.slice(-6000);
-  return proc;
+  processHandle.stdout.on("data", (chunk) => { log += chunk; });
+  processHandle.stderr.on("data", (chunk) => { log += chunk; });
+  processHandle.getLog = () => log.slice(-8000);
+  return processHandle;
 }
 
-function stop(proc) {
-  if (proc && proc.exitCode === null && !proc.killed) proc.kill("SIGTERM");
+function stop(processHandle) {
+  if (
+    processHandle
+    && processHandle.exitCode === null
+    && !processHandle.killed
+  ) {
+    processHandle.kill("SIGTERM");
+  }
 }
 
 function runChecked(command, args, options) {
@@ -155,7 +168,7 @@ function runChecked(command, args, options) {
   if (result.status !== 0) {
     throw new Error(
       `${path.basename(command)} falhou: ${
-        (result.stderr || result.stdout || "").slice(-2000)
+        (result.stderr || result.stdout || "").slice(-3000)
       }`
     );
   }
@@ -175,40 +188,55 @@ async function login(cdp, email) {
     form.requestSubmit();
   })()`);
   await waitFor(
-    () => cdp.evaluate("Boolean(document.querySelector('#m15Sair'))"),
+    () => cdp.evaluate(
+      "Boolean(window.SoproM15?.hasToken()) && " +
+      "Boolean(document.querySelector('[data-report-logout]') || " +
+      "document.querySelector('#m15Sair'))"
+    ),
     `login concluído para ${email}`
   );
 }
 
 async function logout(cdp) {
   await cdp.send("Emulation.setDeviceMetricsOverride", {
-    width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false,
+    width: 1440,
+    height: 1000,
+    deviceScaleFactor: 1,
+    mobile: false,
   });
-  await cdp.evaluate(`document.querySelector(
-    '.sidebar .nav-item[data-section="m15-nucleo"]'
-  ).click()`);
+  await cdp.evaluate(`(() => {
+    const reportLogout = document.querySelector("[data-report-logout]");
+    if (reportLogout) {
+      reportLogout.click();
+      return;
+    }
+    const nav = document.querySelector(
+      '.sidebar .nav-item[data-section="m15-nucleo"]'
+    );
+    if (nav) nav.click();
+    const button = document.querySelector("#m15Sair");
+    if (button) button.click();
+  })()`);
   await waitFor(
     () => cdp.evaluate(
-      "document.querySelector('#m15-nucleo')?.classList.contains('active') && " +
-      "Boolean(document.querySelector('#m15Sair'))"
+      "!window.SoproM15?.hasToken() && " +
+      "Boolean(document.querySelector('#m15LoginForm'))"
     ),
-    "seção de sessão para logout"
-  );
-  await cdp.evaluate("document.querySelector('#m15Sair').click()");
-  await waitFor(
-    () => cdp.evaluate("Boolean(document.querySelector('#m15LoginForm'))"),
     "logout concluído"
   );
 }
 
-async function openReports(cdp, examCode) {
+async function openReports(cdp) {
   await waitFor(
     () => cdp.evaluate(
-      "!document.querySelector(" +
-      "'.sidebar .nav-item[data-section=\"laudos-espirometria\"]'" +
-      ").hidden"
+      `(() => {
+        const entry = document.querySelector(
+          '.sidebar .nav-item[data-section="laudos-espirometria"]'
+        );
+        return Boolean(entry && !entry.hidden);
+      })()`
     ),
-    "entrada de laudos liberada pela feature flag"
+    "entrada de laudos liberada no teste isolado"
   );
   await cdp.evaluate(`document.querySelector(
     '.sidebar .nav-item[data-section="laudos-espirometria"]'
@@ -217,22 +245,10 @@ async function openReports(cdp, examCode) {
     () => cdp.evaluate(
       "document.querySelector('#laudos-espirometria')" +
       "?.classList.contains('active') && " +
-      "Boolean(document.querySelector('#reportExamSearch'))"
+      "Boolean(document.querySelector('#reportWorkflowRoot'))"
     ),
     "workspace de laudos"
   );
-  await waitFor(
-    () => cdp.evaluate(
-      `[...document.querySelectorAll("[data-report-exam]")].some(` +
-      `(button) => button.textContent.includes(${JSON.stringify(examCode)}))`
-    ),
-    `exame ${examCode} na lista`
-  );
-  await cdp.evaluate(`(() => {
-    const button = [...document.querySelectorAll("[data-report-exam]")]
-      .find((item) => item.textContent.includes(${JSON.stringify(examCode)}));
-    button.click();
-  })()`);
 }
 
 async function setFile(cdp, selector, filePath) {
@@ -259,14 +275,11 @@ async function main() {
     throw new Error(`Google Chrome não encontrado: ${CHROME}`);
   }
 
-  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "soprolife-m24a-e2e-"));
-  const dbPath = path.join(temp, "m24a-e2e.db");
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), "soprolife-m24c-e2e-"));
+  const dbPath = path.join(temp, "m24c-e2e.db");
   const reportsPath = path.join(temp, "reports");
-  const downloadsPath = path.join(temp, "downloads");
   const pdfPath = path.join(temp, "TESTE-APAGAR-original.pdf");
-  const profile = path.join(temp, "chrome-profile");
-  fs.mkdirSync(downloadsPath, { mode: 0o700 });
-
+  const chromeProfile = path.join(temp, "chrome-profile");
   const apiPort = await freePort();
   const panelPort = await freePort();
   const chromePort = await freePort();
@@ -277,13 +290,16 @@ async function main() {
     M15_DATABASE_URL: `sqlite:///${dbPath}`,
     M15_API_HOST: "127.0.0.1",
     M15_API_PORT: String(apiPort),
-    M15_AUTH_SECRET: "m24a-browser-e2e-secret-synthetic-only-0123456789",
+    M15_AUTH_SECRET:
+      "m24c-browser-e2e-secret-synthetic-only-0123456789",
     M15_SESSION_COOKIE_PATH: "/painel-soprolife/api/m15",
     M15_REPORTS_STORAGE_DIR: reportsPath,
-    M15_MARKETING_REFRESH_QUEUE: path.join(temp, "marketing-request.json"),
+    M15_MARKETING_REFRESH_QUEUE: path.join(
+      temp, "marketing-request.json"
+    ),
   };
-  // A primeira subida prova o default real; não herda opt-in do shell.
   delete commonEnv.M15_REPORTS_ENABLED;
+  delete commonEnv.M15_REPORTS_TEST_ALLOW_PROVISIONAL_TEMPLATES;
   const alembic = path.join(path.dirname(PYTHON), "alembic");
   const children = [];
   let cdp;
@@ -291,12 +307,15 @@ async function main() {
   try {
     runChecked(
       PYTHON,
-      ["-c",
-        "import sys\nfrom pypdf import PdfWriter\n" +
-        "w=PdfWriter()\nw.add_blank_page(width=595,height=842)\n" +
-        "w.add_blank_page(width=595,height=842)\n" +
-        "with open(sys.argv[1],'wb') as f:w.write(f)",
-        pdfPath],
+      [
+        "-c",
+        "import sys\nfrom pypdf import PdfWriter\n"
+          + "w=PdfWriter()\n"
+          + "w.add_blank_page(width=595,height=842)\n"
+          + "w.add_blank_page(width=595,height=842)\n"
+          + "with open(sys.argv[1],'wb') as f:w.write(f)",
+        pdfPath,
+      ],
       { cwd: M15_DIR, env: commonEnv }
     );
     runChecked(alembic, ["upgrade", "head"], {
@@ -306,8 +325,17 @@ async function main() {
     for (const values of Object.values(USERS)) {
       runChecked(
         PYTHON,
-        ["-m", "app.cli", "criar-usuario", "--email", values[0],
-          "--nome", values[1], "--papel", values[2]],
+        [
+          "-m",
+          "app.cli",
+          "criar-usuario",
+          "--email",
+          values[0],
+          "--nome",
+          values[1],
+          "--papel",
+          values[2],
+        ],
         {
           cwd: M15_DIR,
           env: { ...commonEnv, M15_NOVA_SENHA: PASSWORD },
@@ -327,30 +355,33 @@ async function main() {
         PYTHONDONTWRITEBYTECODE: "1",
         SOPROLIFE_PANEL_HOST: "127.0.0.1",
         SOPROLIFE_PANEL_PORT: String(panelPort),
-        SOPROLIFE_M15_UPSTREAM: `http://127.0.0.1:${apiPort}/api/v1`,
+        SOPROLIFE_M15_UPSTREAM:
+          `http://127.0.0.1:${apiPort}/api/v1`,
       },
     });
     children.push(proxy);
-
     const base = `http://127.0.0.1:${panelPort}/painel-soprolife`;
     await waitFor(async () => {
       const response = await fetch(`${base}/api/m15/health`);
       return response.ok;
     }, "API/proxy local");
 
-    const chrome = spawnLogged(CHROME, [
-      "--headless=new",
-      "--disable-gpu",
-      "--disable-background-networking",
-      "--disable-component-update",
-      "--no-first-run",
-      "--no-default-browser-check",
-      `--remote-debugging-port=${chromePort}`,
-      `--user-data-dir=${profile}`,
-      "about:blank",
-    ], { cwd: ROOT, env: process.env });
+    const chrome = spawnLogged(
+      CHROME,
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--disable-background-networking",
+        "--disable-component-update",
+        "--no-first-run",
+        "--no-default-browser-check",
+        `--remote-debugging-port=${chromePort}`,
+        `--user-data-dir=${chromeProfile}`,
+        "about:blank",
+      ],
+      { cwd: ROOT, env: process.env }
+    );
     children.push(chrome);
-
     await waitFor(async () => {
       const response = await fetch(
         `http://127.0.0.1:${chromePort}/json/version`
@@ -363,7 +394,9 @@ async function main() {
       }`,
       { method: "PUT" }
     );
-    if (!targetResponse.ok) throw new Error("não foi possível criar aba Chrome");
+    if (!targetResponse.ok) {
+      throw new Error("não foi possível criar aba Chrome");
+    }
     const target = await targetResponse.json();
     cdp = await Cdp.connect(target.webSocketDebuggerUrl);
     await Promise.all([
@@ -373,36 +406,37 @@ async function main() {
       cdp.send("DOM.enable"),
       cdp.send("Accessibility.enable"),
     ]);
-    await cdp.send("Page.setDownloadBehavior", {
-      behavior: "allow",
-      downloadPath: downloadsPath,
-    });
 
-    console.log("── Flags M24A: default desligado e opt-in isolado ──");
+    console.log("── Default-off real ──");
     await waitFor(
       () => cdp.evaluate(
-        "document.readyState === 'complete' && Boolean(window.SoproM15) && " +
-        "Boolean(document.querySelector('#m15LoginForm'))"
+        "document.readyState === 'complete' && Boolean(window.SoproM15) && "
+        + "Boolean(document.querySelector('#m15LoginForm'))"
       ),
-      "painel carregado com configuração padrão"
+      "painel padrão"
     );
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    const defaultFlags = await cdp.evaluate(`(async () => {
+    const defaultState = await cdp.evaluate(`(async () => {
       const entries = [...document.querySelectorAll("[data-report-entry]")];
       const response = await fetch("/painel-soprolife/api/m15/laudos");
       const body = await response.json();
       return {
-        entriesHidden: entries.length === 3 && entries.every((entry) => entry.hidden),
-        apiStatus: response.status,
-        apiCode: body?.erro?.codigo
+        entries: entries.length,
+        hidden: entries.every((entry) => entry.hidden),
+        status: response.status,
+        code: body?.erro?.codigo,
       };
     })()`);
-    check("menu e workspace M24A ficam ocultos no frontend padrão",
-      defaultFlags.entriesHidden, JSON.stringify(defaultFlags));
-    check("backend M24A padrão recusa uso operacional antes da autenticação",
-      defaultFlags.apiStatus === 503 &&
-      defaultFlags.apiCode === "relatorios_desabilitados",
-      JSON.stringify(defaultFlags));
+    check(
+      "as três entradas de laudos ficam ocultas por padrão",
+      defaultState.entries === 3 && defaultState.hidden,
+      JSON.stringify(defaultState)
+    );
+    check(
+      "backend padrão recusa laudos antes da autenticação",
+      defaultState.status === 503
+        && defaultState.code === "relatorios_desabilitados",
+      JSON.stringify(defaultState)
+    );
 
     stop(defaultApi);
     await new Promise((resolve) => {
@@ -416,34 +450,51 @@ async function main() {
     children.push(enabledApi);
     await waitFor(async () => {
       try {
-        const response = await fetch(`${base}/api/m15/health`);
-        return response.ok;
+        return (await fetch(`${base}/api/m15/health`)).ok;
       } catch (error) {
         return false;
       }
-    }, "API reiniciada com flag backend explícita");
-
+    }, "API reiniciada com habilitação isolada");
     await cdp.evaluate(
       'localStorage.setItem("soproM24AReports", "on"); location.reload()'
     );
     await waitFor(
       () => cdp.evaluate(
-        "Boolean(window.SoproM15) && " +
-        "!document.querySelector(" +
-        "'.sidebar .nav-item[data-section=\"laudos-espirometria\"]'" +
-        ").hidden && Boolean(document.querySelector('#m15LoginForm'))"
+        "Boolean(window.SoproM15) && "
+        + "!document.querySelector("
+        + "'.sidebar .nav-item[data-section=\"laudos-espirometria\"]'"
+        + ").hidden && Boolean(document.querySelector('#m15LoginForm'))"
       ),
-      "opt-in frontend exclusivo do E2E"
+      "opt-in frontend somente em loopback"
     );
 
-    console.log("── Preparação sintética pela API autenticada ──");
+    console.log("── Administração sintética ──");
     await login(cdp, USERS.admin[0]);
     const seeded = await cdp.evaluate(`(async () => {
+      const accounts = await window.SoproM15.api("/laudos/admin/medicos");
+      const doctor = accounts.find(
+        (item) => item.user.email === ${JSON.stringify(USERS.medico[0])}
+      );
+      const configured = await window.SoproM15.api(
+        "/laudos/admin/medicos/" + doctor.user.id,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            grant_physician_role: true,
+            professional_name: "TESTE APAGAR Profissional Browser",
+            crm_number: "990001",
+            crm_state: "AC",
+            rqe: "RQE-TESTE-001",
+            verification_status: "verified",
+            active: true,
+          }),
+        }
+      );
       const person = await window.SoproM15.api("/pessoas", {
         method: "POST",
         body: JSON.stringify({
-          nome_completo: "TESTE - APAGAR - Pessoa Browser M24A 001"
-        })
+          nome_completo: "TESTE APAGAR Pessoa Browser M24C",
+        }),
       });
       const attendance = await window.SoproM15.api("/atendimentos", {
         method: "POST",
@@ -453,329 +504,305 @@ async function main() {
           espirometria: {
             data_exame: "2026-07-22",
             status: "Realizado",
-            modalidade: "cowork"
+            modalidade: "cowork",
           },
-          idempotency_key: "m24a-browser-synthetic-attendance"
-        })
+          idempotency_key: "m24c-browser-synthetic-attendance",
+        }),
       });
       const template = await window.SoproM15.api("/laudos/templates", {
         method: "POST",
         body: JSON.stringify({
-          codigo: "TST-UI",
+          codigo: "TESTE_BROWSER_M24C",
           titulo: "TESTE - APAGAR",
-          texto_tooltip: "Ajuda curta sintética",
+          texto_tooltip: "Ajuda sintética do E2E",
           texto_completo:
-            "TESTE - APAGAR: conteúdo sintético sem interpretação clínica.",
-          ativo: true
-        })
+            "TESTE - APAGAR: texto controlado sintético sem validade clínica.",
+          ativo: true,
+          status: "approved",
+          clinically_approved: true,
+        }),
       });
+      const adminCatalog = await window.SoproM15.api(
+        "/laudos/templates?catalog=admin"
+      );
       return {
+        profileId: configured.profile.id,
         examCode: attendance.espirometria.public_code,
-        examId: attendance.espirometria.id,
-        templateCode: template.codigo
+        templateCode: template.codigo,
+        provisionalCount: adminCatalog.filter(
+          (item) => item.codigo.endsWith("_PROVISORIO")
+        ).length,
+        provisionalUnsafe: adminCatalog.some(
+          (item) => item.codigo.endsWith("_PROVISORIO")
+            && (item.status !== "draft" || item.clinically_approved)
+        ),
       };
     })()`);
-    check("exame sintético criado com código institucional",
-      /^ESP-\d+$/.test(seeded.examCode), JSON.stringify(seeded));
-    check("template sintético administrável criado",
-      seeded.templateCode === "TST-UI");
+    check(
+      "perfil médico sintético ativo/verificado foi configurado",
+      Boolean(seeded.profileId)
+    );
+    check(
+      "exame sintético possui código institucional",
+      /^ESP-\d+$/.test(seeded.examCode),
+      JSON.stringify(seeded)
+    );
+    check(
+      "seis templates provisórios permanecem draft e não aprovados",
+      seeded.provisionalCount === 6 && !seeded.provisionalUnsafe
+    );
     await logout(cdp);
 
-    console.log("── Operacional: seleção, upload, preview e revisão ──");
+    console.log("── Operacional: localização, origem e atribuição ──");
     await login(cdp, USERS.operacional[0]);
-    await openReports(cdp, seeded.examCode);
+    await openReports(cdp);
     await waitFor(
-      () => cdp.evaluate("Boolean(document.querySelector('#reportUploadForm'))"),
-      "formulário de upload operacional"
+      () => cdp.evaluate(
+        "Boolean(document.querySelector('#reportLocateExamForm'))"
+      ),
+      "formulário operacional"
     );
-    check("consulta não exibe identificador da pessoa",
-      !(await cdp.evaluate(
-        "document.querySelector('#reportWorkflowRoot').textContent" +
-        ".includes('TESTE - APAGAR - Pessoa')"
-      )));
-
+    await cdp.evaluate(`(() => {
+      const form = document.querySelector("#reportLocateExamForm");
+      form.elements.exam_code.value = ${JSON.stringify(seeded.examCode)};
+      form.requestSubmit();
+    })()`);
+    await waitFor(
+      () => cdp.evaluate(
+        "Boolean(document.querySelector('#reportUploadForm'))"
+      ),
+      "exame localizado sem busca por paciente"
+    );
+    const operationalBefore = await cdp.evaluate(
+      "document.querySelector('#reportWorkflowRoot').textContent"
+    );
+    check(
+      "localização operacional não mostra identidade do paciente",
+      !operationalBefore.includes("TESTE APAGAR Pessoa Browser")
+    );
+    await cdp.evaluate(`(() => {
+      const form = document.querySelector("#reportUploadForm");
+      form.elements.physician_profile_id.value = ${
+        JSON.stringify(seeded.profileId)
+      };
+      form.elements.origin_type.value = "coworking";
+      form.elements.origin_label.value = "unidade-browser-teste";
+    })()`);
     await setFile(cdp, "#reportPdfFile", pdfPath);
     await cdp.evaluate(
       "document.querySelector('#reportUploadForm').requestSubmit()"
     );
     await waitFor(
       () => cdp.evaluate(
-        "document.querySelector('#reportPdfFrame')?.src.startsWith('blob:') && " +
-        "document.querySelectorAll('.report-version-row').length === 1"
+        "Boolean(document.querySelector('[data-report-operational]'))"
       ),
-      "upload e preview autenticado do original"
+      "upload e atribuição operacional"
     );
-    const preview = await cdp.evaluate(`(() => {
-      const frame = document.querySelector("#reportPdfFrame");
-      const text = document.querySelector("#reportWorkflowRoot").textContent;
+    const operational = await cdp.evaluate(`(() => {
+      const root = document.querySelector("#reportWorkflowRoot");
+      const row = document.querySelector("[data-report-operational]");
       return {
-        src: frame.src,
-        title: frame.title,
-        referrerPolicy: frame.referrerPolicy,
-        text,
-        originalNameVisible: text.includes("TESTE-APAGAR-original.pdf"),
-        endpointAsSrc: frame.src.includes("/api/m15/") ||
-          frame.src.includes("/versoes/")
+        documentId: row?.getAttribute("data-report-operational"),
+        text: root.textContent,
+        hasEditor: Boolean(document.querySelector("#reportInterpretation")),
       };
     })()`);
-    check("iframe usa somente object URL temporária",
-      preview.src.startsWith("blob:") && !preview.endpointAsSrc);
-    check("iframe autenticado tem nome e referrer policy",
-      preview.title.includes(seeded.examCode) &&
-      preview.referrerPolicy === "no-referrer");
-    check("metadados não exibem nome original nem caminho",
-      !preview.originalNameVisible &&
-      !preview.text.includes("storage_path") &&
-      !preview.text.includes(reportsPath));
+    check(
+      "acompanhamento mostra código/status sem interpretação ou paciente",
+      Boolean(operational.documentId)
+        && operational.text.includes(seeded.examCode)
+        && !operational.text.includes("TESTE APAGAR Pessoa Browser")
+        && !operational.text.includes("texto controlado sintético")
+        && !operational.hasEditor
+    );
+    const operationalDenied = await cdp.evaluate(`(async () => {
+      try {
+        await window.SoproM15.api(
+          "/laudos/" + ${JSON.stringify(operational.documentId)}
+            + "/preparar-assinatura",
+          { method: "POST" }
+        );
+        return 200;
+      } catch (error) {
+        return error.status;
+      }
+    })()`);
+    check(
+      "operacional não prepara assinatura nem edita clínica",
+      operationalDenied === 403
+    );
+    await logout(cdp);
 
-    const templateUi = await cdp.evaluate(`(() => {
-      const card = document.querySelector(".report-template-card");
-      const details = card && card.querySelector("details");
-      if (details) details.open = true;
+    console.log("── Médico: fila restrita, prévia e assinatura pendente ──");
+    await login(cdp, USERS.medico[0]);
+    await openReports(cdp);
+    await waitFor(
+      () => cdp.evaluate(
+        "Boolean(document.querySelector('[data-report-open]'))"
+      ),
+      "Meus laudos do médico"
+    );
+    const restrictedQueue = await cdp.evaluate(`(() => {
+      const rootText = document.querySelector("#reportWorkflowRoot").textContent;
+      const hiddenOtherNavigation = [
+        ...document.querySelectorAll(
+          '.sidebar .nav-item:not([data-section="laudos-espirometria"])'
+        ),
+      ].every((item) => getComputedStyle(item).display === "none");
       return {
-        abbreviation: card?.querySelector("abbr")?.textContent.trim(),
-        tooltip: card?.querySelector("abbr")?.title,
-        summary: card?.querySelector("summary")?.textContent.trim(),
-        full: card?.querySelector(".report-template-full-text")?.textContent.trim()
+        rootText,
+        hiddenOtherNavigation,
+        physicianOnly: document.body.classList.contains(
+          "report-physician-only"
+        ),
       };
     })()`);
-    check("abreviação expõe tooltip acessível",
-      templateUi.abbreviation === "TST-UI" &&
-      templateUi.tooltip === "Ajuda curta sintética");
-    check("área de ajuda expõe o texto completo",
-      templateUi.summary === "Texto completo do modelo TST-UI" &&
-      templateUi.full.includes("conteúdo sintético"));
+    check(
+      "fila médica contém somente códigos/origem/status",
+      restrictedQueue.rootText.includes("Meus laudos")
+        && restrictedQueue.rootText.includes(seeded.examCode)
+        && !restrictedQueue.rootText.includes(
+          "TESTE APAGAR Pessoa Browser"
+        )
+    );
+    check(
+      "conta exclusivamente médica não navega pelas áreas gerais",
+      restrictedQueue.physicianOnly
+        && restrictedQueue.hiddenOtherNavigation
+    );
+    const peopleDenied = await cdp.evaluate(`(async () => {
+      const response = await fetch(
+        "/painel-soprolife/api/m15/pessoas",
+        { credentials: "same-origin" }
+      );
+      return response.status;
+    })()`);
+    check("API geral recusa papel médico isolado", peopleDenied === 403);
+
+    await cdp.evaluate(
+      "document.querySelector('[data-report-open]').click()"
+    );
+    await waitFor(
+      () => cdp.evaluate(
+        "document.querySelector('#reportPdfOriginal')?.src.startsWith('blob:')"
+        + " && Boolean(document.querySelector('#reportComposeForm'))"
+      ),
+      "detalhe e PDF original autenticado"
+    );
+    const opened = await cdp.evaluate(`(() => {
+      const root = document.querySelector("#reportWorkflowRoot");
+      const original = document.querySelector("#reportPdfOriginal");
+      const approved = [...document.querySelectorAll(
+        ".report-template-card abbr"
+      )].map((item) => item.textContent.trim());
+      return {
+        text: root.textContent,
+        src: original?.src,
+        title: original?.title,
+        referrerPolicy: original?.referrerPolicy,
+        approved,
+      };
+    })()`);
+    check(
+      "identidade necessária aparece somente após abrir o atribuído",
+      opened.text.includes("TESTE APAGAR Pessoa Browser")
+    );
+    check(
+      "viewer usa Blob autenticado e política sem referrer",
+      opened.src.startsWith("blob:")
+        && opened.title.includes("PDF original")
+        && opened.referrerPolicy === "no-referrer"
+        && !opened.src.includes("/api/m15/")
+    );
+    check(
+      "seletor clínico mostra só template aprovado",
+      opened.approved.length === 1
+        && opened.approved[0] === seeded.templateCode
+        && !opened.text.includes("NORMAL_PROVISORIO")
+    );
 
     await cdp.evaluate(`(() => {
+      const input = [...document.querySelectorAll(
+        'input[name="template_id"]'
+      )].find((item) => item.value);
+      input.click();
+    })()`);
+    await waitFor(
+      () => cdp.evaluate(
+        "document.querySelector('#reportInterpretation')?.value.includes("
+        + "'texto controlado sintético')"
+      ),
+      "template preenche editor controlado"
+    );
+    await cdp.evaluate(`(() => {
       const form = document.querySelector("#reportComposeForm");
+      const editor = form.elements.interpretation_text;
+      editor.value =
+        "TESTE - APAGAR: edição médica sintética sem validade clínica.";
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
       form.elements.page_number.value = "2";
       form.elements.placement.value = "topo";
       form.requestSubmit();
     })()`);
     await waitFor(
       () => cdp.evaluate(
-        "document.querySelectorAll('.report-version-row').length === 2 && " +
-        "document.querySelector('#reportPdfFrame')?.src.startsWith('blob:') && " +
-        "document.querySelector('#reportWorkflowRoot').textContent" +
-        ".includes('Prévia de rascunho')"
+        "document.querySelector('#reportPdfOriginal')?.src.startsWith('blob:')"
+        + " && document.querySelector('#reportPdfGenerated')"
+        + "?.src.startsWith('blob:')"
+        + " && Boolean(document.querySelector("
+        + "'.report-em_elaboracao'))"
+        + " && Boolean(document.querySelector("
+        + "'[data-report-prepare-signature]'))"
       ),
-      "composição e preview do rascunho"
+      "prévia clínica comparável"
     );
-    check("página e topo retornam nos metadados",
-      await cdp.evaluate(
-        "document.querySelector('.report-metadata').textContent" +
-        ".includes('página 2 · Topo da página')"
-      ));
-
-    await cdp.evaluate(`(() => {
-      const button = document.querySelector("[data-report-review]");
-      button.focus();
-      button.click();
-    })()`);
-    const dialog = await cdp.evaluate(`(() => {
-      const modal = document.querySelector('[role="dialog"]');
-      return {
-        exists: Boolean(modal),
-        ariaModal: modal?.getAttribute("aria-modal"),
-        labelled: Boolean(modal?.getAttribute("aria-labelledby")),
-        described: Boolean(modal?.getAttribute("aria-describedby")),
-        focusIsConfirm: document.activeElement?.hasAttribute(
-          "data-report-modal-confirm"
-        )
+    const preview = await cdp.evaluate(`(async () => {
+      const documentId = ${
+        JSON.stringify(operational.documentId)
       };
-    })()`);
-    check("confirmação é diálogo modal nomeado e descrito",
-      dialog.exists && dialog.ariaModal === "true" &&
-      dialog.labelled && dialog.described);
-    check("foco inicial está na ação explícita", dialog.focusIsConfirm);
-    await cdp.evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", {
-      key: "Escape", bubbles: true
-    }))`);
-    check("Escape fecha e devolve foco ao botão de revisão",
-      await waitFor(
-        () => cdp.evaluate(
-          "!document.querySelector('[role=\"dialog\"]') && " +
-          "document.activeElement?.hasAttribute('data-report-review')"
-        ),
-        "fechamento do diálogo por Escape"
-      ));
-
-    await cdp.evaluate(
-      "document.querySelector('[data-report-review]').click()"
-    );
-    await cdp.evaluate(
-      "document.querySelector('[data-report-modal-confirm]').click()"
-    );
-    await waitFor(
-      () => cdp.evaluate(
-        "document.querySelector('.report-em_revisao')?.textContent" +
-        ".includes('Em revisão clínica') && " +
-        "!document.querySelector('[role=\"dialog\"]')"
-      ),
-      "submissão para revisão"
-    );
-    check("operacional não recebe ação de finalizar",
-      !(await cdp.evaluate(
-        "Boolean(document.querySelector('[data-report-finalize]'))"
-      )));
-    check("composição desaparece durante revisão",
-      !(await cdp.evaluate(
-        "Boolean(document.querySelector('#reportComposeForm'))"
-      )));
-    await logout(cdp);
-
-    console.log("── Gestor: finalização, download e correção imutável ──");
-    await login(cdp, USERS.gestor[0]);
-    await openReports(cdp, seeded.examCode);
-    await waitFor(
-      () => cdp.evaluate(
-        "Boolean(document.querySelector('[data-report-finalize]:not(:disabled)'))"
-      ),
-      "ação privilegiada de finalização habilitada para gestor"
-    );
-    check("gestor vê finalização somente em revisão",
-      await cdp.evaluate(
-        "document.querySelector('.report-em_revisao')?.textContent" +
-        ".includes('Em revisão clínica')"
-      ));
-
-    await cdp.evaluate(
-      "document.querySelector('[data-report-finalize]').click()"
-    );
-    await cdp.evaluate(
-      "document.querySelector('[data-report-modal-confirm]').click()"
-    );
-    await waitFor(
-      () => cdp.evaluate(
-        "document.querySelector('.report-signature-pending strong')" +
-        "?.textContent.trim() === 'assinatura digital pendente' && " +
-        "!document.querySelector('[role=\"dialog\"]')"
-      ),
-      "finalização com assinatura pendente"
-    );
-    const finalUi = await cdp.evaluate(`(() => {
-      const text = document.querySelector("#reportWorkflowRoot").textContent;
-      return {
-        hasCompose: Boolean(document.querySelector("#reportComposeForm")),
-        hasFinalize: Boolean(document.querySelector("[data-report-finalize]")),
-        hasCorrective: Boolean(document.querySelector("[data-report-corrective]")),
-        honestSignature: text.includes("Nenhum provedor ICP-Brasil real") &&
-          text.includes("não afirma que o PDF esteja assinado")
-      };
-    })()`);
-    check("finalizado não pode ser recomposto ou refinalizado",
-      !finalUi.hasCompose && !finalUi.hasFinalize);
-    check("mensagem de assinatura não faz alegação falsa",
-      finalUi.honestSignature);
-    check("fluxo corretivo está disponível sem mutar o finalizado",
-      finalUi.hasCorrective);
-
-    const finalDocumentId = await cdp.evaluate(
-      "document.querySelector('[data-report-document][aria-pressed=\"true\"]')" +
-      ".getAttribute('data-report-document')"
-    );
-    await cdp.evaluate(`(async () => {
-      window.__m24FinalBefore = await window.SoproM15.api(
-        ${JSON.stringify(`/laudos/${finalDocumentId}`)}
-      );
-      return true;
-    })()`);
-
-    await cdp.evaluate(`(() => {
-      const row = [...document.querySelectorAll(".report-version-row")]
-        .find((item) => item.textContent.includes("Versão finalizada"));
-      row.querySelector("[data-report-download]").click();
-    })()`);
-    const downloadedName = await waitFor(() => {
-      const files = fs.readdirSync(downloadsPath)
-        .filter((name) => name.endsWith(".pdf") && !name.endsWith(".crdownload"));
-      return files[0] || "";
-    }, "download PDF pelo Blob");
-    const downloaded = fs.readFileSync(path.join(downloadsPath, downloadedName));
-    check("download usa nome técnico seguro",
-      downloadedName === `laudo-${seeded.examCode}-v3-finalizado.pdf`,
-      downloadedName);
-    check("download real contém PDF e fica fora do repositório",
-      downloaded.subarray(0, 5).toString() === "%PDF-" &&
-      path.dirname(path.join(downloadsPath, downloadedName)) === downloadsPath);
-
-    await cdp.evaluate(
-      "document.querySelector('[data-report-corrective]').click()"
-    );
-    await cdp.evaluate(
-      "document.querySelector('[data-report-modal-confirm]').click()"
-    );
-    await waitFor(
-      () => cdp.evaluate(
-        "document.querySelectorAll('[data-report-document]').length === 2 && " +
-        "document.querySelector('.report-rascunho')?.textContent" +
-        ".includes('Rascunho') && !document.querySelector('[role=\"dialog\"]')"
-      ),
-      "novo documento corretivo"
-    );
-    const corrective = await cdp.evaluate(`(async () => {
-      const selected = document.querySelector(
-        '[data-report-document][aria-pressed="true"]'
-      ).getAttribute("data-report-document");
-      const oldDocument = await window.SoproM15.api(
-        ${JSON.stringify(`/laudos/${finalDocumentId}`)}
-      );
-      const newDocument = await window.SoproM15.api("/laudos/" + selected);
-      const before = window.__m24FinalBefore;
-      const oldCurrent = oldDocument.versoes.find(
-        (version) => version.id === oldDocument.current_version_id
-      );
-      const beforeCurrent = before.versoes.find(
-        (version) => version.id === before.current_version_id
+      const detail = await window.SoproM15.api("/laudos/" + documentId);
+      const current = detail.versoes.find(
+        (item) => item.id === detail.current_version_id
       );
       return {
-        selected,
-        newStatus: newDocument.status,
-        oldStatus: oldDocument.status,
-        supersededBy: oldDocument.superseded_by_id,
-        finalizedAtSame: oldDocument.finalized_at === before.finalized_at,
-        versionSame: oldDocument.current_version_id === before.current_version_id,
-        hashSame: oldCurrent.sha256 === beforeCurrent.sha256,
-        sizeSame: oldCurrent.size_bytes === beforeCurrent.size_bytes
+        status: detail.status,
+        kind: current.kind,
+        page: current.page_number,
+        placement: current.placement,
+        author: current.physician_name_snapshot,
+        crmState: current.physician_crm_state_snapshot,
+        origin: current.origin_type_snapshot,
+        interpretation: current.interpretation_text_snapshot,
+        footer: current.footer_text_snapshot,
+        originalSrc: document.querySelector("#reportPdfOriginal")?.src,
+        generatedSrc: document.querySelector("#reportPdfGenerated")?.src,
       };
     })()`);
-    check("corretiva nasce como outro rascunho",
-      corrective.newStatus === "rascunho" &&
-      corrective.selected !== finalDocumentId);
-    check("finalizado mantém estado, marco, versão, hash e tamanho",
-      corrective.oldStatus === "finalizado" &&
-      corrective.supersededBy === corrective.selected &&
-      corrective.finalizedAtSame && corrective.versionSame &&
-      corrective.hashSame && corrective.sizeSame,
-      JSON.stringify(corrective));
-
-    await cdp.evaluate(`document.querySelector(
-      '[data-report-document="${finalDocumentId}"]'
-    ).click()`);
-    await waitFor(
-      () => cdp.evaluate(
-        "Boolean(document.querySelector('.report-immutable-note'))"
-      ),
-      "aviso de imutabilidade no documento sucedido"
+    check(
+      "prévia congela médico, origem, página e interpretação",
+      preview.status === "em_elaboracao"
+        && preview.kind === "rascunho"
+        && preview.page === 2
+        && preview.placement === "topo"
+        && preview.author === "TESTE APAGAR Profissional Browser"
+        && preview.crmState === "AC"
+        && preview.origin === "coworking"
+        && preview.interpretation.includes("edição médica sintética")
     );
-    check("documento sucedido não oferece mutação",
-      await cdp.evaluate(
-        "!document.querySelector('#reportComposeForm') && " +
-        "!document.querySelector('[data-report-finalize]') && " +
-        "!document.querySelector('[data-report-corrective]')"
-      ));
-    await cdp.evaluate(`document.querySelector(
-      '[data-report-document="${corrective.selected}"]'
-    ).click()`);
-    await waitFor(
-      () => cdp.evaluate(
-        "Boolean(document.querySelector('#reportComposeForm')) && " +
-        "document.querySelector('#reportPdfFrame')?.src.startsWith('blob:')"
-      ),
-      "rascunho corretivo reaberto"
+    check(
+      "rodapé da prévia declara documento TESTE não assinado",
+      preview.footer.includes(
+        "MODELO DE TESTE — DOCUMENTO NÃO ASSINADO E SEM VALIDADE PARA LIBERAÇÃO"
+      )
+    );
+    check(
+      "comparação mantém dois object URLs distintos",
+      preview.originalSrc.startsWith("blob:")
+        && preview.generatedSrc.startsWith("blob:")
+        && preview.originalSrc !== preview.generatedSrc
     );
 
-    console.log("── Responsividade e árvore de acessibilidade ──");
+    console.log("── Responsividade e acessibilidade ──");
     for (const width of [1440, 1000, 800, 420]) {
       await cdp.send("Emulation.setDeviceMetricsOverride", {
         width,
@@ -791,54 +818,137 @@ async function main() {
           body: document.body.scrollWidth,
           root: document.documentElement.scrollWidth,
           workflowClient: workflow.clientWidth,
-          workflowScroll: workflow.scrollWidth
+          workflowScroll: workflow.scrollWidth,
         };
       })()`);
-      check(`viewport ${width}px sem overflow horizontal`,
-        metrics.body <= metrics.inner &&
-        metrics.root <= metrics.inner &&
-        metrics.workflowScroll <= metrics.workflowClient,
-        JSON.stringify(metrics));
+      check(
+        `viewport ${width}px sem overflow horizontal`,
+        metrics.body <= metrics.inner
+          && metrics.root <= metrics.inner
+          && metrics.workflowScroll <= metrics.workflowClient,
+        JSON.stringify(metrics)
+      );
     }
     await cdp.send("Emulation.setDeviceMetricsOverride", {
-      width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false,
+      width: 1440,
+      height: 1000,
+      deviceScaleFactor: 1,
+      mobile: false,
     });
-    await cdp.evaluate(
-      "document.querySelector('.report-template-card details').open = true"
-    );
     const ax = (await cdp.send("Accessibility.getFullAXTree")).nodes || [];
-    const axNames = new Set(
-      ax.map((node) => node.name && node.name.value).filter(Boolean)
-    );
-    for (const name of [
-      "Laudos de espirometria",
-      "Código institucional do exame",
-      "Abreviações disponíveis",
-      "Texto completo do modelo TST-UI",
+    const axNames = ax
+      .map((node) => node.name && node.name.value)
+      .filter(Boolean)
+      .map(String);
+    for (const expected of [
+      "Meus laudos",
+      "Interpretação clínica",
       "Página de destino",
       "Posição do bloco",
+      "Marcar conteúdo pronto para assinatura",
     ]) {
-      check(`árvore acessível nomeia: ${name}`, axNames.has(name));
+      check(
+        `árvore acessível nomeia ${expected}`,
+        axNames.some((name) => name.includes(expected))
+      );
     }
-    check("árvore acessível nomeia a visualização autenticada",
-      [...axNames].some((name) =>
-        String(name).includes("Visualização autenticada do PDF")
-      ));
-    check("nenhuma exceção JavaScript não tratada no fluxo",
-      cdp.exceptions.length === 0, String(cdp.exceptions.length));
+    check(
+      "árvore acessível nomeia os dois viewers",
+      axNames.some((name) => name.includes("PDF original"))
+        && axNames.some((name) => name.includes("PDF gerado"))
+    );
+
+    console.log("── Preparação fail-closed ──");
+    await cdp.evaluate(
+      "document.querySelector('[data-report-prepare-signature]').click()"
+    );
+    await waitFor(
+      () => cdp.evaluate(
+        "Boolean(document.querySelector('.report-assinatura_pendente'))"
+        + " && document.querySelector('.report-signature-panel')"
+        + "?.textContent.includes('assinatura qualificada pendente')"
+      ),
+      "assinatura pendente"
+    );
+    const pending = await cdp.evaluate(`(async () => {
+      const documentId = ${JSON.stringify(operational.documentId)};
+      const detail = await window.SoproM15.api("/laudos/" + documentId);
+      const signature = await window.SoproM15.api(
+        "/laudos/" + documentId + "/assinatura"
+      );
+      const current = detail.versoes.find(
+        (item) => item.id === detail.current_version_id
+      );
+      let correctionStatus = 200;
+      let correctionCode = "";
+      try {
+        await window.SoproM15.api(
+          "/laudos/" + documentId + "/nova-versao-corretiva",
+          {
+            method: "POST",
+            body: JSON.stringify({ reason_code: "clinical_correction" }),
+          }
+        );
+      } catch (error) {
+        correctionStatus = error.status;
+        correctionCode = error.code;
+      }
+      return {
+        status: detail.status,
+        signatureStatus: detail.signature_status,
+        releasable: detail.releasable,
+        kind: current.kind,
+        provider: signature.provider,
+        providerStatus: signature.status,
+        providerReleasable: signature.releasable,
+        correctionStatus,
+        correctionCode,
+        text: document.querySelector("#reportWorkflowRoot").textContent,
+        hasCompose: Boolean(document.querySelector("#reportComposeForm")),
+      };
+    })()`);
+    check(
+      "runtime termina somente em assinatura_pendente/unconfigured",
+      pending.status === "assinatura_pendente"
+        && pending.signatureStatus === "assinatura_pendente"
+        && pending.kind === "assinatura_pendente"
+        && pending.provider === "unconfigured"
+        && pending.providerStatus === "assinatura_pendente"
+    );
+    check(
+      "documento não é assinado nem liberável",
+      pending.releasable === false
+        && pending.providerReleasable === false
+        && !pending.text.includes("assinado digitalmente")
+        && pending.text.includes(
+          "Nenhum documento deste fluxo é assinado ou liberado"
+        )
+        && !pending.hasCompose
+    );
+    check(
+      "correção recusa predecessor não assinado",
+      pending.correctionStatus === 409
+        && pending.correctionCode === "laudo_nao_assinado"
+    );
+    check(
+      "nenhuma exceção JavaScript não tratada ocorreu",
+      cdp.exceptions.length === 0,
+      String(cdp.exceptions.length)
+    );
 
     if (failures) {
-      children.forEach((proc) => {
-        const log = proc.getLog();
+      children.forEach((processHandle) => {
+        const log = processHandle.getLog();
         if (log) {
           console.error(
-            `── log sintético ${path.basename(proc.spawnfile)} ──\n${log}`
+            `── log sintético ${path.basename(processHandle.spawnfile)} ──\n`
+            + log
           );
         }
       });
-      throw new Error(`${failures} falha(s) de browser/E2E M24A`);
+      throw new Error(`${failures} falha(s) de browser/E2E M24C`);
     }
-    console.log("RESULTADO: todos os casos passaram.");
+    console.log("RESULTADO: todos os casos M24C passaram.");
   } finally {
     if (cdp) cdp.close();
     children.reverse().forEach(stop);

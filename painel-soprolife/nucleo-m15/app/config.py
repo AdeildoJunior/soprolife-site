@@ -75,6 +75,10 @@ class Settings(BaseSettings):
     # laudo de espirometria com imagens de curva sem abrir espaço para
     # abuso de armazenamento.
     reports_max_upload_bytes: int = 25 * 1024 * 1024
+    # Exclusivo para fixtures sintéticas em desenvolvimento. O runtime
+    # normal nunca permite selecionar templates provisórios. Em produção o
+    # validador abaixo recusa até mesmo a tentativa de ligar esta chave.
+    reports_test_allow_provisional_templates: bool = False
 
     @field_validator("token_ttl_minutes")
     @classmethod
@@ -168,6 +172,10 @@ class Settings(BaseSettings):
             # M21 — em produção o cookie de sessão é SEMPRE Secure. Não há
             # variável de ambiente capaz de desligar isso.
             object.__setattr__(self, "session_cookie_secure", True)
+            if self.reports_test_allow_provisional_templates:
+                raise ValueError(
+                    "M15_REPORTS_TEST_ALLOW_PROVISIONAL_TEMPLATES é proibido em prod."
+                )
         return self
 
     def resolved_auth_secret(self) -> str:

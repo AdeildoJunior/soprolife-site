@@ -2,7 +2,7 @@
 
 import pathlib
 
-from sqlalchemy import MetaData, create_engine, event
+from sqlalchemy import MetaData, create_engine, event, inspect
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import get_settings
@@ -20,6 +20,55 @@ NAMING_CONVENTION = {
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+
+@event.listens_for(Session, "before_flush")
+def _protect_m24c_immutable_evidence(session, _flush_context, _instances):
+    """Defesa ORM para SQLite/dev e para qualquer escrita fora da API.
+
+    PostgreSQL recebe a mesma proteção por triggers na migration M24C. A
+    importação local usa ``Base.metadata.create_all`` e, portanto, precisa
+    desta camada para não ter semântica mais fraca que produção.
+    """
+
+    from .models import (
+        ReportAssignment,
+        ReportAssignmentEvent,
+        ReportDocumentVersion,
+        ReportFooterTemplate,
+        ReportTemplate,
+    )
+
+    immutable_types = (
+        ReportAssignmentEvent,
+        ReportDocumentVersion,
+        ReportFooterTemplate,
+        ReportTemplate,
+    )
+    for obj in session.deleted:
+        if isinstance(obj, (*immutable_types, ReportAssignment)):
+            raise ValueError("Evidência clínica append-only não pode ser removida.")
+    for obj in session.dirty:
+        if isinstance(obj, immutable_types) and inspect(obj).persistent:
+            raise ValueError("Evidência clínica imutável não pode ser alterada.")
+        if isinstance(obj, ReportAssignment) and inspect(obj).persistent:
+            state = inspect(obj)
+            changed = {
+                attr.key
+                for attr in state.attrs
+                if attr.history.has_changes()
+            }
+            if not changed.issubset({"active", "ended_at"}):
+                raise ValueError("Atribuição histórica não pode ser reescrita.")
+            active_history = state.attrs.active.history
+            if (
+                "active" in changed
+                and not (
+                    active_history.deleted == [True]
+                    and active_history.added == [False]
+                )
+            ):
+                raise ValueError("Atribuição só pode transicionar de ativa para encerrada.")
 
 
 def _ensure_sqlite_dir(url: str) -> None:

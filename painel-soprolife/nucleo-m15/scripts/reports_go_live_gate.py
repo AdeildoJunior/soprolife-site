@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Independent, fail-closed reports go-live gate (M24B).
+"""Independent, fail-closed reports go-live gate (M24B/M24C).
 
 This contract is deliberately separate from the general M15 gate.  It never
 creates a directory, changes a unit, writes configuration, or enables reports.
+M24C also keeps an unconditional production blocker while legal footer text
+and a qualified signature provider remain unapproved/unconfigured.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ REPORTS_WORKFLOW_MARKERS = (
     'id="laudos-espirometria"',
     "report-workflow.js",
 )
+M24C_PRODUCTION_BLOCKER = "m24c_signature_and_legal_approval_missing"
 
 
 class ReportsGateError(RuntimeError):
@@ -274,7 +277,10 @@ def check_preflight(
         expected_enabled=None,
         http_get=http_get,
     )
-    return ReportsGateResult(enabled=True, storage_root=storage_root)
+    # M24C deliberately has no production signing success path and only a
+    # TEST footer. A later, separately authorized milestone must replace this
+    # blocker after legal wording and a qualified provider are approved.
+    raise ReportsGateError(M24C_PRODUCTION_BLOCKER)
 
 
 def _service_ids() -> tuple[int, int]:
@@ -320,10 +326,7 @@ def main(argv: list[str]) -> int:
                 os.environ.get("M15_REPORTS_ENABLED")
             )
             if expected:
-                base_url = os.environ.get("SOPROLIFE_M15_HTTPS_BASE_URL")
-                if not base_url:
-                    raise ReportsGateError("reports_https_base_url_missing")
-                check_https_workspace(base_url, expected_enabled=True)
+                raise ReportsGateError(M24C_PRODUCTION_BLOCKER)
             print("true" if expected else "false")
     except (ReportsGateError, OSError, ValueError) as exc:
         print(

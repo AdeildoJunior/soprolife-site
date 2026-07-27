@@ -4,6 +4,12 @@ Este runbook cobre somente configuração e governança do armazenamento de
 laudos. Ele não autoriza implantação, acesso à VPS, uso de dados reais,
 definição de conteúdo clínico ou contratação de assinatura digital.
 
+M24C preserva integralmente estas proteções de arquivo e substitui o RBAC e
+o ciclo clínico provisórios descritos originalmente por M24A. Para papel
+`medico`, perfil profissional, atribuição, fila, composição e assinatura
+fail-closed, o contrato vigente é
+`m24c-medical-assignment-workflow.md`.
+
 ## Feature flag independente
 
 M24A permanece desligado nesta entrega. O backend usa
@@ -39,6 +45,11 @@ protegida por autenticação. `SOPROLIFE_M15_GO_LIVE=YES`, sozinho ou combinado
 com a autorização geral do M15, é deliberadamente insuficiente. A unit atual
 não contém a raiz e este marco não a provisiona: portanto, este release continua
 incapaz de passar pelo ramo de habilitação fora de fixtures sintéticas.
+
+M24C acrescenta o bloqueio incondicional
+`m24c_signature_and_legal_approval_missing`: mesmo uma fixture que satisfaz
+as precondições técnicas não autoriza produção enquanto o rodapé jurídico e
+um provider de assinatura qualificada não forem aprovados em marco futuro.
 
 ## Configuração de `M15_REPORTS_STORAGE_DIR`
 
@@ -107,7 +118,7 @@ servidor:
 ```
 
 O banco guarda o caminho relativo, SHA-256, tamanho, páginas e ciclo de vida.
-Antes de compor, finalizar, criar corretiva, visualizar ou baixar, um caminho
+Antes de compor, preparar assinatura, criar corretiva, visualizar ou baixar, um caminho
 único relê os bytes, valida novamente a estrutura e conteúdo ativo, recalcula
 SHA-256/tamanho/páginas e exige igualdade com a linha. Arquivo ausente,
 corrompido, substituído ou divergente falha fechado. Metadados de uma versão
@@ -153,7 +164,8 @@ interpretação, borda ou rodapé não couberem inteiros, a composição falha c
 
 Cada gravação atômica devolve uma identidade exata da nova publicação
 (raiz/relativo, dispositivo e inode), registrada antes de qualquer `flush` ou
-`commit` posterior. Upload, composição, finalização e corretiva usam o mesmo
+`commit` posterior. Upload, composição, preparação para assinatura e corretiva
+usam o mesmo
 contrato. Em falha de flush, commit, integridade, concorrência ou outra exceção
 pré-commit, a sessão sofre rollback e somente o arquivo regular criado por
 aquela operação pode ser removido. A limpeza:
@@ -253,14 +265,17 @@ linha ou PDF. Preserve a evidência e investigue.
 
 ## Retenção e exclusão controlada
 
-O período de retenção ainda não foi decidido. Até existir decisão clínica,
-jurídica e de privacidade aprovada:
+O comportamento atual aprovado pelo owner é preservação conservadora. A
+política de retenção de negócio continua pendente, sem prazo inventado:
 
-- não há expiração automática;
+- não há expiração automática de PDF ou linha de banco;
 - não há endpoint de exclusão de laudo;
-- documento finalizado e suas versões permanecem imutáveis;
+- não há job de purge;
+- documento finalizado/assinado e suas versões permanecem preservados;
 - correção cria outro documento e conserva o anterior;
-- backup não deve aplicar rotação destrutiva por suposição.
+- backup não aplica rotação destrutiva por suposição;
+- reconciliação só pode remover arquivo regular que seja órfão de banco
+  confirmado, usando todas as guardas e autorizações existentes.
 
 Uma futura exclusão controlada precisa definir base legal, prazo, exceções por
 litígio/auditoria, alcance sobre backups, dupla autorização, ordem transacional,
@@ -275,20 +290,18 @@ a análise.
 Aplicam-se minimização, necessidade, menor privilégio, finalidade clínica
 aprovada e resposta a incidente. A matriz técnica atual é:
 
-| Papel efetivo | Acesso no fluxo |
+| Papel explícito/efetivo | Acesso no fluxo M24C |
 | --- | --- |
-| `leitura` | listar metadados, visualizar e baixar PDF autenticado |
-| `operacional` | capacidades de leitura, upload, composição, revisão e corretiva |
-| `gestor` | capacidades operacionais, devolução técnica revisão→rascunho e finalização irreversível |
-| `admin` | hierarquia completa e administração de templates |
+| `leitura` | nenhum acesso a laudo |
+| `operacional` | localizar exame, enviar/atribuir, reatribuir antes do rascunho e acompanhar estado técnico |
+| `gestor` | não recebe autoria, edição clínica ou assinatura por hierarquia |
+| `admin` | administra conta/perfil médico e revisões de template; não recebe autoria |
+| `medico` ativo, verificado e atribuído | fila própria, PDF atribuído, composição, prévia e preparação para assinatura |
 
-`gestor` é o papel privilegiado já existente no contrato técnico. Isso não
-define quem é o médico responsável, quem pode assinar legalmente nem qual CRM
-deve constar no laudo.
-
-A trilha append-only registra upload, composição, submissão, devolução técnica,
-finalização, corretiva, administração de templates e cada entrega inline ou
-download bem-sucedida. O evento de entrega contém somente IDs técnicos da
+A trilha append-only registra upload/atribuição, reatribuição, composição,
+preparação para assinatura, corretiva, administração de perfil/template e
+cada entrega inline ou download bem-sucedida. O evento de entrega contém
+somente IDs técnicos da
 versão/documento, modo e estado institucional; nunca paciente, filename, texto,
 caminho, bytes ou URL autenticada. A gravação é confirmada antes de servir o
 PDF. Access log com URL não é substituto aceitável.
@@ -306,7 +319,7 @@ incidente LGPD.
 M24A é **NO-GO** enquanto qualquer item abaixo estiver pendente:
 
 - PostgreSQL 16, backup coordenado e restauração ensaiada;
-- Alembic em `8d4b1a2c9f70` com exatamente um head;
+- Alembic em `4c9e2f7a6b31` com exatamente um head;
 - raiz privada provisionada, não symlink, `soprolife:soprolife` `0700`;
 - `M15_REPORTS_STORAGE_DIR` no EnvironmentFile e o mesmo caminho na allowlist
   `ReadWritePaths` efetiva, de forma exata e sem pai gravável mais amplo;
@@ -317,11 +330,12 @@ M24A é **NO-GO** enquanto qualquer item abaixo estiver pendente:
 - `M15_REPORTS_ENABLED=false` e `reports_enabled=false` preservados até a
   autorização explícita de feature enablement;
 - HTTPS privado, cookie seguro, CSRF e RBAC revisados;
-- usuários mínimos e revisão de papéis concluídos;
+- usuários mínimos, papel médico explícito, perfil verificado e atribuição
+  revisados;
 - templates clínicos aprovados cadastrados por admin — nunca semeados por
   esta entrega;
-- aceite explícito de que toda finalização mostrará
-  **assinatura digital pendente** enquanto não houver provedor real;
+- aceite explícito de que o runtime chega somente a
+  **assinatura qualificada pendente** enquanto não houver provedor real;
 - plano de incidente, retenção/exclusão e governança da auditoria de leitura
   aprovados;
 - suíte SQLite, PostgreSQL 16 efêmero, migrações, Chrome E2E e quality gate
@@ -342,7 +356,8 @@ Rollback de interface/código não é autorização para apagar banco ou storage
 5. valide o sistema anterior antes de reabrir acesso.
 
 Não execute downgrade Alembic em produção com laudos. Os downgrades
-`8d4b1a2c9f70` e `5f0aea639d3d` são exercitados apenas em banco efêmero; com dados, a
+`4c9e2f7a6b31`, `8d4b1a2c9f70` e `5f0aea639d3d` são exercitados apenas em
+banco efêmero; com dados, a
 estratégia segura é restaurar o par coordenado banco+storage em ambiente novo
 e promover somente após reconciliação. Remover `ReadWritePaths` ou a variável
 enquanto a versão antiga ainda precisa servir PDFs também quebra
@@ -354,17 +369,17 @@ Nenhuma das decisões abaixo foi tomada por esta implementação:
 
 1. templates clínicos reais de produção, conteúdo, nomenclatura, aprovação e
    governança;
-2. identidade do médico, CRM/UF e responsabilidade clínica;
-3. papel dedicado de médico e autorização clínica de finalização/assinatura;
-4. escopo de leitura por paciente, unidade e parceiro;
-5. piloto real e desidentificado de compatibilidade com PDFs dos equipamentos;
-6. período de retenção e aprovação da política de exclusão, inclusive backups;
-7. redação jurídica final do rodapé do laudo;
-8. provedor ICP-Brasil, certificado, custódia, renovação, revogação e
+2. aprovação jurídica do uso da identidade profissional congelada no laudo;
+3. piloto formal e desidentificado de compatibilidade com PDFs dos
+   equipamentos;
+4. política de retenção de negócio e exclusão, inclusive backups, sem alterar
+   a preservação conservadora atual;
+5. redação jurídica final do rodapé do laudo;
+6. provedor ICP-Brasil, certificado, custódia, renovação, revogação e
    governança.
 
-Até essas decisões serem formalmente aprovadas, os templates de produção
-permanecem vazios, nenhum médico/CRM é inferido, nenhuma assinatura é alegada,
+Até essas decisões serem formalmente aprovadas, os seis templates provisórios
+ficam bloqueados, nenhum médico/CRM é inferido, nenhuma assinatura é alegada,
 nenhum prazo de retenção é inventado e nenhum rodapé legal é tratado como
 definitivo.
 

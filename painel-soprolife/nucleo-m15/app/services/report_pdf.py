@@ -5,9 +5,9 @@ reportlab (bloco de interpretação + rodapé institucional), mescla com pypdf
 e devolve bytes novos — sempre gravados como uma NOVA versão pelo chamador
 (app/routers/reports.py), nunca sobrescrevendo o arquivo de origem.
 
-Não inventa texto de interpretação médica: o texto vem do registro de
-templates (app/models.py ReportTemplate), que nasce vazio/administrável.
-Este módulo só desenha o texto que já foi selecionado.
+Não inventa texto de interpretação médica: o texto vem do médico atribuído,
+opcionalmente iniciado por um template aprovado. Este módulo não interpreta
+números nem calcula conclusão; apenas desenha o texto recebido.
 """
 
 from __future__ import annotations
@@ -28,14 +28,10 @@ from .pdf_validation import InvalidPdfError, ValidatedPdf, validate_pdf_bytes
 Placement = Literal["topo", "rodape"]
 PLACEMENTS: tuple[Placement, ...] = ("topo", "rodape")
 
-# Rodapé institucional — texto PROVISÓRIO/placeholder. A redação jurídica
-# final do rodapé oficial da SoproLife é uma decisão de produto/jurídica em
-# aberto (M24A, item 17 do pedido) e NUNCA deve ser tratada como definitiva
-# nem como declaração de assinatura digital válida.
+# Fallback fail-safe usado apenas por testes unitários diretos do compositor.
+# O fluxo M24C sempre fornece o snapshot renderizado do template versionado.
 DEFAULT_FOOTER_TEXT = (
-    "SoproLife - Relatorio tecnico gerado eletronicamente. "
-    "Assinatura digital pendente. "
-    "[RODAPE OFICIAL PENDENTE DE DEFINICAO JURIDICA - M24A]"
+    "MODELO DE TESTE — DOCUMENTO NÃO ASSINADO E SEM VALIDADE PARA LIBERAÇÃO"
 )
 
 _FONT = "Helvetica"

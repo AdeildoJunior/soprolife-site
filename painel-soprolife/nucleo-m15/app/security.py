@@ -14,7 +14,10 @@
 - CSRF: requisições que mudam estado autenticadas POR COOKIE exigem o
   cabeçalho X-CSRF-Token. O bearer é imune por construção (o navegador não
   o envia sozinho), então integrações e a CLI não mudam.
-- Papéis: admin > gestor > operacional > leitura.
+- Papéis administrativos: admin > gestor > operacional > leitura.
+- Papel clínico ``medico``: isolado e nunca herdado pela hierarquia
+  administrativa. Autoria clínica exige esse papel de forma explícita,
+  além do perfil profissional e da atribuição validados no fluxo de laudos.
 - Fail-closed: sem credencial válida, nada responde além de /health e
   /auth/token.
 """
@@ -45,14 +48,25 @@ ROLE_ADMIN = "admin"
 ROLE_GESTOR = "gestor"
 ROLE_OPERACIONAL = "operacional"
 ROLE_LEITURA = "leitura"
-ALL_ROLES = [ROLE_ADMIN, ROLE_GESTOR, ROLE_OPERACIONAL, ROLE_LEITURA]
+ROLE_MEDICO = "medico"
+ADMINISTRATIVE_ROLES = [
+    ROLE_ADMIN,
+    ROLE_GESTOR,
+    ROLE_OPERACIONAL,
+    ROLE_LEITURA,
+]
+ALL_ROLES = [*ADMINISTRATIVE_ROLES, ROLE_MEDICO]
 
 # hierarquia: papel -> papéis que ele engloba
 ROLE_IMPLIES = {
-    ROLE_ADMIN: set(ALL_ROLES),
+    # ``admin`` deliberadamente NÃO implica ``medico``. Uma conta
+    # administrativa só ganha autoria clínica se também possuir a linha
+    # explícita de papel médico e passar pelas demais guardas clínicas.
+    ROLE_ADMIN: set(ADMINISTRATIVE_ROLES),
     ROLE_GESTOR: {ROLE_GESTOR, ROLE_OPERACIONAL, ROLE_LEITURA},
     ROLE_OPERACIONAL: {ROLE_OPERACIONAL, ROLE_LEITURA},
     ROLE_LEITURA: {ROLE_LEITURA},
+    ROLE_MEDICO: {ROLE_MEDICO},
 }
 
 
@@ -387,6 +401,16 @@ def user_effective_roles(user: User) -> set[str]:
     for role in user.roles:
         effective |= ROLE_IMPLIES.get(role.name, {role.name})
     return effective
+
+
+def user_has_explicit_role(user: User, role_name: str) -> bool:
+    """Verdadeiro somente para vínculo direto em ``user_roles``.
+
+    Essa distinção é crítica no M24C: nem ``admin`` nem qualquer outro papel
+    hierárquico pode virar autor médico por implicação.
+    """
+
+    return any(role.name == role_name for role in user.roles)
 
 
 def require_role(role_name: str):

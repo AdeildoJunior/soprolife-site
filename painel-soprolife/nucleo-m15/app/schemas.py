@@ -6,6 +6,7 @@ existe na M15. Dados históricos permanecem apenas nas fontes legadas.
 
 from datetime import date
 from decimal import Decimal
+import re
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -815,7 +816,7 @@ class CrmContatoRegistro(StrictModel):
         return self
 
 
-# ------------------------------------------------------------ M24A — laudos
+# ------------------------------------------------------------ M24C — laudos
 #
 # Texto clínico (texto_tooltip/texto_completo) é AUTORADO PELO administrador
 # do template, não digitado livremente por quem compõe um laudo — por isso
@@ -824,15 +825,99 @@ class CrmContatoRegistro(StrictModel):
 # campo que não é clínico; aqui o campo é literalmente o texto clínico).
 
 ReportPlacement = Literal["topo", "rodape"]
-CODIGO_TEMPLATE_RE = r"^[A-Z0-9][A-Z0-9_-]{1,19}$"
+CODIGO_TEMPLATE_RE = r"^[A-Z0-9][A-Z0-9_-]{1,47}$"
+BrazilUF = Literal[
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT",
+    "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO",
+    "RR", "SC", "SP", "SE", "TO",
+]
+PhysicianVerificationStatus = Literal["pending", "verified", "rejected"]
+ReportOriginType = Literal[
+    "pastore",
+    "coworking",
+    "residencial",
+    "clinica_parceira",
+    "empresa_pcmso",
+    "outro",
+]
+ReportTemplateStatus = Literal["draft", "approved", "retired"]
+ReportReassignmentReason = Literal[
+    "assignment_correction",
+    "physician_unavailable",
+    "profile_suspended",
+    "operational_redistribution",
+]
+ReportCorrectionReason = Literal[
+    "clinical_correction",
+    "identification_correction",
+    "technical_document_correction",
+]
+
+
+def normalize_crm_number(value: str) -> str:
+    """Canonical CRM representation: digits only, preserving leading zero."""
+
+    digits = re.sub(r"\D", "", value or "")
+    if not (1 <= len(digits) <= 12):
+        raise ValueError("CRM deve conter de 1 a 12 dígitos.")
+    return digits
+
+
+class PhysicianProfileAdminUpdate(StrictModel):
+    """Administra vínculo explícito e perfil sem criar uma nova conta."""
+
+    grant_physician_role: bool = True
+    professional_name: str | None = Field(default=None, min_length=2, max_length=220)
+    crm_number: str | None = Field(default=None, min_length=1, max_length=40)
+    crm_state: BrazilUF | None = None
+    rqe: str | None = Field(default=None, max_length=30)
+    active: bool | None = None
+    verification_status: PhysicianVerificationStatus | None = None
+
+    @field_validator("professional_name")
+    @classmethod
+    def _normalize_professional_name(
+        cls, value: str | None
+    ) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        if len(normalized) < 2:
+            raise ValueError("Nome profissional é obrigatório.")
+        return normalized
+
+    @field_validator("crm_number")
+    @classmethod
+    def _normalize_crm(cls, value: str | None) -> str | None:
+        return normalize_crm_number(value) if value is not None else None
+
+
+class ReportReassignment(StrictModel):
+    physician_profile_id: str = Field(min_length=36, max_length=36)
+    expected_assignment_id: str = Field(min_length=36, max_length=36)
+    reason_code: ReportReassignmentReason
+
+
+class ReportCorrectiveCreate(StrictModel):
+    reason_code: ReportCorrectionReason
 
 
 class ReportTemplateCreate(StrictModel):
-    codigo: str = Field(min_length=2, max_length=20, pattern=CODIGO_TEMPLATE_RE)
+    codigo: str = Field(min_length=2, max_length=48, pattern=CODIGO_TEMPLATE_RE)
     titulo: str = Field(min_length=2, max_length=200)
     texto_tooltip: str | None = Field(default=None, max_length=240)
     texto_completo: str = Field(default="", max_length=8000)
     ativo: bool = True
+    status: ReportTemplateStatus = "draft"
+    clinically_approved: bool = False
+
+    @model_validator(mode="after")
+    def _approval_coherent(self):
+        if self.clinically_approved != (self.status == "approved"):
+            raise ValueError(
+                "Template aprovado exige status='approved' e clinically_approved=true."
+            )
+        return self
 
 
 class ReportTemplateUpdate(StrictModel):
@@ -840,22 +925,14 @@ class ReportTemplateUpdate(StrictModel):
     texto_tooltip: str | None = Field(default=None, max_length=240)
     texto_completo: str | None = Field(default=None, max_length=8000)
     ativo: bool | None = None
+    status: ReportTemplateStatus | None = None
+    clinically_approved: bool | None = None
 
 
 class ReportDocumentCompose(StrictModel):
     """Corpo de POST .../compor — gera uma nova versão de RASCUNHO."""
 
-    template_id: str
+    template_id: str | None = None
+    interpretation_text: str = Field(min_length=1, max_length=8000)
     page_number: int = Field(ge=1, le=300)
     placement: ReportPlacement
-
-
-class ReportReviewAdjustment(StrictModel):
-    """Motivo técnico fechado — não aceita prosa livre nem dado de paciente."""
-
-    reason_code: Literal[
-        "ajuste_de_composicao",
-        "ajuste_de_template",
-        "ajuste_de_pagina",
-        "correcao_tecnica",
-    ]

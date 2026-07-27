@@ -1,12 +1,9 @@
-/* M24A — fluxo seguro de laudos de espirometria.
+/* M24C — atribuição médica e workspace clínico controlado.
  *
- * Integração deliberadamente fina com o painel existente:
- * - sessão, cookie HttpOnly, CSRF, RBAC e mesma origem: window.SoproM15;
- * - nenhum token, PDF ou dado clínico vai para storage/JSON público;
- * - o PDF é buscado autenticado como Blob e só então aberto em um object URL;
- * - documento finalizado não recebe composição nova; correção cria outro
- *   documento pelo contrato do backend;
- * - ROLE_GESTOR é o papel privilegiado existente para finalizar.
+ * A feature continua default-off em duas camadas. Quando explicitamente
+ * habilitada, todo JSON/PDF usa o cliente autenticado window.SoproM15;
+ * nenhum documento, identidade de paciente ou interpretação entra em
+ * localStorage, URL pública ou snapshot estático.
  */
 (function () {
   "use strict";
@@ -16,23 +13,47 @@
   const CONFIG_URL = "data/m15-config.json";
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
   const EXAM_CODE_RE = /^ESP-\d{1,9}$/i;
+  const UF_VALUES = [
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT",
+    "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO",
+    "RR", "SC", "SP", "SE", "TO",
+  ];
+  const ORIGINS = [
+    ["pastore", "Pastore"],
+    ["coworking", "coworking"],
+    ["residencial", "residencial"],
+    ["clinica_parceira", "clínica parceira"],
+    ["empresa_pcmso", "empresa / PCMSO"],
+    ["outro", "outro"],
+  ];
+  const REASSIGN_REASONS = [
+    ["assignment_correction", "Correção de atribuição"],
+    ["physician_unavailable", "Médico indisponível"],
+    ["profile_suspended", "Perfil suspenso"],
+    ["operational_redistribution", "Redistribuição operacional"],
+  ];
 
   const state = {
-    exams: [],
+    queue: [],
+    operational: [],
+    physicians: [],
     templates: [],
-    documents: [],
-    selectedExamId: "",
-    selectedDocument: null,
+    adminAccounts: [],
+    adminTemplates: [],
+    selectedDocumentId: "",
+    selectedOperationalId: "",
+    selectedAdminUserId: "",
+    selectedAdminTemplateId: "",
+    detail: null,
+    locatedExam: null,
+    interpretation: "",
     selectedTemplateId: "",
-    previewObjectUrl: "",
-    previewVersionId: "",
-    previewLoading: false,
-    previewError: "",
+    statusFilter: "",
     busy: false,
     notice: "",
     noticeKind: "",
-    requestEpoch: 0,
-    previewEpoch: 0,
+    pdfUrls: { original: "", generated: "" },
+    loadEpoch: 0,
   };
 
   function root() {
@@ -52,64 +73,48 @@
       .replace(/'/g, "&#39;");
   }
 
-  function fmtDate(value, withTime) {
-    if (!value) return "—";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return esc(String(value).slice(0, 10));
-    return new Intl.DateTimeFormat("pt-BR", withTime
-      ? { dateStyle: "short", timeStyle: "short" }
-      : { dateStyle: "short", timeZone: "UTC" }).format(date);
+  function options(items, selected) {
+    return items.map(([value, label]) =>
+      `<option value="${esc(value)}"${String(value) === String(selected || "")
+        ? " selected" : ""}>${esc(label)}</option>`
+    ).join("");
   }
 
-  function fmtBytes(value) {
-    const bytes = Number(value);
-    if (!Number.isFinite(bytes) || bytes < 0) return "—";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  function fmtDate(value, withTime) {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return esc(String(value).slice(0, 10));
+    return new Intl.DateTimeFormat("pt-BR", withTime
+      ? { dateStyle: "short", timeStyle: "short" }
+      : { dateStyle: "short", timeZone: "UTC" }).format(parsed);
   }
 
   function statusLabel(value) {
     return {
-      rascunho: "Rascunho",
-      em_revisao: "Em revisão clínica",
-      finalizado: "Finalizado",
+      atribuido: "Atribuído",
+      em_elaboracao: "Em elaboração clínica",
+      assinatura_pendente: "Assinatura qualificada pendente",
+      assinado: "Assinado",
     }[value] || value || "—";
   }
 
   function kindLabel(value) {
     return {
       original: "PDF original",
-      rascunho: "Prévia de rascunho",
-      finalizado: "Versão finalizada",
+      rascunho: "Prévia clínica",
+      assinatura_pendente: "Preparado para assinatura",
+      assinado: "Versão assinada",
     }[value] || value || "Versão";
   }
 
-  function placementLabel(value) {
-    return { topo: "Topo da página", rodape: "Rodapé da página" }[value] || "—";
+  function currentUser() {
+    const c = client();
+    return c && typeof c.getUser === "function" ? c.getUser() : null;
   }
 
-  function selectedExam() {
-    return state.exams.find((exam) => exam.id === state.selectedExamId) || null;
-  }
-
-  function versions() {
-    return state.selectedDocument && Array.isArray(state.selectedDocument.versoes)
-      ? state.selectedDocument.versoes : [];
-  }
-
-  function currentVersion() {
-    const doc = state.selectedDocument;
-    if (!doc) return null;
-    return versions().find((version) => version.id === doc.current_version_id) || null;
-  }
-
-  function originalVersion() {
-    return versions().find((version) => version.kind === "original") || null;
-  }
-
-  function hasDraft() {
-    return versions().some((version) => version.kind === "rascunho");
+  function explicit(role) {
+    const user = currentUser();
+    return Boolean(user && Array.isArray(user.papeis) && user.papeis.includes(role));
   }
 
   function can(role) {
@@ -117,1044 +122,1026 @@
     return Boolean(c && typeof c.can === "function" && c.can(role));
   }
 
-  function isAuthenticated() {
+  function authenticated() {
     const c = client();
     return Boolean(c && typeof c.hasToken === "function" && c.hasToken());
   }
 
-  function secureAccess() {
-    const c = client();
-    return c && typeof c.access === "function"
-      ? c.access()
-      : { secure: false, mode: "blocked" };
+  function readableError(error) {
+    if (!error) return "Não foi possível concluir a operação.";
+    const message = typeof error.message === "string"
+      ? error.message : "Não foi possível concluir a operação.";
+    return error.code ? `${message} (${error.code})` : message;
+  }
+
+  function announce(message, kind) {
+    state.notice = message || "";
+    state.noticeKind = kind || "";
+    const target = document.getElementById("reportStatus");
+    if (target) {
+      target.textContent = state.notice;
+      target.className = `report-status${kind ? ` report-status-${kind}` : ""}`;
+      target.hidden = !state.notice;
+    }
+  }
+
+  function releasePdfUrls() {
+    Object.keys(state.pdfUrls).forEach((key) => {
+      if (state.pdfUrls[key]) URL.revokeObjectURL(state.pdfUrls[key]);
+      state.pdfUrls[key] = "";
+    });
+  }
+
+  function reportContentPath(documentId, versionId, mode) {
+    return `/laudos/${encodeURIComponent(documentId)}/versoes/` +
+      `${encodeURIComponent(versionId)}/conteudo?modo=${mode || "inline"}`;
   }
 
   function reportsFeatureEnabled(config) {
     if (config && config.reports_enabled === true) return true;
-    // Opt-in exclusivo para E2E/desenvolvimento isolado em loopback. Não há
-    // override localStorage em hostname remoto ou produção.
     const loopback = ["127.0.0.1", "::1", "localhost"].includes(
       window.location.hostname
     );
     if (!loopback) return false;
     try {
+      // Override aceito somente em loopback para E2E/desenvolvimento isolado.
       return window.localStorage.getItem("soproM24AReports") === "on";
     } catch (error) {
       return false;
     }
   }
 
-  function announce(message, kind) {
-    state.notice = message || "";
-    state.noticeKind = kind || "";
-    const el = document.getElementById("reportStatus");
-    if (el) {
-      el.className = "report-status" + (kind ? ` report-status-${kind}` : "");
-      el.textContent = state.notice;
-      el.hidden = !state.notice;
+  function setPhysicianNavigationIsolation() {
+    const user = currentUser();
+    const roles = user && Array.isArray(user.papeis) ? user.papeis : [];
+    const physicianOnly = roles.length === 1 && roles[0] === "medico";
+    document.body.classList.toggle("report-physician-only", physicianOnly);
+    if (physicianOnly) {
+      document.querySelectorAll(".section").forEach((section) => {
+        section.classList.toggle("active", section.id === SECTION_ID);
+      });
+      document.querySelectorAll(".nav-item").forEach((item) => {
+        item.classList.toggle(
+          "active", item.getAttribute("data-section") === SECTION_ID
+        );
+      });
     }
   }
 
-  function releasePreview() {
-    state.previewEpoch += 1;
-    const frame = document.getElementById("reportPdfFrame");
-    if (frame) frame.removeAttribute("src");
-    if (state.previewObjectUrl) {
-      URL.revokeObjectURL(state.previewObjectUrl);
-    }
-    state.previewObjectUrl = "";
-    state.previewVersionId = "";
-    state.previewLoading = false;
-    state.previewError = "";
+  function selectedOperational() {
+    return state.operational.find(
+      (item) => item.document_id === state.selectedOperationalId
+    ) || null;
   }
 
-  function reportContentPath(documentId, versionId, mode) {
-    return `/laudos/${encodeURIComponent(documentId)}/versoes/` +
-      `${encodeURIComponent(versionId)}/conteudo?modo=${mode}`;
+  function selectedAdminAccount() {
+    return state.adminAccounts.find(
+      (item) => item.user.id === state.selectedAdminUserId
+    ) || null;
   }
 
-  function safeDownloadName(exam, version) {
-    const code = exam && EXAM_CODE_RE.test(exam.public_code || "")
-      ? exam.public_code.toUpperCase() : "ESP";
-    const number = Number(version && version.version_number) || 1;
-    const kind = ["original", "rascunho", "finalizado"].includes(version && version.kind)
-      ? version.kind : "documento";
-    return `laudo-${code}-v${number}-${kind}.pdf`;
+  function selectedAdminTemplate() {
+    return state.adminTemplates.find(
+      (item) => item.id === state.selectedAdminTemplateId
+    ) || null;
   }
 
-  function gateHtml() {
-    const access = secureAccess();
-    if (!access.secure) {
-      return `
-        <div class="report-gate report-gate-danger" role="alert">
-          <strong>Acesso bloqueado em origem HTTP insegura.</strong>
-          <p>Abra o endereço HTTPS privado do painel ou o loopback local de
-          desenvolvimento. Nenhuma credencial ou requisição de laudo foi enviada.</p>
-        </div>`;
-    }
+  function renderStatus() {
+    return `<div id="reportStatus" class="report-status${
+      state.noticeKind ? ` report-status-${esc(state.noticeKind)}` : ""
+    }" role="status" aria-live="polite"${state.notice ? "" : " hidden"}>${
+      esc(state.notice)
+    }</div>`;
+  }
+
+  function renderUnauthenticated() {
     return `
-      <div class="report-gate" role="status">
-        <strong>Entre no Núcleo administrativo para acessar laudos.</strong>
-        <p>O PDF e os metadados só são carregados depois de uma sessão autenticada.</p>
-        <button type="button" class="m15-btn" data-report-open-login>Ir para o login seguro</button>
+      <div class="report-state" role="status">
+        Entre pelo Núcleo administrativo para acessar o fluxo protegido.
       </div>`;
   }
 
-  function examListHtml() {
-    if (!state.exams.length) {
-      return `
-        <div class="report-empty">
-          Nenhum exame encontrado. Confira o código institucional ESP-… ou atualize
-          a lista de exames recentes.
-        </div>`;
-    }
+  function renderQueue() {
+    const items = state.queue.length
+      ? state.queue.map((item) => `
+          <button type="button" class="report-queue-item${
+            item.document_id === state.selectedDocumentId ? " is-selected" : ""
+          }" data-report-open="${esc(item.document_id)}"
+            role="option" aria-selected="${
+              item.document_id === state.selectedDocumentId ? "true" : "false"
+            }">
+            <strong>${esc(item.report_code)}</strong>
+            <span>${esc(item.exam_code)} · ${fmtDate(item.exam_date, false)}</span>
+            <span>${esc(item.origin_type)}${
+              item.origin_label ? ` · ${esc(item.origin_label)}` : ""
+            }</span>
+            <span class="report-status-chip report-${esc(item.status)}">${
+              esc(statusLabel(item.status))
+            }</span>
+          </button>`).join("")
+      : `<div class="report-empty">Nenhum laudo atribuído neste filtro.</div>`;
     return `
-      <div class="report-exam-list" role="listbox" aria-label="Exames de espirometria">
-        ${state.exams.map((exam) => {
-          const active = exam.id === state.selectedExamId;
-          return `
-            <button type="button" class="report-exam-option${active ? " active" : ""}"
-              role="option" aria-selected="${active ? "true" : "false"}"
-              data-report-exam="${esc(exam.id)}" ${state.busy ? "disabled" : ""}>
-              <span class="report-exam-code">${esc(exam.public_code)}</span>
-              <span>${fmtDate(exam.data_exame, false)} · ${esc(exam.status_exibicao || exam.status)}</span>
-              <small>${esc(exam.modalidade || "Modalidade não informada")}</small>
-            </button>`;
-        }).join("")}
-      </div>`;
-  }
-
-  function examPanelHtml() {
-    return `
-      <aside class="panel report-panel report-exam-panel" aria-labelledby="reportExamTitle">
-        <div class="panel-header">
-          <h3 id="reportExamTitle">1. Localizar exame</h3>
-          <span>Sem busca por nome</span>
-        </div>
-        <form id="reportExamSearch" class="report-search" role="search">
-          <label for="reportExamCode">Código institucional do exame</label>
-          <div class="report-search-row">
-            <input id="reportExamCode" name="public_code" type="search"
-              inputmode="text" autocomplete="off" placeholder="ESP-000001"
-              aria-describedby="reportExamSearchHelp" ${state.busy ? "disabled" : ""}>
-            <button type="submit" class="m15-btn" ${state.busy ? "disabled" : ""}>
-              Localizar
-            </button>
+      <section class="report-panel report-queue-panel" aria-labelledby="myReportsTitle">
+        <div class="report-panel-heading">
+          <div>
+            <p class="eyebrow">Fila clínica restrita</p>
+            <h3 id="myReportsTitle">Meus laudos</h3>
           </div>
-          <p id="reportExamSearchHelp">Use somente ESP-…. Nome, telefone e CPF
-            nunca entram na URL nem nos logs desta busca.</p>
-        </form>
-        <div class="report-exam-list-head">
-          <strong>Exames recentes</strong>
-          <button type="button" class="report-link-btn" data-report-refresh
-            ${state.busy ? "disabled" : ""}>Atualizar</button>
+          <label class="report-compact-field" for="reportStatusFilter">
+            Status
+            <select id="reportStatusFilter">
+              ${options([
+                ["", "Todos"],
+                ["atribuido", "Atribuído"],
+                ["em_elaboracao", "Em elaboração"],
+                ["assinatura_pendente", "Assinatura pendente"],
+                ["assinado", "Assinado"],
+              ], state.statusFilter)}
+            </select>
+          </label>
         </div>
-        ${examListHtml()}
-      </aside>`;
+        <div class="report-queue-list" role="listbox"
+          aria-label="Laudos atribuídos ao médico autenticado">
+          ${items}
+        </div>
+      </section>`;
   }
 
-  function documentTabsHtml() {
-    const selectedId = state.selectedDocument && state.selectedDocument.id;
-    if (!state.documents.length) {
-      return '<div class="report-empty">Este exame ainda não possui laudo PDF.</div>';
-    }
+  function renderTemplateSelector() {
+    const cards = state.templates.map((template) => `
+      <label class="report-template-card">
+        <span class="report-template-choice">
+          <input type="radio" name="template_id" value="${esc(template.id)}"${
+            state.selectedTemplateId === template.id ? " checked" : ""
+          }>
+          <abbr title="${esc(template.texto_tooltip || template.titulo)}">${
+            esc(template.codigo)
+          }</abbr>
+          <span>${esc(template.titulo)}</span>
+        </span>
+        <details>
+          <summary>Texto completo do modelo ${esc(template.codigo)}</summary>
+          <div class="report-template-full-text">${esc(template.texto_completo)}</div>
+        </details>
+      </label>`).join("");
     return `
-      <div class="report-document-list" role="list" aria-label="Documentos deste exame">
-        ${state.documents.map((doc, index) => {
-          const correctionSource = state.documents.find(
-            (candidate) => candidate.superseded_by_id === doc.id
-          );
-          const selected = doc.id === selectedId;
-          const suffix = correctionSource
-            ? "Versão corretiva"
-            : (index === state.documents.length - 1 ? "Documento inicial" : "Documento");
-          return `
-            <div role="listitem">
-              <button type="button" class="report-document-tab${selected ? " active" : ""}"
-                data-report-document="${esc(doc.id)}"
-                aria-pressed="${selected ? "true" : "false"}"
-                ${state.busy ? "disabled" : ""}>
-                <span>${esc(suffix)}</span>
-                <strong>${esc(statusLabel(doc.status))}</strong>
-                <small>${fmtDate(doc.created_at_local || doc.created_at_utc, true)}</small>
-              </button>
-            </div>`;
-        }).join("")}
-      </div>`;
-  }
-
-  function uploadHtml() {
-    if (!can("operacional")) {
-      return `
-        <div class="report-permission-note">
-          Seu papel permite consultar, visualizar e baixar. O envio do PDF original
-          exige o papel operacional.
-        </div>`;
-    }
-    return `
-      <form id="reportUploadForm" class="report-upload-form">
-        <label class="report-file-label" for="reportPdfFile">
-          <span>PDF original do equipamento</span>
-          <input id="reportPdfFile" name="file" type="file"
-            accept="application/pdf,.pdf" required>
-          <small>PDF não criptografado, até 25 MiB. O nome do arquivo não é
-            usado como caminho e não será exibido nesta tela.</small>
+      <fieldset class="report-template-selector">
+        <legend>Modelo clínico aprovado</legend>
+        <label class="report-template-card report-template-manual">
+          <span class="report-template-choice">
+            <input type="radio" name="template_id" value=""${
+              state.selectedTemplateId ? "" : " checked"
+            }>
+            <strong>Texto controlado sem modelo</strong>
+          </span>
+          <span class="report-help">A conclusão é sempre escrita e revisada pelo médico; não há interpretação automática.</span>
         </label>
-        <button type="submit" class="m15-btn" ${state.busy ? "disabled" : ""}>
-          Enviar PDF original
-        </button>
-      </form>`;
-  }
-
-  function workflowProgressHtml(doc) {
-    const order = { rascunho: 1, em_revisao: 2, finalizado: 3 };
-    const current = order[doc.status] || 1;
-    const steps = [
-      ["PDF e rascunho", 1],
-      ["Revisão clínica", 2],
-      ["Finalizado", 3],
-    ];
-    return `
-      <ol class="report-progress" aria-label="Ciclo de vida do laudo">
-        ${steps.map(([label, step]) => `
-          <li class="${step < current ? "done" : (step === current ? "current" : "")}"
-            ${step === current ? 'aria-current="step"' : ""}>
-            <span>${step}</span>${label}
-          </li>`).join("")}
-      </ol>`;
-  }
-
-  function metadataHtml(doc) {
-    const exam = selectedExam();
-    const version = currentVersion();
-    return `
-      <article class="panel report-panel" aria-labelledby="reportMetadataTitle">
-        <div class="panel-header">
-          <h3 id="reportMetadataTitle">Metadados seguros</h3>
-          <span>Sem caminho de arquivo</span>
-        </div>
-        <dl class="report-metadata">
-          <div><dt>Exame</dt><dd>${esc(exam ? exam.public_code : "—")}</dd></div>
-          <div><dt>Estado</dt><dd><span class="report-badge report-${esc(doc.status)}">${esc(statusLabel(doc.status))}</span></dd></div>
-          <div><dt>Versão atual</dt><dd>${version ? `v${version.version_number} · ${esc(kindLabel(version.kind))}` : "—"}</dd></div>
-          <div><dt>Páginas</dt><dd>${version ? esc(version.page_count) : "—"}</dd></div>
-          <div><dt>Tamanho</dt><dd>${version ? esc(fmtBytes(version.size_bytes)) : "—"}</dd></div>
-          <div><dt>Integridade</dt><dd>${version ? `<code>sha256:${esc(version.sha256.slice(0, 16))}…</code>` : "—"}</dd></div>
-          <div><dt>Criado em</dt><dd>${fmtDate(doc.created_at_local || doc.created_at_utc, true)}</dd></div>
-          <div><dt>Posicionamento</dt><dd>${version && version.page_number
-            ? `página ${esc(version.page_number)} · ${esc(placementLabel(version.placement))}` : "Ainda não composto"}</dd></div>
-        </dl>
-        ${doc.status === "finalizado" ? `
-          <div class="report-signature-pending" role="status">
-            <strong>assinatura digital pendente</strong>
-            <span>Nenhum provedor ICP-Brasil real está configurado. Este estado
-              não afirma que o PDF esteja assinado.</span>
-          </div>` : ""}
-        ${doc.superseded_by_id ? `
-          <div class="report-immutable-note">
-            Este documento finalizado foi sucedido por uma correção. Seu PDF,
-            hash, data e estado final permanecem imutáveis.
-          </div>` : ""}
-      </article>`;
-  }
-
-  function versionsHtml() {
-    if (!versions().length) return "";
-    return `
-      <article class="panel report-panel" aria-labelledby="reportVersionsTitle">
-        <div class="panel-header">
-          <h3 id="reportVersionsTitle">Versões imutáveis do arquivo</h3>
-          <span>${versions().length} registro(s)</span>
-        </div>
-        <div class="report-version-list">
-          ${versions().map((version) => `
-            <div class="report-version-row">
-              <div>
-                <strong>v${esc(version.version_number)} · ${esc(kindLabel(version.kind))}</strong>
-                <span>${esc(version.page_count)} pág. · ${esc(fmtBytes(version.size_bytes))} · ${fmtDate(version.created_at, true)}</span>
-              </div>
-              <div class="report-version-actions">
-                <button type="button" class="m15-btn m15-btn-sec"
-                  data-report-preview="${esc(version.id)}"
-                  aria-label="Visualizar v${esc(version.version_number)} — ${esc(kindLabel(version.kind))}"
-                  ${state.previewLoading || state.busy ? "disabled" : ""}>
-                  Visualizar
-                </button>
-                <button type="button" class="m15-btn m15-btn-sec"
-                  data-report-download="${esc(version.id)}"
-                  aria-label="Baixar v${esc(version.version_number)} — ${esc(kindLabel(version.kind))}"
-                  ${state.busy ? "disabled" : ""}>
-                  Baixar
-                </button>
-              </div>
-            </div>`).join("")}
-        </div>
-      </article>`;
-  }
-
-  function templatesHtml() {
-    const activeTemplates = state.templates.filter((template) => template.ativo);
-    if (!state.templates.length) {
-      return `
-        <div class="report-empty">
-          Nenhum modelo clínico foi configurado. A decisão sobre textos clínicos
-          permanece pendente; esta tela não inventa interpretação.
-        </div>`;
-    }
-    if (!state.selectedTemplateId ||
-        !activeTemplates.some((template) => template.id === state.selectedTemplateId)) {
-      state.selectedTemplateId = activeTemplates.length ? activeTemplates[0].id : "";
-    }
-    return `
-      <fieldset class="report-template-fieldset">
-        <legend>Abreviações disponíveis</legend>
-        <div class="report-template-grid">
-          ${state.templates.map((template) => {
-            const tooltip = template.texto_tooltip || template.titulo;
-            const checked = template.id === state.selectedTemplateId;
-            return `
-              <article class="report-template-card${template.ativo ? "" : " inactive"}">
-                <div class="report-template-head">
-                  <label>
-                    <input type="radio" name="template_id" value="${esc(template.id)}"
-                      ${checked ? "checked" : ""}
-                      ${template.ativo && !state.busy ? "" : "disabled"}>
-                    <span>
-                      <abbr title="${esc(tooltip)}">${esc(template.codigo)}</abbr>
-                      ${esc(template.titulo)}
-                    </span>
-                  </label>
-                  <small>v${esc(template.versao)}${template.ativo ? "" : " · inativo"}</small>
-                </div>
-                <details>
-                  <summary>Texto completo do modelo ${esc(template.codigo)}</summary>
-                  <div class="report-template-full-text">${esc(template.texto_completo || "Modelo sem texto cadastrado.")}</div>
-                </details>
-              </article>`;
-          }).join("")}
-        </div>
+        ${cards || `<div class="report-empty">Nenhum template clínico aprovado.</div>`}
       </fieldset>`;
   }
 
-  function composeHtml(doc) {
-    if (doc.status !== "rascunho") return "";
-    if (!can("operacional")) {
-      return `
-        <article class="panel report-panel">
-          <div class="report-permission-note">
-            A composição do rascunho exige o papel operacional.
-          </div>
-        </article>`;
+  function versionByKind(kind) {
+    const versions = state.detail && Array.isArray(state.detail.versoes)
+      ? state.detail.versoes : [];
+    return [...versions].reverse().find((version) => version.kind === kind) || null;
+  }
+
+  function currentVersion() {
+    const detail = state.detail;
+    if (!detail || !Array.isArray(detail.versoes)) return null;
+    return detail.versoes.find(
+      (version) => version.id === detail.current_version_id
+    ) || null;
+  }
+
+  function renderPdfFrame(kind, title, version) {
+    const src = state.pdfUrls[kind];
+    if (!version) {
+      return `<div class="report-pdf-placeholder">Ainda não há PDF ${esc(title.toLowerCase())}.</div>`;
     }
-    const original = originalVersion();
-    const maxPages = original ? original.page_count : 1;
-    const activeTemplates = state.templates.some((template) => template.ativo);
+    if (!src) {
+      return `<div class="report-pdf-placeholder" role="status">Carregando ${esc(title.toLowerCase())}…</div>`;
+    }
+    return `<iframe class="report-pdf-frame" src="${esc(src)}"
+      id="reportPdf${kind === "original" ? "Original" : "Generated"}"
+      title="${esc(title)} — visualização autenticada"
+      referrerpolicy="no-referrer"></iframe>`;
+  }
+
+  function renderSignaturePanel(detail) {
+    const pending = detail.status === "assinatura_pendente";
     return `
-      <article class="panel report-panel" aria-labelledby="reportComposeTitle">
-        <div class="panel-header">
-          <h3 id="reportComposeTitle">2. Modelo e posicionamento</h3>
-          <span>Gera nova prévia</span>
+      <aside class="report-signature-panel" aria-labelledby="signatureTitle">
+        <h4 id="signatureTitle">Assinatura qualificada</h4>
+        <p><strong>${pending ? "assinatura qualificada pendente" :
+          "provedor não configurado"}</strong></p>
+        <p>Nenhum documento deste fluxo é assinado ou liberado nesta versão.</p>
+        <ul>
+          <li>ICP-Brasil A1 — indisponível</li>
+          <li>VIDaaS — pendente de seleção e integração</li>
+          <li>BirdID — pendente de seleção e integração</li>
+        </ul>
+      </aside>`;
+  }
+
+  function renderPhysicianDetail() {
+    const detail = state.detail;
+    if (!detail) {
+      return `
+        <section class="report-panel report-detail-empty">
+          <h3>Área clínica</h3>
+          <p>Selecione um item de “Meus laudos”. A identidade do paciente aparece somente dentro do documento atribuído.</p>
+        </section>`;
+    }
+    const original = versionByKind("original");
+    const current = currentVersion();
+    const editable = ["atribuido", "em_elaboracao"].includes(detail.status);
+    const ready = detail.status === "em_elaboracao";
+    const signed = detail.status === "assinado";
+    const maxPages = original ? original.page_count : 1;
+    return `
+      <section class="report-panel report-clinical-panel" aria-labelledby="reportDetailHeading">
+        <div class="report-panel-heading">
+          <div>
+            <p class="eyebrow">${esc(detail.public_code)} · ${esc(detail.exam.public_code)}</p>
+            <h3 id="reportDetailHeading" tabindex="-1">Documento atribuído</h3>
+          </div>
+          <span class="report-status-chip report-${esc(detail.status)}">${
+            esc(statusLabel(detail.status))
+          }</span>
         </div>
-        ${activeTemplates ? `
-          <form id="reportComposeForm" class="report-compose-form">
-            ${templatesHtml()}
-            <div class="report-compose-controls">
+
+        <div class="report-clinical-identity">
+          <div><span>Paciente</span><strong>${esc(detail.patient.full_name)}</strong></div>
+          <div><span>Código</span><strong>${esc(detail.patient.public_code)}</strong></div>
+          <div><span>Nascimento</span><strong>${fmtDate(detail.patient.date_of_birth, false)}</strong></div>
+          <div><span>Origem</span><strong>${esc(detail.origin_type)}${
+            detail.origin_label ? ` · ${esc(detail.origin_label)}` : ""
+          }</strong></div>
+        </div>
+
+        <div class="report-comparison" aria-label="Comparação entre original e versão gerada">
+          <article>
+            <h4>Original autenticado</h4>
+            ${renderPdfFrame("original", "PDF original", original)}
+          </article>
+          <article>
+            <h4>${current && current.kind !== "original"
+              ? kindLabel(current.kind) : "Prévia gerada"}</h4>
+            ${renderPdfFrame(
+              "generated",
+              "PDF gerado para comparação",
+              current && current.kind !== "original" ? current : null
+            )}
+          </article>
+        </div>
+
+        ${editable ? `
+          <form id="reportComposeForm" class="report-clinical-form">
+            ${renderTemplateSelector()}
+            <label for="reportInterpretation">
+              Interpretação clínica
+              <textarea id="reportInterpretation" name="interpretation_text"
+                maxlength="8000" required aria-describedby="interpretationHelp">${
+                  esc(state.interpretation)
+                }</textarea>
+              <span id="interpretationHelp" class="report-help">Texto autorado pelo médico. O sistema não calcula diagnóstico nem conclusão.</span>
+            </label>
+            <div class="report-placement-grid">
               <label for="reportPageNumber">
                 Página de destino
                 <input id="reportPageNumber" name="page_number" type="number"
-                  min="1" max="${esc(maxPages)}" value="1" required
-                  ${state.busy ? "disabled" : ""}>
-                <small>Entre 1 e ${esc(maxPages)}.</small>
+                  min="1" max="${esc(maxPages)}" value="1" required>
               </label>
               <fieldset>
                 <legend>Posição do bloco</legend>
-                <label><input type="radio" name="placement" value="topo"
-                  ${state.busy ? "disabled" : ""}> Topo</label>
-                <label><input type="radio" name="placement" value="rodape" checked
-                  ${state.busy ? "disabled" : ""}> Rodapé</label>
+                <label><input type="radio" name="placement" value="topo" checked> Topo</label>
+                <label><input type="radio" name="placement" value="rodape"> Rodapé</label>
               </fieldset>
             </div>
-            <button type="submit" class="m15-btn" ${state.busy ? "disabled" : ""}>
-              Gerar prévia de rascunho
-            </button>
-          </form>` : templatesHtml()}
-      </article>`;
+            <button class="m15-btn m15-btn-primary" type="submit"${
+              state.busy ? " disabled" : ""
+            }>Gerar prévia</button>
+          </form>` : ""}
+
+        ${ready ? `
+          <div class="report-ready-action">
+            <p>A prévia e os snapshots de médico, origem, template e rodapé serão congelados. O resultado continuará não assinado.</p>
+            <button type="button" class="m15-btn" data-report-prepare-signature${
+              state.busy ? " disabled" : ""
+            }>Marcar conteúdo pronto para assinatura</button>
+          </div>` : ""}
+
+        ${signed ? `
+          <form id="reportCorrectionForm" class="report-correction-form">
+            <label for="reportCorrectionReason">Motivo técnico da correção
+              <select id="reportCorrectionReason" name="reason_code" required>
+                <option value="clinical_correction">Correção clínica</option>
+                <option value="identification_correction">Correção de identificação</option>
+                <option value="technical_document_correction">Correção técnica do documento</option>
+              </select>
+            </label>
+            <button class="m15-btn" type="submit">Abrir documento corretivo</button>
+          </form>` : ""}
+        ${renderSignaturePanel(detail)}
+      </section>`;
   }
 
-  function lifecycleActionsHtml(doc) {
-    let content = "";
-    if (doc.status === "rascunho") {
-      content = hasDraft()
-        ? (can("operacional") ? `
-            <p>A prévia está pronta. Envie para revisão clínica quando página,
-              posição e texto selecionado estiverem conferidos.</p>
-            <button type="button" class="m15-btn" data-report-review
-              ${state.busy ? "disabled" : ""}>Enviar para revisão clínica</button>`
-          : '<p>Seu papel permite somente consultar este rascunho.</p>')
-        : '<p>Gere ao menos uma prévia antes de enviar para revisão.</p>';
-    } else if (doc.status === "em_revisao") {
-      content = can("gestor") ? `
-        <p>A finalização é irreversível para este documento. O PDF final será
-          preservado e continuará com assinatura digital pendente.</p>
-        <div class="report-lifecycle-buttons">
-          <button type="button" class="m15-btn m15-btn-sec"
-            data-report-adjustment ${state.busy ? "disabled" : ""}>
-            Devolver para ajuste
-          </button>
-          <button type="button" class="m15-btn report-finalize-btn"
-            data-report-finalize ${state.busy ? "disabled" : ""}>
-            Finalizar laudo
-          </button>
-        </div>` : `
-        <p>Documento aguardando o papel gestor, conforme o contrato privilegiado
-          existente. Composição e nova submissão ficam bloqueadas.</p>`;
-    } else if (doc.status === "finalizado") {
-      if (doc.superseded_by_id) {
-        content = `
-          <p>Este documento permanece finalizado e imutável. A correção já foi
-            aberta como outro documento.</p>`;
-      } else if (can("operacional")) {
-        content = `
-          <p>Não altere o PDF finalizado. Se houver correção clínica autorizada,
-            abra um novo documento vinculado ao mesmo exame.</p>
-          <button type="button" class="m15-btn m15-btn-sec"
-            data-report-corrective ${state.busy ? "disabled" : ""}>
-            Abrir versão corretiva
-          </button>`;
-      } else {
-        content = '<p>Documento finalizado e imutável.</p>';
-      }
-    }
+  function renderPhysicianWorkspace() {
     return `
-      <article class="panel report-panel" aria-labelledby="reportLifecycleTitle">
-        <div class="panel-header">
-          <h3 id="reportLifecycleTitle" tabindex="-1">3. Revisão e ciclo de vida</h3>
-          <span>RBAC aplicado na interface e no servidor</span>
-        </div>
-        <div class="report-lifecycle-actions">${content}</div>
-      </article>`;
-  }
-
-  function previewHtml() {
-    const exam = selectedExam();
-    const version = versions().find(
-      (item) => item.id === state.previewVersionId
-    ) || currentVersion();
-    let bodyHtml;
-    if (state.previewLoading) {
-      bodyHtml = '<div class="report-preview-state" role="status">Carregando PDF autenticado…</div>';
-    } else if (state.previewError) {
-      bodyHtml = `<div class="report-preview-state report-preview-error" role="alert">${esc(state.previewError)}</div>`;
-    } else if (state.previewObjectUrl) {
-      bodyHtml = `
-        <iframe id="reportPdfFrame" class="report-pdf-frame"
-          src="${esc(state.previewObjectUrl)}"
-          title="Visualização autenticada do PDF — ${esc(exam ? exam.public_code : "exame")}"
-          referrerpolicy="no-referrer"></iframe>`;
-    } else {
-      bodyHtml = `
-        <div class="report-preview-state">
-          Selecione uma versão para abrir a prévia autenticada.
-        </div>`;
-    }
-    return `
-      <article class="panel report-panel report-preview-panel" aria-labelledby="reportPreviewTitle">
-        <div class="panel-header">
-          <h3 id="reportPreviewTitle">Visualização autenticada do PDF</h3>
-          <span>${version ? `v${esc(version.version_number)} · ${esc(kindLabel(version.kind))}` : "Nenhuma versão aberta"}</span>
-        </div>
-        <p class="report-preview-security">
-          O visualizador recebe um Blob temporário da sessão. Nenhum caminho de
-          sistema de arquivos ou URL pública de documento é exposto.
-        </p>
-        ${bodyHtml}
-      </article>`;
-  }
-
-  function selectedDocumentHtml() {
-    const doc = state.selectedDocument;
-    if (!doc) {
-      return `
-        <article class="panel report-panel">
-          <div class="panel-header">
-            <h3>2. Enviar PDF original</h3>
-            <span>Armazenamento privado</span>
-          </div>
-          ${uploadHtml()}
-        </article>`;
-    }
-    return `
-      ${workflowProgressHtml(doc)}
-      <div class="report-document-grid">
-        <div class="report-stack">
-          ${metadataHtml(doc)}
-          ${versionsHtml()}
-          ${composeHtml(doc)}
-          ${lifecycleActionsHtml(doc)}
-        </div>
-        ${previewHtml()}
+      <div class="report-physician-shell">
+        ${renderQueue()}
+        ${renderPhysicianDetail()}
       </div>`;
   }
 
-  function workspaceHtml() {
-    const exam = selectedExam();
+  function renderOperationalList() {
+    const selected = selectedOperational();
+    const rows = state.operational.length
+      ? state.operational.map((item) => `
+          <button type="button" class="report-operation-row${
+            item.document_id === state.selectedOperationalId ? " is-selected" : ""
+          }" data-report-operational="${esc(item.document_id)}">
+            <strong>${esc(item.report_code)}</strong>
+            <span>${esc(item.exam_code)}</span>
+            <span>${esc(statusLabel(item.status))}</span>
+          </button>`).join("")
+      : `<div class="report-empty">Nenhum documento no fluxo.</div>`;
     return `
-      <div id="reportStatus" class="report-status${state.noticeKind ? ` report-status-${esc(state.noticeKind)}` : ""}"
-        role="status" aria-live="polite" tabindex="-1" ${state.notice ? "" : "hidden"}>
-        ${esc(state.notice)}
-      </div>
-      <div class="report-layout" aria-busy="${state.busy ? "true" : "false"}">
-        ${examPanelHtml()}
-        <main class="report-main">
-          ${exam ? `
-            <article class="panel report-panel report-document-picker" aria-labelledby="reportDocumentTitle">
-              <div class="panel-header">
-                <h3 id="reportDocumentTitle">Laudos de ${esc(exam.public_code)}</h3>
-                <span>${esc(exam.status_exibicao || exam.status)} · ${fmtDate(exam.data_exame, false)}</span>
-              </div>
-              ${documentTabsHtml()}
-            </article>
-            ${selectedDocumentHtml()}`
-          : `
-            <div class="report-state">
-              Selecione um exame pelo código institucional para iniciar ou
-              continuar o fluxo de laudo.
-            </div>`}
-        </main>
+      <section class="report-panel" aria-labelledby="operationalListTitle">
+        <h3 id="operationalListTitle">Acompanhamento operacional</h3>
+        <p class="report-help">Somente códigos, origem, atribuição e estado técnico; a interpretação clínica não é exposta.</p>
+        <div class="report-operation-list">${rows}</div>
+        ${selected && selected.status === "atribuido" ? `
+          <form id="reportReassignForm" class="report-reassign-form">
+            <h4>Reatribuir antes do primeiro rascunho</h4>
+            <input type="hidden" name="document_id" value="${esc(selected.document_id)}">
+            <input type="hidden" name="expected_assignment_id" value="${esc(selected.assignment_id)}">
+            <label for="reportReassignPhysician">Novo médico responsável
+              <select id="reportReassignPhysician" name="physician_profile_id" required>
+                <option value="">Selecione</option>
+                ${state.physicians
+                  .filter((item) => item.id !== selected.physician_profile_id)
+                  .map((item) => `<option value="${esc(item.id)}">${
+                    esc(item.professional_name)
+                  } · CRM/${esc(item.crm_state)} ${esc(item.crm_number)}</option>`).join("")}
+              </select>
+            </label>
+            <label for="reportReassignReason">Motivo técnico fechado
+              <select id="reportReassignReason" name="reason_code" required>
+                ${options(REASSIGN_REASONS, "")}
+              </select>
+            </label>
+            <button class="m15-btn" type="submit">Confirmar reatribuição</button>
+          </form>` : ""}
+      </section>`;
+  }
+
+  function renderOperationalWorkspace() {
+    const physicianOptions = state.physicians.map((profile) =>
+      `<option value="${esc(profile.id)}">${esc(profile.professional_name)} · ` +
+      `CRM/${esc(profile.crm_state)} ${esc(profile.crm_number)}</option>`
+    ).join("");
+    return `
+      <div class="report-operational-shell">
+        <section class="report-panel" aria-labelledby="uploadTitle">
+          <p class="eyebrow">Recebimento e atribuição</p>
+          <h3 id="uploadTitle">Novo PDF original</h3>
+          <form id="reportLocateExamForm" class="report-inline-form">
+            <label for="reportExamCode">Código institucional do exame
+              <input id="reportExamCode" name="exam_code" autocomplete="off"
+                placeholder="ESP-000001" pattern="ESP-[0-9]{1,9}" required>
+            </label>
+            <button class="m15-btn" type="submit">Localizar exame</button>
+          </form>
+          ${state.locatedExam ? `
+            <div class="report-technical-confirmation" role="status">
+              <strong>${esc(state.locatedExam.public_code)}</strong>
+              <span>${fmtDate(state.locatedExam.data_exame, false)} · ${esc(state.locatedExam.status)}</span>
+            </div>
+            <form id="reportUploadForm" class="report-upload-form">
+              <input type="hidden" name="exam_code" value="${esc(state.locatedExam.public_code)}">
+              <label for="reportPhysician">Médico responsável
+                <select id="reportPhysician" name="physician_profile_id" required>
+                  <option value="">Selecione um perfil ativo e verificado</option>
+                  ${physicianOptions}
+                </select>
+              </label>
+              <label for="reportOriginType">Origem do exame
+                <select id="reportOriginType" name="origin_type" required>
+                  ${options(ORIGINS, "")}
+                </select>
+              </label>
+              <label for="reportOriginLabel">Rótulo operacional seguro (opcional)
+                <input id="reportOriginLabel" name="origin_label" maxlength="120"
+                  aria-describedby="originHelp">
+                <span id="originHelp" class="report-help">Não informe paciente, contato ou observação clínica.</span>
+              </label>
+              <label for="reportPartnerUnit">Referência técnica de unidade parceira (opcional)
+                <input id="reportPartnerUnit" name="origin_partner_unit_id"
+                  maxlength="36" autocomplete="off">
+              </label>
+              <label for="reportPdfFile">PDF original
+                <input id="reportPdfFile" name="file" type="file"
+                  accept="application/pdf,.pdf" required>
+              </label>
+              <button class="m15-btn m15-btn-primary" type="submit"${
+                state.busy ? " disabled" : ""
+              }>Enviar e atribuir</button>
+            </form>` : `
+            <p class="report-help">A atribuição só é criada depois da localização exata pelo código ESP.</p>`}
+        </section>
+        ${renderOperationalList()}
+      </div>`;
+  }
+
+  function renderProfileAdmin() {
+    const selected = selectedAdminAccount();
+    const list = state.adminAccounts.map((item) => `
+      <option value="${esc(item.user.id)}"${
+        selected && selected.user.id === item.user.id ? " selected" : ""
+      }>${esc(item.user.nome)} · ${esc(item.user.email)}</option>`).join("");
+    const profile = selected && selected.profile;
+    return `
+      <section class="report-panel" aria-labelledby="physicianAdminTitle">
+        <p class="eyebrow">Administração restrita</p>
+        <h3 id="physicianAdminTitle">Contas médicas</h3>
+        <p class="report-help">Selecione uma conta existente. Este espaço não cria usuários nem recebe senhas.</p>
+        <label for="reportAdminUser">Usuário existente
+          <select id="reportAdminUser">
+            <option value="">Selecione</option>${list}
+          </select>
+        </label>
+        ${selected ? `
+          <form id="reportPhysicianAdminForm" class="report-admin-profile-form">
+            <input type="hidden" name="user_id" value="${esc(selected.user.id)}">
+            <label class="report-check">
+              <input type="checkbox" name="grant_physician_role"${
+                selected.has_explicit_physician_role ? " checked" : ""
+              }> Conceder papel médico explícito
+            </label>
+            <label for="reportProfessionalName">Nome profissional completo
+              <input id="reportProfessionalName" name="professional_name"
+                maxlength="220" required value="${esc(profile && profile.professional_name)}">
+            </label>
+            <div class="report-admin-grid">
+              <label for="reportCrmNumber">CRM
+                <input id="reportCrmNumber" name="crm_number" maxlength="40"
+                  inputmode="numeric" required value="${esc(profile && profile.crm_number)}">
+              </label>
+              <label for="reportCrmState">UF do CRM
+                <select id="reportCrmState" name="crm_state" required>
+                  <option value="">UF</option>
+                  ${options(UF_VALUES.map((uf) => [uf, uf]), profile && profile.crm_state)}
+                </select>
+              </label>
+              <label for="reportRqe">RQE (opcional)
+                <input id="reportRqe" name="rqe" maxlength="30"
+                  value="${esc(profile && profile.rqe)}">
+              </label>
+            </div>
+            <label for="reportVerification">Verificação
+              <select id="reportVerification" name="verification_status" required>
+                ${options([
+                  ["pending", "Pendente"],
+                  ["verified", "Verificado"],
+                  ["rejected", "Recusado"],
+                ], profile && profile.verification_status || "pending")}
+              </select>
+            </label>
+            <label class="report-check">
+              <input type="checkbox" name="active"${
+                profile && profile.active ? " checked" : ""
+              }> Perfil ativo
+            </label>
+            <p class="report-verification-state">Estado atual: <strong>${
+              esc(profile ? profile.verification_status : "perfil ainda não criado")
+            }</strong>${profile && profile.verified_at
+              ? ` · ${fmtDate(profile.verified_at, true)}` : ""}</p>
+            <button class="m15-btn" type="submit">Salvar perfil médico</button>
+          </form>` : ""}
+      </section>`;
+  }
+
+  function renderTemplateAdmin() {
+    const rows = state.adminTemplates.map((template) => `
+      <button type="button" class="report-admin-template${
+        template.id === state.selectedAdminTemplateId ? " is-selected" : ""
+      }${template.status === "draft" ? " is-provisional" : ""}"
+        data-report-admin-template="${esc(template.id)}">
+        <span><abbr title="${esc(template.texto_tooltip || template.titulo)}">${
+          esc(template.codigo)
+        }</abbr> · v${esc(template.versao)}</span>
+        <strong>${esc(template.titulo)}</strong>
+        <span class="report-template-state">${
+          template.clinically_approved ? "APROVADO" :
+            "PROVISÓRIO — NÃO UTILIZAR EM PRODUÇÃO"
+        }</span>
+      </button>`).join("");
+    const selected = selectedAdminTemplate();
+    return `
+      <section class="report-panel" aria-labelledby="templateAdminTitle">
+        <p class="eyebrow">Catálogo versionado</p>
+        <h3 id="templateAdminTitle">Templates clínicos</h3>
+        <div class="report-admin-template-list">${rows}</div>
+        ${selected ? `
+          <form id="reportTemplateRevisionForm" class="report-template-revision-form">
+            <h4>Nova revisão de ${esc(selected.codigo)}</h4>
+            <p class="report-warning">A revisão anterior permanece imutável. Os seis textos atuais são placeholders provisórios.</p>
+            <input type="hidden" name="template_id" value="${esc(selected.id)}">
+            <label for="reportTemplateTitle">Rótulo
+              <input id="reportTemplateTitle" name="titulo" maxlength="200"
+                required value="${esc(selected.titulo)}">
+            </label>
+            <label for="reportTemplateTooltip">Tooltip
+              <input id="reportTemplateTooltip" name="texto_tooltip" maxlength="240"
+                value="${esc(selected.texto_tooltip)}">
+            </label>
+            <label for="reportTemplateBody">Texto da revisão
+              <textarea id="reportTemplateBody" name="texto_completo"
+                maxlength="8000" required>${esc(selected.texto_completo)}</textarea>
+            </label>
+            <label for="reportTemplateStatus">Status
+              <select id="reportTemplateStatus" name="status">
+                ${options([
+                  ["draft", "Rascunho / provisório"],
+                  ["approved", "Aprovado"],
+                  ["retired", "Retirado"],
+                ], selected.status)}
+              </select>
+            </label>
+            <label class="report-check">
+              <input type="checkbox" name="clinically_approved"${
+                selected.clinically_approved ? " checked" : ""
+              }> Aprovação clínica confirmada
+            </label>
+            <label class="report-check">
+              <input type="checkbox" name="ativo"${
+                selected.ativo ? " checked" : ""
+              }> Revisão ativa
+            </label>
+            <button class="m15-btn" type="submit">Criar nova revisão</button>
+          </form>` : ""}
+      </section>`;
+  }
+
+  function renderAdminWorkspace() {
+    return `
+      <div class="report-admin-shell">
+        ${renderProfileAdmin()}
+        ${renderTemplateAdmin()}
       </div>`;
   }
 
   function render() {
     const mount = root();
     if (!mount) return;
-    if (!secureAccess().secure || !isAuthenticated()) {
-      releasePreview();
-      mount.innerHTML = gateHtml();
+    setPhysicianNavigationIsolation();
+    if (!authenticated()) {
+      mount.innerHTML = renderStatus() + renderUnauthenticated();
       return;
     }
-    mount.innerHTML = workspaceHtml();
+    const blocks = [];
+    if (explicit("medico")) blocks.push(renderPhysicianWorkspace());
+    if (can("operacional")) blocks.push(renderOperationalWorkspace());
+    if (can("admin")) blocks.push(renderAdminWorkspace());
+    if (!blocks.length) {
+      blocks.push(`<div class="report-state" role="alert">Esta conta não possui acesso ao fluxo de laudos.</div>`);
+    }
+    mount.innerHTML = `
+      ${renderStatus()}
+      <div class="report-session-strip">
+        <span>Sessão: ${esc(currentUser() && currentUser().nome || "usuário autenticado")}</span>
+        ${explicit("medico") ? `<span>Papel clínico explícito</span>` : ""}
+        <button type="button" class="m15-btn" data-report-logout>Sair</button>
+      </div>
+      ${blocks.join("")}`;
   }
 
-  async function openPreview(documentId, versionId) {
-    const c = client();
-    if (!c || typeof c.apiBlob !== "function") {
-      announce("Cliente autenticado de PDF indisponível.", "error");
+  async function loadAuthenticatedData() {
+    const epoch = ++state.loadEpoch;
+    if (!authenticated()) {
+      render();
       return;
     }
-    releasePreview();
-    const epoch = ++state.previewEpoch;
-    state.previewLoading = true;
-    state.previewVersionId = versionId;
-    render();
-    try {
-      const blob = await c.apiBlob(
-        reportContentPath(documentId, versionId, "inline")
-      );
-      if (epoch !== state.previewEpoch) return;
-      state.previewObjectUrl = URL.createObjectURL(blob);
-      state.previewLoading = false;
-      state.previewError = "";
-      render();
-    } catch (error) {
-      if (epoch !== state.previewEpoch) return;
-      state.previewLoading = false;
-      state.previewError = error.message || String(error);
-      render();
-    }
-  }
-
-  async function downloadVersion(versionId) {
-    const c = client();
-    const doc = state.selectedDocument;
-    const exam = selectedExam();
-    const version = versions().find((item) => item.id === versionId);
-    if (!c || !doc || !version || typeof c.apiBlob !== "function") return;
-    announce("Preparando download autenticado…");
-    try {
-      const blob = await c.apiBlob(
-        reportContentPath(doc.id, version.id, "download")
-      );
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = safeDownloadName(exam, version);
-      link.rel = "noopener";
-      link.hidden = true;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-      announce("Download autenticado preparado.", "success");
-    } catch (error) {
-      announce(`Não foi possível baixar o PDF: ${error.message || error}`, "error");
-    }
-  }
-
-  async function loadDocument(documentId, previewCurrent) {
-    const c = client();
-    if (!c) return;
-    const epoch = ++state.requestEpoch;
     state.busy = true;
     render();
     try {
-      const detail = await c.api(`/laudos/${encodeURIComponent(documentId)}`);
-      if (epoch !== state.requestEpoch) return;
-      if (detail.spirometry_exam_id !== state.selectedExamId) {
-        throw new Error("O laudo retornado não corresponde ao exame selecionado.");
+      const calls = [];
+      const labels = [];
+      if (explicit("medico")) {
+        const suffix = state.statusFilter
+          ? `?status=${encodeURIComponent(state.statusFilter)}` : "";
+        calls.push(client().api(`/laudos/meus${suffix}`));
+        labels.push("queue");
+        calls.push(client().api("/laudos/templates?catalog=clinical"));
+        labels.push("templates");
       }
-      state.selectedDocument = detail;
+      if (can("operacional")) {
+        calls.push(client().api("/laudos"));
+        labels.push("operational");
+        calls.push(client().api("/laudos/medicos-disponiveis"));
+        labels.push("physicians");
+      }
+      if (can("admin")) {
+        calls.push(client().api("/laudos/admin/medicos"));
+        labels.push("adminAccounts");
+        calls.push(client().api("/laudos/templates?catalog=admin"));
+        labels.push("adminTemplates");
+      }
+      const values = await Promise.all(calls);
+      if (epoch !== state.loadEpoch) return;
+      labels.forEach((label, index) => { state[label] = values[index]; });
+      if (state.selectedDocumentId &&
+          !state.queue.some((item) => item.document_id === state.selectedDocumentId)) {
+        state.selectedDocumentId = "";
+        state.detail = null;
+        releasePdfUrls();
+      }
+      if (state.selectedOperationalId &&
+          !state.operational.some((item) => item.document_id === state.selectedOperationalId)) {
+        state.selectedOperationalId = "";
+      }
       state.busy = false;
       render();
-      if (previewCurrent !== false && detail.current_version_id) {
-        await openPreview(detail.id, detail.current_version_id);
-      }
+      if (state.selectedDocumentId) await loadDocument(state.selectedDocumentId, false);
     } catch (error) {
-      if (epoch !== state.requestEpoch) return;
-      state.busy = false;
-      announce(`Não foi possível abrir o laudo: ${error.message || error}`, "error");
+      if (epoch !== state.loadEpoch) return;
+      announce(readableError(error), "erro");
       render();
-    }
-  }
-
-  async function loadDocuments(examId, preferredDocumentId) {
-    const c = client();
-    if (!c) return;
-    const epoch = ++state.requestEpoch;
-    releasePreview();
-    state.busy = true;
-    render();
-    try {
-      const docs = await c.api(`/laudos?exam_id=${encodeURIComponent(examId)}`);
-      if (epoch !== state.requestEpoch || examId !== state.selectedExamId) return;
-      state.documents = Array.isArray(docs) ? docs : [];
-      const preferred = state.documents.find((doc) => doc.id === preferredDocumentId);
-      const target = preferred || state.documents[0] || null;
-      if (!target) {
-        state.selectedDocument = null;
+    } finally {
+      if (epoch === state.loadEpoch) {
         state.busy = false;
         render();
-        return;
       }
-      state.busy = false;
-      await loadDocument(target.id, true);
-    } catch (error) {
-      if (epoch !== state.requestEpoch) return;
-      state.busy = false;
-      announce(`Não foi possível listar os laudos: ${error.message || error}`, "error");
-      render();
     }
   }
 
-  async function loadWorkspace() {
-    const mount = root();
-    if (!mount) return;
-    if (!secureAccess().secure || !isAuthenticated()) {
-      state.requestEpoch += 1;
-      state.exams = [];
-      state.templates = [];
-      state.documents = [];
-      state.selectedExamId = "";
-      state.selectedDocument = null;
-      render();
-      return;
-    }
-    const c = client();
-    const epoch = ++state.requestEpoch;
-    releasePreview();
-    state.busy = true;
-    state.notice = "";
-    render();
+  async function loadPdf(version, slot, epoch) {
+    if (!version) return;
     try {
-      const [examPage, templates] = await Promise.all([
-        c.api("/espirometrias?tamanho=50"),
-        c.api("/laudos/templates"),
-      ]);
-      if (epoch !== state.requestEpoch) return;
-      state.exams = Array.isArray(examPage.itens) ? examPage.itens : [];
-      state.templates = Array.isArray(templates) ? templates : [];
-      if (!state.exams.some((exam) => exam.id === state.selectedExamId)) {
-        state.selectedExamId = "";
-        state.documents = [];
-        state.selectedDocument = null;
-      }
-      state.busy = false;
-      render();
-      if (state.selectedExamId) {
-        await loadDocuments(
-          state.selectedExamId,
-          state.selectedDocument && state.selectedDocument.id
-        );
-      }
-    } catch (error) {
-      if (epoch !== state.requestEpoch) return;
-      state.busy = false;
-      render();
-      announce(`Fluxo de laudos indisponível: ${error.message || error}`, "error");
-    }
-  }
-
-  async function locateExam(rawCode) {
-    const code = String(rawCode || "").trim().toUpperCase();
-    if (!EXAM_CODE_RE.test(code)) {
-      announce("Informe somente um código institucional no formato ESP-000001.", "error");
-      return;
-    }
-    const c = client();
-    const epoch = ++state.requestEpoch;
-    state.busy = true;
-    render();
-    try {
-      const page = await c.api(
-        `/espirometrias?public_code=${encodeURIComponent(code)}&tamanho=10`
+      const blob = await client().apiBlob(
+        reportContentPath(state.selectedDocumentId, version.id, "inline")
       );
-      if (epoch !== state.requestEpoch) return;
-      state.exams = Array.isArray(page.itens) ? page.itens : [];
-      state.busy = false;
-      if (state.exams.length === 1) {
-        state.selectedExamId = state.exams[0].id;
-        announce(`Exame ${code} localizado.`, "success");
-        await loadDocuments(state.selectedExamId);
-      } else {
-        state.selectedExamId = "";
-        state.documents = [];
-        state.selectedDocument = null;
-        render();
-        announce(`Nenhum exame encontrado para ${code}.`, "error");
-      }
-    } catch (error) {
-      if (epoch !== state.requestEpoch) return;
-      state.busy = false;
+      if (epoch !== state.loadEpoch) return;
+      if (state.pdfUrls[slot]) URL.revokeObjectURL(state.pdfUrls[slot]);
+      state.pdfUrls[slot] = URL.createObjectURL(blob);
       render();
-      announce(`Falha ao localizar exame: ${error.message || error}`, "error");
+    } catch (error) {
+      if (epoch !== state.loadEpoch) return;
+      announce(readableError(error), "erro");
+      render();
     }
   }
 
-  async function uploadOriginal(file) {
-    const exam = selectedExam();
-    const c = client();
-    if (!exam || !c) return;
-    const pdfName = file && /\.pdf$/i.test(file.name || "");
-    const pdfType = file && (!file.type || file.type === "application/pdf");
-    if (!file || !pdfName || !pdfType) {
-      announce("Selecione um arquivo PDF.", "error");
+  async function loadDocument(documentId, focusHeading) {
+    state.selectedDocumentId = documentId;
+    state.detail = null;
+    releasePdfUrls();
+    const epoch = ++state.loadEpoch;
+    render();
+    try {
+      const detail = await client().api(`/laudos/${encodeURIComponent(documentId)}`);
+      if (epoch !== state.loadEpoch) return;
+      state.detail = detail;
+      const current = Array.isArray(detail.versoes)
+        ? detail.versoes.find((item) => item.id === detail.current_version_id) : null;
+      state.interpretation = current && current.interpretation_text_snapshot || "";
+      state.selectedTemplateId = current && current.template_id || "";
+      render();
+      if (focusHeading) {
+        const heading = document.getElementById("reportDetailHeading");
+        if (heading) heading.focus();
+      }
+      const original = Array.isArray(detail.versoes)
+        ? detail.versoes.find((item) => item.kind === "original") : null;
+      // Cada entrega gera auditoria mínima. Sequenciar evita duas gravações
+      // concorrentes na mesma sessão/banco local e mantém os dois Blob URLs
+      // estáveis para a comparação.
+      await loadPdf(original, "original", epoch);
+      await loadPdf(
+        current && current.kind !== "original" ? current : null,
+        "generated",
+        epoch
+      );
+    } catch (error) {
+      if (epoch !== state.loadEpoch) return;
+      announce(readableError(error), "erro");
+      render();
+    }
+  }
+
+  async function locateExam(code) {
+    const normalized = String(code || "").trim().toUpperCase();
+    if (!EXAM_CODE_RE.test(normalized)) {
+      announce("Informe um código institucional no formato ESP-000001.", "erro");
+      return;
+    }
+    state.busy = true;
+    announce("Localizando exame…", "");
+    try {
+      const response = await client().api(
+        `/espirometrias?public_code=${encodeURIComponent(normalized)}`
+      );
+      const items = Array.isArray(response) ? response : response.itens || [];
+      state.locatedExam = items.find((item) => item.public_code === normalized) || null;
+      if (!state.locatedExam) throw new Error("Exame não encontrado pelo código informado.");
+      announce("Exame localizado. Complete a atribuição técnica.", "ok");
+    } catch (error) {
+      state.locatedExam = null;
+      announce(readableError(error), "erro");
+    } finally {
+      state.busy = false;
+      render();
+      const physician = document.getElementById("reportPhysician");
+      if (physician) physician.focus();
+    }
+  }
+
+  async function uploadOriginal(form) {
+    const file = form.elements.file.files[0];
+    if (!file) {
+      announce("Selecione um PDF original.", "erro");
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
-      announce("O PDF excede o limite de 25 MiB.", "error");
+      announce("O PDF excede o limite de 25 MiB.", "erro");
       return;
     }
-    const data = new FormData();
-    data.append("exam_id", exam.id);
-    data.append("file", file);
-    const epoch = ++state.requestEpoch;
+    const payload = new FormData();
+    [
+      "exam_code", "physician_profile_id", "origin_type",
+      "origin_label", "origin_partner_unit_id",
+    ].forEach((name) => payload.append(name, form.elements[name].value || ""));
+    payload.append("file", file);
     state.busy = true;
+    announce("Validando, armazenando e atribuindo o PDF…", "");
     render();
     try {
-      const created = await c.api("/laudos", { method: "POST", body: data });
-      if (epoch !== state.requestEpoch || exam.id !== state.selectedExamId) return;
-      state.busy = false;
-      announce("PDF original recebido e validado.", "success");
-      await loadDocuments(exam.id, created.id);
-    } catch (error) {
-      if (epoch !== state.requestEpoch) return;
-      state.busy = false;
-      render();
-      announce(`Upload recusado: ${error.message || error}`, "error");
-    }
-  }
-
-  async function composeDraft(form) {
-    const doc = state.selectedDocument;
-    const c = client();
-    if (!doc || !c) return;
-    const templateId = form.elements.template_id
-      ? form.elements.template_id.value : "";
-    const pageNumber = Number(form.elements.page_number.value);
-    const placement = form.elements.placement.value;
-    if (!templateId) {
-      announce("Escolha uma abreviação de modelo ativa.", "error");
-      return;
-    }
-    state.selectedTemplateId = templateId;
-    const epoch = ++state.requestEpoch;
-    state.busy = true;
-    render();
-    try {
-      await c.api(`/laudos/${encodeURIComponent(doc.id)}/compor`, {
-        method: "POST",
-        body: JSON.stringify({
-          template_id: templateId,
-          page_number: pageNumber,
-          placement,
-        }),
+      const result = await client().api("/laudos", {
+        method: "POST", body: payload,
       });
-      if (epoch !== state.requestEpoch || doc.id !== state.selectedDocument?.id) return;
-      state.busy = false;
-      announce("Nova prévia de rascunho gerada.", "success");
-      await loadDocuments(state.selectedExamId, doc.id);
+      state.locatedExam = null;
+      announce(`${result.public_code} recebido e atribuído com segurança.`, "ok");
+      await loadAuthenticatedData();
     } catch (error) {
-      if (epoch !== state.requestEpoch) return;
-      state.busy = false;
+      announce(readableError(error), "erro");
       render();
-      announce(`Não foi possível gerar a prévia: ${error.message || error}`, "error");
+    } finally {
+      state.busy = false;
     }
   }
 
-  async function transition(path, successMessage, preferredDocumentId, payload) {
-    const c = client();
-    const examId = state.selectedExamId;
-    const epoch = ++state.requestEpoch;
+  async function compose(form) {
+    state.interpretation = form.elements.interpretation_text.value;
+    const payload = {
+      template_id: form.elements.template_id.value || null,
+      interpretation_text: state.interpretation,
+      page_number: Number(form.elements.page_number.value),
+      placement: form.elements.placement.value,
+    };
     state.busy = true;
+    announce("Gerando e revalidando a prévia clínica…", "");
     render();
     try {
-      const options = { method: "POST" };
-      if (payload) options.body = JSON.stringify(payload);
-      const result = await c.api(path, options);
-      if (epoch !== state.requestEpoch || examId !== state.selectedExamId) return result;
-      state.busy = false;
-      announce(successMessage, "success");
-      await loadDocuments(
-        state.selectedExamId,
-        preferredDocumentId === "result" ? result.id : preferredDocumentId
+      await client().api(
+        `/laudos/${encodeURIComponent(state.selectedDocumentId)}/compor`,
+        { method: "POST", body: JSON.stringify(payload) }
       );
+      announce("Prévia criada. Compare os dois PDFs antes de continuar.", "ok");
+      await loadAuthenticatedData();
     } catch (error) {
-      if (epoch !== state.requestEpoch) throw error;
-      state.busy = false;
+      announce(readableError(error), "erro");
       render();
-      announce(`Ação recusada: ${error.message || error}`, "error");
-      throw error;
+    } finally {
+      state.busy = false;
     }
   }
 
-  function openConfirm(options) {
-    const previousFocus = document.activeElement;
-    const overlay = document.createElement("div");
-    const titleId = `reportDialogTitle-${Date.now()}`;
-    const descId = `reportDialogDesc-${Date.now()}`;
-    overlay.className = "m15-modal-overlay report-modal-overlay";
-    overlay.innerHTML = `
-      <div class="m15-modal report-modal" role="dialog" aria-modal="true"
-        aria-labelledby="${titleId}" aria-describedby="${descId}">
-        <h3 id="${titleId}">${esc(options.title)}</h3>
-        <p id="${descId}">${esc(options.description)}</p>
-        ${options.formHtml || ""}
-        <div class="report-modal-error" role="alert" hidden></div>
-        <div class="m15-modal-actions">
-          <button type="button" class="m15-btn m15-btn-sec" data-report-modal-cancel>
-            Cancelar
-          </button>
-          <button type="button" class="m15-btn ${options.danger ? "report-finalize-btn" : ""}"
-            data-report-modal-confirm>${esc(options.confirmLabel)}</button>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    const modal = overlay.querySelector(".report-modal");
-    const confirm = overlay.querySelector("[data-report-modal-confirm]");
-    const cancel = overlay.querySelector("[data-report-modal-cancel]");
-    let submitting = false;
+  async function prepareSignature() {
+    state.busy = true;
+    announce("Congelando evidências e preparando assinatura…", "");
+    render();
+    try {
+      await client().api(
+        `/laudos/${encodeURIComponent(state.selectedDocumentId)}/preparar-assinatura`,
+        { method: "POST" }
+      );
+      announce("Conteúdo pronto. Assinatura qualificada permanece pendente.", "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+      render();
+    } finally {
+      state.busy = false;
+    }
+  }
 
-    function focusable() {
-      return Array.from(modal.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )).filter((element) => !element.disabled && element.offsetParent !== null);
+  async function reassign(form) {
+    const documentId = form.elements.document_id.value;
+    const payload = {
+      physician_profile_id: form.elements.physician_profile_id.value,
+      expected_assignment_id: form.elements.expected_assignment_id.value,
+      reason_code: form.elements.reason_code.value,
+    };
+    state.busy = true;
+    announce("Aplicando reatribuição auditada…", "");
+    try {
+      await client().api(`/laudos/${encodeURIComponent(documentId)}/reatribuir`, {
+        method: "POST", body: JSON.stringify(payload),
+      });
+      announce("Reatribuição concluída antes do primeiro rascunho.", "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+      render();
+    } finally {
+      state.busy = false;
     }
-    function close() {
-      document.removeEventListener("keydown", onKey, true);
-      overlay.remove();
-      if (previousFocus && previousFocus.isConnected && previousFocus.focus) {
-        previousFocus.focus();
-      } else {
-        const fallback = document.getElementById("reportStatus") ||
-          document.getElementById("reportLifecycleTitle");
-        if (fallback && fallback.focus) fallback.focus();
-      }
+  }
+
+  async function savePhysician(form) {
+    const payload = {
+      grant_physician_role: form.elements.grant_physician_role.checked,
+      professional_name: form.elements.professional_name.value,
+      crm_number: form.elements.crm_number.value,
+      crm_state: form.elements.crm_state.value,
+      rqe: form.elements.rqe.value || null,
+      verification_status: form.elements.verification_status.value,
+      active: form.elements.active.checked,
+    };
+    state.busy = true;
+    announce("Validando perfil e papel explícito…", "");
+    try {
+      await client().api(
+        `/laudos/admin/medicos/${encodeURIComponent(form.elements.user_id.value)}`,
+        { method: "PATCH", body: JSON.stringify(payload) }
+      );
+      announce("Perfil médico atualizado.", "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+      render();
+    } finally {
+      state.busy = false;
     }
-    function onKey(event) {
-      if (event.key === "Escape") {
-        if (submitting) return;
-        event.preventDefault();
-        close();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const items = focusable();
-      if (!items.length) return;
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+  }
+
+  async function saveTemplateRevision(form) {
+    const payload = {
+      titulo: form.elements.titulo.value,
+      texto_tooltip: form.elements.texto_tooltip.value || null,
+      texto_completo: form.elements.texto_completo.value,
+      status: form.elements.status.value,
+      clinically_approved: form.elements.clinically_approved.checked,
+      ativo: form.elements.ativo.checked,
+    };
+    state.busy = true;
+    announce("Criando revisão imutável do template…", "");
+    try {
+      const revision = await client().api(
+        `/laudos/templates/${encodeURIComponent(form.elements.template_id.value)}`,
+        { method: "PATCH", body: JSON.stringify(payload) }
+      );
+      state.selectedAdminTemplateId = revision.id;
+      announce(`Revisão v${revision.versao} criada sem reescrever a anterior.`, "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+      render();
+    } finally {
+      state.busy = false;
     }
-    document.addEventListener("keydown", onKey, true);
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay && !submitting) close();
-    });
-    cancel.addEventListener("click", close);
-    confirm.addEventListener("click", async () => {
-      submitting = true;
-      confirm.disabled = true;
-      cancel.disabled = true;
-      try {
-        await options.onConfirm(modal);
-        submitting = false;
-        close();
-      } catch (error) {
-        submitting = false;
-        const alert = overlay.querySelector(".report-modal-error");
-        alert.textContent = error.message || String(error);
-        alert.hidden = false;
-        confirm.disabled = false;
-        cancel.disabled = false;
-        confirm.focus();
-      }
-    });
-    confirm.focus();
+  }
+
+  async function openCorrection(form) {
+    state.busy = true;
+    announce("Abrindo documento corretivo separado…", "");
+    try {
+      const result = await client().api(
+        `/laudos/${encodeURIComponent(state.selectedDocumentId)}/nova-versao-corretiva`,
+        {
+          method: "POST",
+          body: JSON.stringify({ reason_code: form.elements.reason_code.value }),
+        }
+      );
+      state.selectedDocumentId = result.id;
+      announce("Documento corretivo aberto; o predecessor assinado não foi alterado.", "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+      render();
+    } finally {
+      state.busy = false;
+    }
   }
 
   function handleClick(event) {
-    const target = event.target.closest && event.target.closest("button");
-    if (!target) return;
-    if (target.matches("[data-report-open-login]")) {
-      const nav = document.querySelector('.nav-item[data-section="m15-nucleo"]');
-      if (nav) nav.click();
+    const button = event.target.closest("button");
+    if (!button) return;
+    if (button.matches("[data-report-open]")) {
+      loadDocument(button.getAttribute("data-report-open"), true);
       return;
     }
-    if (target.matches("[data-report-refresh]")) {
-      loadWorkspace();
+    if (button.matches("[data-report-operational]")) {
+      state.selectedOperationalId = button.getAttribute("data-report-operational");
+      render();
+      const form = document.getElementById("reportReassignForm");
+      if (form) form.querySelector("select").focus();
       return;
     }
-    if (target.matches("[data-report-exam]")) {
-      state.selectedExamId = target.getAttribute("data-report-exam");
-      state.documents = [];
-      state.selectedDocument = null;
-      loadDocuments(state.selectedExamId);
+    if (button.matches("[data-report-admin-template]")) {
+      state.selectedAdminTemplateId = button.getAttribute("data-report-admin-template");
+      render();
+      const heading = document.querySelector("#reportTemplateRevisionForm h4");
+      if (heading) {
+        heading.setAttribute("tabindex", "-1");
+        heading.focus();
+      }
       return;
     }
-    if (target.matches("[data-report-document]")) {
-      loadDocument(target.getAttribute("data-report-document"), true);
+    if (button.matches("[data-report-prepare-signature]")) {
+      prepareSignature();
       return;
     }
-    if (target.matches("[data-report-preview]") && state.selectedDocument) {
-      openPreview(
-        state.selectedDocument.id,
-        target.getAttribute("data-report-preview")
-      );
-      return;
-    }
-    if (target.matches("[data-report-download]")) {
-      downloadVersion(target.getAttribute("data-report-download"));
-      return;
-    }
-    const doc = state.selectedDocument;
-    if (!doc) return;
-    if (target.matches("[data-report-review]")) {
-      openConfirm({
-        title: "Enviar para revisão clínica?",
-        description: "A composição deste documento ficará bloqueada durante a revisão.",
-        confirmLabel: "Enviar para revisão",
-        onConfirm: () => transition(
-          `/laudos/${encodeURIComponent(doc.id)}/revisao`,
-          "Documento enviado para revisão clínica.",
-          doc.id
-        ),
-      });
-      return;
-    }
-    if (target.matches("[data-report-finalize]")) {
-      openConfirm({
-        title: "Finalizar este laudo?",
-        description: "Esta ação é irreversível para este documento. O PDF ficará imutável e a assinatura digital permanecerá pendente até existir um provedor real.",
-        confirmLabel: "Finalizar de forma imutável",
-        danger: true,
-        onConfirm: () => transition(
-          `/laudos/${encodeURIComponent(doc.id)}/finalizar`,
-          "Laudo finalizado. Assinatura digital pendente.",
-          doc.id
-        ),
-      });
-      return;
-    }
-    if (target.matches("[data-report-adjustment]")) {
-      openConfirm({
-        title: "Devolver o laudo para ajuste?",
-        description: "Escolha somente um motivo técnico. Não informe nome, CPF ou qualquer dado de paciente.",
-        formHtml: `
-          <label for="reportAdjustmentReason">
-            Motivo técnico
-            <select id="reportAdjustmentReason" required>
-              <option value="ajuste_de_composicao">Ajuste de composição</option>
-              <option value="ajuste_de_template">Ajuste de template</option>
-              <option value="ajuste_de_pagina">Ajuste de página</option>
-              <option value="correcao_tecnica">Correção técnica</option>
-            </select>
-          </label>`,
-        confirmLabel: "Voltar para rascunho",
-        onConfirm: (modal) => transition(
-          `/laudos/${encodeURIComponent(doc.id)}/devolver-para-ajuste`,
-          "Documento devolvido para ajuste técnico.",
-          doc.id,
-          { reason_code: modal.querySelector("#reportAdjustmentReason").value }
-        ),
-      });
-      return;
-    }
-    if (target.matches("[data-report-corrective]")) {
-      openConfirm({
-        title: "Abrir uma versão corretiva?",
-        description: "Um novo documento em rascunho será criado. O laudo finalizado atual não terá PDF, hash, data ou estado alterados.",
-        confirmLabel: "Criar novo documento corretivo",
-        onConfirm: () => transition(
-          `/laudos/${encodeURIComponent(doc.id)}/nova-versao-corretiva`,
-          "Versão corretiva aberta como novo documento.",
-          "result"
-        ),
-      });
-    }
-  }
-
-  function handleSubmit(event) {
-    if (event.target.id === "reportExamSearch") {
-      event.preventDefault();
-      locateExam(event.target.elements.public_code.value);
-      return;
-    }
-    if (event.target.id === "reportUploadForm") {
-      event.preventDefault();
-      uploadOriginal(event.target.elements.file.files[0]);
-      return;
-    }
-    if (event.target.id === "reportComposeForm") {
-      event.preventDefault();
-      composeDraft(event.target);
+    if (button.matches("[data-report-logout]")) {
+      releasePdfUrls();
+      client().logout();
     }
   }
 
   function handleChange(event) {
+    if (event.target.id === "reportStatusFilter") {
+      state.statusFilter = event.target.value;
+      loadAuthenticatedData();
+      return;
+    }
+    if (event.target.id === "reportAdminUser") {
+      state.selectedAdminUserId = event.target.value;
+      render();
+      const target = document.getElementById("reportProfessionalName");
+      if (target) target.focus();
+      return;
+    }
     if (event.target.matches('input[name="template_id"]')) {
       state.selectedTemplateId = event.target.value;
+      const template = state.templates.find(
+        (item) => item.id === state.selectedTemplateId
+      );
+      if (template) state.interpretation = template.texto_completo;
+      else state.interpretation = "";
+      render();
+      const editor = document.getElementById("reportInterpretation");
+      if (editor) {
+        editor.focus();
+        editor.setSelectionRange(editor.value.length, editor.value.length);
+      }
+    }
+  }
+
+  function handleInput(event) {
+    if (event.target.id === "reportInterpretation") {
+      state.interpretation = event.target.value;
+    }
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    if (event.target.id === "reportLocateExamForm") {
+      locateExam(event.target.elements.exam_code.value);
+    } else if (event.target.id === "reportUploadForm") {
+      uploadOriginal(event.target);
+    } else if (event.target.id === "reportComposeForm") {
+      compose(event.target);
+    } else if (event.target.id === "reportReassignForm") {
+      reassign(event.target);
+    } else if (event.target.id === "reportPhysicianAdminForm") {
+      savePhysician(event.target);
+    } else if (event.target.id === "reportTemplateRevisionForm") {
+      saveTemplateRevision(event.target);
+    } else if (event.target.id === "reportCorrectionForm") {
+      openCorrection(event.target);
     }
   }
 
   function bindClient() {
     const c = client();
     if (!c) {
-      window.setTimeout(bindClient, 250);
+      window.setTimeout(bindClient, 200);
       return;
     }
-    if (typeof c.onSessionChange === "function") {
-      c.onSessionChange(() => {
-        if (!isAuthenticated()) releasePreview();
-        if (document.getElementById(SECTION_ID).classList.contains("active")) {
-          loadWorkspace();
-        } else {
-          render();
-        }
-      });
-    }
+    c.onSessionChange(() => {
+      if (!authenticated()) {
+        state.loadEpoch += 1;
+        state.detail = null;
+        releasePdfUrls();
+        setPhysicianNavigationIsolation();
+        render();
+        return;
+      }
+      loadAuthenticatedData();
+    });
+    setPhysicianNavigationIsolation();
     render();
   }
 
@@ -1168,26 +1155,32 @@
     } catch (error) {
       config = {};
     }
-    if (config.enabled !== true ||
-        !reportsFeatureEnabled(config) ||
-        config.api_base !== "/painel-soprolife/api/m15") {
+    if (
+      config.enabled !== true
+      || !reportsFeatureEnabled(config)
+      || config.api_base !== "/painel-soprolife/api/m15"
+    ) {
       return;
     }
     document.querySelectorAll("[data-report-entry]").forEach((entry) => {
       entry.hidden = false;
     });
     mount.addEventListener("click", handleClick);
-    mount.addEventListener("submit", handleSubmit);
     mount.addEventListener("change", handleChange);
-    const nav = document.querySelector(`.nav-item[data-section="${SECTION_ID}"]`);
-    if (nav) nav.addEventListener("click", loadWorkspace);
+    mount.addEventListener("input", handleInput);
+    mount.addEventListener("submit", handleSubmit);
+    const nav = document.querySelector(
+      `.nav-item[data-section="${SECTION_ID}"]`
+    );
+    if (nav) nav.addEventListener("click", loadAuthenticatedData);
     document.addEventListener("click", (event) => {
-      const otherNav = event.target.closest && event.target.closest(".nav-item[data-section]");
-      if (otherNav && otherNav.getAttribute("data-section") !== SECTION_ID) {
-        releasePreview();
+      const other = event.target.closest
+        && event.target.closest(".nav-item[data-section]");
+      if (other && other.getAttribute("data-section") !== SECTION_ID) {
+        releasePdfUrls();
       }
     });
-    window.addEventListener("beforeunload", releasePreview);
+    window.addEventListener("beforeunload", releasePdfUrls);
     bindClient();
   }
 

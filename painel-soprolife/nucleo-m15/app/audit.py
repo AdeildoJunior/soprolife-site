@@ -19,6 +19,13 @@ ALLOWED_KEYS = {
     "decisao", "contexto", "campo", "marcador", "codigo", "fila", "papel",
     "ativo", "report_version_id", "delivery_mode", "institutional_status",
     "reason_code",
+    # M24C — exclusivamente identificadores técnicos e valores fechados.
+    "report_code", "exam_code", "origin_type", "physician_profile_id",
+    "assignment_id", "previous_assignment_id", "target_user_id", "fields",
+    "physician_role", "active", "verification_status", "template_id",
+    "template_version", "page_number", "placement", "signature_status",
+    "provider", "predecessor_document_id", "supersedes_template_id",
+    "clinically_approved", "version",
 }
 
 _MAX_STR = 120
