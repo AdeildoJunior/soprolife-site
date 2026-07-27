@@ -170,8 +170,12 @@ run "bash -n lib-deploy-hardening.sh" \
   bash -n painel-soprolife/nucleo-m15/scripts/lib-deploy-hardening.sh
 run "bash -n lib-go-live-gate.sh" \
   bash -n painel-soprolife/nucleo-m15/scripts/lib-go-live-gate.sh
+run "bash -n lib-reports-go-live-gate.sh" \
+  bash -n painel-soprolife/nucleo-m15/scripts/lib-reports-go-live-gate.sh
 run "py_compile go_live_https_gate" \
   env PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile painel-soprolife/nucleo-m15/scripts/go_live_https_gate.py
+run "py_compile reports_go_live_gate" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile painel-soprolife/nucleo-m15/scripts/reports_go_live_gate.py
 run "test-deploy-hardening (M15.3B)" \
   bash painel-soprolife/nucleo-m15/scripts/test-deploy-hardening.sh
 run "test-deploy-go-live (M15.5B shell)" \

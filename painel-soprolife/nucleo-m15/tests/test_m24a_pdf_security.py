@@ -205,7 +205,7 @@ def test_conteudo_ativo_e_embutido_e_rejeitado(kind, codigo):
     assert caught.value.codigo == codigo
 
 
-def test_link_uri_manual_nao_e_confundido_com_acao_automatica():
+def test_link_uri_manual_tambem_e_tratado_como_nao_confiavel():
     writer = PdfWriter()
     page = writer.add_blank_page(width=595, height=842)
     page[NameObject("/Annots")] = ArrayObject(
@@ -230,9 +230,9 @@ def test_link_uri_manual_nao_e_confundido_com_acao_automatica():
     )
     output = io.BytesIO()
     writer.write(output)
-    assert validate_pdf_bytes(
-        output.getvalue(), max_size_bytes=MAX_BYTES
-    ).page_count == 1
+    with pytest.raises(InvalidPdfError) as caught:
+        validate_pdf_bytes(output.getvalue(), max_size_bytes=MAX_BYTES)
+    assert caught.value.codigo == "pdf_uri_externa_nao_permitida"
 
 
 def test_traversal_com_referencia_ciclica_termina_com_seguranca():

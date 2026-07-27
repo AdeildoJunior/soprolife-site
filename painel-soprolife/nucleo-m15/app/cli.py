@@ -8,6 +8,7 @@ Uso (a partir de painel-soprolife/nucleo-m15, com o venv ativo):
   python -m app.cli importar --tipo leads --arquivo caminho.csv --execute
   python -m app.cli seed-demo                # dados 100% sintéticos
   python -m app.cli seed-institucional --arquivo data-private/parceiros.json
+  python -m app.cli reconciliar-laudos       # dry-run, nunca provisiona a raiz
 
 Migração governada por snapshot (M15.6A — manifesto privado, portões e
 reconciliação; dry-run é SEMPRE o padrão, nunca há execução implícita):
@@ -1067,6 +1068,90 @@ def cmd_exportar_snapshots(args) -> int:
     return 0
 
 
+def cmd_reconciliar_laudos(args) -> int:
+    """Technical-only output; dry-run unless every destructive gate passes."""
+
+    from .config import get_settings
+    from .services.report_reconciliation import (
+        DELETE_CONFIRMATION_PHRASE,
+        ReportReconciliationError,
+        delete_confirmed_orphans,
+        reconcile_report_storage,
+    )
+
+    settings = get_settings()
+    configured_root = settings.reports_storage_dir
+    if configured_root is None or not pathlib.Path(configured_root).is_dir():
+        print(
+            json.dumps({"ok": False, "code": "reports_storage_root_unavailable"}),
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        root = settings.resolved_reports_storage_dir()
+    except (ValueError, OSError):
+        print(
+            json.dumps({"ok": False, "code": "reports_storage_root_unsafe"}),
+            file=sys.stderr,
+        )
+        return 1
+
+    db = _session()
+    try:
+        dry_run = reconcile_report_storage(
+            db,
+            root=root,
+            max_size_bytes=settings.reports_max_upload_bytes,
+        )
+        print(
+            json.dumps(
+                dry_run.as_dict(),
+                ensure_ascii=False,
+                sort_keys=True,
+                indent=None if args.json else 2,
+            )
+        )
+        if not args.delete_orphans:
+            return 0
+
+        print(
+            "A exclusão exige backup coordenado do PostgreSQL e da raiz privada. "
+            f"Digite exatamente: {DELETE_CONFIRMATION_PHRASE}",
+            file=sys.stderr,
+        )
+        try:
+            phrase = input("> ")
+        except (EOFError, KeyboardInterrupt):
+            phrase = ""
+        deleted = delete_confirmed_orphans(
+            db,
+            root=root,
+            dry_run=dry_run,
+            explicit_delete=True,
+            confirmation_phrase=phrase,
+            backup_postgresql_and_storage_confirmed=(
+                args.backup_postgresql_and_storage_confirmed
+            ),
+        )
+        print(
+            json.dumps(
+                deleted.as_dict(),
+                ensure_ascii=False,
+                sort_keys=True,
+                indent=None if args.json else 2,
+            )
+        )
+        return 0
+    except ReportReconciliationError as exc:
+        print(
+            json.dumps({"ok": False, "code": str(exc)}),
+            file=sys.stderr,
+        )
+        return 1
+    finally:
+        db.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="m15", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -1098,6 +1183,24 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--saida", default="var/relatorios-importacao",
                    help="Diretório dos relatórios JSON/MD")
     p.set_defaults(func=cmd_importar)
+
+    p = sub.add_parser(
+        "reconciliar-laudos",
+        help="Compara linhas e storage de laudos (dry-run por padrão)",
+    )
+    p.add_argument(
+        "--delete-orphans",
+        action="store_true",
+        help="Solicita exclusão guardada somente dos órfãos confirmados",
+    )
+    p.add_argument(
+        "--backup-postgresql-e-storage-confirmado",
+        dest="backup_postgresql_and_storage_confirmed",
+        action="store_true",
+        help="Confirma backup coordenado anterior do PostgreSQL e storage",
+    )
+    p.add_argument("--json", action="store_true", help="Saída JSON em uma linha")
+    p.set_defaults(func=cmd_reconciliar_laudos)
 
     mig = sub.add_parser(
         "migracao",

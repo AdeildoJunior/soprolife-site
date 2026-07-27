@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import errno
+import logging
 import os
 import re
 import stat
@@ -10,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .pdf_validation import InvalidPdfError, ValidatedPdf, validate_pdf_bytes
+
+logger = logging.getLogger(__name__)
 
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -41,10 +45,28 @@ class StoredPdfIntegrityError(ReportStorageError):
         super().__init__(mensagem)
 
 
+class ReportCleanupError(ReportStorageError):
+    """Refusal or failure while removing one exact unpublished file."""
+
+
 @dataclass(frozen=True)
 class StoredPdf:
     data: bytes
     validated: ValidatedPdf
+
+
+@dataclass(frozen=True)
+class PublishedReportFile:
+    """Identity-bound handle for exactly one file created by this operation."""
+
+    root: Path
+    relative_path: Path
+    device: int
+    inode: int
+
+    @property
+    def path(self) -> Path:
+        return self.root / self.relative_path
 
 
 def _assert_safe_id(value: str, *, label: str) -> str:
@@ -131,8 +153,95 @@ def version_storage_path(
     return path
 
 
-def atomic_write_new_file(path: Path, data: bytes, *, root: Path) -> None:
-    """Publica um arquivo novo de forma atômica, sempre 0600, sem overwrite."""
+def _fsync_directory(directory_fd: int) -> None:
+    try:
+        os.fsync(directory_fd)
+    except OSError as exc:
+        if exc.errno in {
+            errno.EINVAL,
+            getattr(errno, "ENOTSUP", errno.EINVAL),
+            getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+            errno.EROFS,
+        }:
+            return
+        raise
+
+
+def cleanup_published_file(publication: PublishedReportFile) -> bool:
+    """Remove only the identity-bound regular file represented by ``publication``."""
+
+    root = publication.root
+    relative = publication.relative_path
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise ReportCleanupError("Identidade de publicação inválida.")
+    resolved_root = root.resolve(strict=True)
+    if resolved_root != root:
+        raise ReportCleanupError("Raiz da publicação mudou.")
+    path = root / relative
+    checked_root, checked_relative = _relative_to_root(path, root)
+    if checked_root != root or checked_relative != relative:
+        raise ReportCleanupError("Publicação fora da raiz privada.")
+    _assert_private_directory(root)
+    _assert_no_internal_symlink(root, relative)
+    _assert_private_directory(path.parent)
+
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        directory_flags |= os.O_NOFOLLOW
+    directory_fd = os.open(path.parent, directory_flags)
+    try:
+        try:
+            current = os.stat(
+                path.name,
+                dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            return False
+        if stat.S_ISLNK(current.st_mode) or not stat.S_ISREG(current.st_mode):
+            raise ReportCleanupError("Publicação deixou de ser arquivo regular.")
+        if (current.st_dev, current.st_ino) != (
+            publication.device,
+            publication.inode,
+        ):
+            raise ReportCleanupError("Identidade da publicação mudou.")
+
+        # Revalidation immediately before the destructive call.
+        revalidated = os.stat(
+            path.name,
+            dir_fd=directory_fd,
+            follow_symlinks=False,
+        )
+        if (
+            not stat.S_ISREG(revalidated.st_mode)
+            or (revalidated.st_dev, revalidated.st_ino)
+            != (publication.device, publication.inode)
+        ):
+            raise ReportCleanupError("Publicação mudou durante a limpeza.")
+        os.unlink(path.name, dir_fd=directory_fd)
+        _fsync_directory(directory_fd)
+        return True
+    finally:
+        os.close(directory_fd)
+
+
+def _log_cleanup_failure(error: BaseException) -> None:
+    """Log only a stable event and exception class; never paths or PDF metadata."""
+
+    logger.error(
+        "report_publication_cleanup_failed",
+        extra={
+            "event": "report_publication_cleanup_failed",
+            "error_type": type(error).__name__,
+        },
+    )
+
+
+def atomic_write_new_file(
+    path: Path, data: bytes, *, root: Path
+) -> PublishedReportFile:
+    """Publish one new 0600 file and return its identity; never overwrite."""
+
     resolved_root, relative = _relative_to_root(path, root)
     _ensure_private_directory_chain(resolved_root, path.parent)
     _assert_no_internal_symlink(resolved_root, relative)
@@ -149,7 +258,7 @@ def atomic_write_new_file(path: Path, data: bytes, *, root: Path) -> None:
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     fd = os.open(tmp_path, flags, 0o600)
-    published = False
+    publication: PublishedReportFile | None = None
     try:
         os.fchmod(fd, 0o600)
         if stat.S_IMODE(os.fstat(fd).st_mode) != 0o600:
@@ -159,22 +268,51 @@ def atomic_write_new_file(path: Path, data: bytes, *, root: Path) -> None:
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
+            temporary_stat = os.fstat(handle.fileno())
         try:
             os.link(tmp_path, path, follow_symlinks=False)
         except FileExistsError:
             raise FileExistsError(
                 "Arquivo de destino já existe; overwrite recusado."
             ) from None
-        published = True
+        publication = PublishedReportFile(
+            root=resolved_root,
+            relative_path=relative,
+            device=temporary_stat.st_dev,
+            inode=temporary_stat.st_ino,
+        )
         os.chmod(path, 0o600, follow_symlinks=False)
-        file_mode = path.stat(follow_symlinks=False).st_mode
-        if not stat.S_ISREG(file_mode) or stat.S_IMODE(file_mode) != 0o600:
+        file_stat = path.stat(follow_symlinks=False)
+        if not stat.S_ISREG(file_stat.st_mode) or stat.S_IMODE(file_stat.st_mode) != 0o600:
             raise ReportStorageError("Arquivo publicado não ficou com modo 0600.")
+        if (file_stat.st_dev, file_stat.st_ino) != (
+            publication.device,
+            publication.inode,
+        ):
+            raise ReportStorageError("Arquivo publicado mudou de identidade.")
         directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try:
-            os.fsync(directory_fd)
+            _fsync_directory(directory_fd)
         finally:
             os.close(directory_fd)
+        # Repete contenção, symlink e modos depois da publicação.
+        _assert_no_internal_symlink(resolved_root, relative)
+        resolved_path = path.resolve(strict=True)
+        try:
+            resolved_path.relative_to(resolved_root)
+        except ValueError as exc:
+            raise ReportStorageError(
+                "Arquivo publicado escapou da raiz privada."
+            ) from exc
+        _assert_private_directory(path.parent)
+        return publication
+    except BaseException:
+        if publication is not None:
+            try:
+                cleanup_published_file(publication)
+            except BaseException as cleanup_error:
+                _log_cleanup_failure(cleanup_error)
+        raise
     finally:
         if fd >= 0:
             os.close(fd)
@@ -182,17 +320,6 @@ def atomic_write_new_file(path: Path, data: bytes, *, root: Path) -> None:
             tmp_path.unlink()
         except FileNotFoundError:
             pass
-        if published:
-            # Repete contenção, symlink e modos depois da publicação.
-            _assert_no_internal_symlink(resolved_root, relative)
-            resolved_path = path.resolve(strict=True)
-            try:
-                resolved_path.relative_to(resolved_root)
-            except ValueError as exc:
-                raise ReportStorageError(
-                    "Arquivo publicado escapou da raiz privada."
-                ) from exc
-            _assert_private_directory(path.parent)
 
 
 def _read_stored_pdf_bytes(path: Path, *, root: Path) -> bytes:

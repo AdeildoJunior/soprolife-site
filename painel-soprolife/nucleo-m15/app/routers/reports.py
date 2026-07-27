@@ -38,12 +38,15 @@ from ..security import ROLE_ADMIN, ROLE_GESTOR, ROLE_LEITURA, ROLE_OPERACIONAL, 
 from ..serializers import ser_report_document, ser_report_signature, ser_report_template
 from ..services.pdf_validation import InvalidPdfError, validate_pdf_bytes
 from ..services.report_pdf import PdfCompositionError, compose_report_pdf
+from ..services.report_publication import (
+    ReportPublicationTransaction,
+    report_publication_transaction,
+)
 from ..services.report_storage import (
     ReportStorageError,
     StoredPdf,
     StoredPdfIntegrityError,
     StoredPdfMissingError,
-    atomic_write_new_file,
     read_and_validate_stored_pdf,
     version_storage_path,
 )
@@ -199,6 +202,7 @@ def _snapshot_hash(text: str) -> str:
 def _store_new_version(
     db: Session,
     *,
+    publication: ReportPublicationTransaction,
     document: ReportDocument,
     exam_id: str,
     kind: str,
@@ -216,6 +220,14 @@ def _store_new_version(
     from ..ids import new_uuid
 
     settings = get_settings()
+    try:
+        version_number = _next_version_number(db, document.id)
+    except IntegrityError:
+        raise ReportDomainError(
+            409,
+            "numero_versao_concorrente",
+            "Outra composição criou uma versão ao mesmo tempo; repita a operação.",
+        ) from None
     try:
         validated = validate_pdf_bytes(
             data,
@@ -260,7 +272,7 @@ def _store_new_version(
             document_id=document.id,
             version_id=version_id,
         )
-        atomic_write_new_file(path, data, root=storage_root)
+        publication.publish(path, data, root=storage_root)
         # Confirma que os bytes efetivamente publicados são exatamente os que
         # produziram os metadados que entrarão no banco.
         read_and_validate_stored_pdf(
@@ -284,7 +296,7 @@ def _store_new_version(
         id=version_id,
         report_document_id=document.id,
         kind=kind,
-        version_number=_next_version_number(db, document.id),
+        version_number=version_number,
         storage_path=str(path.relative_to(storage_root)),
         sha256=validated.sha256,
         size_bytes=validated.size_bytes,
@@ -302,7 +314,6 @@ def _store_new_version(
     try:
         db.flush()
     except IntegrityError:
-        db.rollback()
         raise ReportDomainError(
             409,
             "numero_versao_concorrente",
@@ -366,37 +377,39 @@ async def upload_report_document(
     except InvalidPdfError as exc:
         raise ReportDomainError(422, exc.codigo, exc.mensagem) from None
 
-    document = ReportDocument(
-        spirometry_exam_id=exam.id,
-        status=STATUS_RASCUNHO,
-        created_by_user_id=user.id,
-    )
-    db.add(document)
-    db.flush()
+    with report_publication_transaction(db) as publication:
+        document = ReportDocument(
+            spirometry_exam_id=exam.id,
+            status=STATUS_RASCUNHO,
+            created_by_user_id=user.id,
+        )
+        db.add(document)
+        db.flush()
 
-    version = _store_new_version(
-        db,
-        document=document,
-        exam_id=exam.id,
-        kind=KIND_ORIGINAL,
-        data=raw,
-        created_by_user_id=user.id,
-    )
-    document.current_version_id = version.id
-    audit(
-        db,
-        "laudo_original_enviado",
-        entidade="report_documents",
-        entidade_id=document.id,
-        user_id=user.id,
-        request_id=getattr(request.state, "request_id", None),
-        detalhes={
-            "public_code": exam.public_code,
-            "status": document.status,
-            "sha256": version.sha256,
-        },
-    )
-    db.commit()
+        version = _store_new_version(
+            db,
+            publication=publication,
+            document=document,
+            exam_id=exam.id,
+            kind=KIND_ORIGINAL,
+            data=raw,
+            created_by_user_id=user.id,
+        )
+        document.current_version_id = version.id
+        audit(
+            db,
+            "laudo_original_enviado",
+            entidade="report_documents",
+            entidade_id=document.id,
+            user_id=user.id,
+            request_id=getattr(request.state, "request_id", None),
+            detalhes={
+                "public_code": exam.public_code,
+                "status": document.status,
+                "sha256": version.sha256,
+            },
+        )
+        publication.commit()
     db.refresh(document)
     return ser_report_document(document, versions=[version])
 
@@ -636,35 +649,37 @@ def compose_report_document(
     except PdfCompositionError as exc:
         raise ReportDomainError(422, exc.codigo, exc.mensagem) from None
 
-    version = _store_new_version(
-        db,
-        document=document,
-        exam_id=document.spirometry_exam_id,
-        kind=KIND_RASCUNHO,
-        data=composed.data,
-        created_by_user_id=user.id,
-        template_id=template.id,
-        template_code_snapshot=snapshot_code,
-        template_version_snapshot=snapshot_version,
-        template_text_snapshot=snapshot_text,
-        page_number=payload.page_number,
-        placement=payload.placement,
-    )
-    document.current_version_id = version.id
-    audit(
-        db,
-        "laudo_rascunho_composto",
-        entidade="report_documents",
-        entidade_id=document.id,
-        user_id=user.id,
-        request_id=getattr(request.state, "request_id", None),
-        detalhes={
-            "status": document.status,
-            "sha256": version.sha256,
-            "codigo": snapshot_code,
-        },
-    )
-    db.commit()
+    with report_publication_transaction(db) as publication:
+        version = _store_new_version(
+            db,
+            publication=publication,
+            document=document,
+            exam_id=document.spirometry_exam_id,
+            kind=KIND_RASCUNHO,
+            data=composed.data,
+            created_by_user_id=user.id,
+            template_id=template.id,
+            template_code_snapshot=snapshot_code,
+            template_version_snapshot=snapshot_version,
+            template_text_snapshot=snapshot_text,
+            page_number=payload.page_number,
+            placement=payload.placement,
+        )
+        document.current_version_id = version.id
+        audit(
+            db,
+            "laudo_rascunho_composto",
+            entidade="report_documents",
+            entidade_id=document.id,
+            user_id=user.id,
+            request_id=getattr(request.state, "request_id", None),
+            detalhes={
+                "status": document.status,
+                "sha256": version.sha256,
+                "codigo": snapshot_code,
+            },
+        )
+        publication.commit()
     db.refresh(document)
     return ser_report_document(document, versions=[version])
 
@@ -780,43 +795,45 @@ def finalize_report_document(
             "Evidência imutável do template está ausente ou divergente.",
         )
 
-    final_version = _store_new_version(
-        db,
-        document=document,
-        exam_id=document.spirometry_exam_id,
-        kind=KIND_FINALIZADO,
-        data=draft.data,
-        created_by_user_id=user.id,
-        template_id=draft_version.template_id,
-        template_code_snapshot=draft_version.template_code_snapshot,
-        template_version_snapshot=draft_version.template_version_snapshot,
-        template_text_snapshot=draft_version.template_text_snapshot,
-        page_number=draft_version.page_number,
-        placement=draft_version.placement,
-    )
-    now = datetime.now(timezone.utc)
-    document.status = STATUS_FINALIZADO
-    document.signature_status = SIGNATURE_STATUS_PENDENTE
-    document.current_version_id = final_version.id
-    document.reviewer_user_id = document.reviewer_user_id or user.id
-    document.finalized_by_user_id = user.id
-    document.finalized_at = now
-    db.add(
-        ReportSignature(
-            report_document_version_id=final_version.id,
-            status=SIGNATURE_STATUS_PENDENTE,
+    with report_publication_transaction(db) as publication:
+        final_version = _store_new_version(
+            db,
+            publication=publication,
+            document=document,
+            exam_id=document.spirometry_exam_id,
+            kind=KIND_FINALIZADO,
+            data=draft.data,
+            created_by_user_id=user.id,
+            template_id=draft_version.template_id,
+            template_code_snapshot=draft_version.template_code_snapshot,
+            template_version_snapshot=draft_version.template_version_snapshot,
+            template_text_snapshot=draft_version.template_text_snapshot,
+            page_number=draft_version.page_number,
+            placement=draft_version.placement,
         )
-    )
-    audit(
-        db,
-        "laudo_finalizado",
-        entidade="report_documents",
-        entidade_id=document.id,
-        user_id=user.id,
-        request_id=getattr(request.state, "request_id", None),
-        detalhes={"status": document.status, "sha256": final_version.sha256},
-    )
-    db.commit()
+        now = datetime.now(timezone.utc)
+        document.status = STATUS_FINALIZADO
+        document.signature_status = SIGNATURE_STATUS_PENDENTE
+        document.current_version_id = final_version.id
+        document.reviewer_user_id = document.reviewer_user_id or user.id
+        document.finalized_by_user_id = user.id
+        document.finalized_at = now
+        db.add(
+            ReportSignature(
+                report_document_version_id=final_version.id,
+                status=SIGNATURE_STATUS_PENDENTE,
+            )
+        )
+        audit(
+            db,
+            "laudo_finalizado",
+            entidade="report_documents",
+            entidade_id=document.id,
+            user_id=user.id,
+            request_id=getattr(request.state, "request_id", None),
+            detalhes={"status": document.status, "sha256": final_version.sha256},
+        )
+        publication.commit()
     db.refresh(document)
     return ser_report_document(document, versions=[final_version])
 
@@ -852,37 +869,38 @@ def open_corrective_version(
         )
     original = _read_stored_version(original_version)
 
-    new_document = ReportDocument(
-        spirometry_exam_id=old_document.spirometry_exam_id,
-        status=STATUS_RASCUNHO,
-        corrects_document_id=old_document.id,
-        created_by_user_id=user.id,
-    )
-    db.add(new_document)
-    db.flush()
-    new_version = _store_new_version(
-        db,
-        document=new_document,
-        exam_id=new_document.spirometry_exam_id,
-        kind=KIND_ORIGINAL,
-        data=original.data,
-        created_by_user_id=user.id,
-    )
-    new_document.current_version_id = new_version.id
-    old_document.superseded_by_id = new_document.id
-    audit(
-        db,
-        "laudo_versao_corretiva_aberta",
-        entidade="report_documents",
-        entidade_id=new_document.id,
-        user_id=user.id,
-        request_id=getattr(request.state, "request_id", None),
-        detalhes={"status": new_document.status},
-    )
     try:
-        db.commit()
+        with report_publication_transaction(db) as publication:
+            new_document = ReportDocument(
+                spirometry_exam_id=old_document.spirometry_exam_id,
+                status=STATUS_RASCUNHO,
+                corrects_document_id=old_document.id,
+                created_by_user_id=user.id,
+            )
+            db.add(new_document)
+            db.flush()
+            new_version = _store_new_version(
+                db,
+                publication=publication,
+                document=new_document,
+                exam_id=new_document.spirometry_exam_id,
+                kind=KIND_ORIGINAL,
+                data=original.data,
+                created_by_user_id=user.id,
+            )
+            new_document.current_version_id = new_version.id
+            old_document.superseded_by_id = new_document.id
+            audit(
+                db,
+                "laudo_versao_corretiva_aberta",
+                entidade="report_documents",
+                entidade_id=new_document.id,
+                user_id=user.id,
+                request_id=getattr(request.state, "request_id", None),
+                detalhes={"status": new_document.status},
+            )
+            publication.commit()
     except IntegrityError:
-        db.rollback()
         raise ReportDomainError(
             409,
             "laudo_ja_possui_corretiva",

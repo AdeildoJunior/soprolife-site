@@ -133,7 +133,7 @@ Idempotente; não inventa telefone, e-mail, datas nem percentuais.
 bash scripts/test-postgres-efemero.sh
 ```
 
-## Laudos PDF seguros (M24A)
+## Laudos PDF seguros (M24A/M24B)
 
 M24A possui feature flag independente e permanece desabilitado por padrão:
 `M15_REPORTS_ENABLED=false` no backend e `reports_enabled=false` na
@@ -142,9 +142,12 @@ API operacional de laudos. Não habilite essas flags até as decisões clínicas
 de produto listadas no runbook serem aprovadas.
 
 Um futuro uso também exige `M15_REPORTS_STORAGE_DIR` absoluto, privado e fora
-do Git. A implementação valida estrutura/conteúdo ativo e integridade
-SHA-256/tamanho/páginas em toda releitura, cria diretórios 0700 e arquivos
-0600, congela o template por versão e audita cada entrega bem-sucedida sem PII.
+do Git. A implementação valida a interseção MediaBox/CropBox/TrimBox, rotações,
+conteúdo ativo/URI e integridade SHA-256/tamanho/páginas em toda releitura,
+cria diretórios 0700 e arquivos 0600, limpa a publicação exata após falha
+transacional, congela o template por versão e audita cada entrega sem PII.
+`python -m app.cli reconciliar-laudos --json` reconcilia banco/storage em
+dry-run; qualquer deleção possui gates adicionais descritos no runbook.
 Configuração, backup/restore coordenado, retenção, LGPD, implantação e rollback
 estão em `../docs/m24a-laudos-pdf-operacao.md`. Nenhum template clínico,
 médico/CRM, rodapé jurídico ou provedor de assinatura é presumido.

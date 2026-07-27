@@ -93,6 +93,8 @@ class TestCertificadoETimeouts(unittest.TestCase):
             raiz / "lib-deploy-hardening.sh",
             raiz / "lib-go-live-gate.sh",
             raiz / "go_live_https_gate.py",
+            raiz / "lib-reports-go-live-gate.sh",
+            raiz / "reports_go_live_gate.py",
         ]
         for alvo in alvos:
             texto = alvo.read_text(encoding="utf-8")

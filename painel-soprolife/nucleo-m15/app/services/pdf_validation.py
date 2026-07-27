@@ -12,12 +12,20 @@ from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
 
+from .pdf_geometry import PdfPageGeometryError, effective_page_box
+
 PDF_MAGIC = b"%PDF-"
 MIN_PAGES = 1
 MAX_PAGES = 300
 ACCEPTED_CONTENT_TYPES = {"application/pdf", "application/x-pdf"}
 _MAX_GRAPH_DEPTH = 200
 _MAX_GRAPH_OBJECTS = 100_000
+
+# Deliberately empty in production.  A future milestone may populate a closed,
+# reviewed origin allowlist through a separate policy/configuration contract.
+# Parsing remains purely local: validation must never resolve DNS or perform an
+# outbound request.
+APPROVED_EXTERNAL_URI_ORIGINS: frozenset[str] = frozenset()
 
 _FORBIDDEN_KEYS = {
     "/OpenAction": "pdf_conteudo_ativo_openaction",
@@ -98,12 +106,28 @@ def _resolved_scalar(value):
     return value
 
 
-def _is_external_uri(value) -> bool:
+def _uri_origin(value) -> str | None:
     value = _resolved_scalar(value)
     if not isinstance(value, str):
-        return False
+        return None
     parsed = urlsplit(value.strip())
-    return parsed.scheme.lower() in {"http", "https", "ftp", "file", "mailto"}
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"} or not parsed.hostname:
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    default_port = 443 if scheme == "https" else 80
+    effective_port = port or default_port
+    return f"{scheme}://{parsed.hostname.lower()}:{effective_port}"
+
+
+def _uri_action_is_approved(value) -> bool:
+    """Local-only future extension point for a deliberately closed allowlist."""
+
+    origin = _uri_origin(value)
+    return origin is not None and origin in APPROVED_EXTERNAL_URI_ORIGINS
 
 
 def _validate_no_active_content(reader: PdfReader) -> None:
@@ -165,14 +189,12 @@ def _validate_no_active_content(reader: PdfReader) -> None:
                     _FORBIDDEN_ANNOTATION_SUBTYPES[subtype],
                     "PDF contém mídia ativa, formulário ou anexo não permitido.",
                 )
-            if (
-                automatic_action
-                and action_type == "/URI"
-                and _is_external_uri(string_keys.get("/URI"))
+            if action_type == "/URI" and not _uri_action_is_approved(
+                string_keys.get("/URI")
             ):
                 raise InvalidPdfError(
-                    "pdf_acao_automatica_uri_externa",
-                    "PDF contém URI externa em ação automática.",
+                    "pdf_uri_externa_nao_permitida",
+                    "PDF contém ação de URI externa não permitida.",
                 )
 
             for key, item in value.items():
@@ -245,8 +267,10 @@ def validate_pdf_bytes(
     try:
         page_count = len(reader.pages)
         for page in reader.pages:
-            _ = page.mediabox
-    except (PdfReadError, ValueError, OSError, KeyError, IndexError) as exc:
+            effective_page_box(page)
+    except PdfPageGeometryError as exc:
+        raise InvalidPdfError(exc.codigo, exc.mensagem) from exc
+    except (PdfReadError, ValueError, OSError, KeyError, IndexError, TypeError) as exc:
         raise InvalidPdfError(
             "pdf_malformado", "PDF malformado ou corrompido."
         ) from exc

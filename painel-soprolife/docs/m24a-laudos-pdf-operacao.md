@@ -1,4 +1,4 @@
-# M24A — operação segura dos laudos PDF
+# M24A/M24B — operação segura dos laudos PDF
 
 Este runbook cobre somente configuração e governança do armazenamento de
 laudos. Ele não autoriza implantação, acesso à VPS, uso de dados reais,
@@ -17,6 +17,28 @@ O opt-in por `localStorage` existe somente em hostname loopback para E2E e
 desenvolvimento isolado; não funciona em origem remota. Não altere nenhuma das
 duas flags para produção enquanto os itens de NO-GO deste runbook estiverem
 pendentes.
+
+M24B adiciona um gate de implantação exclusivo, separado do gate geral M15.
+Uma futura tentativa de habilitação só passa se, antes de qualquer mutação:
+
+- `SOPROLIFE_REPORTS_GO_LIVE` for exatamente
+  `AUTORIZO GO-LIVE DE LAUDOS`;
+- o JSON versionado tiver `reports_enabled=true` e a configuração backend tiver
+  explicitamente `M15_REPORTS_ENABLED=true`;
+- `M15_REPORTS_STORAGE_DIR` apontar para raiz absoluta, privada, já existente,
+  fora do Git, sem ancestral symlink, de `soprolife:soprolife` e modo `0700`;
+- a configuração systemd **efetiva**, inclusive drop-ins, contiver a raiz exata
+  em `ReadWritePaths`, sem aceitar `/`, `/opt/soprolife` ou outro pai gravável
+  mais amplo;
+- `SOPROLIFE_REPORTS_BACKUP_COORDINATED` for exatamente
+  `POSTGRESQL_E_STORAGE_CONFIRMADOS`, após backup coordenado e restaurável;
+- preflight HTTPS provar que workspace, flag frontend e estado da API concordam.
+
+O postflight HTTPS repete a prova com `reports_enabled=true` servido e API
+protegida por autenticação. `SOPROLIFE_M15_GO_LIVE=YES`, sozinho ou combinado
+com a autorização geral do M15, é deliberadamente insuficiente. A unit atual
+não contém a raiz e este marco não a provisiona: portanto, este release continua
+incapaz de passar pelo ramo de habilitação fora de fixtures sintéticas.
 
 ## Configuração de `M15_REPORTS_STORAGE_DIR`
 
@@ -97,10 +119,88 @@ versão final. A API não devolve caminho de filesystem nem URL pública.
 Preview/download usam sessão autenticada, geram `Blob` temporário e desativam
 cache.
 
-PDFs com `OpenAction`, `AA`, JavaScript, `EmbeddedFiles`, `Launch`, RichMedia
-ou URI externa em ação automática são recusados por travessia cycle-safe antes
-e depois da composição. O bloco clínico só é composto quando todas as linhas
-cabem no mediabox acima do rodapé; não há truncamento nem página automática.
+PDFs com `OpenAction`, `AA`, JavaScript, `EmbeddedFiles`, formulários, `Launch`,
+RichMedia ou outras ações/conteúdo ativos são recusados por travessia cycle-safe
+antes e depois da composição. Toda ação `/URI`, inclusive link manual em
+anotação, árvore de nomes/ações ou objeto indireto, é tratada como não confiável
+e recusada por padrão; a validação nunca resolve DNS nem faz chamada de rede.
+Links não são removidos, reescritos ou “sanitizados” silenciosamente. Há um
+ponto de extensão explícito para uma futura allowlist fechada e aprovada, mas a
+allowlist de produção permanece vazia neste marco. Texto visível que apenas
+contém caracteres de URL continua sendo texto.
+
+## Área visível efetiva e composição
+
+Para cada página, a única geometria usada é a interseção estrita de `MediaBox`,
+`CropBox` quando presente e `TrimBox` quando presente. Array malformado,
+coordenada não finita, caixa vazia/invertida ou caixas sem interseção produzem
+422 seguro. A aplicação não normaliza, expande, substitui ou grava de volta
+nenhuma caixa do PDF recebido.
+
+A mesma caixa efetiva determina largura de quebra de linha, posicionamento da
+interpretação, rodapé, validação de altura útil e verificação pós-composição.
+Origens diferentes de zero são preservadas. Rotações `0`, `90`, `180` e `270`
+usam coordenadas visuais verticais, com transformação inversa para o espaço do
+PDF. O PDF composto é reaberto e revalidado; os baselines marcados de cada linha
+e a extensão completa de todas as linhas do rodapé precisam continuar dentro
+da interseção original em todas as páginas.
+
+Texto nunca é truncado e nenhuma página é adicionada automaticamente. Se
+interpretação, borda ou rodapé não couberem inteiros, a composição falha com
+422. Os bytes originais não são mutados nem sobrescritos.
+
+## Publicação transacional e arquivos órfãos
+
+Cada gravação atômica devolve uma identidade exata da nova publicação
+(raiz/relativo, dispositivo e inode), registrada antes de qualquer `flush` ou
+`commit` posterior. Upload, composição, finalização e corretiva usam o mesmo
+contrato. Em falha de flush, commit, integridade, concorrência ou outra exceção
+pré-commit, a sessão sofre rollback e somente o arquivo regular criado por
+aquela operação pode ser removido. A limpeza:
+
+- repete contenção sob a raiz configurada e recusa symlink ou tipo não regular;
+- compara dispositivo/inode, de modo que um arquivo preexistente ou substituído
+  nunca seja removido;
+- revalida imediatamente antes de `unlink` e faz `fsync` do diretório quando o
+  filesystem suporta;
+- jamais troca o erro transacional original por sucesso;
+- registra falha somente com evento técnico e classe de erro, sem paciente,
+  filename, template, conteúdo PDF ou caminho absoluto.
+
+Falha abrupta do host fora do controle da transação ainda exige reconciliação;
+não se apaga arquivo por inferência.
+
+## Reconciliação storage ↔ banco
+
+O comando administrativo é somente leitura por padrão e não cria a raiz:
+
+```bash
+.venv/bin/python -m app.cli reconciliar-laudos --json
+```
+
+Ele compara `report_document_versions` com arquivos regulares sob a raiz e
+reporta apenas IDs técnicos, IDs opacos de achado e contagens agregadas. Detecta
+linha sem arquivo, arquivo sem linha, divergência de SHA-256/tamanho/páginas,
+permissões inseguras, symlink, tipo inesperado e PDF inválido. Nunca imprime
+identidade do paciente, exame, texto de template, filename, bytes ou caminho
+absoluto.
+
+Não execute reconciliação destrutiva em produção sem janela aprovada, backup
+coordenado e ensaio de restauração. Mesmo em ambiente autorizado, exclusão de
+órfãos exige simultaneamente:
+
+```bash
+.venv/bin/python -m app.cli reconciliar-laudos \
+  --delete-orphans \
+  --backup-postgresql-e-storage-confirmado
+```
+
+e digitar exatamente `EXCLUIR APENAS PDFS ORFAOS CONFIRMADOS`. A frase não é
+argumento nem variável de ambiente. Antes de cada remoção, banco, contenção,
+tipo, dispositivo e inode são relidos; somente o órfão regular confirmado sob a
+raiz exata é removido. Arquivo referenciado por qualquer linha — em especial
+uma versão `finalizado` — nunca é apagado automaticamente. Divergências que não
+sejam órfãos confirmados são preservadas para investigação.
 
 Não copie a árvore para `data/`, `data-private/`, snapshots JSON públicos,
 logs, tickets, mensagens ou artefatos do navegador. Nome de arquivo, PDF,
@@ -209,7 +309,9 @@ M24A é **NO-GO** enquanto qualquer item abaixo estiver pendente:
 - Alembic em `8d4b1a2c9f70` com exatamente um head;
 - raiz privada provisionada, não symlink, `soprolife:soprolife` `0700`;
 - `M15_REPORTS_STORAGE_DIR` no EnvironmentFile e o mesmo caminho na allowlist
-  `ReadWritePaths` efetiva;
+  `ReadWritePaths` efetiva, de forma exata e sem pai gravável mais amplo;
+- gate específico de laudos, autorização humana exclusiva, atestado de backup
+  coordenado e preflight/postflight HTTPS aprovados;
 - capacidade/monitoramento de disco e alerta de falha de backup;
 - proxy da mesma origem com limites dedicados ao upload e à resposta PDF;
 - `M15_REPORTS_ENABLED=false` e `reports_enabled=false` preservados até a
@@ -246,19 +348,25 @@ e promover somente após reconciliação. Remover `ReadWritePaths` ou a variáve
 enquanto a versão antiga ainda precisa servir PDFs também quebra
 preview/download e não constitui rollback íntegro.
 
-## Decisões de produto e clínicas ainda abertas
+## Bloqueios clínicos, legais e de produto ainda abertos
 
 Nenhuma das decisões abaixo foi tomada por esta implementação:
 
-1. conteúdo, nomenclatura, aprovação e governança dos templates clínicos;
-2. identidade do médico, CRM/UF, responsabilidade e autorização de
-   finalização/assinatura;
-3. provedor ICP-Brasil, integração, política de certificado, custódia da chave,
-   renovação, revogação e resposta a comprometimento;
-4. período de retenção e alcance da exclusão em backups;
-5. redação jurídica final do rodapé do laudo.
+1. templates clínicos reais de produção, conteúdo, nomenclatura, aprovação e
+   governança;
+2. identidade do médico, CRM/UF e responsabilidade clínica;
+3. papel dedicado de médico e autorização clínica de finalização/assinatura;
+4. escopo de leitura por paciente, unidade e parceiro;
+5. piloto real e desidentificado de compatibilidade com PDFs dos equipamentos;
+6. período de retenção e aprovação da política de exclusão, inclusive backups;
+7. redação jurídica final do rodapé do laudo;
+8. provedor ICP-Brasil, certificado, custódia, renovação, revogação e
+   governança.
 
 Até essas decisões serem formalmente aprovadas, os templates de produção
 permanecem vazios, nenhum médico/CRM é inferido, nenhuma assinatura é alegada,
 nenhum prazo de retenção é inventado e nenhum rodapé legal é tratado como
 definitivo.
+
+M24B fecha somente hardening técnico pré-habilitação. Não conclui nenhum desses
+bloqueios e **não significa que laudos estejam prontos para habilitar**.

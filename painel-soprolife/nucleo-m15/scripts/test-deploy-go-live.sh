@@ -156,6 +156,22 @@ fiacao "deploy valida HTTPS antes da mutação" \
   'soprolife_go_live_validar_https pre'
 fiacao "deploy revalida HTTPS após o deploy" \
   'soprolife_go_live_validar_https pos'
+fiacao "deploy carrega gate independente de laudos" \
+  'lib-reports-go-live-gate.sh'
+fiacao "deploy valida laudos antes de qualquer mutação" \
+  'soprolife_reports_go_live_preflight'
+fiacao "deploy possui postflight HTTPS específico de laudos" \
+  'soprolife_reports_go_live_postflight'
+
+REPORTS_GATE_LINE="$(grep -n 'soprolife_reports_go_live_preflight' "$DEPLOY" | tail -1 | cut -d: -f1)"
+PROMPT_LINE="$(grep -n '^printf "Digite exatamente' "$DEPLOY" | head -1 | cut -d: -f1)"
+SUDO_LINE="$(grep -n '^sudo -v$' "$DEPLOY" | head -1 | cut -d: -f1)"
+if [[ -n "$REPORTS_GATE_LINE" && -n "$PROMPT_LINE" && -n "$SUDO_LINE" ]] \
+   && (( REPORTS_GATE_LINE < PROMPT_LINE && REPORTS_GATE_LINE < SUDO_LINE )); then
+  caso "gate de laudos precede prompt e sudo (zero mutação pré-gate)" 0 0
+else
+  caso "gate de laudos precede prompt e sudo (zero mutação pré-gate)" 0 1
+fi
 
 # As proteções existentes não podem ter sido removidas pela ponte.
 for padrao in \
@@ -181,6 +197,18 @@ echo "── release integrado M15.5C: enabled=true e alvo aprovado no check-sou
 SAIDA="$(soprolife_go_live_flag_config \
   "$REPO_ROOT/painel-soprolife/data/m15-config.json" 2>/dev/null)"
 caso "data/m15-config.json deste release lê 'true'" "true" "$SAIDA"
+
+REPORTS_FLAG="$(python3 - "$REPO_ROOT/painel-soprolife/data/m15-config.json" <<'PY'
+import json, pathlib, sys
+value = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")).get(
+    "reports_enabled"
+)
+if value is not False:
+    raise SystemExit(1)
+print("false")
+PY
+)"
+caso "reports_enabled deste release permanece false" "false" "$REPORTS_FLAG"
 
 if soprolife_go_live_checar_fonte_alvo "$REPO_ROOT" >/dev/null 2>&1; then
   caso "release integrado passa no check-source do gate" 0 0

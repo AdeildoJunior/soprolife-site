@@ -43,6 +43,7 @@ readonly UPDATE_UNIT_NAME="soprolife-update-data.service"
 readonly UPDATE_TIMER_UNIT="soprolife-update-data.timer"
 readonly HARDENING_LIB="$M15_DIR/scripts/lib-deploy-hardening.sh"
 readonly GO_LIVE_LIB="$M15_DIR/scripts/lib-go-live-gate.sh"
+readonly REPORTS_GO_LIVE_LIB="$M15_DIR/scripts/lib-reports-go-live-gate.sh"
 readonly DB_ROLE="soprolife_m15"
 readonly DB_NAME="soprolife_m15"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -113,6 +114,10 @@ source "$HARDENING_LIB"
 [[ -f "$GO_LIVE_LIB" ]] || fail "biblioteca de go-live ausente: $GO_LIVE_LIB"
 # shellcheck source=lib-go-live-gate.sh
 source "$GO_LIVE_LIB"
+[[ -f "$REPORTS_GO_LIVE_LIB" ]] || \
+  fail "biblioteca do gate independente de laudos ausente"
+# shellcheck source=lib-reports-go-live-gate.sh
+source "$REPORTS_GO_LIVE_LIB"
 
 CURRENT_BRANCH="$(git branch --show-current)"
 CURRENT_COMMIT="$(git rev-parse HEAD)"
@@ -145,6 +150,17 @@ if [[ "$M15_FLAG" == "true" ]]; then
     fail "endereço HTTPS privado reprovado na validação pré-deploy"
   GO_LIVE_MODE=1
 fi
+
+# M24B: o gate independente de laudos sempre roda antes de prompt, sudo,
+# backup ou qualquer outra mutação. Ausência da variável backend significa
+# false; valores ambíguos falham fechados no gate Python. A autorização geral
+# SOPROLIFE_M15_GO_LIVE nunca é consultada por este contrato.
+REPORTS_GO_LIVE_MODE="$(
+  soprolife_reports_go_live_preflight \
+    "$REPO_ROOT" "soprolife-m15-api.service"
+)" || fail "release reprovado pelo gate independente de laudos"
+[[ "$REPORTS_GO_LIVE_MODE" == "true" || "$REPORTS_GO_LIVE_MODE" == "false" ]] || \
+  fail "gate independente de laudos devolveu estado inválido"
 
 echo "Contexto confirmado:"
 echo "  usuário: $CURRENT_USER"
@@ -273,6 +289,10 @@ chmod 0600 "$TEMP_ENV"
   printf 'M15_API_PORT=8015\n'
   printf "M15_CORS_ORIGINS='[\"http://127.0.0.1:8765\",\"http://localhost:8765\"]'\n"
   printf 'M15_DISPLAY_TIMEZONE=America/Sao_Paulo\n'
+  printf 'M15_REPORTS_ENABLED=%s\n' "$REPORTS_GO_LIVE_MODE"
+  if [[ "$REPORTS_GO_LIVE_MODE" == "true" ]]; then
+    printf 'M15_REPORTS_STORAGE_DIR=%s\n' "${M15_REPORTS_STORAGE_DIR-}"
+  fi
 } >"$TEMP_ENV"
 sudo install -d -o root -g soprolife -m 0750 /opt/soprolife/secrets
 sudo install -o root -g soprolife -m 0640 "$TEMP_ENV" "$ENV_FILE"
@@ -436,12 +456,22 @@ if (( GO_LIVE_MODE )); then
     fail "validação HTTPS pós-deploy do go-live falhou"
 fi
 
+if [[ "$REPORTS_GO_LIVE_MODE" == "true" ]]; then
+  soprolife_reports_go_live_postflight "$REPO_ROOT" || \
+    fail "validação HTTPS pós-deploy específica de laudos falhou"
+fi
+
 sudo systemctl --no-pager --full status soprolife-m15-api.service
 sudo systemctl --no-pager --full status soprolife-painel-loopback.service
 if (( GO_LIVE_MODE )); then
   echo "Implantação técnica concluída; go-live controlado validado (enabled=true)."
 else
   echo "Implantação técnica concluída; feature flag permanece false."
+fi
+if [[ "$REPORTS_GO_LIVE_MODE" == "true" ]]; then
+  echo "Gate técnico específico de laudos validado; decisões clínicas continuam externas."
+else
+  echo "Laudos permanecem desabilitados pelo gate específico."
 fi
 echo "Backup verificado: $BACKUP_DIR"
 echo "Nenhum usuário, dado demo ou dado real foi criado/importado."
