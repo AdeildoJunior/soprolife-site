@@ -228,6 +228,74 @@ def test_downgrade_m24c_falha_fechado_com_perfil_profissional(
     engine.dispose()
 
 
+def test_m24c_preserva_report_templates_populada_ao_migrar(tmp_path, monkeypatch):
+    """F1: report_templates com linha legada não pode falhar em SQLite.
+
+    batch_alter_table recria a tabela em SQLite copiando as linhas com um
+    INSERT...SELECT que não referencia colunas adicionadas depois no mesmo
+    bloco. A remoção do server_default de status/clinically_approved precisa
+    estar num segundo bloco, executado depois que as colunas já existem com
+    default, para que a linha legada sobreviva à cópia.
+    """
+    monkeypatch.delenv("M15_DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path}/m24c-templates-populada.db"
+    cfg = _alembic_config(url)
+    command.upgrade(cfg, "8d4b1a2c9f70")
+    engine = create_engine(url)
+    legacy_id = "24c20000-0000-4000-8000-000000000001"
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO report_templates (
+                    id, codigo, titulo, texto_tooltip, texto_completo,
+                    versao, ativo, criado_por, created_at, updated_at
+                ) VALUES (
+                    :id, 'LEGADO', 'Template Legado Teste', NULL,
+                    'texto legado sintetico', 1, true, NULL,
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {"id": legacy_id},
+        )
+    engine.dispose()
+
+    command.upgrade(cfg, "head")
+
+    engine = create_engine(url)
+    with engine.connect() as connection:
+        legacy_row = connection.execute(
+            text(
+                "SELECT status, clinically_approved FROM report_templates"
+                " WHERE id = :id"
+            ),
+            {"id": legacy_id},
+        ).one()
+        assert legacy_row.status == "draft"
+        assert bool(legacy_row.clinically_approved) is False
+
+        provisional_codes = sorted(
+            row[0]
+            for row in connection.execute(
+                text(
+                    "SELECT codigo FROM report_templates WHERE id <> :id"
+                ),
+                {"id": legacy_id},
+            )
+        )
+    engine.dispose()
+
+    assert provisional_codes == [
+        "INESPECIFICO_QUALIDADE_PROVISORIO",
+        "MISTO_PROVISORIO",
+        "NORMAL_PROVISORIO",
+        "OBSTRUTIVO_BD_PROVISORIO",
+        "OBSTRUTIVO_PROVISORIO",
+        "SUGESTIVO_RESTRITIVO_PROVISORIO",
+    ]
+
+
 def _popular_financeiro_pre_m23_1(engine, *, com_conflitos: bool):
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
     session = SessionLocal()

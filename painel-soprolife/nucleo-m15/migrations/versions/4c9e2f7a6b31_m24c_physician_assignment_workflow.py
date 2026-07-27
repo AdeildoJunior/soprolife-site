@@ -288,6 +288,14 @@ def upgrade() -> None:
             "approved_by_user_id IS NULL AND approved_at IS NULL"
             ")",
         )
+    # Segundo bloco: em SQLite, batch_alter_table recria a tabela e copia as
+    # linhas existentes com um INSERT...SELECT que não referencia colunas
+    # adicionadas depois. Se a remoção do server_default estivesse no mesmo
+    # bloco acima, a tabela recriada nasceria com "status"/"clinically_approved"
+    # NOT NULL sem default, e a cópia de linhas legadas violaria o NOT NULL.
+    # Manter essa remoção num bloco separado, executado depois que as colunas
+    # já existem com default, preserva linhas populadas em report_templates.
+    with op.batch_alter_table("report_templates", schema=None) as batch_op:
         batch_op.alter_column("status", server_default=None)
         batch_op.alter_column("clinically_approved", server_default=None)
 
