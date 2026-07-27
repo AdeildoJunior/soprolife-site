@@ -453,6 +453,7 @@ def _setup_m24c_assignment_context(
         verification_status="verified",
         verified_at=now,
         verified_by_user_id=verifier.id,
+        verification_reference=f"CRM-VERIF-TESTE-{tag}-A",
     )
     second_profile = PhysicianProfile(
         user_id=second_user.id,
@@ -463,6 +464,7 @@ def _setup_m24c_assignment_context(
         verification_status="verified",
         verified_at=now,
         verified_by_user_id=verifier.id,
+        verification_reference=f"CRM-VERIF-TESTE-{tag}-B",
     )
     session.add_all([document, first_profile, second_profile])
     session.commit()
@@ -582,6 +584,7 @@ def test_crm_uf_ativo_unico_sob_concorrencia_pg(pg_engine):
                 verification_status="verified",
                 verified_at=datetime.now(timezone.utc),
                 verified_by_user_id=verifier_id,
+                verification_reference=f"CRM-VERIF-TESTE-CONCORRENTE-{index}",
             )
             worker_session.add(profile)
             worker_session.commit()

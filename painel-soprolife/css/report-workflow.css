@@ -82,6 +82,20 @@
   color: #8a2727;
 }
 
+/* M24D — aviso obrigatório do piloto interno controlado. Precisa ficar
+   visualmente acima de qualquer outra faixa da área de trabalho. */
+.report-pilot-warning {
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 2px solid #8a2727;
+  border-radius: var(--radius-xs);
+  background: var(--danger-soft);
+  color: #8a2727;
+  font-weight: 700;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .report-physician-shell {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);

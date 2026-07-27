@@ -54,6 +54,7 @@ def test_habilitar_o_nucleo_nao_habilita_relatorios_no_frontend():
 
 def test_backend_so_abre_a_borda_quando_flag_dedicada_e_explicita(monkeypatch):
     monkeypatch.setenv("M15_REPORTS_ENABLED", "true")
+    monkeypatch.setenv("M15_REPORTS_MODE", "pilot")
     get_settings.cache_clear()
     try:
         with TestClient(create_app()) as client:
@@ -61,5 +62,38 @@ def test_backend_so_abre_a_borda_quando_flag_dedicada_e_explicita(monkeypatch):
         # A flag deixou passar; a autenticação ainda bloqueia o uso.
         assert response.status_code == 401
         assert response.json()["erro"]["codigo"] == "http_401"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_backend_default_mode_e_disabled(monkeypatch):
+    monkeypatch.delenv("M15_REPORTS_MODE", raising=False)
+    assert Settings().reports_mode == "disabled"
+
+
+def test_flag_geral_isolada_nao_basta_sem_modo_pilot(monkeypatch):
+    """M24D: M15_REPORTS_ENABLED=true sozinho (sem M15_REPORTS_MODE=pilot)
+    continua desligado — a variável geral do M15 nunca é suficiente."""
+    monkeypatch.setenv("M15_REPORTS_ENABLED", "true")
+    monkeypatch.delenv("M15_REPORTS_MODE", raising=False)
+    get_settings.cache_clear()
+    try:
+        with TestClient(create_app()) as client:
+            response = client.get("/api/v1/laudos")
+        assert response.status_code == 503
+        assert response.json()["erro"]["codigo"] == "relatorios_desabilitados"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_modo_producao_permanece_bloqueado_mesmo_com_flag_ligada(monkeypatch):
+    monkeypatch.setenv("M15_REPORTS_ENABLED", "true")
+    monkeypatch.setenv("M15_REPORTS_MODE", "production")
+    get_settings.cache_clear()
+    try:
+        with TestClient(create_app()) as client:
+            response = client.get("/api/v1/laudos")
+        assert response.status_code == 503
+        assert response.json()["erro"]["codigo"] == "relatorios_producao_bloqueada"
     finally:
         get_settings.cache_clear()

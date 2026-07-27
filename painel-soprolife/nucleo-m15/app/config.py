@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     # diretório privado e gravável da API; o timer consome o mesmo caminho.
     marketing_refresh_queue: Path = Path("./var/marketing-refresh-request.json")
 
+    # M24D — contrato explícito de três estados para o piloto controlado de
+    # laudos. "disabled" (padrão) e "production" nunca servem a API de
+    # laudos: production permanece bloqueada porque não existe assinatura
+    # qualificada nem aprovação jurídica/clínica (ver
+    # scripts/reports_go_live_gate.py). Apenas "pilot" pode operar, e mesmo
+    # assim só quando M15_REPORTS_ENABLED=true também estiver presente — a
+    # variável geral do M15 sozinha nunca é suficiente.
+    reports_mode: Literal["disabled", "pilot", "production"] = "disabled"
     # M24A permanece independente do restante do Núcleo M15 e desabilitado
     # por padrão. Um deploy de código ou a ativação global do M15 nunca
     # habilita a API de laudos por efeito colateral.

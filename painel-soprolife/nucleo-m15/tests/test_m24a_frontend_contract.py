@@ -45,6 +45,7 @@ def _minimal_pdf(pages: int = 2) -> bytes:
 def _reports_storage(monkeypatch, tmp_path):
     monkeypatch.setenv("M15_REPORTS_STORAGE_DIR", str(tmp_path / "reports"))
     monkeypatch.setenv("M15_REPORTS_ENABLED", "true")
+    monkeypatch.setenv("M15_REPORTS_MODE", "pilot")
     monkeypatch.setenv(
         "M15_AUTH_SECRET",
         "m24c-frontend-contract-secret-only-for-tests-0123456789abcdef",
@@ -76,6 +77,7 @@ def physician(db, client, auth):
             "crm_number": "600001",
             "crm_state": "SC",
             "verification_status": "verified",
+            "verification_reference": "CRM-VERIF-TESTE-0002",
             "active": True,
         },
         headers=auth("admin"),
@@ -328,8 +330,10 @@ def test_interface_consome_apenas_elaboracao_e_assinatura_pendente(
     assert body["signature"]["provider"] == "unconfigured"
     assert body["signature"]["releasable"] is False
     assert body["versoes"][0]["kind"] == "assinatura_pendente"
+    # M24D: em modo piloto (fixture _reports_storage acima) o rodapé
+    # congelado é o PILOTO INTERNO, não o rodapé genérico de TESTE.
     assert body["versoes"][0]["footer_text_snapshot"].endswith(
-        "MODELO DE TESTE — DOCUMENTO NÃO ASSINADO E SEM VALIDADE PARA LIBERAÇÃO"
+        "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR AO PACIENTE"
     )
 
 

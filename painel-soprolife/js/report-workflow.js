@@ -11,6 +11,11 @@
   const SECTION_ID = "laudos-espirometria";
   const ROOT_ID = "reportWorkflowRoot";
   const CONFIG_URL = "data/m15-config.json";
+  // M24D — aviso obrigatório do piloto interno controlado. Precisa
+  // aparecer, ao vivo, sempre que o modo ativo for "pilot" — o mesmo texto
+  // exato usado no rodapé congelado do PDF (services/report_catalog.py).
+  const PILOT_WARNING =
+    "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR AO PACIENTE";
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
   const EXAM_CODE_RE = /^ESP-\d{1,9}$/i;
   const UF_VALUES = [
@@ -34,6 +39,7 @@
   ];
 
   const state = {
+    reportsMode: "disabled",
     queue: [],
     operational: [],
     physicians: [],
@@ -211,6 +217,13 @@
       state.noticeKind ? ` report-status-${esc(state.noticeKind)}` : ""
     }" role="status" aria-live="polite"${state.notice ? "" : " hidden"}>${
       esc(state.notice)
+    }</div>`;
+  }
+
+  function renderPilotWarning() {
+    if (state.reportsMode !== "pilot") return "";
+    return `<div id="reportPilotWarning" class="report-pilot-warning" role="alert">${
+      esc(PILOT_WARNING)
     }</div>`;
   }
 
@@ -710,6 +723,7 @@
     }
     mount.innerHTML = `
       ${renderStatus()}
+      ${renderPilotWarning()}
       <div class="report-session-strip">
         <span>Sessão: ${esc(currentUser() && currentUser().nome || "usuário autenticado")}</span>
         ${explicit("medico") ? `<span>Papel clínico explícito</span>` : ""}
@@ -1162,6 +1176,10 @@
     ) {
       return;
     }
+    // M24D — o aviso PILOTO INTERNO só aparece quando o backend está
+    // realmente em modo piloto; qualquer outro valor mantém o padrão
+    // seguro "disabled" (sem aviso, sem capacidade extra).
+    state.reportsMode = config.reports_mode === "pilot" ? "pilot" : "disabled";
     document.querySelectorAll("[data-report-entry]").forEach((entry) => {
       entry.hidden = false;
     });

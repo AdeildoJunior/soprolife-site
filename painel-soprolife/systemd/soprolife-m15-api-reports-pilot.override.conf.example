@@ -1,0 +1,18 @@
+# M24D — drop-in de exemplo para o piloto interno controlado de laudos.
+#
+# NÃO aplicar automaticamente. Instalar apenas depois que
+# scripts/reports_go_live_gate.py preflight-pilot aprovar TODAS as
+# condições independentes (modo, autorização dedicada, storage, backup
+# verificado, HTTPS). Instalação real:
+#
+#   sudo cp soprolife-m15-api-reports-pilot.override.conf.example \
+#     /etc/systemd/system/soprolife-m15-api.service.d/reports-pilot.conf
+#   sudo systemctl daemon-reload
+#   sudo systemctl restart soprolife-m15-api
+#
+# A raiz abaixo é a ÚNICA path de laudos aceita: precisa ser absoluta, fora
+# do Git, sem ancestral symlink, modo 0700, dono soprolife:soprolife, e ser
+# EXATAMENTE (não um pai mais amplo) a mesma raiz de
+# scripts/reports_go_live_gate.py::_validate_exact_readwritepath.
+[Service]
+ReadWritePaths=/opt/soprolife/private/reports

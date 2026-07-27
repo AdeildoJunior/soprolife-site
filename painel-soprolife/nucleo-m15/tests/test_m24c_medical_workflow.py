@@ -65,6 +65,7 @@ def _minimal_pdf(pages: int = 2) -> bytes:
 @pytest.fixture(autouse=True)
 def reports_enabled(monkeypatch, tmp_path):
     monkeypatch.setenv("M15_REPORTS_ENABLED", "true")
+    monkeypatch.setenv("M15_REPORTS_MODE", "pilot")
     monkeypatch.setenv("M15_REPORTS_STORAGE_DIR", str(tmp_path / "reports"))
     monkeypatch.setenv(
         "M15_AUTH_SECRET",
@@ -118,6 +119,7 @@ def _configure_profile(
             "crm_state": "RJ",
             "rqe": "RQE-TESTE-001",
             "verification_status": verification,
+            "verification_reference": "CRM-VERIF-TESTE-0001",
             "active": active,
         },
         headers=auth("admin"),
@@ -272,6 +274,39 @@ def test_multirole_explicito_ainda_exige_perfil_e_atribuicao(
     ).scalar_one()
     admin_user_id = admin_user.id
     db.rollback()
+    # M24D (fecha F2): o próprio admin não pode se autoverificar.
+    self_verify = client.patch(
+        f"/api/v1/laudos/admin/medicos/{admin_user_id}",
+        json={
+            "grant_physician_role": True,
+            "professional_name": "TESTE APAGAR Administrador Médico",
+            "crm_number": "88001",
+            "crm_state": "SP",
+            "verification_status": "verified",
+            "verification_reference": "CRM-VERIF-TESTE-SELF",
+            "active": True,
+        },
+        headers=auth("admin"),
+    )
+    assert self_verify.status_code == 409
+    assert (
+        self_verify.json()["erro"]["codigo"] == "autoverificacao_medica_proibida"
+    )
+
+    # Um segundo admin (quatro olhos) consegue verificar — a segregação de
+    # papéis continua não afetando o isolamento por atribuição.
+    ensure_roles_exist(db)
+    second_admin = User(
+        email="segundo-admin@teste.local",
+        nome="TESTE APAGAR Segundo Admin",
+        password_hash=hash_password("senha-admin-sintetica-123"),
+    )
+    second_admin.roles.append(get_role(db, ROLE_ADMIN))
+    db.add(second_admin)
+    db.commit()
+    second_admin_headers = {
+        "Authorization": f"Bearer {issue_token(second_admin.id, second_admin.password_hash)}"
+    }
     response = client.patch(
         f"/api/v1/laudos/admin/medicos/{admin_user_id}",
         json={
@@ -280,9 +315,10 @@ def test_multirole_explicito_ainda_exige_perfil_e_atribuicao(
             "crm_number": "88001",
             "crm_state": "SP",
             "verification_status": "verified",
+            "verification_reference": "CRM-VERIF-TESTE-0004",
             "active": True,
         },
-        headers=auth("admin"),
+        headers=second_admin_headers,
     )
     assert response.status_code == 200, response.text
     assert set(response.json()["user"]["papeis"]) == {"admin", "medico"}
@@ -365,6 +401,7 @@ def test_crm_uf_ativo_unico_no_banco(client, auth, db):
             "crm_number": "CRM 77001",
             "crm_state": "RJ",
             "verification_status": "verified",
+            "verification_reference": "CRM-VERIF-TESTE-0005",
             "active": True,
         },
         headers=auth("admin"),
@@ -638,9 +675,11 @@ def test_composicao_e_exclusiva_do_atribuido_e_congela_snapshots(
     assert version["physician_name_snapshot"] == "TESTE APAGAR Profissional Um"
     assert version["physician_crm_number_snapshot"] == "00123"
     assert version["origin_type_snapshot"] == "coworking"
-    assert version["footer_code_snapshot"] == "TESTE_NAO_ASSINADO"
+    # M24D: em modo piloto (fixture reports_enabled acima), toda prévia usa
+    # o rodapé PILOTO INTERNO em vez do rodapé genérico de TESTE.
+    assert version["footer_code_snapshot"] == "PILOTO_INTERNO_NAO_ASSINADO"
     assert (
-        "MODELO DE TESTE — DOCUMENTO NÃO ASSINADO E SEM VALIDADE PARA LIBERAÇÃO"
+        "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR AO PACIENTE"
         in version["footer_text_snapshot"]
     )
     assert "assinado digitalmente" not in version["footer_text_snapshot"].lower()
@@ -725,6 +764,7 @@ def test_edicao_do_perfil_nao_reescreve_snapshot_e_exige_nova_previa(
             "crm_state": "RJ",
             "rqe": "RQE-TESTE-002",
             "verification_status": "verified",
+            "verification_reference": "CRM-VERIF-TESTE-0006",
             "active": True,
         },
         headers=auth("admin"),

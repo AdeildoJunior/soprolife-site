@@ -58,6 +58,7 @@ def reports_storage(monkeypatch, tmp_path):
     storage_dir = tmp_path / "laudos-storage"
     monkeypatch.setenv("M15_REPORTS_STORAGE_DIR", str(storage_dir))
     monkeypatch.setenv("M15_REPORTS_ENABLED", "true")
+    monkeypatch.setenv("M15_REPORTS_MODE", "pilot")
     monkeypatch.setenv(
         "M15_AUTH_SECRET",
         "m24a-teste-segredo-fixo-nao-usar-em-producao-0123456789",
@@ -106,6 +107,7 @@ def _physician(client, auth) -> tuple[dict, dict]:
             "crm_number": "424242",
             "crm_state": "AC",
             "verification_status": "verified",
+            "verification_reference": "CRM-VERIF-TESTE-0003",
             "active": True,
         },
         headers=auth("admin"),

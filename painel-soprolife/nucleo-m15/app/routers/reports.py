@@ -54,6 +54,7 @@ from ..schemas import (
     PhysicianProfileAdminUpdate,
     ReportCorrectiveCreate,
     ReportDocumentCompose,
+    ReportPhysicianRecovery,
     ReportReassignment,
     ReportTemplateCreate,
     ReportTemplateUpdate,
@@ -79,6 +80,8 @@ from ..serializers import (
 )
 from ..services.pdf_validation import InvalidPdfError, validate_pdf_bytes
 from ..services.report_catalog import (
+    PILOT_FOOTER_CODE,
+    PILOT_WARNING,
     PROVISIONAL_CODES,
     PROVISIONAL_WARNING,
     TEST_FOOTER_CODE,
@@ -147,7 +150,19 @@ _UNSIGNED_WARNING = (
 
 
 def _require_reports_enabled() -> None:
-    if not get_settings().reports_enabled:
+    settings = get_settings()
+    # M24D — "production" nunca serve a API de laudos, mesmo com
+    # M15_REPORTS_ENABLED=true: não existe assinatura qualificada nem
+    # aprovação jurídica/clínica nesta versão. A checagem de modo vem antes
+    # da checagem do flag geral para que a variável do M15 sozinha nunca
+    # seja suficiente para servir nada em modo produção.
+    if settings.reports_mode == "production":
+        raise ReportDomainError(
+            503,
+            "relatorios_producao_bloqueada",
+            "O modo produção de laudos permanece bloqueado nesta versão.",
+        )
+    if not settings.reports_enabled or settings.reports_mode == "disabled":
         raise ReportDomainError(
             503,
             "relatorios_desabilitados",
@@ -774,6 +789,58 @@ def _render_test_footer(
     return rendered
 
 
+def _render_pilot_footer(
+    footer: ReportFooterTemplate,
+    *,
+    profile: PhysicianProfile,
+    document: ReportDocument,
+    exam: SpirometryExam,
+    issued_at: datetime,
+    version_number: int,
+) -> str:
+    """M24D — rodapé exclusivo do piloto interno controlado. Espelha
+    ``_render_test_footer`` mas exige o aviso PILOTO INTERNO exato em vez do
+    aviso de MODELO DE TESTE; nunca aprovado para produção."""
+
+    if (
+        footer.code != PILOT_FOOTER_CODE
+        or footer.status != "test"
+        or footer.production_approved
+        or not footer.active
+        or PILOT_WARNING not in footer.body_template
+    ):
+        raise ReportDomainError(
+            503,
+            "rodape_piloto_indisponivel",
+            "O rodapé PILOTO INTERNO não está disponível de forma segura.",
+        )
+    try:
+        rendered = footer.body_template.format(
+            physician_name=profile.professional_name,
+            crm_state=profile.crm_state,
+            crm_number=profile.crm_number,
+            rqe=profile.rqe or "",
+            exam_code=exam.public_code,
+            origin=_origin_display(document),
+            issued_at=issued_at.astimezone(timezone.utc).isoformat(),
+            report_code=document.public_code,
+            version_number=version_number,
+        )
+    except (KeyError, ValueError):
+        raise ReportDomainError(
+            503,
+            "rodape_piloto_invalido",
+            "O rodapé PILOTO INTERNO possui placeholders inválidos.",
+        ) from None
+    if PILOT_WARNING not in rendered or "assinado digitalmente" in rendered.lower():
+        raise ReportDomainError(
+            503,
+            "rodape_piloto_invalido",
+            "O rodapé PILOTO INTERNO não declara corretamente o estado não assinado.",
+        )
+    return rendered
+
+
 def _latest_template_version(db: Session, code: str) -> int:
     value = db.execute(
         select(func.max(ReportTemplate.versao)).where(
@@ -962,14 +1029,33 @@ def update_physician_account(
     if identity_changed and requested_verification is None:
         requested_verification = "pending"
     if requested_verification is not None:
-        profile.verification_status = requested_verification
         if requested_verification == "verified":
+            # M24D (fecha F2) — segregação de funções: quem verifica nunca
+            # pode ser o próprio perfil verificado, e a verificação exige
+            # uma referência técnica segura (código/ID do processo de
+            # checagem CRM/UF), nunca uma afirmação sem prova.
+            if admin.id == account.id:
+                raise ReportDomainError(
+                    409,
+                    "autoverificacao_medica_proibida",
+                    "Quem verifica não pode ser o próprio perfil médico.",
+                )
+            reference = (values.get("verification_reference") or "").strip()
+            if len(reference) < 4:
+                raise ReportDomainError(
+                    422,
+                    "referencia_verificacao_obrigatoria",
+                    "Verificação exige uma referência técnica segura.",
+                )
+            profile.verification_reference = reference
             profile.verified_at = datetime.now(timezone.utc)
             profile.verified_by_user_id = admin.id
         else:
             profile.verified_at = None
             profile.verified_by_user_id = None
+            profile.verification_reference = None
             profile.active = False
+        profile.verification_status = requested_verification
         changed_fields.append("verification_status")
 
     requested_active = values.get("active")
@@ -1008,6 +1094,8 @@ def update_physician_account(
             "physician_role": has_role,
             "active": profile.active,
             "verification_status": profile.verification_status,
+            "verification_reference_present": profile.verification_reference
+            is not None,
         },
     )
     try:
@@ -1457,6 +1545,111 @@ def reassign_report_document(
     }
 
 
+@router.post("/{document_id}/recuperar-medico-suspenso")
+def recover_report_after_physician_unavailable(
+    document_id: str,
+    payload: ReportPhysicianRecovery,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_role(ROLE_ADMIN)),
+):
+    """M24D (fecha F3) — único caminho para destravar um laudo cujo médico
+    ficou indisponível DEPOIS do primeiro rascunho clínico. A reatribuição
+    comum (`/reatribuir`) permanece bloqueada nesse ponto por desenho; esta
+    rota exige papel admin, um motivo fechado dedicado, prova de que o
+    médico anterior deixou de ser elegível, e nunca reescreve a prévia
+    clínica já gravada — apenas encerra a atribuição antiga e abre uma nova.
+    """
+
+    document = _lock_document_or_404(db, document_id)
+    if (
+        document.status not in (STATUS_EM_ELABORACAO, STATUS_ASSINATURA_PENDENTE)
+        or document.clinical_started_at is None
+    ):
+        raise ReportDomainError(
+            409,
+            "recuperacao_nao_aplicavel",
+            "A recuperação só se aplica a laudos em elaboração clínica.",
+        )
+    previous = _active_assignment(db, document.id, lock=True)
+    if previous is None or previous.id != payload.expected_assignment_id:
+        raise ReportDomainError(
+            409,
+            "atribuicao_desatualizada",
+            "A atribuição mudou; atualize a fila antes de tentar novamente.",
+        )
+    previous_profile = db.get(PhysicianProfile, previous.physician_profile_id)
+    previous_account = (
+        db.get(User, previous_profile.user_id) if previous_profile else None
+    )
+    still_eligible = (
+        previous_profile is not None
+        and previous_account is not None
+        and previous_account.ativo
+        and user_has_explicit_role(previous_account, ROLE_MEDICO)
+        and previous_profile.active
+        and previous_profile.verification_status == "verified"
+    )
+    if still_eligible:
+        raise ReportDomainError(
+            409,
+            "medico_ainda_elegivel",
+            "O médico atribuído continua ativo e verificado; use a reatribuição comum.",
+        )
+    new_profile, _account = _profile_for_assignment(db, payload.physician_profile_id)
+    if new_profile.id == previous.physician_profile_id:
+        raise ReportDomainError(
+            409,
+            "medico_ja_atribuido",
+            "O médico selecionado já é o responsável ativo.",
+        )
+    try:
+        previous.active = False
+        previous.ended_at = datetime.now(timezone.utc)
+        assignment = _create_assignment(
+            db,
+            document=document,
+            profile=new_profile,
+            performed_by_user_id=admin.id,
+            reason_code="physician_unavailable_after_draft",
+            event_type="recovered_after_draft",
+            previous=previous,
+        )
+        # A prévia clínica do médico anterior permanece imutável (guarda
+        # ORM + trigger PostgreSQL); apenas o ponteiro de atribuição e o
+        # status do documento voltam para "atribuido" para permitir que o
+        # novo médico inicie sua própria elaboração do zero.
+        document.status = STATUS_ATRIBUIDO
+        document.clinical_started_at = None
+        audit(
+            db,
+            "laudo_medico_recuperado",
+            entidade="report_documents",
+            entidade_id=document.id,
+            user_id=admin.id,
+            request_id=_request_id(request),
+            detalhes={
+                "status": document.status,
+                "previous_assignment_id": previous.id,
+                "assignment_id": assignment.id,
+                "physician_profile_id": new_profile.id,
+            },
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ReportDomainError(
+            409,
+            "atribuicao_concorrente",
+            "A atribuição mudou em outra operação.",
+        ) from None
+    return {
+        "report_code": document.public_code,
+        "status": document.status,
+        "assignment": ser_report_assignment(assignment),
+    }
+
+
 # --------------------------------------------------------- fila do médico
 
 
@@ -1501,8 +1694,19 @@ def get_report_document(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    # M24D (fecha F4) — a checagem de papel roda ANTES da busca por id, para
+    # que um papel sem qualquer acesso a laudos (ex.: leitura) receba a
+    # MESMA resposta para id existente e inexistente, em vez do padrão
+    # anterior (403 para existente, 404 para inexistente) que servia de
+    # oráculo de existência entre papéis.
+    is_medico = user_has_explicit_role(user, ROLE_MEDICO)
+    is_operacional = ROLE_OPERACIONAL in user_effective_roles(user)
+    if not is_medico and not is_operacional:
+        raise ReportDomainError(
+            403, "permissao_insuficiente", "Permissão insuficiente."
+        )
     document = _get_document_or_404(db, document_id)
-    if user_has_explicit_role(user, ROLE_MEDICO):
+    if is_medico:
         profile, assignment = _require_assigned_physician(db, user, document)
         versions = _all_versions(db, document.id)
         exam = db.get(SpirometryExam, document.spirometry_exam_id)
@@ -1531,10 +1735,6 @@ def get_report_document(
                 "date_of_birth": d(person.data_nascimento),
             },
         }
-    if ROLE_OPERACIONAL not in user_effective_roles(user):
-        raise ReportDomainError(
-            403, "permissao_insuficiente", "Permissão insuficiente."
-        )
     exam = db.get(SpirometryExam, document.spirometry_exam_id)
     assignment = _active_assignment(db, document.id)
     if exam is None:
@@ -1553,6 +1753,15 @@ def download_report_version(
     db: Session = Depends(get_db),
     physician_user: User = Depends(get_current_user),
 ):
+    # M24D (fecha F4) — checa o papel explícito ANTES da busca por id; sem
+    # isso, um papel sem `medico` recebia 403 para id existente e 404 para
+    # id inexistente, um oráculo de existência.
+    if not user_has_explicit_role(physician_user, ROLE_MEDICO):
+        raise ReportDomainError(
+            403,
+            "papel_medico_explicito_necessario",
+            "O download exige o papel médico explícito.",
+        )
     document = _get_document_or_404(db, document_id)
     _profile, _assignment = _require_assigned_physician(
         db, physician_user, document
@@ -1648,9 +1857,16 @@ def compose_report_document(
         template_version = 1
         template_text = ""
 
+    settings = get_settings()
+    # M24D — em modo piloto, todo PDF gerado carrega o aviso PILOTO INTERNO
+    # (nunca o rodapé genérico de TESTE). O router só chega aqui com
+    # reports_mode == "pilot" (disabled/production são bloqueados antes),
+    # mas a checagem explícita é defensiva.
+    is_pilot = settings.reports_mode == "pilot"
+    footer_code = PILOT_FOOTER_CODE if is_pilot else TEST_FOOTER_CODE
     footer = db.execute(
         select(ReportFooterTemplate).where(
-            ReportFooterTemplate.code == TEST_FOOTER_CODE,
+            ReportFooterTemplate.code == footer_code,
             ReportFooterTemplate.version == 1,
             ReportFooterTemplate.active.is_(True),
         )
@@ -1658,8 +1874,8 @@ def compose_report_document(
     if footer is None:
         raise ReportDomainError(
             503,
-            "rodape_teste_indisponivel",
-            "O rodapé TESTE não está disponível.",
+            "rodape_indisponivel",
+            "O rodapé exigido para este modo não está disponível.",
         )
     exam = db.get(SpirometryExam, document.spirometry_exam_id)
     if exam is None:
@@ -1668,7 +1884,8 @@ def compose_report_document(
         )
     next_number = _next_version_number(db, document.id)
     issued_at = datetime.now(timezone.utc)
-    footer_text = _render_test_footer(
+    render_footer = _render_pilot_footer if is_pilot else _render_test_footer
+    footer_text = render_footer(
         footer,
         profile=profile,
         document=document,
@@ -1676,7 +1893,6 @@ def compose_report_document(
         issued_at=issued_at,
         version_number=next_number,
     )
-    settings = get_settings()
     try:
         composed = compose_report_pdf(
             original_bytes=original.data,
@@ -1766,6 +1982,14 @@ def _validate_ready_snapshot(
             "snapshot_clinico_incompleto",
             "A prévia não possui evidência clínica completa.",
         )
+    # M24D — o aviso exigido no rodapé congelado depende de qual rodapé foi
+    # usado na prévia: PILOTO INTERNO em modo piloto, MODELO DE TESTE fora
+    # dele. Nunca aceita nenhum dos dois quando o código não bate.
+    expected_warning = (
+        PILOT_WARNING
+        if draft.footer_code_snapshot == PILOT_FOOTER_CODE
+        else _UNSIGNED_WARNING
+    )
     if (
         draft.template_text_sha256
         != _snapshot_hash(draft.template_text_snapshot or "")
@@ -1773,7 +1997,7 @@ def _validate_ready_snapshot(
         != _snapshot_hash(draft.interpretation_text_snapshot or "")
         or draft.footer_text_sha256
         != _snapshot_hash(draft.footer_text_snapshot or "")
-        or _UNSIGNED_WARNING not in (draft.footer_text_snapshot or "")
+        or expected_warning not in (draft.footer_text_snapshot or "")
     ):
         raise ReportDomainError(
             409,
@@ -2110,13 +2334,17 @@ def get_report_signature_status(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    document = _get_document_or_404(db, document_id)
-    if user_has_explicit_role(user, ROLE_MEDICO):
-        _require_assigned_physician(db, user, document)
-    elif ROLE_OPERACIONAL not in user_effective_roles(user):
+    # M24D (fecha F4) — mesmo tratamento de get_report_document: checa papel
+    # antes de saber se o id existe, para não servir de oráculo.
+    is_medico = user_has_explicit_role(user, ROLE_MEDICO)
+    is_operacional = ROLE_OPERACIONAL in user_effective_roles(user)
+    if not is_medico and not is_operacional:
         raise ReportDomainError(
             403, "permissao_insuficiente", "Permissão insuficiente."
         )
+    document = _get_document_or_404(db, document_id)
+    if is_medico:
+        _require_assigned_physician(db, user, document)
     if document.signature_status is None:
         return {
             "status": None,

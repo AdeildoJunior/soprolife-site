@@ -63,6 +63,26 @@ Laudo/versão: {report_code}/v{version_number}
 Estado da assinatura: NÃO ASSINADO — PREPARAÇÃO PENDENTE
 MODELO DE TESTE — DOCUMENTO NÃO ASSINADO E SEM VALIDADE PARA LIBERAÇÃO"""
 
+# M24D — rodapé exclusivo do piloto interno controlado. Usado sempre que
+# M15_REPORTS_MODE == "pilot" no lugar do rodapé TESTE; o aviso é congelado
+# no snapshot da versão (footer_text_snapshot), nunca reescrito depois.
+PILOT_FOOTER_ID = "24c00000-0000-4000-8000-000000000101"
+PILOT_FOOTER_CODE = "PILOTO_INTERNO_NAO_ASSINADO"
+PILOT_WARNING = (
+    "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR AO PACIENTE"
+)
+PILOT_FOOTER_BODY = """SoproLife Diagnósticos e Soluções em Saúde
+Laudo de espirometria — piloto interno controlado
+Médico: {physician_name}
+CRM/{crm_state}: {crm_number}
+RQE: {rqe}
+Exame: {exam_code}
+Origem: {origin}
+Emissão: {issued_at}
+Laudo/versão: {report_code}/v{version_number}
+Estado da assinatura: NÃO ASSINADO — PREPARAÇÃO PENDENTE
+PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR AO PACIENTE"""
+
 
 def ensure_m24c_catalog(db: Session) -> None:
     """Insere somente seeds ausentes; divergência de id/código falha fechado."""
@@ -122,4 +142,26 @@ def ensure_m24c_catalog(db: Session) -> None:
         or footer.production_approved
     ):
         raise RuntimeError("Rodapé TESTE M24C divergente.")
+
+    pilot_footer = db.get(ReportFooterTemplate, PILOT_FOOTER_ID)
+    if pilot_footer is None:
+        db.add(
+            ReportFooterTemplate(
+                id=PILOT_FOOTER_ID,
+                code=PILOT_FOOTER_CODE,
+                version=1,
+                body_template=PILOT_FOOTER_BODY,
+                status="test",
+                production_approved=False,
+                active=True,
+            )
+        )
+    elif (
+        pilot_footer.code != PILOT_FOOTER_CODE
+        or pilot_footer.version != 1
+        or pilot_footer.body_template != PILOT_FOOTER_BODY
+        or pilot_footer.status != "test"
+        or pilot_footer.production_approved
+    ):
+        raise RuntimeError("Rodapé PILOTO M24D divergente.")
     db.flush()

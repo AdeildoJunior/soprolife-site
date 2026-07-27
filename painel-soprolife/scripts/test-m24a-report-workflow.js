@@ -269,6 +269,36 @@ check(
     )
 );
 
+console.log("\nF2) M24D — piloto interno controlado");
+const PILOT_WARNING =
+  "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR AO PACIENTE";
+check(
+  "contrato de três estados: disabled é o padrão, production continua bloqueado",
+  backendConfig.includes('reports_mode: Literal["disabled", "pilot", "production"]')
+    && reports.includes("relatorios_producao_bloqueada")
+);
+check(
+  "rodapé PILOTO INTERNO versionado contém o aviso exato",
+  catalog.includes("PILOTO_INTERNO_NAO_ASSINADO")
+    && catalog.includes(PILOT_WARNING)
+);
+check(
+  "workspace mostra o aviso PILOTO INTERNO só em modo piloto",
+  workflow.includes(PILOT_WARNING)
+    && workflow.includes('config.reports_mode === "pilot"')
+    && css.includes("report-pilot-warning")
+);
+check(
+  "config pública traz reports_mode e mantém o padrão seguro",
+  publicConfig.reports_mode === "disabled"
+);
+check(
+  "F2/F3/F4 fechados: autoverificação, recuperação e oráculo de existência",
+  reports.includes("autoverificacao_medica_proibida")
+    && reports.includes("recuperar-medico-suspenso")
+    && reports.includes("physician_unavailable_after_draft")
+);
+
 console.log("\nG) Sessão, privacidade, acessibilidade e responsividade");
 check(
   "usa cliente de sessão compartilhado sem token/cookie manual",

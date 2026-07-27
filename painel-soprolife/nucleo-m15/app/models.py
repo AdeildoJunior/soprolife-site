@@ -1019,8 +1019,17 @@ REPORT_ASSIGNMENT_REASON_VALUES = (
     "profile_suspended",
     "operational_redistribution",
     "corrective_document",
+    # M24D — recuperação admin-only de laudo preso em elaboração clínica
+    # quando o médico atribuído fica indisponível DEPOIS do primeiro
+    # rascunho (reatribuição comum só é permitida antes disso).
+    "physician_unavailable_after_draft",
 )
-REPORT_ASSIGNMENT_EVENT_VALUES = ("assigned", "reassigned", "corrective_assigned")
+REPORT_ASSIGNMENT_EVENT_VALUES = (
+    "assigned",
+    "reassigned",
+    "corrective_assigned",
+    "recovered_after_draft",
+)
 REPORT_TEMPLATE_STATUS_VALUES = ("draft", "approved", "retired")
 REPORT_FOOTER_STATUS_VALUES = ("test", "draft", "approved", "retired")
 
@@ -1045,6 +1054,11 @@ class PhysicianProfile(Base, TimestampMixin):
     verified_by_user_id: Mapped[str | None] = mapped_column(
         String(UUID_LEN), ForeignKey("users.id")
     )
+    # M24D — referência técnica segura da verificação (código/ID de processo
+    # de checagem CRM/UF, nunca texto livre nem dado de paciente). Some-se à
+    # exigência de quatro olhos: quem verifica nunca pode ser o próprio
+    # perfil verificado (ver ck_physician_profiles_verification_not_self).
+    verification_reference: Mapped[str | None] = mapped_column(String(64))
     __table_args__ = (
         CheckConstraint(
             "length(trim(professional_name)) >= 2",
@@ -1065,12 +1079,19 @@ class PhysicianProfile(Base, TimestampMixin):
         CheckConstraint(
             "("
             "verification_status = 'verified' AND "
-            "verified_at IS NOT NULL AND verified_by_user_id IS NOT NULL"
+            "verified_at IS NOT NULL AND verified_by_user_id IS NOT NULL AND "
+            "verification_reference IS NOT NULL AND "
+            "length(trim(verification_reference)) >= 4"
             ") OR ("
             "verification_status <> 'verified' AND "
-            "verified_at IS NULL AND verified_by_user_id IS NULL"
+            "verified_at IS NULL AND verified_by_user_id IS NULL AND "
+            "verification_reference IS NULL"
             ")",
             name="verification_evidence_complete",
+        ),
+        CheckConstraint(
+            "verified_by_user_id IS NULL OR verified_by_user_id <> user_id",
+            name="verification_not_self",
         ),
     )
 

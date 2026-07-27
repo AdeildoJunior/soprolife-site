@@ -45,6 +45,7 @@ def publication_context(db, tmp_path, monkeypatch):
     os.chmod(root, 0o700)
     monkeypatch.setenv("M15_REPORTS_STORAGE_DIR", str(root))
     monkeypatch.setenv("M15_REPORTS_ENABLED", "true")
+    monkeypatch.setenv("M15_REPORTS_MODE", "pilot")
     get_settings.cache_clear()
 
     user = User(

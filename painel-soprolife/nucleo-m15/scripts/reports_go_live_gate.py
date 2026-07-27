@@ -10,6 +10,7 @@ and a qualified signature provider remain unapproved/unconfigured.
 from __future__ import annotations
 
 import grp
+import hashlib
 import json
 import os
 import pathlib
@@ -19,11 +20,18 @@ import stat
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import go_live_https_gate as https_transport
 
 REPORTS_AUTHORIZATION_PHRASE = "AUTORIZO GO-LIVE DE LAUDOS"
 BACKUP_ATTESTATION_PHRASE = "POSTGRESQL_E_STORAGE_CONFIRMADOS"
+# M24D — autorização dedicada do piloto interno controlado. Independente da
+# frase geral de go-live de laudos acima (essa continua exigida só para
+# produção) e do go-live geral do M15 (SOPROLIFE_M15_GO_LIVE), que sozinho
+# nunca é suficiente para habilitar nada aqui.
+PILOT_AUTHORIZATION_PHRASE = "HABILITAR PILOTO DE LAUDOS"
+BACKUP_MANIFEST_MAX_AGE_SECONDS = 24 * 60 * 60
 REPORTS_API_BASE = "/painel-soprolife/api/m15"
 REPORTS_CONFIG_PATH = "/painel-soprolife/data/m15-config.json"
 REPORTS_PANEL_PATH = "/painel-soprolife/"
@@ -283,6 +291,166 @@ def check_preflight(
     raise ReportsGateError(M24C_PRODUCTION_BLOCKER)
 
 
+def _validate_backup_manifest(
+    value: str | None,
+    *,
+    expected_uid: int,
+    expected_gid: int,
+) -> None:
+    """M24D — o piloto exige backup verificado do PostgreSQL e do storage de
+    laudos ANTES da mutação (habilitação). Falha fechado em qualquer
+    divergência: manifesto ausente, expirado, contagem inválida, artefato
+    ausente/symlink/dono errado, ou hash que não bate com o arquivo real."""
+
+    if not value:
+        raise ReportsGateError("reports_backup_manifest_missing")
+    manifest_path = pathlib.Path(value)
+    if not manifest_path.is_absolute():
+        raise ReportsGateError("reports_backup_manifest_not_absolute")
+    try:
+        raw = manifest_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ReportsGateError("reports_backup_manifest_unreadable") from exc
+    try:
+        manifest = json.loads(raw)
+    except ValueError as exc:
+        raise ReportsGateError("reports_backup_manifest_invalid_json") from exc
+    if not isinstance(manifest, dict):
+        raise ReportsGateError("reports_backup_manifest_invalid_json")
+
+    required_keys = (
+        "created_at",
+        "postgresql_dump_path",
+        "postgresql_dump_sha256",
+        "storage_archive_path",
+        "storage_archive_sha256",
+        "counts",
+    )
+    for key in required_keys:
+        if key not in manifest:
+            raise ReportsGateError("reports_backup_manifest_missing_field")
+
+    try:
+        created_at = datetime.fromisoformat(str(manifest["created_at"]))
+    except ValueError as exc:
+        raise ReportsGateError("reports_backup_manifest_created_at_invalid") from exc
+    if created_at.tzinfo is None:
+        raise ReportsGateError("reports_backup_manifest_created_at_invalid")
+    age_seconds = (
+        datetime.now(timezone.utc) - created_at.astimezone(timezone.utc)
+    ).total_seconds()
+    if age_seconds < 0 or age_seconds > BACKUP_MANIFEST_MAX_AGE_SECONDS:
+        raise ReportsGateError("reports_backup_manifest_stale")
+
+    counts = manifest["counts"]
+    if not isinstance(counts, dict):
+        raise ReportsGateError("reports_backup_manifest_counts_invalid")
+    for count_key in (
+        "report_documents",
+        "report_document_versions",
+        "physician_profiles",
+    ):
+        count_value = counts.get(count_key)
+        if (
+            not isinstance(count_value, int)
+            or isinstance(count_value, bool)
+            or count_value < 0
+        ):
+            raise ReportsGateError("reports_backup_manifest_counts_invalid")
+
+    for path_key, hash_key in (
+        ("postgresql_dump_path", "postgresql_dump_sha256"),
+        ("storage_archive_path", "storage_archive_sha256"),
+    ):
+        raw_path = manifest[path_key]
+        raw_hash = manifest[hash_key]
+        if not isinstance(raw_path, str) or not isinstance(raw_hash, str):
+            raise ReportsGateError("reports_backup_manifest_invalid_field_type")
+        artifact_path = pathlib.Path(raw_path)
+        if not artifact_path.is_absolute():
+            raise ReportsGateError("reports_backup_manifest_artifact_not_absolute")
+        try:
+            artifact_stat = artifact_path.stat(follow_symlinks=False)
+        except OSError as exc:
+            raise ReportsGateError("reports_backup_manifest_artifact_missing") from exc
+        if stat.S_ISLNK(artifact_stat.st_mode) or not stat.S_ISREG(
+            artifact_stat.st_mode
+        ):
+            raise ReportsGateError(
+                "reports_backup_manifest_artifact_not_regular_file"
+            )
+        if (
+            artifact_stat.st_uid != expected_uid
+            or artifact_stat.st_gid != expected_gid
+        ):
+            raise ReportsGateError("reports_backup_manifest_artifact_owner_mismatch")
+        digest = hashlib.sha256()
+        with artifact_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != raw_hash:
+            raise ReportsGateError("reports_backup_manifest_hash_mismatch")
+
+
+def check_pilot_preflight(
+    *,
+    repo_root: pathlib.Path,
+    mode_value: str | None,
+    backend_flag: str | None,
+    pilot_authorization: str | None,
+    storage_root_value: str | None,
+    backup_manifest_path: str | None,
+    effective_unit_text: str,
+    expected_uid: int,
+    expected_gid: int,
+    https_base_url: str | None,
+    http_get=None,
+) -> ReportsGateResult:
+    """M24D — gate dedicado do piloto interno controlado.
+
+    Independente do gate de produção acima (``check_preflight``), que
+    permanece com bloqueio incondicional. Nunca cria diretório, altera
+    unidade, escreve configuração nem habilita nada por si só — só decide
+    se TODAS as condições independentes foram satisfeitas. A variável geral
+    do M15 e mesmo ``M15_REPORTS_ENABLED`` sozinho nunca bastam: modo,
+    autorização dedicada, storage, backup verificado e HTTPS são exigidos
+    juntos.
+    """
+
+    repo_root = repo_root.resolve(strict=True)
+    if mode_value != "pilot":
+        raise ReportsGateError("reports_pilot_mode_not_selected")
+    if not _parse_backend_flag(backend_flag):
+        raise ReportsGateError("reports_pilot_backend_flag_missing")
+    if not _read_target_frontend_flag(repo_root):
+        raise ReportsGateError("reports_pilot_frontend_flag_missing")
+    if pilot_authorization != PILOT_AUTHORIZATION_PHRASE:
+        raise ReportsGateError("reports_pilot_authorization_missing")
+    storage_root = _validate_storage_root(
+        storage_root_value,
+        repo_root=repo_root,
+        expected_uid=expected_uid,
+        expected_gid=expected_gid,
+    )
+    _validate_exact_readwritepath(
+        effective_unit_text,
+        storage_root=storage_root,
+    )
+    _validate_backup_manifest(
+        backup_manifest_path,
+        expected_uid=expected_uid,
+        expected_gid=expected_gid,
+    )
+    if not https_base_url:
+        raise ReportsGateError("reports_https_base_url_missing")
+    check_https_workspace(
+        https_base_url,
+        expected_enabled=True,
+        http_get=http_get,
+    )
+    return ReportsGateResult(enabled=True, storage_root=storage_root)
+
+
 def _service_ids() -> tuple[int, int]:
     try:
         return pwd.getpwnam("soprolife").pw_uid, grp.getgrnam("soprolife").gr_gid
@@ -291,9 +459,11 @@ def _service_ids() -> tuple[int, int]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3 or argv[1] not in {"preflight", "postflight"}:
+    phases = {"preflight", "postflight", "preflight-pilot", "postflight-pilot"}
+    if len(argv) != 3 or argv[1] not in phases:
         print(
-            "usage: reports_go_live_gate.py preflight|postflight REPO_ROOT",
+            "usage: reports_go_live_gate.py "
+            "preflight|postflight|preflight-pilot|postflight-pilot REPO_ROOT",
             file=sys.stderr,
         )
         return 2
@@ -321,6 +491,40 @@ def main(argv: list[str]) -> int:
                 ),
             )
             print("true" if result.enabled else "false")
+        elif phase == "preflight-pilot":
+            uid, gid = _service_ids()
+            unit_text = sys.stdin.read()
+            result = check_pilot_preflight(
+                repo_root=repo_root,
+                mode_value=os.environ.get("M15_REPORTS_MODE"),
+                backend_flag=os.environ.get("M15_REPORTS_ENABLED"),
+                pilot_authorization=os.environ.get(
+                    "SOPROLIFE_REPORTS_PILOT_AUTHORIZATION"
+                ),
+                storage_root_value=os.environ.get("M15_REPORTS_STORAGE_DIR"),
+                backup_manifest_path=os.environ.get(
+                    "SOPROLIFE_REPORTS_BACKUP_MANIFEST"
+                ),
+                effective_unit_text=unit_text,
+                expected_uid=uid,
+                expected_gid=gid,
+                https_base_url=os.environ.get(
+                    "SOPROLIFE_M15_HTTPS_BASE_URL"
+                ),
+            )
+            print("true" if result.enabled else "false")
+        elif phase == "postflight-pilot":
+            mode = os.environ.get("M15_REPORTS_MODE")
+            enabled = _parse_backend_flag(os.environ.get("M15_REPORTS_ENABLED"))
+            if enabled and mode != "pilot":
+                raise ReportsGateError("reports_pilot_mode_not_selected")
+            result_enabled = enabled and mode == "pilot"
+            https_base_url = os.environ.get("SOPROLIFE_M15_HTTPS_BASE_URL")
+            if https_base_url:
+                check_https_workspace(
+                    https_base_url, expected_enabled=result_enabled
+                )
+            print("true" if result_enabled else "false")
         else:
             expected = _parse_backend_flag(
                 os.environ.get("M15_REPORTS_ENABLED")

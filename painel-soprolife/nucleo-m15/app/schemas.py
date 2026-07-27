@@ -863,6 +863,9 @@ def normalize_crm_number(value: str) -> str:
     return digits
 
 
+VERIFICATION_REFERENCE_RE = r"^[A-Za-z0-9][A-Za-z0-9_.-]{3,63}$"
+
+
 class PhysicianProfileAdminUpdate(StrictModel):
     """Administra vínculo explícito e perfil sem criar uma nova conta."""
 
@@ -873,6 +876,12 @@ class PhysicianProfileAdminUpdate(StrictModel):
     rqe: str | None = Field(default=None, max_length=30)
     active: bool | None = None
     verification_status: PhysicianVerificationStatus | None = None
+    # M24D — referência técnica segura da verificação (código/ID do processo
+    # de checagem CRM/UF junto ao conselho). Obrigatória para transicionar
+    # para "verified"; nunca texto livre nem dado identificável de paciente.
+    verification_reference: str | None = Field(
+        default=None, pattern=VERIFICATION_REFERENCE_RE
+    )
 
     @field_validator("professional_name")
     @classmethod
@@ -896,6 +905,15 @@ class ReportReassignment(StrictModel):
     physician_profile_id: str = Field(min_length=36, max_length=36)
     expected_assignment_id: str = Field(min_length=36, max_length=36)
     reason_code: ReportReassignmentReason
+
+
+class ReportPhysicianRecovery(StrictModel):
+    """Recuperação admin-only de laudo preso quando o médico fica indisponível
+    depois do primeiro rascunho clínico (M24D). Motivo é fixo e fechado —
+    não aceita texto livre."""
+
+    physician_profile_id: str = Field(min_length=36, max_length=36)
+    expected_assignment_id: str = Field(min_length=36, max_length=36)
 
 
 class ReportCorrectiveCreate(StrictModel):
