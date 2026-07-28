@@ -3949,6 +3949,124 @@ body{
   <!-- SOPRO:ANALYTICS_START -->
   <script src="/assets/analytics.js"></script>
   <!-- SOPRO:ANALYTICS_END -->
+<style id="sopro-map-pastore-ipanema-style">
+/* SOPRO:MAP_PASTORE_IPANEMA_STYLE_V1 */
+.sl-map-unit-card__text{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+}
+.sl-map-unit-card__name{
+  font-weight:850;
+  line-height:1.25;
+}
+.sl-map-unit-card__tag{
+  font-size:.7rem;
+  font-weight:600;
+  letter-spacing:.01em;
+  color:#3a6076;
+  opacity:.9;
+  line-height:1.3;
+}
+
+/* Cartao da unidade parceira: nao usa .sl-map-unit-card de proposito,
+   para nao herdar o clique global que abre o WhatsApp. */
+.sl-map-partner-card{
+  margin:12px 0 4px;
+  padding:12px 13px;
+  border-radius:13px;
+  border:1px solid rgba(11,34,57,.14);
+  border-left:5px solid #0b2239;
+  background:linear-gradient(180deg,#ffffff 0%,#f3f8fb 100%);
+  box-shadow:0 8px 18px rgba(8,24,41,.075);
+}
+.sl-map-partner-card__head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-bottom:5px;
+}
+.sl-map-partner-card__name{
+  font-weight:850;
+  font-size:.9rem;
+  color:#0b3348;
+  line-height:1.25;
+}
+.sl-map-partner-card__badge{
+  flex:0 0 auto;
+  padding:3px 8px;
+  border-radius:999px;
+  background:#0b2239;
+  color:#fff;
+  font-size:.66rem;
+  font-weight:800;
+  letter-spacing:.02em;
+}
+.sl-map-partner-card__address{
+  font-style:normal;
+  font-size:.82rem;
+  color:#315a70;
+  line-height:1.4;
+}
+.sl-map-partner-card__hours{
+  margin:6px 0 10px;
+  font-size:.79rem;
+  color:#46687f;
+  line-height:1.4;
+}
+.sl-map-partner-card__hours span{
+  display:block;
+  font-size:.74rem;
+  opacity:.85;
+}
+.sl-map-partner-card__actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.sl-map-partner-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:7px 12px;
+  border-radius:999px;
+  font-size:.76rem;
+  font-weight:800;
+  text-decoration:none;
+  transition:transform .14s ease, box-shadow .14s ease, background .14s ease;
+}
+.sl-map-partner-btn--ghost{
+  border:1px solid rgba(30,181,171,.5);
+  color:#0b3348;
+  background:#fff;
+}
+.sl-map-partner-btn--ghost:hover{
+  background:#eafaf8;
+  transform:translateY(-1px);
+}
+.sl-map-partner-btn--solid{
+  border:1px solid transparent;
+  background:linear-gradient(135deg,#1eb5ab,#18a197);
+  color:#fff;
+  box-shadow:0 6px 14px rgba(30,181,171,.26);
+}
+.sl-map-partner-btn--solid:hover{
+  transform:translateY(-1px);
+  box-shadow:0 10px 20px rgba(30,181,171,.32);
+}
+.sl-map-partner-btn:focus-visible{
+  outline:3px solid rgba(30,181,171,.32);
+  outline-offset:3px;
+}
+
+@media (max-width:520px){
+  .sl-map-partner-card__actions{flex-direction:column}
+  .sl-map-partner-btn{width:100%}
+}
+</style>
 </head>
 <body class="sl-typo-clean">
 
@@ -4148,7 +4266,7 @@ body{
           <div class="sl-section-kicker">Sobre o exame</div>
           <h2 class="sl-section-title">O que é a espirometria?</h2>
           <p class="sl-section-subtitle">
-            A espirometria (prova de função respiratória ou prova de função pulmonar) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório. Para quem procura <a href="/espirometria-rio-de-janeiro/" style="color:#0f8f86;text-decoration:underline;font-weight:700;">onde fazer espirometria no Rio de Janeiro</a>, a Sopro Life oferece uma página específica com orientações e agendamento.
+            A espirometria (prova de função respiratória ou prova de função pulmonar) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório. Para quem procura <a href="/espirometria-rio-de-janeiro/" style="color:#0f8f86;text-decoration:underline;font-weight:700;">onde fazer espirometria no Rio de Janeiro</a>, a Sopro Life oferece uma página específica com orientações e agendamento. Na Zona Sul, veja a <a href="/espirometria-ipanema/" style="color:#0f8f86;text-decoration:underline;font-weight:700;">espirometria em Ipanema</a>, realizada na unidade Centro Médico Pastore.
           </p>
         </div>
 
@@ -4236,11 +4354,49 @@ body{
               <h4>Unidades de atendimento</h4>
               <p class="sl-map-panel-sub">Escolha a unidade e finalize pelo WhatsApp.</p>
               <div class="sl-map-unit-cards">
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Atendimento domiciliar">Atendimento domiciliar</div>
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Barra">Unidade Barra</div>
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Zona Norte">Unidade Zona Norte</div>
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Atendimento domiciliar">
+                  <span class="sl-map-unit-card__text">
+                    <span class="sl-map-unit-card__name">Atendimento domiciliar</span>
+                  </span>
+                </div>
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Barra">
+                  <span class="sl-map-unit-card__text">
+                    <span class="sl-map-unit-card__name">Unidade Barra</span>
+                    <span class="sl-map-unit-card__tag">Espaço parceiro / coworking</span>
+                  </span>
+                </div>
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Zona Norte">
+                  <span class="sl-map-unit-card__text">
+                    <span class="sl-map-unit-card__name">Unidade Zona Norte</span>
+                    <span class="sl-map-unit-card__tag">Espaço parceiro / coworking</span>
+                  </span>
+                </div>
               </div>
-              <p class="sl-map-panel-note">Endereço confirmado pelo WhatsApp no momento do agendamento.</p>
+
+              <!-- SOPRO:MAP_PASTORE_IPANEMA_CARD_START -->
+              <div class="sl-map-partner-card">
+                <div class="sl-map-partner-card__head">
+                  <span class="sl-map-partner-card__name">Centro Médico Pastore — Ipanema</span>
+                  <span class="sl-map-partner-card__badge">Unidade parceira</span>
+                </div>
+                <address class="sl-map-partner-card__address">Rua Teixeira de Melo, 54 — Ipanema</address>
+                <p class="sl-map-partner-card__hours">
+                  Espirometria às terças e aos sábados, das 8h às 12h.
+                  <span>Disponibilidade confirmada no agendamento.</span>
+                </p>
+                <div class="sl-map-partner-card__actions">
+                  <a class="sl-map-partner-btn sl-map-partner-btn--ghost"
+                     href="/espirometria-ipanema/" data-sl-pastore-conhecer>Conhecer a unidade</a>
+                  <a class="sl-map-partner-btn sl-map-partner-btn--ghost"
+                     href="https://www.google.com/maps/dir/?api=1&amp;destination=Rua%20Teixeira%20de%20Melo%2C%2054%2C%20Ipanema%2C%20Rio%20de%20Janeiro%20-%20RJ"
+                     target="_blank" rel="noopener" data-sl-pastore-rota>Como chegar</a>
+                  <a class="sl-map-partner-btn sl-map-partner-btn--solid"
+                     href="/espirometria-ipanema/#agendar" data-sl-pastore-agendar>Agendar</a>
+                </div>
+              </div>
+              <!-- SOPRO:MAP_PASTORE_IPANEMA_CARD_END -->
+
+              <p class="sl-map-panel-note">Nas unidades da SoproLife, o endereço é confirmado pelo WhatsApp no momento do agendamento.</p>
             </div>
             <div class="sl-map-modal__map-wrap">
               <div id="sl-units-map" aria-label="Mapa ampliado das unidades"></div>
@@ -4737,9 +4893,32 @@ body{
   var miniMap = null;
   var largeMap = null;
 
+  /* ==========================================================================
+     SOPRO:COORD_PASTORE_IPANEMA  —  ÚNICO PONTO DE EDIÇÃO DA COORDENADA
+     --------------------------------------------------------------------------
+     Rua Teixeira de Melo, 54 — Ipanema, Rio de Janeiro/RJ.
+     Coordenada CONFIRMADA no Google Maps pelo operador em 2026-07-28.
+     (Substituiu o valor provisório -22.983856 / -43.198428, que havia sido
+     obtido por interpolação no OpenStreetMap.)
+
+     Para corrigir, altere SOMENTE as duas linhas lat/lng abaixo.
+     A mesma constante existe em espirometria-ipanema/index.html
+     (procure por SOPRO:COORD_PASTORE_IPANEMA).
+     ========================================================================== */
+  var COORD_PASTORE_IPANEMA = {
+    lat: -22.983686,
+    lng: -43.198411
+  };
+
   var units = [
-    { name: 'Unidade Barra', lat: -22.999051350996826, lng: -43.35229531126693 },
-    { name: 'Unidade Zona Norte', lat: -22.88608548571967, lng: -43.28447232933152 }
+    { name: 'Unidade Barra', lat: -22.999051350996826, lng: -43.35229531126693,
+      note: 'Espaço parceiro / coworking' },
+    { name: 'Unidade Zona Norte', lat: -22.88608548571967, lng: -43.28447232933152,
+      note: 'Espaço parceiro / coworking' },
+    /* Unidade onde a SoproLife realiza os exames de espirometria. */
+    { name: 'Centro Médico Pastore — Ipanema',
+      lat: COORD_PASTORE_IPANEMA.lat, lng: COORD_PASTORE_IPANEMA.lng,
+      note: 'Unidade parceira · Rua Teixeira de Melo, 54 — Ipanema' }
   ];
 
   function loadLeafletAssets(){
@@ -4785,7 +4964,7 @@ body{
     var bounds = [];
     units.forEach(function(unit){
       var marker = window.L.marker([unit.lat, unit.lng], { icon: markerIcon() }).addTo(target);
-      marker.bindPopup(unit.name);
+      marker.bindPopup(unit.note ? ('<strong>' + unit.name + '</strong><br>' + unit.note) : unit.name);
       bounds.push([unit.lat, unit.lng]);
     });
     target.fitBounds(bounds, { padding: padding });
@@ -5114,6 +5293,34 @@ body{
     var unit = card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim();
     card.setAttribute('aria-label', 'Abrir WhatsApp para ' + unit);
     card.setAttribute('title', 'Abrir WhatsApp para ' + unit);
+  });
+})();
+</script>
+
+
+<script id="sopro-map-pastore-ipanema-track">
+/* SOPRO:MAP_PASTORE_IPANEMA_TRACK_V1
+   Eventos do cartão da unidade parceira no modal do mapa.
+   window.track() é no-op enquanto o visitante não aceita os cookies. */
+(function(){
+  function fire(ev, params){
+    try{ if(window.track){ window.track(ev, params); } }catch(e){}
+  }
+
+  var map = [
+    ['[data-sl-pastore-conhecer]', 'click_mapa_pastore_ipanema', { acao: 'conhecer_unidade' }],
+    ['[data-sl-pastore-agendar]',  'click_mapa_pastore_ipanema', { acao: 'agendar' }],
+    ['[data-sl-pastore-rota]',     'click_rota_pastore_ipanema', { destino: 'google_maps' }]
+  ];
+
+  map.forEach(function(entry){
+    document.querySelectorAll(entry[0]).forEach(function(el){
+      el.addEventListener('click', function(){
+        var params = { origem: 'home_modal_mapa', unidade: 'pastore_ipanema' };
+        Object.keys(entry[2]).forEach(function(k){ params[k] = entry[2][k]; });
+        fire(entry[1], params);
+      });
+    });
   });
 })();
 </script>
