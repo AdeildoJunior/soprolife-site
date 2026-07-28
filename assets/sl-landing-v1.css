@@ -2,13 +2,17 @@
    SOPRO:LANDING_STYLE_V1  —  folha compartilhada das landings locais
    --------------------------------------------------------------------------
    Usada por:
-     /espirometria-zona-sul/
      /espirometria-ipanema/
 
    É uma folha nova e enxuta: NÃO substitui e NÃO é usada pelas páginas
    antigas (/, /espirometria-rio-de-janeiro/, /servicos/ ...), que continuam
    com os seus próprios blocos <style> acumulados. Editar aqui só afeta as
    landings listadas acima.
+
+   Nota: alguns seletores (.sl-chips, .sl-hoods, .sl-grid-3) sobraram da
+   landing de Zona Sul, retirada na revisão estratégica de 2026-07-28. Foram
+   mantidos porque a folha é servida como um único arquivo e a decisão de
+   criar páginas de bairro ficou apenas adiada, não descartada.
    ========================================================================== */
 
 /* SOPRO:ZONA_SUL_PAGE_STYLE_V1 — folha própria e enxuta desta landing.
