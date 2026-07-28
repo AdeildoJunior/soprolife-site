@@ -14,7 +14,13 @@
   "name": "Sopro Life",
   "legalName": "Sopro Life Diagnósticos e Soluções em Saúde LTDA",
   "url": "https://soprolife.com.br/",
-  "logo": "https://soprolife.com.br/img/logo.png",
+  "logo": {
+    "@type": "ImageObject",
+    "url": "https://soprolife.com.br/img/soprolife-logo-quadrado.png",
+    "width": 1200,
+    "height": 1200,
+    "caption": "Sopro Life"
+  },
   "image": "https://soprolife.com.br/img/espirometro-sopro-life.jpg",
   "description": "Espirometria (prova de função pulmonar) com e sem broncodilatador e teleconsulta médica respiratória no Rio de Janeiro, com laudo por pneumologista. Atendimento ambulatorial e domiciliar.",
   "telephone": "+5521998901775",
@@ -2690,6 +2696,11 @@ body{
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" integrity="sha384-RkASv+6KfBMW9eknReJIJ6b3UnjKOKC5bOUaNgIY778NFbQ8MtWq9Lr/khUgqtTt" crossorigin="anonymous" referrerpolicy="no-referrer">
 <!-- SOPRO:FLATPICKR_PTBR_END -->
   <!-- SOPRO:FAVICON_START -->
+  <!-- SOPRO:FAVICON_RESPIRO_V1 — ícone quadrado 512 com margem interna.
+       O favicon antigo tinha os pulmões encostados na borda e o Google, que
+       recorta o ícone em círculo, cortava as pontas. Este arquivo entra
+       primeiro para ser o candidato preferencial do Google. -->
+  <link rel="icon" type="image/png" sizes="512x512" href="/img/soprolife-icone-quadrado-512.png?v=20260728">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260522b">
   <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=20260522b">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260522b">
@@ -2698,6 +2709,21 @@ body{
   <link rel="manifest" href="/site.webmanifest?v=20260522b">
   <meta name="theme-color" content="#0b3348">
   <!-- SOPRO:FAVICON_END -->
+
+  <!-- SOPRO:OG_V1 — imagem social com respiro, sem recorte do logo -->
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="Sopro Life">
+  <meta property="og:title" content="Espirometria | Sopro Life">
+  <meta property="og:description" content="Espirometria com e sem broncodilatador na Sopro Life. Atendimento humanizado, laudos ágeis e opção de parceria com clínicas, empresas e PCMSO.">
+  <meta property="og:url" content="https://soprolife.com.br/">
+  <meta property="og:image" content="https://soprolife.com.br/img/soprolife-og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Espirometria | Sopro Life">
+  <meta name="twitter:description" content="Espirometria com e sem broncodilatador na Sopro Life. Atendimento humanizado, laudos ágeis e opção de parceria com clínicas, empresas e PCMSO.">
+  <meta name="twitter:image" content="https://soprolife.com.br/img/soprolife-og.png">
 
 <!-- SOPRO:MENU_UNIFORME_FIX_START -->
 <style>
