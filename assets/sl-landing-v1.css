@@ -1,0 +1,421 @@
+/* ==========================================================================
+   SOPRO:LANDING_STYLE_V1  —  folha compartilhada das landings locais
+   --------------------------------------------------------------------------
+   Usada por:
+     /espirometria-zona-sul/
+     /espirometria-ipanema/
+
+   É uma folha nova e enxuta: NÃO substitui e NÃO é usada pelas páginas
+   antigas (/, /espirometria-rio-de-janeiro/, /servicos/ ...), que continuam
+   com os seus próprios blocos <style> acumulados. Editar aqui só afeta as
+   landings listadas acima.
+   ========================================================================== */
+
+/* SOPRO:ZONA_SUL_PAGE_STYLE_V1 — folha própria e enxuta desta landing.
+   Não depende dos overrides acumulados nas outras páginas. */
+:root{
+  --sl-navy:#0b2239;
+  --sl-navy-deep:#081829;
+  --sl-teal:#1eb5ab;
+  --sl-teal-deep:#0f8f86;
+  --sl-ink:#0b2239;
+  --sl-soft:#476172;
+  --sl-line:rgba(11,34,57,.10);
+  --sl-bg-soft:#f2fbfb;
+  --sl-wa:#25D366;
+  --sl-r-lg:20px;
+  --sl-r-md:14px;
+  --sl-r-sm:10px;
+  --sl-sh-soft:0 14px 35px rgba(8,24,41,.08);
+  --sl-sh-light:0 8px 20px rgba(8,24,41,.05);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,Arial,sans-serif;
+  color:var(--sl-ink);
+  background:#fff;
+  line-height:1.55;
+}
+a{color:inherit;text-decoration:none}
+img{max-width:100%}
+h1,h2,h3,h4{line-height:1.2;letter-spacing:-.015em}
+
+/* ---------- Header ---------- */
+.sl-header{
+  position:sticky;top:0;z-index:40;
+  background:rgba(255,255,255,.96);
+  border-bottom:1px solid rgba(11,34,57,.08);
+  box-shadow:0 8px 24px rgba(15,35,52,.035);
+  backdrop-filter:saturate(1.1) blur(6px);
+}
+.sl-header-in{
+  max-width:1120px;margin:0 auto;padding:8px 16px;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:22px;min-height:76px;
+}
+.sl-brand{display:inline-flex;align-items:center}
+.sl-brand img{max-height:58px;width:auto;display:block}
+.sl-main-nav{display:flex;align-items:center;gap:18px;margin-left:24px;flex:1}
+.sl-nav-link{
+  position:relative;color:#5f7485;font-size:.95rem;font-weight:650;
+  white-space:nowrap;padding:7px 0;
+}
+.sl-nav-link:hover{color:var(--sl-navy)}
+.sl-nav-link::after{
+  content:"";position:absolute;left:0;bottom:0;width:0;height:2px;
+  border-radius:999px;background:var(--sl-teal);transition:width .2s ease;
+}
+.sl-nav-link:hover::after{width:100%}
+.sl-header-social{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:38px;height:38px;border-radius:999px;color:var(--sl-navy);
+  background:rgba(255,255,255,.72);border:1px solid rgba(11,34,57,.08);
+  transition:background .16s,color .16s,border-color .16s,transform .16s;
+  flex:0 0 auto;
+}
+.sl-header-social:hover{color:var(--sl-teal);background:rgba(30,181,171,.08);transform:translateY(-1px)}
+.sl-header-social svg{width:19px;height:19px;display:block}
+.sl-nav-cta{
+  display:inline-flex;align-items:center;justify-content:center;
+  border-radius:999px;background:var(--sl-wa);color:#fff;
+  padding:9px 18px;font-size:.9rem;font-weight:800;white-space:nowrap;
+  box-shadow:0 8px 18px rgba(37,211,102,.18);flex:0 0 auto;
+}
+.sl-nav-cta:hover{filter:brightness(.96)}
+@media (max-width:960px){
+  .sl-main-nav{display:none}
+  .sl-header-social{margin-left:auto;width:36px;height:36px}
+  .sl-brand img{max-height:52px}
+}
+@media (max-width:720px){
+  .sl-header-in{gap:8px;padding-left:12px;padding-right:12px;min-height:70px}
+  .sl-brand img{max-height:46px;max-width:168px}
+  .sl-nav-cta{padding:9px 13px;font-size:.82rem}
+}
+
+/* ---------- Estrutura ---------- */
+.sl-page{background:#fff;padding-bottom:96px}
+.sl-container{max-width:1120px;margin:0 auto;padding:0 16px}
+.sl-section{padding:44px 0}
+.sl-section--tight{padding:30px 0}
+.sl-kicker{
+  display:inline-block;font-size:.74rem;font-weight:800;text-transform:uppercase;
+  letter-spacing:.16em;color:var(--sl-teal-deep);margin-bottom:8px;
+}
+.sl-h2{font-size:1.72rem;margin:0 0 8px}
+.sl-lead{margin:0;color:var(--sl-soft);font-size:1rem;max-width:66ch}
+.sl-section-head{margin-bottom:22px}
+
+/* ---------- Botões ---------- */
+.sl-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  border:1px solid transparent;border-radius:999px;cursor:pointer;
+  font-weight:750;font-size:.95rem;padding:12px 22px;
+  transition:transform .15s,box-shadow .15s,background .15s;
+}
+.sl-btn--wa{background:var(--sl-wa);color:#fff;box-shadow:0 10px 24px rgba(37,211,102,.24)}
+.sl-btn--wa:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(37,211,102,.3)}
+.sl-btn--primary{
+  background:linear-gradient(135deg,var(--sl-teal),var(--sl-teal-deep));
+  color:#fff;box-shadow:0 10px 24px rgba(30,181,171,.26);
+}
+.sl-btn--primary:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(30,181,171,.32)}
+.sl-btn--outline{background:#fff;border-color:rgba(30,181,171,.45);color:var(--sl-navy)}
+.sl-btn--outline:hover{background:#eafaf8;transform:translateY(-1px)}
+.sl-btn--sm{padding:9px 16px;font-size:.87rem}
+.sl-btn:focus-visible{outline:3px solid rgba(30,181,171,.35);outline-offset:3px}
+.sl-actions{display:flex;flex-wrap:wrap;gap:10px}
+
+/* ---------- Hero ---------- */
+.sl-hero{
+  padding:38px 0 40px;
+  background:
+    radial-gradient(1100px 420px at 8% -10%, rgba(30,181,171,.12), transparent 62%),
+    radial-gradient(900px 380px at 96% 0%, rgba(11,34,57,.07), transparent 60%);
+  border-bottom:1px solid var(--sl-line);
+}
+.sl-crumb{display:flex;flex-wrap:wrap;gap:6px;font-size:.8rem;color:var(--sl-soft);margin-bottom:16px}
+.sl-crumb a:hover{color:var(--sl-navy);text-decoration:underline}
+.sl-crumb [aria-current]{color:var(--sl-navy);font-weight:700}
+.sl-hero-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:36px;align-items:center}
+.sl-hero h1{font-size:2.6rem;margin:0 0 14px}
+.sl-hero h1 em{font-style:normal;color:var(--sl-teal-deep)}
+.sl-hero-sub{margin:0 0 20px;font-size:1.06rem;color:var(--sl-soft);max-width:56ch}
+.sl-hero-note{margin:14px 0 0;font-size:.85rem;color:var(--sl-soft)}
+
+/* chips de bairro */
+.sl-chips{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 22px;padding:0;list-style:none}
+.sl-chips li{
+  font-size:.83rem;font-weight:650;color:#2c5468;
+  background:#fff;border:1px solid rgba(30,181,171,.28);
+  padding:5px 12px;border-radius:999px;
+}
+.sl-chips li:first-child{
+  background:linear-gradient(135deg,var(--sl-teal),var(--sl-teal-deep));
+  color:#fff;border-color:transparent;
+}
+
+/* card lateral do hero */
+.sl-hero-card{
+  background:#fff;border-radius:var(--sl-r-lg);
+  border:1px solid var(--sl-line);border-top:5px solid var(--sl-teal);
+  box-shadow:var(--sl-sh-soft);padding:22px 22px 20px;
+}
+.sl-hero-card__top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.sl-hero-card__label{font-size:.76rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--sl-soft)}
+.sl-badge{
+  font-size:.68rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+  background:var(--sl-navy);color:#fff;padding:4px 10px;border-radius:999px;
+}
+.sl-hero-card h2{font-size:1.12rem;margin:0 0 6px}
+.sl-addr{font-style:normal;font-size:.92rem;color:var(--sl-soft);line-height:1.5}
+.sl-addr strong{color:var(--sl-navy)}
+.sl-metro{
+  display:inline-flex;align-items:center;gap:6px;margin-top:10px;
+  font-size:.83rem;color:var(--sl-teal-deep);font-weight:650;
+}
+.sl-rule{height:1px;background:var(--sl-line);margin:16px 0}
+.sl-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;font-size:.8rem;color:var(--sl-soft)}
+.sl-facts strong{display:block;font-size:.86rem;color:var(--sl-navy)}
+
+/* ---------- Cards genéricos ---------- */
+.sl-grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.sl-grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.sl-card{
+  background:#fff;border:1px solid var(--sl-line);border-radius:var(--sl-r-md);
+  padding:20px;box-shadow:var(--sl-sh-light);
+}
+.sl-card h3{font-size:1.04rem;margin:0 0 8px}
+.sl-card p{margin:0;font-size:.93rem;color:var(--sl-soft)}
+.sl-card ul{margin:8px 0 0;padding-left:1.1rem;font-size:.92rem;color:var(--sl-soft)}
+.sl-card li{margin-bottom:4px}
+.sl-card__tag{
+  display:inline-block;font-size:.7rem;font-weight:800;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--sl-teal-deep);margin-bottom:6px;
+}
+
+/* ---------- Destaque Ipanema ---------- */
+.sl-spot{
+  display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:0;
+  border-radius:var(--sl-r-lg);overflow:hidden;
+  border:1px solid rgba(30,181,171,.3);box-shadow:var(--sl-sh-soft);background:#fff;
+}
+.sl-spot__main{padding:28px 30px}
+.sl-spot__main h3{font-size:1.34rem;margin:0 0 10px}
+.sl-spot__main p{margin:0 0 14px;color:var(--sl-soft);font-size:.97rem}
+.sl-spot__side{
+  padding:28px 30px;
+  background:linear-gradient(150deg,var(--sl-navy-deep),var(--sl-teal-deep));
+  color:#fff;
+}
+.sl-spot__side h4{margin:0 0 10px;font-size:1rem}
+.sl-spot__side .sl-addr{color:rgba(255,255,255,.9)}
+.sl-spot__side .sl-addr strong{color:#fff}
+.sl-spot__side .sl-metro{color:#9fe9e2}
+.sl-spot__side .sl-rule{background:rgba(255,255,255,.18)}
+.sl-steps{margin:0;padding-left:1.15rem;font-size:.92rem;color:rgba(255,255,255,.92)}
+.sl-steps li{margin-bottom:5px}
+.sl-steps strong{color:#fff}
+/* Sobre o painel escuro, o botão vazado vira sólido claro: contraste de CTA. */
+.sl-spot__side .sl-btn--outline{background:#fff;border-color:#fff;color:var(--sl-navy);box-shadow:0 10px 24px rgba(0,0,0,.22)}
+.sl-spot__side .sl-btn--outline:hover{background:#eafaf8;transform:translateY(-1px)}
+
+/* ---------- Bairros ---------- */
+.sl-hoods{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;list-style:none;margin:0;padding:0}
+.sl-hoods li{
+  background:linear-gradient(180deg,#fff,var(--sl-bg-soft));
+  border:1px solid var(--sl-line);border-radius:var(--sl-r-sm);
+  padding:13px 15px;font-size:.92rem;
+}
+.sl-hoods strong{display:block;font-size:.97rem;color:var(--sl-navy)}
+.sl-hoods span{font-size:.82rem;color:var(--sl-soft)}
+
+/* ---------- FAQ ---------- */
+.sl-faq details{
+  background:#fff;border:1px solid var(--sl-line);border-radius:var(--sl-r-sm);
+  margin-bottom:9px;box-shadow:var(--sl-sh-light);
+}
+.sl-faq summary{
+  cursor:pointer;padding:14px 16px;font-weight:700;font-size:.96rem;color:var(--sl-navy);
+  list-style:none;display:flex;justify-content:space-between;gap:12px;
+}
+.sl-faq summary::-webkit-details-marker{display:none}
+.sl-faq summary::after{content:"+";color:var(--sl-teal);font-weight:800;flex:0 0 auto}
+.sl-faq details[open] summary::after{content:"−"}
+.sl-faq summary:focus-visible{outline:3px solid rgba(30,181,171,.32);outline-offset:2px;border-radius:var(--sl-r-sm)}
+.sl-faq details>div{padding:0 16px 16px;font-size:.93rem;color:var(--sl-soft)}
+.sl-faq a{color:var(--sl-teal-deep);text-decoration:underline;font-weight:650}
+
+/* ---------- CTA final ---------- */
+.sl-cta{
+  border-radius:var(--sl-r-lg);padding:32px 34px;color:#fff;
+  background:linear-gradient(120deg,var(--sl-navy-deep),var(--sl-teal-deep));
+  box-shadow:var(--sl-sh-soft);
+  display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:26px;align-items:center;
+}
+.sl-cta h2{margin:0 0 8px;font-size:1.55rem}
+.sl-cta p{margin:0;font-size:.96rem;color:rgba(255,255,255,.9)}
+.sl-cta .sl-actions{justify-content:flex-end}
+.sl-cta .sl-btn--outline{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.5);color:#fff}
+.sl-cta .sl-btn--outline:hover{background:rgba(255,255,255,.2)}
+
+/* ---------- Transparência / nota ---------- */
+.sl-note{
+  margin:20px 0 0;padding:14px 16px;border-radius:var(--sl-r-sm);
+  background:var(--sl-bg-soft);border:1px solid rgba(30,181,171,.18);
+  font-size:.88rem;color:var(--sl-soft);
+}
+.sl-note strong{color:var(--sl-navy)}
+
+/* ---------- Links internos ---------- */
+.sl-links{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0;padding:0}
+.sl-links a{
+  display:inline-block;padding:9px 15px;border-radius:999px;
+  border:1px solid var(--sl-line);background:#fff;font-size:.89rem;color:#2c5468;font-weight:650;
+}
+.sl-links a:hover{border-color:rgba(30,181,171,.45);color:var(--sl-navy)}
+
+/* ---------- Rodapé ---------- */
+.sl-links-footer{
+  padding:32px 0 40px;border-top:1px solid var(--sl-line);
+  background:linear-gradient(135deg,var(--sl-bg-soft),#e3f6f6);
+  font-size:.9rem;color:var(--sl-soft);
+}
+.sl-links-footer-grid{max-width:1120px;margin:0 auto;padding:0 16px;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1.4fr);gap:26px}
+.sl-links-footer h3{margin:0 0 8px;font-size:1rem;color:var(--sl-ink)}
+.sl-links-list,.sl-social-list{list-style:none;padding:0;margin:0}
+.sl-links-list li+li,.sl-social-list li+li{margin-top:5px}
+.sl-links-list a:hover{color:var(--sl-navy);text-decoration:underline}
+.sl-social-list a{display:inline-flex;align-items:center;gap:8px}
+.sl-social-icon{
+  width:26px;height:26px;border-radius:999px;display:inline-flex;
+  align-items:center;justify-content:center;font-size:.78rem;font-weight:800;background:#eef4f5;
+}
+.sl-social-icon--ig{background:radial-gradient(circle at 30% 30%,#ffdd55,#ff543e 45%,#c837ab 70%);color:#fff}
+.sl-social-icon--li{background:#0a66c2;color:#fff}
+.sl-social-icon--yt{background:#ff0000;color:#fff}
+
+/* ---------- Barra fixa WhatsApp ---------- */
+.sl-wa-bar{
+  position:fixed;left:0;right:0;bottom:0;z-index:60;
+  background:#08a94f;color:#fff;font-size:.92rem;
+  box-shadow:0 -4px 16px rgba(0,0,0,.16);
+}
+.sl-wa-bar a{display:flex;align-items:center;justify-content:center;gap:10px;padding:11px 14px}
+
+/* ---------- Responsivo ---------- */
+@media (max-width:980px){
+  .sl-hero-grid,.sl-spot,.sl-cta{grid-template-columns:minmax(0,1fr)}
+  .sl-grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sl-hoods{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .sl-cta .sl-actions{justify-content:flex-start}
+  .sl-links-footer-grid{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:720px){
+  .sl-hero{padding:26px 0 30px}
+  .sl-hero h1{font-size:1.95rem}
+  .sl-hero-sub{font-size:1rem}
+  .sl-section{padding:32px 0}
+  .sl-h2{font-size:1.42rem}
+  .sl-grid-3,.sl-grid-2{grid-template-columns:minmax(0,1fr)}
+  .sl-hoods{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sl-spot__main,.sl-spot__side{padding:22px 20px}
+  .sl-cta{padding:24px 20px}
+  .sl-actions .sl-btn{width:100%}
+  .sl-page{padding-bottom:104px}
+}
+@media (max-width:400px){
+  .sl-hoods{grid-template-columns:minmax(0,1fr)}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important}
+}
+
+/* ==========================================================================
+   Mapa: minimapa embutido + modal ampliado (usado em /espirometria-ipanema/)
+   ========================================================================== */
+.sl-map-block{
+  border-radius:var(--sl-r-lg);overflow:hidden;
+  border:1px solid var(--sl-line);box-shadow:var(--sl-sh-soft);background:#fff;
+  display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);
+}
+.sl-map-block__info{padding:26px 28px;display:flex;flex-direction:column;gap:14px}
+.sl-map-block__info h3{margin:0;font-size:1.2rem}
+.sl-map-block__info .sl-actions{margin-top:auto}
+
+.sl-mini-map{
+  position:relative;min-height:380px;height:100%;
+  background:#e8f1f4;cursor:pointer;
+}
+.sl-mini-map:focus-visible{outline:3px solid rgba(30,181,171,.45);outline-offset:-3px}
+.sl-mini-map__canvas{position:absolute;inset:0}
+.sl-map-open-btn{
+  position:absolute;right:14px;bottom:14px;z-index:500;
+  background:#fff;color:var(--sl-navy);border:1px solid var(--sl-line);
+  border-radius:999px;padding:9px 16px;font-size:.85rem;font-weight:750;cursor:pointer;
+  box-shadow:0 8px 20px rgba(8,24,41,.16);
+}
+.sl-map-open-btn:hover{background:#eafaf8}
+.sl-map-badge{
+  position:absolute;left:14px;top:14px;z-index:500;
+  background:var(--sl-navy);color:#fff;border-radius:999px;
+  padding:6px 13px;font-size:.76rem;font-weight:800;letter-spacing:.04em;
+  box-shadow:0 8px 20px rgba(8,24,41,.22);
+}
+
+/* pino do mapa */
+.sl-map-pin{
+  width:20px;height:20px;display:block;
+  border-radius:50% 50% 50% 0;
+  background:linear-gradient(150deg,#1eb5ab 0%,#13958d 100%);
+  border:2px solid var(--sl-navy);
+  transform:rotate(-45deg);
+  box-shadow:0 2px 8px rgba(11,34,57,.28);
+  position:relative;
+}
+.sl-map-pin::after{
+  content:"";position:absolute;width:7px;height:7px;border-radius:999px;
+  background:#fff;top:5px;left:5px;
+}
+
+/* modal */
+.sl-map-modal{position:fixed;inset:0;z-index:1000;display:none}
+.sl-map-modal.is-open{display:block}
+.sl-map-modal__backdrop{position:absolute;inset:0;background:rgba(8,24,41,.55)}
+.sl-map-modal__dialog{
+  position:absolute;inset:24px;margin:auto;
+  max-width:1120px;max-height:90vh;
+  background:#fff;border-radius:var(--sl-r-lg);overflow:hidden;
+  box-shadow:0 30px 70px rgba(8,24,41,.4);
+  display:flex;flex-direction:column;
+}
+.sl-map-modal__header{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:16px 20px;border-bottom:1px solid var(--sl-line);
+}
+.sl-map-modal__header h3{margin:0;font-size:1.06rem}
+.sl-map-modal__body{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);flex:1;min-height:0}
+.sl-map-modal__info{
+  padding:20px;border-right:1px solid var(--sl-line);
+  background:var(--sl-bg-soft);overflow:auto;
+  display:flex;flex-direction:column;gap:12px;
+}
+.sl-map-modal__info h4{margin:0;font-size:1rem}
+.sl-map-modal__info p{margin:0;font-size:.9rem;color:var(--sl-soft)}
+.sl-map-modal__map{position:relative;min-height:320px}
+.sl-map-modal__map>div{position:absolute;inset:0}
+
+@media (max-width:980px){
+  .sl-map-block{grid-template-columns:minmax(0,1fr)}
+  .sl-mini-map{min-height:300px}
+  .sl-map-modal__body{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  .sl-map-modal__info{border-right:0;border-bottom:1px solid var(--sl-line)}
+}
+@media (max-width:720px){
+  .sl-map-block__info{padding:22px 20px}
+  .sl-mini-map{min-height:260px}
+  .sl-map-modal__dialog{inset:10px;max-height:none}
+  .sl-map-modal__info{max-height:38vh}
+}
