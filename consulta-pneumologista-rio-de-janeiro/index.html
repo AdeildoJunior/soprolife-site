@@ -764,49 +764,6 @@ body{
 </style>
 
 
-<style id="soprolife-instagram-mobile-android-fix-v1">
-/* Sopro Life: no mobile, Instagram fica junto do WhatsApp, não colado na logo */
-@media (max-width: 960px) {
-  .sl-header-in {
-    display: flex !important;
-    align-items: center !important;
-  }
-
-  .sl-main-nav {
-    display: none !important;
-  }
-
-  .sl-header-instagram {
-    margin-left: auto !important;
-    margin-right: 8px !important;
-    flex: 0 0 42px !important;
-    width: 42px !important;
-    height: 42px !important;
-  }
-
-  .sl-nav-cta {
-    margin-left: 0 !important;
-    flex: 0 0 auto !important;
-  }
-}
-
-@media (max-width: 380px) {
-  .sl-header-instagram {
-    flex-basis: 38px !important;
-    width: 38px !important;
-    height: 38px !important;
-    margin-right: 6px !important;
-  }
-
-  .sl-nav-cta {
-    min-width: 88px !important;
-    max-width: 104px !important;
-    padding-left: 10px !important;
-    padding-right: 10px !important;
-  }
-}
-</style>
-
 <style id="soprolife-local-header-standard-v1">
 /* Padroniza apenas o header desta landing local com as páginas internas */
 .sl-header{
@@ -2060,6 +2017,42 @@ body{
 }
 </style>
 
+<style id="soprolife-fix-rodape-alinhamento-v1">
+/* SOPRO:FIX_RODAPE_ALINHAMENTO
+   O rodapé "Links úteis" fica fora de .sl-container e, sem o
+   /assets/sl-v3.css (carregado só na home), nascia coladinho na borda.
+   Recebe aqui as mesmas medidas de .sl-container desta página.
+   Mesma regra já aplicada em /espirometria-rio-de-janeiro/. */
+.sl-links-footer-grid{
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* SOPRO:FIX_CONTRASTE_CTA_ESCURO — o bloco #agendamento-antigo ficou oculto
+   dentro de um bloco de estilo quebrado desde a criacao desta pagina; ao voltar a ser
+   exibido, o titulo herdava o navy de .sl-cta-title (aplicado com !important
+   pela padronizacao tipografica) e ficava ilegivel sobre o gradiente escuro.
+   Mesma regra ja aplicada em /espirometria-rio-de-janeiro/. */
+.sl-cta-box{
+  color: #fff !important;
+}
+.sl-cta-box .sl-cta-title,
+.sl-cta-box h2,
+.sl-cta-box h3{
+  color: #fff !important;
+  opacity: 1 !important;
+}
+.sl-cta-box .sl-cta-sub,
+.sl-cta-box .sl-cta-contacts,
+.sl-cta-box .sl-cta-small{
+  color: rgba(255,255,255,.92) !important;
+}
+.sl-cta-box .sl-cta-contacts strong{
+  color: #fff !important;
+}
+</style>
+
   <!-- SOPRO:ANALYTICS_START -->
   <script src="/assets/analytics.js"></script>
   <!-- SOPRO:ANALYTICS_END -->
@@ -2088,7 +2081,7 @@ body{
   </a>
 </div>
 <!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_END -->
- <div class="sl-page"> <div class="sl-container"> <!-- HERO --> <section class="sl-hero"> <div class="sl-breadcrumb">Início › Telemedicina › Pneumologista</div> <div class="sl-hero-grid"> <div> <div class="sl-hero-kicker">Respiração é vida</div> <h1 class="sl-hero-title">Consulta com <span>pneumologista</span> no Rio de Janeiro</h1> <p class="sl-hero-subtitle">Consulta com médica pneumologista por telemedicina, de onde você estiver no Rio de Janeiro. Atendimento online para adultos e idosos, com agendamento pelo WhatsApp.</p> <ul class="sl-hero-list"> <li>Tosse, falta de ar e chiado no peito</li> <li>Asma, DPOC, rinite e tabagismo</li> <li>Interpretação de exames e de espirometria</li> <li>Acompanhamento de doenças respiratórias crônicas</li> <li>Atendimento 100% online, por médica pneumologista</li> </ul> <div class="sl-hero-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20tenho%20interesse%20em%20teleconsulta%20m%C3%A9dica%20respirat%C3%B3ria."> Agendar consulta </a> </div> <p class="sl-hero-note">Consultas de pneumologia por telemedicina, para adultos e idosos.</p> <a class="sl-whatsapp-pill" data-sl="wa" data-sl="wa" target="_blank" rel="noopener" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20tenho%20interesse%20em%20teleconsulta%20m%C3%A9dica%20respirat%C3%B3ria."> <span class="sl-dot"></span> Agendamento rápido pelo WhatsApp <svg class="sl-wa-ico" viewBox="0 0 24 24" aria-hidden="true"> <path fill="currentColor" d="M20.5 3.5a9.9 9.9 0 0 0-14 14L3 21l3.6-3.6a9.9 9.9 0 0 0 13.9-13.9Zm-7.7 3.1c3.6 0 6.5 2.9 6.5 6.5s-2.9 6.5-6.5 6.5a6.5 6.5 0 0 1-3.1-.8l-.2-.1-1.9 1 .4-2.1-.1-.2A6.5 6.5 0 0 1 12.8 6.6Zm3.2 7.9c-.2.6-1.1 1-1.5 1-.4 0-1 .1-2-.4s-1.7-1.5-1.9-1.8c-.2-.3-.5-.9-.2-1.5.3-.6.7-.9.9-1 .1-.1.2-.1.3 0 .1 0 .2.1.3.3.1.2.4.9.5 1 .1.1.1.2 0 .3-.1.1-.2.3-.3.4-.1.1-.2.2-.1.4.2.2.6.9 1.3 1.4.9.6 1.1.5 1.3.4.2-.1.4-.3.5-.4.1-.1.2-.1.3 0l.9.4c.1.1.2.1.2.2Z"/> </svg> </a> </div> <aside class="sl-hero-card"> <div class="sl-hero-card-header"> <div> <div class="sl-hero-card-title">Consulta por telemedicina</div> <div class="sl-hero-card-badge">Atendimento online para adultos e idosos, de onde você estiver no Rio de Janeiro.</div> </div> </div> <div class="sl-modes"> <span class="sl-mode-pill" style="cursor:default">100% online</span> <span class="sl-mode-pill" style="cursor:default">Adultos e idosos</span> <span class="sl-mode-pill" style="cursor:default">Sem fila</span> </div> <div class="sl-card-divider"></div> <div class="sl-hero-mini-grid"> <div><strong>Médica pneumologista</strong><br>Dra. Ana Cristina — RQE 58224 · CRM 623075-RJ.</div> <div><strong>Consulta por vídeo</strong><br>Você conversa com a médica com calma e tempo adequado.</div> </div> <div class="sl-hero-card-footer"> Receitas e pedidos de exames, quando necessários, são enviados digitalmente após a consulta. </div> </aside> </div> </section>
+ <div class="sl-page"> <div class="sl-container"> <!-- HERO --> <section class="sl-hero"> <div class="sl-breadcrumb">Início › Telemedicina › Pneumologista</div> <div class="sl-hero-grid"> <div> <div class="sl-hero-kicker">Respiração é vida</div> <h1 class="sl-hero-title">Consulta com <span>pneumologista</span> no Rio de Janeiro</h1> <p class="sl-hero-subtitle">Consulta com médica pneumologista por telemedicina, de onde você estiver no Rio de Janeiro. Atendimento online para adultos e idosos, com agendamento pelo WhatsApp.</p> <ul class="sl-hero-list"> <li>Tosse, falta de ar e chiado no peito</li> <li>Asma, DPOC, rinite e tabagismo</li> <li>Interpretação de exames e de espirometria</li> <li>Acompanhamento de doenças respiratórias crônicas</li> <li>Atendimento 100% online, por médica pneumologista</li> </ul> <div class="sl-hero-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20tenho%20interesse%20em%20teleconsulta%20m%C3%A9dica%20respirat%C3%B3ria."> Agendar consulta </a> </div> <p class="sl-hero-note">Consultas de pneumologia por telemedicina, para adultos e idosos.</p> <a class="sl-whatsapp-pill" data-sl="wa" target="_blank" rel="noopener" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20tenho%20interesse%20em%20teleconsulta%20m%C3%A9dica%20respirat%C3%B3ria."> <span class="sl-dot"></span> Agendamento rápido pelo WhatsApp <svg class="sl-wa-ico" viewBox="0 0 24 24" aria-hidden="true"> <path fill="currentColor" d="M20.5 3.5a9.9 9.9 0 0 0-14 14L3 21l3.6-3.6a9.9 9.9 0 0 0 13.9-13.9Zm-7.7 3.1c3.6 0 6.5 2.9 6.5 6.5s-2.9 6.5-6.5 6.5a6.5 6.5 0 0 1-3.1-.8l-.2-.1-1.9 1 .4-2.1-.1-.2A6.5 6.5 0 0 1 12.8 6.6Zm3.2 7.9c-.2.6-1.1 1-1.5 1-.4 0-1 .1-2-.4s-1.7-1.5-1.9-1.8c-.2-.3-.5-.9-.2-1.5.3-.6.7-.9.9-1 .1-.1.2-.1.3 0 .1 0 .2.1.3.3.1.2.4.9.5 1 .1.1.1.2 0 .3-.1.1-.2.3-.3.4-.1.1-.2.2-.1.4.2.2.6.9 1.3 1.4.9.6 1.1.5 1.3.4.2-.1.4-.3.5-.4.1-.1.2-.1.3 0l.9.4c.1.1.2.1.2.2Z"/> </svg> </a> </div> <aside class="sl-hero-card"> <div class="sl-hero-card-header"> <div> <div class="sl-hero-card-title">Consulta por telemedicina</div> <div class="sl-hero-card-badge">Atendimento online para adultos e idosos, de onde você estiver no Rio de Janeiro.</div> </div> </div> <div class="sl-modes"> <span class="sl-mode-pill" style="cursor:default">100% online</span> <span class="sl-mode-pill" style="cursor:default">Adultos e idosos</span> <span class="sl-mode-pill" style="cursor:default">Sem fila</span> </div> <div class="sl-card-divider"></div> <div class="sl-hero-mini-grid"> <div><strong>Médica pneumologista</strong><br>Dra. Ana Cristina — RQE 58224 · CRM 623075-RJ.</div> <div><strong>Consulta por vídeo</strong><br>Você conversa com a médica com calma e tempo adequado.</div> </div> <div class="sl-hero-card-footer"> Receitas e pedidos de exames, quando necessários, são enviados digitalmente após a consulta. </div> </aside> </div> </section>
 <!-- SOPRO:MEDICA_RESPONSAVEL -->
 <section class="sl-section" id="medica-responsavel" aria-label="Médica responsável pela consulta">
   <div class="sl-container">
@@ -2471,7 +2464,10 @@ body{
     font-size:22px;
     line-height:1;
   }
-  #depoimentos .sl-tarrow--left{left:16px !important; outline-offset:2px}
+  #depoimentos .sl-tarrow--left{left:16px !important}
+  #depoimentos .sl-tarrow--right{right:16px !important}
+  #depoimentos .sl-tarrow:active{transform:translateY(-50%) scale(.98)}
+  #depoimentos .sl-tarrow:focus{outline:2px solid rgba(0,128,128,.35); outline-offset:2px}
 
   /* clique: trava a página escolhida sem quebrar o auto */
   #depoimentos[data-manual] .sl-tpage{animation:none !important;opacity:0 !important;pointer-events:none !important;}
@@ -2491,7 +2487,31 @@ body{
   /* no mobile, setas um pouco menores */
   @media (max-width: 980px){
     #depoimentos .sl-tarrow{width:30px;height:30px;font-size:20px}
-    #depoimentos .sl-tarrow--left{left:16px !important;</li> <li>Tosse, falta de ar e chiado no peito;</li> <li>Asma, DPOC e rinite;</li> <li>Tabagismo e apoio para parar de fumar;</li> <li>Acompanhamento de doenças respiratórias crônicas.</li> </ul> </div> <div class="sl-highlight-box"> <strong>Quando procurar a consulta?</strong> <p>Tosse persistente, falta de ar, chiado, cansaço, infecções de repetição ou exames alterados.</p> <p>Na consulta, a médica avalia o quadro, orienta o tratamento e pede exames quando necessário.</p> </div> </div> </section> <!-- TIPOS --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Na consulta</span> <h2 class="sl-section-title">O que avaliamos na consulta de pneumologia</h2> </div> <div class="sl-tabs" id="tipos-espirometria"> <div class="sl-tab-list" role="tablist"> <button class="sl-tab-button" role="tab" aria-selected="true" data-tab="simples">Sintomas respiratórios</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="bd">Asma e DPOC</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="ocupacional">Tabagismo e exames</button> </div> <div class="sl-tab-panel is-active" data-panel="simples" role="tabpanel"> <div class="sl-tagline">Investigação</div> <h3>Sintomas respiratórios</h3> <p>Avaliamos tosse persistente, falta de ar, chiado no peito e cansaço, buscando a causa e o melhor tratamento.</p> <ul class="sl-bullet-list"> <li>Tosse que não passa;</li> <li>Falta de ar e chiado;</li> <li>Infecções respiratórias de repetição.</li> </ul> </div> <div class="sl-tab-panel" data-panel="bd" role="tabpanel"> <div class="sl-tagline">Doenças crônicas</div> <h3>Asma e DPOC</h3> <p>Diagnóstico e acompanhamento de asma e DPOC, com ajuste de medicações e orientação sobre o uso correto das bombinhas.</p> <ul class="sl-bullet-list"> <li>Controle da asma;</li> <li>Acompanhamento da DPOC;</li> <li>Ajuste de bombinhas e medicações.</li> </ul> </div> <div class="sl-tab-panel" data-panel="ocupacional" role="tabpanel"> <div class="sl-tagline">Prevenção</div> <h3>Tabagismo e exames</h3> <p>Apoio para parar de fumar e interpretação de exames já realizados, como espirometria e tomografia, com orientação clara.</p> <ul class="sl-bullet-list"> <li>Ajuda para parar de fumar;</li> <li>Interpretação de exames;</li> <li>Rinite e outras queixas respiratórias.</li> </ul> </div> </div> </section> <!-- PREPARO --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Telemedicina</span> <h2 class="sl-section-title">Como funciona a consulta online</h2> <p class="sl-section-subtitle">A consulta é por vídeo, simples e segura. Veja como se preparar para aproveitar melhor o atendimento.</p> </div> <div class="sl-card-grid"> <div class="sl-card"> <div class="sl-pill-label">Antes</div> <h3>Antes da consulta</h3> <ul> <li>Separe seus exames anteriores (ex.: espirometria);</li> <li>Anote seus sintomas e suas dúvidas;</li> <li>Tenha a lista das medicações em uso;</li> <li>Escolha um lugar tranquilo, com internet.</li> </ul> </div> <div class="sl-card"> <div class="sl-pill-label">Durante</div> <h3>Durante a consulta</h3> <ul> <li>Você conversa com a médica por vídeo;</li> <li>A médica avalia o quadro e orienta o tratamento;</li> <li>Receitas e pedidos de exames chegam de forma digital.</li> </ul> </div> </div> </section> <!-- CTA --> <section class="sl-cta-section" id="agendamento-antigo"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua consulta</h2> <p class="sl-cta-sub">Consulta de pneumologia por telemedicina, com agendamento pelo WhatsApp e tempo adequado para você.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> telemedicina (online), por agendamento. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20tenho%20interesse%20em%20teleconsulta%20m%C3%A9dica%20respirat%C3%B3ria."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list"> <li> <a href="https://www.instagram.com/soprolife/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--ig">IG</span> <span>Instagram da Sopro Life</span> </a> </li> <li> <a href="https://linkedin.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--li">in</span> <span>LinkedIn da Sopro Life</span> </a> </li> <li> <a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--yt">▶</span> <span>Canal da Sopro Life no YouTube</span> </a> </li> </ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20tenho%20interesse%20em%20teleconsulta%20m%C3%A9dica%20respirat%C3%B3ria." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script> // Tabs (function(){ var root=document.getElementById("tipos-espirometria"); if(!root) return; var buttons=root.querySelectorAll(".sl-tab-button"); var panels=root.querySelectorAll(".sl-tab-panel"); buttons.forEach(function(btn){ btn.addEventListener("click",function(){ var tab=btn.getAttribute("data-tab"); buttons.forEach(function(b){b.setAttribute("aria-selected",b===btn?"true":"false");}); panels.forEach(function(p){p.classList.toggle("is-active",p.getAttribute("data-panel")===tab);}); }); }); })(); </script>
+    #depoimentos .sl-tarrow{display:none}
+  }
+</style>
+<!-- SOPRO:ARROWS_STYLE_END -->
+
+<!-- SOPRO:TESTIMONIALS_END -->
+
+<!-- SOPRO:SOBRE_A_CONSULTA_RESTAURADO
+     A abertura desta secao foi destruida pela corrupcao do bloco
+     SOPRO:ARROWS_STYLE (regra CSS nao fechada), presente desde 2842b43.
+     Todo o HTML abaixo estava preso dentro do bloco de estilo e foi devolvido ao
+     documento sem qualquer reescrita. Apenas os elementos estruturais de
+     abertura (section / div / ul) e o rotulo da secao foram reconstruidos.
+     Nenhum conteudo medico novo foi criado. -->
+<section class="sl-section" id="sobre-a-consulta">
+  <div class="sl-section-header">
+    <span class="sl-section-kicker">Sobre a consulta</span>
+    <h2 class="sl-section-title">Quando a consulta com pneumologista é indicada</h2>
+  </div>
+  <div class="sl-two-column">
+    <div class="sl-text-block">
+      <ul class="sl-bullet-list">
+        <li>Tosse, falta de ar e chiado no peito;</li> <li>Asma, DPOC e rinite;</li> <li>Tabagismo e apoio para parar de fumar;</li> <li>Acompanhamento de doenças respiratórias crônicas.</li> </ul> </div> <div class="sl-highlight-box"> <strong>Quando procurar a consulta?</strong> <p>Tosse persistente, falta de ar, chiado, cansaço, infecções de repetição ou exames alterados.</p> <p>Na consulta, a médica avalia o quadro, orienta o tratamento e pede exames quando necessário.</p> </div> </div> </section> <!-- TIPOS --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Na consulta</span> <h2 class="sl-section-title">O que avaliamos na consulta de pneumologia</h2> </div> <div class="sl-tabs" id="tipos-espirometria"> <div class="sl-tab-list" role="tablist"> <button class="sl-tab-button" role="tab" aria-selected="true" data-tab="simples">Sintomas respiratórios</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="bd">Asma e DPOC</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="ocupacional">Tabagismo e exames</button> </div> <div class="sl-tab-panel is-active" data-panel="simples" role="tabpanel"> <div class="sl-tagline">Investigação</div> <h3>Sintomas respiratórios</h3> <p>Avaliamos tosse persistente, falta de ar, chiado no peito e cansaço, buscando a causa e o melhor tratamento.</p> <ul class="sl-bullet-list"> <li>Tosse que não passa;</li> <li>Falta de ar e chiado;</li> <li>Infecções respiratórias de repetição.</li> </ul> </div> <div class="sl-tab-panel" data-panel="bd" role="tabpanel"> <div class="sl-tagline">Doenças crônicas</div> <h3>Asma e DPOC</h3> <p>Diagnóstico e acompanhamento de asma e DPOC, com ajuste de medicações e orientação sobre o uso correto das bombinhas.</p> <ul class="sl-bullet-list"> <li>Controle da asma;</li> <li>Acompanhamento da DPOC;</li> <li>Ajuste de bombinhas e medicações.</li> </ul> </div> <div class="sl-tab-panel" data-panel="ocupacional" role="tabpanel"> <div class="sl-tagline">Prevenção</div> <h3>Tabagismo e exames</h3> <p>Apoio para parar de fumar e interpretação de exames já realizados, como espirometria e tomografia, com orientação clara.</p> <ul class="sl-bullet-list"> <li>Ajuda para parar de fumar;</li> <li>Interpretação de exames;</li> <li>Rinite e outras queixas respiratórias.</li> </ul> </div> </div> </section> <!-- PREPARO --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Telemedicina</span> <h2 class="sl-section-title">Como funciona a consulta online</h2> <p class="sl-section-subtitle">A consulta é por vídeo, simples e segura. Veja como se preparar para aproveitar melhor o atendimento.</p> </div> <div class="sl-card-grid"> <div class="sl-card"> <div class="sl-pill-label">Antes</div> <h3>Antes da consulta</h3> <ul> <li>Separe seus exames anteriores (ex.: espirometria);</li> <li>Anote seus sintomas e suas dúvidas;</li> <li>Tenha a lista das medicações em uso;</li> <li>Escolha um lugar tranquilo, com internet.</li> </ul> </div> <div class="sl-card"> <div class="sl-pill-label">Durante</div> <h3>Durante a consulta</h3> <ul> <li>Você conversa com a médica por vídeo;</li> <li>A médica avalia o quadro e orienta o tratamento;</li> <li>Receitas e pedidos de exames chegam de forma digital.</li> </ul> </div> </div> </section> <!-- CTA --> <section class="sl-cta-section" id="agendamento-antigo"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua consulta</h2> <p class="sl-cta-sub">Consulta de pneumologia por telemedicina, com agendamento pelo WhatsApp e tempo adequado para você.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> telemedicina (online), por agendamento. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20tenho%20interesse%20em%20teleconsulta%20m%C3%A9dica%20respirat%C3%B3ria."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list"> <li> <a href="https://www.instagram.com/soprolife/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--ig">IG</span> <span>Instagram da Sopro Life</span> </a> </li> <li> <a href="https://linkedin.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--li">in</span> <span>LinkedIn da Sopro Life</span> </a> </li> <li> <a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--yt">▶</span> <span>Canal da Sopro Life no YouTube</span> </a> </li> </ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20tenho%20interesse%20em%20teleconsulta%20m%C3%A9dica%20respirat%C3%B3ria." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script>
+// Tabs
+(function(){ var root=document.getElementById("tipos-espirometria"); if(!root) return; var buttons=root.querySelectorAll(".sl-tab-button"); var panels=root.querySelectorAll(".sl-tab-panel"); buttons.forEach(function(btn){ btn.addEventListener("click",function(){ var tab=btn.getAttribute("data-tab"); buttons.forEach(function(b){b.setAttribute("aria-selected",b===btn?"true":"false");}); panels.forEach(function(p){p.classList.toggle("is-active",p.getAttribute("data-panel")===tab);}); }); }); })(); </script>
 <!-- SOPRO:TESTIMONIALS_JS_START -->
 <script>
 // Rotação feita 100% via CSS (25s = 5 páginas x 5s). JS não é necessário aqui.
