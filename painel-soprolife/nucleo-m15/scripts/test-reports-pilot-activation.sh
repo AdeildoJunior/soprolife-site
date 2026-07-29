@@ -11,8 +11,10 @@
 #   - a API é ativada antes do fast-forward do frontend (ordem no script);
 #   - o postflight exige o acordo COMPLETO do piloto (usa a variante
 #     dedicada, não o gate genérico);
-#   - toda falha após a mutação aciona rollback (MUTATION_STARTED + trap
-#     ERR fiados ao rollback; corpo do rollback sem comando destrutivo);
+#   - toda falha após a mutação aciona rollback exatamente uma vez
+#     (MUTATION_STARTED + trap EXIT; corpo sem comando destrutivo);
+#   - o config estático fica 0644 e é testado como usuário soprolife depois
+#     tanto do fast-forward quanto do reset de rollback;
 #   - SHA inválido, worktree sujo, autorização errada e confirmação errada
 #     falham fechado (funções reais);
 #   - nenhum comando de exclusão de dado do PostgreSQL ou do storage de
@@ -285,7 +287,9 @@ fiacao "script valida o escopo do diff do commit alvo" \
 fiacao "script valida a ancestralidade do commit alvo" \
   'soprolife_reports_activation_verify_ancestor'
 fiacao "script marca o início da mutação" 'MUTATION_STARTED=1'
-fiacao "script registra rollback na trap de erro" 'trap on_error ERR'
+fiacao "script registra finalização determinística na trap EXIT" 'trap on_exit EXIT'
+fiacao "trap EXIT usa o handler testável da lib de ativação" \
+  'soprolife_reports_activation_handle_exit'
 
 PREFLIGHT_LINE="$(grep -n 'soprolife_reports_go_live_pilot_preflight "\$TMP_WORKTREE"' \
   "$ACTIVATION_SCRIPT" | head -1 | cut -d: -f1)"
@@ -337,11 +341,14 @@ fi
 
 echo "── rollback é acionado em toda falha após a mutação ──"
 
-ON_ERROR_BODY="$(awk '/^on_error\(\) \{/,/^}/' "$ACTIVATION_SCRIPT")"
-if grep -q 'MUTATION_STARTED' <<<"$ON_ERROR_BODY" && grep -q 'do_rollback' <<<"$ON_ERROR_BODY"; then
-  caso "on_error só chama do_rollback quando MUTATION_STARTED estiver ligado" 0 0
+EXIT_HANDLER_BODY="$(awk '/^soprolife_reports_activation_handle_exit\(\) \{/,/^}/' \
+  "$SCRIPT_DIR/lib-reports-pilot-activation.sh")"
+if grep -q 'MUTATION_STARTED' <<<"$EXIT_HANDLER_BODY" && \
+   grep -q 'ROLLBACK_ATTEMPTED' <<<"$EXIT_HANDLER_BODY" && \
+   grep -q 'do_rollback' <<<"$EXIT_HANDLER_BODY"; then
+  caso "handler EXIT condiciona rollback à mutação e tem guarda de execução única" 0 0
 else
-  caso "on_error só chama do_rollback quando MUTATION_STARTED estiver ligado" 0 1
+  caso "handler EXIT condiciona rollback à mutação e tem guarda de execução única" 0 1
 fi
 
 DO_ROLLBACK_BODY="$(awk '/^do_rollback\(\) \{/,/^}/' "$ACTIVATION_SCRIPT")"
@@ -353,6 +360,70 @@ for padrao in 'm15.env.before' 'reset --hard "$WIRING_SHA"' 'restart "$API_UNIT"
     caso "rollback restaura: $padrao" 0 1
   fi
 done
+
+if grep -q 'POSTFLIGHT_RESULT="$(soprolife_reports_go_live_pilot_postflight' \
+  "$ACTIVATION_SCRIPT"; then
+  caso "postflight não roda em substituição de comando/condição que suprima errexit" 0 1
+else
+  caso "postflight não roda em substituição de comando/condição que suprima errexit" 0 0
+fi
+
+testa_saida_com_falha() {
+  local nome="$1" corpo="$2" esperado_rc="$3"
+  local slug="${nome//[^[:alnum:]]/_}"
+  local log="$TMP_DIR/rollback-$slug.log"
+  : >"$log"
+  ACTIVATION_LIB="$SCRIPT_DIR/lib-reports-pilot-activation.sh" \
+    ROLLBACK_LOG="$log" FAILURE_BODY="$corpo" \
+    bash -c '
+      set -Eeuo pipefail
+      source "$ACTIVATION_LIB"
+      MUTATION_STARTED=1
+      ROLLBACK_ATTEMPTED=0
+      do_rollback() {
+        printf "rollback\n" >>"$ROLLBACK_LOG"
+      }
+      cleanup() {
+        printf "cleanup\n" >>"$ROLLBACK_LOG"
+      }
+      on_exit() {
+        local exit_code=$?
+        soprolife_reports_activation_handle_exit "$exit_code"
+      }
+      trap on_exit EXIT
+      eval "$FAILURE_BODY"
+    ' >/dev/null 2>&1
+  local rc=$?
+  caso "$nome preserva o código de saída" "$esperado_rc" "$rc"
+  caso "$nome aciona rollback exatamente uma vez" 1 \
+    "$(grep -c '^rollback$' "$log")"
+  caso "$nome executa cleanup exatamente uma vez" 1 \
+    "$(grep -c '^cleanup$' "$log")"
+}
+
+testa_saida_com_falha "falha simples com errexit" 'false' 1
+testa_saida_com_falha "exit explícito" 'exit 23' 23
+testa_saida_com_falha "falha tratada por wrapper condicional" 'false || exit 24' 24
+testa_saida_com_falha "falha de postflight direto" \
+  'pilot_postflight() { return 25; }; pilot_postflight >"$ROLLBACK_LOG.result"' 25
+
+echo "── config estático legível após fast-forward e rollback ──"
+
+CONFIG_HELPER_BODY="$(awk '/^ensure_static_config_readable\(\) \{/,/^}/' \
+  "$ACTIVATION_SCRIPT")"
+for padrao in 'chmod 0644 "$config_path"' 'sudo -u soprolife test -r "$config_path"'; do
+  if grep -q "$padrao" <<<"$CONFIG_HELPER_BODY"; then
+    caso "helper de legibilidade contém: $padrao" 0 0
+  else
+    caso "helper de legibilidade contém: $padrao" 0 1
+  fi
+done
+
+CONFIG_HELPER_CALLS="$(grep -Ec \
+  '^[[:space:]]*ensure_static_config_readable([[:space:]]|$)' \
+  "$ACTIVATION_SCRIPT")"
+caso "legibilidade é normalizada após fast-forward e durante rollback" 2 \
+  "$CONFIG_HELPER_CALLS"
 
 echo "── nenhum comando de exclusão de PostgreSQL/storage de laudos existe ──"
 

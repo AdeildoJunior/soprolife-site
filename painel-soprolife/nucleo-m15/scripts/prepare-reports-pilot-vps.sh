@@ -33,6 +33,15 @@ readonly UNIT_NAME="soprolife-m15-api.service"
 readonly GATE_PY="$SCRIPT_DIR/reports_go_live_gate.py"
 readonly BACKUP_SCRIPT="$SCRIPT_DIR/backup-reports-pilot.sh"
 
+BACKUP_RESULT_FILE=""
+
+cleanup() {
+  if [[ -n "$BACKUP_RESULT_FILE" && -f "$BACKUP_RESULT_FILE" ]]; then
+    rm -f -- "$BACKUP_RESULT_FILE"
+  fi
+}
+trap cleanup EXIT
+
 fail() {
   echo "ERRO: $*" >&2
   exit 1
@@ -71,11 +80,15 @@ systemctl cat "$UNIT_NAME" | \
 echo "  OK: raiz exata em ReadWritePaths, sem pai gravável mais amplo."
 
 echo "== 4/5 backup coordenado (PostgreSQL + storage de laudos) =="
-BACKUP_OUTPUT="$("$BACKUP_SCRIPT" "$STORAGE_ROOT" "$BACKUP_DEST_ROOT")"
-echo "$BACKUP_OUTPUT"
-MANIFEST_PATH="$(printf '%s\n' "$BACKUP_OUTPUT" | sed -n 's/^Manifesto: //p' | tail -n1)"
-[[ -n "$MANIFEST_PATH" ]] || \
-  fail "não foi possível localizar o caminho do manifesto na saída do backup"
+BACKUP_RESULT_FILE="$(mktemp /tmp/soprolife-reports-pilot-backup-result.XXXXXX)"
+chmod 0600 "$BACKUP_RESULT_FILE"
+SOPROLIFE_REPORTS_BACKUP_RESULT_FILE="$BACKUP_RESULT_FILE" \
+  "$BACKUP_SCRIPT" "$STORAGE_ROOT" "$BACKUP_DEST_ROOT"
+MANIFEST_PATH="$(<"$BACKUP_RESULT_FILE")"
+[[ -n "$MANIFEST_PATH" && "$MANIFEST_PATH" == /* && "$MANIFEST_PATH" != *$'\n'* ]] || \
+  fail "backup não retornou um único caminho absoluto de manifesto"
+rm -f -- "$BACKUP_RESULT_FILE"
+BACKUP_RESULT_FILE=""
 
 echo "== 5/5 verificação do manifesto de backup =="
 python3 "$GATE_PY" verify-backup-manifest "$MANIFEST_PATH" >/dev/null || \

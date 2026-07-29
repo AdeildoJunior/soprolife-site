@@ -18,6 +18,7 @@ readonly DUMP_TEMP="${DUMP_DEST}.partial"
 readonly ARCHIVE_DEST="$DEST_ROOT/reports-storage-${STAMP}.tar"
 readonly ARCHIVE_TEMP="${ARCHIVE_DEST}.partial"
 readonly MANIFEST_DEST="$DEST_ROOT/manifest-${STAMP}.json"
+readonly RESULT_FILE="${SOPROLIFE_REPORTS_BACKUP_RESULT_FILE-}"
 
 cleanup() {
   if sudo test -f "$DUMP_TEMP"; then sudo rm -f -- "$DUMP_TEMP"; fi
@@ -28,6 +29,17 @@ trap cleanup EXIT
 [[ -t 0 && -t 1 ]] || { echo "ERRO: execute em terminal interativo" >&2; exit 1; }
 command -v sudo >/dev/null || { echo "ERRO: sudo ausente" >&2; exit 1; }
 [[ "$STORAGE_ROOT" == /* ]] || { echo "ERRO: STORAGE_ROOT precisa ser absoluto" >&2; exit 1; }
+if [[ -n "$RESULT_FILE" ]]; then
+  [[ "$RESULT_FILE" == /* && -f "$RESULT_FILE" && ! -L "$RESULT_FILE" \
+    && ! -s "$RESULT_FILE" ]] || {
+    echo "ERRO: arquivo de resultado precisa ser regular, vazio, existente e absoluto" >&2
+    exit 1
+  }
+  [[ "$(stat -c '%u:%a' "$RESULT_FILE")" == "$EUID:600" ]] || {
+    echo "ERRO: arquivo de resultado precisa pertencer ao usuário atual e ter modo 0600" >&2
+    exit 1
+  }
+fi
 sudo test -d "$STORAGE_ROOT" || { echo "ERRO: STORAGE_ROOT não existe ou não é diretório" >&2; exit 1; }
 sudo -v
 sudo install -d -o root -g root -m 0700 "$DEST_ROOT"
@@ -39,12 +51,14 @@ echo "Gerando dump PostgreSQL..."
 sudo -u postgres pg_dump --format=custom "$DB_NAME" | sudo tee "$DUMP_TEMP" >/dev/null
 sudo chmod 0600 "$DUMP_TEMP"
 sudo pg_restore --list "$DUMP_TEMP" >/dev/null
+sudo chown soprolife:soprolife "$DUMP_TEMP"
 sudo mv -- "$DUMP_TEMP" "$DUMP_DEST"
 
 echo "Arquivando storage de laudos ($STORAGE_ROOT)..."
 sudo tar --create --preserve-permissions --file "$ARCHIVE_TEMP" -C "$(dirname "$STORAGE_ROOT")" "$(basename "$STORAGE_ROOT")"
 sudo chmod 0600 "$ARCHIVE_TEMP"
 sudo tar tvf "$ARCHIVE_TEMP" >/dev/null
+sudo chown soprolife:soprolife "$ARCHIVE_TEMP"
 sudo mv -- "$ARCHIVE_TEMP" "$ARCHIVE_DEST"
 
 echo "Contando linhas técnicas..."
@@ -60,6 +74,12 @@ sudo python3 "$SCRIPT_DIR/reports_pilot_backup.py" \
   --count-report-documents "$COUNT_DOCS" \
   --count-report-document-versions "$COUNT_VERSIONS" \
   --count-physician-profiles "$COUNT_PROFILES"
+sudo chown soprolife:soprolife "$MANIFEST_DEST"
+sudo chmod 0600 "$MANIFEST_DEST"
+
+if [[ -n "$RESULT_FILE" ]]; then
+  printf '%s\n' "$MANIFEST_DEST" >"$RESULT_FILE"
+fi
 
 trap - EXIT
 echo "Backup do piloto de laudos criado e verificado."

@@ -14,8 +14,12 @@ from __future__ import annotations
 
 import json
 import os
+import pty
+import select
+import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -27,6 +31,51 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 import reports_go_live_gate as gate  # noqa: E402
 
 BASE = "https://pilot-deploy.example.invalid"
+PREPARE_SCRIPT = SCRIPTS_DIR / "prepare-reports-pilot-vps.sh"
+BACKUP_SCRIPT = SCRIPTS_DIR / "backup-reports-pilot.sh"
+
+
+def _write_executable(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def _run_in_pty(
+    argv: list[str], *, cwd: Path, env: dict[str, str], timeout: float = 15
+) -> tuple[int, str]:
+    master_fd, slave_fd = pty.openpty()
+    process = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        env=env,
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        close_fds=True,
+    )
+    os.close(slave_fd)
+    chunks: list[bytes] = []
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            if time.monotonic() >= deadline:
+                process.kill()
+                raise AssertionError(f"processo excedeu {timeout}s")
+            readable, _, _ = select.select([master_fd], [], [], 0.1)
+            if readable:
+                try:
+                    chunk = os.read(master_fd, 65536)
+                except OSError:
+                    chunk = b""
+                if chunk:
+                    chunks.append(chunk)
+                elif process.poll() is not None:
+                    break
+            if process.poll() is not None and not readable:
+                break
+        return process.wait(), b"".join(chunks).decode(errors="replace")
+    finally:
+        os.close(master_fd)
 
 
 def _synthetic_repo(tmp_path: Path, *, mode: str, enabled: bool) -> Path:
@@ -316,6 +365,200 @@ def test_producao_permanece_bloqueada_no_gate_unico(tmp_path):
 
 
 # ------------------------------------- script de preparação (estático/idempotente)
+
+
+def test_preparacao_mantem_backup_em_terminal_interativo(tmp_path):
+    """O preparo não pode capturar stdout do backup: o backup continua vendo
+    stdin e stdout como TTY e devolve o manifesto por canal privado 0600."""
+
+    fake_repo = tmp_path / "repo"
+    fake_scripts = fake_repo / "painel-soprolife/nucleo-m15/scripts"
+    fake_systemd = fake_repo / "painel-soprolife/systemd"
+    fake_scripts.mkdir(parents=True)
+    fake_systemd.mkdir(parents=True)
+    shutil.copy2(PREPARE_SCRIPT, fake_scripts / PREPARE_SCRIPT.name)
+    (fake_scripts / "reports_go_live_gate.py").write_text("", encoding="utf-8")
+    (fake_systemd / "soprolife-m15-api-reports-pilot.override.conf.example").write_text(
+        "[Service]\nReadWritePaths=/synthetic\n", encoding="utf-8"
+    )
+
+    manifest = tmp_path / "manifest-sintetico.json"
+    _write_executable(
+        fake_scripts / BACKUP_SCRIPT.name,
+        """#!/usr/bin/env bash
+set -Eeuo pipefail
+[[ -t 0 && -t 1 ]] || {
+  echo "BACKUP_SEM_TTY" >&2
+  exit 91
+}
+[[ -n "${SOPROLIFE_REPORTS_BACKUP_RESULT_FILE-}" ]]
+printf '%s\\n' "$TEST_MANIFEST_PATH" >"$SOPROLIFE_REPORTS_BACKUP_RESULT_FILE"
+echo "BACKUP_TTY_OK"
+""",
+    )
+
+    mock_bin = tmp_path / "bin"
+    mock_bin.mkdir()
+    _write_executable(mock_bin / "sudo", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(mock_bin / "id", "#!/usr/bin/env bash\nexit 0\n")
+    _write_executable(
+        mock_bin / "systemctl",
+        """#!/usr/bin/env bash
+if [[ "${1-}" == "cat" ]]; then
+  printf '[Service]\\nReadWritePaths=%s\\n' "$TEST_STORAGE_ROOT"
+fi
+""",
+    )
+    _write_executable(mock_bin / "python3", "#!/usr/bin/env bash\nexit 0\n")
+
+    storage = tmp_path / "storage"
+    backup_dest = tmp_path / "backups"
+    storage.mkdir()
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{mock_bin}:{env['PATH']}",
+            "TEST_MANIFEST_PATH": str(manifest),
+            "TEST_STORAGE_ROOT": str(storage),
+        }
+    )
+    rc, output = _run_in_pty(
+        [
+            "/bin/bash",
+            str(fake_scripts / PREPARE_SCRIPT.name),
+            str(storage),
+            str(backup_dest),
+        ],
+        cwd=fake_repo,
+        env=env,
+    )
+
+    assert rc == 0, output
+    assert "BACKUP_TTY_OK" in output
+    assert "BACKUP_SEM_TTY" not in output
+    assert f"MANIFEST_PATH={manifest}" in output
+
+
+def test_backup_aplica_dono_e_modo_exigidos_pelo_gate(tmp_path):
+    """Executa o backup em PTY com sudo/PostgreSQL/tar simulados e comprova
+    os comandos de ownership/mode sem tocar banco, storage ou privilégios."""
+
+    storage = tmp_path / "storage"
+    destination = tmp_path / "backups"
+    storage.mkdir()
+    result_file = tmp_path / "backup-result"
+    result_file.touch(mode=0o600)
+    os.chmod(result_file, 0o600)
+    sudo_log = tmp_path / "sudo.log"
+
+    mock_bin = tmp_path / "bin"
+    mock_bin.mkdir()
+    _write_executable(
+        mock_bin / "sudo",
+        """#!/usr/bin/env bash
+set -Eeuo pipefail
+printf '%s\\n' "$*" >>"$TEST_SUDO_LOG"
+if [[ "${1-}" == "-v" ]]; then
+  exit 0
+fi
+if [[ "${1-}" == "-u" ]]; then
+  shift 2
+  case "${1-}" in
+    pg_dump) printf 'synthetic-postgresql-dump' ;;
+    psql) printf '0\\n' ;;
+    *) exit 93 ;;
+  esac
+  exit 0
+fi
+case "${1-}" in
+  test|chmod|mv|rm)
+    command "$@"
+    ;;
+  install)
+    destination="${!#}"
+    mkdir -p "$destination"
+    ;;
+  tee)
+    command tee "$2"
+    ;;
+  pg_restore|chown)
+    exit 0
+    ;;
+  tar)
+    archive=""
+    previous=""
+    for argument in "$@"; do
+      if [[ "$previous" == "--file" ]]; then
+        archive="$argument"
+      fi
+      previous="$argument"
+    done
+    if [[ " $* " == *" --create "* ]]; then
+      printf 'synthetic-storage-archive' >"$archive"
+    fi
+    ;;
+  python3)
+    manifest=""
+    previous=""
+    for argument in "$@"; do
+      if [[ "$previous" == "--manifest" ]]; then
+        manifest="$argument"
+      fi
+      previous="$argument"
+    done
+    printf '{}\\n' >"$manifest"
+    ;;
+  *)
+    exit 94
+    ;;
+esac
+""",
+    )
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{mock_bin}:{env['PATH']}",
+            "SOPROLIFE_REPORTS_BACKUP_RESULT_FILE": str(result_file),
+            "TEST_SUDO_LOG": str(sudo_log),
+        }
+    )
+    rc, output = _run_in_pty(
+        ["/bin/bash", str(BACKUP_SCRIPT), str(storage), str(destination)],
+        cwd=REPO_ROOT,
+        env=env,
+    )
+
+    assert rc == 0, output
+    manifest_path = Path(result_file.read_text(encoding="utf-8").strip())
+    assert manifest_path.is_absolute()
+    log = sudo_log.read_text(encoding="utf-8").splitlines()
+    dump_chown = [
+        line
+        for line in log
+        if line.startswith("chown soprolife:soprolife ")
+        and "soprolife_m15-" in line
+        and line.endswith(".dump.partial")
+    ]
+    archive_chown = [
+        line
+        for line in log
+        if line.startswith("chown soprolife:soprolife ")
+        and "reports-storage-" in line
+        and line.endswith(".tar.partial")
+    ]
+    assert len(dump_chown) == 1
+    assert len(archive_chown) == 1
+    assert f"chown soprolife:soprolife {manifest_path}" in log
+    assert f"chmod 0600 {manifest_path}" in log
+    dumps = list(destination.glob("*.dump"))
+    archives = list(destination.glob("*.tar"))
+    assert len(dumps) == 1
+    assert len(archives) == 1
+    for artifact in dumps:
+        assert artifact.stat().st_mode & 0o777 == 0o600
+    for artifact in archives:
+        assert artifact.stat().st_mode & 0o777 == 0o600
 
 
 def test_preparacao_nunca_reinicia_habilita_ou_toca_config():

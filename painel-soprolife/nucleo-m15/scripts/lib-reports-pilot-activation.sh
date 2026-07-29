@@ -1,15 +1,30 @@
 #!/usr/bin/env bash
-# M24D — funções puras (sem sudo, sem systemd, sem rede) usadas pela primeira
-# ativação atômica do piloto de laudos (activate-reports-pilot-vps.sh).
+# M24D — validações puras e coordenação de saída usadas pela primeira ativação
+# atômica do piloto de laudos (activate-reports-pilot-vps.sh).
 #
-# Cada função aqui é testável isoladamente contra um repositório Git
-# descartável em /tmp: nenhuma delas grava fora do worktree/arquivo que
-# recebe como argumento, nenhuma chama sudo/systemctl e nenhuma acessa rede.
-# A orquestração privilegiada (backup/restart/fast-forward do worktree de
-# produção) fica em activate-reports-pilot-vps.sh.
+# As validações são testáveis isoladamente contra um repositório Git
+# descartável em /tmp: nenhuma chama sudo/systemctl ou acessa rede. O handler
+# de EXIT apenas coordena callbacks `do_rollback`/`cleanup` definidos pelo
+# chamador e é testado com mocks. A implementação privilegiada de backup,
+# restart e fast-forward continua em activate-reports-pilot-vps.sh.
 
 readonly SOPROLIFE_REPORTS_PILOT_CONFIRMATION_PHRASE="ATIVAR PILOTO DE LAUDOS"
 readonly SOPROLIFE_REPORTS_PILOT_AUTHORIZATION_PHRASE="HABILITAR PILOTO DE LAUDOS"
+
+soprolife_reports_activation_handle_exit() {
+  # Handler único para trap EXIT. Diferentemente de ERR, EXIT também cobre
+  # falhas convertidas em `exit` explícito por wrappers `... || fail`.
+  # ROLLBACK_ATTEMPTED impede repetição mesmo se cleanup/rollback falharem.
+  local exit_code="$1"
+  trap - EXIT ERR
+  set +e
+  if (( exit_code != 0 && MUTATION_STARTED && ! ROLLBACK_ATTEMPTED )); then
+    ROLLBACK_ATTEMPTED=1
+    do_rollback
+  fi
+  cleanup
+  exit "$exit_code"
+}
 
 soprolife_reports_activation_is_sha40() {
   # Formato estrito: 40 hex minúsculos. Falha fechado em qualquer outra coisa

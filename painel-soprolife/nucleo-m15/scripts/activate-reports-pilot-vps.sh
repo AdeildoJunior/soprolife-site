@@ -48,8 +48,9 @@ readonly BACKUP_DIR="/opt/soprolife/backups/m15-reports-pilot-activation/$STAMP"
 
 TMP_WORKTREE=""
 TEMP_ENV_CONTENT=""
+GATE_RESULT_FILE=""
 MUTATION_STARTED=0
-FF_DONE=0
+ROLLBACK_ATTEMPTED=0
 
 fail() {
   echo "ERRO: $*" >&2
@@ -72,8 +73,28 @@ cleanup() {
   if [[ -n "$TEMP_ENV_CONTENT" && -f "$TEMP_ENV_CONTENT" ]]; then
     rm -f -- "$TEMP_ENV_CONTENT"
   fi
+  if [[ -n "$GATE_RESULT_FILE" && -f "$GATE_RESULT_FILE" ]]; then
+    rm -f -- "$GATE_RESULT_FILE"
+  fi
+}
+
+on_exit() {
+  local exit_code=$?
+  soprolife_reports_activation_handle_exit "$exit_code"
 }
 trap cleanup EXIT
+
+ensure_static_config_readable() {
+  # O checkout/merge/reset herda umask 077 deste script. Normalize o modo do
+  # config estático rastreado e prove a leitura como o usuário do loopback.
+  local config_path="$REPO_ROOT/$CONFIG_REL_PATH"
+  soprolife_priv chmod 0644 "$config_path"
+  if [[ "${SOPROLIFE_PRIV_MODE:-sudo}" == "direct" ]]; then
+    test -r "$config_path"
+  else
+    sudo -u soprolife test -r "$config_path"
+  fi
+}
 
 do_rollback() {
   # Só é chamado depois que MUTATION_STARTED=1 — antes disso, nenhuma
@@ -91,11 +112,14 @@ do_rollback() {
     rollback_ok=0
   fi
 
-  if (( FF_DONE )); then
-    if [[ "$(git -C "$REPO_ROOT" rev-parse HEAD)" == "$TARGET_SHA" ]]; then
-      git -C "$REPO_ROOT" reset --hard "$WIRING_SHA" || rollback_ok=0
-    fi
+  local current_head
+  current_head="$(git -C "$REPO_ROOT" rev-parse HEAD)" || rollback_ok=0
+  if [[ "$current_head" == "$TARGET_SHA" ]]; then
+    git -C "$REPO_ROOT" reset --hard "$WIRING_SHA" || rollback_ok=0
+  elif [[ "$current_head" != "$WIRING_SHA" ]]; then
+    rollback_ok=0
   fi
+  ensure_static_config_readable || rollback_ok=0
 
   soprolife_priv systemctl restart "$API_UNIT" || rollback_ok=0
   soprolife_wait_health_ok "http://127.0.0.1:8015/api/v1/health" \
@@ -124,16 +148,6 @@ PY
   fi
 }
 
-on_error() {
-  local exit_code=$?
-  trap - ERR
-  if (( MUTATION_STARTED )); then
-    do_rollback
-  fi
-  exit "$exit_code"
-}
-trap on_error ERR
-
 [[ -f "$HARDENING_LIB" ]] || fail "biblioteca de hardening ausente: $HARDENING_LIB"
 # shellcheck source=lib-deploy-hardening.sh
 source "$HARDENING_LIB"
@@ -143,6 +157,7 @@ source "$REPORTS_GATE_LIB"
 [[ -f "$ACTIVATION_LIB" ]] || fail "biblioteca de ativação do piloto ausente: $ACTIVATION_LIB"
 # shellcheck source=lib-reports-pilot-activation.sh
 source "$ACTIVATION_LIB"
+trap on_exit EXIT
 
 [[ -t 0 && -t 1 ]] || fail "execute em terminal interativo"
 command -v git >/dev/null || fail "git não encontrado"
@@ -211,8 +226,12 @@ soprolife_reports_activation_worktree_add "$REPO_ROOT" "$TMP_WORKTREE" "$TARGET_
   fail "não foi possível criar o worktree destacado de preflight"
 
 echo "== preflight dedicado do piloto (worktree destacado em $TARGET_SHA) =="
-PREFLIGHT_RESULT="$(soprolife_reports_go_live_pilot_preflight "$TMP_WORKTREE" "$API_UNIT")" || \
-  fail "preflight dedicado do piloto reprovou o commit alvo"
+GATE_RESULT_FILE="$(mktemp /tmp/soprolife-reports-pilot-gate-result.XXXXXX)"
+soprolife_reports_go_live_pilot_preflight "$TMP_WORKTREE" "$API_UNIT" \
+  >"$GATE_RESULT_FILE"
+PREFLIGHT_RESULT="$(<"$GATE_RESULT_FILE")"
+rm -f -- "$GATE_RESULT_FILE"
+GATE_RESULT_FILE=""
 [[ "$PREFLIGHT_RESULT" == "true" ]] || \
   fail "preflight dedicado do piloto não confirmou habilitação (resultado: $PREFLIGHT_RESULT)"
 echo "  OK: preflight aprovado."
@@ -259,7 +278,7 @@ echo "== 4/6 fast-forward do worktree de produção até o commit alvo =="
 [[ "$(git -C "$REPO_ROOT" rev-parse HEAD)" == "$WIRING_SHA" ]] || \
   fail "HEAD de produção mudou de forma inesperada antes do fast-forward"
 git -C "$REPO_ROOT" merge --ff-only "$TARGET_SHA"
-FF_DONE=1
+ensure_static_config_readable
 
 echo "== 5/6 restart do painel loopback e do painel Tailscale =="
 soprolife_garantir_porta_loopback_livre "$LOOPBACK_UNIT" "soprolife"
@@ -271,8 +290,11 @@ soprolife_priv systemctl is-active --quiet "$TAILSCALE_UNIT" || \
   fail "painel Tailscale não ficou ativo após restart"
 
 echo "== 6/6 postflight do piloto e provas finais =="
-POSTFLIGHT_RESULT="$(soprolife_reports_go_live_pilot_postflight "$REPO_ROOT")" || \
-  fail "postflight do piloto reprovou o estado servido pós-ativação"
+GATE_RESULT_FILE="$(mktemp /tmp/soprolife-reports-pilot-gate-result.XXXXXX)"
+soprolife_reports_go_live_pilot_postflight "$REPO_ROOT" >"$GATE_RESULT_FILE"
+POSTFLIGHT_RESULT="$(<"$GATE_RESULT_FILE")"
+rm -f -- "$GATE_RESULT_FILE"
+GATE_RESULT_FILE=""
 [[ "$POSTFLIGHT_RESULT" == "true" ]] || \
   fail "postflight do piloto não confirmou o acordo completo (resultado: $POSTFLIGHT_RESULT)"
 
@@ -320,8 +342,9 @@ run_m15_env "$VENV_DIR/bin/alembic" current
 run_m15_env "$VENV_DIR/bin/alembic" check
 soprolife_wait_health_ok "http://127.0.0.1:8015/api/v1/health" "API M15 direta (prova final)"
 
+SERVED_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 echo ""
 echo "PILOTO DE LAUDOS ATIVADO (modo pilot; nunca alcança assinado/finalizado/liberado)."
-echo "  commit servido: $(git -C "$REPO_ROOT" rev-parse HEAD)"
+echo "  commit servido: $SERVED_SHA"
 echo "  backup do m15.env anterior: $BACKUP_DIR/m15.env.before"
 echo "Nenhum dado de paciente real, PostgreSQL ou storage foi apagado."
