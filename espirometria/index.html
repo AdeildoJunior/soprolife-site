@@ -13,6 +13,268 @@
 @media (max-width:720px){ .sl-whatsapp-pill[data-sl="wa"]::after{ width:16px; height:16px; margin-left:8px; }
 } /* Links úteis: permitir <a.sl-card> como card */
 .sl-card a, a.sl-card{display:block;color:inherit;text-decoration:none}
+</style>
+<style id="soprolife-espirometria-base-v1">
+/* Base de componentes Sopro Life — mesma paleta/tipografia/componentes já usados
+   em /espirometria-rio-de-janeiro/. Camada BASE (sem !important): as camadas
+   "clean-visual" seguintes continuam prevalecendo onde já ajustam o visual. */
+:root{
+  --sl-primary:#0b2239;
+  --sl-primary-dark:#081829;
+  --sl-accent:#1eb5ab;
+  --sl-accent-deep:#0f8f86;
+  --sl-bg-soft:#f2fbfb;
+  --sl-bg-strong:#e3f6f6;
+  --sl-text-dark:#0b2239;
+  --sl-text-soft:#5f7485;
+  --sl-radius-lg:18px;
+  --sl-radius-sm:10px;
+  --sl-shadow-soft:0 14px 35px rgba(0,0,0,.08);
+  --sl-shadow-light:0 8px 20px rgba(0,0,0,.05);
+}
+
+*{box-sizing:border-box}
+a{color:inherit;text-decoration:none}
+img,svg{max-width:100%}
+
+/* Reserva o espaço da barra fixa de WhatsApp (antes ela cobria o rodapé) */
+body{padding-bottom:64px}
+
+.sl-wrap,
+.sl-container{max-width:1280px;margin:0 auto;padding:0 16px}
+
+/* ===== Seções ===== */
+.sl-section{padding:26px 0}
+.sl-section-header{margin-bottom:18px}
+.sl-section-kicker{
+  display:block;
+  font-size:.78rem;
+  text-transform:uppercase;
+  letter-spacing:.15em;
+  color:var(--sl-accent-deep);
+  font-weight:700;
+  margin-bottom:6px;
+}
+.sl-section-title{font-size:1.5rem;line-height:1.15;margin:0 0 8px;color:var(--sl-text-dark)}
+.sl-section-subtitle{margin:0;color:var(--sl-text-soft);font-size:.98rem;line-height:1.6;max-width:660px}
+
+.sl-two-column{
+  display:grid;
+  grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);
+  gap:28px;
+  align-items:start;
+}
+.sl-two-column > *{min-width:0}
+.sl-text-block p{margin:0 0 12px;font-size:.98rem;line-height:1.65;color:var(--sl-text-soft)}
+.sl-text-block p:last-child{margin-bottom:0}
+
+.sl-highlight-box{
+  background:var(--sl-bg-soft);
+  border-radius:var(--sl-radius-lg);
+  padding:20px 22px;
+  font-size:.95rem;
+  line-height:1.6;
+  color:var(--sl-text-soft);
+}
+.sl-highlight-box strong{
+  display:block;
+  margin-bottom:8px;
+  color:var(--sl-text-dark);
+  font-size:1.02rem;
+}
+.sl-highlight-box p{margin:0 0 10px}
+.sl-highlight-box p:last-child{margin-bottom:0}
+
+/* ===== Abas (tipos de espirometria) ===== */
+.sl-tabs{
+  background:#fff;
+  border-radius:22px;
+  box-shadow:var(--sl-shadow-soft);
+  padding:22px;
+}
+.sl-tab-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.sl-tab-button{
+  border-radius:999px;
+  border:1px solid transparent;
+  padding:10px 16px;
+  font:inherit;
+  font-size:.86rem;
+  line-height:1.2;
+  cursor:pointer;
+  background:#f2f7f8;
+  color:var(--sl-text-soft);
+  transition:background-color .15s,color .15s,box-shadow .15s;
+}
+.sl-tab-button:hover{color:var(--sl-text-dark)}
+.sl-tab-button[aria-selected="true"]{
+  background:linear-gradient(135deg,var(--sl-accent),#18a197);
+  color:#fff;
+  box-shadow:0 10px 20px rgba(30,181,171,.20);
+}
+.sl-tab-button:focus-visible{outline:2px solid var(--sl-accent-deep);outline-offset:2px}
+.sl-tab-panel{display:none;font-size:.95rem;color:var(--sl-text-soft)}
+.sl-tab-panel.is-active{display:block}
+.sl-tab-panel h3{margin:6px 0 8px;font-size:1.08rem;color:var(--sl-text-dark);letter-spacing:-.015em}
+.sl-tab-panel p{margin:0;line-height:1.65}
+.sl-tagline,
+.sl-pill-label{
+  display:inline-block;
+  font-size:.74rem;
+  text-transform:uppercase;
+  letter-spacing:.14em;
+  font-weight:700;
+  color:var(--sl-accent-deep);
+  margin-bottom:6px;
+}
+
+/* ===== Cartões ===== */
+.sl-card-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.sl-card-grid > *{min-width:0}
+.sl-card{
+  background:#fff;
+  border-radius:var(--sl-radius-lg);
+  padding:22px;
+  box-shadow:var(--sl-shadow-light);
+  font-size:.95rem;
+  color:var(--sl-text-soft);
+}
+.sl-card h3{margin:0 0 8px;font-size:1.05rem;line-height:1.3;color:var(--sl-text-dark);letter-spacing:-.015em}
+.sl-card p{margin:0;line-height:1.6}
+
+/* ===== CTA final ===== */
+.sl-cta-section{padding:26px 0}
+.sl-cta-box{
+  border-radius:24px;
+  background:linear-gradient(120deg,var(--sl-primary-dark),#0f8f86);
+  color:#fff;
+  padding:30px;
+  box-shadow:var(--sl-shadow-soft);
+  display:grid;
+  grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);
+  gap:24px;
+  align-items:center;
+}
+.sl-cta-box > *{min-width:0}
+.sl-cta-title{margin:0 0 8px;font-size:1.5rem;line-height:1.15}
+.sl-cta-sub{margin:0 0 16px;font-size:.96rem;line-height:1.6;opacity:.86}
+.sl-cta-contacts{font-size:.95rem;line-height:1.75;opacity:.94}
+.sl-cta-contacts strong{font-weight:700}
+.sl-cta-actions{display:flex;flex-direction:column;align-items:flex-end;gap:10px;text-align:right}
+.sl-cta-small{font-size:.84rem;line-height:1.5;opacity:.8;max-width:280px}
+
+/* ===== Botões ===== */
+.sl-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  border:none;
+  border-radius:999px;
+  cursor:pointer;
+  font-weight:800;
+  font-size:.95rem;
+  text-align:center;
+  transition:transform .15s,box-shadow .15s,filter .15s;
+}
+/* Mesmo verde do botão do hero e do topo: um único CTA visual na página */
+.sl-btn-primary{
+  padding:13px 24px;
+  background:#25D366;
+  color:#fff;
+  box-shadow:0 12px 24px rgba(37,211,102,.22);
+}
+.sl-btn-primary:hover{transform:translateY(-1px);box-shadow:0 16px 30px rgba(37,211,102,.28)}
+.sl-btn:focus-visible{outline:2px solid #fff;outline-offset:3px}
+
+/* ===== Rodapé: Links úteis + redes sociais ===== */
+.sl-links-footer{
+  padding:28px;
+  border-radius:24px;
+  border:1px solid rgba(11,34,57,.06);
+  background:linear-gradient(135deg,var(--sl-bg-soft),var(--sl-bg-strong));
+  font-size:.92rem;
+  color:var(--sl-text-soft);
+}
+.sl-links-footer-grid{
+  display:grid;
+  grid-template-columns:minmax(0,2fr) minmax(0,1.4fr);
+  gap:28px;
+}
+.sl-links-footer-grid > *{min-width:0}
+.sl-links-footer h3{
+  margin:0 0 12px;
+  font-size:.78rem;
+  text-transform:uppercase;
+  letter-spacing:.14em;
+  font-weight:700;
+  color:var(--sl-accent-deep);
+}
+.sl-links-list,
+.sl-social-list{list-style:none;padding-left:0;margin:0;display:grid;gap:10px}
+.sl-links-list a,
+.sl-social-list a{color:inherit;text-decoration:none;line-height:1.45}
+.sl-links-list a:hover{color:var(--sl-primary);text-decoration:underline}
+.sl-links-list a:focus-visible,
+.sl-social-list a:focus-visible{outline:2px solid var(--sl-accent-deep);outline-offset:3px;border-radius:6px}
+
+.sl-social-list a{display:inline-flex;align-items:center;gap:10px}
+.sl-social-list a:hover{color:var(--sl-primary)}
+.sl-social-icon{
+  width:26px;
+  height:26px;
+  flex:0 0 auto;
+  border-radius:999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:.72rem;
+  font-weight:700;
+  background:#eef4f5;
+}
+.sl-social-icon--ig{background:radial-gradient(circle at 30% 30%,#ffdd55,#ff543e 45%,#c837ab 70%);color:#fff}
+.sl-social-icon--li{background:#0a66c2;color:#fff}
+.sl-social-icon--yt{background:#ff0000;color:#fff}
+
+/* ===== Barra fixa de WhatsApp ===== */
+.sl-whatsapp-bar{
+  position:fixed;
+  left:0;
+  right:0;
+  bottom:0;
+  background:#25D366;
+  color:#fff;
+  font-size:.92rem;
+  z-index:999;
+}
+.sl-whatsapp-bar a{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:10px 14px;
+  color:#fff;
+  text-align:center;
+}
+.sl-whatsapp-bar strong{font-weight:700}
+
+/* ===== Responsivo ===== */
+@media (max-width:900px){
+  .sl-two-column,
+  .sl-card-grid,
+  .sl-cta-box,
+  .sl-links-footer-grid{grid-template-columns:minmax(0,1fr)}
+  .sl-cta-actions{align-items:flex-start;text-align:left}
+  .sl-cta-small{max-width:none}
+  .sl-cta-box{padding:24px}
+  .sl-links-footer{padding:24px}
+}
+
+@media (max-width:720px){
+  body{padding-bottom:72px}
+  .sl-cta-title{font-size:1.3rem}
+  .sl-btn-primary{width:100%;padding:14px 20px}
+  .sl-tab-button{flex:1 1 100%}
+}
 </style> <script type="application/ld+json">
 { "@context": "https://schema.org", "@type": "MedicalBusiness", "name": "Sopro Life", "url": "https://soprolife.com.br", "sameAs": [], "areaServed": [ { "@type": "City", "name": "Rio de Janeiro" }, { "@type": "AdministrativeArea", "name": "Rio de Janeiro - RJ" } ], "telephone": "+55 21 99890-1775", "availableService": [ { "@type": "MedicalProcedure", "name": "Espirometria (Prova de Função Respiratória)" } ], "serviceArea": { "@type": "AdministrativeArea", "name": "Rio de Janeiro - RJ" }, "mainEntityOfPage": "https://soprolife.com.br/espirometria/"
 }
@@ -1020,6 +1282,63 @@ main.sl-container,
     color: #c13584 !important;
     font-weight: 600 !important;
   }
+}
+</style>
+
+<style id="soprolife-espirometria-polish-v1">
+/* Ritmo, agrupamento e correções de overflow — camada final da página. */
+
+/* Agrupa "Links úteis" (cards) + rodapé de links/redes como um único bloco,
+   em vez de duas seções com 58px de respiro cada uma. */
+#links-uteis{padding-bottom:26px !important}
+
+.sl-links-footer.sl-section{
+  padding:28px !important;
+  margin-bottom:8px !important;
+}
+
+/* CTA final com respiro próprio, alinhado ao ritmo das seções */
+.sl-cta-section{
+  padding-top:26px !important;
+  padding-bottom:34px !important;
+}
+
+/* Cards de "Links úteis" clicáveis: destaque no hover/foco, sem borda extra */
+#links-uteis .sl-card{
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+#links-uteis .sl-card:hover{
+  transform:translateY(-2px);
+  border-color:rgba(30,181,171,.28) !important;
+  box-shadow:0 22px 50px rgba(15,35,52,.10) !important;
+}
+#links-uteis .sl-card:focus-visible{
+  outline:2px solid var(--sl-accent-deep);
+  outline-offset:3px;
+}
+
+/* Depoimentos: as setas ficam ocultas no mobile, então o "corredor" lateral
+   de 56px só espremia os cards. */
+@media (max-width:980px){
+  #depoimentos .sl-tcarousel{padding:0 !important}
+}
+
+/* Sem rolagem horizontal: nenhum filho de grid/flex pode estourar a coluna. */
+.sl-two-column > *,
+.sl-card-grid > *,
+.sl-cta-box > *,
+.sl-links-footer-grid > *,
+.sl-tpage > *{min-width:0}
+
+.sl-card h3,
+.sl-links-list a,
+.sl-social-list a,
+.sl-tab-button{overflow-wrap:anywhere}
+
+@media (max-width:720px){
+  #links-uteis{padding-bottom:20px !important}
+  .sl-links-footer.sl-section{padding:22px !important}
+  .sl-cta-section{padding-top:20px !important;padding-bottom:28px !important}
 }
 </style>
 
