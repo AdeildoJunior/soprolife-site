@@ -984,9 +984,42 @@ body{
 }
 
 /* Corrige contraste do CTA escuro */
+/* SOPRO:FIX_CONTRASTE_CTA_ESCURO — o mesmo tratamento de #contato passa a
+   valer para qualquer .sl-cta-box. O bloco #agendamento-antigo ficou oculto
+   dentro de um <style> quebrado desde 2026-02-08; ao voltar a ser exibido,
+   o título herdava o navy de .sl-cta-title e ficava ilegível sobre o
+   gradiente escuro. */
+.sl-cta-box{
+  color: #fff !important;
+}
+.sl-cta-box .sl-cta-title,
+.sl-cta-box h2,
+.sl-cta-box h3{
+  color: #fff !important;
+  opacity: 1 !important;
+}
+.sl-cta-box .sl-cta-sub,
+.sl-cta-box .sl-cta-contacts,
+.sl-cta-box .sl-cta-small{
+  color: rgba(255,255,255,.92) !important;
+}
+.sl-cta-box .sl-cta-contacts strong{
+  color: #fff !important;
+}
+
 #contato .sl-cta-box,
 .sl-cta-section#contato .sl-cta-box{
   color: #fff !important;
+}
+
+/* SOPRO:FIX_RODAPE_ALINHAMENTO
+   O rodapé "Links úteis" fica fora de .sl-container e, sem o
+   /assets/sl-v3.css (carregado só na home), nascia coladinho na borda.
+   Recebe aqui as mesmas medidas de .sl-container desta página. */
+.sl-links-footer-grid{
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 16px;
 }
 
 #contato .sl-cta-title,
@@ -1040,7 +1073,7 @@ body{
   }
 }
 </style>
-<style id="soprolife-instagram-mobile-android-fix-v1">
+<style id="soprolife-map-modal-side-polish-v1">
 /* Sopro Life: no mobile, Instagram fica junto do WhatsApp, não colado na logo */
 @media (max-width: 960px) {
   .sl-header-in {
@@ -2038,6 +2071,9 @@ body{
   <!-- SOPRO:ANALYTICS_START -->
   <script src="/assets/analytics.js"></script>
   <!-- SOPRO:ANALYTICS_END -->
+
+<!-- SOPRO:SL_BOOKING_SHARED_CSS -->
+<link rel="stylesheet" href="/assets/sl-booking.css">
 </head>
 <body> <!-- Header com logo encostada à esquerda --> <header class="sl-header">
 <div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a>
@@ -2110,33 +2146,46 @@ body{
 
           <div class="sl-booking-grid">
             <div class="sl-booking-controls">
+              <!-- SOPRO:BOOKING_FIELDS_SHARED_V1
+                   Estilo em /assets/sl-booking.css · lógica em /assets/sl-booking.js.
+                   Rótulos e ordem vêm da configuração central
+                   (SL_BOOKING.LOCATIONS), mas QUAIS localidades aparecem é
+                   decisão desta página: aqui o formulário é do atendimento
+                   domiciliar e NÃO oferece a unidade parceira de Ipanema.
+                   O módulo compartilhado nunca reinsere opções ausentes. -->
               <div class="sl-booking-field">
                 <label for="sl-booking-service">Tipo de Espirometria</label>
-                <select id="sl-booking-service" name="servico">
-                  <option value="Espirometria simples" selected>Espirometria simples</option>
-                  <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
-                  <option value="Empresas / PCMSO">Empresas / PCMSO</option>
-                </select>
+                <span class="sl-field-wrap sl-field-wrap--select">
+                  <select id="sl-booking-service" class="sl-field-control" name="servico">
+                    <option value="Espirometria simples" selected>Espirometria simples</option>
+                    <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
+                    <option value="Empresas / PCMSO">Empresas / PCMSO</option>
+                  </select>
+                </span>
               </div>
 
               <div class="sl-booking-field">
                 <label for="sl-booking-unit">Localidade</label>
-                <select id="sl-booking-unit" name="unidade">
-                  <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
-                  <option value="Unidade Barra">Unidade Barra</option>
-                  <option value="Unidade Zona Norte">Unidade Zona Norte</option>
-                </select>
+                <span class="sl-field-wrap sl-field-wrap--select">
+                  <select id="sl-booking-unit" class="sl-field-control" name="unidade">
+                    <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
+                    <option value="Unidade Barra">Unidade Barra</option>
+                    <option value="Unidade Zona Norte">Unidade Zona Norte</option>
+                  </select>
+                </span>
               </div>
 
               <div class="sl-booking-field">
                 <label for="sl-booking-date">Data</label>
-                <input id="sl-booking-date" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa" />
+                <span class="sl-field-wrap sl-field-wrap--date">
+                  <input id="sl-booking-date" class="sl-field-control" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa" />
+                </span>
               </div>
 
               <div>
                 <div class="sl-booking-slots-title">Horários disponíveis</div>
                 <div class="sl-booking-slots" id="sl-booking-slots"></div>
-                <p class="sl-booking-note">Horários em cinza estão ocupados. Confirmação pelo WhatsApp.</p>
+                <p class="sl-booking-note">Horários sujeitos a confirmação pelo WhatsApp.</p>
               </div>
             </div>
 
@@ -2151,8 +2200,41 @@ body{
           </div>
         </div>
         </div>
+        </div><!-- SOPRO:FIX_CONTAINER_AGENDAMENTO — fecha .sl-container da seção
+                    de agendamento, que estava sem par e deixava .sl-page aberta -->
       </section>
 <!-- SOPRO:RJ_HOME_BOOKING_SECTION_END -->
+
+<!-- SOPRO:DOM_LINK_IPANEMA_START
+     Ponte discreta para a unidade parceira. Fora do formulário de propósito:
+     o seletor desta página é do atendimento domiciliar. -->
+<div class="sl-container">
+  <p class="sl-dom-ipanema-link">
+    Prefere atendimento em Ipanema?
+    <a href="/espirometria-ipanema/">Conheça a unidade parceira.</a>
+  </p>
+</div>
+<style>
+.sl-dom-ipanema-link{
+  margin:0 0 18px;
+  font-size:.88rem;
+  line-height:1.5;
+  color:#4a6c80;
+}
+.sl-dom-ipanema-link a{
+  color:#0b6f68;
+  font-weight:700;
+  text-decoration:underline;
+  text-underline-offset:2px;
+}
+.sl-dom-ipanema-link a:hover{ color:#0b2239; }
+.sl-dom-ipanema-link a:focus-visible{
+  outline:3px solid rgba(30,181,171,.35);
+  outline-offset:3px;
+  border-radius:4px;
+}
+</style>
+<!-- SOPRO:DOM_LINK_IPANEMA_END -->
 
 <section id="depoimentos" class="sl-testimonials" aria-label="Opiniões de pacientes">
   <div class="sl-container sl-container--wide">
@@ -2361,7 +2443,10 @@ body{
     font-size:22px;
     line-height:1;
   }
-  #depoimentos .sl-tarrow--left{left:16px !important; outline-offset:2px}
+  #depoimentos .sl-tarrow--left{left:16px !important}
+  #depoimentos .sl-tarrow--right{right:16px !important}
+  #depoimentos .sl-tarrow:active{transform:translateY(-50%) scale(.98)}
+  #depoimentos .sl-tarrow:focus{outline:2px solid rgba(0,128,128,.35); outline-offset:2px}
 
   /* clique: trava a página escolhida sem quebrar o auto */
   #depoimentos[data-manual] .sl-tpage{animation:none !important;opacity:0 !important;pointer-events:none !important;}
@@ -2381,7 +2466,18 @@ body{
   /* no mobile, setas um pouco menores */
   @media (max-width: 980px){
     #depoimentos .sl-tarrow{width:30px;height:30px;font-size:20px}
-    #depoimentos .sl-tarrow--left{left:16px !important;</li> <li>Avaliação de tabagistas e ex-tabagistas;</li> <li>Ocupacional: poeiras/gases (PCMSO);</li> <li>Pré-operatório;</li> <li>Seguimento de doenças pulmonares.</li> </ul> </div> <div class="sl-highlight-box"> <strong>Quem pede o exame?</strong> <p>Pneumologistas, clínicos, cardiologistas, médicos do trabalho e cirurgiões, entre outros.</p> <p>Na Sopro Life, o laudo é objetivo e útil ao médico solicitante, com recomendações quando necessário.</p> </div> </div> </section> <!-- TIPOS --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Modalidades</span> <h2 class="sl-section-title">Tipos de espirometria que realizamos</h2> </div> <div class="sl-tabs" id="tipos-espirometria"> <div class="sl-tab-list" role="tablist"> <button class="sl-tab-button" role="tab" aria-selected="true" data-tab="simples">Espirometria simples</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="bd">Espirometria com broncodilatador</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="ocupacional">Espirometria ocupacional / PCMSO</button> </div> <div class="sl-tab-panel is-active" data-panel="simples" role="tabpanel"> <div class="sl-tagline">Avaliação basal</div> <h3>Espirometria simples</h3> <p>Sem medicação durante o exame. Ótima para investigação inicial e acompanhamento periódico.</p> <ul class="sl-bullet-list"> <li>Mede CVF, VEF1, entre outros;</li> <li>Identifica padrões obstrutivos/restritivos;</li> <li>Permite comparação em seguimentos.</li> </ul> </div> <div class="sl-tab-panel" data-panel="bd" role="tabpanel"> <div class="sl-tagline">Resposta a medicação</div> <h3>Espirometria com broncodilatador</h3> <p>Após a etapa basal, aplica-se broncodilatador e repete-se o teste. Essa etapa também é chamada de prova broncodilatadora e ajuda a avaliar a resposta dos pulmões à medicação.</p> <ul class="sl-bullet-list"> <li>Chave no diagnóstico e controle da asma;</li> <li>Ajuda a diferenciar DPOC de outras obstruções;</li> <li>Orienta ajustes de bombinhas.</li> </ul> </div> <div class="sl-tab-panel" data-panel="ocupacional" role="tabpanel"> <div class="sl-tagline">Saúde do trabalhador</div> <h3>Espirometria ocupacional / PCMSO</h3> <p>Protocolos alinhados às normas para ambientes com poeiras/fumos/vapores. Admissional, periódico e demissional.</p> <ul class="sl-bullet-list"> <li>Registros adequados a auditorias;</li> <li>Campanhas in company mediante programação;</li> <li>Relatórios padronizados.</li> </ul> </div> </div> </section> <!-- PREPARO --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Preparo</span> <h2 class="sl-section-title">Como se preparar</h2> <p class="sl-section-subtitle">Uma boa preparação melhora a qualidade do exame. Em dúvida, siga o médico solicitante.</p> </div> <div class="sl-card-grid"> <div class="sl-card"> <div class="sl-pill-label">No dia</div> <h3>Cuidados gerais</h3> <ul> <li>Evite refeições muito pesadas até 2 h antes;</li> <li>Roupas confortáveis (tórax livre);</li> <li>Chegue com alguns minutos de antecedência;</li> <li>Leve solicitação e documentos.</li> </ul> </div> <div class="sl-card"> <div class="sl-pill-label">Medicações/Tabaco</div> <h3>Quando suspender/manter</h3> <ul> <li>Não fume de 2 a 4 h antes;</li> <li>Suspensão de bombinhas depende do seu médico; na dúvida, não suspenda por conta.</li> <li>Leve suas medicações inalatórias.</li> </ul> </div> </div> </section> <!-- CTA --> <section class="sl-cta-section" id="agendamento-antigo"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua Espirometria</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Gostaria%20de%20agendar%20uma%20espirometria%20na%20Sopro%20Life."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list"> <li> <a href="https://www.instagram.com/soprolife/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--ig">IG</span> <span>Instagram da Sopro Life</span> </a> </li> <li> <a href="https://linkedin.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--li">in</span> <span>LinkedIn da Sopro Life</span> </a> </li> <li> <a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--yt">▶</span> <span>Canal da Sopro Life no YouTube</span> </a> </li> </ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Gostaria%20de%20agendar%20uma%20espirometria%20na%20Sopro%20Life." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script> // Tabs (function(){ var root=document.getElementById("tipos-espirometria"); if(!root) return; var buttons=root.querySelectorAll(".sl-tab-button"); var panels=root.querySelectorAll(".sl-tab-panel"); buttons.forEach(function(btn){ btn.addEventListener("click",function(){ var tab=btn.getAttribute("data-tab"); buttons.forEach(function(b){b.setAttribute("aria-selected",b===btn?"true":"false");}); panels.forEach(function(p){p.classList.toggle("is-active",p.getAttribute("data-panel")===tab);}); }); }); })(); </script>
+    #depoimentos .sl-tarrow{display:none}
+  }
+</style>
+<!-- SOPRO:ARROWS_STYLE_END -->
+
+<!-- SOPRO:TESTIMONIALS_END -->
+
+<!-- SOPRO:SOBRE_O_EXAME_RESTAURADO
+     Abertura desta seção foi destruída em 94049af (2026-02-08) e restaurada
+     literalmente a partir de 94049af^. Nada foi reescrito. -->
+<section class="sl-section"> <div class="sl-section-header"> <div class="sl-section-kicker">Sobre o exame</div> <div class="sl-local-mini" aria-label="Atendimento no Rio de Janeiro"> <h3>Atendimento em todo o Rio de Janeiro (RJ)</h3> <p>A SoproLife realiza espirometria domiciliar mediante avaliação da região e disponibilidade da equipe. Também há opções de atendimento em espaços parceiros, apresentadas separadamente no site.</p> <div class="sl-local-tags" aria-label="Regiões atendidas"> <span class="sl-tag">Centro</span> <span class="sl-tag">Zona Sul</span> <span class="sl-tag">Zona Norte</span> <span class="sl-tag">Tijuca</span> <span class="sl-tag">Barra</span> <span class="sl-tag">Jacarepaguá</span> <span class="sl-tag">Copacabana</span> </div>
+</div> <h2 class="sl-section-title">O que é a espirometria?</h2> <p class="sl-section-subtitle"> A espirometria (prova de função respiratória) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório. </p> </div> <div class="sl-two-column"> <div class="sl-text-block"> <p>Durante o exame, o paciente respira por um bocal conectado ao espirômetro. Fazemos manobras guiadas como inspirações profundas e sopros prolongados.</p> <p>As curvas e índices apontam se há obstrução/restrição e se existe resposta a broncodilatadores.</p> <ul class="sl-bullet-list"> <li>Diagnóstico e controle de asma e DPOC;</li> <li>Avaliação de tabagistas e ex-tabagistas;</li> <li>Ocupacional: poeiras/gases (PCMSO);</li> <li>Pré-operatório;</li> <li>Seguimento de doenças pulmonares.</li> </ul> </div> <div class="sl-highlight-box"> <strong>Quem pede o exame?</strong> <p>Pneumologistas, clínicos, cardiologistas, médicos do trabalho e cirurgiões, entre outros.</p> <p>Na Sopro Life, o laudo é objetivo e útil ao médico solicitante, com recomendações quando necessário.</p> </div> </div> </section> <!-- TIPOS --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Modalidades</span> <h2 class="sl-section-title">Tipos de espirometria que realizamos</h2> </div> <div class="sl-tabs" id="tipos-espirometria"> <div class="sl-tab-list" role="tablist"> <button class="sl-tab-button" role="tab" aria-selected="true" data-tab="simples">Espirometria simples</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="bd">Espirometria com broncodilatador</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="ocupacional">Espirometria ocupacional / PCMSO</button> </div> <div class="sl-tab-panel is-active" data-panel="simples" role="tabpanel"> <div class="sl-tagline">Avaliação basal</div> <h3>Espirometria simples</h3> <p>Sem medicação durante o exame. Ótima para investigação inicial e acompanhamento periódico.</p> <ul class="sl-bullet-list"> <li>Mede CVF, VEF1, entre outros;</li> <li>Identifica padrões obstrutivos/restritivos;</li> <li>Permite comparação em seguimentos.</li> </ul> </div> <div class="sl-tab-panel" data-panel="bd" role="tabpanel"> <div class="sl-tagline">Resposta a medicação</div> <h3>Espirometria com broncodilatador</h3> <p>Após a etapa basal, aplica-se broncodilatador e repete-se o teste. Essa etapa também é chamada de prova broncodilatadora e ajuda a avaliar a resposta dos pulmões à medicação.</p> <ul class="sl-bullet-list"> <li>Chave no diagnóstico e controle da asma;</li> <li>Ajuda a diferenciar DPOC de outras obstruções;</li> <li>Orienta ajustes de bombinhas.</li> </ul> </div> <div class="sl-tab-panel" data-panel="ocupacional" role="tabpanel"> <div class="sl-tagline">Saúde do trabalhador</div> <h3>Espirometria ocupacional / PCMSO</h3> <p>Protocolos alinhados às normas para ambientes com poeiras/fumos/vapores. Admissional, periódico e demissional.</p> <ul class="sl-bullet-list"> <li>Registros adequados a auditorias;</li> <li>Campanhas in company mediante programação;</li> <li>Relatórios padronizados.</li> </ul> </div> </div> </section> <!-- PREPARO --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Preparo</span> <h2 class="sl-section-title">Como se preparar</h2> <p class="sl-section-subtitle">Uma boa preparação melhora a qualidade do exame. Em dúvida, siga o médico solicitante.</p> </div> <div class="sl-card-grid"> <div class="sl-card"> <div class="sl-pill-label">No dia</div> <h3>Cuidados gerais</h3> <ul> <li>Evite refeições muito pesadas até 2 h antes;</li> <li>Roupas confortáveis (tórax livre);</li> <li>Chegue com alguns minutos de antecedência;</li> <li>Leve solicitação e documentos.</li> </ul> </div> <div class="sl-card"> <div class="sl-pill-label">Medicações/Tabaco</div> <h3>Quando suspender/manter</h3> <ul> <li>Não fume de 2 a 4 h antes;</li> <li>Suspensão de bombinhas depende do seu médico; na dúvida, não suspenda por conta.</li> <li>Leve suas medicações inalatórias.</li> </ul> </div> </div> </section> <!-- CTA --> <section class="sl-cta-section" id="agendamento-antigo"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Pronto para agendar sua espirometria?</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Gostaria%20de%20agendar%20uma%20espirometria%20na%20Sopro%20Life."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list"> <li> <a href="https://www.instagram.com/soprolife/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--ig">IG</span> <span>Instagram da Sopro Life</span> </a> </li> <li> <a href="https://linkedin.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--li">in</span> <span>LinkedIn da Sopro Life</span> </a> </li> <li> <a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--yt">▶</span> <span>Canal da Sopro Life no YouTube</span> </a> </li> </ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Gostaria%20de%20agendar%20uma%20espirometria%20na%20Sopro%20Life." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script> // Tabs (function(){ var root=document.getElementById("tipos-espirometria"); if(!root) return; var buttons=root.querySelectorAll(".sl-tab-button"); var panels=root.querySelectorAll(".sl-tab-panel"); buttons.forEach(function(btn){ btn.addEventListener("click",function(){ var tab=btn.getAttribute("data-tab"); buttons.forEach(function(b){b.setAttribute("aria-selected",b===btn?"true":"false");}); panels.forEach(function(p){p.classList.toggle("is-active",p.getAttribute("data-panel")===tab);}); }); }); })(); </script>
 <!-- SOPRO:TESTIMONIALS_JS_START -->
 <script>
 // Rotação feita 100% via CSS (25s = 5 páginas x 5s). JS não é necessário aqui.
@@ -2458,8 +2554,9 @@ body{
 
 
 
-<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/pt.js"></script>
+<!-- SOPRO:FLATPICKR_DUP_REMOVIDO
+     Este par de tags do flatpickr era o segundo da página e estava sem SRI.
+     A carga válida (com integrity) fica logo antes de /assets/sl-booking.js. -->
 
 
 <!-- SOPRO:RJ_HOME_BOOKING_SCRIPTS_END -->
@@ -2546,274 +2643,9 @@ header .sl-header-instagram:hover,
 
 
 
-<script>
-/* SOPRO:BOOKING_COMPACT_V1 */
-(function(){
-  function toLocalIso(date){
-    var d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
-    return d.toISOString().split('T')[0];
-  }
 
-  function initBookingCompact(){
-    var slotsWrap = document.getElementById('sl-booking-slots');
-    var serviceEl = document.getElementById('sl-booking-service');
-    var unitEl = document.getElementById('sl-booking-unit');
-    var dateEl = document.getElementById('sl-booking-date');
 
-    if(!slotsWrap || !serviceEl || !unitEl || !dateEl) return;
 
-    var slots = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];
-
-    var today = new Date();
-    var todayIso = toLocalIso(today);
-    var maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + 30);
-    var maxIso = toLocalIso(maxDate);
-
-    dateEl.min = todayIso;
-    dateEl.max = maxIso;
-    if(!dateEl.value){
-      dateEl.value = todayIso;
-    }
-
-    function parseLocalDate(iso){
-      if(!iso) return null;
-      var parts = iso.split('-').map(Number);
-      if(parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
-      return new Date(parts[0], parts[1] - 1, parts[2]);
-    }
-
-    function formatDate(iso){
-      var parts = iso ? iso.split('-') : [];
-      return parts.length === 3 ? [parts[2], parts[1], parts[0]].join('/') : iso;
-    }
-
-    function isInDateWindow(isoDate){
-      var selected = parseLocalDate(isoDate || dateEl.value || todayIso);
-      var start = parseLocalDate(todayIso);
-      var end = parseLocalDate(maxIso);
-      if(!selected || !start || !end) return false;
-      return selected >= start && selected <= end;
-    }
-
-    function isSlotAvailable(unit, isoDate, time){
-      if(unit === 'Atendimento domiciliar'){
-        return isInDateWindow(isoDate);
-      }
-      if(unit === 'Unidade Barra' || unit === 'Unidade Zona Norte'){
-        return false;
-      }
-      return false;
-    }
-
-    function openWhatsApp(time){
-      var service = serviceEl.value;
-      var unit = unitEl.value;
-      var isoDate = dateEl.value || todayIso;
-      var date = formatDate(isoDate);
-      var text = 'Olá, gostaria de agendar espirometria na Sopro Life.\n'
-        + 'Tipo de espirometria: ' + service + '\n'
-        + 'Localidade: ' + unit + '\n'
-        + 'Data: ' + date + '\n'
-        + 'Horário: ' + time;
-      var url = 'https://api.whatsapp.com/send?phone=5521998901775&text=' + encodeURIComponent(text);
-      window.open(url, '_blank', 'noopener');
-    }
-
-    function renderSlots(){
-      slotsWrap.innerHTML = '';
-      var unit = unitEl.value;
-      var isoDate = dateEl.value || todayIso;
-      var frag = document.createDocumentFragment();
-
-      slots.forEach(function(time){
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'sl-slot-btn';
-        btn.textContent = time;
-
-        var available = isSlotAvailable(unit, isoDate, time);
-        if(!available){
-          btn.disabled = true;
-          btn.setAttribute('aria-disabled', 'true');
-        } else {
-          btn.addEventListener('click', function(){
-            openWhatsApp(time);
-          });
-        }
-
-        frag.appendChild(btn);
-      });
-
-      slotsWrap.appendChild(frag);
-    }
-
-    serviceEl.addEventListener('change', renderSlots);
-    unitEl.addEventListener('change', renderSlots);
-    dateEl.addEventListener('change', renderSlots);
-
-    renderSlots();
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', initBookingCompact);
-  } else {
-    initBookingCompact();
-  }
-})();
-</script>
-
-<script>
-/* SOPRO:BOOKING_MAP_MODAL_V1 */
-(function(){
-  var openBtn = document.getElementById('sl-open-map-modal');
-  var closeBtn = document.getElementById('sl-close-map-modal');
-  var modal = document.getElementById('sl-map-modal');
-  var miniNode = document.getElementById('sl-units-map-mini');
-  var mapNode = document.getElementById('sl-units-map');
-  if(!openBtn || !closeBtn || !modal || !mapNode || !miniNode) return;
-
-  var leafletReady = false;
-  var miniReady = false;
-  var largeReady = false;
-  var miniMap = null;
-  var largeMap = null;
-
-  var units = [
-    { name: 'Unidade Barra', lat: -22.999051350996826, lng: -43.35229531126693 },
-    { name: 'Unidade Zona Norte', lat: -22.88608548571967, lng: -43.28447232933152 }
-  ];
-
-  function loadLeafletAssets(){
-    if(window.L && window.L.map) return Promise.resolve();
-    if(window.__slLeafletLoadingPromise) return window.__slLeafletLoadingPromise;
-
-    window.__slLeafletLoadingPromise = new Promise(function(resolve, reject){
-      var css = document.createElement('link');
-      css.rel = 'stylesheet';
-      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      css.crossOrigin = '';
-      document.head.appendChild(css);
-
-      var script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.crossOrigin = '';
-      script.onload = function(){ leafletReady = true; resolve(); };
-      script.onerror = reject;
-      document.body.appendChild(script);
-    });
-
-    return window.__slLeafletLoadingPromise;
-  }
-
-  function createTileLayer(target){
-    return window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap &copy; CARTO'
-    }).addTo(target);
-  }
-
-  function markerIcon(){
-    return window.L.divIcon({
-      className: 'sl-map-pin-wrap',
-      html: '<span class="sl-map-pin" aria-hidden="true"></span>',
-      iconSize: [20, 20],
-      iconAnchor: [10, 20],
-      popupAnchor: [0, -18]
-    });
-  }
-
-  function fitUnits(target, padding){
-    var bounds = [];
-    units.forEach(function(unit){
-      var marker = window.L.marker([unit.lat, unit.lng], { icon: markerIcon() }).addTo(target);
-      marker.bindPopup(unit.name);
-      bounds.push([unit.lat, unit.lng]);
-    });
-    target.fitBounds(bounds, { padding: padding });
-  }
-
-  function initMiniMapIfNeeded(){
-    if(miniReady || !leafletReady || !window.L) return;
-    miniMap = window.L.map(miniNode, {
-      zoomControl: false,
-      attributionControl: false,
-      dragging: false,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
-      boxZoom: false,
-      keyboard: false,
-      tap: false,
-      touchZoom: false
-    });
-    createTileLayer(miniMap);
-    fitUnits(miniMap, [16, 16]);
-    miniReady = true;
-  }
-
-  function initLargeMapIfNeeded(){
-    if(largeReady || !leafletReady || !window.L) return;
-    largeMap = window.L.map(mapNode, {
-      scrollWheelZoom: true,
-      zoomControl: true,
-      attributionControl: true
-    });
-    createTileLayer(largeMap);
-    fitUnits(largeMap, [36, 36]);
-    largeReady = true;
-  }
-
-  function openModal(){
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-    loadLeafletAssets().then(function(){
-      initMiniMapIfNeeded();
-      initLargeMapIfNeeded();
-      setTimeout(function(){ if(largeMap){ largeMap.invalidateSize(); } }, 90);
-    });
-  }
-
-  function closeModal(){
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-  }
-
-  openBtn.addEventListener('click', function(e){
-    e.stopPropagation();
-    openModal();
-  });
-  miniNode.addEventListener('click', openModal);
-  miniNode.addEventListener('keydown', function(e){
-    if(e.key === 'Enter' || e.key === ' '){
-      e.preventDefault();
-      openModal();
-    }
-  });
-  closeBtn.addEventListener('click', closeModal);
-  modal.addEventListener('click', function(e){
-    if(e.target && e.target.getAttribute('data-map-close') === 'backdrop'){ closeModal(); }
-  });
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
-  });
-
-  if('IntersectionObserver' in window){
-    var io = new IntersectionObserver(function(entries){
-      entries.forEach(function(entry){
-        if(entry.isIntersecting){
-          loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
-          io.disconnect();
-        }
-      });
-    }, { rootMargin: '120px' });
-    io.observe(miniNode);
-  } else {
-    loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
-  }
-})();
-</script>
 
 <script id="sopro-map-unit-whatsapp-hotfix">
 /* SOPRO:MAP_UNIT_WHATSAPP_HOTFIX_V1 */
@@ -2885,53 +2717,20 @@ header .sl-header-instagram:hover,
 })();
 </script>
 
-<script id="sopro-flatpickr-ptbr-init">
-/* SOPRO:FLATPICKR_PTBR_INIT */
-(function(){
-  function initSoproDatePicker(){
-    var dateEl = document.getElementById('sl-booking-date');
-    if(!dateEl || !window.flatpickr) return;
-    if(dateEl._flatpickr) return;
+<!-- SOPRO:FLATPICKR_CDN_UNICO
+     Carga única do calendário pt-BR, com SRI, imediatamente antes do módulo
+     compartilhado que o inicializa. Sem flatpickr, /assets/sl-booking.js cai
+     no seletor de data nativo (input type="date"). -->
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" integrity="sha384-5JqMv4L/Xa0hfvtF06qboNdhvuYXUku9ZrhZh3bSk8VXF0A/RuSLHpLsSV9Zqhl6" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/pt.js" integrity="sha384-agbVpcY312cNMSL1b3CUo060bj9FmbwUX8HUCNSE17+jOU/en4yz3w9ro9IWVusF" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-    var today = new Date();
-    var maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + 30);
-
-    var currentValue = dateEl.value || null;
-
-    flatpickr(dateEl, {
-      locale: {
-        ...flatpickr.l10ns.pt,
-        firstDayOfWeek: 0
-      },
-      dateFormat: "Y-m-d",
-      altInput: true,
-      altFormat: "d/m/Y",
-      defaultDate: currentValue || today,
-      minDate: dateEl.min || today,
-      maxDate: dateEl.max || maxDate,
-      disableMobile: true,
-      allowInput: false,
-      monthSelectorType: "dropdown",
-      onChange: function(){
-        dateEl.dispatchEvent(new Event('change', { bubbles:true }));
-      },
-      onReady: function(selectedDates, dateStr, instance){
-        if(instance.altInput){
-          instance.altInput.setAttribute('placeholder', 'dd/mm/aaaa');
-          instance.altInput.setAttribute('aria-label', 'Data no formato dia, mês e ano');
-        }
-      }
-    });
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', initSoproDatePicker);
-  } else {
-    initSoproDatePicker();
-  }
-})();
-</script>
+<!-- SOPRO:SL_BOOKING_SHARED_JS
+     Configuração e lógica únicas do agendamento (localidades, agendas,
+     validação de data, horários, WhatsApp e analytics) + mapa das unidades.
+     Substituem os antigos blocos inline BOOKING_COMPACT_V1,
+     BOOKING_MAP_MODAL_V1 e FLATPICKR_PTBR_INIT. -->
+<script src="/assets/sl-booking.js"></script>
+<script src="/assets/sl-units-map.js"></script>
 
 <script id="sopro-booking-mobile-relocate">
 /* SOPRO:BOOKING_MOBILE_RELOCATE_V1 */
@@ -2970,111 +2769,7 @@ header .sl-header-instagram:hover,
 </script>
 
 
-<script id="sopro-rj-domiciliar-only">
-(function(){
-  function ready(fn){
-    if(document.readyState !== "loading") fn();
-    else document.addEventListener("DOMContentLoaded", fn);
-  }
 
-  function isTimeText(txt){
-    return /^\s*\d{2}:\d{2}\s*$/.test((txt || "").trim());
-  }
-
-  function getSection(){
-    return document.getElementById("agendamento") || document.querySelector(".sl-booking-section");
-  }
-
-  function getLocalidadeSelect(section){
-    var selects = section ? section.querySelectorAll("select") : [];
-    return selects.length > 1 ? selects[1] : null;
-  }
-
-  function getTimeControls(section){
-    if(!section) return [];
-    var candidates = Array.from(section.querySelectorAll("button, a"));
-    return candidates.filter(function(el){
-      if(el.id === "sl-open-map-modal") return false;
-      if(el.classList.contains("sl-map-open-btn")) return false;
-      if(el.hasAttribute("data-time")) return true;
-      return isTimeText(el.textContent);
-    });
-  }
-
-  function isDomiciliar(select){
-    if(!select) return true;
-    var text = "";
-    try {
-      text = select.options[select.selectedIndex].text || select.value || "";
-    } catch(e) {
-      text = select.value || "";
-    }
-    return /domiciliar/i.test(text);
-  }
-
-  function update(){
-    var section = getSection();
-    if(!section) return;
-
-    var select = getLocalidadeSelect(section);
-    var active = isDomiciliar(select);
-    var times = getTimeControls(section);
-
-    times.forEach(function(el){
-      el.dataset.slDomiciliarOnly = active ? "active" : "inactive";
-
-      if(active){
-        el.disabled = false;
-        el.removeAttribute("aria-disabled");
-        el.style.pointerEvents = "";
-        el.style.opacity = "1";
-        el.style.cursor = "pointer";
-        el.style.filter = "";
-      } else {
-        el.disabled = true;
-        el.setAttribute("aria-disabled", "true");
-        el.style.pointerEvents = "none";
-        el.style.opacity = ".45";
-        el.style.cursor = "not-allowed";
-        el.style.filter = "grayscale(1)";
-      }
-    });
-
-    var note = section.querySelector(".sl-booking-note");
-    if(note){
-      note.textContent = active
-        ? "Horários disponíveis para atendimento domiciliar. Confirmação pelo WhatsApp."
-        : "Para Unidade Zona Norte ou Unidade Barra, confirme disponibilidade de horários pelo WhatsApp.";
-    }
-  }
-
-  ready(function(){
-    var section = getSection();
-    if(!section) return;
-
-    var select = getLocalidadeSelect(section);
-    if(select){
-      select.addEventListener("change", function(){
-        setTimeout(update, 50);
-      });
-    }
-
-    update();
-    setTimeout(update, 300);
-    setTimeout(update, 900);
-    setTimeout(update, 1600);
-
-    document.addEventListener("click", function(e){
-      var target = e.target.closest("[data-sl-domiciliar-only='inactive']");
-      if(target){
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-    }, true);
-  });
-})();
-</script>
 
 
 <style id="soprolife-mobile-header-final-v5">
