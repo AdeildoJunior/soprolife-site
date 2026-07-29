@@ -1292,7 +1292,10 @@ main.sl-container,
     font-size:22px;
     line-height:1;
   }
-  #depoimentos .sl-tarrow--left{left:16px !important; outline-offset:2px}
+  #depoimentos .sl-tarrow--left{left:8px}
+  #depoimentos .sl-tarrow--right{right:8px}
+  #depoimentos .sl-tarrow:active{transform:translateY(-50%) scale(.98)}
+  #depoimentos .sl-tarrow:focus{outline:2px solid rgba(0,128,128,.35); outline-offset:2px}
 
   /* clique: trava a página escolhida sem quebrar o auto */
   #depoimentos[data-manual] .sl-tpage{animation:none !important;opacity:0 !important;pointer-events:none !important;}
@@ -1312,7 +1315,27 @@ main.sl-container,
   /* no mobile, setas um pouco menores */
   @media (max-width: 980px){
     #depoimentos .sl-tarrow{width:30px;height:30px;font-size:20px}
-    #depoimentos .sl-tarrow--left{left:16px !important; if(!root) return; var buttons=root.querySelectorAll(".sl-tab-button"); var panels=root.querySelectorAll(".sl-tab-panel"); buttons.forEach(function(btn){ btn.addEventListener("click",function(){ var tab=btn.getAttribute("data-tab"); buttons.forEach(function(b){b.setAttribute("aria-selected",b===btn?"true":"false");}); panels.forEach(function(p){p.classList.toggle("is-active",p.getAttribute("data-panel")===tab);}); }); }); })(); </script> <script id="sl-hide-breadcrumb">
+    #depoimentos .sl-tarrow--left{left:6px}
+    #depoimentos .sl-tarrow{display:none}
+
+    #depoimentos .sl-tarrow--right{right:6px}
+  }
+</style>
+<!-- SOPRO:ARROWS_STYLE_END -->
+
+<!-- SOPRO:TESTIMONIALS_END -->
+
+<!-- SOPRO:BLOCO_RESTAURADO
+     CTA, links uteis, rodape e barra fixa de WhatsApp foram destruidos em
+     94049af (2026-02-08) por um sed guloso e restaurados literalmente a partir
+     de 94049af^ (7771377). Nada foi reescrito; apenas o link de WhatsApp foi
+     alinhado a mensagem personalizada ja usada nesta pagina (dd2d0c7). -->
+
+<section class="sl-cta-section" id="agendamento"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Agende sua espirometria</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20quero%20agendar%20uma%20espirometria.%20Tipo%3A%20simples%2C%20com%20broncodilatador%2C%20ocupacional%2FPCMSO%20ou%20domiciliar."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section>
+<section class="sl-section" id="links-uteis"> <div class="sl-section-header"> <div class="sl-section-kicker">Referências</div> <h2 class="sl-section-title">Links úteis</h2> <p class="sl-section-subtitle"> Fontes confiáveis para quem deseja se aprofundar em Pneumologia e função pulmonar. </p> </div> <div class="sl-card-grid"> <a class="sl-card" href="https://sbpt.org.br/" target="_blank" rel="noopener"> <h3>SBPT — Sociedade Brasileira de Pneumologia e Tisiologia</h3> <p>Diretrizes, notas técnicas e cursos para profissionais e pacientes.</p> </a> <a class="sl-card" href="https://www.gov.br/saude" target="_blank" rel="noopener"> <h3>Ministério da Saúde (Brasil)</h3> <p>Protocolos, campanhas e informações oficiais sobre saúde respiratória.</p> </a> <a class="sl-card" href="https://ginasthma.org/" target="_blank" rel="noopener"> <h3>GINA — Global Initiative for Asthma</h3> <p>Relatórios anuais e recomendações atualizadas para asma.</p> </a> <a class="sl-card" href="https://goldcopd.org/" target="_blank" rel="noopener"> <h3>GOLD — Global Initiative for Chronic Obstructive Lung Disease</h3> <p>Estratégias e relatórios para diagnóstico e manejo da DPOC.</p> </a> </div>
+</section> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list"> <li> <a href="https://instagram.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--ig">IG</span> <span>Instagram da Sopro Life</span> </a> </li> <li> <a href="https://linkedin.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--li">in</span> <span>LinkedIn da Sopro Life</span> </a> </li> <li> <a href="https://youtube.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--yt">▶</span> <span>Canal da Sopro Life no YouTube</span> </a> </li> </ul> </div> </div> </section> <!-- Barra fixa WhatsApp --> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20quero%20agendar%20uma%20espirometria.%20Tipo%3A%20simples%2C%20com%20broncodilatador%2C%20ocupacional%2FPCMSO%20ou%20domiciliar." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script>
+// Tabs
+(function(){ var root=document.getElementById("tipos-espirometria"); if(!root) return; var buttons=root.querySelectorAll(".sl-tab-button"); var panels=root.querySelectorAll(".sl-tab-panel"); buttons.forEach(function(btn){ btn.addEventListener("click",function(){ var tab=btn.getAttribute("data-tab"); buttons.forEach(function(b){b.setAttribute("aria-selected",b===btn?"true":"false");}); panels.forEach(function(p){p.classList.toggle("is-active",p.getAttribute("data-panel")===tab);}); }); }); })(); </script> <script id="sl-hide-breadcrumb">
 document.addEventListener('DOMContentLoaded', function () { try { var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); var node; while ((node = walker.nextNode())) { var t = node.nodeValue; if (!t) continue; if (t.indexOf('Início') !== -1 && t.indexOf('Espirometria') !== -1) { var el = node.parentElement; if (el) { el.style.display = 'none'; } break; } } } catch (e) { console && console.warn && console.warn('sl-hide-breadcrumb:', e); }
 });
 </script> </main>
