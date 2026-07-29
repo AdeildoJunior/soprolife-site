@@ -2267,7 +2267,8 @@ body{
   color:#2b526a;
   margin-bottom:7px
 }
-.sl-booking-field select.sl-booking-field input{
+.sl-booking-field select,
+.sl-booking-field input{
   width:100%;
   min-height:44px;
   padding:10px 12px;
@@ -2280,10 +2281,12 @@ body{
   transition:border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
 }
 
-.sl-booking-field select:hover.sl-booking-field input:hover{
+.sl-booking-field select:hover,
+.sl-booking-field input:hover{
   border-color:rgba(11,34,57,.24);
 }
-.sl-booking-field select:focus.sl-booking-field input:focus{
+.sl-booking-field select:focus,
+.sl-booking-field input:focus{
   outline:none;
   border-color:rgba(30,181,171,.72);
   box-shadow:0 0 0 3px rgba(30,181,171,.16);
@@ -2327,7 +2330,9 @@ body{
 }
 .sl-unit-list span{display:block;font-size:.79rem;color:#456479;margin-top:2px;line-height:1.35}
 .sl-btn-disabled{display:inline-flex;align-items:center;justify-content:center;pointer-events:none;opacity:.85}
-.sl-booking-section .sl-booking-card.sl-booking-section .sl-units-placeholder.sl-booking-section .sl-booking-controls{
+.sl-booking-section .sl-booking-card,
+.sl-booking-section .sl-units-placeholder,
+.sl-booking-section .sl-booking-controls{
   backdrop-filter: blur(1.5px);
 }
 
@@ -4093,6 +4098,9 @@ body{
   .sl-map-partner-btn{width:100%}
 }
 </style>
+
+<!-- SOPRO:SL_BOOKING_SHARED_CSS -->
+<link rel="stylesheet" href="/assets/sl-booking.css">
 </head>
 <body class="sl-typo-clean">
 
@@ -4325,33 +4333,44 @@ body{
 
           <div class="sl-booking-grid">
             <div class="sl-booking-controls">
+              <!-- SOPRO:BOOKING_FIELDS_SHARED_V1
+                   Estilo em /assets/sl-booking.css · lógica em /assets/sl-booking.js.
+                   As opções de Localidade são reconciliadas com a configuração
+                   central (SL_BOOKING.LOCATIONS) no carregamento da página. -->
               <div class="sl-booking-field">
                 <label for="sl-booking-service">Tipo de Espirometria</label>
-                <select id="sl-booking-service" name="servico">
-                  <option value="Espirometria simples" selected>Espirometria simples</option>
-                  <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
-                  <option value="Empresas / PCMSO">Empresas / PCMSO</option>
-                </select>
+                <span class="sl-field-wrap sl-field-wrap--select">
+                  <select id="sl-booking-service" class="sl-field-control" name="servico">
+                    <option value="Espirometria simples" selected>Espirometria simples</option>
+                    <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
+                    <option value="Empresas / PCMSO">Empresas / PCMSO</option>
+                  </select>
+                </span>
               </div>
 
               <div class="sl-booking-field">
                 <label for="sl-booking-unit">Localidade</label>
-                <select id="sl-booking-unit" name="unidade">
-                  <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
-                  <option value="Unidade Barra">Unidade Barra</option>
-                  <option value="Unidade Zona Norte">Unidade Zona Norte</option>
-                </select>
+                <span class="sl-field-wrap sl-field-wrap--select">
+                  <select id="sl-booking-unit" class="sl-field-control" name="unidade">
+                    <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
+                    <option value="Unidade Barra">Unidade Barra</option>
+                    <option value="Unidade Zona Norte">Unidade Zona Norte</option>
+                    <option value="Centro Médico Pastore — Ipanema">Pastore Ipanema — Unidade parceira</option>
+                  </select>
+                </span>
               </div>
 
               <div class="sl-booking-field">
                 <label for="sl-booking-date">Data</label>
-                <input id="sl-booking-date" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa" />
+                <span class="sl-field-wrap sl-field-wrap--date">
+                  <input id="sl-booking-date" class="sl-field-control" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa" />
+                </span>
               </div>
 
               <div>
                 <div class="sl-booking-slots-title">Horários disponíveis</div>
                 <div class="sl-booking-slots" id="sl-booking-slots"></div>
-                <p class="sl-booking-note">Horários em cinza estão ocupados. Confirmação pelo WhatsApp.</p>
+                <p class="sl-booking-note">Horários sujeitos a confirmação pelo WhatsApp.</p>
               </div>
             </div>
 
@@ -4379,48 +4398,60 @@ body{
             <div class="sl-map-panel-info sl-map-modal__info">
               <h4>Unidades de atendimento</h4>
               <p class="sl-map-panel-sub">Escolha a unidade e finalize pelo WhatsApp.</p>
-              <div class="sl-map-unit-cards">
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Atendimento domiciliar">
-                  <span class="sl-map-unit-card__text">
-                    <span class="sl-map-unit-card__name">Atendimento domiciliar</span>
-                  </span>
+                            <!-- SOPRO:MAP_PASTORE_IPANEMA_CARD_START
+                   Primeiro cartão da lista: unidade parceira, com endereço real.
+                   NÃO usa .sl-map-unit-card de propósito — essa classe tem um
+                   clique global que abre o WhatsApp da SoproLife, e em Ipanema
+                   quem administra o agendamento é a Pastore. -->
+              <div class="sl-map-partner-card" data-map-location="pastore-ipanema">
+                <div class="sl-map-partner-card__head">
+                  <span class="sl-map-partner-card__name">Centro Médico Pastore — Ipanema</span>
+                  <span class="sl-map-partner-card__badge">Unidade parceira</span>
                 </div>
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Barra">
+                <address class="sl-map-partner-card__address">
+                  Rua Teixeira de Melo, 54 — Ipanema, Rio de Janeiro/RJ<br>
+                  Em frente ao acesso C do metrô General Osório.
+                </address>
+                <p class="sl-map-partner-card__hours">
+                  Espirometria às terças-feiras e aos sábados, das 8h às 12h.
+                  <span>Disponibilidade sujeita à confirmação no sistema oficial de agendamento da Pastore.</span>
+                </p>
+                <div class="sl-map-partner-card__actions">
+                  <a class="sl-map-partner-btn sl-map-partner-btn--ghost"
+                     href="https://www.google.com/maps/dir/?api=1&amp;destination=Rua%20Teixeira%20de%20Melo%2C%2054%2C%20Ipanema%2C%20Rio%20de%20Janeiro%20-%20RJ"
+                     target="_blank" rel="noopener" data-sl-pastore-rota>Como chegar</a>
+                  <a class="sl-map-partner-btn sl-map-partner-btn--wa"
+                     href="https://api.whatsapp.com/send?phone=5521998901775&amp;text=Ol%C3%A1%21%20Vim%20pelo%20site%20da%20SoproLife%20e%20gostaria%20de%20orienta%C3%A7%C3%A3o%20para%20agendar%20uma%20espirometria%20na%20unidade%20Pastore%20Ipanema."
+                     target="_blank" rel="noopener" data-sl-pastore-wa>Falar no WhatsApp</a>
+                  <a class="sl-map-partner-btn sl-map-partner-btn--solid"
+                     href="https://paciente.centromedicopastore.com.br/exams?utm_source=soprolife&amp;utm_medium=referral&amp;utm_campaign=espirometria_ipanema"
+                     target="_blank" rel="noopener" data-sl-pastore-agendar>Agendar na Pastore</a>
+                </div>
+                <a class="sl-map-partner-card__link" href="/espirometria-ipanema/"
+                   data-sl-pastore-conhecer>Conhecer a unidade de Ipanema</a>
+              </div>
+              <!-- SOPRO:MAP_PASTORE_IPANEMA_CARD_END -->
+
+              <div class="sl-map-unit-cards">
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Barra" data-map-location="barra">
                   <span class="sl-map-unit-card__text">
                     <span class="sl-map-unit-card__name">Unidade Barra</span>
                     <span class="sl-map-unit-card__tag">Espaço parceiro / coworking</span>
                   </span>
                 </div>
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Zona Norte">
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Zona Norte" data-map-location="zona-norte">
                   <span class="sl-map-unit-card__text">
                     <span class="sl-map-unit-card__name">Unidade Zona Norte</span>
                     <span class="sl-map-unit-card__tag">Espaço parceiro / coworking</span>
                   </span>
                 </div>
-              </div>
-
-              <!-- SOPRO:MAP_PASTORE_IPANEMA_CARD_START -->
-              <div class="sl-map-partner-card">
-                <div class="sl-map-partner-card__head">
-                  <span class="sl-map-partner-card__name">Centro Médico Pastore — Ipanema</span>
-                  <span class="sl-map-partner-card__badge">Unidade parceira</span>
-                </div>
-                <address class="sl-map-partner-card__address">Rua Teixeira de Melo, 54 — Ipanema</address>
-                <p class="sl-map-partner-card__hours">
-                  Espirometria às terças e aos sábados, das 8h às 12h.
-                  <span>Disponibilidade confirmada no agendamento.</span>
-                </p>
-                <div class="sl-map-partner-card__actions">
-                  <a class="sl-map-partner-btn sl-map-partner-btn--ghost"
-                     href="/espirometria-ipanema/" data-sl-pastore-conhecer>Conhecer a unidade</a>
-                  <a class="sl-map-partner-btn sl-map-partner-btn--ghost"
-                     href="https://www.google.com/maps/dir/?api=1&amp;destination=Rua%20Teixeira%20de%20Melo%2C%2054%2C%20Ipanema%2C%20Rio%20de%20Janeiro%20-%20RJ"
-                     target="_blank" rel="noopener" data-sl-pastore-rota>Como chegar</a>
-                  <a class="sl-map-partner-btn sl-map-partner-btn--solid"
-                     href="/espirometria-ipanema/#agendar" data-sl-pastore-agendar>Agendar</a>
+                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Atendimento domiciliar" data-map-location="domiciliar">
+                  <span class="sl-map-unit-card__text">
+                    <span class="sl-map-unit-card__name">Atendimento domiciliar</span>
+                    <span class="sl-map-unit-card__tag">Endereço combinado pelo WhatsApp</span>
+                  </span>
                 </div>
               </div>
-              <!-- SOPRO:MAP_PASTORE_IPANEMA_CARD_END -->
 
               <p class="sl-map-panel-note">Nas unidades da SoproLife, o endereço é confirmado pelo WhatsApp no momento do agendamento.</p>
             </div>
@@ -4786,297 +4817,9 @@ body{
 })();
 </script>
 
-<script>
-/* SOPRO:BOOKING_COMPACT_V1 */
-(function(){
-  function toLocalIso(date){
-    var d = new Date(date.getTime() - date.getTimezoneOffset()*60000);
-    return d.toISOString().split('T')[0];
-  }
 
-  function initBookingCompact(){
-    var slotsWrap = document.getElementById('sl-booking-slots');
-    var serviceEl = document.getElementById('sl-booking-service');
-    var unitEl = document.getElementById('sl-booking-unit');
-    var dateEl = document.getElementById('sl-booking-date');
 
-    if(!slotsWrap || !serviceEl || !unitEl || !dateEl) return;
 
-    var slots = ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00'];
-
-    var today = new Date();
-    var todayIso = toLocalIso(today);
-    var maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + 30);
-    var maxIso = toLocalIso(maxDate);
-
-    dateEl.min = todayIso;
-    dateEl.max = maxIso;
-    if(!dateEl.value){
-      dateEl.value = todayIso;
-    }
-
-    function parseLocalDate(iso){
-      if(!iso) return null;
-      var parts = iso.split('-').map(Number);
-      if(parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
-      return new Date(parts[0], parts[1] - 1, parts[2]);
-    }
-
-    function formatDate(iso){
-      var parts = iso ? iso.split('-') : [];
-      return parts.length === 3 ? [parts[2], parts[1], parts[0]].join('/') : iso;
-    }
-
-    function isInDateWindow(isoDate){
-      var selected = parseLocalDate(isoDate || dateEl.value || todayIso);
-      var start = parseLocalDate(todayIso);
-      var end = parseLocalDate(maxIso);
-      if(!selected || !start || !end) return false;
-      return selected >= start && selected <= end;
-    }
-
-    function isSlotAvailable(unit, isoDate, time){
-      if(unit === 'Atendimento domiciliar'){
-        return isInDateWindow(isoDate);
-      }
-      if(unit === 'Unidade Barra' || unit === 'Unidade Zona Norte'){
-        return false;
-      }
-      return false;
-    }
-
-    function openWhatsApp(time){
-      var service = serviceEl.value;
-      var unit = unitEl.value;
-      var isoDate = dateEl.value || todayIso;
-      var date = formatDate(isoDate);
-      var text = 'Olá, gostaria de agendar espirometria na Sopro Life.\n'
-        + 'Tipo de espirometria: ' + service + '\n'
-        + 'Localidade: ' + unit + '\n'
-        + 'Data: ' + date + '\n'
-        + 'Horário: ' + time;
-      var url = 'https://api.whatsapp.com/send?phone=5521998901775&text=' + encodeURIComponent(text);
-      window.open(url, '_blank', 'noopener');
-    }
-
-    function renderSlots(){
-      slotsWrap.innerHTML = '';
-      var unit = unitEl.value;
-      var isoDate = dateEl.value || todayIso;
-      var frag = document.createDocumentFragment();
-
-      slots.forEach(function(time){
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'sl-slot-btn';
-        btn.textContent = time;
-
-        var available = isSlotAvailable(unit, isoDate, time);
-        if(!available){
-          btn.disabled = true;
-          btn.setAttribute('aria-disabled', 'true');
-        } else {
-          btn.addEventListener('click', function(){
-            openWhatsApp(time);
-          });
-        }
-
-        frag.appendChild(btn);
-      });
-
-      slotsWrap.appendChild(frag);
-    }
-
-    serviceEl.addEventListener('change', renderSlots);
-    unitEl.addEventListener('change', renderSlots);
-    dateEl.addEventListener('change', renderSlots);
-
-    renderSlots();
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', initBookingCompact);
-  } else {
-    initBookingCompact();
-  }
-})();
-</script>
-
-<script>
-/* SOPRO:BOOKING_MAP_MODAL_V1 */
-(function(){
-  var openBtn = document.getElementById('sl-open-map-modal');
-  var closeBtn = document.getElementById('sl-close-map-modal');
-  var modal = document.getElementById('sl-map-modal');
-  var miniNode = document.getElementById('sl-units-map-mini');
-  var mapNode = document.getElementById('sl-units-map');
-  if(!openBtn || !closeBtn || !modal || !mapNode || !miniNode) return;
-
-  var leafletReady = false;
-  var miniReady = false;
-  var largeReady = false;
-  var miniMap = null;
-  var largeMap = null;
-
-  /* ==========================================================================
-     SOPRO:COORD_PASTORE_IPANEMA  —  ÚNICO PONTO DE EDIÇÃO DA COORDENADA
-     --------------------------------------------------------------------------
-     Rua Teixeira de Melo, 54 — Ipanema, Rio de Janeiro/RJ.
-     Coordenada CONFIRMADA no Google Maps pelo operador em 2026-07-28.
-     (Substituiu o valor provisório -22.983856 / -43.198428, que havia sido
-     obtido por interpolação no OpenStreetMap.)
-
-     Para corrigir, altere SOMENTE as duas linhas lat/lng abaixo.
-     A mesma constante existe em espirometria-ipanema/index.html
-     (procure por SOPRO:COORD_PASTORE_IPANEMA).
-     ========================================================================== */
-  var COORD_PASTORE_IPANEMA = {
-    lat: -22.983686,
-    lng: -43.198411
-  };
-
-  var units = [
-    { name: 'Unidade Barra', lat: -22.999051350996826, lng: -43.35229531126693,
-      note: 'Espaço parceiro / coworking' },
-    { name: 'Unidade Zona Norte', lat: -22.88608548571967, lng: -43.28447232933152,
-      note: 'Espaço parceiro / coworking' },
-    /* Unidade onde a SoproLife realiza os exames de espirometria. */
-    { name: 'Centro Médico Pastore — Ipanema',
-      lat: COORD_PASTORE_IPANEMA.lat, lng: COORD_PASTORE_IPANEMA.lng,
-      note: 'Unidade parceira · Rua Teixeira de Melo, 54 — Ipanema' }
-  ];
-
-  function loadLeafletAssets(){
-    if(window.L && window.L.map) return Promise.resolve();
-    if(window.__slLeafletLoadingPromise) return window.__slLeafletLoadingPromise;
-
-    window.__slLeafletLoadingPromise = new Promise(function(resolve, reject){
-      var css = document.createElement('link');
-      css.rel = 'stylesheet';
-      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      css.crossOrigin = '';
-      document.head.appendChild(css);
-
-      var script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.crossOrigin = '';
-      script.onload = function(){ leafletReady = true; resolve(); };
-      script.onerror = reject;
-      document.body.appendChild(script);
-    });
-
-    return window.__slLeafletLoadingPromise;
-  }
-
-  function createTileLayer(target){
-    return window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap &copy; CARTO'
-    }).addTo(target);
-  }
-
-  function markerIcon(){
-    return window.L.divIcon({
-      className: 'sl-map-pin-wrap',
-      html: '<span class="sl-map-pin" aria-hidden="true"></span>',
-      iconSize: [20, 20],
-      iconAnchor: [10, 20],
-      popupAnchor: [0, -18]
-    });
-  }
-
-  function fitUnits(target, padding){
-    var bounds = [];
-    units.forEach(function(unit){
-      var marker = window.L.marker([unit.lat, unit.lng], { icon: markerIcon() }).addTo(target);
-      marker.bindPopup(unit.note ? ('<strong>' + unit.name + '</strong><br>' + unit.note) : unit.name);
-      bounds.push([unit.lat, unit.lng]);
-    });
-    target.fitBounds(bounds, { padding: padding });
-  }
-
-  function initMiniMapIfNeeded(){
-    if(miniReady || !leafletReady || !window.L) return;
-    miniMap = window.L.map(miniNode, {
-      zoomControl: false,
-      attributionControl: false,
-      dragging: false,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
-      boxZoom: false,
-      keyboard: false,
-      tap: false,
-      touchZoom: false
-    });
-    createTileLayer(miniMap);
-    fitUnits(miniMap, [16, 16]);
-    miniReady = true;
-  }
-
-  function initLargeMapIfNeeded(){
-    if(largeReady || !leafletReady || !window.L) return;
-    largeMap = window.L.map(mapNode, {
-      scrollWheelZoom: true,
-      zoomControl: true,
-      attributionControl: true
-    });
-    createTileLayer(largeMap);
-    fitUnits(largeMap, [36, 36]);
-    largeReady = true;
-  }
-
-  function openModal(){
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-    loadLeafletAssets().then(function(){
-      initMiniMapIfNeeded();
-      initLargeMapIfNeeded();
-      setTimeout(function(){ if(largeMap){ largeMap.invalidateSize(); } }, 90);
-    });
-  }
-
-  function closeModal(){
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-  }
-
-  openBtn.addEventListener('click', function(e){
-    e.stopPropagation();
-    openModal();
-  });
-  miniNode.addEventListener('click', openModal);
-  miniNode.addEventListener('keydown', function(e){
-    if(e.key === 'Enter' || e.key === ' '){
-      e.preventDefault();
-      openModal();
-    }
-  });
-  closeBtn.addEventListener('click', closeModal);
-  modal.addEventListener('click', function(e){
-    if(e.target && e.target.getAttribute('data-map-close') === 'backdrop'){ closeModal(); }
-  });
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
-  });
-
-  if('IntersectionObserver' in window){
-    var io = new IntersectionObserver(function(entries){
-      entries.forEach(function(entry){
-        if(entry.isIntersecting){
-          loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
-          io.disconnect();
-        }
-      });
-    }, { rootMargin: '120px' });
-    io.observe(miniNode);
-  } else {
-    loadLeafletAssets().then(function(){ initMiniMapIfNeeded(); });
-  }
-})();
-</script>
 
 <!-- SOPRO:TESTIMONIALS_JS_START -->
 <script>
@@ -5324,32 +5067,7 @@ body{
 </script>
 
 
-<script id="sopro-map-pastore-ipanema-track">
-/* SOPRO:MAP_PASTORE_IPANEMA_TRACK_V1
-   Eventos do cartão da unidade parceira no modal do mapa.
-   window.track() é no-op enquanto o visitante não aceita os cookies. */
-(function(){
-  function fire(ev, params){
-    try{ if(window.track){ window.track(ev, params); } }catch(e){}
-  }
-
-  var map = [
-    ['[data-sl-pastore-conhecer]', 'click_mapa_pastore_ipanema', { acao: 'conhecer_unidade' }],
-    ['[data-sl-pastore-agendar]',  'click_mapa_pastore_ipanema', { acao: 'agendar' }],
-    ['[data-sl-pastore-rota]',     'click_rota_pastore_ipanema', { destino: 'google_maps' }]
-  ];
-
-  map.forEach(function(entry){
-    document.querySelectorAll(entry[0]).forEach(function(el){
-      el.addEventListener('click', function(){
-        var params = { origem: 'home_modal_mapa', unidade: 'pastore_ipanema' };
-        Object.keys(entry[2]).forEach(function(k){ params[k] = entry[2][k]; });
-        fire(entry[1], params);
-      });
-    });
-  });
-})();
-</script>
+<!-- SOPRO:MAP_PASTORE_IPANEMA_TRACK -> centralizado em /assets/sl-units-map.js -->
 
 
 <style id="sopro-flatpickr-ptbr-style">
@@ -5364,7 +5082,9 @@ body{
 .flatpickr-months{
   background:#ffffff !important;
 }
-.flatpickr-current-month.flatpickr-current-month .flatpickr-monthDropdown-months.flatpickr-current-month input.cur-year{
+.flatpickr-current-month,
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year{
   color:#0b2239 !important;
   font-weight:800 !important;
 }
@@ -5379,7 +5099,9 @@ body{
 .flatpickr-day.today{
   border-color:#1eb5ab !important;
 }
-.flatpickr-day.selected.flatpickr-day.startRange.flatpickr-day.endRange{
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange{
   background:#1eb5ab !important;
   border-color:#1eb5ab !important;
   color:white !important;
@@ -5388,11 +5110,13 @@ body{
   background:rgba(30,181,171,.13) !important;
   border-color:rgba(30,181,171,.28) !important;
 }
-.flatpickr-day.disabled.flatpickr-day.disabled:hover{
+.flatpickr-day.disabled,
+.flatpickr-day.disabled:hover{
   color:#b6c4ce !important;
   background:#f1f5f7 !important;
 }
-.flatpickr-calendar .flatpickr-prev-month.flatpickr-calendar .flatpickr-next-month{
+.flatpickr-calendar .flatpickr-prev-month,
+.flatpickr-calendar .flatpickr-next-month{
   color:#0b2239 !important;
   fill:#0b2239 !important;
 }
@@ -5402,68 +5126,32 @@ body{
 <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" integrity="sha384-5JqMv4L/Xa0hfvtF06qboNdhvuYXUku9ZrhZh3bSk8VXF0A/RuSLHpLsSV9Zqhl6" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/pt.js" integrity="sha384-agbVpcY312cNMSL1b3CUo060bj9FmbwUX8HUCNSE17+jOU/en4yz3w9ro9IWVusF" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
-<script id="sopro-flatpickr-ptbr-init">
-/* SOPRO:FLATPICKR_PTBR_INIT */
-(function(){
-  function initSoproDatePicker(){
-    var dateEl = document.getElementById('sl-booking-date');
-    if(!dateEl || !window.flatpickr) return;
-    if(dateEl._flatpickr) return;
-
-    var today = new Date();
-    var maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + 30);
-
-    var currentValue = dateEl.value || null;
-
-    flatpickr(dateEl, {
-      locale: {
-        ...flatpickr.l10ns.pt,
-        firstDayOfWeek: 0
-      },
-      dateFormat: "Y-m-d",
-      altInput: true,
-      altFormat: "d/m/Y",
-      defaultDate: currentValue || today,
-      minDate: dateEl.min || today,
-      maxDate: dateEl.max || maxDate,
-      disableMobile: true,
-      allowInput: false,
-      monthSelectorType: "dropdown",
-      onChange: function(){
-        dateEl.dispatchEvent(new Event('change', { bubbles:true }));
-      },
-      onReady: function(selectedDates, dateStr, instance){
-        if(instance.altInput){
-          instance.altInput.setAttribute('placeholder', 'dd/mm/aaaa');
-          instance.altInput.setAttribute('aria-label', 'Data no formato dia, mês e ano');
-        }
-      }
-    });
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', initSoproDatePicker);
-  } else {
-    initSoproDatePicker();
-  }
-})();
-</script>
+<!-- SOPRO:SL_BOOKING_SHARED_JS
+     Configuração e lógica únicas do agendamento (localidades, agendas,
+     validação de data, horários, WhatsApp e analytics) + mapa das unidades.
+     Substituem os antigos blocos inline BOOKING_COMPACT_V1,
+     BOOKING_MAP_MODAL_V1 e FLATPICKR_PTBR_INIT. -->
+<script src="/assets/sl-booking.js"></script>
+<script src="/assets/sl-units-map.js"></script>
 
 
 <style id="sopro-map-tile-filter">
 /* SOPRO:MAP_TILE_FILTER_V1 */
 /* Mantém o mapa limpo, mas puxa discretamente para a paleta SoproLife */
-.sl-mini-map .leaflet-tile.sl-map-modal-map .leaflet-tile,
+.sl-mini-map .leaflet-tile,
+.sl-map-modal-map .leaflet-tile,
 #sl-mini-map .leaflet-tile,
 #sl-map-modal-map .leaflet-tile{
   filter: saturate(1.08) contrast(.98) brightness(1.03) hue-rotate(-4deg);
 }
 
 /* Mantém pins e controles sem filtro */
-.sl-mini-map .leaflet-marker-icon.sl-map-modal-map .leaflet-marker-icon,
+.sl-mini-map .leaflet-marker-icon,
+.sl-map-modal-map .leaflet-marker-icon,
 #sl-mini-map .leaflet-marker-icon,
-#sl-map-modal-map .leaflet-marker-icon.sl-mini-map .leaflet-control.sl-map-modal-map .leaflet-control,
+#sl-map-modal-map .leaflet-marker-icon,
+.sl-mini-map .leaflet-control,
+.sl-map-modal-map .leaflet-control,
 #sl-mini-map .leaflet-control,
 #sl-map-modal-map .leaflet-control{
   filter:none !important;

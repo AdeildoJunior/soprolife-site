@@ -1,0 +1,413 @@
+/* ==========================================================================
+   SOPRO:SL_BOOKING_FIELDS_V1
+   Componente visual compartilhado dos campos de agendamento.
+
+   Escopo proposital: TODAS as regras estão presas a .sl-booking-field,
+   .sl-booking-controls, .sl-booking-note ou .sl-ipanema-*.
+   Nenhum seletor global de form/select/input — formulários de outras
+   áreas do site (funil, telemedicina, contato) não são afetados.
+
+   Este arquivo é carregado por:
+     /index.html
+     /espirometria-rio-de-janeiro/index.html
+     /espirometria-domiciliar-rio-de-janeiro/index.html
+   ========================================================================== */
+
+.sl-booking-controls{
+  --slf-navy: #12354d;
+  --slf-navy-strong: #0b2239;
+  --slf-teal: #1eb5ab;
+  --slf-border: rgba(11,34,57,.16);
+  --slf-border-hover: rgba(11,34,57,.30);
+  --slf-bg: #f6fbfe;
+  --slf-bg-focus: #ffffff;
+  --slf-radius: 12px;
+  --slf-height: 50px;
+}
+
+/* ---------- Label ---------- */
+.sl-booking-field label,
+.sl-booking-slots-title{
+  display:block;
+  font-family:inherit;
+  font-size:.71rem;
+  font-weight:700;
+  letter-spacing:.10em;
+  line-height:1.25;
+  text-transform:uppercase;
+  color:#2b526a;
+  margin:0 0 7px;
+}
+
+/* ---------- Wrapper do controle ---------- */
+.sl-booking-field{
+  min-width:0;
+}
+.sl-field-wrap{
+  position:relative;
+  display:block;
+  width:100%;
+}
+
+/* Seta do select / ícone de calendário: puramente decorativos.
+   pointer-events:none garante que o clique continue chegando ao controle
+   nativo (abre o dropdown do sistema / o calendário). */
+.sl-field-wrap::after{
+  content:"";
+  position:absolute;
+  right:14px;
+  top:50%;
+  width:11px;
+  height:11px;
+  margin-top:-6px;
+  pointer-events:none;
+  background-repeat:no-repeat;
+  background-position:center;
+  background-size:contain;
+  opacity:.72;
+  transition:opacity .16s ease, transform .16s ease;
+}
+.sl-field-wrap--select::after{
+  /* chevron teal da marca */
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1.2 1.4 6 6.2l4.8-4.8' stroke='%231eb5ab' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+.sl-field-wrap--date::after{
+  width:15px;
+  height:15px;
+  margin-top:-8px;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Crect x='1.6' y='2.9' width='12.8' height='11.5' rx='2.4' stroke='%231eb5ab' stroke-width='1.6'/%3E%3Cpath d='M1.6 6.4h12.8M5.2 1.4v2.6M10.8 1.4v2.6' stroke='%231eb5ab' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.sl-field-wrap:focus-within::after{
+  opacity:1;
+}
+.sl-field-wrap--select:focus-within::after{
+  transform:rotate(180deg);
+}
+
+/* ---------- Controle (select + input) ----------
+   Especificidade 0,2,0 (duas classes) para vencer as regras antigas
+   `.sl-booking-field select` (0,1,1) que ainda existem inline nas páginas. */
+.sl-booking-field .sl-field-control,
+.sl-booking-controls .sl-field-control{
+  display:block;
+  width:100%;
+  min-height:var(--slf-height, 50px);
+  height:var(--slf-height, 50px);
+  margin:0;
+  padding:12px 40px 12px 14px;
+  border:1px solid var(--slf-border, rgba(11,34,57,.16));
+  border-radius:var(--slf-radius, 12px);
+  background:var(--slf-bg, #f6fbfe);
+  color:var(--slf-navy, #12354d);
+  font-family:inherit;
+  font-size:15.5px;
+  font-weight:600;
+  line-height:1.25;
+  letter-spacing:0;
+  text-overflow:ellipsis;
+  cursor:pointer;
+  appearance:none;
+  -webkit-appearance:none;
+  -moz-appearance:none;
+  box-shadow:0 1px 0 rgba(11,34,57,.02);
+  transition:border-color .16s ease, box-shadow .16s ease,
+             background-color .16s ease, color .16s ease;
+}
+
+/* Remove o ícone nativo do datepicker do Chrome — já temos o nosso.
+   Mantido só quando o campo é do tipo date (fallback sem flatpickr). */
+.sl-booking-field .sl-field-control::-webkit-calendar-picker-indicator{
+  opacity:0;
+  cursor:pointer;
+}
+
+.sl-booking-field .sl-field-control:hover:not(:disabled){
+  border-color:var(--slf-border-hover, rgba(11,34,57,.30));
+  background:#fbfeff;
+}
+
+.sl-booking-field .sl-field-control:focus{
+  outline:none;
+  border-color:rgba(30,181,171,.78);
+  background:var(--slf-bg-focus, #fff);
+  box-shadow:0 0 0 3px rgba(30,181,171,.20);
+}
+
+/* Anel de foco de teclado sempre visível (não escondemos o foco). */
+.sl-booking-field .sl-field-control:focus-visible{
+  outline:2px solid var(--slf-teal, #1eb5ab);
+  outline-offset:2px;
+  border-color:rgba(30,181,171,.85);
+  box-shadow:0 0 0 3px rgba(30,181,171,.22);
+}
+
+/* Desativado: parece indisponível, mas mantém contraste legível (>= 4.5:1). */
+.sl-booking-field .sl-field-control:disabled,
+.sl-booking-field .sl-field-control[aria-disabled="true"]{
+  background:#eef2f5;
+  border-color:rgba(11,34,57,.14);
+  border-style:dashed;
+  color:#56697a;
+  cursor:not-allowed;
+  box-shadow:none;
+}
+.sl-booking-field.is-disabled label{
+  color:#63798a;
+}
+.sl-booking-field.is-disabled .sl-field-wrap::after{
+  opacity:.35;
+}
+
+/* Erro / data inválida para a localidade escolhida. */
+.sl-booking-field.is-invalid .sl-field-control{
+  border-color:#d2564a;
+  background:#fff8f7;
+  box-shadow:0 0 0 3px rgba(210,86,74,.14);
+}
+.sl-booking-field.is-invalid label{
+  color:#a83b30;
+}
+
+/* Campo preenchido e válido. */
+.sl-booking-field.is-valid .sl-field-control{
+  border-color:rgba(30,181,171,.55);
+  background:#f4fdfc;
+}
+
+/* Texto auxiliar por campo. */
+.sl-field-hint{
+  display:block;
+  margin:6px 0 0;
+  font-family:inherit;
+  font-size:.79rem;
+  font-weight:500;
+  line-height:1.4;
+  color:#587086;
+}
+.sl-booking-field.is-invalid .sl-field-hint{
+  color:#a83b30;
+  font-weight:600;
+}
+.sl-field-hint:empty{
+  display:none;
+}
+
+/* ---------- Nota abaixo dos horários ---------- */
+.sl-booking-note{
+  margin:8px 0 0;
+  font-family:inherit;
+  font-size:.79rem;
+  font-weight:500;
+  line-height:1.45;
+  color:#587086;
+}
+.sl-booking-note.is-warning{
+  color:#8a5a12;
+}
+
+/* Aviso ocupando a faixa dos horários quando não há slots. */
+.sl-booking-slots-empty{
+  grid-column:1 / -1;
+  margin:0;
+  padding:12px 14px;
+  border:1px dashed rgba(11,34,57,.20);
+  border-radius:12px;
+  background:#f7fafc;
+  font-family:inherit;
+  font-size:.86rem;
+  font-weight:600;
+  line-height:1.45;
+  color:#3d5a6e;
+}
+
+/* ==========================================================================
+   Painel da unidade parceira (Pastore Ipanema) dentro do agendamento
+   ========================================================================== */
+.sl-ipanema-panel{
+  margin:14px 0 0;
+  padding:14px 15px;
+  border:1px solid rgba(11,34,57,.14);
+  border-left:5px solid #0b2239;
+  border-radius:14px;
+  background:linear-gradient(180deg,#ffffff 0%,#f3f8fb 100%);
+  box-shadow:0 8px 18px rgba(8,24,41,.06);
+}
+.sl-ipanema-panel[hidden]{
+  display:none !important;
+}
+.sl-ipanema-panel__badge{
+  display:inline-block;
+  margin:0 0 7px;
+  padding:3px 9px;
+  border-radius:999px;
+  background:#0b2239;
+  color:#fff;
+  font-size:.66rem;
+  font-weight:800;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+.sl-ipanema-panel__title{
+  margin:0 0 5px;
+  font-family:inherit;
+  font-size:.98rem;
+  font-weight:800;
+  line-height:1.35;
+  color:#0b3348;
+}
+.sl-ipanema-panel__address{
+  margin:0 0 6px;
+  font-style:normal;
+  font-size:.83rem;
+  line-height:1.45;
+  color:#315a70;
+}
+.sl-ipanema-panel__disclaimer{
+  margin:0 0 10px;
+  font-size:.8rem;
+  font-weight:600;
+  line-height:1.45;
+  color:#4a6c80;
+}
+.sl-ipanema-panel__steps-title{
+  margin:0 0 4px;
+  font-size:.72rem;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#2b526a;
+}
+.sl-ipanema-panel__steps{
+  margin:0 0 12px;
+  padding-left:1.15rem;
+  font-size:.82rem;
+  line-height:1.5;
+  color:#31586e;
+}
+.sl-ipanema-panel__steps li{
+  margin-bottom:2px;
+}
+.sl-ipanema-panel__actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+}
+.sl-ipanema-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:42px;
+  padding:10px 15px;
+  border-radius:999px;
+  border:1px solid transparent;
+  font-family:inherit;
+  font-size:.85rem;
+  font-weight:700;
+  line-height:1.2;
+  text-decoration:none;
+  cursor:pointer;
+  transition:transform .14s ease, box-shadow .14s ease, background-color .14s ease;
+}
+.sl-ipanema-btn--wa{
+  background:#0d833f;
+  color:#fff;
+  box-shadow:0 6px 14px rgba(13,131,63,.26);
+}
+.sl-ipanema-btn--wa:hover{
+  transform:translateY(-1px);
+  background:#0b7a3a;
+}
+.sl-ipanema-btn--pastore{
+  background:#ffffff;
+  border-color:rgba(11,34,57,.26);
+  color:#0b2239;
+}
+.sl-ipanema-btn--pastore:hover{
+  transform:translateY(-1px);
+  box-shadow:0 6px 14px rgba(8,24,41,.12);
+}
+.sl-ipanema-btn:focus-visible{
+  outline:3px solid rgba(30,181,171,.42);
+  outline-offset:3px;
+}
+
+/* ==========================================================================
+   Cartões do modal do mapa
+   ========================================================================== */
+
+/* Botão WhatsApp do cartão da unidade parceira. */
+.sl-map-partner-btn--wa{
+  border:1px solid transparent;
+  background:#0d833f;
+  color:#fff;
+  box-shadow:0 6px 14px rgba(13,131,63,.26);
+}
+.sl-map-partner-btn--wa:hover{
+  transform:translateY(-1px);
+  background:#0b7a3a;
+}
+
+/* Link discreto para a landing de Ipanema. */
+.sl-map-partner-card__link{
+  display:inline-block;
+  margin-top:9px;
+  font-size:.76rem;
+  font-weight:700;
+  color:#0b6f68;
+  text-decoration:underline;
+  text-underline-offset:2px;
+}
+.sl-map-partner-card__link:hover{
+  color:#0b2239;
+}
+.sl-map-partner-card__link:focus-visible{
+  outline:3px solid rgba(30,181,171,.32);
+  outline-offset:3px;
+}
+
+/* Cartão da localidade escolhida no formulário. */
+.sl-map-unit-card.is-selected,
+.sl-map-partner-card.is-selected{
+  border-color:rgba(30,181,171,.72);
+  box-shadow:0 0 0 2px rgba(30,181,171,.22), 0 8px 18px rgba(8,24,41,.09);
+}
+
+/* ==========================================================================
+   Marcador destacado no mapa (localidade selecionada)
+   ========================================================================== */
+.sl-map-pin-wrap.is-active{
+  z-index:900 !important;
+}
+.sl-map-pin-wrap.is-active .sl-map-pin{
+  transform:scale(1.35);
+  filter:drop-shadow(0 4px 8px rgba(8,24,41,.35));
+}
+.sl-map-pin{
+  transition:transform .18s ease, filter .18s ease;
+}
+
+/* ==========================================================================
+   Responsivo
+   ========================================================================== */
+@media (max-width:720px){
+  .sl-booking-controls{
+    --slf-height:50px;
+  }
+  /* >= 16px evita o zoom automático do iOS ao focar o campo. */
+  .sl-booking-field .sl-field-control,
+  .sl-booking-controls .sl-field-control{
+    font-size:16px;
+  }
+  .sl-ipanema-panel__actions .sl-ipanema-btn{
+    flex:1 1 100%;
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .sl-booking-field .sl-field-control,
+  .sl-field-wrap::after,
+  .sl-ipanema-btn,
+  .sl-map-pin{
+    transition:none;
+  }
+}
