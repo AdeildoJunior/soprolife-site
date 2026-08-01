@@ -144,10 +144,10 @@ caso("unit de atualização não contém segredo",
 update_sh = (RAIZ / "scripts" / "update-local-data.sh").read_text(encoding="utf-8")
 caso("script tem lock não bloqueante",
      "flock -n -E 99" in update_sh)
-caso("pedido só é consumido depois da tentativa de Marketing",
+caso("pedido só é concluído pela tentativa de Marketing",
      update_sh.index('echo "3/6 - Atualizando Marketing & SEO') <
      update_sh.index('_MKT_ATTEMPTED=1') <
-     update_sh.index('rm -f -- "$_MKT_QUEUE"') <
+     update_sh.index('--refresh-request "$_MKT_QUEUE"') <
      update_sh.index('echo "4/6 - Atualizando timeline'))
 
 # ── M23: a unit de produção não pode depender de ADC pessoal ──────────────

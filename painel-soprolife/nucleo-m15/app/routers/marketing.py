@@ -8,7 +8,8 @@ de serviço dedicada.
 
 import json
 import os
-from datetime import datetime, timedelta, timezone
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
@@ -18,9 +19,6 @@ from ..models import User
 from ..security import ROLE_LEITURA, ROLE_OPERACIONAL, require_role
 
 router = APIRouter(prefix="/marketing", tags=["marketing"])
-
-_MIN_INTERVAL = timedelta(seconds=60)
-
 
 def _queue_path() -> Path:
     return get_settings().marketing_refresh_queue
@@ -34,23 +32,15 @@ def _read_request() -> dict | None:
     return value if isinstance(value, dict) else None
 
 
-def _parse_requested_at(value) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(str(value))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
 def _write_request(now: datetime) -> dict:
     """Grava timestamp/origem de forma atômica e com permissão 0600."""
     target = _queue_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = {
+        "requestId": str(uuid.uuid4()),
         "requestedAt": now.isoformat(timespec="seconds"),
         "origin": "painel-autenticado",
+        "state": "pending",
     }
     temporary = target.with_suffix(target.suffix + ".tmp")
     try:
@@ -76,26 +66,43 @@ def request_refresh(
     """Enfileira uma atualização; sessão por cookie exige CSRF via dependency."""
     now = datetime.now(timezone.utc)
     previous = _read_request()
-    requested_at = _parse_requested_at((previous or {}).get("requestedAt"))
-    if requested_at is not None and now - requested_at < _MIN_INTERVAL:
+    if previous is not None and previous.get("state", "pending") == "pending":
         return {
             "ok": True,
             "queued": False,
-            "reason": "Já existe um pedido recente na fila.",
+            "pending": True,
+            "reason": "Já existe uma atualização em andamento.",
+            "requestId": previous.get("requestId"),
             "requestedAt": previous.get("requestedAt"),
         }
     payload = _write_request(now)
-    return {"ok": True, "queued": True, "requestedAt": payload["requestedAt"]}
+    return {
+        "ok": True,
+        "queued": True,
+        "pending": True,
+        "requestId": payload["requestId"],
+        "requestedAt": payload["requestedAt"],
+    }
 
 
 @router.get("/refresh-status")
 def refresh_status(
     _user: User = Depends(require_role(ROLE_LEITURA)),
 ):
-    """Informa somente se o pedido ainda aguarda consumo pelo timer."""
+    """Informa andamento e resultado seguro da consulta solicitada."""
     request = _read_request()
+    if request is None:
+        return {"ok": True, "pending": False, "state": "idle"}
+    state = request.get("state", "pending")
     return {
         "ok": True,
-        "pending": request is not None,
-        "requestedAt": (request or {}).get("requestedAt"),
+        "pending": state == "pending",
+        "state": state,
+        "requestId": request.get("requestId"),
+        "requestedAt": request.get("requestedAt"),
+        "completedAt": request.get("completedAt"),
+        "success": request.get("success") if state == "completed" else None,
+        "degraded": request.get("degraded") if state == "completed" else None,
+        "snapshotGeneratedAt": request.get("snapshotGeneratedAt"),
+        "errorMessageSafe": request.get("errorMessageSafe") if state == "completed" else None,
     }

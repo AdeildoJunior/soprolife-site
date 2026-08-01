@@ -433,8 +433,9 @@ def test_refresh_marketing_enfileira_metadado_minimo(
     assert resp.status_code == 200, resp.text
     assert resp.json()["queued"] is True
     saved = json.loads(target.read_text(encoding="utf-8"))
-    assert set(saved) == {"requestedAt", "origin"}
+    assert set(saved) == {"requestId", "requestedAt", "origin", "state"}
     assert saved["origin"] == "painel-autenticado"
+    assert saved["state"] == "pending"
     assert oct(target.stat().st_mode & 0o777) == "0o600"
 
     # Clique repetido é limitado e não cria uma fila crescente.
@@ -457,8 +458,22 @@ def test_refresh_marketing_status_exige_login_e_detecta_consumo(
         headers={"X-CSRF-Token": csrf},
     )
     assert client.get("/api/v1/marketing/refresh-status").json()["pending"] is True
-    target.unlink()  # simula consumo pelo serviço agendado no diretório temporário
-    assert client.get("/api/v1/marketing/refresh-status").json()["pending"] is False
+    request = json.loads(target.read_text(encoding="utf-8"))
+    target.write_text(json.dumps({
+        **request,
+        "state": "completed",
+        "completedAt": "2026-08-01T12:00:00+00:00",
+        "success": False,
+        "degraded": True,
+        "snapshotGeneratedAt": "2026-08-01T12:00:00+00:00",
+        "errorMessageSafe": "Falha ao consultar o Google. Snapshot preservado.",
+    }), encoding="utf-8")
+    status = client.get("/api/v1/marketing/refresh-status").json()
+    assert status["pending"] is False
+    assert status["state"] == "completed"
+    assert status["success"] is False
+    assert status["degraded"] is True
+    assert "Snapshot preservado" in status["errorMessageSafe"]
 
 
 # ───────────────────── rate limiting e anti-enumeração ──────────────────────

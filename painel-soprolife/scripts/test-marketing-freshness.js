@@ -97,7 +97,10 @@ console.log("── Cache-busting do app.js: por sessão e sem token ──");
 const appSrc = fs.readFileSync(path.resolve(__dirname, "../js/app.js"), "utf8");
 caso("bust é constante de sessão (DATA_CACHE_BUST)",
      appSrc.includes("const DATA_CACHE_BUST") &&
-     appSrc.includes("_cb=${DATA_CACHE_BUST}"));
+     appSrc.includes("cacheBust = DATA_CACHE_BUST") &&
+     appSrc.includes("_cb=${cacheBust}"));
+caso("refresh pode forçar cache-buster novo na mesma sessão",
+     /loadOptionalJson\(\s*"\.\/data\/marketing-seo\.local\.json",\s*`\$\{Date\.now/.test(appSrc));
 caso("nenhum token/credencial na URL de dados",
      !/[?&](token|key|auth|credential)[=$]/i.test(appSrc.match(/function withCacheBust[\s\S]{0,300}/)[0]));
 caso("banner de frescor ligado no app.js",

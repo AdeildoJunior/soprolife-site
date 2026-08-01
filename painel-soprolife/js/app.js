@@ -19,6 +19,9 @@ const state = {
   crmKpisAutomacao: null,
   // M21 — pedido de atualização de Marketing em curso (estado "Atualizando").
   mktRefreshPendente: false,
+  mktRefreshPolling: false,
+  mktRefreshResultado: null,
+  mktRefreshRequestId: null,
   followupSummary: null,
   followupClinicas: null,
   ultimosLancamentos: null,
@@ -131,9 +134,9 @@ function fmtBRL(value) {
 // versão nova, mas releituras na mesma sessão podem reusar o cache HTTP.
 // Nunca inclui token ou identificador sensível na URL.
 const DATA_CACHE_BUST = Date.now().toString(36);
-function withCacheBust(path) {
+function withCacheBust(path, cacheBust = DATA_CACHE_BUST) {
   const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}_cb=${DATA_CACHE_BUST}`;
+  return `${path}${sep}_cb=${cacheBust}`;
 }
 
 async function loadJson(path) {
@@ -144,9 +147,9 @@ async function loadJson(path) {
   return response.json();
 }
 
-async function loadOptionalJson(path) {
+async function loadOptionalJson(path, cacheBust = DATA_CACHE_BUST) {
   try {
-    const response = await fetch(withCacheBust(path));
+    const response = await fetch(withCacheBust(path, cacheBust));
 
     if (response.status === 404) {
       return null;
@@ -2995,6 +2998,13 @@ function mktSourceTip(source, medium) {
   return MKT_SOURCE_TIPS[`${source}/${medium}`] || null;
 }
 
+function mktInclusiveDateCount(start, end) {
+  const startMs = Date.parse(`${start}T00:00:00Z`);
+  const endMs = Date.parse(`${end}T00:00:00Z`);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return null;
+  return Math.floor((endMs - startMs) / 86400000) + 1;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────── */
 
 // Classes de estado do selo de Marketing — removidas todas antes de aplicar a
@@ -3038,26 +3048,25 @@ function renderMktHeader() {
     badgesEl.hidden = badges.length === 0;
   }
 
-  // Última sincronização BEM-SUCEDIDA, período coberto e próxima atualização
-  // agendada — três conceitos distintos, nunca misturados num só rótulo.
+  // Consulta do backend, intervalo realmente enviado ao Search Console e
+  // atraso de publicação do Google são conceitos diferentes.
   const periodEl = document.querySelector("#mktPeriod");
   if (periodEl) {
     const partes = [];
-    const ultimoSucesso = [aval.fontes.searchConsole, aval.fontes.ga4]
-      .map((f) => mfParseIso(f?.lastSuccessAt))
-      .filter((v) => v !== null)
-      .sort((a, b) => b - a)[0];
-    partes.push(`Última atualização com sucesso: ${
-      ultimoSucesso ? mfFormatarDataHora(new Date(ultimoSucesso).toISOString()) : "—"}`);
-    partes.push(`Última tentativa: ${mfFormatarDataHora(aval.lastAttemptAt)}`);
+    const scStatus = aval.fontes.searchConsole;
+    partes.push(`Última consulta ao Google: ${mfFormatarDataHora(scStatus?.lastAttemptAt)}`);
+    const scRequest = m?.searchConsole?.request;
+    const dataStart = scRequest?.startDate || aval.period?.start;
+    const dataEnd = scRequest?.endDate || aval.period?.end;
+    if (dataStart && dataEnd) {
+      partes.push(`Dados disponíveis no Google: ${dataStart} a ${dataEnd}`);
+    }
+    partes.push("Os dados do Search Console podem ter atraso de processamento.");
     const proxima = mfProximaAtualizacao(aval.lastAttemptAt);
     if (proxima) {
       partes.push(proxima.atrasada
         ? "Próxima atualização: a qualquer momento"
         : `Próxima atualização: ${mfFormatarDataHora(proxima.iso)}`);
-    }
-    if (aval.period) {
-      partes.push(`Dados cobrem: ${aval.period.start} → ${aval.period.end}`);
     }
     periodEl.textContent = partes.join(" · ");
     periodEl.hidden = false;
@@ -3128,7 +3137,13 @@ function renderMktHeader() {
   const msgEl = document.querySelector("#mktRefreshMsg");
   if (msgEl) {
     if (atualizando) {
-      msgEl.textContent = "Atualização pedida ao servidor — aguardando nova leitura.";
+      msgEl.textContent = "Consultando o Google e aguardando o novo snapshot.";
+      msgEl.hidden = false;
+    } else if (state.mktRefreshResultado) {
+      msgEl.textContent = state.mktRefreshResultado.success
+        ? "Consulta concluída; novo snapshot carregado."
+        : (state.mktRefreshResultado.errorMessageSafe
+          || "Falha ao consultar o Google; último snapshot válido preservado.");
       msgEl.hidden = false;
     } else {
       msgEl.hidden = true;
@@ -3151,6 +3166,7 @@ const MKT_POLL_MAX = 40;
 async function pedirAtualizacaoMarketing() {
   const btn = document.querySelector("#mktRefreshBtn");
   const msgEl = document.querySelector("#mktRefreshMsg");
+  if (state.mktRefreshPendente || state.mktRefreshPolling) return;
   if (btn) btn.disabled = true;
   try {
     const m15 = window.SoproM15;
@@ -3160,6 +3176,8 @@ async function pedirAtualizacaoMarketing() {
     const body = await m15.api(MKT_REFRESH_URL, { method: "POST" });
     if (body.ok !== true) throw new Error("Pedido não confirmado.");
     state.mktRefreshPendente = true;
+    state.mktRefreshResultado = null;
+    state.mktRefreshRequestId = body.requestId || null;
     state.mktGeneratedAtNoPedido = state.marketingSeo?.meta?.generatedAt || null;
     renderMktHeader();
     acompanharAtualizacaoMarketing();
@@ -3174,33 +3192,55 @@ async function pedirAtualizacaoMarketing() {
 }
 
 function acompanharAtualizacaoMarketing() {
+  if (state.mktRefreshPolling) return;
+  state.mktRefreshPolling = true;
   let tentativas = 0;
-  const parar = () => {
+  const parar = (resultado) => {
     state.mktRefreshPendente = false;
+    state.mktRefreshPolling = false;
+    state.mktRefreshResultado = resultado || null;
+    state.mktRefreshRequestId = null;
     const btn = document.querySelector("#mktRefreshBtn");
     if (btn) btn.disabled = false;
     renderMarketingSection();
   };
   const tick = async () => {
     tentativas += 1;
-    let consumido = false;
+    let status = null;
     try {
       const m15 = window.SoproM15;
-      const st = m15 && m15.hasToken()
+      status = m15 && m15.hasToken()
         ? await m15.api(MKT_REFRESH_STATUS_URL)
         : null;
-      consumido = st && st.ok === true && st.pending === false;
     } catch (err) {
-      consumido = false; // rede instável não encerra o acompanhamento
+      status = null; // rede instável não encerra o acompanhamento
     }
-    if (consumido) {
-      // O serviço rodou: recarrega só o snapshot de Marketing.
-      const novo = await loadOptionalJson("./data/marketing-seo.local.json");
+    const requestCorreto = !state.mktRefreshRequestId
+      || !status?.requestId
+      || status.requestId === state.mktRefreshRequestId;
+    if (status?.ok === true && status.state === "completed" && requestCorreto) {
+      // O backend terminou: busca o snapshot persistido com cache-buster novo,
+      // inclusive no caso degradado (dados antigos + estado de falha).
+      const novo = await loadOptionalJson(
+        "./data/marketing-seo.local.json",
+        `${Date.now().toString(36)}-${tentativas}`
+      );
       if (novo) state.marketingSeo = novo;
-      parar();
+      parar({
+        success: status.success === true,
+        degraded: status.degraded === true,
+        errorMessageSafe: status.errorMessageSafe || null,
+      });
       return;
     }
-    if (tentativas >= MKT_POLL_MAX) { parar(); return; }
+    if (tentativas >= MKT_POLL_MAX) {
+      parar({
+        success: false,
+        degraded: true,
+        errorMessageSafe: "A consulta não terminou no prazo; o último snapshot válido permanece exibido.",
+      });
+      return;
+    }
     window.setTimeout(tick, MKT_POLL_INTERVALO_MS);
   };
   window.setTimeout(tick, MKT_POLL_INTERVALO_MS);
@@ -3523,6 +3563,14 @@ function renderMktTrendChart() {
   if (!byDate?.length || !panel) return;
 
   panel.hidden = false;
+  const subtitle = document.querySelector("#mktTrendSubtitle");
+  if (subtitle) {
+    const req = state.marketingSeo?.searchConsole?.request;
+    const dias = mktInclusiveDateCount(req?.startDate, req?.endDate);
+    subtitle.textContent = dias === 28
+      ? "Search Console · 28 dias"
+      : "Search Console · por dia";
+  }
   const canvas = document.querySelector("#mktTrendChart");
 
   createChart("mktTrend", "#mktTrendChart", {

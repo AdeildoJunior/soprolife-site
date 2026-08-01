@@ -269,8 +269,10 @@ console.log("F) Marketing distingue os cinco estados exigidos");
 });
 caso("o selo nunca acumula dois estados contraditórios",
      /MKT_STATE_CLASSES\.forEach\(\(c\) => label\.classList\.remove\(c\)\)/.test(appSrc));
-caso("a última atualização com SUCESSO é exibida",
-     appSrc.indexOf("Última atualização com sucesso:") !== -1);
+caso("consulta ao Google e intervalo dos dados são distinguidos",
+     appSrc.indexOf("Última consulta ao Google:") !== -1 &&
+     appSrc.indexOf("Dados disponíveis no Google:") !== -1 &&
+     appSrc.indexOf("podem ter atraso de processamento") !== -1);
 caso("a próxima atualização agendada é exibida quando dá",
      appSrc.indexOf("Próxima atualização:") !== -1 &&
      /mfProximaAtualizacao/.test(mfSrc));
@@ -293,9 +295,9 @@ caso("a orientação não afirma credencial instalada quando credentialKind é n
      /aval\.credentialKind === "service_account"/.test(appSrc) &&
      /precisam ser\s+criados e instalados no servidor/.test(appSrc) &&
      !/A conta de serviço de leitura já está configurada no servidor/.test(appSrc));
-caso("scripts de Marketing usam cache-buster da correção de credencial",
-     /marketing-freshness\.js\?v=2026072502/.test(indexSrc) &&
-     /app\.js\?v=2026072502/.test(indexSrc));
+caso("scripts de Marketing usam cache-buster da reconciliação",
+     /marketing-freshness\.js\?v=2026080101/.test(indexSrc) &&
+     /app\.js\?v=2026080101/.test(indexSrc));
 
 // ───────────── G) unidade systemd e credencial durável ─────────────────────
 console.log();
@@ -316,8 +318,9 @@ caso("a unit tem teto de tempo por execução",
 caso("o script tem proteção de concorrência (flock)",
      /flock -n -E 99/.test(updateSh) &&
      updateSh.indexOf("outra atualização já está em execução") !== -1);
-caso("o script consome o pedido manual enfileirado",
-     /rm -f -- "\$_MKT_QUEUE"/.test(updateSh));
+caso("o script conclui o pedido manual com resultado explícito",
+     /--refresh-request "\$_MKT_QUEUE"/.test(updateSh) &&
+     updateSh.indexOf("pending por completed") !== -1);
 caso("API e timer compartilham a mesma fila privada explicitamente",
      /M15_MARKETING_REFRESH_QUEUE=\/opt\/soprolife\/soprolife-site\/painel-soprolife\/nucleo-m15\/var\//
        .test(m15UnitSrc) &&

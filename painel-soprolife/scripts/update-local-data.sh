@@ -111,7 +111,9 @@ echo
 _MKT_QUEUE="${SOPROLIFE_MARKETING_REFRESH_QUEUE:-painel-soprolife/nucleo-m15/var/marketing-refresh-request.json}"
 _MKT_REQUESTED=0
 _MKT_ATTEMPTED=0
-if [ -f "$_MKT_QUEUE" ]; then
+if [ -f "$_MKT_QUEUE" ] && python3 -c \
+  'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); raise SystemExit(0 if d.get("state", "pending") == "pending" else 1)' \
+  "$_MKT_QUEUE" 2>/dev/null; then
   echo "Pedido manual de atualização encontrado na fila."
   _MKT_REQUESTED=1
   echo
@@ -155,13 +157,20 @@ fi
 echo
 echo "3/6 - Atualizando Marketing & SEO (Search Console + GA4)..."
 
-if [ ! -f "$_MARKETING_CONFIG" ]; then
+if [ ! -f "$_MARKETING_SCRIPT" ]; then
+  echo "AVISO: conector de Marketing & SEO não encontrado ($_MARKETING_SCRIPT)."
+  _FALHAS=$((_FALHAS + 1))
+elif [ ! -f "$_MARKETING_CONFIG" ]; then
   echo "Marketing & SEO não configurado neste ambiente."
   echo "(Crie $_MARKETING_CONFIG a partir de"
   echo " painel-soprolife/config-examples/marketing-seo.local.example.json)"
-elif [ ! -f "$_MARKETING_SCRIPT" ]; then
-  echo "AVISO: conector de Marketing & SEO não encontrado ($_MARKETING_SCRIPT)."
-  _FALHAS=$((_FALHAS + 1))
+  # O conector registra a falha segura e, quando manual, conclui o pedido.
+  _MKT_ATTEMPTED=1
+  _MKT_ARGS=(--write)
+  if [ "$_MKT_REQUESTED" -eq 1 ]; then
+    _MKT_ARGS+=(--refresh-request "$_MKT_QUEUE")
+  fi
+  "$_MARKETING_PYTHON" "$_MARKETING_SCRIPT" "${_MKT_ARGS[@]}" 2>&1 || true
 else
   # A credencial durável (conta de serviço, somente leitura) é a única aceita
   # em produção. Sem ela o conector grava o estado credential_pending e
@@ -178,7 +187,11 @@ else
   echo "Interpretador: $_MARKETING_PYTHON"
   echo
   _MKT_ATTEMPTED=1
-  if ! "$_MARKETING_PYTHON" "$_MARKETING_SCRIPT" --write 2>&1; then
+  _MKT_ARGS=(--write)
+  if [ "$_MKT_REQUESTED" -eq 1 ]; then
+    _MKT_ARGS+=(--refresh-request "$_MKT_QUEUE")
+  fi
+  if ! "$_MARKETING_PYTHON" "$_MARKETING_SCRIPT" "${_MKT_ARGS[@]}" 2>&1; then
     echo
     echo "AVISO: Marketing & SEO falhou — último snapshot válido preservado."
     echo "  Diagnóstico: $_MARKETING_PYTHON $_MARKETING_SCRIPT --credential-check"
@@ -190,10 +203,9 @@ else
 fi
 
 if [ "$_MKT_REQUESTED" -eq 1 ] && [ "$_MKT_ATTEMPTED" -eq 1 ]; then
-  # A tentativa terminou (com sucesso ou preservando o último snapshot).
-  # Remover só esta marca mínima não toca em nenhum dado válido.
-  rm -f -- "$_MKT_QUEUE"
-  echo "Pedido manual de Marketing consumido após a tentativa."
+  # O próprio conector troca atomicamente pending por completed e inclui um
+  # resultado seguro; a API pode então distinguir sucesso de snapshot retido.
+  echo "Pedido manual de Marketing concluído após a tentativa."
 elif [ "$_MKT_REQUESTED" -eq 1 ]; then
   echo "Pedido manual de Marketing mantido na fila: conector não chegou a executar."
 fi

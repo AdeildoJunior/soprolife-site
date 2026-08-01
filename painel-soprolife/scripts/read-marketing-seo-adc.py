@@ -56,6 +56,7 @@ import sys
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # Guarda de PII compartilhada (M2) — mesma pasta deste script.
 # _scan_for_secrets abaixo permanece como redundância.
@@ -84,6 +85,11 @@ _OUT_PUBLIC  = Path("painel-soprolife/data/marketing-seo.local.json")
 
 SC_SCOPE  = "https://www.googleapis.com/auth/webmasters.readonly"
 GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
+
+SC_SEARCH_TYPE = "web"
+SC_DATA_STATE = "all"
+SC_LOOKBACK_DAYS = 28
+SC_DETAIL_ROW_LIMIT = 25000
 
 # ── Credencial durável de leitura (M21) ─────────────────────────────────────
 # Caminho padrão de produção. Fica FORA do Git por construção (/opt), com
@@ -210,6 +216,31 @@ def _now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def canonical_search_console_window(today=None, timezone_name="America/Sao_Paulo"):
+    """Intervalo canônico de 28 datas, encerrado ontem na timezone configurada.
+
+    `today` é injetável para regressões. O dia corrente nunca entra: dados
+    intradiários podem ainda não existir ou mudar enquanto o snapshot é gerado.
+    """
+    if today is None:
+        try:
+            tz = ZoneInfo(str(timezone_name or "America/Sao_Paulo"))
+        except ZoneInfoNotFoundError:
+            tz = ZoneInfo("America/Sao_Paulo")
+        today = datetime.now(tz).date()
+    elif isinstance(today, datetime):
+        today = today.date()
+    if not isinstance(today, date):
+        raise TypeError("today deve ser date ou datetime")
+
+    end = today - timedelta(days=1)
+    start = end - timedelta(days=SC_LOOKBACK_DAYS - 1)
+    inclusive_days = (end - start).days + 1
+    if inclusive_days != SC_LOOKBACK_DAYS:
+        raise ValueError("janela Search Console deve conter exatamente 28 datas")
+    return start.isoformat(), end.isoformat(), inclusive_days
+
+
 def _load_config():
     if not _CONFIG_PATH.exists():
         return None
@@ -261,16 +292,21 @@ def _fetch_search_console(build, credentials, site_url, start_date, end_date, to
         warnings.append(f"Search Console: falha ao inicializar cliente — {exc}")
         return result, warnings
 
-    def sc_query(dimensions, row_limit=top_limit):
+    common_body = {
+        "startDate": start_date,
+        "endDate": end_date,
+        "type": SC_SEARCH_TYPE,
+        "dataState": SC_DATA_STATE,
+    }
+
+    def sc_query(dimensions, row_limit=None):
         try:
+            body = {**common_body, "dimensions": dimensions}
+            if row_limit is not None:
+                body["rowLimit"] = row_limit
             resp = service.searchanalytics().query(
                 siteUrl=site_url,
-                body={
-                    "startDate": start_date,
-                    "endDate": end_date,
-                    "dimensions": dimensions,
-                    "rowLimit": row_limit,
-                }
+                body=body,
             ).execute()
             return resp.get("rows", [])
         except Exception as exc:
@@ -285,11 +321,12 @@ def _fetch_search_console(build, credentials, site_url, start_date, end_date, to
                 warnings.append(f"Search Console: {exc}")
             return None
 
-    # Totais (sem dimensões)
+    # KPIs: requisição agregada dedicada. Nunca somar linhas dimensionais:
+    # elas podem ser truncadas ou filtradas por privacidade independentemente.
     try:
         resp = service.searchanalytics().query(
             siteUrl=site_url,
-            body={"startDate": start_date, "endDate": end_date, "dimensions": [], "rowLimit": 1}
+            body=dict(common_body),
         ).execute()
         rows = resp.get("rows", [])
         if rows:
@@ -297,14 +334,21 @@ def _fetch_search_console(build, credentials, site_url, start_date, end_date, to
             result["totals"] = {
                 "impressions": int(r.get("impressions", 0)),
                 "clicks": int(r.get("clicks", 0)),
-                "ctr": round(float(r.get("ctr", 0)), 4),
-                "avgPosition": round(float(r.get("position", 0)), 1),
+                "ctr": float(r.get("ctr", 0)),
+                "avgPosition": float(r.get("position", 0)),
             }
+        else:
+            warnings.append("Search Console totais: resposta agregada sem linha.")
     except Exception as exc:
         warnings.append(f"Search Console totais: {exc}")
 
-    # Top consultas
-    rows = sc_query(["query"])
+    # Sem o agregado, a fonte inteira falha e o snapshot válido anterior é
+    # preservado. Linhas dimensionais jamais viram fallback para os KPIs.
+    if "totals" not in result:
+        return {}, warnings
+
+    # Consultas e páginas são datasets independentes e podem ser filtrados.
+    rows = sc_query(["query"], row_limit=SC_DETAIL_ROW_LIMIT)
     if rows is not None:
         result["topQueries"] = [
             {
@@ -318,7 +362,7 @@ def _fetch_search_console(build, credentials, site_url, start_date, end_date, to
         ]
 
     # Top páginas
-    rows = sc_query(["page"])
+    rows = sc_query(["page"], row_limit=SC_DETAIL_ROW_LIMIT)
     if rows is not None:
         result["topPages"] = [
             {
@@ -332,7 +376,7 @@ def _fetch_search_console(build, credentials, site_url, start_date, end_date, to
         ]
 
     # Evolução por data
-    rows = sc_query(["date"], row_limit=90)
+    rows = sc_query(["date"])
     if rows is not None:
         result["byDate"] = [
             {
@@ -343,6 +387,18 @@ def _fetch_search_console(build, credentials, site_url, start_date, end_date, to
             for r in rows
         ]
 
+    # Qualquer falha parcial preserva atomicamente o último conjunto completo,
+    # em vez de trocar rankings válidos por listas ausentes.
+    if warnings:
+        return {}, warnings
+
+    result["request"] = {
+        "siteUrl": site_url,
+        "startDate": start_date,
+        "endDate": end_date,
+        "type": SC_SEARCH_TYPE,
+        "dataState": SC_DATA_STATE,
+    }
     return result, warnings
 
 
@@ -668,6 +724,50 @@ def _write_output(output, out_public=None):
     print("  bash painel-soprolife/scripts/check-access.sh")
 
 
+def _complete_refresh_request(request_path, snapshot_path, exit_code):
+    """Marca o pedido manual como concluído com resultado seguro e atômico."""
+    request_path = Path(request_path)
+    try:
+        request = json.loads(request_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(request, dict) or request.get("state", "pending") != "pending":
+        return
+
+    snapshot = _carregar_snapshot(snapshot_path)
+    meta = (snapshot or {}).get("meta") or {}
+    statuses = meta.get("sourceStatus") or {}
+    configured_statuses = [
+        block for block in statuses.values()
+        if isinstance(block, dict) and block.get("errorCode") != "NOT_CONFIGURED"
+    ]
+    has_valid_data = any(
+        isinstance((snapshot or {}).get(key), dict) for key, _sid, _name in _SOURCES_DEF
+    )
+    success = bool(configured_statuses) and all(
+        block.get("errorCode") is None for block in configured_statuses
+    ) and int(exit_code) == fc.EXIT_FRESH
+    safe_errors = [
+        str(block.get("errorMessageSafe")) for block in configured_statuses
+        if block.get("errorMessageSafe")
+    ]
+    completed = {
+        "requestId": request.get("requestId"),
+        "requestedAt": request.get("requestedAt"),
+        "origin": request.get("origin", "painel-autenticado"),
+        "state": "completed",
+        "completedAt": _now_iso(),
+        "success": success,
+        "degraded": not success and has_valid_data,
+        "snapshotGeneratedAt": meta.get("generatedAt"),
+        "errorMessageSafe": None if success else (
+            " ".join(dict.fromkeys(safe_errors))
+            or "Falha ao consultar o Google. Último snapshot válido preservado."
+        ),
+    }
+    fc.escrever_json_atomico(request_path, completed, mode=0o600)
+
+
 # ───────────────────────── Modos de execução ────────────────────────────────
 
 def cmd_status(args, modo):
@@ -801,11 +901,10 @@ def cmd_sync(args, mode):
         print("AVISO: ga4PropertyId e searchConsoleSiteUrl estão vazios — nada a consultar.")
         return _finalizar({}, periodo_vazio)
 
-    lookback  = max(1, int(cfg.get("lookbackDays", 28)))
     top_limit = max(1, int(cfg.get("topLimit", 20)))
-    today      = date.today()
-    end_date   = (today - timedelta(days=1)).isoformat()
-    start_date = (today - timedelta(days=lookback)).isoformat()
+    start_date, end_date, lookback = canonical_search_console_window(
+        timezone_name=cfg.get("timezone", "America/Sao_Paulo")
+    )
     periodo = (start_date, end_date, lookback)
 
     print(f"Período: {start_date} → {end_date} ({lookback} dias)")
@@ -926,6 +1025,8 @@ def main():
                         help="Caminho alternativo do snapshot (testes)")
     parser.add_argument("--no-network", action="store_true",
                         help="Proíbe chamadas externas (modos de teste)")
+    parser.add_argument("--refresh-request", default=None,
+                        help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     if args.credential_check:
@@ -934,7 +1035,12 @@ def main():
         return cmd_status(args, "status")
     if args.check:
         return cmd_status(args, "check")
-    return cmd_sync(args, "write" if args.write else "dry-run")
+    mode = "write" if args.write else "dry-run"
+    exit_code = cmd_sync(args, mode)
+    if args.refresh_request and args.write:
+        out_path = Path(args.output) if args.output else _OUT_PUBLIC
+        _complete_refresh_request(args.refresh_request, out_path, exit_code)
+    return exit_code
 
 
 if __name__ == "__main__":
