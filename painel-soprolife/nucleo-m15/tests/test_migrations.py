@@ -1,7 +1,9 @@
 """Migrações Alembic: sobem do zero e batem com o metadata dos modelos."""
 
+from datetime import datetime, timezone
 from decimal import Decimal
 import pathlib
+import uuid
 
 import pytest
 from alembic import command
@@ -162,11 +164,11 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
 def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     cfg = _alembic_config(f"sqlite:///{tmp_path}/heads.db")
-    # A migração M24D (c657f22bf857) é a head atual — o
+    # A migração M25.2 (a3f1d7c25e90) é a head atual — o
     # valor esperado aqui é atualizado a cada nova migration; o que a
     # asserção realmente prova é continuar existindo EXATAMENTE uma head
     # (sem ponto de ramificação acidental).
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["c657f22bf857"]
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["a3f1d7c25e90"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(
@@ -299,16 +301,45 @@ def test_m24c_preserva_report_templates_populada_ao_migrar(tmp_path, monkeypatch
 def _popular_financeiro_pre_m23_1(engine, *, com_conflitos: bool):
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
     session = SessionLocal()
-    pessoa = Person(
-        public_code="PES-910001",
-        nome_completo="Pessoa Sintetica Migracao",
-        nome_normalizado="pessoa sintetica migracao",
+    # `people` e `spirometry_exams` são populados por SQL explícito, e não
+    # pelo ORM: este cenário roda contra uma revisão ANTIGA do schema, e o
+    # ORM já conhece colunas criadas por migrations posteriores (M25.2
+    # acrescentou people.sexo, spirometry_exams.hora_exame e
+    # spirometry_exams.indicacao_clinica). Fixar as colunas aqui mantém o
+    # teste preso à revisão que ele realmente quer exercitar.
+    pessoa_id = str(uuid.uuid4())
+    exam_id = str(uuid.uuid4())
+    agora = datetime.now(timezone.utc)
+    session.execute(
+        text(
+            "INSERT INTO people (id, public_code, nome_completo, "
+            "nome_normalizado, status, nao_contatar, created_at, updated_at) "
+            "VALUES (:id, :code, :nome, :norm, 'ativo', 0, :now, :now)"
+        ),
+        {
+            "id": pessoa_id,
+            "code": "PES-910001",
+            "nome": "Pessoa Sintetica Migracao",
+            "norm": "pessoa sintetica migracao",
+            "now": agora,
+        },
     )
-    session.add(pessoa)
+    session.execute(
+        text(
+            "INSERT INTO spirometry_exams (id, public_code, person_id, "
+            "status, data_exame_dia_assumido, created_at, updated_at) "
+            "VALUES (:id, :code, :person_id, 'Aguardando', 0, :now, :now)"
+        ),
+        {
+            "id": exam_id,
+            "code": "ESP-910001",
+            "person_id": pessoa_id,
+            "now": agora,
+        },
+    )
     session.flush()
-    exam = SpirometryExam(public_code="ESP-910001", person_id=pessoa.id)
-    consultation = Consultation(public_code="CON-910001", person_id=pessoa.id)
-    session.add_all([exam, consultation])
+    consultation = Consultation(public_code="CON-910001", person_id=pessoa_id)
+    session.add(consultation)
     session.flush()
 
     rows = [
@@ -318,7 +349,7 @@ def _popular_financeiro_pre_m23_1(engine, *, com_conflitos: bool):
             categoria=" Espirometria ",
             valor=Decimal("100.00"),
             status="Pendente",
-            spirometry_exam_id=exam.id,
+            spirometry_exam_id=exam_id,
         ),
         FinancialEntry(
             public_code="LAN-910010",
@@ -326,7 +357,7 @@ def _popular_financeiro_pre_m23_1(engine, *, com_conflitos: bool):
             categoria="Outro",
             valor=Decimal("5.00"),
             status="Pendente",
-            spirometry_exam_id=exam.id,
+            spirometry_exam_id=exam_id,
         ),
         FinancialEntry(
             public_code="LAN-910011",
@@ -334,7 +365,7 @@ def _popular_financeiro_pre_m23_1(engine, *, com_conflitos: bool):
             categoria="Espirometria",
             valor=Decimal("3.00"),
             status="Pendente",
-            spirometry_exam_id=exam.id,
+            spirometry_exam_id=exam_id,
         ),
         FinancialEntry(
             public_code="LAN-910020",
@@ -362,7 +393,7 @@ def _popular_financeiro_pre_m23_1(engine, *, com_conflitos: bool):
                     categoria="Espirometria\ufe0f",
                     valor=Decimal("101.00"),
                     status="Pendente",
-                    spirometry_exam_id=exam.id,
+                    spirometry_exam_id=exam_id,
                 ),
                 FinancialEntry(
                     public_code="LAN-910022",

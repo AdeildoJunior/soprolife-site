@@ -224,6 +224,10 @@ def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
         == 200
     )
     queue_row = physician_queue.json()[0]
+    # Conjunto EXATO de chaves da fila: nenhuma identidade de paciente,
+    # texto clínico, nome de arquivo ou caminho pode aparecer aqui. As
+    # chaves M25.2 acrescentadas são só carimbos institucionais de estado
+    # (liberado / corretivo / código de verificação).
     assert set(queue_row) == {
         "report_code",
         "document_id",
@@ -235,6 +239,10 @@ def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
         "status",
         "signature_status",
         "releasable",
+        "released_at",
+        "locked",
+        "is_corrective",
+        "validation_code",
     }
     assert "patient" not in operational.text
     assert person["nome_completo"] not in operational.text
@@ -353,7 +361,9 @@ def test_corretiva_e_assinatura_legada_falham_fechado(
         headers=assigned_case["physician"]["headers"],
     )
     assert correction.status_code == 409
-    assert correction.json()["erro"]["codigo"] == "laudo_nao_assinado"
+    # M25.2 renomeou o código: correção parte de um laudo FECHADO
+    # (assinado com evidência qualificada ou liberado institucionalmente).
+    assert correction.json()["erro"]["codigo"] == "laudo_nao_fechado"
     assert client.post(
         f"/api/v1/laudos/{assigned_case['document']['id']}/finalizar",
         headers=auth("gestor"),

@@ -144,6 +144,9 @@ class Person(Base, TimestampMixin, LegacyMixin):
     status: Mapped[str] = mapped_column(String(20), default="ativo", nullable=False)
     nao_contatar: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     data_nascimento: Mapped[date | None] = mapped_column(Date)
+    # M25.2 — dado demográfico exigido pelo laudo médico. Opcional e NUNCA
+    # inferido: sem informação cadastrada o laudo imprime "não informado".
+    sexo: Mapped[str | None] = mapped_column(String(20))
     observacao: Mapped[str | None] = mapped_column(Text)
     contacts: Mapped[list["PersonContact"]] = relationship(
         back_populates="person", lazy="selectin"
@@ -288,6 +291,10 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
     responsavel: Mapped[str | None] = mapped_column(String(120))
     idempotency_key: Mapped[str | None] = mapped_column(String(64), unique=True)
     idempotency_fingerprint: Mapped[str | None] = mapped_column(String(FINGERPRINT_LEN))
+    # M25.2 — campos exigidos pelo laudo médico. Ambos opcionais e nunca
+    # inventados: ausentes, o laudo imprime "não informada/não informada".
+    hora_exame: Mapped[str | None] = mapped_column(String(5))  # HH:MM
+    indicacao_clinica: Mapped[str | None] = mapped_column(Text)
     observacao: Mapped[str | None] = mapped_column(Text)
 
 
@@ -423,6 +430,14 @@ class PartnerUnit(Base, TimestampMixin):
     nome: Mapped[str] = mapped_column(String(200), nullable=False)
     bairro: Mapped[str | None] = mapped_column(String(120))
     cidade: Mapped[str | None] = mapped_column(String(120))
+    # M25.2 — endereço institucional estruturado da unidade. Serve ao "local
+    # de realização" do laudo (app/services/report_locations.py) para que
+    # nenhum endereço fique fixo no template do PDF. São dados da CLÍNICA,
+    # nunca do paciente.
+    logradouro: Mapped[str | None] = mapped_column(String(200))
+    uf: Mapped[str | None] = mapped_column(String(2))
+    cep: Mapped[str | None] = mapped_column(String(12))
+    telefone_central: Mapped[str | None] = mapped_column(String(40))
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     observacao: Mapped[str | None] = mapped_column(Text)
 
@@ -956,6 +971,15 @@ STATUS_LAUDO_ATRIBUIDO = "atribuido"
 STATUS_LAUDO_EM_ELABORACAO = "em_elaboracao"
 STATUS_LAUDO_ASSINATURA_PENDENTE = "assinatura_pendente"
 STATUS_LAUDO_ASSINADO = "assinado"
+# M25.2 — liberação institucional: a médica atribuída, autenticada na
+# própria sessão, executa a ação consciente "Assinar e liberar laudo". O
+# conteúdo é congelado e o PDF nativo do laudo é gerado e bloqueado.
+#
+# `liberado` é DELIBERADAMENTE distinto de `assinado`. `assinado` continua
+# reservado para uma assinatura eletrônica QUALIFICADA (PAdES/ICP-Brasil)
+# de um provedor real, que não existe nesta etapa. Uma imagem de assinatura
+# manuscrita não é certificado ICP-Brasil e nunca é tratada como tal.
+STATUS_LAUDO_LIBERADO = "liberado"
 # Estados legados M24A permanecem reconhecidos para que a migration seja
 # aditiva e não reescreva evidência preexistente. Nenhum endpoint M24C cria
 # novos documentos nesses estados.
@@ -967,6 +991,7 @@ STATUS_LAUDO_VALUES = (
     STATUS_LAUDO_EM_ELABORACAO,
     STATUS_LAUDO_ASSINATURA_PENDENTE,
     STATUS_LAUDO_ASSINADO,
+    STATUS_LAUDO_LIBERADO,
     STATUS_LAUDO_RASCUNHO,
     STATUS_LAUDO_EM_REVISAO,
     STATUS_LAUDO_FINALIZADO,
@@ -977,12 +1002,28 @@ VERSAO_TIPO_RASCUNHO = "rascunho"
 VERSAO_TIPO_ASSINATURA_PENDENTE = "assinatura_pendente"
 VERSAO_TIPO_ASSINADO = "assinado"
 VERSAO_TIPO_FINALIZADO = "finalizado"
+# M25.2 — o laudo SoproLife é um documento PRÓPRIO, gerado nativamente, e
+# NUNCA uma composição sobre o PDF técnico da MIR. O PDF da MIR permanece
+# intacto na versão `original` e continua disponível separadamente.
+VERSAO_TIPO_LAUDO_PREVIA = "laudo_previa"
+VERSAO_TIPO_LAUDO_LIBERADO = "laudo_liberado"
+VERSAO_TIPO_LAUDO_ADENDO = "laudo_adendo"
 VERSAO_TIPO_VALUES = (
     VERSAO_TIPO_ORIGINAL,
     VERSAO_TIPO_RASCUNHO,
     VERSAO_TIPO_ASSINATURA_PENDENTE,
     VERSAO_TIPO_ASSINADO,
     VERSAO_TIPO_FINALIZADO,
+    VERSAO_TIPO_LAUDO_PREVIA,
+    VERSAO_TIPO_LAUDO_LIBERADO,
+    VERSAO_TIPO_LAUDO_ADENDO,
+)
+# Versões que representam o laudo médico próprio (baixável separadamente do
+# PDF técnico da MIR).
+VERSAO_TIPOS_LAUDO_NATIVO = (
+    VERSAO_TIPO_LAUDO_PREVIA,
+    VERSAO_TIPO_LAUDO_LIBERADO,
+    VERSAO_TIPO_LAUDO_ADENDO,
 )
 
 # "signing-required" (item 7 do pedido M24A) é representado aqui como o
@@ -994,8 +1035,16 @@ VERSAO_TIPO_VALUES = (
 SIGNATURE_STATUS_PENDENTE = "assinatura_pendente"
 SIGNATURE_STATUS_ASSINADA = "assinada"
 SIGNATURE_STATUS_REJEITADA = "rejeitada"
+# M25.2 — liberação institucional autenticada. NÃO é assinatura qualificada
+# ICP-Brasil: representa a ação consciente da médica atribuída na própria
+# sessão individual, com trilha de auditoria e hash do PDF liberado. O
+# próprio documento declara essa natureza de forma explícita.
+SIGNATURE_STATUS_LIBERADA_INSTITUCIONAL = "liberada_institucional"
 SIGNATURE_STATUS_VALUES = (
-    SIGNATURE_STATUS_PENDENTE, SIGNATURE_STATUS_ASSINADA, SIGNATURE_STATUS_REJEITADA,
+    SIGNATURE_STATUS_PENDENTE,
+    SIGNATURE_STATUS_ASSINADA,
+    SIGNATURE_STATUS_REJEITADA,
+    SIGNATURE_STATUS_LIBERADA_INSTITUCIONAL,
 )
 
 BRAZIL_UF_VALUES = (
@@ -1046,6 +1095,13 @@ class PhysicianProfile(Base, TimestampMixin):
     crm_number: Mapped[str] = mapped_column(String(12), nullable=False)
     crm_state: Mapped[str] = mapped_column(String(2), nullable=False)
     rqe: Mapped[str | None] = mapped_column(String(30))
+    # M25.2 — apresentação humana do CRM no laudo (ex.: "52.62307-5"). O
+    # armazenamento canônico continua normalizado em dígitos; este campo é
+    # só formatação e é validado para conter EXATAMENTE os mesmos dígitos
+    # de `crm_number` (ver ck_physician_profiles_crm_display_digits).
+    crm_display: Mapped[str | None] = mapped_column(String(30))
+    # Especialidade impressa no bloco médico (ex.: "Médica Pneumologista").
+    especialidade: Mapped[str | None] = mapped_column(String(120))
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     verification_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="pending"
@@ -1092,6 +1148,18 @@ class PhysicianProfile(Base, TimestampMixin):
         CheckConstraint(
             "verified_by_user_id IS NULL OR verified_by_user_id <> user_id",
             name="verification_not_self",
+        ),
+        # A igualdade de dígitos entre `crm_display` e `crm_number` é
+        # validada na aplicação (normalize.crm_display_matches) porque uma
+        # extração de dígitos portátil entre SQLite e PostgreSQL não cabe
+        # num CHECK. Aqui só garantimos que o campo não fique vazio.
+        CheckConstraint(
+            "crm_display IS NULL OR length(trim(crm_display)) >= 1",
+            name="crm_display_present",
+        ),
+        CheckConstraint(
+            "especialidade IS NULL OR length(trim(especialidade)) >= 2",
+            name="especialidade_present",
         ),
     )
 
@@ -1234,6 +1302,18 @@ class ReportDocument(Base, TimestampMixin):
     )
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     correction_reason_code: Mapped[str | None] = mapped_column(String(40))
+    # ------------------------------------------------------------ M25.2
+    # Liberação institucional do laudo próprio da SoproLife.
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    released_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    released_physician_profile_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("physician_profiles.id")
+    )
+    # Código único e opaco de verificação impresso no laudo (texto + QR).
+    # Não é derivado de dado do paciente e não revela nada por si só.
+    validation_code: Mapped[str | None] = mapped_column(String(24), unique=True)
     __table_args__ = (
         CheckConstraint(
             f"status IN {STATUS_LAUDO_VALUES!r}", name="status_valido",
@@ -1257,8 +1337,18 @@ class ReportDocument(Base, TimestampMixin):
             "("
             "status NOT IN ("
             "'atribuido', 'em_elaboracao', "
-            "'assinatura_pendente', 'assinado'"
+            "'assinatura_pendente', 'assinado', 'liberado'"
             ")"
+            ") OR ("
+            "status = 'liberado' AND "
+            "clinical_started_at IS NOT NULL AND "
+            "ready_for_signature_at IS NOT NULL AND "
+            "released_at IS NOT NULL AND "
+            "released_by_user_id IS NOT NULL AND "
+            "released_physician_profile_id IS NOT NULL AND "
+            "validation_code IS NOT NULL AND "
+            "signed_at IS NULL AND "
+            "signature_status = 'liberada_institucional'"
             ") OR ("
             "status = 'atribuido' AND "
             "clinical_started_at IS NULL AND "
@@ -1282,6 +1372,18 @@ class ReportDocument(Base, TimestampMixin):
             "signed_at IS NOT NULL AND signature_status = 'assinada'"
             ")",
             name="clinical_state_coherent",
+        ),
+        # M25.2 — evidência de liberação só existe em documento liberado.
+        # Nenhum estado anterior pode carregar carimbo de liberação, e
+        # nenhum código de validação é alocado antes da ação consciente.
+        CheckConstraint(
+            "status = 'liberado' OR ("
+            "released_at IS NULL AND "
+            "released_by_user_id IS NULL AND "
+            "released_physician_profile_id IS NULL AND "
+            "validation_code IS NULL"
+            ")",
+            name="release_evidence_coherent",
         ),
     )
 
@@ -1435,6 +1537,43 @@ class ReportDocumentVersion(Base):
     )
     page_number: Mapped[int | None] = mapped_column(Integer)
     placement: Mapped[str | None] = mapped_column(String(20))
+    # ------------------------------------------------------------ M25.2
+    # Evidência clínica congelada do laudo NATIVO. Preenchida somente nas
+    # versões `laudo_previa`/`laudo_liberado`/`laudo_adendo`; a versão
+    # `original` (PDF técnico da MIR) nunca recebe estes campos.
+    #
+    # `interpretation_text_snapshot` continua guardando o texto efetivamente
+    # assinado; os campos abaixo guardam a ESCOLHA de catálogo que originou
+    # aquele texto, para que a decisão da médica fique auditável mesmo
+    # depois de ela editar livremente a redação.
+    conclusion_code_snapshot: Mapped[str | None] = mapped_column(String(40))
+    conclusion_text_snapshot: Mapped[str | None] = mapped_column(Text)
+    bronchodilator_code_snapshot: Mapped[str | None] = mapped_column(String(40))
+    bronchodilator_text_snapshot: Mapped[str | None] = mapped_column(Text)
+    observations_snapshot: Mapped[str | None] = mapped_column(Text)
+    exam_has_post_bd_snapshot: Mapped[bool | None] = mapped_column(Boolean)
+    # Local de realização estruturado (app/services/report_locations.py).
+    location_name_snapshot: Mapped[str | None] = mapped_column(String(240))
+    location_address_snapshot: Mapped[str | None] = mapped_column(String(300))
+    location_contact_snapshot: Mapped[str | None] = mapped_column(String(120))
+    location_partner_unit_id_snapshot: Mapped[str | None] = mapped_column(
+        String(UUID_LEN)
+    )
+    location_source_snapshot: Mapped[str | None] = mapped_column(String(40))
+    # Código impresso/QR e evidência da liberação institucional.
+    validation_code_snapshot: Mapped[str | None] = mapped_column(String(24))
+    released_at_snapshot: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    # Referência técnica do ativo manuscrito usado. NUNCA os bytes da
+    # imagem, NUNCA um caminho absoluto — só id opaco e hash.
+    signature_asset_id_snapshot: Mapped[str | None] = mapped_column(
+        String(UUID_LEN)
+    )
+    signature_asset_sha256_snapshot: Mapped[str | None] = mapped_column(
+        String(64)
+    )
+    addendum_sequence: Mapped[int | None] = mapped_column(Integer)
     created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     __table_args__ = (
@@ -1502,6 +1641,62 @@ class ReportDocumentVersion(Base):
             ")",
             name="footer_snapshot_complete",
         ),
+        # ------------------------------------------------------------ M25.2
+        CheckConstraint(
+            "("
+            "conclusion_code_snapshot IS NULL AND "
+            "conclusion_text_snapshot IS NULL"
+            ") OR ("
+            "conclusion_code_snapshot IS NOT NULL AND "
+            "conclusion_text_snapshot IS NOT NULL"
+            ")",
+            name="conclusion_snapshot_complete",
+        ),
+        CheckConstraint(
+            "("
+            "bronchodilator_code_snapshot IS NULL AND "
+            "bronchodilator_text_snapshot IS NULL"
+            ") OR ("
+            "bronchodilator_code_snapshot IS NOT NULL AND "
+            "bronchodilator_text_snapshot IS NOT NULL"
+            ")",
+            name="bronchodilator_snapshot_complete",
+        ),
+        CheckConstraint(
+            "("
+            "location_name_snapshot IS NULL AND "
+            "location_source_snapshot IS NULL"
+            ") OR ("
+            "location_name_snapshot IS NOT NULL AND "
+            "location_source_snapshot IS NOT NULL"
+            ")",
+            name="location_snapshot_complete",
+        ),
+        CheckConstraint(
+            "("
+            "signature_asset_id_snapshot IS NULL AND "
+            "signature_asset_sha256_snapshot IS NULL"
+            ") OR ("
+            "signature_asset_id_snapshot IS NOT NULL AND "
+            "signature_asset_sha256_snapshot IS NOT NULL"
+            ")",
+            name="signature_asset_snapshot_complete",
+        ),
+        CheckConstraint(
+            "addendum_sequence IS NULL OR addendum_sequence > 0",
+            name="addendum_sequence_positive",
+        ),
+        # Somente uma versão de laudo nativo carrega evidência de liberação;
+        # a versão `original` (PDF da MIR) permanece intacta e sem carimbo.
+        CheckConstraint(
+            "("
+            "kind = 'laudo_liberado' OR kind = 'laudo_adendo'"
+            ") OR ("
+            "released_at_snapshot IS NULL AND "
+            "validation_code_snapshot IS NULL"
+            ")",
+            name="release_snapshot_only_on_released_kind",
+        ),
     )
 
 
@@ -1532,4 +1727,115 @@ class ReportSignature(Base, TimestampMixin):
     error_message: Mapped[str | None] = mapped_column(String(300))
     __table_args__ = (
         CheckConstraint(f"status IN {SIGNATURE_STATUS_VALUES!r}", name="status_valido"),
+    )
+
+
+# ------------------------------------------------------------ M25.2 — laudo
+# próprio da SoproLife: ativo manuscrito e adendos.
+
+
+class PhysicianSignatureAsset(Base):
+    """Imagem de assinatura manuscrita autorizada de um perfil médico.
+
+    O arquivo vive SOMENTE na raiz privada de laudos
+    (``M15_REPORTS_STORAGE_DIR``), fora do Git. Esta tabela guarda apenas
+    referência técnica: caminho relativo interno, hash e dimensões. A imagem
+    nunca é servida como recurso próprio, nunca é devolvida por API, nunca
+    entra em JavaScript, em URL pública, em log, em fixture ou em teste —
+    ela só é desenhada dentro do PDF do laudo já liberado.
+
+    Uma imagem de assinatura NÃO é assinatura digital qualificada. Este
+    registro não altera esse fato em nenhum ponto do sistema.
+    """
+
+    __tablename__ = "physician_signature_assets"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    physician_profile_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("physician_profiles.id"),
+        nullable=False,
+        index=True,
+    )
+    storage_path: Mapped[str] = mapped_column(String(300), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    image_width: Mapped[int] = mapped_column(Integer, nullable=False)
+    image_height: Mapped[int] = mapped_column(Integer, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    __table_args__ = (
+        CheckConstraint("size_bytes > 0", name="size_bytes_positivo"),
+        CheckConstraint("image_width > 0", name="image_width_positivo"),
+        CheckConstraint("image_height > 0", name="image_height_positivo"),
+        CheckConstraint("mime_type = 'image/png'", name="mime_type_valido"),
+        CheckConstraint(
+            "(active = true AND revoked_at IS NULL AND revoked_by_user_id IS NULL) "
+            "OR (active = false AND revoked_at IS NOT NULL AND "
+            "revoked_by_user_id IS NOT NULL)",
+            name="revocation_coherent",
+        ),
+    )
+
+
+Index(
+    "uq_signature_assets_one_active_per_profile",
+    PhysicianSignatureAsset.physician_profile_id,
+    unique=True,
+    sqlite_where=PhysicianSignatureAsset.active.is_(True),
+    postgresql_where=PhysicianSignatureAsset.active.is_(True),
+)
+
+
+class ReportAddendum(Base):
+    """Adendo append-only a um laudo já liberado.
+
+    Correção posterior NUNCA reescreve o laudo anterior: ou nasce um
+    documento corretivo separado, ou entra um adendo numerado que gera uma
+    NOVA versão de PDF preservando integralmente a versão liberada.
+    """
+
+    __tablename__ = "report_addenda"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    report_document_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("report_documents.id"),
+        nullable=False,
+        index=True,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    body_text: Mapped[str] = mapped_column(Text, nullable=False)
+    body_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    physician_profile_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("physician_profiles.id"), nullable=False
+    )
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id"), nullable=False
+    )
+    report_document_version_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("report_document_versions.id"),
+        nullable=False,
+        unique=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    __table_args__ = (
+        UniqueConstraint(
+            "report_document_id", "sequence", name="uq_report_addendum_sequence"
+        ),
+        CheckConstraint("sequence > 0", name="sequence_positive"),
+        CheckConstraint(
+            "length(trim(body_text)) >= 3", name="body_text_present"
+        ),
     )

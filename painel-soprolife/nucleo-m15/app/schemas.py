@@ -954,3 +954,52 @@ class ReportDocumentCompose(StrictModel):
     interpretation_text: str = Field(min_length=1, max_length=8000)
     page_number: int = Field(ge=1, le=300)
     placement: ReportPlacement
+
+
+# ---------------------------------------------------------------- M25.2
+#
+# Laudo próprio da SoproLife: catálogo fechado de conclusões, prévia
+# nativa, liberação consciente e adendo append-only.
+
+
+class ReportNativeDraft(StrictModel):
+    """Corpo de POST .../laudo/previa — gera a prévia do laudo nativo.
+
+    `final_text` é o texto que a médica realmente vai assinar. Quando
+    omitido, o servidor monta o texto determinístico a partir dos códigos
+    do catálogo; quando enviado, vale a redação da médica.
+    """
+
+    conclusion_code: str = Field(min_length=2, max_length=40)
+    conclusion_custom_text: str | None = Field(default=None, max_length=2000)
+    bronchodilator_code: str | None = Field(default=None, max_length=40)
+    final_text: str | None = Field(default=None, max_length=6000)
+    observations: str | None = Field(default=None, max_length=2000)
+
+
+class ReportReleaseRequest(StrictModel):
+    """Corpo de POST .../assinar-e-liberar.
+
+    Exige confirmação consciente e a identidade EXATA do conteúdo que a
+    médica viu na prévia: assinar às cegas ou assinar conteúdo substituído
+    por concorrência é recusado.
+    """
+
+    confirmacao: Literal["ASSINAR E LIBERAR"]
+    expected_version_id: str = Field(min_length=36, max_length=36)
+    expected_text_sha256: str = Field(min_length=64, max_length=64)
+
+    @field_validator("expected_text_sha256")
+    @classmethod
+    def _hex_sha256(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", normalized):
+            raise ValueError("Hash de conteúdo inválido.")
+        return normalized
+
+
+class ReportAddendumCreate(StrictModel):
+    """Corpo de POST .../adendo — acrescenta sem reescrever o anterior."""
+
+    body_text: str = Field(min_length=3, max_length=4000)
+    confirmacao: Literal["PUBLICAR ADENDO"]

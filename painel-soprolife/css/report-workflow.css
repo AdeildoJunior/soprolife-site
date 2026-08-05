@@ -550,3 +550,401 @@ body.report-physician-only .section:not(#laudos-espirometria) {
     transition: none;
   }
 }
+
+/* ===================================================== M25.2 — laudo
+ * próprio da SoproLife: seleção de conclusão por botões curtos, texto
+ * editável, prévia, liberação consciente e adendo.
+ */
+
+.report-status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.report-liberado,
+.report-liberado-flag {
+  background: var(--ok-soft);
+  color: #0b7355 !important;
+}
+
+.report-adendo-flag {
+  background: var(--sky-soft);
+  color: var(--navy) !important;
+}
+
+.report-corrigido-flag,
+.report-locked-flag {
+  background: var(--warn-soft);
+  color: #7c550f !important;
+}
+
+.report-queue-flag {
+  display: inline-flex;
+  width: fit-content;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--sky-soft);
+  color: var(--navy) !important;
+  font-size: 10px !important;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.report-queue-flag.is-locked {
+  background: var(--ok-soft);
+  color: #0b7355 !important;
+}
+
+/* -------------------------------------------- seleção de conclusão */
+
+.report-conclusion-picker {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-xs);
+  background: #f9fbfd;
+}
+
+.report-conclusion-picker legend {
+  padding: 0 6px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.report-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.report-conclusion-chip,
+.report-bd-chip {
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--card);
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  /* Alvo confortável de toque no celular. */
+  min-height: 40px;
+  transition: background .15s ease, border-color .15s ease;
+}
+
+.report-conclusion-chip:hover,
+.report-bd-chip:hover {
+  border-color: var(--teal, #1b9c93);
+  background: var(--sky-soft);
+}
+
+.report-conclusion-chip.is-selected,
+.report-bd-chip.is-selected {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #fff;
+}
+
+.report-conclusion-chip.is-custom {
+  border-style: dashed;
+}
+
+.report-conclusion-chip:focus-visible,
+.report-bd-chip:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.report-custom-conclusion {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* --------------------------------------------------- laudo nativo */
+
+.report-native-form {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--navy);
+  border-radius: var(--radius-xs);
+  background: var(--card);
+}
+
+.report-native-form h4 {
+  margin-bottom: 4px;
+  color: var(--navy);
+}
+
+/* --------------------------------------- liberação consciente */
+
+.report-release-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: #f9fbfd;
+}
+
+.report-release-action p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.report-release-cta {
+  font-size: 15px;
+  font-weight: 800;
+  padding: 12px 20px;
+  min-height: 46px;
+}
+
+.report-release-confirm {
+  margin-top: 14px;
+  padding: 16px;
+  border: 2px solid #7c550f;
+  border-radius: var(--radius-xs);
+  background: var(--warn-soft);
+}
+
+.report-release-confirm h4 {
+  margin-bottom: 8px;
+  color: #7c550f;
+}
+
+.report-release-confirm ul {
+  margin: 10px 0;
+  padding-left: 18px;
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.report-release-confirm li {
+  margin-bottom: 4px;
+}
+
+.report-release-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.m15-btn-danger {
+  border-color: #a3320f;
+  background: #a3320f;
+  color: #fff;
+  font-weight: 800;
+}
+
+.m15-btn-danger:hover:not(:disabled) {
+  background: #8a2a0d;
+}
+
+.m15-btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------- adendo */
+
+.report-addendum-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--card);
+}
+
+.report-addendum-form h4 {
+  margin-bottom: 0;
+  color: var(--navy);
+}
+
+/* ----------------------------------- dois documentos separados */
+
+.report-documents-panel {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-xs);
+  background: #f9fbfd;
+}
+
+.report-documents-panel h4 {
+  margin-bottom: 8px;
+  color: var(--navy);
+}
+
+.report-documents-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-documents-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-xs);
+  background: var(--card);
+}
+
+.report-documents-list li > div {
+  display: grid;
+  gap: 2px;
+}
+
+.report-documents-list strong {
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.report-documents-list span {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.report-doc-meta {
+  font-variant-numeric: tabular-nums;
+}
+
+.report-doc-missing {
+  opacity: .65;
+}
+
+.report-validation-code {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.report-validation-code code {
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--sky-soft);
+  color: var(--navy);
+  font-weight: 800;
+  letter-spacing: .06em;
+}
+
+/* ------------------------------------------- fluxos anteriores */
+
+.report-legacy-compose {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-xs);
+  background: #fbfcfe;
+}
+
+.report-legacy-compose > summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.report-legacy-compose[open] > summary {
+  margin-bottom: 10px;
+}
+
+/* ------------------------------------------------ responsivo */
+
+@media (max-width: 720px) {
+  .report-status-badges {
+    justify-content: flex-start;
+  }
+
+  .report-release-action {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .report-release-cta,
+  .report-release-buttons .m15-btn {
+    width: 100%;
+  }
+
+  .report-documents-list li {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .report-documents-list .m15-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .report-chip-grid {
+    gap: 6px;
+  }
+
+  .report-conclusion-chip,
+  .report-bd-chip {
+    flex: 1 1 calc(50% - 6px);
+    padding: 10px 8px;
+    font-size: 12px;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-conclusion-chip,
+  .report-bd-chip {
+    transition: none;
+  }
+}
+
+/* `m15-btn-primary` é usado pelo JS do fluxo de laudos mas nunca teve
+ * estilo próprio. Definimos aqui SOMENTE dentro do workspace de laudos,
+ * para não alterar o visual de outros módulos que compartilham `m15-btn`.
+ */
+.report-workflow-root .m15-btn-primary {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #fff;
+  font-weight: 800;
+}
+
+.report-workflow-root .m15-btn-primary:hover:not(:disabled) {
+  background: #0d3a63;
+  border-color: #0d3a63;
+}
+
+.report-workflow-root .m15-btn-primary:disabled {
+  opacity: .55;
+}
+
+/* A ação "Assinar e liberar laudo" é a mais consequente da tela: fica
+ * visualmente inequívoca mesmo se o botão base mudar.
+ */
+.report-workflow-root .report-release-cta {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #fff;
+  box-shadow: var(--shadow-xs);
+}

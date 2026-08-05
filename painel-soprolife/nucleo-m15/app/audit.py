@@ -26,6 +26,16 @@ ALLOWED_KEYS = {
     "template_version", "page_number", "placement", "signature_status",
     "provider", "predecessor_document_id", "supersedes_template_id",
     "clinically_approved", "version",
+    # M25.2 — laudo nativo. Somente identificadores técnicos, códigos de
+    # catálogo fechado, hashes e valores booleanos. Nenhuma destas chaves
+    # carrega texto clínico, identidade de paciente, nome de arquivo,
+    # caminho absoluto ou byte de documento.
+    "version_number", "conclusion_code", "bronchodilator_code",
+    "location_source", "document_sha256", "signed_text_sha256",
+    "validation_code", "handwritten_signature_applied",
+    "qualified_signature", "addendum_sequence", "addendum_sha256",
+    "supersedes_version_id", "size_bytes", "image_width", "image_height",
+    "revoked_previous_asset_id",
 }
 
 _MAX_STR = 120

@@ -37,6 +37,10 @@
     ["profile_suspended", "Perfil suspenso"],
     ["operational_redistribution", "Redistribuição operacional"],
   ];
+  // M25.2 — confirmações conscientes exigidas pela API. O texto exato é
+  // parte do contrato: nenhum clique isolado assina ou libera um laudo.
+  const RELEASE_CONFIRMATION = "ASSINAR E LIBERAR";
+  const ADDENDUM_CONFIRMATION = "PUBLICAR ADENDO";
 
   const state = {
     reportsMode: "disabled",
@@ -60,6 +64,23 @@
     noticeKind: "",
     pdfUrls: { original: "", generated: "" },
     loadEpoch: 0,
+    // ------------------------------------------------------------ M25.2
+    // Estado do laudo PRÓPRIO da SoproLife. O catálogo vem do servidor por
+    // documento (ele sabe se o exame tem fase pós-broncodilatador); o
+    // navegador nunca decide grau, conclusão ou compatibilidade.
+    catalog: null,
+    conclusionCode: "",
+    customConclusion: "",
+    bronchodilatorCode: "",
+    finalText: "",
+    observations: "",
+    // Identidade EXATA da prévia conferida, exigida na liberação.
+    previewVersionId: "",
+    previewTextSha256: "",
+    confirmRelease: false,
+    addendumText: "",
+    documents: null,
+    suggestedText: "",
   };
 
   function root() {
@@ -101,16 +122,33 @@
       em_elaboracao: "Em elaboração clínica",
       assinatura_pendente: "Assinatura qualificada pendente",
       assinado: "Assinado",
+      liberado: "Laudo liberado",
     }[value] || value || "—";
   }
 
   function kindLabel(value) {
     return {
-      original: "PDF original",
+      original: "Exame técnico (MIR)",
       rascunho: "Prévia clínica",
       assinatura_pendente: "Preparado para assinatura",
       assinado: "Versão assinada",
+      laudo_previa: "Prévia do laudo",
+      laudo_liberado: "Laudo liberado",
+      laudo_adendo: "Laudo com adendo",
     }[value] || value || "Versão";
+  }
+
+  // M25.2 — a versão de laudo NATIVO mais recente (prévia, liberado ou
+  // adendo). É o "documento 2"; o PDF da MIR continua sendo o documento 1.
+  const NATIVE_KINDS = ["laudo_previa", "laudo_liberado", "laudo_adendo"];
+
+  function latestNativeVersion() {
+    const versions = state.detail && Array.isArray(state.detail.versoes)
+      ? state.detail.versoes : [];
+    return [...versions]
+      .filter((version) => NATIVE_KINDS.includes(version.kind))
+      .sort((a, b) => a.version_number - b.version_number)
+      .pop() || null;
   }
 
   function currentUser() {
@@ -251,6 +289,10 @@
             <span class="report-status-chip report-${esc(item.status)}">${
               esc(statusLabel(item.status))
             }</span>
+            ${item.is_corrective
+              ? `<span class="report-queue-flag">corrigido</span>` : ""}
+            ${item.locked
+              ? `<span class="report-queue-flag is-locked">liberado</span>` : ""}
           </button>`).join("")
       : `<div class="report-empty">Nenhum laudo atribuído neste filtro.</div>`;
     return `
@@ -265,8 +307,9 @@
             <select id="reportStatusFilter">
               ${options([
                 ["", "Todos"],
-                ["atribuido", "Atribuído"],
+                ["atribuido", "Pendente"],
                 ["em_elaboracao", "Em elaboração"],
+                ["liberado", "Liberado"],
                 ["assinatura_pendente", "Assinatura pendente"],
                 ["assinado", "Assinado"],
               ], state.statusFilter)}
@@ -341,6 +384,173 @@
       referrerpolicy="no-referrer"></iframe>`;
   }
 
+  // ------------------------------------------------------------- M25.2
+
+  function renderConclusionPicker() {
+    const catalog = state.catalog;
+    if (!catalog) {
+      return `<div class="report-empty" role="status">Carregando catálogo de conclusões…</div>`;
+    }
+    const buttons = catalog.conclusoes.map((option) => `
+      <button type="button"
+        class="report-conclusion-chip${
+          state.conclusionCode === option.codigo ? " is-selected" : ""
+        }${option.personalizado ? " is-custom" : ""}"
+        data-report-conclusion="${esc(option.codigo)}"
+        aria-pressed="${state.conclusionCode === option.codigo ? "true" : "false"}"
+        title="${esc(option.texto || "Escreva a conclusão livremente")}">
+        ${esc(option.rotulo)}
+      </button>`).join("");
+
+    const bdButtons = catalog.complementos_bd.map((option) => `
+      <button type="button"
+        class="report-bd-chip${
+          state.bronchodilatorCode === option.codigo ? " is-selected" : ""
+        }"
+        data-report-bd="${esc(option.codigo)}"
+        aria-pressed="${
+          state.bronchodilatorCode === option.codigo ? "true" : "false"
+        }"
+        title="${esc(option.texto || "Não acrescenta frase de resposta ao broncodilatador")}">
+        ${esc(option.rotulo)}
+      </button>`).join("");
+
+    return `
+      <fieldset class="report-conclusion-picker">
+        <legend>Conclusão</legend>
+        <p class="report-help">O botão mostra a abreviação; o PDF recebe o texto por extenso. O grau é decisão exclusivamente sua — o sistema não calcula nem sugere.</p>
+        <div class="report-chip-grid">${buttons}</div>
+        ${state.conclusionCode === "PERSONALIZADO" ? `
+          <label for="reportCustomConclusion" class="report-custom-conclusion">
+            Conclusão personalizada
+            <textarea id="reportCustomConclusion" name="conclusion_custom_text"
+              maxlength="2000" rows="3"
+              placeholder="Escreva a conclusão completa.">${esc(state.customConclusion)}</textarea>
+          </label>` : ""}
+      </fieldset>
+
+      <fieldset class="report-conclusion-picker">
+        <legend>Pós-broncodilatador</legend>
+        ${catalog.exame_com_pos_bd
+          ? `<p class="report-help">Exame com fase pós-broncodilatador.</p>`
+          : `<p class="report-help">Este exame não possui fase pós-broncodilatador; opções incompatíveis não são oferecidas.</p>`}
+        <div class="report-chip-grid">${bdButtons}</div>
+      </fieldset>`;
+  }
+
+  function renderNativeReportForm(detail) {
+    const editable = ["atribuido", "em_elaboracao"].includes(detail.status);
+    if (!editable) return "";
+    const canPreview = Boolean(state.conclusionCode);
+    return `
+      <form id="reportNativeForm" class="report-clinical-form report-native-form">
+        <h4>Laudo médico da SoproLife</h4>
+        <p class="report-help">Documento próprio, gerado pelo Centro de Comando. O PDF técnico da MIR permanece intacto e continua sendo baixado separadamente.</p>
+        ${renderConclusionPicker()}
+        <label for="reportFinalText">
+          Texto final do laudo
+          <textarea id="reportFinalText" name="final_text" maxlength="6000"
+            rows="5" aria-describedby="reportFinalTextHelp"
+            placeholder="Escolha uma conclusão para montar o texto — e edite livremente antes de assinar.">${esc(state.finalText)}</textarea>
+          <span id="reportFinalTextHelp" class="report-help">Este é o texto que será assinado. Você pode reescrevê-lo por completo.</span>
+        </label>
+        <label for="reportObservations">
+          Observações complementares (opcional)
+          <textarea id="reportObservations" name="observations" maxlength="2000"
+            rows="3">${esc(state.observations)}</textarea>
+        </label>
+        <button class="m15-btn m15-btn-primary" type="submit"${
+          state.busy || !canPreview ? " disabled" : ""
+        }>Gerar prévia do laudo</button>
+      </form>`;
+  }
+
+  function renderReleaseAction(detail) {
+    if (detail.status !== "em_elaboracao" || !state.previewVersionId) return "";
+    if (state.confirmRelease) {
+      return `
+        <div class="report-release-confirm" role="alertdialog"
+          aria-labelledby="reportReleaseConfirmTitle" aria-modal="false">
+          <h4 id="reportReleaseConfirmTitle" tabindex="-1">Confirmar assinatura e liberação</h4>
+          <p>Você vai <strong>assinar e liberar</strong> este laudo com a sua identificação profissional. O conteúdo será congelado e o documento passa a valer para entrega.</p>
+          <ul>
+            <li>Confira a prévia exibida acima — é exatamente o PDF final.</li>
+            <li>Depois da liberação, correções só entram como <strong>adendo</strong> ou <strong>versão corretiva</strong>; a versão anterior é preservada.</li>
+            <li>A liberação é registrada com seu usuário, data e hora.</li>
+          </ul>
+          <div class="report-release-buttons">
+            <button type="button" class="m15-btn m15-btn-danger"
+              data-report-release-confirm${state.busy ? " disabled" : ""}>
+              Sim, assinar e liberar laudo
+            </button>
+            <button type="button" class="m15-btn" data-report-release-cancel>
+              Cancelar
+            </button>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="report-release-action">
+        <p>Confira a prévia. A assinatura só é aplicada após a sua confirmação consciente.</p>
+        <button type="button" class="m15-btn m15-btn-primary report-release-cta"
+          data-report-release-open${state.busy ? " disabled" : ""}>
+          Assinar e liberar laudo
+        </button>
+      </div>`;
+  }
+
+  function renderAddendumForm(detail) {
+    if (detail.status !== "liberado") return "";
+    return `
+      <form id="reportAddendumForm" class="report-addendum-form">
+        <h4>Adendo ao laudo liberado</h4>
+        <p class="report-help">O adendo gera uma versão nova preservando integralmente a versão liberada anterior.</p>
+        <label for="reportAddendumText">
+          Texto do adendo
+          <textarea id="reportAddendumText" name="body_text" maxlength="4000"
+            rows="3" required>${esc(state.addendumText)}</textarea>
+        </label>
+        <button class="m15-btn" type="submit"${
+          state.busy ? " disabled" : ""
+        }>Publicar adendo</button>
+      </form>`;
+  }
+
+  function renderDocumentsPanel() {
+    const docs = state.documents;
+    if (!docs) return "";
+    const entry = (item, titulo, descricao) => {
+      if (!item) {
+        return `<li class="report-doc-missing"><strong>${esc(titulo)}</strong><span>Ainda não disponível.</span></li>`;
+      }
+      return `
+        <li>
+          <div>
+            <strong>${esc(titulo)}</strong>
+            <span>${esc(descricao)}</span>
+            <span class="report-doc-meta">${esc(kindLabel(item.kind))} · v${
+              esc(item.version_number)
+            } · ${esc(String(item.sha256).slice(0, 12))}…</span>
+          </div>
+          <button type="button" class="m15-btn m15-btn-sm"
+            data-report-download="${esc(item.version_id)}">Baixar</button>
+        </li>`;
+    };
+    return `
+      <aside class="report-documents-panel" aria-labelledby="reportDocsTitle">
+        <h4 id="reportDocsTitle">Documentos do exame</h4>
+        <ul class="report-documents-list">
+          ${entry(docs.tecnico_mir, "Exame técnico (MIR)",
+            "PDF original do equipamento, sem qualquer alteração.")}
+          ${entry(docs.laudo_soprolife, "Laudo médico SoproLife",
+            "Documento próprio com a conclusão médica.")}
+        </ul>
+        ${docs.validation_code ? `
+          <p class="report-validation-code">Código de verificação:
+            <code>${esc(docs.validation_code)}</code></p>` : ""}
+      </aside>`;
+  }
+
   function renderSignaturePanel(detail) {
     const pending = detail.status === "assinatura_pendente";
     return `
@@ -371,6 +581,9 @@
     const editable = ["atribuido", "em_elaboracao"].includes(detail.status);
     const ready = detail.status === "em_elaboracao";
     const signed = detail.status === "assinado";
+    const released = detail.status === "liberado";
+    const native = latestNativeVersion();
+    const hasAddendum = Boolean(native && native.kind === "laudo_adendo");
     const maxPages = original ? original.page_count : 1;
     return `
       <section class="report-panel report-clinical-panel" aria-labelledby="reportDetailHeading">
@@ -379,9 +592,17 @@
             <p class="eyebrow">${esc(detail.public_code)} · ${esc(detail.exam.public_code)}</p>
             <h3 id="reportDetailHeading" tabindex="-1">Documento atribuído</h3>
           </div>
-          <span class="report-status-chip report-${esc(detail.status)}">${
-            esc(statusLabel(detail.status))
-          }</span>
+          <div class="report-status-badges">
+            <span class="report-status-chip report-${esc(detail.status)}">${
+              esc(statusLabel(detail.status))
+            }</span>
+            ${released ? `<span class="report-status-chip report-liberado-flag">Liberado</span>` : ""}
+            ${hasAddendum ? `<span class="report-status-chip report-adendo-flag">Com adendo</span>` : ""}
+            ${detail.corrects_document_id
+              ? `<span class="report-status-chip report-corrigido-flag">Documento corretivo</span>`
+              : ""}
+            ${detail.locked ? `<span class="report-status-chip report-locked-flag">Conteúdo bloqueado</span>` : ""}
+          </div>
         </div>
 
         <div class="report-clinical-identity">
@@ -393,14 +614,16 @@
           }</strong></div>
         </div>
 
-        <div class="report-comparison" aria-label="Comparação entre original e versão gerada">
+        <div class="report-comparison" aria-label="Exame técnico da MIR e laudo da SoproLife">
           <article>
-            <h4>Original autenticado</h4>
+            <h4>Exame técnico (MIR)</h4>
+            <p class="report-help">Documento original, nunca alterado nem assinado por cima.</p>
             ${renderPdfFrame("original", "PDF original", original)}
           </article>
           <article>
             <h4>${current && current.kind !== "original"
-              ? kindLabel(current.kind) : "Prévia gerada"}</h4>
+              ? kindLabel(current.kind) : "Laudo SoproLife"}</h4>
+            <p class="report-help">Laudo médico próprio, gerado pelo Centro de Comando.</p>
             ${renderPdfFrame(
               "generated",
               "PDF gerado para comparação",
@@ -409,7 +632,15 @@
           </article>
         </div>
 
+        ${renderDocumentsPanel()}
+        ${renderNativeReportForm(detail)}
+        ${renderReleaseAction(detail)}
+        ${renderAddendumForm(detail)}
+
         ${editable ? `
+          <details class="report-legacy-compose">
+          <summary>Anotação técnica sobre o PDF da MIR (fluxo M24C)</summary>
+          <p class="report-help">Fluxo anterior: compõe um bloco de texto sobre o próprio PDF do equipamento. O laudo médico da SoproLife acima é o documento oficial.</p>
           <form id="reportComposeForm" class="report-clinical-form">
             ${renderTemplateSelector()}
             <label for="reportInterpretation">
@@ -432,20 +663,24 @@
                 <label><input type="radio" name="placement" value="rodape"> Rodapé</label>
               </fieldset>
             </div>
-            <button class="m15-btn m15-btn-primary" type="submit"${
+            <button class="m15-btn" type="submit"${
               state.busy ? " disabled" : ""
-            }>Gerar prévia</button>
-          </form>` : ""}
+            }>Gerar anotação sobre o PDF da MIR</button>
+          </form>
+          </details>` : ""}
 
         ${ready ? `
+          <details class="report-legacy-compose">
+          <summary>Preparar assinatura qualificada (ICP-Brasil, pendente)</summary>
           <div class="report-ready-action">
-            <p>A prévia e os snapshots de médico, origem, template e rodapé serão congelados. O resultado continuará não assinado.</p>
+            <p>Congela os snapshots e deixa o documento aguardando um provedor de assinatura qualificada. Nenhum provedor está configurado nesta versão.</p>
             <button type="button" class="m15-btn" data-report-prepare-signature${
               state.busy ? " disabled" : ""
             }>Marcar conteúdo pronto para assinatura</button>
-          </div>` : ""}
+          </div>
+          </details>` : ""}
 
-        ${signed ? `
+        ${signed || released ? `
           <form id="reportCorrectionForm" class="report-correction-form">
             <label for="reportCorrectionReason">Motivo técnico da correção
               <select id="reportCorrectionReason" name="reason_code" required>
@@ -811,6 +1046,10 @@
   async function loadDocument(documentId, focusHeading) {
     state.selectedDocumentId = documentId;
     state.detail = null;
+    state.catalog = null;
+    state.documents = null;
+    state.confirmRelease = false;
+    state.addendumText = "";
     releasePdfUrls();
     const epoch = ++state.loadEpoch;
     render();
@@ -822,7 +1061,24 @@
         ? detail.versoes.find((item) => item.id === detail.current_version_id) : null;
       state.interpretation = current && current.interpretation_text_snapshot || "";
       state.selectedTemplateId = current && current.template_id || "";
+      // M25.2 — reidrata a escolha de catálogo da última versão nativa,
+      // para que reabrir o documento não perca o trabalho em andamento.
+      const native = latestNativeVersion();
+      state.conclusionCode = native && native.conclusion_code_snapshot || "";
+      state.customConclusion = state.conclusionCode === "PERSONALIZADO"
+        && native ? native.conclusion_text_snapshot || "" : "";
+      state.bronchodilatorCode =
+        native && native.bronchodilator_code_snapshot || "";
+      state.finalText = native && native.interpretation_text_snapshot || "";
+      state.observations = native && native.observations_snapshot || "";
+      state.previewVersionId =
+        native && native.kind === "laudo_previa" ? native.id : "";
+      state.previewTextSha256 =
+        native && native.kind === "laudo_previa"
+          ? native.interpretation_text_sha256 || "" : "";
       render();
+      loadCatalog(documentId, epoch);
+      loadDeliveryDocuments(documentId, epoch);
       if (focusHeading) {
         const heading = document.getElementById("reportDetailHeading");
         if (heading) heading.focus();
@@ -842,6 +1098,209 @@
       if (epoch !== state.loadEpoch) return;
       announce(readableError(error), "erro");
       render();
+    }
+  }
+
+  // ------------------------------------------------------------- M25.2
+
+  async function loadCatalog(documentId, epoch) {
+    try {
+      const catalog = await client().api(
+        `/laudos/${encodeURIComponent(documentId)}/catalogo-conclusoes`
+      );
+      if (epoch !== state.loadEpoch) return;
+      state.catalog = catalog;
+      render();
+    } catch (error) {
+      if (epoch !== state.loadEpoch) return;
+      state.catalog = null;
+      render();
+    }
+  }
+
+  async function loadDeliveryDocuments(documentId, epoch) {
+    try {
+      const documents = await client().api(
+        `/laudos/${encodeURIComponent(documentId)}/documentos`
+      );
+      if (epoch !== state.loadEpoch) return;
+      state.documents = documents;
+      render();
+    } catch (error) {
+      if (epoch !== state.loadEpoch) return;
+      state.documents = null;
+      render();
+    }
+  }
+
+  // Monta a MESMA sugestão determinística que o servidor montaria, apenas
+  // para pré-preencher o editor. O texto que vale é sempre o que a médica
+  // enviar, e o servidor revalida os códigos de qualquer forma.
+  function suggestedConclusionText() {
+    const catalog = state.catalog;
+    if (!catalog || !state.conclusionCode) return "";
+    const conclusion = catalog.conclusoes.find(
+      (item) => item.codigo === state.conclusionCode
+    );
+    if (!conclusion) return "";
+    const base = conclusion.personalizado
+      ? state.customConclusion.trim() : conclusion.texto;
+    const complement = catalog.complementos_bd.find(
+      (item) => item.codigo === state.bronchodilatorCode
+    );
+    const extra = complement && complement.texto ? complement.texto : "";
+    if (!base) return extra;
+    return extra ? `${base}\n${extra}` : base;
+  }
+
+  function applyCatalogText() {
+    const suggestion = suggestedConclusionText();
+    const current = state.finalText.trim();
+    // Só sobrescreve enquanto a médica não tiver escrito a própria redação.
+    if (!current || current === (state.suggestedText || "").trim()) {
+      state.finalText = suggestion;
+    } else if (suggestion && suggestion !== current) {
+      announce(
+        "Conclusão atualizada. O texto que você editou foi preservado — ajuste-o se necessário.",
+        ""
+      );
+    }
+    state.suggestedText = suggestion;
+  }
+
+  function readNativeForm() {
+    const form = document.getElementById("reportNativeForm");
+    if (form) {
+      if (form.elements.final_text) {
+        state.finalText = form.elements.final_text.value;
+      }
+      if (form.elements.observations) {
+        state.observations = form.elements.observations.value;
+      }
+      if (form.elements.conclusion_custom_text) {
+        state.customConclusion = form.elements.conclusion_custom_text.value;
+      }
+    }
+  }
+
+  async function previewNativeReport() {
+    readNativeForm();
+    if (!state.conclusionCode) {
+      announce("Selecione uma conclusão antes de gerar a prévia.", "erro");
+      return;
+    }
+    const payload = {
+      conclusion_code: state.conclusionCode,
+      conclusion_custom_text: state.conclusionCode === "PERSONALIZADO"
+        ? state.customConclusion : null,
+      bronchodilator_code: state.bronchodilatorCode || null,
+      // Texto vazio deixa o servidor montar a redação a partir do catálogo.
+      final_text: state.finalText.trim() ? state.finalText : null,
+      observations: state.observations.trim() ? state.observations : null,
+    };
+    state.busy = true;
+    state.confirmRelease = false;
+    announce("Gerando a prévia exata do laudo…", "");
+    render();
+    try {
+      const result = await client().api(
+        `/laudos/${encodeURIComponent(state.selectedDocumentId)}/laudo/previa`,
+        { method: "POST", body: JSON.stringify(payload) }
+      );
+      state.finalText = result.final_text || "";
+      state.previewVersionId = result.preview_version_id || "";
+      state.previewTextSha256 = result.final_text_sha256 || "";
+      announce("Prévia gerada. Confira o documento antes de assinar.", "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+      render();
+    } finally {
+      state.busy = false;
+    }
+  }
+
+  async function releaseReport() {
+    if (!state.previewVersionId || !state.previewTextSha256) {
+      announce("Gere a prévia do laudo antes de assinar e liberar.", "erro");
+      return;
+    }
+    state.busy = true;
+    announce("Assinando e liberando o laudo…", "");
+    render();
+    try {
+      const result = await client().api(
+        `/laudos/${encodeURIComponent(state.selectedDocumentId)}/assinar-e-liberar`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            confirmacao: RELEASE_CONFIRMATION,
+            expected_version_id: state.previewVersionId,
+            expected_text_sha256: state.previewTextSha256,
+          }),
+        }
+      );
+      state.confirmRelease = false;
+      state.previewVersionId = "";
+      state.previewTextSha256 = "";
+      announce(
+        `Laudo liberado. Código de verificação ${result.validation_code}.`,
+        "ok"
+      );
+      await loadAuthenticatedData();
+    } catch (error) {
+      state.confirmRelease = false;
+      announce(readableError(error), "erro");
+      render();
+    } finally {
+      state.busy = false;
+    }
+  }
+
+  async function publishAddendum(form) {
+    state.addendumText = form.elements.body_text.value;
+    state.busy = true;
+    announce("Publicando adendo sem alterar a versão anterior…", "");
+    render();
+    try {
+      await client().api(
+        `/laudos/${encodeURIComponent(state.selectedDocumentId)}/adendo`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            body_text: state.addendumText,
+            confirmacao: ADDENDUM_CONFIRMATION,
+          }),
+        }
+      );
+      state.addendumText = "";
+      announce("Adendo publicado; a versão liberada anterior foi preservada.", "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+      render();
+    } finally {
+      state.busy = false;
+    }
+  }
+
+  async function downloadVersion(versionId) {
+    try {
+      const blob = await client().apiBlob(
+        reportContentPath(state.selectedDocumentId, versionId, "download")
+      );
+      // URL de objeto temporária, revogada logo após o disparo: nenhum
+      // documento fica acessível por endereço persistente.
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (error) {
+      announce(readableError(error), "erro");
     }
   }
 
@@ -1078,6 +1537,52 @@
       prepareSignature();
       return;
     }
+    // ---------------------------------------------------------- M25.2
+    if (button.matches("[data-report-conclusion]")) {
+      readNativeForm();
+      const code = button.getAttribute("data-report-conclusion");
+      state.conclusionCode = state.conclusionCode === code ? "" : code;
+      // Trocar a conclusão invalida a prévia já conferida.
+      state.previewVersionId = "";
+      state.previewTextSha256 = "";
+      state.confirmRelease = false;
+      applyCatalogText();
+      render();
+      return;
+    }
+    if (button.matches("[data-report-bd]")) {
+      readNativeForm();
+      const code = button.getAttribute("data-report-bd");
+      state.bronchodilatorCode =
+        state.bronchodilatorCode === code ? "" : code;
+      state.previewVersionId = "";
+      state.previewTextSha256 = "";
+      state.confirmRelease = false;
+      applyCatalogText();
+      render();
+      return;
+    }
+    if (button.matches("[data-report-release-open]")) {
+      readNativeForm();
+      state.confirmRelease = true;
+      render();
+      const heading = document.getElementById("reportReleaseConfirmTitle");
+      if (heading) heading.focus();
+      return;
+    }
+    if (button.matches("[data-report-release-cancel]")) {
+      state.confirmRelease = false;
+      render();
+      return;
+    }
+    if (button.matches("[data-report-release-confirm]")) {
+      releaseReport();
+      return;
+    }
+    if (button.matches("[data-report-download]")) {
+      downloadVersion(button.getAttribute("data-report-download"));
+      return;
+    }
     if (button.matches("[data-report-logout]")) {
       releasePdfUrls();
       client().logout();
@@ -1116,6 +1621,30 @@
   function handleInput(event) {
     if (event.target.id === "reportInterpretation") {
       state.interpretation = event.target.value;
+      return;
+    }
+    // M25.2 — editar qualquer campo do laudo invalida a prévia conferida:
+    // a liberação exige o hash exato do conteúdo que foi visto.
+    if (event.target.id === "reportFinalText") {
+      state.finalText = event.target.value;
+      state.previewVersionId = "";
+      state.previewTextSha256 = "";
+      return;
+    }
+    if (event.target.id === "reportObservations") {
+      state.observations = event.target.value;
+      state.previewVersionId = "";
+      state.previewTextSha256 = "";
+      return;
+    }
+    if (event.target.id === "reportCustomConclusion") {
+      state.customConclusion = event.target.value;
+      state.previewVersionId = "";
+      state.previewTextSha256 = "";
+      return;
+    }
+    if (event.target.id === "reportAddendumText") {
+      state.addendumText = event.target.value;
     }
   }
 
@@ -1127,6 +1656,10 @@
       uploadOriginal(event.target);
     } else if (event.target.id === "reportComposeForm") {
       compose(event.target);
+    } else if (event.target.id === "reportNativeForm") {
+      previewNativeReport();
+    } else if (event.target.id === "reportAddendumForm") {
+      publishAddendum(event.target);
     } else if (event.target.id === "reportReassignForm") {
       reassign(event.target);
     } else if (event.target.id === "reportPhysicianAdminForm") {

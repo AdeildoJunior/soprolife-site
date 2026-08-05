@@ -35,10 +35,13 @@ from ..config import get_settings
 from ..db import get_db
 from ..errors import ReportDomainError
 from ..ids import allocate_public_code
+from ..ids import new_uuid
 from ..models import (
     PartnerUnit,
     Person,
     PhysicianProfile,
+    PhysicianSignatureAsset,
+    ReportAddendum,
     ReportAssignment,
     ReportAssignmentEvent,
     ReportDocument,
@@ -52,10 +55,13 @@ from ..models import (
 from ..normalize import contains_clinical_info, contains_pii_like
 from ..schemas import (
     PhysicianProfileAdminUpdate,
+    ReportAddendumCreate,
     ReportCorrectiveCreate,
     ReportDocumentCompose,
+    ReportNativeDraft,
     ReportPhysicianRecovery,
     ReportReassignment,
+    ReportReleaseRequest,
     ReportTemplateCreate,
     ReportTemplateUpdate,
 )
@@ -71,6 +77,7 @@ from ..security import (
 )
 from ..serializers import (
     d,
+    iso,
     ser_physician_profile,
     ser_report_assignment,
     ser_report_document,
@@ -87,6 +94,32 @@ from ..services.report_catalog import (
     TEST_FOOTER_CODE,
     ensure_m24c_catalog,
 )
+from ..services.native_report_builder import (
+    NativeReportBuildError,
+    active_signature_asset,
+    build_native_content,
+    generate_validation_code,
+    load_addenda,
+    resolve_document_context,
+    resolve_signature_asset,
+    text_sha256,
+    to_display_timezone,
+    validation_url,
+)
+from ..services.report_conclusions import (
+    ConclusionCatalogError,
+    catalog_payload,
+    compose_default_conclusion_text,
+    normalize_final_text,
+    normalize_observations,
+    resolve_bronchodilator_text,
+    resolve_conclusion_text,
+)
+from ..services.report_native_pdf import (
+    AddendumBlock,
+    NativeReportPdfError,
+    build_native_report_pdf,
+)
 from ..services.report_pdf import PdfCompositionError, compose_report_pdf
 from ..services.report_publication import (
     ReportPublicationTransaction,
@@ -100,9 +133,17 @@ from ..services.report_storage import (
     read_and_validate_stored_pdf,
     version_storage_path,
 )
+from ..services.signature_asset import (
+    SignatureAssetError,
+    signature_asset_storage_path,
+    validate_signature_png,
+)
 from ..services.signature_provider import (
+    PROVIDER_INSTITUTIONAL_RELEASE,
+    SIGNATURE_STATUS_LIBERADA_INSTITUCIONAL,
     SIGNATURE_STATUS_PENDENTE,
     get_signature_provider,
+    institutional_release_evidence,
 )
 
 KIND_ORIGINAL = "original"
@@ -110,11 +151,17 @@ KIND_RASCUNHO = "rascunho"
 KIND_ASSINATURA_PENDENTE = "assinatura_pendente"
 KIND_ASSINADO = "assinado"
 KIND_FINALIZADO_LEGADO = "finalizado"
+# M25.2 — espécies do laudo próprio da SoproLife (documento separado do
+# PDF técnico da MIR, que permanece na versão `original`).
+KIND_LAUDO_PREVIA = "laudo_previa"
+KIND_LAUDO_LIBERADO = "laudo_liberado"
+KIND_LAUDO_ADENDO = "laudo_adendo"
 
 STATUS_ATRIBUIDO = "atribuido"
 STATUS_EM_ELABORACAO = "em_elaboracao"
 STATUS_ASSINATURA_PENDENTE = "assinatura_pendente"
 STATUS_ASSINADO = "assinado"
+STATUS_LAUDO_LIBERADO = "liberado"
 
 ORIGIN_TYPES = frozenset(
     {
@@ -140,6 +187,7 @@ CLINICAL_STATUSES = frozenset(
         STATUS_EM_ELABORACAO,
         STATUS_ASSINATURA_PENDENTE,
         STATUS_ASSINADO,
+        STATUS_LAUDO_LIBERADO,
     }
 )
 _UPLOAD_CHUNK_BYTES = 64 * 1024
@@ -359,6 +407,25 @@ def _store_new_version(
     issued_at_snapshot: datetime | None = None,
     page_number: int | None = None,
     placement: str | None = None,
+    # ------------------------------------------------------------ M25.2
+    # Evidência do laudo NATIVO. Só as versões `laudo_*` preenchem estes
+    # campos; a versão `original` (PDF técnico da MIR) permanece sem eles.
+    conclusion_code_snapshot: str | None = None,
+    conclusion_text_snapshot: str | None = None,
+    bronchodilator_code_snapshot: str | None = None,
+    bronchodilator_text_snapshot: str | None = None,
+    observations_snapshot: str | None = None,
+    exam_has_post_bd_snapshot: bool | None = None,
+    location_name_snapshot: str | None = None,
+    location_address_snapshot: str | None = None,
+    location_contact_snapshot: str | None = None,
+    location_partner_unit_id_snapshot: str | None = None,
+    location_source_snapshot: str | None = None,
+    validation_code_snapshot: str | None = None,
+    released_at_snapshot: datetime | None = None,
+    signature_asset_id_snapshot: str | None = None,
+    signature_asset_sha256_snapshot: str | None = None,
+    addendum_sequence: int | None = None,
 ) -> ReportDocumentVersion:
     """Publica bytes novos e persiste somente snapshots coerentes."""
 
@@ -497,6 +564,22 @@ def _store_new_version(
         issued_at_snapshot=issued_at_snapshot,
         page_number=page_number,
         placement=placement,
+        conclusion_code_snapshot=conclusion_code_snapshot,
+        conclusion_text_snapshot=conclusion_text_snapshot,
+        bronchodilator_code_snapshot=bronchodilator_code_snapshot,
+        bronchodilator_text_snapshot=bronchodilator_text_snapshot,
+        observations_snapshot=observations_snapshot,
+        exam_has_post_bd_snapshot=exam_has_post_bd_snapshot,
+        location_name_snapshot=location_name_snapshot,
+        location_address_snapshot=location_address_snapshot,
+        location_contact_snapshot=location_contact_snapshot,
+        location_partner_unit_id_snapshot=location_partner_unit_id_snapshot,
+        location_source_snapshot=location_source_snapshot,
+        validation_code_snapshot=validation_code_snapshot,
+        released_at_snapshot=released_at_snapshot,
+        signature_asset_id_snapshot=signature_asset_id_snapshot,
+        signature_asset_sha256_snapshot=signature_asset_sha256_snapshot,
+        addendum_sequence=addendum_sequence,
         created_by_user_id=created_by_user_id,
     )
     db.add(version)
@@ -908,6 +991,14 @@ def _technical_report_row(
         "status": document.status,
         "signature_status": document.signature_status,
         "releasable": False,
+        # M25.2 — sinalização de estado para a fila médica. Nenhum dado
+        # clínico ou de paciente: só carimbos institucionais.
+        "released_at": document.released_at.isoformat()
+        if document.released_at
+        else None,
+        "locked": document.status == STATUS_LAUDO_LIBERADO,
+        "is_corrective": document.corrects_document_id is not None,
+        "validation_code": document.validation_code,
     }
     if include_assignment_ids:
         data.update(
@@ -1783,11 +1874,17 @@ def download_report_version(
             KIND_ASSINATURA_PENDENTE,
             KIND_ASSINADO,
             KIND_FINALIZADO_LEGADO,
+            KIND_LAUDO_PREVIA,
+            KIND_LAUDO_LIBERADO,
+            KIND_LAUDO_ADENDO,
         }
         else "documento"
     )
+    # M25.2 — o nome deixa claro QUAL dos dois documentos foi baixado: o
+    # exame técnico da MIR ou o laudo médico da SoproLife.
+    prefix = "exame-tecnico-mir" if version.kind == KIND_ORIGINAL else "laudo"
     safe_name = (
-        f"laudo-{exam_code}-v{version.version_number}-{safe_kind}.pdf"
+        f"{prefix}-{exam_code}-v{version.version_number}-{safe_kind}.pdf"
     )
     disposition = "attachment" if modo == "download" else "inline"
     audit(
@@ -2215,13 +2312,17 @@ def open_corrective_document(
     profile, _assignment = _require_assigned_physician(
         db, physician_user, predecessor, lock=True
     )
-    if predecessor.status != STATUS_ASSINADO:
+    # Correção posterior é permitida a partir de um documento realmente
+    # fechado: assinado com evidência QUALIFICADA (caminho futuro) ou
+    # LIBERADO institucionalmente (caminho M25.2). Nos dois casos o
+    # predecessor é preservado integralmente — nunca reescrito nem apagado.
+    if predecessor.status not in {STATUS_ASSINADO, STATUS_LAUDO_LIBERADO}:
         raise ReportDomainError(
             409,
-            "laudo_nao_assinado",
-            "Somente um documento genuinamente assinado aceita correção.",
+            "laudo_nao_fechado",
+            "Somente um laudo assinado ou liberado aceita correção.",
         )
-    signed_version = db.get(
+    closed_version = db.get(
         ReportDocumentVersion, predecessor.current_version_id
     )
     signature = db.execute(
@@ -2230,18 +2331,33 @@ def open_corrective_document(
             == predecessor.current_version_id
         )
     ).scalar_one_or_none()
-    if (
-        signed_version is None
-        or signed_version.kind != KIND_ASSINADO
-        or signature is None
-        or not _qualified_signature_evidence(
-            signature, signed_version, profile
-        )
+    if predecessor.status == STATUS_ASSINADO:
+        if (
+            closed_version is None
+            or closed_version.kind != KIND_ASSINADO
+            or signature is None
+            or not _qualified_signature_evidence(
+                signature, closed_version, profile
+            )
+        ):
+            raise ReportDomainError(
+                409,
+                "assinatura_qualificada_nao_comprovada",
+                "A assinatura qualificada não possui evidência verificável.",
+            )
+    elif (
+        closed_version is None
+        or closed_version.kind
+        not in {KIND_LAUDO_LIBERADO, KIND_LAUDO_ADENDO}
+        or not predecessor.released_at
+        or predecessor.released_physician_profile_id != profile.id
+        or predecessor.signature_status
+        != SIGNATURE_STATUS_LIBERADA_INSTITUCIONAL
     ):
         raise ReportDomainError(
             409,
-            "assinatura_qualificada_nao_comprovada",
-            "A assinatura qualificada não possui evidência verificável.",
+            "liberacao_institucional_nao_comprovada",
+            "A liberação institucional não possui evidência verificável.",
         )
     existing = db.execute(
         select(ReportDocument).where(
@@ -2369,3 +2485,1016 @@ def get_report_signature_status(
     # Sem adapter autorizado, nunca há liberação nesta versão.
     result["releasable"] = False
     return result
+
+
+# ============================================================== M25.2
+#
+# Laudo médico PRÓPRIO da SoproLife.
+#
+# Dois documentos SEPARADOS convivem no mesmo caso de laudo:
+#
+#   - versão `original`  -> PDF técnico da MIR. Intacto, jamais recomposto,
+#     jamais assinado por cima, sempre baixável por conta própria;
+#   - versões `laudo_*`  -> laudo médico gerado nativamente pelo Centro de
+#     Comando (app/services/report_native_pdf.py).
+#
+# A assinatura manuscrita só entra depois da ação consciente "Assinar e
+# liberar laudo", executada pela médica atribuída na PRÓPRIA sessão. O
+# caminho de assinatura QUALIFICADA (PAdES/ICP-Brasil) permanece intocado e
+# continua exigindo um provedor real: nada aqui o simula.
+
+
+def _exam_has_post_bd(exam: SpirometryExam) -> bool:
+    """Fase pós-BD é um fato do exame, nunca inferido do texto clínico."""
+
+    return exam.broncodilatador is True
+
+
+def _native_version_kinds() -> frozenset[str]:
+    return frozenset(
+        {KIND_LAUDO_PREVIA, KIND_LAUDO_LIBERADO, KIND_LAUDO_ADENDO}
+    )
+
+
+def _latest_native_version(
+    db: Session, document_id: str
+) -> ReportDocumentVersion | None:
+    return db.execute(
+        select(ReportDocumentVersion)
+        .where(
+            ReportDocumentVersion.report_document_id == document_id,
+            ReportDocumentVersion.kind.in_(_native_version_kinds()),
+        )
+        .order_by(ReportDocumentVersion.version_number.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+
+def _conclusion_snapshot(
+    *,
+    conclusion_code: str,
+    conclusion_text: str,
+    bronchodilator_code: str | None,
+    bronchodilator_text: str,
+    observations: str | None,
+    exam: SpirometryExam,
+    location,
+    validation_code: str | None = None,
+    released_at: datetime | None = None,
+    signature_asset_id: str | None = None,
+    signature_asset_sha256: str | None = None,
+    addendum_sequence: int | None = None,
+) -> dict:
+    """Evidência clínica congelada de uma versão de laudo nativo."""
+
+    snapshot = {
+        "conclusion_code_snapshot": conclusion_code,
+        "conclusion_text_snapshot": conclusion_text,
+        "bronchodilator_code_snapshot": bronchodilator_code,
+        "bronchodilator_text_snapshot": (
+            bronchodilator_text if bronchodilator_code else None
+        ),
+        "observations_snapshot": observations,
+        "exam_has_post_bd_snapshot": exam.broncodilatador,
+        "validation_code_snapshot": validation_code,
+        "released_at_snapshot": released_at,
+        "signature_asset_id_snapshot": signature_asset_id,
+        "signature_asset_sha256_snapshot": signature_asset_sha256,
+        "addendum_sequence": addendum_sequence,
+    }
+    snapshot.update(location.as_snapshot())
+    return snapshot
+
+
+def _publish_native_version(
+    db: Session,
+    *,
+    publication: ReportPublicationTransaction,
+    document: ReportDocument,
+    exam: SpirometryExam,
+    profile: PhysicianProfile,
+    kind: str,
+    data: bytes,
+    created_by_user_id: str,
+    final_text: str,
+    extra: dict,
+) -> ReportDocumentVersion:
+    """Grava uma versão de laudo nativo com toda a evidência imutável.
+
+    Reaproveita `_store_new_version`, que revalida os bytes, publica de
+    forma atômica, relê o arquivo e confere hash/tamanho/páginas.
+    """
+
+    return _store_new_version(
+        db,
+        publication=publication,
+        document=document,
+        exam_id=document.spirometry_exam_id,
+        kind=kind,
+        data=data,
+        created_by_user_id=created_by_user_id,
+        interpretation_text_snapshot=final_text,
+        **_physician_snapshot(profile, document),
+        **extra,
+    )
+
+
+def _native_pdf_bytes(content) -> bytes:
+    try:
+        return build_native_report_pdf(content)
+    except NativeReportPdfError as exc:
+        raise ReportDomainError(422, exc.codigo, exc.mensagem) from None
+    except (OSError, ValueError, MemoryError):
+        # Nunca vaza traceback, caminho ou conteúdo clínico na resposta.
+        raise ReportDomainError(
+            500,
+            "falha_geracao_laudo",
+            "Não foi possível gerar o PDF do laudo.",
+        ) from None
+
+
+def _pilot_warning() -> str | None:
+    return PILOT_WARNING if get_settings().reports_mode == "pilot" else None
+
+
+def _document_context(db: Session, document: ReportDocument):
+    try:
+        return resolve_document_context(db, document)
+    except NativeReportBuildError as exc:
+        raise ReportDomainError(409, exc.codigo, exc.mensagem) from None
+
+
+def _resolve_signature(db: Session, profile_id: str):
+    settings = get_settings()
+    try:
+        return resolve_signature_asset(
+            db, profile_id, storage_root=_storage_root(settings)
+        )
+    except NativeReportBuildError as exc:
+        raise ReportDomainError(409, exc.codigo, exc.mensagem) from None
+
+
+@router.get("/{document_id}/catalogo-conclusoes")
+def get_conclusion_catalog(
+    document_id: str,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Catálogo fechado de conclusões e complementos pós-BD do exame.
+
+    Complementos incompatíveis simplesmente não são oferecidos quando o
+    exame não tem fase pós-broncodilatador.
+    """
+
+    if not user_has_explicit_role(physician_user, ROLE_MEDICO):
+        raise ReportDomainError(
+            403,
+            "papel_medico_explicito_necessario",
+            "O catálogo clínico exige o papel médico explícito.",
+        )
+    document = _get_document_or_404(db, document_id)
+    _require_assigned_physician(db, physician_user, document)
+    exam = db.get(SpirometryExam, document.spirometry_exam_id)
+    if exam is None:
+        raise ReportDomainError(
+            409, "exame_nao_encontrado", "Exame do laudo não encontrado."
+        )
+    return catalog_payload(has_post_bd=_exam_has_post_bd(exam))
+
+
+@router.post("/{document_id}/laudo/previa")
+def compose_native_report_preview(
+    document_id: str,
+    payload: ReportNativeDraft,
+    request: Request,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Gera a prévia EXATA do laudo que será assinado.
+
+    A prévia usa o mesmo gerador do documento final; só muda a tarja de
+    estado, a ausência de código de validação e a ausência da assinatura
+    manuscrita.
+    """
+
+    document = _lock_document_or_404(db, document_id)
+    profile, _assignment = _require_assigned_physician(
+        db, physician_user, document, lock=True
+    )
+    if document.status not in {STATUS_ATRIBUIDO, STATUS_EM_ELABORACAO}:
+        raise ReportDomainError(
+            409,
+            "laudo_bloqueado_para_edicao",
+            "Este laudo não aceita mais edição de conteúdo clínico.",
+        )
+    exam, person, location = _document_context(db, document)
+    has_post_bd = _exam_has_post_bd(exam)
+
+    try:
+        conclusion_text = resolve_conclusion_text(
+            conclusion_code=payload.conclusion_code,
+            custom_text=payload.conclusion_custom_text,
+        )
+        bronchodilator_text = resolve_bronchodilator_text(
+            bronchodilator_code=payload.bronchodilator_code,
+            has_post_bd=has_post_bd,
+        )
+        if payload.final_text is None:
+            final_text = compose_default_conclusion_text(
+                conclusion_code=payload.conclusion_code,
+                custom_text=payload.conclusion_custom_text,
+                bronchodilator_code=payload.bronchodilator_code,
+                has_post_bd=has_post_bd,
+            )
+        else:
+            final_text = normalize_final_text(payload.final_text)
+        observations = normalize_observations(payload.observations)
+    except ConclusionCatalogError as exc:
+        raise ReportDomainError(422, exc.codigo, exc.mensagem) from None
+
+    now = datetime.now(timezone.utc)
+    version_number = _next_version_number(db, document.id)
+    content = build_native_content(
+        db,
+        document=document,
+        exam=exam,
+        person=person,
+        profile=profile,
+        location=location,
+        version_number=version_number,
+        conclusion_text=final_text,
+        observations=observations,
+        issued_at=now,
+        released=False,
+        addenda=load_addenda(db, document.id),
+        pilot_warning=_pilot_warning(),
+    )
+    data = _native_pdf_bytes(content)
+
+    with report_publication_transaction(db) as publication:
+        version = _publish_native_version(
+            db,
+            publication=publication,
+            document=document,
+            exam=exam,
+            profile=profile,
+            kind=KIND_LAUDO_PREVIA,
+            data=data,
+            created_by_user_id=physician_user.id,
+            final_text=final_text,
+            extra=_conclusion_snapshot(
+                conclusion_code=payload.conclusion_code,
+                conclusion_text=conclusion_text,
+                bronchodilator_code=payload.bronchodilator_code,
+                bronchodilator_text=bronchodilator_text,
+                observations=observations,
+                exam=exam,
+                location=location,
+            ),
+        )
+        if document.status == STATUS_ATRIBUIDO:
+            document.status = STATUS_EM_ELABORACAO
+            document.clinical_started_at = now
+        document.current_version_id = version.id
+        audit(
+            db,
+            "laudo_nativo_previa_gerada",
+            entidade="report_documents",
+            entidade_id=document.id,
+            user_id=physician_user.id,
+            request_id=_request_id(request),
+            # Somente identificadores técnicos e códigos de catálogo:
+            # nenhum texto clínico, paciente, caminho ou byte de PDF.
+            detalhes={
+                "status": document.status,
+                "report_version_id": version.id,
+                "version_number": version.version_number,
+                "conclusion_code": payload.conclusion_code,
+                "bronchodilator_code": payload.bronchodilator_code,
+                "location_source": location.source,
+                "document_sha256": version.sha256,
+            },
+        )
+        publication.commit()
+
+    return {
+        **ser_report_document(
+            document, versions=[version], include_clinical=True
+        ),
+        "preview_version_id": version.id,
+        "final_text": final_text,
+        "final_text_sha256": version.interpretation_text_sha256,
+        "location": location.as_payload(),
+        "exam_has_post_bd": has_post_bd,
+    }
+
+
+@router.post("/{document_id}/assinar-e-liberar")
+def sign_and_release_report(
+    document_id: str,
+    payload: ReportReleaseRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Ação consciente da médica atribuída: assina e libera o laudo.
+
+    Proteções contra assinatura automática ou às cegas:
+
+    - papel médico explícito, perfil ativo/verificado e atribuição ativa,
+      tudo na sessão individual da própria médica;
+    - confirmação textual obrigatória no corpo do pedido;
+    - `expected_version_id` precisa ser a prévia atual;
+    - `expected_text_sha256` precisa bater com o texto daquela prévia, de
+      modo que conteúdo trocado por concorrência nunca seja assinado.
+    """
+
+    document = _lock_document_or_404(db, document_id)
+    profile, _assignment = _require_assigned_physician(
+        db, physician_user, document, lock=True
+    )
+    if document.status == STATUS_LAUDO_LIBERADO:
+        raise ReportDomainError(
+            409,
+            "laudo_ja_liberado",
+            "Este laudo já foi liberado; use adendo ou versão corretiva.",
+        )
+    if document.status != STATUS_EM_ELABORACAO:
+        raise ReportDomainError(
+            409,
+            "laudo_fora_de_elaboracao",
+            "Gere a prévia do laudo antes de assinar e liberar.",
+        )
+    draft = db.get(ReportDocumentVersion, document.current_version_id)
+    if (
+        draft is None
+        or draft.report_document_id != document.id
+        or draft.kind != KIND_LAUDO_PREVIA
+    ):
+        raise ReportDomainError(
+            409,
+            "previa_laudo_ausente",
+            "Gere a prévia do laudo antes de assinar e liberar.",
+        )
+    if payload.expected_version_id != draft.id:
+        raise ReportDomainError(
+            409,
+            "previa_desatualizada",
+            "A prévia mudou desde a conferência; revise antes de assinar.",
+        )
+    if payload.expected_text_sha256 != (draft.interpretation_text_sha256 or ""):
+        raise ReportDomainError(
+            409,
+            "conteudo_divergente_da_previa",
+            "O texto conferido não corresponde ao texto atual da prévia.",
+        )
+    if not draft.conclusion_code_snapshot or not draft.interpretation_text_snapshot:
+        raise ReportDomainError(
+            409,
+            "evidencia_previa_incompleta",
+            "A prévia não possui evidência clínica completa.",
+        )
+
+    exam, person, location = _document_context(db, document)
+    resolved_signature = _resolve_signature(db, profile.id)
+    now = datetime.now(timezone.utc)
+    version_number = _next_version_number(db, document.id)
+    validation_code = generate_validation_code()
+
+    content = build_native_content(
+        db,
+        document=document,
+        exam=exam,
+        person=person,
+        profile=profile,
+        location=location,
+        version_number=version_number,
+        conclusion_text=draft.interpretation_text_snapshot,
+        observations=draft.observations_snapshot,
+        issued_at=now,
+        released=True,
+        released_at=now,
+        validation_code=validation_code,
+        signature_image=(
+            resolved_signature.image if resolved_signature else None
+        ),
+        addenda=load_addenda(db, document.id),
+        pilot_warning=_pilot_warning(),
+    )
+    data = _native_pdf_bytes(content)
+
+    try:
+        with report_publication_transaction(db) as publication:
+            released = _publish_native_version(
+                db,
+                publication=publication,
+                document=document,
+                exam=exam,
+                profile=profile,
+                kind=KIND_LAUDO_LIBERADO,
+                data=data,
+                created_by_user_id=physician_user.id,
+                final_text=draft.interpretation_text_snapshot,
+                extra=_conclusion_snapshot(
+                    conclusion_code=draft.conclusion_code_snapshot,
+                    conclusion_text=draft.conclusion_text_snapshot,
+                    bronchodilator_code=draft.bronchodilator_code_snapshot,
+                    bronchodilator_text=(
+                        draft.bronchodilator_text_snapshot or ""
+                    ),
+                    observations=draft.observations_snapshot,
+                    exam=exam,
+                    location=location,
+                    validation_code=validation_code,
+                    released_at=now,
+                    signature_asset_id=(
+                        resolved_signature.asset.id
+                        if resolved_signature
+                        else None
+                    ),
+                    signature_asset_sha256=(
+                        resolved_signature.asset.sha256
+                        if resolved_signature
+                        else None
+                    ),
+                ),
+            )
+            document.status = STATUS_LAUDO_LIBERADO
+            document.signature_status = SIGNATURE_STATUS_LIBERADA_INSTITUCIONAL
+            document.ready_for_signature_at = now
+            document.released_at = now
+            document.released_by_user_id = physician_user.id
+            document.released_physician_profile_id = profile.id
+            document.validation_code = validation_code
+            document.current_version_id = released.id
+            signature = ReportSignature(
+                report_document_version_id=released.id,
+                provider=PROVIDER_INSTITUTIONAL_RELEASE,
+                status=SIGNATURE_STATUS_LIBERADA_INSTITUCIONAL,
+                requested_by_user_id=physician_user.id,
+                requested_at=now,
+                completed_at=now,
+                external_reference=validation_code,
+                verification_metadata=institutional_release_evidence(
+                    physician_profile_id=profile.id,
+                    document_sha256=released.sha256,
+                    signed_text_sha256=(
+                        released.interpretation_text_sha256 or ""
+                    ),
+                    signature_asset_sha256=(
+                        resolved_signature.asset.sha256
+                        if resolved_signature
+                        else None
+                    ),
+                ),
+            )
+            db.add(signature)
+            audit(
+                db,
+                "laudo_assinado_e_liberado",
+                entidade="report_documents",
+                entidade_id=document.id,
+                user_id=physician_user.id,
+                request_id=_request_id(request),
+                detalhes={
+                    "status": document.status,
+                    "signature_status": document.signature_status,
+                    "provider": PROVIDER_INSTITUTIONAL_RELEASE,
+                    "physician_profile_id": profile.id,
+                    "report_version_id": released.id,
+                    "version_number": released.version_number,
+                    "conclusion_code": draft.conclusion_code_snapshot,
+                    "bronchodilator_code": draft.bronchodilator_code_snapshot,
+                    # Hash do PDF final e do texto efetivamente assinado.
+                    "document_sha256": released.sha256,
+                    "signed_text_sha256": (
+                        released.interpretation_text_sha256
+                    ),
+                    "validation_code": validation_code,
+                    "handwritten_signature_applied": bool(resolved_signature),
+                    "qualified_signature": False,
+                },
+            )
+            publication.commit()
+    except IntegrityError:
+        raise ReportDomainError(
+            409,
+            "liberacao_concorrente",
+            "Outra liberação ocorreu ao mesmo tempo; recarregue o laudo.",
+        ) from None
+
+    return {
+        **ser_report_document(
+            document, versions=[released], include_clinical=True
+        ),
+        "released_version_id": released.id,
+        "validation_code": validation_code,
+        "validation_url": validation_url(validation_code),
+        "document_sha256": released.sha256,
+        "handwritten_signature_applied": bool(resolved_signature),
+        "qualified_signature": False,
+    }
+
+
+@router.post("/{document_id}/adendo", status_code=201)
+def add_report_addendum(
+    document_id: str,
+    payload: ReportAddendumCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Adendo append-only sobre laudo liberado.
+
+    A versão liberada anterior NUNCA é apagada, sobrescrita ou alterada:
+    o adendo produz uma versão NOVA que contém o laudo mais os adendos
+    acumulados, e o histórico completo permanece baixável.
+    """
+
+    document = _lock_document_or_404(db, document_id)
+    profile, _assignment = _require_assigned_physician(
+        db, physician_user, document, lock=True
+    )
+    if document.status != STATUS_LAUDO_LIBERADO:
+        raise ReportDomainError(
+            409,
+            "laudo_nao_liberado",
+            "Somente um laudo liberado aceita adendo.",
+        )
+    try:
+        body_text = normalize_final_text(payload.body_text)
+    except ConclusionCatalogError as exc:
+        raise ReportDomainError(422, exc.codigo, exc.mensagem) from None
+
+    released_version = db.get(
+        ReportDocumentVersion, document.current_version_id
+    )
+    if released_version is None or released_version.kind not in {
+        KIND_LAUDO_LIBERADO,
+        KIND_LAUDO_ADENDO,
+    }:
+        raise ReportDomainError(
+            409,
+            "versao_liberada_ausente",
+            "A versão liberada do laudo não está disponível.",
+        )
+
+    exam, person, location = _document_context(db, document)
+    resolved_signature = _resolve_signature(db, profile.id)
+    now = datetime.now(timezone.utc)
+    next_sequence = int(
+        db.execute(
+            select(func.max(ReportAddendum.sequence)).where(
+                ReportAddendum.report_document_id == document.id
+            )
+        ).scalar_one()
+        or 0
+    ) + 1
+    version_number = _next_version_number(db, document.id)
+
+    addenda = load_addenda(db, document.id) + (
+        AddendumBlock(
+            sequence=next_sequence,
+            body_text=body_text,
+            created_at=to_display_timezone(now),
+        ),
+    )
+    content = build_native_content(
+        db,
+        document=document,
+        exam=exam,
+        person=person,
+        profile=profile,
+        location=location,
+        version_number=version_number,
+        conclusion_text=released_version.interpretation_text_snapshot or "",
+        observations=released_version.observations_snapshot,
+        issued_at=now,
+        released=True,
+        released_at=document.released_at,
+        validation_code=document.validation_code,
+        signature_image=(
+            resolved_signature.image if resolved_signature else None
+        ),
+        addenda=addenda,
+        pilot_warning=_pilot_warning(),
+    )
+    data = _native_pdf_bytes(content)
+
+    try:
+        with report_publication_transaction(db) as publication:
+            version = _publish_native_version(
+                db,
+                publication=publication,
+                document=document,
+                exam=exam,
+                profile=profile,
+                kind=KIND_LAUDO_ADENDO,
+                data=data,
+                created_by_user_id=physician_user.id,
+                final_text=(
+                    released_version.interpretation_text_snapshot or ""
+                ),
+                extra=_conclusion_snapshot(
+                    conclusion_code=released_version.conclusion_code_snapshot,
+                    conclusion_text=released_version.conclusion_text_snapshot,
+                    bronchodilator_code=(
+                        released_version.bronchodilator_code_snapshot
+                    ),
+                    bronchodilator_text=(
+                        released_version.bronchodilator_text_snapshot or ""
+                    ),
+                    observations=released_version.observations_snapshot,
+                    exam=exam,
+                    location=location,
+                    validation_code=document.validation_code,
+                    released_at=document.released_at,
+                    signature_asset_id=(
+                        resolved_signature.asset.id
+                        if resolved_signature
+                        else None
+                    ),
+                    signature_asset_sha256=(
+                        resolved_signature.asset.sha256
+                        if resolved_signature
+                        else None
+                    ),
+                    addendum_sequence=next_sequence,
+                ),
+            )
+            addendum = ReportAddendum(
+                report_document_id=document.id,
+                sequence=next_sequence,
+                body_text=body_text,
+                body_sha256=text_sha256(body_text),
+                physician_profile_id=profile.id,
+                created_by_user_id=physician_user.id,
+                report_document_version_id=version.id,
+                created_at=now,
+            )
+            db.add(addendum)
+            # O documento permanece LIBERADO; muda apenas qual versão é a
+            # corrente. Todas as anteriores continuam preservadas.
+            document.current_version_id = version.id
+            audit(
+                db,
+                "laudo_adendo_publicado",
+                entidade="report_documents",
+                entidade_id=document.id,
+                user_id=physician_user.id,
+                request_id=_request_id(request),
+                detalhes={
+                    "status": document.status,
+                    "physician_profile_id": profile.id,
+                    "report_version_id": version.id,
+                    "version_number": version.version_number,
+                    "addendum_sequence": next_sequence,
+                    "addendum_sha256": addendum.body_sha256,
+                    "document_sha256": version.sha256,
+                    "supersedes_version_id": released_version.id,
+                },
+            )
+            publication.commit()
+    except IntegrityError:
+        raise ReportDomainError(
+            409,
+            "adendo_concorrente",
+            "Outro adendo foi publicado ao mesmo tempo; recarregue o laudo.",
+        ) from None
+
+    return {
+        **ser_report_document(
+            document, versions=[version], include_clinical=True
+        ),
+        "addendum_sequence": next_sequence,
+        "addendum_version_id": version.id,
+    }
+
+
+@router.get("/{document_id}/documentos")
+def list_report_documents_for_delivery(
+    document_id: str,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Os DOIS documentos do caso, para download separado.
+
+    - `tecnico_mir`: PDF original do equipamento, intacto;
+    - `laudo_soprolife`: laudo médico próprio (prévia enquanto não
+      liberado; versão liberada/adendo depois).
+    """
+
+    if not user_has_explicit_role(physician_user, ROLE_MEDICO):
+        raise ReportDomainError(
+            403,
+            "papel_medico_explicito_necessario",
+            "A consulta exige o papel médico explícito.",
+        )
+    document = _get_document_or_404(db, document_id)
+    _require_assigned_physician(db, physician_user, document)
+    original = _version_by_kind(db, document.id, KIND_ORIGINAL)
+    native = _latest_native_version(db, document.id)
+
+    def _entry(version: ReportDocumentVersion | None) -> dict | None:
+        if version is None:
+            return None
+        return {
+            "version_id": version.id,
+            "kind": version.kind,
+            "version_number": version.version_number,
+            "sha256": version.sha256,
+            "size_bytes": version.size_bytes,
+            "page_count": version.page_count,
+            "created_at": iso(version.created_at),
+            "download_path": (
+                f"/laudos/{document.id}/versoes/{version.id}/conteudo"
+            ),
+        }
+
+    return {
+        "document_id": document.id,
+        "report_code": document.public_code,
+        "status": document.status,
+        "locked": document.status == STATUS_LAUDO_LIBERADO,
+        "validation_code": document.validation_code,
+        # Documento 1 — nunca alterado, nunca assinado por cima.
+        "tecnico_mir": _entry(original),
+        # Documento 2 — laudo médico gerado nativamente.
+        "laudo_soprolife": _entry(native),
+        "observacao": (
+            "O PDF técnico da MIR e o laudo médico da SoproLife são "
+            "documentos separados e devem ser baixados separadamente."
+        ),
+    }
+
+
+@router.get("/validacao/{codigo}")
+def validate_released_report(
+    codigo: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Confere um código impresso no laudo.
+
+    Responde SOMENTE com dados institucionais e técnicos: nada de
+    paciente, texto clínico ou conclusão. A rota exige sessão autenticada
+    porque o Centro de Comando não expõe verificação anônima; uma futura
+    verificação pública precisa de decisão de privacidade própria.
+    """
+
+    normalized = (codigo or "").strip().upper()
+    if not re.fullmatch(r"[A-Z0-9]{8,24}", normalized):
+        raise ReportDomainError(
+            422, "codigo_validacao_invalido", "Código de validação inválido."
+        )
+    document = db.execute(
+        select(ReportDocument).where(
+            ReportDocument.validation_code == normalized
+        )
+    ).scalar_one_or_none()
+    if document is None or document.status != STATUS_LAUDO_LIBERADO:
+        # Mesma resposta para código inexistente e não liberado.
+        raise ReportDomainError(
+            404,
+            "laudo_nao_localizado",
+            "Nenhum laudo liberado corresponde a este código.",
+        )
+    version = db.get(ReportDocumentVersion, document.current_version_id)
+    profile = (
+        db.get(PhysicianProfile, document.released_physician_profile_id)
+        if document.released_physician_profile_id
+        else None
+    )
+    return {
+        "validation_code": document.validation_code,
+        "report_code": document.public_code,
+        "status": document.status,
+        "released_at": iso(document.released_at),
+        "version_number": version.version_number if version else None,
+        "document_sha256": version.sha256 if version else None,
+        "physician_name": profile.professional_name if profile else None,
+        "physician_crm": (
+            f"CRM-{profile.crm_state} "
+            f"{profile.crm_display or profile.crm_number}"
+            if profile
+            else None
+        ),
+        "physician_rqe": profile.rqe if profile else None,
+        # Declaração honesta da natureza da liberação.
+        "qualified_signature": False,
+        "signature_kind": PROVIDER_INSTITUTIONAL_RELEASE,
+        "observacao": (
+            "Liberação institucional autenticada. Não constitui, por si "
+            "só, assinatura digital qualificada ICP-Brasil."
+        ),
+    }
+
+
+# ------------------------------- ativo de assinatura manuscrita (admin)
+#
+# A imagem autorizada é cadastrada por ADMIN e nunca por quem opera ou por
+# quem assina. Ela vive apenas na raiz privada de laudos: não entra no Git,
+# não é servida ao navegador, não vira URL, não aparece em log e não é
+# devolvida por nenhuma resposta desta API — só é desenhada dentro do PDF
+# do laudo já liberado.
+
+
+def _ser_signature_asset(asset: PhysicianSignatureAsset) -> dict:
+    """Metadados técnicos apenas — nunca bytes, nunca caminho."""
+
+    return {
+        "id": asset.id,
+        "physician_profile_id": asset.physician_profile_id,
+        "sha256": asset.sha256,
+        "size_bytes": asset.size_bytes,
+        "mime_type": asset.mime_type,
+        "image_width": asset.image_width,
+        "image_height": asset.image_height,
+        "active": asset.active,
+        "created_at": iso(asset.created_at),
+        "revoked_at": iso(asset.revoked_at),
+    }
+
+
+@router.get("/admin/medicos/{profile_id}/assinatura")
+def get_signature_asset_status(
+    profile_id: str,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_role(ROLE_ADMIN)),
+):
+    profile = db.get(PhysicianProfile, profile_id)
+    if profile is None:
+        raise ReportDomainError(
+            404, "perfil_medico_nao_encontrado", "Perfil médico não encontrado."
+        )
+    asset = active_signature_asset(db, profile.id)
+    return {
+        "physician_profile_id": profile.id,
+        "configurada": asset is not None,
+        "ativo": _ser_signature_asset(asset) if asset else None,
+        "observacao": (
+            "Uma imagem de assinatura manuscrita é elemento visual de "
+            "identificação e não constitui assinatura digital qualificada."
+        ),
+    }
+
+
+@router.post("/admin/medicos/{profile_id}/assinatura", status_code=201)
+async def upload_signature_asset(
+    profile_id: str,
+    request: Request,
+    arquivo: UploadFile = File(...),
+    confirmacao: str = Form(...),
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(ROLE_ADMIN)),
+):
+    """Cadastra a imagem autorizada da assinatura de um perfil médico.
+
+    Exige confirmação explícita de que o arquivo é o ativo autorizado
+    daquela médica: nenhuma assinatura é desenhada, simulada ou inferida
+    pelo sistema.
+    """
+
+    if confirmacao.strip() != "ATIVO DE ASSINATURA AUTORIZADO":
+        raise ReportDomainError(
+            422,
+            "confirmacao_assinatura_ausente",
+            "Confirme explicitamente que o arquivo é o ativo autorizado.",
+        )
+    profile = db.get(PhysicianProfile, profile_id)
+    if profile is None:
+        raise ReportDomainError(
+            404, "perfil_medico_nao_encontrado", "Perfil médico não encontrado."
+        )
+    settings = get_settings()
+    storage_root = _storage_root(settings)
+    raw = await _read_upload_bounded(
+        arquivo, max_size_bytes=settings.reports_signature_max_bytes
+    )
+    try:
+        validated = validate_signature_png(
+            raw, max_size_bytes=settings.reports_signature_max_bytes
+        )
+    except SignatureAssetError as exc:
+        raise ReportDomainError(422, exc.codigo, exc.mensagem) from None
+
+    now = datetime.now(timezone.utc)
+    asset_id = new_uuid()
+    try:
+        with report_publication_transaction(db) as publication:
+            previous = db.execute(
+                select(PhysicianSignatureAsset)
+                .where(
+                    PhysicianSignatureAsset.physician_profile_id == profile.id,
+                    PhysicianSignatureAsset.active.is_(True),
+                )
+                .with_for_update()
+            ).scalar_one_or_none()
+            if previous is not None:
+                # A imagem anterior é REVOGADA, nunca apagada: laudos já
+                # liberados continuam apontando para o hash que usaram.
+                previous.active = False
+                previous.revoked_at = now
+                previous.revoked_by_user_id = admin_user.id
+                db.flush()
+
+            path = signature_asset_storage_path(
+                storage_root,
+                physician_profile_id=profile.id,
+                asset_id=asset_id,
+            )
+            publication.publish(path, validated.data, root=storage_root)
+            asset = PhysicianSignatureAsset(
+                id=asset_id,
+                physician_profile_id=profile.id,
+                storage_path=str(path.relative_to(storage_root)),
+                sha256=validated.sha256,
+                size_bytes=validated.size_bytes,
+                mime_type=validated.mime_type,
+                image_width=validated.width,
+                image_height=validated.height,
+                active=True,
+                created_by_user_id=admin_user.id,
+                created_at=now,
+            )
+            db.add(asset)
+            audit(
+                db,
+                "assinatura_medica_cadastrada",
+                entidade="physician_signature_assets",
+                entidade_id=asset_id,
+                user_id=admin_user.id,
+                request_id=_request_id(request),
+                # Sem filename enviado, sem caminho, sem bytes.
+                detalhes={
+                    "physician_profile_id": profile.id,
+                    "sha256": validated.sha256,
+                    "size_bytes": validated.size_bytes,
+                    "image_width": validated.width,
+                    "image_height": validated.height,
+                    "revoked_previous_asset_id": (
+                        previous.id if previous else None
+                    ),
+                },
+            )
+            publication.commit()
+    except (ReportStorageError, OSError) as exc:
+        raise ReportDomainError(
+            503,
+            "armazenamento_laudos_indisponivel",
+            "Armazenamento de laudos indisponível.",
+        ) from exc
+    except IntegrityError:
+        raise ReportDomainError(
+            409,
+            "assinatura_concorrente",
+            "Outro cadastro de assinatura ocorreu ao mesmo tempo.",
+        ) from None
+    return _ser_signature_asset(asset)
+
+
+@router.delete("/admin/medicos/{profile_id}/assinatura")
+def revoke_signature_asset(
+    profile_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(ROLE_ADMIN)),
+):
+    """Revoga o ativo ativo. O arquivo e os laudos anteriores permanecem."""
+
+    profile = db.get(PhysicianProfile, profile_id)
+    if profile is None:
+        raise ReportDomainError(
+            404, "perfil_medico_nao_encontrado", "Perfil médico não encontrado."
+        )
+    asset = db.execute(
+        select(PhysicianSignatureAsset)
+        .where(
+            PhysicianSignatureAsset.physician_profile_id == profile.id,
+            PhysicianSignatureAsset.active.is_(True),
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+    if asset is None:
+        raise ReportDomainError(
+            404,
+            "assinatura_nao_configurada",
+            "Não há ativo de assinatura configurado para este perfil.",
+        )
+    asset.active = False
+    asset.revoked_at = datetime.now(timezone.utc)
+    asset.revoked_by_user_id = admin_user.id
+    audit(
+        db,
+        "assinatura_medica_revogada",
+        entidade="physician_signature_assets",
+        entidade_id=asset.id,
+        user_id=admin_user.id,
+        request_id=_request_id(request),
+        detalhes={
+            "physician_profile_id": profile.id,
+            "sha256": asset.sha256,
+        },
+    )
+    db.commit()
+    return _ser_signature_asset(asset)

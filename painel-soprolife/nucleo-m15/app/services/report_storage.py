@@ -354,6 +354,13 @@ def _read_stored_pdf_bytes(path: Path, *, root: Path) -> bytes:
         raise StoredPdfMissingError() from exc
 
 
+# M25.2 — nomes públicos para outros ativos privados sob a mesma raiz (hoje,
+# o PNG de assinatura manuscrita). Mesmas garantias de contenção, symlink,
+# tipo e modo 0600; a validação de formato é responsabilidade do chamador.
+assert_safe_storage_id = _assert_safe_id
+read_private_file_bytes = _read_stored_pdf_bytes
+
+
 def read_and_validate_stored_pdf(
     path: Path,
     *,

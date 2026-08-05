@@ -27,6 +27,55 @@ SIGNATURE_STATUS_PENDENTE = "assinatura_pendente"
 SIGNATURE_STATUS_ASSINADA = "assinada"
 SIGNATURE_STATUS_REJEITADA = "rejeitada"
 
+# ------------------------------------------------------------------ M25.2
+#
+# Liberação institucional: a via efetivamente disponível hoje. Ela NÃO é
+# assinatura qualificada e é registrada com provider e status próprios,
+# justamente para nunca ser confundida com o resultado de um provedor
+# ICP-Brasil. O que ela realmente prova é:
+#
+#   - qual médica, autenticada na PRÓPRIA sessão individual, executou a
+#     ação consciente "Assinar e liberar laudo";
+#   - qual era exatamente o texto liberado (hash do conteúdo);
+#   - qual é o hash SHA-256 do PDF final congelado;
+#   - quando isso aconteceu (com fuso America/Sao_Paulo registrado).
+#
+# O caminho qualificado permanece intacto e continua exigindo um provider
+# real: `get_signature_provider()` segue devolvendo o provedor nulo, e
+# `SIGNATURE_STATUS_ASSINADA` continua inalcançável sem PAdES/ICP-Brasil.
+SIGNATURE_STATUS_LIBERADA_INSTITUCIONAL = "liberada_institucional"
+PROVIDER_INSTITUTIONAL_RELEASE = "institutional_release"
+
+
+def institutional_release_evidence(
+    *,
+    physician_profile_id: str,
+    document_sha256: str,
+    signed_text_sha256: str,
+    signature_asset_sha256: str | None,
+) -> dict:
+    """Metadados técnicos da liberação institucional.
+
+    Declara explicitamente `qualified_signature=False` para que nenhuma
+    verificação futura confunda esta evidência com assinatura qualificada.
+    Nunca inclui identidade de paciente, texto clínico ou bytes de imagem.
+    """
+
+    return {
+        "qualified_signature": False,
+        "standard": None,
+        "trust_chain": None,
+        "release_kind": "institutional_authenticated_action",
+        "signer_physician_profile_id": physician_profile_id,
+        "document_sha256": document_sha256,
+        "signed_text_sha256": signed_text_sha256,
+        "handwritten_asset_sha256": signature_asset_sha256,
+        # Uma imagem de assinatura manuscrita é elemento visual de
+        # identificação; ela não é, e nunca deve ser tratada como,
+        # certificado digital.
+        "handwritten_image_is_not_a_certificate": True,
+    }
+
 
 @dataclass(frozen=True)
 class SignatureRequestResult:

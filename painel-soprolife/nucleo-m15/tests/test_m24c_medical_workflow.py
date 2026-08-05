@@ -1081,7 +1081,10 @@ def test_correcao_exige_evidencia_qualificada_e_cria_documento_separado(
         headers=medical_case["doctor_auth"],
     )
     assert blocked.status_code == 409
-    assert blocked.json()["erro"]["codigo"] == "laudo_nao_assinado"
+    # M25.2 renomeou o código: a correção agora parte de um laudo FECHADO —
+    # assinado com evidência qualificada (caminho futuro) ou liberado
+    # institucionalmente. Um laudo apenas em preparação segue recusado.
+    assert blocked.json()["erro"]["codigo"] == "laudo_nao_fechado"
 
     # Fixture isolada: materializa evidência sintética completa diretamente
     # no banco. Nenhum provider/mock de runtime devolve sucesso.

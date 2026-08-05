@@ -69,9 +69,12 @@ check(
     && !/localStorage\.setItem|sessionStorage|indexedDB/.test(workflow)
 );
 check(
-  "assets M24C versionados",
-  /report-workflow\.css\?v=2026072701/.test(index)
-    && /report-workflow\.js\?v=2026072701/.test(index)
+  "assets M24C/M25.2 versionados",
+  // Versão de cache-busting: atualizada a cada release que muda o CSS/JS
+  // do fluxo de laudos. O que a asserção prova é que os dois assets
+  // continuam versionados juntos, com o MESMO selo.
+  /report-workflow\.css\?v=2026080501/.test(index)
+    && /report-workflow\.js\?v=2026080501/.test(index)
 );
 
 console.log("\nB) Papel médico e autoria explícita");
@@ -171,7 +174,7 @@ check(
   "original e prévia usam Blob autenticado em comparação",
   workflow.includes("apiBlob(")
     && /URL\.createObjectURL\(blob\)/.test(workflow)
-    && workflow.includes("Comparação entre original e versão gerada")
+    && workflow.includes("Exame técnico da MIR e laudo da SoproLife")
     && (workflow.match(/report-pdf-frame/g) || []).length >= 1
 );
 check(

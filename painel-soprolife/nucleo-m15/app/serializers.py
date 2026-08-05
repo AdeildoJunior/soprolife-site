@@ -527,6 +527,21 @@ def ser_report_document_version(
         "footer_version_snapshot": v.footer_version_snapshot,
         "footer_text_sha256": v.footer_text_sha256,
         "issued_at_snapshot": iso(v.issued_at_snapshot),
+        # M25.2 — evidência do laudo nativo. Códigos e local são
+        # institucionais/técnicos; o texto clínico só sai com
+        # `include_clinical`.
+        "conclusion_code_snapshot": v.conclusion_code_snapshot,
+        "bronchodilator_code_snapshot": v.bronchodilator_code_snapshot,
+        "exam_has_post_bd_snapshot": v.exam_has_post_bd_snapshot,
+        "location_name_snapshot": v.location_name_snapshot,
+        "location_source_snapshot": v.location_source_snapshot,
+        "validation_code_snapshot": v.validation_code_snapshot,
+        "released_at_snapshot": iso(v.released_at_snapshot),
+        "addendum_sequence": v.addendum_sequence,
+        # Só a referência técnica e o hash do ativo manuscrito. NUNCA os
+        # bytes da imagem nem qualquer caminho de arquivo.
+        "signature_asset_id_snapshot": v.signature_asset_id_snapshot,
+        "signature_asset_sha256_snapshot": v.signature_asset_sha256_snapshot,
     }
     if include_clinical:
         data.update(
@@ -535,6 +550,11 @@ def ser_report_document_version(
                 "template_text_sha256": v.template_text_sha256,
                 "interpretation_text_snapshot": v.interpretation_text_snapshot,
                 "interpretation_text_sha256": v.interpretation_text_sha256,
+                "conclusion_text_snapshot": v.conclusion_text_snapshot,
+                "bronchodilator_text_snapshot": v.bronchodilator_text_snapshot,
+                "observations_snapshot": v.observations_snapshot,
+                "location_address_snapshot": v.location_address_snapshot,
+                "location_contact_snapshot": v.location_contact_snapshot,
                 "footer_text_snapshot": v.footer_text_snapshot,
             }
         )
@@ -591,6 +611,12 @@ def ser_report_document(
         "clinical_started_at": iso(doc.clinical_started_at),
         "ready_for_signature_at": iso(doc.ready_for_signature_at),
         "signed_at": iso(doc.signed_at),
+        # M25.2 — liberação institucional (distinta de assinatura
+        # qualificada, que continua inalcançável sem provedor ICP-Brasil).
+        "released_at": iso(doc.released_at),
+        "released_physician_profile_id": doc.released_physician_profile_id,
+        "validation_code": doc.validation_code,
+        "locked": doc.status == m.STATUS_LAUDO_LIBERADO,
         **_stamps(doc),
         "versoes": [
             ser_report_document_version(v, include_clinical=include_clinical)

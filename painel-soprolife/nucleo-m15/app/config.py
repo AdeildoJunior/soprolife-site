@@ -87,6 +87,26 @@ class Settings(BaseSettings):
     # normal nunca permite selecionar templates provisórios. Em produção o
     # validador abaixo recusa até mesmo a tentativa de ligar esta chave.
     reports_test_allow_provisional_templates: bool = False
+    # M25.2 — base pública do endereço de validação impresso no laudo (texto
+    # + QR Code). Sem valor configurado o laudo sai apenas com o código de
+    # verificação textual: nenhuma URL é inventada. Precisa ser HTTPS.
+    reports_validation_base_url: str | None = None
+    # Tamanho máximo do PNG de assinatura manuscrita (bytes).
+    reports_signature_max_bytes: int = 2 * 1024 * 1024
+
+    @field_validator("reports_validation_base_url")
+    @classmethod
+    def _validation_url_https(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().rstrip("/")
+        if not normalized:
+            return None
+        if not normalized.startswith("https://"):
+            raise ValueError(
+                "M15_REPORTS_VALIDATION_BASE_URL precisa ser uma URL HTTPS."
+            )
+        return normalized
 
     @field_validator("token_ttl_minutes")
     @classmethod

@@ -32,6 +32,7 @@ def _protect_m24c_immutable_evidence(session, _flush_context, _instances):
     """
 
     from .models import (
+        ReportAddendum,
         ReportAssignment,
         ReportAssignmentEvent,
         ReportDocumentVersion,
@@ -44,6 +45,10 @@ def _protect_m24c_immutable_evidence(session, _flush_context, _instances):
         ReportDocumentVersion,
         ReportFooterTemplate,
         ReportTemplate,
+        # M25.2 — adendo publicado é evidência clínica append-only: uma
+        # correção posterior entra como NOVO adendo ou documento corretivo,
+        # nunca reescrevendo o anterior.
+        ReportAddendum,
     )
     for obj in session.deleted:
         if isinstance(obj, (*immutable_types, ReportAssignment)):
