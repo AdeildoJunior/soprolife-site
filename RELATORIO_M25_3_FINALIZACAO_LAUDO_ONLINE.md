@@ -518,17 +518,59 @@ git log --oneline -3
 git status --short
 ```
 
-**Reprovisionar o ambiente, se necessário:**
+**Reprovisionar o ambiente do ZERO (outra máquina):**
+
+Quatro coisas NÃO vêm pelo Git e precisam ser recriadas: o `.venv`, o
+`.env`, a raiz privada de PDFs e o banco local com o cenário fictício.
 
 ```bash
 cd painel-soprolife/nucleo-m15
+
+# 1) venv (requirements-dev.txt já inclui reportlab e pillow)
 python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt   # inclui reportlab e pillow
-install -d -m 700 /home/adeildo/.soprolife-private/m25-reports
-# recriar .env conforme a seção 16 (o arquivo NÃO é versionado)
+.venv/bin/pip install -r requirements-dev.txt
+
+# 2) raiz privada dos PDFs — absoluta, 0700, FORA do repositório.
+#    Ajuste o caminho para o usuário da máquina em questão.
+install -d -m 700 "$HOME/.soprolife-private/m25-reports"
+
+# 3) .env local (gitignored). Conteúdo COMPLETO abaixo.
+cat > .env <<ENV
+M15_DATABASE_URL=sqlite:///./var/m15_nucleo.db
+M15_ENV=dev
+M15_API_HOST=127.0.0.1
+M15_API_PORT=8015
+M15_CORS_ORIGINS=["http://127.0.0.1:8765","http://localhost:8765"]
+M15_DISPLAY_TIMEZONE=America/Sao_Paulo
+M15_SESSION_COOKIE_NAME=soprolife_m15_sessao
+M15_SESSION_COOKIE_PATH=/painel-soprolife/api/m15
+M15_SESSION_COOKIE_SECURE=false
+M15_SESSION_TTL_MINUTES=720
+M15_MARKETING_REFRESH_QUEUE=./var/marketing-refresh-request.json
+# Laudos: habilitado APENAS neste ambiente local de teste.
+# O padrão versionado em app/config.py continua false/disabled.
+M15_REPORTS_ENABLED=true
+M15_REPORTS_MODE=pilot
+M15_REPORTS_STORAGE_DIR=$HOME/.soprolife-private/m25-reports
+# QR/validação deliberadamente NÃO definida — sem ela o laudo sai só com
+# o código textual, e nenhuma URL é inventada.
+# M15_REPORTS_VALIDATION_BASE_URL=
+ENV
+
+# 4) banco + cenário fictício
+mkdir -p var
 .venv/bin/alembic upgrade head
 .venv/bin/python scripts/seed_m25_3_laudo_demo.py --confirmar
 ```
+
+> O `.env` acima **não contém segredo nenhum**: em `M15_ENV=dev` o
+> `M15_AUTH_SECRET` é opcional e gerado em memória. Por isso ele pode ser
+> reproduzido em texto aqui. Em produção o segredo é obrigatório e **nunca**
+> entra em documento ou repositório.
+
+**O que NÃO se transporta entre máquinas:** o ativo de assinatura (quando
+existir) é um arquivo privado fora do Git — precisa ser cadastrado de novo
+pela tela admin em cada ambiente, a partir do PNG autorizado original.
 
 **Verificar tudo de novo:**
 
