@@ -874,6 +874,11 @@ class PhysicianProfileAdminUpdate(StrictModel):
     crm_number: str | None = Field(default=None, min_length=1, max_length=40)
     crm_state: BrazilUF | None = None
     rqe: str | None = Field(default=None, max_length=30)
+    # M25.3 — campos de identificação que o laudo nativo já imprimia mas que
+    # nenhuma rota sabia gravar. `crm_display` é APENAS formatação: o router
+    # exige que seus dígitos sejam idênticos aos de `crm_number`.
+    crm_display: str | None = Field(default=None, max_length=30)
+    especialidade: str | None = Field(default=None, max_length=120)
     active: bool | None = None
     verification_status: PhysicianVerificationStatus | None = None
     # M24D — referência técnica segura da verificação (código/ID do processo
@@ -899,6 +904,19 @@ class PhysicianProfileAdminUpdate(StrictModel):
     @classmethod
     def _normalize_crm(cls, value: str | None) -> str | None:
         return normalize_crm_number(value) if value is not None else None
+
+    @field_validator("crm_display", "especialidade")
+    @classmethod
+    def _normalize_optional_identity(cls, value: str | None) -> str | None:
+        """Colapsa espaços e trata string vazia como "limpar o campo".
+
+        O CHECK do banco recusa valor presente porém em branco; normalizar
+        aqui mantém a API previsível em vez de devolver 500 na constraint.
+        """
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        return normalized or None
 
 
 class ReportReassignment(StrictModel):

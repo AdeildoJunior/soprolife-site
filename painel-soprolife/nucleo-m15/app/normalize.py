@@ -65,3 +65,21 @@ def contains_clinical_info(text: str | None) -> bool:
         return False
     lowered = text.lower()
     return any(marker in lowered for marker in CLINICAL_KEYWORDS)
+
+
+def crm_display_matches(display: str | None, crm_number: str | None) -> bool:
+    """M25.2/M25.3 — a apresentação humana do CRM só pode reformatar o número.
+
+    `crm_number` é o armazenamento canônico (dígitos, com zero à esquerda
+    preservado). `crm_display` existe apenas para imprimir "52.62307-5" no
+    lugar de "52623075" — separadores e espaços são livres, mas os DÍGITOS
+    precisam ser exatamente os mesmos, na mesma ordem. Assim a formatação
+    nunca vira um caminho lateral para alterar o registro profissional.
+
+    O CHECK correspondente no banco (`ck_physician_profiles_crm_display_digits`)
+    só garante não-vazio: extrair dígitos de forma portátil entre SQLite e
+    PostgreSQL não cabe num CHECK, então a igualdade é validada aqui.
+    """
+    if display is None:
+        return True
+    return re.sub(r"\D", "", display) == re.sub(r"\D", "", crm_number or "")

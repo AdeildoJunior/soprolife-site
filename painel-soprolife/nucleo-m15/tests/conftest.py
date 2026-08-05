@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+from app.config import Settings
 from app.db import Base, build_engine, get_db
 from app.main import create_app
 from app.models import User
@@ -18,6 +19,18 @@ from app.security import (
 # telefone sintético NÃO DISCÁVEL (prefixo local 0000 não atribuído no Brasil)
 SYNTH_PHONE = "(21) 0000-9001"
 SYNTH_PHONE_NORM = "552100009001"
+
+# M25.3 — a suíte NUNCA lê o `.env` do desenvolvedor.
+#
+# `Settings` carrega `.env` do diretório corrente. Sem esta neutralização, um
+# `.env` local de desenvolvimento vaza para dentro dos testes e quebra
+# justamente as asserções que provam os PADRÕES fail-closed do código
+# (ex.: `M15_REPORTS_ENABLED` e `M15_REPORTS_MODE` nascerem desabilitados).
+# O resultado passaria a depender da máquina: quem tivesse `.env` veria falhas
+# falsas, e — pior — um padrão inseguro poderia ser mascarado por um `.env`
+# permissivo. Os testes que precisam da feature ligada já a ligam
+# explicitamente via `monkeypatch.setenv`, que continua funcionando.
+Settings.model_config["env_file"] = None
 
 
 @pytest.fixture(autouse=True)

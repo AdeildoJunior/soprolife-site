@@ -567,6 +567,51 @@
       </aside>`;
   }
 
+  // M25.3 — contexto do exame e LOCAL DE REALIZAÇÃO estruturado. A médica
+  // precisa ver, antes de escolher a conclusão, o mesmo cabeçalho que o PDF
+  // vai imprimir. O local vem da unidade parceira vinculada ao documento ou
+  // ao exame (nunca fixo no template) e é dado institucional da clínica —
+  // jamais endereço do paciente.
+  function renderExamAndLocation(detail) {
+    const exam = detail.exam || {};
+    const local = detail.location || null;
+    const naoInformado = `<em class="report-empty-value">não informado</em>`;
+    const bd =
+      exam.post_bronchodilator === true
+        ? "Com fase pós-broncodilatador"
+        : exam.post_bronchodilator === false
+          ? "Sem fase pós-broncodilatador"
+          : naoInformado;
+    return `
+      <div class="report-exam-context">
+        <article>
+          <h4>Exame</h4>
+          <div><span>Código</span><strong>${esc(exam.public_code || "—")}</strong></div>
+          <div><span>Data</span><strong>${fmtDate(exam.exam_date, false)}</strong></div>
+          <div><span>Hora</span><strong>${
+            exam.exam_time ? esc(exam.exam_time) : naoInformado
+          }</strong></div>
+          <div><span>Broncodilatador</span><strong>${bd}</strong></div>
+          <div class="report-exam-indication"><span>Indicação clínica</span><strong>${
+            exam.clinical_indication ? esc(exam.clinical_indication) : `<em class="report-empty-value">não informada</em>`
+          }</strong></div>
+        </article>
+        <article>
+          <h4>Local de realização</h4>
+          ${local
+            ? `<div><span>Unidade</span><strong>${esc(local.nome || "—")}</strong></div>
+               <div><span>Endereço</span><strong>${
+                 local.endereco ? esc(local.endereco) : naoInformado
+               }</strong></div>
+               <div><span>Contato</span><strong>${
+                 local.contato ? esc(local.contato) : naoInformado
+               }</strong></div>`
+            : `<p class="report-help">Local não resolvido para este documento.</p>`}
+          <p class="report-help">Vem da clínica vinculada ao exame — nunca fixo no laudo.</p>
+        </article>
+      </div>`;
+  }
+
   function renderPhysicianDetail() {
     const detail = state.detail;
     if (!detail) {
@@ -613,6 +658,8 @@
             detail.origin_label ? ` · ${esc(detail.origin_label)}` : ""
           }</strong></div>
         </div>
+
+        ${renderExamAndLocation(detail)}
 
         <div class="report-comparison" aria-label="Exame técnico da MIR e laudo da SoproLife">
           <article>

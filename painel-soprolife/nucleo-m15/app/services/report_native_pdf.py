@@ -420,7 +420,10 @@ class _Composer:
             ),
         )
 
-        rule_y = top - HEADER_HEIGHT + 16
+        # A base do logo fica em `top - LOGO_MAX_HEIGHT` (top - 34). A régua
+        # precisa passar ABAIXO disso, senão ela corta a tagline
+        # "DIAGNÓSTICOS E SOLUÇÕES EM SAÚDE" impressa no rodapé da marca.
+        rule_y = top - HEADER_HEIGHT + 10
         c.setStrokeColor(NAVY)
         c.setLineWidth(1.4)
         c.line(MARGIN_X, rule_y, PAGE_WIDTH - MARGIN_X, rule_y)
@@ -483,7 +486,7 @@ class _Composer:
         c.setFont(FONT_BOLD, 19)
         c.setFillColor(NAVY)
         c.drawString(MARGIN_X, self.y - 19, pdf_safe(DOCUMENT_TITLE))
-        self.y -= 24
+        self.y -= 22
 
         status = (
             "DOCUMENTO LIBERADO"
@@ -493,7 +496,7 @@ class _Composer:
         c.setFont(FONT_BOLD, 8)
         c.setFillColor(TEAL if self.content.released else WARN_INK)
         c.drawString(MARGIN_X, self.y - 8, pdf_safe(status))
-        self.y -= 15
+        self.y -= 12
 
     def draw_banner(self, text: str) -> None:
         """Faixa de aviso (prévia/piloto) — nunca sobre outro conteúdo."""
@@ -517,10 +520,10 @@ class _Composer:
         for line in lines:
             c.drawString(MARGIN_X + 10, text_y, line)
             text_y -= 11
-        self.y = top - height - 10
+        self.y = top - height - 7
 
     def draw_section_heading(self, title: str) -> None:
-        self.ensure(21)
+        self.ensure(18)
         c = self.canvas
         c.setFont(FONT_BOLD, 9.5)
         c.setFillColor(NAVY)
@@ -528,7 +531,7 @@ class _Composer:
         c.setStrokeColor(TEAL)
         c.setLineWidth(1.0)
         c.line(MARGIN_X, self.y - 15, MARGIN_X + 26, self.y - 15)
-        self.y -= 19
+        self.y -= 16
 
     def draw_field_grid(self, fields: list[tuple[str, str]]) -> None:
         """Grade de dois campos por linha dentro de um cartão claro."""
@@ -553,9 +556,9 @@ class _Composer:
             rows.append(current)
 
         row_heights = [
-            max(len(cell[1]) for cell in row) * 11 + 12 for row in rows
+            max(len(cell[1]) for cell in row) * 11 + 10 for row in rows
         ]
-        height = sum(row_heights) + 9
+        height = sum(row_heights) + 8
         self.ensure(height + 6)
 
         c = self.canvas
@@ -583,7 +586,7 @@ class _Composer:
                     c.drawString(x, text_y, line)
                     text_y -= 11
             row_top -= row_height
-        self.y = top - height - 10
+        self.y = top - height - 7
 
     def draw_paragraph(
         self,
@@ -655,14 +658,14 @@ class _Composer:
         )
         lines_count = 3 + (1 if physician.specialty else 0)
         return (
-            10  # respiro superior
+            8  # respiro superior
             + 42  # área reservada da assinatura manuscrita
             + 6
             + 1  # linha
             + 12 * lines_count
-            + 8
-            + len(statement_lines) * 8.6
             + 6
+            + len(statement_lines) * 8.6
+            + 4
         )
 
     def draw_physician_signature_block(self) -> None:
@@ -681,7 +684,7 @@ class _Composer:
 
         # Faixa reservada da assinatura manuscrita. Fica vazia quando não há
         # ativo autorizado — nada é desenhado por cima em nenhum caso.
-        signature_area_top = top - 10
+        signature_area_top = top - 8
         signature_area_height = 42.0
         line_y = signature_area_top - signature_area_height - 6
         line_width = 240.0
@@ -848,7 +851,7 @@ class _Composer:
                 y=top - height + 11,
                 size=qr_size,
             )
-        self.y = top - height - 10
+        self.y = top - height - 7
 
     def _draw_qr(self, value: str, *, x: float, y: float, size: float) -> None:
         try:
@@ -891,7 +894,7 @@ class _Composer:
         for line in lines:
             c.drawString(MARGIN_X + 12, text_y, line)
             text_y -= 10
-        self.y = top - height - 8
+        self.y = top - height - 6
 
 
 # ------------------------------------------------------------------ API
@@ -998,7 +1001,7 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
         )
         composer.draw_paragraph(addendum.body_text, size=10, leading=13.5)
 
-    composer.space(4)
+    composer.space(2)
     composer.draw_mir_notice()
     composer.draw_validation_block()
     # A área de identificação e assinatura fecha o documento: é o último

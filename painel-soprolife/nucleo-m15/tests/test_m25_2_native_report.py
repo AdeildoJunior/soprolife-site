@@ -1086,3 +1086,142 @@ def test_catalogo_do_modulo_bate_com_o_texto_exigido():
         "REV_PARCIAL": "Reversibilidade parcial após broncodilatador.",
         "BD_NAO_REALIZADO": "",
     }
+
+
+# ------------------------------------------------------- M25.3 (finalização)
+
+
+def test_identificacao_profissional_completa_chega_ao_pdf(
+    client, auth, db, person
+):
+    """M25.3 — `especialidade` e `crm_display` são graváveis e impressos.
+
+    As duas colunas nasceram no M25.2 e o gerador do PDF já as lia, mas
+    NENHUMA rota sabia gravá-las: o laudo saía sem especialidade e com o CRM
+    em dígitos crus. Sem isso a identificação exigida ("Médica Pneumologista",
+    "CRM-RJ 52.62307-5") era inalcançável pelo cadastro real.
+    """
+
+    caso = _make_case(client, auth, db, person, suffix="931")
+    response = client.patch(
+        f"/api/v1/laudos/admin/medicos/{caso['doctor'].id}",
+        json={
+            "professional_name": "TESTE APAGAR Dra. Profissional M25-3",
+            "crm_number": "52623075",
+            "crm_display": "52.62307-5",
+            "crm_state": "RJ",
+            "rqe": "58224",
+            "especialidade": "Médica Pneumologista",
+            "verification_status": "verified",
+            "verification_reference": "CRM-VERIF-TESTE-M25-3",
+            "active": True,
+        },
+        headers=auth("admin"),
+    )
+    assert response.status_code == 200, response.text
+    profile = response.json()["profile"]
+    assert profile["crm_display"] == "52.62307-5"
+    assert profile["especialidade"] == "Médica Pneumologista"
+
+    preview = _preview(client, caso)
+    assert preview.status_code == 200, preview.text
+    released = _release(client, caso, preview.json())
+    assert released.status_code == 200, released.text
+    version = db.get(ReportDocumentVersion, released.json()["released_version_id"])
+    texto = _pdf_text(_stored_bytes(db, version))
+    assert "TESTE APAGAR Dra. Profissional M25-3" in texto
+    assert "Médica Pneumologista" in texto
+    # Formatado, não em dígitos crus.
+    assert "CRM-RJ 52.62307-5" in texto
+    assert "RQE 58224" in texto
+
+
+def test_crm_display_nao_pode_alterar_os_digitos_do_crm(
+    client, auth, db, person
+):
+    """A formatação não pode virar caminho lateral para trocar o registro."""
+
+    caso = _make_case(client, auth, db, person, suffix="932")
+    response = client.patch(
+        f"/api/v1/laudos/admin/medicos/{caso['doctor'].id}",
+        json={
+            "crm_number": "52623075",
+            # dígitos diferentes do CRM canônico
+            "crm_display": "99.99999-9",
+            "crm_state": "RJ",
+        },
+        headers=auth("admin"),
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["erro"]["codigo"] == "crm_display_divergente"
+
+
+def test_tela_medica_mostra_exame_e_local_estruturado(
+    client, auth, db, person
+):
+    """M25.3 — a médica vê local e contexto do exame ANTES de concluir.
+
+    Antes a tela só exibia o código técnico da origem; o local de realização
+    existia apenas dentro do PDF, o que impedia conferir o cabeçalho antes de
+    assinar.
+    """
+
+    partner = Partner(public_code="CLI-993201", nome="Clínica Exemplo M25-3")
+    db.add(partner)
+    db.flush()
+    unit = PartnerUnit(
+        public_code="UNI-993201",
+        partner_id=partner.id,
+        nome="Unidade Exemplo",
+        logradouro="Rua Exemplo, 100",
+        bairro="Bairro Exemplo",
+        cidade="Cidade Exemplo",
+        uf="RJ",
+        telefone_central="(21) 0000-0000",
+    )
+    db.add(unit)
+    db.commit()
+
+    caso = _make_case(client, auth, db, person, suffix="933")
+    exam = db.get(SpirometryExam, caso["exam"]["id"])
+    exam.hora_exame = "09:20"
+    exam.indicacao_clinica = "Indicação sintética de teste."
+    document = db.get(ReportDocument, caso["document"]["id"])
+    document.origin_type = "clinica_parceira"
+    document.origin_partner_unit_id = unit.id
+    db.commit()
+
+    response = client.get(
+        f"/api/v1/laudos/{caso['document']['id']}", headers=caso["doctor_auth"]
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["location"]["nome"] == "Clínica Exemplo M25-3 — Unidade Exemplo"
+    assert "Rua Exemplo, 100" in body["location"]["endereco"]
+    assert body["location"]["contato"] == "Central: (21) 0000-0000"
+    assert body["location"]["origem_do_dado"] == "documento_unidade"
+    assert body["exam"]["exam_time"] == "09:20"
+    assert body["exam"]["post_bronchodilator"] is True
+    assert body["exam"]["clinical_indication"] == "Indicação sintética de teste."
+
+
+def test_laudo_liberado_tipico_cabe_em_uma_pagina(client, auth, db, person):
+    """M25.3 — o laudo liberado padrão não deve derramar numa página quase vazia.
+
+    A prévia já cabia em uma página, mas a versão LIBERADA (que acrescenta o
+    bloco de validação e a área de assinatura) estourava por poucos pontos e
+    empurrava a assinatura sozinha para a página 2.
+    """
+
+    caso = _make_case(client, auth, db, person, suffix="934")
+    preview = _preview(client, caso)
+    assert preview.status_code == 200, preview.text
+    released = _release(client, caso, preview.json())
+    assert released.status_code == 200, released.text
+    version = db.get(
+        ReportDocumentVersion, released.json()["released_version_id"]
+    )
+    assert version.page_count == 1, (
+        "o laudo liberado típico precisa caber em uma página "
+        f"(gerou {version.page_count})"
+    )

@@ -219,6 +219,61 @@
   overflow-wrap: anywhere;
 }
 
+/* M25.3 — contexto do exame + local de realização estruturado. */
+.report-exam-context {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.report-exam-context > article {
+  padding: 12px;
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-xs);
+  background: #f9fbfd;
+}
+
+.report-exam-context h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.report-exam-context > article > div {
+  display: grid;
+  grid-template-columns: minmax(0, 96px) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-top: 1px solid var(--line-light);
+}
+
+.report-exam-context > article > div:first-of-type {
+  border-top: 0;
+}
+
+.report-exam-context span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.report-exam-context strong {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.report-exam-context .report-empty-value {
+  color: var(--muted);
+  font-style: italic;
+  font-weight: 500;
+}
+
 .report-comparison {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -502,8 +557,16 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   .report-comparison,
   .report-placement-grid,
   .report-admin-grid,
+  .report-exam-context,
   .report-clinical-identity {
     grid-template-columns: 1fr;
+  }
+
+  /* Rótulo acima do valor: em telas estreitas a coluna fixa de 96px
+     espremeria o endereço da clínica. */
+  .report-exam-context > article > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 
   .report-panel-heading,

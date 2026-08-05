@@ -52,7 +52,7 @@ from ..models import (
     SpirometryExam,
     User,
 )
-from ..normalize import contains_clinical_info, contains_pii_like
+from ..normalize import contains_clinical_info, contains_pii_like, crm_display_matches
 from ..schemas import (
     PhysicianProfileAdminUpdate,
     ReportAddendumCreate,
@@ -120,6 +120,7 @@ from ..services.report_native_pdf import (
     NativeReportPdfError,
     build_native_report_pdf,
 )
+from ..services.report_locations import resolve_report_location
 from ..services.report_pdf import PdfCompositionError, compose_report_pdf
 from ..services.report_publication import (
     ReportPublicationTransaction,
@@ -1090,6 +1091,10 @@ def update_physician_account(
         "crm_number",
         "crm_state",
         "rqe",
+        # M25.3 — entram na identidade profissional: mudá-los reabre a
+        # verificação exatamente como mudar o CRM ou o nome.
+        "crm_display",
+        "especialidade",
     }
     identity_changed = False
     changed_fields: list[str] = []
@@ -1097,12 +1102,22 @@ def update_physician_account(
         if field not in values:
             continue
         value = values[field]
-        if field == "rqe":
+        if field in ("rqe", "crm_display", "especialidade"):
             value = value or None
         if value != getattr(profile, field):
             setattr(profile, field, value)
             identity_changed = True
             changed_fields.append(field)
+
+    # `crm_display` é só apresentação: os dígitos precisam bater com o CRM
+    # canônico, senão a formatação viraria um caminho lateral para alterar o
+    # registro profissional sem passar por nova verificação.
+    if not crm_display_matches(profile.crm_display, profile.crm_number):
+        raise ReportDomainError(
+            422,
+            "crm_display_divergente",
+            "A formatação do CRM deve conter exatamente os mesmos dígitos do CRM.",
+        )
 
     physician_role = get_role(db, ROLE_MEDICO)
     has_role = user_has_explicit_role(account, ROLE_MEDICO)
@@ -1817,7 +1832,18 @@ def get_report_document(
             "exam": {
                 "public_code": exam.public_code,
                 "exam_date": d(exam.data_exame),
+                # M25.3 — a médica precisa ver o mesmo contexto de exame que
+                # será impresso no laudo, antes de escolher a conclusão.
+                "exam_time": exam.hora_exame,
+                "post_bronchodilator": exam.broncodilatador,
+                "clinical_indication": exam.indicacao_clinica,
             },
+            # M25.3 — local de realização ESTRUTURADO (dado institucional da
+            # clínica, nunca do paciente). Antes a tela mostrava apenas o
+            # código técnico da origem, e o local só aparecia dentro do PDF.
+            "location": resolve_report_location(
+                db, document=document, exam=exam
+            ).as_payload(),
             # Somente este workspace atribuído contém identidade do paciente.
             # Ela nunca entra na fila, URL ou audit details.
             "patient": {

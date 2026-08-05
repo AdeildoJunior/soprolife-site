@@ -470,6 +470,10 @@ def ser_physician_profile(p: m.PhysicianProfile) -> dict:
         "crm_number": p.crm_number,
         "crm_state": p.crm_state,
         "rqe": p.rqe,
+        # M25.3 — identificação impressa no laudo. São dados profissionais
+        # institucionais (nunca do paciente), então podem ser devolvidos.
+        "crm_display": p.crm_display,
+        "especialidade": p.especialidade,
         "active": p.active,
         "verification_status": p.verification_status,
         "verified_at": iso(p.verified_at),
