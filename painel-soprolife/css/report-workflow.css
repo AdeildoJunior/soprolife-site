@@ -191,40 +191,13 @@
   color: #0b7355 !important;
 }
 
-.report-clinical-identity {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin: 14px 0;
-}
-
-.report-clinical-identity > div {
-  display: grid;
-  gap: 4px;
-  padding: 10px;
-  border: 1px solid var(--line-light);
-  border-radius: var(--radius-xs);
-  background: #f9fbfd;
-}
-
-.report-clinical-identity span {
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-}
-
-.report-clinical-identity strong {
-  overflow-wrap: anywhere;
-}
-
-/* M25.3 — contexto do exame + local de realização estruturado. */
+/* M25.3/M25.4 — contexto único: paciente + exame + local em três colunas.
+   Substituiu a faixa de identidade separada, que repetia os mesmos dados. */
 .report-exam-context {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  margin: 0 0 14px;
+  margin: 14px 0;
 }
 
 .report-exam-context > article {
@@ -303,9 +276,13 @@
 }
 
 .report-pdf-placeholder {
-  min-height: 420px;
+  /* M25.4 — o placeholder de "ainda não há PDF" ocupava a mesma altura de
+     um PDF renderizado (420px de vazio). Espaço reservado para conteúdo
+     que ainda não existe é a maior fonte de poluição desta tela. */
+  min-height: 96px;
   display: grid;
   place-items: center;
+  font-size: 13px;
 }
 
 .report-clinical-form,
@@ -471,6 +448,30 @@
   font-size: 12px;
 }
 
+/* M25.4 — o bloco virou <details> colapsado. */
+.report-signature-panel > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+  color: #7a5a1c;
+  list-style-position: inside;
+}
+
+.report-signature-panel > summary::marker {
+  color: rgba(231, 169, 63, .9);
+}
+
+.report-signature-panel > summary:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.report-signature-panel > p {
+  margin: 8px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
 .report-warning {
   border-color: rgba(221, 79, 79, .3);
   background: var(--danger-soft);
@@ -532,7 +533,7 @@ body.report-physician-only .section:not(#laudos-espirometria) {
     grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
   }
 
-  .report-clinical-identity {
+  .report-exam-context {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -557,8 +558,7 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   .report-comparison,
   .report-placement-grid,
   .report-admin-grid,
-  .report-exam-context,
-  .report-clinical-identity {
+  .report-exam-context {
     grid-template-columns: 1fr;
   }
 
@@ -1010,4 +1010,43 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   background: var(--navy);
   color: #fff;
   box-shadow: var(--shadow-xs);
+}
+
+/* ---------------------------------------------------------------- M25.4
+   Ativo de assinatura manuscrita (área administrativa).
+
+   Não há preview da imagem aqui de propósito: a API nunca devolve os bytes
+   nem o caminho do arquivo. O painel mostra só existência, hash e
+   dimensões. */
+.report-signature-asset {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: #fbfdfe;
+}
+
+.report-signature-asset h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.report-signature-asset-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 10px 0;
+}
+
+.report-signature-asset-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.report-signature-asset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

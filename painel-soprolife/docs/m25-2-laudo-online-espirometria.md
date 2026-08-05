@@ -224,3 +224,70 @@ como o M24D o deixou:
 
 O modo `production` permanece bloqueado incondicionalmente
 (`relatorios_producao_bloqueada`).
+
+---
+
+## M25.4 — enxugamento visual, selo e cadastro da assinatura
+
+### O que mudou no documento
+
+O laudo perdeu camadas de repetição, não informação:
+
+- `Documento` e `Versão` saíram do bloco de validação — os dois já constam
+  do cabeçalho e do rodapé de toda página (eram a terceira repetição).
+- Cabeçalhos soltos de seção viraram título EMBUTIDO no cartão
+  (`draw_data_card`), removendo uma camada visual por bloco.
+- Os rótulos deixaram de ecoar o título do cartão
+  ("PACIENTE › PACIENTE" virou "PACIENTE › NOME").
+- A nota sobre o PDF da MIR saiu da caixa própria e virou nota de rodapé:
+  a informação continua obrigatória, mas parou de competir em peso visual
+  com a conclusão médica.
+- `RELEASE_STATEMENT` foi encurtada mantendo as três afirmações que precisam
+  constar: quem liberou e como, o que prova a integridade, e o que a
+  liberação **não** é.
+
+### Selo institucional
+
+`_Composer.draw_verification_seal()` desenha um selo circular próprio da
+SoproLife (dois anéis, um "visto" e o texto do estado).
+
+Regras que o selo respeita:
+
+- **Só aparece em documento LIBERADO.** Numa prévia seria mentira visual.
+- Fica FORA da faixa reservada da assinatura manuscrita — nunca por cima.
+- O texto diz "LIBERAÇÃO INSTITUCIONAL", nunca "assinado digitalmente":
+  o selo não pode sugerir ICP-Brasil.
+- As posições verticais do texto são conferidas contra a corda do anel
+  interno; num círculo a largura disponível cai conforme se afasta do
+  centro, e foi assim que "INSTITUCIONAL" vazou para fora na primeira versão.
+
+O selo é inspirado apenas na ORGANIZAÇÃO de um laudo profissional. Nenhuma
+marca, arte ou texto de concorrente foi copiado.
+
+### Cadastro do ativo de assinatura (agora com interface)
+
+Os endpoints existiam desde a M25.2, mas **não havia interface**: na prática
+não era possível cadastrar a assinatura sem chamar a API à mão.
+
+Onde fica: **Administração → Contas médicas → selecione a médica →
+"Assinatura manuscrita (imagem)"**.
+
+O que a tela faz:
+
+- mostra se existe ativo, com hash e dimensões;
+- recebe o PNG e envia a confirmação exigida pela API;
+- revoga o ativo atual (o anterior é preservado, nunca apagado).
+
+Não há preview da imagem **de propósito**: a API nunca devolve os bytes nem
+o caminho do arquivo. A ausência de preview é a garantia funcionando, não
+uma lacuna.
+
+O proxy local passou a aceitar `DELETE` (`_M15_METHODS`) porque a revogação
+usa esse verbo; sem isso o botão recebia 405 do próprio proxy, antes de a API
+decidir sobre autorização. `PUT` e `HEAD` seguem bloqueados.
+
+### Campos de identificação com interface
+
+`crm_display` e `especialidade` — que a M25.3 tornou graváveis — ganharam
+campos no formulário de perfil médico. Sem eles o laudo saía sem
+especialidade e com o CRM em dígitos crus.

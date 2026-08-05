@@ -177,9 +177,27 @@ class ProxyM15Tests(unittest.TestCase):
         ).statuses[-1], 200)
         denied = self.run_m15("PUT", "/painel-soprolife/api/m15/health")
         self.assertEqual(denied.statuses[-1], 405)
-        self.assertEqual(denied.response_headers["allow"], "GET, POST, PATCH")
+        self.assertEqual(
+            denied.response_headers["allow"], "GET, POST, PATCH, DELETE"
+        )
         head = self.run_m15("HEAD", "/painel-soprolife/api/m15/health")
         self.assertEqual(head.statuses[-1], 405)
+
+    def test_delete_atravessa_para_revogar_assinatura(self):
+        """M25.4 — DELETE é necessário para revogar o ativo de assinatura.
+
+        Sem ele o botão "Revogar" do painel recebia 405 do PRÓPRIO proxy,
+        antes mesmo de a API decidir sobre a autorização. PUT continua
+        bloqueado no teste acima: liberar um verbo não libera os outros.
+        """
+
+        resultado = self.run_m15(
+            "DELETE",
+            "/painel-soprolife/api/m15/laudos/admin/medicos/"
+            "11111111-1111-1111-1111-111111111111/assinatura",
+        )
+        self.assertEqual(resultado.statuses[-1], 200)
+        self.assertEqual(FakeConnection.instances[-1].request_args[0], "DELETE")
 
     def test_request_id_longo_nao_e_encaminhado(self):
         self.run_m15(headers={"X-Request-ID": "x" * 500})

@@ -67,18 +67,23 @@ LOGO_MAX_WIDTH = 150.0
 INSTITUTION_NAME = "SoproLife Diagnósticos e Soluções em Saúde"
 DOCUMENT_TITLE = "Laudo de Espirometria"
 
+# M25.4 — nota enxuta. A versão anterior gastava três linhas em caixa
+# própria para dizer o que cabe em uma: o essencial é que o traçado está em
+# OUTRO documento, intacto.
 MIR_SEPARATE_NOTICE = (
-    "O traçado e as medidas originais do exame constam do PDF técnico "
-    "gerado pelo equipamento (MIR), que é um documento SEPARADO deste "
-    "laudo, permanece inalterado e pode ser obtido em download próprio."
+    "Traçado e medidas originais constam do PDF técnico do equipamento "
+    "(MIR) — documento SEPARADO deste laudo, inalterado, com download "
+    "próprio."
 )
 
 # Declaração honesta da natureza da liberação. NÃO afirma ICP-Brasil.
+# M25.4 — encurtada sem perder nenhuma das três afirmações que precisam
+# constar: quem liberou e como, o que prova a integridade, e o que esta
+# liberação NÃO é.
 RELEASE_STATEMENT = (
-    "Documento liberado eletronicamente pela médica identificada acima, "
-    "mediante autenticação individual e ação consciente registrada no "
-    "Centro de Comando SoproLife. A integridade é verificável pelo código "
-    "e pelo hash SHA-256 registrados neste laudo. Esta liberação não "
+    "Liberado eletronicamente pela médica acima, com autenticação "
+    "individual e ação consciente registradas. Integridade verificável "
+    "pelo código e pelo hash SHA-256 deste laudo. Esta liberação não "
     "constitui, por si só, assinatura digital qualificada ICP-Brasil."
 )
 
@@ -533,7 +538,21 @@ class _Composer:
         c.line(MARGIN_X, self.y - 15, MARGIN_X + 26, self.y - 15)
         self.y -= 16
 
-    def draw_field_grid(self, fields: list[tuple[str, str]]) -> None:
+    def draw_data_card(self, title: str, fields: list[tuple[str, str]]) -> None:
+        """Cartão de dados com o título EMBUTIDO (M25.4).
+
+        Antes cada bloco gastava um cabeçalho solto acima do cartão. Somando
+        paciente, exame, conclusão e observações, eram quatro títulos
+        flutuando entre quatro caixas — ruído puro. O título agora vive
+        dentro do próprio cartão, e o documento perde uma camada visual
+        sem perder nenhuma informação.
+        """
+
+        self.draw_field_grid(fields, title=title)
+
+    def draw_field_grid(
+        self, fields: list[tuple[str, str]], *, title: str | None = None
+    ) -> None:
         """Grade de dois campos por linha dentro de um cartão claro."""
 
         label_size = 7.0
@@ -558,7 +577,8 @@ class _Composer:
         row_heights = [
             max(len(cell[1]) for cell in row) * 11 + 10 for row in rows
         ]
-        height = sum(row_heights) + 8
+        title_height = 15.0 if title else 0.0
+        height = sum(row_heights) + 8 + title_height
         self.ensure(height + 6)
 
         c = self.canvas
@@ -572,7 +592,12 @@ class _Composer:
         c.setFillColor(TEAL)
         c.rect(MARGIN_X, top - height, 2.6, height, stroke=0, fill=1)
 
-        row_top = top - 8
+        if title:
+            c.setFont(FONT_BOLD, 8)
+            c.setFillColor(NAVY)
+            c.drawString(MARGIN_X + 16, top - 13, pdf_safe(title.upper()))
+
+        row_top = top - 8 - title_height
         for row, row_height in zip(rows, row_heights):
             for index, (label, wrapped) in enumerate(row):
                 x = MARGIN_X + 16 + index * column_width
@@ -704,6 +729,14 @@ class _Composer:
         c.setLineWidth(0.8)
         c.line(line_x, line_y, line_x + line_width, line_y)
 
+        # Selo institucional à esquerda, na faixa livre ao lado da assinatura.
+        # Fica FORA da área reservada da assinatura manuscrita — nunca é
+        # desenhado por cima dela.
+        self.draw_verification_seal(
+            center_x=MARGIN_X + 46,
+            center_y=line_y + signature_area_height / 2 - 2,
+        )
+
         text_y = line_y - 13
         c.setFont(FONT_BOLD, 10.5)
         c.setFillColor(NAVY)
@@ -752,6 +785,65 @@ class _Composer:
 
         self.y = top - height
 
+    def draw_verification_seal(
+        self, *, center_x: float, center_y: float, radius: float = 34.0
+    ) -> None:
+        """Selo circular de verificação — identidade PRÓPRIA da SoproLife.
+
+        M25.4. Inspirado apenas na ORGANIZAÇÃO de um laudo profissional
+        (um selo fecha o documento), sem copiar marca, arte ou texto de
+        nenhum concorrente. É um elemento gráfico institucional: dois anéis,
+        um "visto" e o texto do estado. NÃO é, e não sugere ser, certificado
+        digital — o próprio selo diz "liberação institucional".
+
+        Só é desenhado em documento LIBERADO: numa prévia, um selo de
+        verificação seria mentira visual.
+        """
+
+        if not self.content.released:
+            return
+        c = self.canvas
+        c.saveState()
+
+        # Anel externo e interno.
+        c.setStrokeColor(TEAL)
+        c.setLineWidth(1.6)
+        c.circle(center_x, center_y, radius, stroke=1, fill=0)
+        c.setLineWidth(0.5)
+        c.circle(center_x, center_y, radius - 4.2, stroke=1, fill=0)
+
+        # "Visto" central, desenhado como duas retas (sem fonte simbólica,
+        # que o WinAnsi não representa).
+        c.setStrokeColor(NAVY)
+        c.setLineWidth(2.2)
+        c.setLineCap(1)
+        tick = radius * 0.30
+        c.line(center_x - tick, center_y + tick * 0.15,
+               center_x - tick * 0.25, center_y - tick * 0.55)
+        c.line(center_x - tick * 0.25, center_y - tick * 0.55,
+               center_x + tick * 1.05, center_y + tick * 0.85)
+
+        # Texto do selo. As posições verticais são conferidas contra a corda
+        # do anel interno: num círculo, quanto mais longe do centro, menos
+        # largura disponível — foi assim que "INSTITUCIONAL" vazava para fora
+        # do anel na primeira versão.
+        inner = radius - 4.2
+        c.setFillColor(NAVY)
+        c.setFont(FONT_BOLD, 5.8)
+        c.drawCentredString(
+            center_x, center_y + inner - 9.0, pdf_safe("SOPROLIFE")
+        )
+        c.setFillColor(TEAL)
+        c.setFont(FONT_BOLD, 5.2)
+        c.drawCentredString(
+            center_x, center_y - inner + 13.0, pdf_safe("LIBERAÇÃO")
+        )
+        c.setFont(FONT_BOLD, 4.6)
+        c.drawCentredString(
+            center_x, center_y - inner + 7.4, pdf_safe("INSTITUCIONAL")
+        )
+        c.restoreState()
+
     def _draw_signature_image(
         self,
         image: SignatureImage,
@@ -792,10 +884,10 @@ class _Composer:
 
     def draw_validation_block(self) -> None:
         content = self.content
-        info_lines: list[str] = [
-            f"Documento: {content.document_code}",
-            f"Versão: {content.version_number}",
-        ]
+        # M25.4 — "Documento" e "Versão" saíram daqui: os dois já aparecem no
+        # cabeçalho (canto superior direito) E no rodapé de toda página.
+        # Repeti-los uma terceira vez era só ruído.
+        info_lines: list[str] = []
         if content.validation_code:
             info_lines.append(f"Código de verificação: {content.validation_code}")
         if content.released_at_local:
@@ -872,29 +964,31 @@ class _Composer:
             return
 
     def draw_mir_notice(self) -> None:
+        """Nota discreta, sem caixa própria (M25.4).
+
+        A informação continua obrigatória — o laudo precisa dizer que o
+        traçado está em documento separado —, mas ela é uma nota de rodapé,
+        não um bloco de mesmo peso visual que a conclusão médica. A caixa
+        anterior competia com o conteúdo clínico.
+        """
+
         lines = wrap_text(
             MIR_SEPARATE_NOTICE,
             font=FONT_ITALIC,
-            size=7.5,
-            max_width=CONTENT_WIDTH - 24,
+            size=7.2,
+            max_width=CONTENT_WIDTH - 12,
         )
-        height = len(lines) * 10 + 18
-        self.ensure(height + 6)
+        height = len(lines) * 9.4 + 6
+        self.ensure(height + 4)
         c = self.canvas
         top = self.y
-        c.setStrokeColor(RULE)
-        c.setLineWidth(0.6)
-        c.setFillColor(HexColor("#FFFFFF"))
-        c.rect(
-            MARGIN_X, top - height, CONTENT_WIDTH, height, stroke=1, fill=1
-        )
-        c.setFont(FONT_ITALIC, 7.5)
+        text_y = top - 8
+        c.setFont(FONT_ITALIC, 7.2)
         c.setFillColor(MUTED)
-        text_y = top - 14
         for line in lines:
-            c.drawString(MARGIN_X + 12, text_y, line)
-            text_y -= 10
-        self.y = top - height - 6
+            c.drawString(MARGIN_X + 6, text_y, line)
+            text_y -= 9.4
+        self.y = top - height - 4
 
 
 # ------------------------------------------------------------------ API
@@ -948,17 +1042,18 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
         content.released_at_local or content.issued_at_local
     ).date()
     patient = content.patient
+    # Rótulos NÃO repetem o título do cartão ("Paciente"/"Exame"): com o
+    # título embutido, "PACIENTE › PACIENTE" virava eco visual (M25.4).
     patient_fields: list[tuple[str, str]] = [
-        ("Paciente", patient.full_name),
+        ("Nome", patient.full_name),
         ("Data de nascimento", format_date(patient.birth_date)),
     ]
     age = format_age(patient.birth_date, reference)
     patient_fields.append(("Idade", age or "não informada"))
     patient_fields.append(("Sexo", format_sex(patient.sex)))
     if patient.public_code:
-        patient_fields.append(("Registro do paciente", patient.public_code))
-    composer.draw_section_heading("Identificação do paciente")
-    composer.draw_field_grid(patient_fields)
+        patient_fields.append(("Registro", patient.public_code))
+    composer.draw_data_card("Paciente", patient_fields)
 
     exam = content.exam
     exam_date = format_date(exam.exam_date, exam.date_precision)
@@ -971,14 +1066,13 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
     if location.contact_line:
         location_text = f"{location_text}\n{location.contact_line}"
     exam_fields: list[tuple[str, str]] = [
-        ("Exame", exam.public_code),
-        ("Data e hora do exame", exam_date),
-        ("Fase pós-broncodilatador", _post_bd_label(exam.has_post_bd)),
+        ("Código", exam.public_code),
+        ("Data e hora", exam_date),
+        ("Pós-broncodilatador", _post_bd_label(exam.has_post_bd)),
         ("Indicação clínica", exam.clinical_indication or "não informada"),
         ("Local de realização", location_text),
     ]
-    composer.draw_section_heading("Dados do exame")
-    composer.draw_field_grid(exam_fields)
+    composer.draw_data_card("Exame", exam_fields)
 
     composer.draw_section_heading("Conclusão")
     composer.draw_paragraph(

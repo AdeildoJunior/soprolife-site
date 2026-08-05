@@ -277,9 +277,15 @@ check(
     && !/def finalize_report_document/.test(reports)
 );
 check(
-  "UI não promete liberação ou assinatura visual",
-  workflow.includes("Nenhum documento deste fluxo é assinado ou liberado")
-    && !/assinado digitalmente|imagem de assinatura|signature image/i.test(
+  "UI não promete assinatura qualificada",
+  // M25.4 — a asserção antiga exigia a frase "Nenhum documento deste fluxo é
+  // assinado ou liberado nesta versão". Ela nasceu no M24C, quando não havia
+  // liberação nenhuma; a M25.2 introduziu o estado `liberado` e a frase virou
+  // FALSA — a UI passou a afirmar que nada era liberado enquanto liberava.
+  // O que precisa ser garantido é o que sempre foi a intenção: a interface
+  // nunca pode vender a liberação institucional como assinatura ICP-Brasil.
+  /não é assinatura ICP-Brasil/i.test(workflow)
+    && !/assinado digitalmente|assinatura digital qualificada aplicada/i.test(
       workflow
     )
 );

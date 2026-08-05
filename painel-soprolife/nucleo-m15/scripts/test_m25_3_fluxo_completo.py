@@ -331,8 +331,11 @@ def main() -> int:
                   "Com resposta significativa ao broncodilatador." in laudo_txt, "")
             check("laudo declara que o PDF da MIR é documento separado",
                   "SEPARADO" in laudo_txt.upper(), "")
+            # Insensível a caixa: o que importa é a ressalva estar presente,
+            # não se ela abre a frase (M25.4 encurtou a declaração).
             check("laudo NÃO alega assinatura ICP-Brasil",
-                  "não constitui, por si só" in laudo_txt, "")
+                  "não constitui, por si só" in laudo_txt.lower()
+                  and "icp-brasil" in laudo_txt.lower(), "")
             check("laudo traz o adendo preservando o corpo anterior",
                   "ADENDO 1" in laudo_txt.upper(), "")
 

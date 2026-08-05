@@ -1225,3 +1225,59 @@ def test_laudo_liberado_tipico_cabe_em_uma_pagina(client, auth, db, person):
         "o laudo liberado típico precisa caber em uma página "
         f"(gerou {version.page_count})"
     )
+
+
+# ----------------------------------------------------- M25.4 (visual/selo)
+
+
+def test_selo_institucional_so_aparece_em_laudo_liberado(client, case, db):
+    """O selo é uma afirmação de estado: numa prévia seria mentira visual."""
+
+    preview = _preview(client, case)
+    assert preview.status_code == 200, preview.text
+    previa = db.get(ReportDocumentVersion, preview.json()["preview_version_id"])
+    texto_previa = _pdf_text(_stored_bytes(db, previa))
+    assert "LIBERAÇÃO" not in texto_previa.upper()
+    # Encerra a transação de leitura antes de voltar à API: no SQLite uma
+    # transação ORM aberta faz o commit da liberação falhar com
+    # "database is locked".
+    db.rollback()
+
+    released = _release(client, case, preview.json())
+    assert released.status_code == 200, released.text
+    liberada = db.get(
+        ReportDocumentVersion, released.json()["released_version_id"]
+    )
+    texto = _pdf_text(_stored_bytes(db, liberada))
+    # O selo imprime o estado em duas linhas dentro do anel.
+    assert "SOPROLIFE" in texto
+    assert "LIBERAÇÃO" in texto.upper()
+    assert "INSTITUCIONAL" in texto.upper()
+    # E nunca sugere assinatura qualificada.
+    assert "assinado digitalmente" not in texto.lower()
+
+
+def test_laudo_nao_repete_codigo_e_versao_no_bloco_de_validacao(
+    client, case, db
+):
+    """M25.4 — código e versão constam do cabeçalho e do rodapé.
+
+    O bloco de validação repetia os dois uma TERCEIRA vez. A informação
+    continua no documento; o que saiu foi a redundância.
+    """
+
+    preview = _preview(client, case)
+    released = _release(client, case, preview.json())
+    assert released.status_code == 200, released.text
+    version = db.get(
+        ReportDocumentVersion, released.json()["released_version_id"]
+    )
+    texto = _pdf_text(_stored_bytes(db, version))
+    assert "IDENTIFICAÇÃO E VALIDAÇÃO" in texto.upper()
+    # O bloco não traz mais as linhas "Documento:" e "Versão:".
+    assert "Documento: " not in texto
+    assert "Versão: " not in texto
+    # Mas o código do laudo continua visível (cabeçalho/rodapé) e o código
+    # de verificação segue no bloco.
+    assert case["document"]["public_code"] in texto
+    assert "Código de verificação" in texto

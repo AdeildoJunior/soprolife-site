@@ -47,6 +47,8 @@
     queue: [],
     operational: [],
     physicians: [],
+    units: [],
+    signatureAsset: null,
     templates: [],
     adminAccounts: [],
     adminTemplates: [],
@@ -114,6 +116,14 @@
     return new Intl.DateTimeFormat("pt-BR", withTime
       ? { dateStyle: "short", timeStyle: "short" }
       : { dateStyle: "short", timeZone: "UTC" }).format(parsed);
+  }
+
+  // M25.4 — a fila mostrava o código técnico cru ("clinica_parceira ·
+  // pastore-ipanema"). O rótulo operacional interno não diz nada à médica e
+  // o local completo já aparece ao abrir o documento.
+  function originLabel(value) {
+    const found = ORIGINS.find((item) => item[0] === value);
+    return found ? found[1] : (value || "origem não registrada");
   }
 
   function statusLabel(value) {
@@ -283,15 +293,13 @@
             }">
             <strong>${esc(item.report_code)}</strong>
             <span>${esc(item.exam_code)} · ${fmtDate(item.exam_date, false)}</span>
-            <span>${esc(item.origin_type)}${
-              item.origin_label ? ` · ${esc(item.origin_label)}` : ""
-            }</span>
+            <span>${esc(originLabel(item.origin_type))}</span>
             <span class="report-status-chip report-${esc(item.status)}">${
               esc(statusLabel(item.status))
             }</span>
             ${item.is_corrective
               ? `<span class="report-queue-flag">corrigido</span>` : ""}
-            ${item.locked
+            ${item.locked && item.status !== "liberado"
               ? `<span class="report-queue-flag is-locked">liberado</span>` : ""}
           </button>`).join("")
       : `<div class="report-empty">Nenhum laudo atribuído neste filtro.</div>`;
@@ -553,18 +561,22 @@
 
   function renderSignaturePanel(detail) {
     const pending = detail.status === "assinatura_pendente";
+    // M25.4 — colapsado. O status de um provedor que ainda não existe é
+    // informação de projeto, não de rotina clínica: ocupava um bloco âmbar
+    // inteiro no fim da tela de emissão, competindo com o CTA de liberação.
+    // Continua acessível em um clique, e continua dizendo a verdade.
     return `
-      <aside class="report-signature-panel" aria-labelledby="signatureTitle">
-        <h4 id="signatureTitle">Assinatura qualificada</h4>
-        <p><strong>${pending ? "assinatura qualificada pendente" :
-          "provedor não configurado"}</strong></p>
-        <p>Nenhum documento deste fluxo é assinado ou liberado nesta versão.</p>
+      <details class="report-signature-panel" ${pending ? "open" : ""}>
+        <summary>Assinatura digital qualificada — ${
+          pending ? "pendente" : "provedor não configurado"
+        }</summary>
+        <p>A liberação institucional deste fluxo não é assinatura ICP-Brasil.</p>
         <ul>
           <li>ICP-Brasil A1 — indisponível</li>
           <li>VIDaaS — pendente de seleção e integração</li>
           <li>BirdID — pendente de seleção e integração</li>
         </ul>
-      </aside>`;
+      </details>`;
   }
 
   // M25.3 — contexto do exame e LOCAL DE REALIZAÇÃO estruturado. A médica
@@ -582,17 +594,28 @@
         : exam.post_bronchodilator === false
           ? "Sem fase pós-broncodilatador"
           : naoInformado;
+    const dataHora = exam.exam_time
+      ? `${fmtDate(exam.exam_date, false)} às ${esc(exam.exam_time)}`
+      : fmtDate(exam.exam_date, false);
+    // M25.4 — um contexto só. Antes havia a faixa de identidade (paciente,
+    // código, nascimento, origem) MAIS este bloco: o mesmo exame aparecia
+    // duas vezes e a "origem" repetia o local em código técnico.
     return `
       <div class="report-exam-context">
         <article>
+          <h4>Paciente</h4>
+          <div><span>Nome</span><strong>${esc(detail.patient.full_name)}</strong></div>
+          <div><span>Nascimento</span><strong>${
+            fmtDate(detail.patient.date_of_birth, false)
+          }</strong></div>
+          <div><span>Registro</span><strong>${esc(detail.patient.public_code)}</strong></div>
+        </article>
+        <article>
           <h4>Exame</h4>
           <div><span>Código</span><strong>${esc(exam.public_code || "—")}</strong></div>
-          <div><span>Data</span><strong>${fmtDate(exam.exam_date, false)}</strong></div>
-          <div><span>Hora</span><strong>${
-            exam.exam_time ? esc(exam.exam_time) : naoInformado
-          }</strong></div>
-          <div><span>Broncodilatador</span><strong>${bd}</strong></div>
-          <div class="report-exam-indication"><span>Indicação clínica</span><strong>${
+          <div><span>Data</span><strong>${dataHora}</strong></div>
+          <div><span>Broncodil.</span><strong>${bd}</strong></div>
+          <div><span>Indicação</span><strong>${
             exam.clinical_indication ? esc(exam.clinical_indication) : `<em class="report-empty-value">não informada</em>`
           }</strong></div>
         </article>
@@ -607,7 +630,6 @@
                  local.contato ? esc(local.contato) : naoInformado
                }</strong></div>`
             : `<p class="report-help">Local não resolvido para este documento.</p>`}
-          <p class="report-help">Vem da clínica vinculada ao exame — nunca fixo no laudo.</p>
         </article>
       </div>`;
   }
@@ -641,22 +663,16 @@
             <span class="report-status-chip report-${esc(detail.status)}">${
               esc(statusLabel(detail.status))
             }</span>
-            ${released ? `<span class="report-status-chip report-liberado-flag">Liberado</span>` : ""}
             ${hasAddendum ? `<span class="report-status-chip report-adendo-flag">Com adendo</span>` : ""}
             ${detail.corrects_document_id
               ? `<span class="report-status-chip report-corrigido-flag">Documento corretivo</span>`
               : ""}
-            ${detail.locked ? `<span class="report-status-chip report-locked-flag">Conteúdo bloqueado</span>` : ""}
+            ${/* M25.4 — "Liberado" e "Conteúdo bloqueado" repetiam o chip de
+                  status: liberado JÁ implica bloqueado. Só mostramos o
+                  bloqueio quando ele NÃO é consequência óbvia do status. */""
+            }${detail.locked && !released
+              ? `<span class="report-status-chip report-locked-flag">Conteúdo bloqueado</span>` : ""}
           </div>
-        </div>
-
-        <div class="report-clinical-identity">
-          <div><span>Paciente</span><strong>${esc(detail.patient.full_name)}</strong></div>
-          <div><span>Código</span><strong>${esc(detail.patient.public_code)}</strong></div>
-          <div><span>Nascimento</span><strong>${fmtDate(detail.patient.date_of_birth, false)}</strong></div>
-          <div><span>Origem</span><strong>${esc(detail.origin_type)}${
-            detail.origin_label ? ` · ${esc(detail.origin_label)}` : ""
-          }</strong></div>
         </div>
 
         ${renderExamAndLocation(detail)}
@@ -797,6 +813,12 @@
       `<option value="${esc(profile.id)}">${esc(profile.professional_name)} · ` +
       `CRM/${esc(profile.crm_state)} ${esc(profile.crm_number)}</option>`
     ).join("");
+    const unitOptions = (state.units || []).map((unit) => {
+      const lugar = [unit.bairro, unit.cidade].filter(Boolean).join(", ");
+      return `<option value="${esc(unit.id)}">${esc(unit.nome)}${
+        lugar ? ` · ${esc(lugar)}` : ""
+      }</option>`;
+    }).join("");
     return `
       <div class="report-operational-shell">
         <section class="report-panel" aria-labelledby="uploadTitle">
@@ -832,9 +854,13 @@
                   aria-describedby="originHelp">
                 <span id="originHelp" class="report-help">Não informe paciente, contato ou observação clínica.</span>
               </label>
-              <label for="reportPartnerUnit">Referência técnica de unidade parceira (opcional)
-                <input id="reportPartnerUnit" name="origin_partner_unit_id"
-                  maxlength="36" autocomplete="off">
+              <label for="reportPartnerUnit">Unidade parceira (define o local no laudo)
+                <select id="reportPartnerUnit" name="origin_partner_unit_id">
+                  <option value="">Sem unidade — usar o rótulo da origem</option>
+                  ${unitOptions}
+                </select>
+                <span class="report-help">Só se aplica à origem “clínica
+                  parceira”. É daqui que sai o endereço impresso no laudo.</span>
               </label>
               <label for="reportPdfFile">PDF original
                 <input id="reportPdfFile" name="file" type="file"
@@ -895,6 +921,20 @@
                   value="${esc(profile && profile.rqe)}">
               </label>
             </div>
+            <div class="report-admin-grid">
+              <label for="reportCrmDisplay">CRM formatado (impresso no laudo)
+                <input id="reportCrmDisplay" name="crm_display" maxlength="30"
+                  placeholder="52.62307-5" aria-describedby="crmDisplayHelp"
+                  value="${esc(profile && profile.crm_display)}">
+                <span id="crmDisplayHelp" class="report-help">Só formatação —
+                  precisa ter os mesmos dígitos do CRM.</span>
+              </label>
+              <label for="reportEspecialidade">Especialidade (impressa no laudo)
+                <input id="reportEspecialidade" name="especialidade" maxlength="120"
+                  placeholder="Médica Pneumologista"
+                  value="${esc(profile && profile.especialidade)}">
+              </label>
+            </div>
             <label for="reportVerification">Verificação
               <select id="reportVerification" name="verification_status" required>
                 ${options([
@@ -914,7 +954,69 @@
             }</strong>${profile && profile.verified_at
               ? ` · ${fmtDate(profile.verified_at, true)}` : ""}</p>
             <button class="m15-btn" type="submit">Salvar perfil médico</button>
-          </form>` : ""}
+          </form>
+          ${renderSignatureAssetAdmin(profile)}` : ""}
+      </section>`;
+  }
+
+  // M25.4 — área administrativa do ativo de assinatura manuscrita.
+  //
+  // Os endpoints existiam desde a M25.2, mas NÃO havia interface: na prática
+  // não havia como cadastrar a assinatura sem chamar a API à mão. Este bloco
+  // é o lugar visível onde o ativo autorizado entra.
+  //
+  // A imagem NUNCA volta pela API (nem bytes, nem caminho): o painel mostra
+  // apenas se existe, o hash e as dimensões. Por isso não há preview aqui —
+  // a ausência de preview é intencional, não uma lacuna.
+  function renderSignatureAssetAdmin(profile) {
+    if (!profile || !profile.id) {
+      return `<p class="report-help">Salve o perfil médico antes de cadastrar
+        a assinatura.</p>`;
+    }
+    const asset = state.signatureAsset;
+    const carregado = asset && asset.physician_profile_id === profile.id;
+    const configurada = carregado && asset.configurada;
+    return `
+      <section class="report-signature-asset" aria-labelledby="signatureAssetTitle">
+        <h4 id="signatureAssetTitle">Assinatura manuscrita (imagem)</h4>
+        <p class="report-help">
+          Elemento visual de identificação. <strong>Não é</strong> assinatura
+          digital qualificada ICP-Brasil. É aplicada somente depois de a médica
+          clicar em “Assinar e liberar laudo” — nunca na prévia.
+        </p>
+        ${carregado ? `
+          <p class="report-signature-asset-state">
+            <span class="report-status-chip ${
+              configurada ? "report-liberado-flag" : "report-atribuido"
+            }">${configurada ? "Cadastrada" : "Não cadastrada"}</span>
+            ${configurada ? `<span class="report-help">SHA-256
+              ${esc(String(asset.ativo.sha256).slice(0, 16))}… ·
+              ${esc(asset.ativo.image_width)}×${esc(asset.ativo.image_height)} px</span>` : ""}
+          </p>` : `
+          <button class="m15-btn" type="button"
+            data-report-signature-status="${esc(profile.id)}">Ver situação da assinatura</button>`}
+        <form id="reportSignatureAssetForm" class="report-signature-asset-form">
+          <input type="hidden" name="physician_profile_id" value="${esc(profile.id)}">
+          <label for="reportSignatureFile">Arquivo PNG com fundo transparente
+            <input id="reportSignatureFile" name="arquivo" type="file"
+              accept="image/png,.png" required>
+            <span class="report-help">Até 2 MiB, proporção entre 0,8:1 e 12:1.
+              O arquivo é gravado fora do repositório, em raiz privada 0700.</span>
+          </label>
+          <label class="report-check">
+            <input type="checkbox" name="confirmacao_ok" required>
+            Confirmo que este é o ativo de assinatura <strong>autorizado</strong>
+            pela profissional identificada acima.
+          </label>
+          <div class="report-signature-asset-actions">
+            <button class="m15-btn m15-btn-primary" type="submit"${
+              state.busy ? " disabled" : ""
+            }>Cadastrar assinatura</button>
+            ${configurada ? `
+              <button class="m15-btn" type="button"
+                data-report-signature-revoke="${esc(profile.id)}">Revogar atual</button>` : ""}
+          </div>
+        </form>
       </section>`;
   }
 
@@ -1038,6 +1140,11 @@
         labels.push("operational");
         calls.push(client().api("/laudos/medicos-disponiveis"));
         labels.push("physicians");
+        // M25.4 — unidades para o seletor de local. Antes o formulário pedia
+        // o UUID da unidade digitado à mão, o que na prática significava
+        // deixar o campo vazio e perder o endereço no laudo.
+        calls.push(client().api("/unidades?tamanho=100"));
+        labels.push("units");
       }
       if (can("admin")) {
         calls.push(client().api("/laudos/admin/medicos"));
@@ -1047,7 +1154,13 @@
       }
       const values = await Promise.all(calls);
       if (epoch !== state.loadEpoch) return;
-      labels.forEach((label, index) => { state[label] = values[index]; });
+      labels.forEach((label, index) => {
+        const value = values[index];
+        // `/unidades` é paginado ({itens, total}); os demais devolvem lista.
+        state[label] = (label === "units" && value && Array.isArray(value.itens))
+          ? value.itens
+          : value;
+      });
       if (state.selectedDocumentId &&
           !state.queue.some((item) => item.document_id === state.selectedDocumentId)) {
         state.selectedDocumentId = "";
@@ -1487,6 +1600,10 @@
       crm_number: form.elements.crm_number.value,
       crm_state: form.elements.crm_state.value,
       rqe: form.elements.rqe.value || null,
+      // M25.4 — identificação impressa no laudo. Sem estes dois campos o
+      // documento saía sem especialidade e com o CRM em dígitos crus.
+      crm_display: form.elements.crm_display.value || null,
+      especialidade: form.elements.especialidade.value || null,
       verification_status: form.elements.verification_status.value,
       active: form.elements.active.checked,
     };
@@ -1499,6 +1616,86 @@
       );
       announce("Perfil médico atualizado.", "ok");
       await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+      render();
+    } finally {
+      state.busy = false;
+    }
+  }
+
+  // ------------------------------------------- M25.4 ativo de assinatura
+
+  const SIGNATURE_CONFIRMATION = "ATIVO DE ASSINATURA AUTORIZADO";
+  const MAX_SIGNATURE_BYTES = 2 * 1024 * 1024;
+
+  async function loadSignatureAsset(profileId) {
+    try {
+      state.signatureAsset = await client().api(
+        `/laudos/admin/medicos/${encodeURIComponent(profileId)}/assinatura`
+      );
+    } catch (error) {
+      state.signatureAsset = null;
+      announce(readableError(error), "erro");
+    }
+    render();
+  }
+
+  async function uploadSignatureAsset(form) {
+    const file = form.elements.arquivo.files[0];
+    if (!file) {
+      announce("Selecione o PNG da assinatura autorizada.", "erro");
+      return;
+    }
+    if (file.size > MAX_SIGNATURE_BYTES) {
+      announce("A imagem excede o limite de 2 MiB.", "erro");
+      return;
+    }
+    if (!form.elements.confirmacao_ok.checked) {
+      announce("Confirme que o arquivo é o ativo autorizado.", "erro");
+      return;
+    }
+    const profileId = form.elements.physician_profile_id.value;
+    const payload = new FormData();
+    payload.append("arquivo", file);
+    // A frase exata é exigida pela API — a caixa marcada acima é o
+    // consentimento humano que autoriza enviá-la.
+    payload.append("confirmacao", SIGNATURE_CONFIRMATION);
+    state.busy = true;
+    announce("Validando e armazenando a assinatura em raiz privada…", "");
+    render();
+    try {
+      await client().api(
+        `/laudos/admin/medicos/${encodeURIComponent(profileId)}/assinatura`,
+        { method: "POST", body: payload }
+      );
+      announce("Assinatura cadastrada. A anterior, se havia, foi revogada.", "ok");
+      await loadSignatureAsset(profileId);
+    } catch (error) {
+      announce(readableError(error), "erro");
+      render();
+    } finally {
+      state.busy = false;
+    }
+  }
+
+  async function revokeSignatureAsset(profileId) {
+    if (!window.confirm(
+      "Revogar a assinatura atual?\n\n" +
+      "Os laudos JÁ liberados continuam válidos e preservam a imagem que " +
+      "usaram. Novos laudos passam a sair sem imagem, apenas com a " +
+      "identificação profissional."
+    )) return;
+    state.busy = true;
+    announce("Revogando ativo de assinatura…", "");
+    render();
+    try {
+      await client().api(
+        `/laudos/admin/medicos/${encodeURIComponent(profileId)}/assinatura`,
+        { method: "DELETE" }
+      );
+      announce("Assinatura revogada sem apagar o histórico.", "ok");
+      await loadSignatureAsset(profileId);
     } catch (error) {
       announce(readableError(error), "erro");
       render();
@@ -1568,6 +1765,14 @@
       render();
       const form = document.getElementById("reportReassignForm");
       if (form) form.querySelector("select").focus();
+      return;
+    }
+    if (button.matches("[data-report-signature-status]")) {
+      loadSignatureAsset(button.getAttribute("data-report-signature-status"));
+      return;
+    }
+    if (button.matches("[data-report-signature-revoke]")) {
+      revokeSignatureAsset(button.getAttribute("data-report-signature-revoke"));
       return;
     }
     if (button.matches("[data-report-admin-template]")) {
@@ -1715,6 +1920,8 @@
       saveTemplateRevision(event.target);
     } else if (event.target.id === "reportCorrectionForm") {
       openCorrection(event.target);
+    } else if (event.target.id === "reportSignatureAssetForm") {
+      uploadSignatureAsset(event.target);
     }
   }
 

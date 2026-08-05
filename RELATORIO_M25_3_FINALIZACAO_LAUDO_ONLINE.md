@@ -568,3 +568,196 @@ e os runbooks M24A/M24C/M24D.
 explícita; não usar dado real de paciente; não afirmar que a liberação
 institucional é ICP-Brasil; não commitar ativo de assinatura; não fazer
 push/merge/deploy sem autorização separada.
+
+---
+
+# ADENDO M25.4 — Enxugamento visual, selo institucional e assinatura
+
+Executado em **05/08/2026**, 11h20–14h00 (America/Sao_Paulo), na mesma
+branch, a partir do retorno visual sobre as telas e o PDF.
+
+## A. Pedido
+
+1. Deixar menos poluído o painel **e** o laudo gerado.
+2. Explicar (ou criar) a área de upload do exame.
+3. Visual mais premium, com selos.
+4. Colocar a imagem da assinatura.
+
+## B. Arquivos que NÃO chegaram
+
+Dois itens do pedido dependiam de arquivos que **não estavam disponíveis**:
+
+- **modelo do Mais Laudos** — não veio na conversa nem está no disco;
+- **foto da assinatura da médica** — idem.
+
+Procurei em `~/Downloads`, no repositório e na raiz privada. Os únicos PDFs
+em Downloads eram os dois que eu mesmo havia gerado.
+
+**Não inventei nem desenhei assinatura.** O que fiz foi construir o caminho
+completo para ela entrar em um passo, e provar que o caminho funciona (§F).
+
+Sobre os "selos": o próprio escopo da M25.2 manda inspirar-se apenas na
+**organização** do Mais Laudos, sem copiá-lo. Projetei um selo de identidade
+própria da SoproLife — o que seria o correto mesmo com o modelo em mãos.
+
+## C. Enxugamento do laudo
+
+Saiu redundância, não informação:
+
+| O que saiu | Por quê |
+| --- | --- |
+| `Documento:` e `Versão:` do bloco de validação | Já constam do cabeçalho **e** do rodapé de toda página — eram a terceira repetição |
+| Cabeçalhos soltos de seção | Viraram título embutido no cartão (`draw_data_card`), removendo uma camada visual por bloco |
+| Eco de rótulo ("PACIENTE › PACIENTE") | Virou "PACIENTE › NOME" e "EXAME › CÓDIGO" |
+| Caixa da nota da MIR | Virou nota de rodapé: continua obrigatória, parou de competir com a conclusão |
+| 2 linhas da declaração de liberação | Encurtada mantendo as três afirmações exigidas |
+
+## D. Selo institucional
+
+`draw_verification_seal()` — selo circular próprio: dois anéis, um "visto"
+desenhado com retas e o texto do estado.
+
+Regras que ele respeita:
+
+- **Só em documento liberado.** Numa prévia seria mentira visual (testado).
+- Fica **fora** da faixa reservada da assinatura — nunca por cima.
+- Diz "LIBERAÇÃO INSTITUCIONAL", nunca "assinado digitalmente".
+
+Um detalhe que custou uma iteração: as posições verticais do texto precisam
+ser conferidas contra a **corda do anel interno** — num círculo a largura cai
+conforme se afasta do centro, e "INSTITUCIONAL" vazou para fora na primeira
+tentativa.
+
+## E. Enxugamento do painel
+
+| O que saiu | Por quê |
+| --- | --- |
+| Faixa de identidade separada | Repetia paciente/exame que o bloco de contexto já mostrava |
+| Campo "Origem" com código técnico | `clinica_parceira · pastore-ipanema` não diz nada à médica; o local completo já aparece |
+| Chips "Liberado" + "Conteúdo bloqueado" | Repetiam o chip de status — liberado **já implica** bloqueado |
+| Flag "liberado" duplicada na fila | Mesmo motivo |
+| Caixa âmbar de assinatura qualificada | Virou `<details>` colapsado; competia com o CTA de liberação |
+| Placeholder de PDF com 420px de vazio | Reduzido a 96px — espaço reservado para conteúdo inexistente era a maior fonte de poluição |
+
+O contexto agora é **um bloco de três colunas**: Paciente · Exame · Local.
+
+## F. Assinatura — caminho completo, pronto para o arquivo real
+
+### Interface criada (não existia)
+
+Os endpoints existiam desde a M25.2, mas **não havia tela**: na prática não
+dava para cadastrar a assinatura sem chamar a API à mão.
+
+**Administração → Contas médicas → selecione a médica → "Assinatura
+manuscrita (imagem)"**. A tela mostra se existe ativo (hash e dimensões),
+recebe o PNG com confirmação consciente, e revoga o atual.
+
+Não há preview da imagem **de propósito**: a API nunca devolve os bytes nem
+o caminho. A ausência de preview é a garantia funcionando.
+
+### Defeito encontrado e corrigido
+
+O botão "Revogar" recebia **405 do próprio proxy**: `_M15_METHODS` só
+permitia GET/POST/PATCH. Liberei **apenas** `DELETE` (PUT e HEAD seguem
+bloqueados), com teste travando os dois comportamentos.
+
+### Prova de que funciona
+
+Cadastrei um **PNG geométrico sintético** (zigue-zague, sem semelhança com
+assinatura de ninguém), liberei um laudo e confirmei a imagem impressa acima
+da linha, ao lado do selo, sem sobreposição. Em seguida **revoguei o ativo e
+apaguei o PNG** — deixar uma assinatura falsa vinculada ao nome real da
+médica seria arriscado. O histórico foi preservado (`active: false`,
+`revoked_at` gravado), como manda o desenho.
+
+### Como cadastrar a assinatura real
+
+1. Peça à Dra. Ana Cristina um **PNG com fundo transparente** (até 2 MiB,
+   proporção entre 0,8:1 e 12:1).
+2. Entre no painel como **admin**.
+3. Administração → Contas médicas → selecione a médica.
+4. Em "Assinatura manuscrita (imagem)": escolha o arquivo, marque a
+   confirmação, clique em **Cadastrar assinatura**.
+
+O arquivo vai para
+`/home/adeildo/.soprolife-private/m25-reports/assinaturas/<perfil>/<id>.png`
+(0600 sob raiz 0700), **fora do Git**. Nunca entra em repositório, log,
+fixture, JavaScript ou URL pública.
+
+### Sobre "assinar digitalmente"
+
+Uma imagem de assinatura **não é** assinatura digital. Hoje o fluxo produz
+**liberação institucional**: prova quem liberou, com autenticação individual,
+qual texto, qual hash e quando. É honesto e rastreável — e o PDF diz
+textualmente que não é ICP-Brasil.
+
+Para assinatura **com validade jurídica plena**, o caminho é PAdES/ICP-Brasil
+com provedor real (VIDaaS, BirdID, ou certificado A1/A3 da médica). A
+arquitetura já está preparada: `get_signature_provider()` é o ponto de
+extensão e continua devolvendo o provedor nulo.
+
+> Vi um PDF assinado via **D4Sign** em `~/Downloads`. Se a SoproLife já usa
+> D4Sign, ele é um candidato natural a provedor — mas isso é uma decisão
+> comercial/jurídica sua, não de engenharia. Não abri o arquivo.
+
+## G. Área de upload do exame — onde fica
+
+**Ela já existia** e não foi encontrada porque só aparece para o papel
+**operacional** — você estava logado como médica. A médica **não** faz
+upload por desenho: quem recebe e atribui é a operação.
+
+Caminho: entre como `operacional.teste@soprolife.local` →
+**Laudos de espirometria** → painel **"Recebimento e atribuição — Novo PDF
+original"**.
+
+Fluxo: digite o código do exame (`ESP-000009`) → **Localizar exame** →
+escolha a médica, a origem, **a unidade parceira** e o PDF → **Enviar e
+atribuir**. O laudo aparece na fila da médica.
+
+**Melhoria feita:** o campo de unidade era um **input de UUID digitado à
+mão** — na prática ficava vazio e o laudo saía sem endereço. Agora é um
+seletor real alimentado por `GET /unidades`.
+
+## H. Testes
+
+| Verificação | Resultado |
+| --- | --- |
+| `pytest` suíte completa | **931 passaram**, 22 skipped, **0 falhas** |
+| `test_m25_2_native_report.py` | **37 passaram** (2 novos testes M25.4) |
+| `test_m25_3_fluxo_completo.py` | **49 OK, 0 falhas** |
+| `test_command_center_m15_proxy.py` | **46 passaram** (inclui o novo teste de DELETE) |
+| `test-m24a-report-workflow.js` | Todos passaram |
+| `node --check` em todo o JS | OK |
+| `git diff --check` | OK |
+
+### Duas regressões que meu próprio enxugamento causou
+
+A suíte pegou o que a inspeção visual não pegaria: ao encurtar os textos eu
+removi **ênfase com significado**, e os testes existentes estavam certos.
+
+1. **`SEPARADO` em caixa alta** — que o PDF da MIR é documento separado é
+   ponto clínico/legal, não formatação. Ênfase restaurada.
+2. **`"Esta liberação não constitui, por si só, ..."`** — eu havia reescrito
+   a abertura da frase legal. Restaurada ao texto exato.
+
+Ambas foram corrigidas restaurando o conteúdo, **não afrouxando o teste**.
+
+### Duas asserções desatualizadas
+
+Estas sim eram do teste, e ambas apontavam defeitos reais:
+
+1. **`"UI não promete liberação ou assinatura visual"`** exigia a frase
+   *"Nenhum documento deste fluxo é assinado ou liberado nesta versão"*. Essa
+   frase nasceu no M24C e **virou falsa na M25.2**: a interface afirmava que
+   nada era liberado enquanto liberava. A asserção agora verifica a intenção
+   real — a UI nunca pode vender a liberação como ICP-Brasil.
+2. A verificação da ressalva ICP-Brasil no PDF era sensível a maiúsculas.
+
+## I. Pendências desta etapa
+
+1. **PNG da assinatura autorizada** — a tela está pronta e provada (§F).
+2. **Modelo do Mais Laudos** — se você ainda quiser comparar organização,
+   precisa enviá-lo; o selo atual é identidade própria.
+3. **Decisão sobre assinatura qualificada** (PAdES/ICP-Brasil, D4Sign?).
+4. **Screenshots automatizados do painel** seguem indisponíveis (harness é
+   Chrome-only; a máquina só tem Firefox).

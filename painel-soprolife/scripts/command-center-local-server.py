@@ -48,7 +48,14 @@ _API_PATH    = "/painel-soprolife/api/command-center"
 _STATUS_PATH = "/painel-soprolife/api/command-center/status"
 _M15_PREFIX = "/painel-soprolife/api/m15"
 _M15_DEFAULT_UPSTREAM = "http://127.0.0.1:8015/api/v1"
-_M15_METHODS = frozenset({"GET", "POST", "PATCH"})
+# M25.4 — DELETE entrou para a revogação do ativo de assinatura médica
+# (DELETE /laudos/admin/medicos/{id}/assinatura). Sem ele, o botão "Revogar"
+# do painel recebia 405 do próprio proxy e a única saída era chamar a API à
+# mão. PUT e HEAD seguem bloqueados de propósito: nenhuma rota do M15 os usa,
+# e a fronteira de autorização continua sendo o RBAC da API (admin-only),
+# não esta lista.
+_M15_METHODS = frozenset({"GET", "POST", "PATCH", "DELETE"})
+_M15_ALLOW_HEADER = "GET, POST, PATCH, DELETE"
 _M15_FORWARD_HEADERS = {
     "authorization": "Authorization",
     "content-type": "Content-Type",
@@ -245,7 +252,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             self._m15_error(400, "Caminho M15 inválido.")
             return
         if m15 is not None:
-            self._m15_error(405, "Método não permitido.", {"Allow": "GET, POST, PATCH"})
+            self._m15_error(405, "Método não permitido.", {"Allow": _M15_ALLOW_HEADER})
         else:
             super().do_HEAD()
 
@@ -268,7 +275,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(501, "Unsupported method")
             return
         if method not in _M15_METHODS:
-            self._m15_error(405, "Método não permitido.", {"Allow": "GET, POST, PATCH"})
+            self._m15_error(405, "Método não permitido.", {"Allow": _M15_ALLOW_HEADER})
             return
         self._handle_m15(method, m15)
 
