@@ -44,9 +44,17 @@ _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 MAX_SIGNATURE_BYTES = 2 * 1024 * 1024
 MIN_DIMENSION = 40
 MAX_DIMENSION = 4000
-# Assinatura é um traço largo e baixo; proporções absurdas indicam arquivo
-# errado (ex.: uma foto de documento enviada por engano).
-MIN_ASPECT_RATIO = 0.8
+# Sanidade de formato, NÃO controle de segurança: só barra arquivo
+# grosseiramente errado (uma captura de tela inteira, um banner). Quem
+# protege este ativo de verdade é o RBAC do cadastro e a conferência visual
+# do admin, não esta razão.
+#
+# O piso era 0.8, escrito sob a premissa de que "assinatura é um traço largo
+# e baixo". A primeira assinatura autorizada real derrubou a premissa: é um
+# floreio vertical, medido em 0.42. Assinar com monograma ou rubrica alta é
+# comum, então o piso desceu para caber nesse caso sem deixar de recusar
+# proporções absurdas.
+MIN_ASPECT_RATIO = 0.25
 MAX_ASPECT_RATIO = 12.0
 
 

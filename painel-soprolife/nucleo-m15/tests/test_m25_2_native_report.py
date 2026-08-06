@@ -1257,13 +1257,14 @@ def test_selo_institucional_so_aparece_em_laudo_liberado(client, case, db):
     assert "assinado digitalmente" not in texto.lower()
 
 
-def test_laudo_nao_repete_codigo_e_versao_no_bloco_de_validacao(
-    client, case, db
-):
-    """M25.4 — código e versão constam do cabeçalho e do rodapé.
+def test_laudo_traz_a_validacao_sem_repetir_codigo_e_versao(client, case, db):
+    """Os dados de conferência aparecem, e cada um aparece uma vez só.
 
-    O bloco de validação repetia os dois uma TERCEIRA vez. A informação
-    continua no documento; o que saiu foi a redundância.
+    M25.5 — este teste checava também o título do cartão que carregava a
+    validação. O cartão deixou de existir: a validação subiu para o
+    cabeçalho (QR e código) e para a faixa do rodapé (onde conferir). O que
+    importa nunca foi ONDE isso está desenhado, e sim que esteja no
+    documento sem redundância — é isso que as asserções cobrem agora.
     """
 
     preview = _preview(client, case)
@@ -1273,11 +1274,119 @@ def test_laudo_nao_repete_codigo_e_versao_no_bloco_de_validacao(
         ReportDocumentVersion, released.json()["released_version_id"]
     )
     texto = _pdf_text(_stored_bytes(db, version))
-    assert "IDENTIFICAÇÃO E VALIDAÇÃO" in texto.upper()
-    # O bloco não traz mais as linhas "Documento:" e "Versão:".
+
+    # Continua sem as linhas "Documento:" e "Versão:", que repetiam pela
+    # terceira vez o que já está no cabeçalho e no rodapé.
     assert "Documento: " not in texto
     assert "Versão: " not in texto
-    # Mas o código do laudo continua visível (cabeçalho/rodapé) e o código
-    # de verificação segue no bloco.
+
+    # E o essencial permanece: identificação do laudo, código de verificação
+    # e a instrução de onde conferir.
     assert case["document"]["public_code"] in texto
     assert "Código de verificação" in texto
+    assert released.json()["validation_code"] in texto
+    assert "Para validar este documento" in texto
+
+
+# ------------------------------------------------------------------ M25.5
+
+
+def test_assinatura_mais_alta_que_larga_e_aceita(client, auth, case):
+    """Uma rubrica vertical é assinatura tanto quanto um traço deitado.
+
+    O piso de proporção nasceu de uma premissa errada ("assinatura é um
+    traço largo e baixo") e recusava a primeira assinatura autorizada real,
+    que é um floreio vertical. O piso desceu; o teto e as demais guardas
+    continuam iguais.
+    """
+
+    caminho = (
+        f"/api/v1/laudos/admin/medicos/{case['profile']['id']}/assinatura"
+    )
+    alta = _synthetic_signature_png(width=120, height=300)  # proporção 0.4
+    resposta = client.post(
+        caminho,
+        data={"confirmacao": SIGNATURE_CONFIRMATION},
+        files={"arquivo": ("assinatura.png", alta, "image/png")},
+        headers=auth("admin"),
+    )
+    assert resposta.status_code == 201, resposta.text
+    assert resposta.json()["image_width"] == 120
+    assert resposta.json()["image_height"] == 300
+
+
+def test_proporcao_absurda_continua_recusada(client, auth, case):
+    """Afrouxar o piso não podia abrir a porta para qualquer arquivo."""
+
+    caminho = (
+        f"/api/v1/laudos/admin/medicos/{case['profile']['id']}/assinatura"
+    )
+    for largura, altura in ((60, 900), (900, 60)):
+        resposta = client.post(
+            caminho,
+            data={"confirmacao": SIGNATURE_CONFIRMATION},
+            files={
+                "arquivo": (
+                    "x.png",
+                    _synthetic_signature_png(width=largura, height=altura),
+                    "image/png",
+                )
+            },
+            headers=auth("admin"),
+        )
+        assert resposta.status_code == 422, resposta.text
+        assert (
+            resposta.json()["erro"]["codigo"] == "assinatura_proporcao_invalida"
+        )
+
+
+def test_selo_declara_o_tipo_real_e_nunca_antecipa_icp_brasil(
+    client, case, db
+):
+    """O selo lateral não pode prometer o que o sistema ainda não faz.
+
+    Enquanto nenhum provedor ICP-Brasil estiver conectado, a liberação é
+    institucional — e é isso que o selo precisa dizer. Um selo "ICP-Brasil"
+    ou "PAdES" aqui seria uma afirmação falsa impressa no documento.
+    """
+
+    preview = _preview(client, case)
+    released = _release(client, case, preview.json())
+    assert released.status_code == 200, released.text
+    version = db.get(
+        ReportDocumentVersion, released.json()["released_version_id"]
+    )
+    texto = _pdf_text(_stored_bytes(db, version))
+    alto = texto.upper()
+
+    # O selo do tipo declara o que de fato houve.
+    assert "ASSINADO" in alto and "ELETRONICAMENTE" in alto
+    assert "LIBERAÇÃO" in alto and "INSTITUCIONAL" in alto
+
+    # E nunca as marcas reservadas à assinatura qualificada.
+    assert "ASSINADO DIGITALMENTE" not in alto
+    assert "PADRÃO PADES" not in alto
+    # "ICP-Brasil" só pode aparecer na frase que NEGA a assinatura
+    # qualificada — nunca como selo afirmativo.
+    assert alto.count("ICP-BRASIL") == 1
+    assert "não constitui" in texto
+
+
+def test_cabecalho_traz_o_local_estruturado_da_unidade(client, case, db):
+    """O local encabeça o documento e sai do corpo — sem duplicar.
+
+    M25.5 — o endereço saiu do cartão "Exame" e passou a encabeçar o laudo,
+    como o timbre de uma unidade. Continua vindo da unidade vinculada ao
+    exame, nunca escrito no template.
+    """
+
+    preview = _preview(client, case)
+    version = db.get(
+        ReportDocumentVersion, preview.json()["preview_version_id"]
+    )
+    texto = _pdf_text(_stored_bytes(db, version))
+
+    # O rótulo "Local de realização" era do cartão que deixou de existir.
+    assert "Local de realização" not in texto
+    # O nome da unidade aparece uma vez só, no cabeçalho.
+    assert texto.count("Espaço de atendimento SoproLife") == 1

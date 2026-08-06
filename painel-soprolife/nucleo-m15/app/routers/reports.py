@@ -118,6 +118,8 @@ from ..services.report_conclusions import (
 from ..services.report_native_pdf import (
     AddendumBlock,
     NativeReportPdfError,
+    SIGNATURE_KIND_INSTITUTIONAL,
+    SIGNATURE_KIND_QUALIFIED_ICP,
     build_native_report_pdf,
 )
 from ..services.report_locations import resolve_report_location
@@ -2326,6 +2328,36 @@ def _qualified_signature_evidence(
     )
 
 
+def _seal_signature_kind(
+    db: Session,
+    *,
+    version: ReportDocumentVersion | None,
+    profile: PhysicianProfile,
+) -> str:
+    """Tipo de assinatura que o SELO do laudo deve declarar.
+
+    Lê a evidência realmente gravada, com o mesmo critério do portão
+    `_qualified_signature_evidence`. Enquanto nenhum provedor ICP-Brasil
+    estiver conectado, a resposta é sempre a liberação institucional — o
+    selo não pode prometer o que o sistema ainda não faz. Quando o provedor
+    entrar, esta função passa a devolver o tipo qualificado sozinha, sem
+    nenhuma mudança no desenho do laudo.
+    """
+
+    if version is None:
+        return SIGNATURE_KIND_INSTITUTIONAL
+    signature = db.execute(
+        select(ReportSignature).where(
+            ReportSignature.report_document_version_id == version.id
+        )
+    ).scalar_one_or_none()
+    if signature is not None and _qualified_signature_evidence(
+        signature, version, profile
+    ):
+        return SIGNATURE_KIND_QUALIFIED_ICP
+    return SIGNATURE_KIND_INSTITUTIONAL
+
+
 @router.post("/{document_id}/nova-versao-corretiva", status_code=201)
 def open_corrective_document(
     document_id: str,
@@ -2904,6 +2936,11 @@ def sign_and_release_report(
         signature_image=(
             resolved_signature.image if resolved_signature else None
         ),
+        # Na liberação a evidência ainda não foi gravada — ela nasce logo
+        # abaixo, junto da versão. O selo declara a liberação institucional
+        # porque é exatamente isso que está acontecendo aqui: uma assinatura
+        # qualificada viria de um provedor, por outro caminho.
+        signature_kind=SIGNATURE_KIND_INSTITUTIONAL,
         addenda=load_addenda(db, document.id),
         pilot_warning=_pilot_warning(),
     )
@@ -3101,6 +3138,11 @@ def add_report_addendum(
         validation_code=document.validation_code,
         signature_image=(
             resolved_signature.image if resolved_signature else None
+        ),
+        # O adendo reemite o laudo JÁ liberado: o selo precisa continuar
+        # declarando a mesma assinatura que fechou o documento original.
+        signature_kind=_seal_signature_kind(
+            db, version=released_version, profile=profile
         ),
         addenda=addenda,
         pilot_warning=_pilot_warning(),

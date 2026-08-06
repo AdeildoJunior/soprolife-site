@@ -58,8 +58,19 @@ MARGIN_TOP = 34.0
 MARGIN_BOTTOM = 38.0
 CONTENT_WIDTH = PAGE_WIDTH - 2 * MARGIN_X
 
-HEADER_HEIGHT = 50.0
-PAGE_FOOTER_RESERVE = 26.0
+# M25.5 — cabeçalho em moldura de três células (marca | local | validação),
+# no lugar da faixa solta com régua. A moldura fecha o topo do documento e
+# concentra ali a validação, que antes ocupava um cartão inteiro no corpo.
+HEADER_HEIGHT = 84.0
+HEADER_LOGO_CELL = 158.0
+HEADER_CODE_CELL = 104.0
+PAGE_FOOTER_RESERVE = 40.0
+
+# Selos da faixa de assinatura. Duas colunas laterais de largura fixa
+# emolduram a assinatura; o miolo recebe o que sobra.
+SEAL_CELL_WIDTH = 116.0
+SEAL_RADIUS = 32.0
+SIGNATURE_AREA_HEIGHT = 62.0
 
 LOGO_MAX_HEIGHT = 34.0
 LOGO_MAX_WIDTH = 150.0
@@ -184,6 +195,15 @@ class PhysicianBlock:
     rqe: str | None
 
 
+# Tipos de assinatura que o selo lateral pode declarar. O valor NUNCA é
+# escolhido pelo desenhista: ele chega pronto de quem sabe o que de fato
+# aconteceu (o router, a partir da evidência gravada). É assim que o selo
+# continua correspondendo ao tipo real de assinatura mesmo quando um
+# provedor ICP-Brasil entrar no ar.
+SIGNATURE_KIND_INSTITUTIONAL = "institutional"
+SIGNATURE_KIND_QUALIFIED_ICP = "qualified_icp"
+
+
 @dataclass(frozen=True)
 class SignatureImage:
     """Bytes já revalidados do ativo manuscrito autorizado."""
@@ -218,6 +238,9 @@ class NativeReportContent:
     validation_code: str | None = None
     validation_url: str | None = None
     signature_image: SignatureImage | None = None
+    # Fail-closed: sem informação em contrário, o selo declara a liberação
+    # institucional. Nunca assume ICP-Brasil por omissão.
+    signature_kind: str = SIGNATURE_KIND_INSTITUTIONAL
     addenda: tuple[AddendumBlock, ...] = field(default_factory=tuple)
     pilot_warning: str | None = None
     logo_path: Path | None = None
@@ -403,82 +426,198 @@ class _Composer:
     # ------------------------------------------------------------ header
 
     def _draw_header(self) -> None:
+        """Moldura de topo: marca | local de realização | validação.
+
+        O local vem SEMPRE de `content.location`, resolvido a partir da
+        unidade vinculada ao exame. Nenhum endereço é escrito no template:
+        trocar a clínica troca o cabeçalho, sem tocar neste arquivo.
+        """
+
         c = self.canvas
         top = PAGE_HEIGHT - MARGIN_TOP
-        logo_drawn = self._draw_logo(top)
-        if not logo_drawn:
-            c.setFont(FONT_BOLD, 16)
-            c.setFillColor(NAVY)
-            c.drawString(MARGIN_X, top - 16, "SoproLife")
+        bottom = top - HEADER_HEIGHT
+        right = PAGE_WIDTH - MARGIN_X
+        divider_left = MARGIN_X + HEADER_LOGO_CELL
+        divider_right = right - HEADER_CODE_CELL
 
-        c.setFont(FONT, 7.5)
-        c.setFillColor(MUTED)
-        c.drawRightString(
-            PAGE_WIDTH - MARGIN_X, top - 10, pdf_safe(INSTITUTION_NAME)
+        c.setStrokeColor(RULE)
+        c.setLineWidth(0.8)
+        c.rect(MARGIN_X, bottom, CONTENT_WIDTH, HEADER_HEIGHT, stroke=1, fill=0)
+        c.line(divider_left, bottom, divider_left, top)
+        c.line(divider_right, bottom, divider_right, top)
+
+        self._draw_logo_cell(
+            left=MARGIN_X, right=divider_left, top=top, bottom=bottom
         )
-        c.drawRightString(
-            PAGE_WIDTH - MARGIN_X,
-            top - 20,
-            pdf_safe(
-                f"Laudo {self.content.document_code} "
-                f"• versão {self.content.version_number}"
-            ),
+        self._draw_location_cell(
+            left=divider_left, right=divider_right, top=top, bottom=bottom
+        )
+        self._draw_validation_cell(
+            left=divider_right, right=right, top=top, bottom=bottom
         )
 
-        # A base do logo fica em `top - LOGO_MAX_HEIGHT` (top - 34). A régua
-        # precisa passar ABAIXO disso, senão ela corta a tagline
-        # "DIAGNÓSTICOS E SOLUÇÕES EM SAÚDE" impressa no rodapé da marca.
-        rule_y = top - HEADER_HEIGHT + 10
-        c.setStrokeColor(NAVY)
-        c.setLineWidth(1.4)
-        c.line(MARGIN_X, rule_y, PAGE_WIDTH - MARGIN_X, rule_y)
-        c.setStrokeColor(TEAL)
-        c.setLineWidth(1.4)
-        c.line(MARGIN_X, rule_y, MARGIN_X + 92, rule_y)
-
-    def _draw_logo(self, top: float) -> bool:
+    def _draw_logo_cell(
+        self, *, left: float, right: float, top: float, bottom: float
+    ) -> None:
+        center_x = (left + right) / 2
+        center_y = (top + bottom) / 2
         reader = _load_logo_reader(self.content.logo_path or DEFAULT_LOGO_PATH)
-        if reader is None:
-            return False
-        try:
-            src_w, src_h = reader.getSize()
-        except Exception:
-            return False
-        if src_w <= 0 or src_h <= 0:
-            return False
-        scale = min(LOGO_MAX_WIDTH / src_w, LOGO_MAX_HEIGHT / src_h)
-        width = src_w * scale
-        height = src_h * scale
+        size = self._logo_size(reader)
+        if size is None:
+            c = self.canvas
+            c.setFont(FONT_BOLD, 15)
+            c.setFillColor(NAVY)
+            c.drawCentredString(center_x, center_y - 5, "SoproLife")
+            return
+        width, height = size
         self.canvas.drawImage(
             reader,
-            MARGIN_X,
-            top - height,
+            center_x - width / 2,
+            center_y - height / 2,
             width=width,
             height=height,
             mask="auto",
             preserveAspectRatio=True,
-            anchor="sw",
+            anchor="c",
         )
-        return True
+
+    def _logo_size(self, reader) -> tuple[float, float] | None:
+        if reader is None:
+            return None
+        try:
+            src_w, src_h = reader.getSize()
+        except Exception:
+            return None
+        if src_w <= 0 or src_h <= 0:
+            return None
+        scale = min(LOGO_MAX_WIDTH / src_w, LOGO_MAX_HEIGHT / src_h)
+        return src_w * scale, src_h * scale
+
+    def _draw_location_cell(
+        self, *, left: float, right: float, top: float, bottom: float
+    ) -> None:
+        location = self.content.location
+        width = right - left - 16
+        center_x = (left + right) / 2
+
+        lines: list[tuple[str, str, float]] = []
+        for line in wrap_text(
+            location.name, font=FONT_BOLD, size=8.6, max_width=width
+        ):
+            lines.append((line, FONT_BOLD, 8.6))
+        for raw in (location.address_line, location.contact_line):
+            if not raw:
+                continue
+            for line in wrap_text(raw, font=FONT, size=7.6, max_width=width):
+                lines.append((line, FONT, 7.6))
+
+        total = sum(size + 2.6 for _text, _font, size in lines)
+        text_y = (top + bottom) / 2 + total / 2 - 8
+        c = self.canvas
+        for text, font, size in lines:
+            c.setFont(font, size)
+            c.setFillColor(NAVY if font == FONT_BOLD else MUTED)
+            c.drawCentredString(center_x, text_y, text)
+            text_y -= size + 2.6
+
+    def _draw_validation_cell(
+        self, *, left: float, right: float, top: float, bottom: float
+    ) -> None:
+        """Célula de validação: QR e código de verificação.
+
+        M25.5 — antes isto era um cartão inteiro no meio do laudo. Como é
+        metadado de conferência, e não conteúdo clínico, subiu para o
+        cabeçalho e liberou uma faixa inteira do corpo.
+        """
+
+        content = self.content
+        center_x = (left + right) / 2
+        code = content.validation_code
+
+        c = self.canvas
+        if content.validation_url:
+            size = 50.0
+            self._draw_qr(
+                content.validation_url,
+                x=center_x - size / 2,
+                y=bottom + (HEADER_HEIGHT - size) / 2 + 5,
+                size=size,
+            )
+            # Com QR, a legenda fica no pé da célula, abaixo do código.
+            caption_y = bottom + 7
+        else:
+            # Sem URL de validação não há QR, e ancorar a legenda no pé
+            # deixava dois terços da célula em branco. O código então ocupa
+            # o centro, como qualquer texto sozinho numa caixa.
+            caption_y = (top + bottom) / 2 - 4
+            if not content.released:
+                c.setFont(FONT_BOLD, 7.0)
+                c.setFillColor(WARN_INK)
+                c.drawCentredString(
+                    center_x, caption_y + 20, pdf_safe("PRÉVIA")
+                )
+
+        c.setFont(FONT, 5.6)
+        c.setFillColor(MUTED)
+        c.drawCentredString(
+            center_x, caption_y + 8, pdf_safe("Código de verificação")
+        )
+        c.setFont(FONT_BOLD, 7.2)
+        c.setFillColor(NAVY)
+        c.drawCentredString(center_x, caption_y, pdf_safe(code or "—"))
 
     # ------------------------------------------------------------ rodapé
 
     def _draw_page_footer(self) -> None:
         c = self.canvas
-        y = MARGIN_BOTTOM + 14
+        content = self.content
+        y = MARGIN_BOTTOM + 24
+
         c.setStrokeColor(RULE)
         c.setLineWidth(0.6)
         c.line(MARGIN_X, y, PAGE_WIDTH - MARGIN_X, y)
         c.setFont(FONT, 6.8)
         c.setFillColor(MUTED)
         left = (
-            f"{INSTITUTION_NAME} • Laudo {self.content.document_code} "
-            f"• versão {self.content.version_number}"
+            f"{INSTITUTION_NAME} • Laudo {content.document_code} "
+            f"• versão {content.version_number}"
         )
         c.drawString(MARGIN_X, y - 10, pdf_safe(left))
-        code = self.content.validation_code
-        right = f"Verificação {code}" if code else "PRÉVIA — sem código"
-        c.drawRightString(PAGE_WIDTH - MARGIN_X, y - 10, pdf_safe(right))
+        c.drawRightString(
+            PAGE_WIDTH - MARGIN_X,
+            y - 10,
+            pdf_safe(f"Página {self.page_index}"),
+        )
+
+        # Faixa de validação: fecha a página do jeito que um laudo emitido
+        # fecha — dizendo onde conferir e com qual código. Só existe quando
+        # há URL configurada; sem ela, o código já está no cabeçalho.
+        if not (content.validation_url and content.validation_code):
+            return
+        strip_height = 14.0
+        strip_y = MARGIN_BOTTOM - 2
+        c.setFillColor(CARD_BG)
+        c.setStrokeColor(RULE)
+        c.setLineWidth(0.6)
+        c.rect(
+            MARGIN_X, strip_y, CONTENT_WIDTH, strip_height, stroke=1, fill=1
+        )
+        # A URL de validação normalmente já termina com o próprio código.
+        # Quando termina, pedir "e informe o código" logo depois imprime o
+        # mesmo dado duas vezes na mesma linha.
+        aviso = f"Para validar este documento acesse {content.validation_url}"
+        if not content.validation_url.rstrip("/").endswith(
+            content.validation_code
+        ):
+            aviso = (
+                f"{aviso} e informe o código de verificação "
+                f"{content.validation_code}"
+            )
+        c.setFont(FONT, 6.6)
+        c.setFillColor(INK)
+        c.drawCentredString(
+            MARGIN_X + CONTENT_WIDTH / 2, strip_y + 4.6, pdf_safe(aviso)
+        )
 
     # ---------------------------------------------------------- primitivas
 
@@ -486,22 +625,39 @@ class _Composer:
         self.y -= height
 
     def draw_title(self) -> None:
+        """Barra de título: o documento se nomeia em uma linha só.
+
+        M25.5 — antes eram um título de 19pt e uma linha de estado logo
+        abaixo, ocupando 34pt de altura para dizer duas coisas curtas. A
+        barra diz as mesmas duas coisas em 20pt.
+        """
+
+        height = 20.0
+        self.ensure(height + 8)
         c = self.canvas
-        self.ensure(46)
-        c.setFont(FONT_BOLD, 19)
+        top = self.y
+        c.setFillColor(CARD_BG)
+        c.setStrokeColor(RULE)
+        c.setLineWidth(0.8)
+        c.rect(MARGIN_X, top - height, CONTENT_WIDTH, height, stroke=1, fill=1)
+
+        c.setFont(FONT_BOLD, 11.5)
         c.setFillColor(NAVY)
-        c.drawString(MARGIN_X, self.y - 19, pdf_safe(DOCUMENT_TITLE))
-        self.y -= 22
+        c.drawCentredString(
+            MARGIN_X + CONTENT_WIDTH / 2, top - 14, pdf_safe(DOCUMENT_TITLE)
+        )
 
         status = (
             "DOCUMENTO LIBERADO"
             if self.content.released
             else PREVIEW_WATERMARK
         )
-        c.setFont(FONT_BOLD, 8)
+        c.setFont(FONT_BOLD, 6.4)
         c.setFillColor(TEAL if self.content.released else WARN_INK)
-        c.drawString(MARGIN_X, self.y - 8, pdf_safe(status))
-        self.y -= 12
+        c.drawRightString(
+            PAGE_WIDTH - MARGIN_X - 8, top - 13, pdf_safe(status)
+        )
+        self.y = top - height - 8
 
     def draw_banner(self, text: str) -> None:
         """Faixa de aviso (prévia/piloto) — nunca sobre outro conteúdo."""
@@ -528,90 +684,88 @@ class _Composer:
         self.y = top - height - 7
 
     def draw_section_heading(self, title: str) -> None:
-        self.ensure(18)
+        # A régua fica 8pt abaixo da linha de base, não 5: com 5 ela passava
+        # dentro da cedilha de "CONCLUSÕES" e parecia um risco no texto.
+        self.ensure(22)
         c = self.canvas
-        c.setFont(FONT_BOLD, 9.5)
+        c.setFont(FONT_BOLD, 9.0)
         c.setFillColor(NAVY)
         c.drawString(MARGIN_X, self.y - 10, pdf_safe(title.upper()))
         c.setStrokeColor(TEAL)
         c.setLineWidth(1.0)
-        c.line(MARGIN_X, self.y - 15, MARGIN_X + 26, self.y - 15)
-        self.y -= 16
+        c.line(MARGIN_X, self.y - 18, MARGIN_X + 22, self.y - 18)
+        self.y -= 21
 
-    def draw_data_card(self, title: str, fields: list[tuple[str, str]]) -> None:
-        """Cartão de dados com o título EMBUTIDO (M25.4).
+    def draw_identification_table(
+        self,
+        left_fields: list[tuple[str, str]],
+        right_fields: list[tuple[str, str]],
+    ) -> None:
+        """Bloco único de identificação, em duas colunas com rótulo em linha.
 
-        Antes cada bloco gastava um cabeçalho solto acima do cartão. Somando
-        paciente, exame, conclusão e observações, eram quatro títulos
-        flutuando entre quatro caixas — ruído puro. O título agora vive
-        dentro do próprio cartão, e o documento perde uma camada visual
-        sem perder nenhuma informação.
+        M25.5 — antes eram dois cartões empilhados (paciente e exame), cada
+        um com título próprio e cada campo gastando duas linhas: o rótulo em
+        caixa alta acima e o valor abaixo. Onze campos consumiam mais de um
+        terço da página. No formato "Rótulo: valor" o mesmo conteúdo cabe em
+        uma moldura só, e nenhum dado foi removido.
         """
 
-        self.draw_field_grid(fields, title=title)
+        label_size = 8.2
+        value_size = 8.2
+        padding = 10.0
+        column_width = (CONTENT_WIDTH - 3 * padding) / 2
 
-    def draw_field_grid(
-        self, fields: list[tuple[str, str]], *, title: str | None = None
-    ) -> None:
-        """Grade de dois campos por linha dentro de um cartão claro."""
+        def layout(fields: list[tuple[str, str]]) -> list[tuple[str, str, bool]]:
+            """Quebra cada campo em linhas prontas para desenhar.
 
-        label_size = 7.0
-        value_size = 9.0
-        column_width = (CONTENT_WIDTH - 32) / 2
-        rows: list[list[tuple[str, list[str]]]] = []
-        current: list[tuple[str, list[str]]] = []
-        for label, value in fields:
-            wrapped = wrap_text(
-                value or "—",
-                font=FONT,
-                size=value_size,
-                max_width=column_width,
-            )
-            current.append((label, wrapped))
-            if len(current) == 2:
-                rows.append(current)
-                current = []
-        if current:
-            rows.append(current)
+            A primeira linha carrega o rótulo; as continuações entram
+            recuadas, sem repetir o rótulo.
+            """
 
-        row_heights = [
-            max(len(cell[1]) for cell in row) * 11 + 10 for row in rows
-        ]
-        title_height = 15.0 if title else 0.0
-        height = sum(row_heights) + 8 + title_height
-        self.ensure(height + 6)
+            rendered: list[tuple[str, str, bool]] = []
+            for label, value in fields:
+                prefix = f"{label}: "
+                prefix_width = _width(pdf_safe(prefix), FONT_BOLD, label_size)
+                wrapped = wrap_text(
+                    value or "—",
+                    font=FONT,
+                    size=value_size,
+                    max_width=column_width - prefix_width,
+                )
+                rendered.append((prefix, wrapped[0], True))
+                for extra in wrapped[1:]:
+                    rendered.append(("", extra, False))
+            return rendered
+
+        left = layout(left_fields)
+        right = layout(right_fields)
+        line_height = 12.4
+        rows = max(len(left), len(right))
+        height = rows * line_height + 2 * padding
+        self.ensure(height + 8)
 
         c = self.canvas
         top = self.y
-        c.setFillColor(CARD_BG)
         c.setStrokeColor(RULE)
-        c.setLineWidth(0.6)
-        c.rect(
-            MARGIN_X, top - height, CONTENT_WIDTH, height, stroke=1, fill=1
-        )
-        c.setFillColor(TEAL)
-        c.rect(MARGIN_X, top - height, 2.6, height, stroke=0, fill=1)
+        c.setLineWidth(0.8)
+        c.rect(MARGIN_X, top - height, CONTENT_WIDTH, height, stroke=1, fill=0)
 
-        if title:
-            c.setFont(FONT_BOLD, 8)
-            c.setFillColor(NAVY)
-            c.drawString(MARGIN_X + 16, top - 13, pdf_safe(title.upper()))
-
-        row_top = top - 8 - title_height
-        for row, row_height in zip(rows, row_heights):
-            for index, (label, wrapped) in enumerate(row):
-                x = MARGIN_X + 16 + index * column_width
-                c.setFont(FONT_BOLD, label_size)
-                c.setFillColor(MUTED)
-                c.drawString(x, row_top - 8, pdf_safe(label.upper()))
+        for index, column in enumerate((left, right)):
+            x = MARGIN_X + padding + index * (column_width + padding)
+            text_y = top - padding - value_size
+            for prefix, value, is_first in column:
+                if is_first and prefix:
+                    c.setFont(FONT_BOLD, label_size)
+                    c.setFillColor(NAVY)
+                    c.drawString(x, text_y, pdf_safe(prefix))
+                    offset = _width(pdf_safe(prefix), FONT_BOLD, label_size)
+                else:
+                    offset = 8.0
                 c.setFont(FONT, value_size)
                 c.setFillColor(INK)
-                text_y = row_top - 19
-                for line in wrapped:
-                    c.drawString(x, text_y, line)
-                    text_y -= 11
-            row_top -= row_height
-        self.y = top - height - 7
+                c.drawString(x + offset, text_y, pdf_safe(value))
+                text_y -= line_height
+        self.y = top - height - 9
 
     def draw_paragraph(
         self,
@@ -671,34 +825,58 @@ class _Composer:
 
     # ------------------------------------------- bloco médico + assinatura
 
+    def _statement_text(self) -> str:
+        return (
+            RELEASE_STATEMENT
+            if self.content.released
+            else (
+                "Prévia sem validade: a identificação e a assinatura médica "
+                "só são aplicadas após a ação \"Assinar e liberar laudo\"."
+            )
+        )
+
     def _signature_block_height(self) -> float:
-        physician = self.content.physician
+        """Altura exata da faixa.
+
+        Especialidade, CRM e RQE moram na MESMA linha da identificação, então
+        a contagem é fixa: nome e credenciais. Antes cada um ocupava uma
+        linha própria e a especialidade fazia a faixa crescer.
+        """
+
         statement_lines = wrap_text(
-            RELEASE_STATEMENT if self.content.released else
-            "Prévia sem validade: a identificação e a assinatura médica só "
-            "são aplicadas após a ação \"Assinar e liberar laudo\".",
+            self._statement_text(),
             font=FONT_ITALIC,
             size=7.2,
             max_width=CONTENT_WIDTH - 24,
         )
-        lines_count = 3 + (1 if physician.specialty else 0)
         return (
-            8  # respiro superior
-            + 42  # área reservada da assinatura manuscrita
+            23  # respiro superior + linha da data de liberação
+            + SIGNATURE_AREA_HEIGHT
             + 6
-            + 1  # linha
-            + 12 * lines_count
-            + 6
+            + 1  # linha de assinatura
+            + 13  # nome
+            + 12  # especialidade, CRM e RQE
+            + 8
             + len(statement_lines) * 8.6
-            + 4
+            + 6
         )
 
     def draw_physician_signature_block(self) -> None:
-        """Área EXCLUSIVA de identificação e assinatura — nada mais aqui."""
+        """Faixa EXCLUSIVA de assinatura, em três colunas.
+
+        M25.5 — o selo do TIPO de assinatura fica à esquerda, a assinatura
+        manuscrita e a identificação da médica no centro, o selo institucional
+        da SoproLife à direita. Os selos ocupam colunas próprias e nunca são
+        desenhados sobre a área reservada da assinatura.
+        """
 
         height = self._signature_block_height()
         # Bloco atômico: nunca é dividido entre páginas.
         self.ensure(height)
+        # A faixa segue o fluxo do texto e NÃO é ancorada no pé da página.
+        # Ancorar foi tentado e piorou: num laudo curto abria um vão morto
+        # entre a nota do MIR e a assinatura, e o vão no meio chama mais
+        # atenção que a mesma sobra no fim da folha.
         c = self.canvas
         top = self.y
         physician = self.content.physician
@@ -707,140 +885,248 @@ class _Composer:
         c.setLineWidth(0.6)
         c.line(MARGIN_X, top, PAGE_WIDTH - MARGIN_X, top)
 
-        # Faixa reservada da assinatura manuscrita. Fica vazia quando não há
-        # ativo autorizado — nada é desenhado por cima em nenhum caso.
-        signature_area_top = top - 8
-        signature_area_height = 42.0
-        line_y = signature_area_top - signature_area_height - 6
-        line_width = 240.0
-        line_x = MARGIN_X + (CONTENT_WIDTH - line_width) / 2
+        center_x = MARGIN_X + CONTENT_WIDTH / 2
+        # A régua de assinatura não ocupa a coluna central inteira: uma linha
+        # de 250pt sob um traço estreito parecia um campo vazio a preencher.
+        line_width = 200.0
+        line_x = center_x - line_width / 2
 
+        # Data de liberação acima da assinatura, como num laudo emitido.
+        moment = self.content.released_at_local or self.content.issued_at_local
+        c.setFont(FONT, 7.6)
+        c.setFillColor(MUTED)
+        prefix = "Liberado em" if self.content.released else "Prévia gerada em"
+        c.drawCentredString(
+            center_x,
+            top - 14,
+            pdf_safe(
+                f"{prefix} {format_datetime(moment)} "
+                f"({self.content.timezone_label})"
+            ),
+        )
+
+        signature_area_top = top - 23
+        line_y = signature_area_top - SIGNATURE_AREA_HEIGHT - 6
+
+        # Área reservada da assinatura manuscrita. Fica vazia quando não há
+        # ativo autorizado — nada é desenhado por cima em nenhum caso.
         image = self.content.signature_image if self.content.released else None
         if image is not None:
             self._draw_signature_image(
                 image,
-                center_x=line_x + line_width / 2,
+                center_x=center_x,
                 baseline_y=line_y + 3,
                 max_width=line_width - 20,
-                max_height=signature_area_height,
+                max_height=SIGNATURE_AREA_HEIGHT,
             )
 
         c.setStrokeColor(NAVY)
         c.setLineWidth(0.8)
         c.line(line_x, line_y, line_x + line_width, line_y)
 
-        # Selo institucional à esquerda, na faixa livre ao lado da assinatura.
-        # Fica FORA da área reservada da assinatura manuscrita — nunca é
-        # desenhado por cima dela.
-        self.draw_verification_seal(
-            center_x=MARGIN_X + 46,
-            center_y=line_y + signature_area_height / 2 - 2,
+        seal_center_y = line_y + SIGNATURE_AREA_HEIGHT / 2 - 4
+        self.draw_signature_type_seal(
+            center_x=MARGIN_X + SEAL_CELL_WIDTH / 2,
+            center_y=seal_center_y,
+        )
+        self.draw_institutional_seal(
+            center_x=PAGE_WIDTH - MARGIN_X - SEAL_CELL_WIDTH / 2,
+            center_y=seal_center_y,
         )
 
         text_y = line_y - 13
         c.setFont(FONT_BOLD, 10.5)
         c.setFillColor(NAVY)
         c.drawCentredString(
-            MARGIN_X + CONTENT_WIDTH / 2,
-            text_y,
-            pdf_safe(physician.professional_name),
+            center_x, text_y, pdf_safe(physician.professional_name)
         )
         text_y -= 12
-        if physician.specialty:
-            c.setFont(FONT, 9)
-            c.setFillColor(INK)
-            c.drawCentredString(
-                MARGIN_X + CONTENT_WIDTH / 2,
-                text_y,
-                pdf_safe(physician.specialty),
-            )
-            text_y -= 12
-        c.setFont(FONT, 9)
-        c.setFillColor(INK)
         registry = f"CRM-{physician.crm_state} {physician.crm_display}"
         if physician.rqe:
             registry = f"{registry}   •   RQE {physician.rqe}"
-        c.drawCentredString(
-            MARGIN_X + CONTENT_WIDTH / 2, text_y, pdf_safe(registry)
-        )
+        if physician.specialty:
+            registry = f"{physician.specialty}   •   {registry}"
+        c.setFont(FONT, 8.6)
+        c.setFillColor(INK)
+        c.drawCentredString(center_x, text_y, pdf_safe(registry))
         text_y -= 10
 
-        statement = (
-            RELEASE_STATEMENT
-            if self.content.released
-            else (
-                "Prévia sem validade: a identificação e a assinatura médica "
-                "só são aplicadas após a ação \"Assinar e liberar laudo\"."
-            )
-        )
         lines = wrap_text(
-            statement, font=FONT_ITALIC, size=7.2, max_width=CONTENT_WIDTH - 24
+            self._statement_text(),
+            font=FONT_ITALIC,
+            size=7.2,
+            max_width=CONTENT_WIDTH - 24,
         )
         c.setFont(FONT_ITALIC, 7.2)
         c.setFillColor(MUTED)
-        text_y -= 6
+        text_y -= 8
         for line in lines:
-            c.drawCentredString(MARGIN_X + CONTENT_WIDTH / 2, text_y, line)
+            c.drawCentredString(center_x, text_y, line)
             text_y -= 8.6
 
         self.y = top - height
 
-    def draw_verification_seal(
-        self, *, center_x: float, center_y: float, radius: float = 34.0
+    def _draw_seal_rings(
+        self, *, center_x: float, center_y: float, radius: float, color: Color
     ) -> None:
-        """Selo circular de verificação — identidade PRÓPRIA da SoproLife.
+        c = self.canvas
+        c.setStrokeColor(color)
+        c.setLineWidth(1.6)
+        c.circle(center_x, center_y, radius, stroke=1, fill=0)
+        c.setLineWidth(0.5)
+        c.circle(center_x, center_y, radius - 4.2, stroke=1, fill=0)
 
-        M25.4. Inspirado apenas na ORGANIZAÇÃO de um laudo profissional
-        (um selo fecha o documento), sem copiar marca, arte ou texto de
-        nenhum concorrente. É um elemento gráfico institucional: dois anéis,
-        um "visto" e o texto do estado. NÃO é, e não sugere ser, certificado
-        digital — o próprio selo diz "liberação institucional".
+    def _draw_seal_text(
+        self,
+        text: str,
+        *,
+        center_x: float,
+        center_y: float,
+        dy: float,
+        inner: float,
+        size: float,
+        color: Color,
+    ) -> None:
+        """Escreve dentro do anel, encolhendo até caber na corda daquela altura.
 
-        Só é desenhado em documento LIBERADO: numa prévia, um selo de
-        verificação seria mentira visual.
+        Num círculo a largura útil encolhe conforme o texto se afasta do
+        centro. Estimar isso à mão foi o que fez "INSTITUCIONAL" e
+        "E SOLUÇÕES EM SAÚDE" vazarem para fora do anel. Agora a largura vem
+        da corda real e a fonte cede até caber — nenhuma linha de selo pode
+        mais escapar do círculo, qualquer que seja o texto.
+        """
+
+        safe = pdf_safe(text)
+        # A corda é medida na BORDA SUPERIOR da caixa de texto (linha de base
+        # mais a altura de caixa alta), não na linha de base: é o topo das
+        # letras que encosta no anel primeiro.
+        extreme = abs(dy) + size * 0.78
+        half_chord = max(inner**2 - extreme**2, 1.0) ** 0.5
+        available = half_chord * 2 - 5.0
+        while size > 2.6 and _width(safe, FONT_BOLD, size) > available:
+            size -= 0.1
+        c = self.canvas
+        c.setFont(FONT_BOLD, size)
+        c.setFillColor(color)
+        c.drawCentredString(center_x, center_y + dy, safe)
+
+    def draw_signature_type_seal(
+        self, *, center_x: float, center_y: float, radius: float = SEAL_RADIUS
+    ) -> None:
+        """Selo do TIPO de assinatura aplicada — nunca do tipo desejado.
+
+        M25.5. O texto vem de `content.signature_kind`, que por sua vez vem
+        da evidência realmente gravada. Enquanto não houver provedor
+        ICP-Brasil conectado, este selo diz "liberação institucional", que é
+        o que de fato aconteceu. No dia em que a assinatura qualificada
+        entrar, o MESMO selo passa a declarar ICP-Brasil sem que nenhuma
+        outra parte do laudo precise mudar.
+
+        Não é desenhado em prévia: um selo de assinatura num documento não
+        assinado seria mentira visual.
+        """
+
+        if not self.content.released:
+            return
+        qualified = self.content.signature_kind == SIGNATURE_KIND_QUALIFIED_ICP
+        c = self.canvas
+        c.saveState()
+        self._draw_seal_rings(
+            center_x=center_x,
+            center_y=center_y,
+            radius=radius,
+            color=NAVY if qualified else TEAL,
+        )
+
+        inner = radius - 4.2
+        self._draw_seal_text(
+            "ASSINADO",
+            center_x=center_x, center_y=center_y, dy=16.0,
+            inner=inner, size=5.8, color=NAVY,
+        )
+        self._draw_seal_text(
+            # "eletronicamente" e "digitalmente" NÃO são sinônimos aqui: a
+            # segunda forma é reservada à assinatura com certificado.
+            "DIGITALMENTE" if qualified else "ELETRONICAMENTE",
+            center_x=center_x, center_y=center_y, dy=9.4,
+            inner=inner, size=5.0, color=NAVY,
+        )
+
+        c.setStrokeColor(RULE)
+        c.setLineWidth(0.5)
+        c.line(center_x - inner * 0.62, center_y + 3.4,
+               center_x + inner * 0.62, center_y + 3.4)
+
+        accent = NAVY if qualified else TEAL
+        self._draw_seal_text(
+            "ICP-BRASIL" if qualified else "LIBERAÇÃO",
+            center_x=center_x, center_y=center_y, dy=-6.0,
+            inner=inner, size=6.0, color=accent,
+        )
+        self._draw_seal_text(
+            "PADRÃO PAdES" if qualified else "INSTITUCIONAL",
+            center_x=center_x, center_y=center_y, dy=-14.0,
+            inner=inner, size=4.8, color=accent,
+        )
+        c.restoreState()
+
+    def draw_institutional_seal(
+        self, *, center_x: float, center_y: float, radius: float = SEAL_RADIUS
+    ) -> None:
+        """Selo institucional da SoproLife — identidade PRÓPRIA.
+
+        Inspirado apenas na ORGANIZAÇÃO de um laudo profissional (um selo
+        fecha o documento), sem copiar marca, arte ou texto de nenhum
+        concorrente. O motivo central são as ondas da própria marca,
+        desenhadas em curva — não é certificado nem sugere ser.
         """
 
         if not self.content.released:
             return
         c = self.canvas
         c.saveState()
+        self._draw_seal_rings(
+            center_x=center_x, center_y=center_y, radius=radius, color=TEAL
+        )
 
-        # Anel externo e interno.
-        c.setStrokeColor(TEAL)
-        c.setLineWidth(1.6)
-        c.circle(center_x, center_y, radius, stroke=1, fill=0)
-        c.setLineWidth(0.5)
-        c.circle(center_x, center_y, radius - 4.2, stroke=1, fill=0)
-
-        # "Visto" central, desenhado como duas retas (sem fonte simbólica,
-        # que o WinAnsi não representa).
+        # Ondas da marca, como no "≈" do logotipo. Duas curvas de Bézier
+        # espelhadas, sem depender de fonte simbólica (o WinAnsi não
+        # representa o caractere).
         c.setStrokeColor(NAVY)
-        c.setLineWidth(2.2)
+        c.setLineWidth(1.5)
         c.setLineCap(1)
-        tick = radius * 0.30
-        c.line(center_x - tick, center_y + tick * 0.15,
-               center_x - tick * 0.25, center_y - tick * 0.55)
-        c.line(center_x - tick * 0.25, center_y - tick * 0.55,
-               center_x + tick * 1.05, center_y + tick * 0.85)
+        span = radius * 0.52
+        for index, offset in enumerate((3.0, -2.6)):
+            path = c.beginPath()
+            path.moveTo(center_x - span, center_y + offset)
+            path.curveTo(
+                center_x - span * 0.45, center_y + offset + 4.4,
+                center_x - span * 0.1, center_y + offset - 4.4,
+                center_x + span * 0.35, center_y + offset,
+            )
+            path.curveTo(
+                center_x + span * 0.6, center_y + offset + 2.6,
+                center_x + span * 0.8, center_y + offset + 2.6,
+                center_x + span, center_y + offset + 1.2,
+            )
+            c.setStrokeColor(NAVY if index == 0 else TEAL)
+            c.drawPath(path, stroke=1, fill=0)
 
-        # Texto do selo. As posições verticais são conferidas contra a corda
-        # do anel interno: num círculo, quanto mais longe do centro, menos
-        # largura disponível — foi assim que "INSTITUCIONAL" vazava para fora
-        # do anel na primeira versão.
         inner = radius - 4.2
-        c.setFillColor(NAVY)
-        c.setFont(FONT_BOLD, 5.8)
-        c.drawCentredString(
-            center_x, center_y + inner - 9.0, pdf_safe("SOPROLIFE")
+        self._draw_seal_text(
+            "SOPROLIFE",
+            center_x=center_x, center_y=center_y, dy=15.0,
+            inner=inner, size=6.4, color=NAVY,
         )
-        c.setFillColor(TEAL)
-        c.setFont(FONT_BOLD, 5.2)
-        c.drawCentredString(
-            center_x, center_y - inner + 13.0, pdf_safe("LIBERAÇÃO")
+        self._draw_seal_text(
+            "DIAGNÓSTICOS",
+            center_x=center_x, center_y=center_y, dy=-12.4,
+            inner=inner, size=4.8, color=TEAL,
         )
-        c.setFont(FONT_BOLD, 4.6)
-        c.drawCentredString(
-            center_x, center_y - inner + 7.4, pdf_safe("INSTITUCIONAL")
+        self._draw_seal_text(
+            "EM SAÚDE",
+            center_x=center_x, center_y=center_y, dy=-19.0,
+            inner=inner, size=4.8, color=TEAL,
         )
         c.restoreState()
 
@@ -880,70 +1166,7 @@ class _Composer:
             anchor="sw",
         )
 
-    # --------------------------------------------------- validação + MIR
-
-    def draw_validation_block(self) -> None:
-        content = self.content
-        # M25.4 — "Documento" e "Versão" saíram daqui: os dois já aparecem no
-        # cabeçalho (canto superior direito) E no rodapé de toda página.
-        # Repeti-los uma terceira vez era só ruído.
-        info_lines: list[str] = []
-        if content.validation_code:
-            info_lines.append(f"Código de verificação: {content.validation_code}")
-        if content.released_at_local:
-            info_lines.append(
-                f"Liberado em: {format_datetime(content.released_at_local)} "
-                f"({content.timezone_label})"
-            )
-        else:
-            info_lines.append(
-                f"Prévia gerada em: {format_datetime(content.issued_at_local)} "
-                f"({content.timezone_label})"
-            )
-        if content.validation_url:
-            info_lines.extend(
-                wrap_text(
-                    f"Validação: {content.validation_url}",
-                    font=FONT,
-                    size=7.5,
-                    max_width=CONTENT_WIDTH - 130,
-                )
-            )
-
-        qr_size = 66.0 if content.validation_url else 0.0
-        text_height = len(info_lines) * 10 + 22
-        height = max(text_height, qr_size + 22)
-        self.ensure(height + 8)
-
-        c = self.canvas
-        top = self.y
-        c.setFillColor(CARD_BG)
-        c.setStrokeColor(RULE)
-        c.setLineWidth(0.6)
-        c.rect(
-            MARGIN_X, top - height, CONTENT_WIDTH, height, stroke=1, fill=1
-        )
-
-        c.setFont(FONT_BOLD, 7.5)
-        c.setFillColor(NAVY)
-        c.drawString(
-            MARGIN_X + 12, top - 14, pdf_safe("IDENTIFICAÇÃO E VALIDAÇÃO")
-        )
-        c.setFont(FONT, 7.5)
-        c.setFillColor(INK)
-        text_y = top - 26
-        for line in info_lines:
-            c.drawString(MARGIN_X + 12, text_y, pdf_safe(line))
-            text_y -= 10
-
-        if content.validation_url and qr_size:
-            self._draw_qr(
-                content.validation_url,
-                x=PAGE_WIDTH - MARGIN_X - qr_size - 12,
-                y=top - height + 11,
-                size=qr_size,
-            )
-        self.y = top - height - 7
+    # ------------------------------------------------ QR + nota MIR
 
     def _draw_qr(self, value: str, *, x: float, y: float, size: float) -> None:
         try:
@@ -995,10 +1218,12 @@ class _Composer:
 
 
 def _post_bd_label(has_post_bd: bool | None) -> str:
+    # Rótulo curto: o campo se chama "Pós-BD", então repetir
+    # "exame com fase pós-broncodilatador" no valor era eco do próprio rótulo.
     if has_post_bd is True:
-        return "Sim — exame com fase pós-broncodilatador"
+        return "realizado"
     if has_post_bd is False:
-        return "Não — exame sem fase pós-broncodilatador"
+        return "não realizado"
     return "não informado"
 
 
@@ -1042,63 +1267,50 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
         content.released_at_local or content.issued_at_local
     ).date()
     patient = content.patient
-    # Rótulos NÃO repetem o título do cartão ("Paciente"/"Exame"): com o
-    # título embutido, "PACIENTE › PACIENTE" virava eco visual (M25.4).
+    age = format_age(patient.birth_date, reference)
+    birth = format_date(patient.birth_date)
+    if age:
+        birth = f"{birth} ({age})"
     patient_fields: list[tuple[str, str]] = [
         ("Nome", patient.full_name),
-        ("Data de nascimento", format_date(patient.birth_date)),
+        ("Nascimento", birth),
+        ("Sexo", format_sex(patient.sex)),
     ]
-    age = format_age(patient.birth_date, reference)
-    patient_fields.append(("Idade", age or "não informada"))
-    patient_fields.append(("Sexo", format_sex(patient.sex)))
     if patient.public_code:
         patient_fields.append(("Registro", patient.public_code))
-    composer.draw_data_card("Paciente", patient_fields)
 
     exam = content.exam
     exam_date = format_date(exam.exam_date, exam.date_precision)
     if exam.exam_time:
         exam_date = f"{exam_date} às {exam.exam_time}"
-    location = content.location
-    location_text = location.name
-    if location.address_line:
-        location_text = f"{location_text}\n{location.address_line}"
-    if location.contact_line:
-        location_text = f"{location_text}\n{location.contact_line}"
+    # O LOCAL de realização não entra aqui: ele encabeça o documento, na
+    # célula central do cabeçalho, como num laudo impresso em papel timbrado
+    # da unidade. Repeti-lo no corpo era a mesma informação duas vezes.
     exam_fields: list[tuple[str, str]] = [
-        ("Código", exam.public_code),
-        ("Data e hora", exam_date),
-        ("Pós-broncodilatador", _post_bd_label(exam.has_post_bd)),
-        ("Indicação clínica", exam.clinical_indication or "não informada"),
-        ("Local de realização", location_text),
+        ("Exame", exam.public_code),
+        ("Data", exam_date),
+        ("Pós-BD", _post_bd_label(exam.has_post_bd)),
+        ("Indicação", exam.clinical_indication or "não informada"),
     ]
-    composer.draw_data_card("Exame", exam_fields)
+    composer.draw_identification_table(patient_fields, exam_fields)
 
-    composer.draw_section_heading("Conclusão")
-    composer.draw_paragraph(
-        content.conclusion_text,
-        size=11,
-        leading=15,
-        font=FONT_BOLD,
-        color=NAVY,
-        emphasis_box=True,
-    )
+    composer.draw_section_heading("Conclusões")
+    composer.draw_paragraph(content.conclusion_text, size=10, leading=14)
 
     if content.observations:
         composer.draw_section_heading("Observações complementares")
-        composer.draw_paragraph(content.observations, size=10, leading=13.5)
+        composer.draw_paragraph(content.observations, size=9.4, leading=13)
 
     for addendum in content.addenda:
         composer.draw_section_heading(
             f"Adendo {addendum.sequence} — "
             f"{format_datetime(addendum.created_at)}"
         )
-        composer.draw_paragraph(addendum.body_text, size=10, leading=13.5)
+        composer.draw_paragraph(addendum.body_text, size=9.4, leading=13)
 
     composer.space(2)
     composer.draw_mir_notice()
-    composer.draw_validation_block()
-    # A área de identificação e assinatura fecha o documento: é o último
+    # A faixa de identificação e assinatura fecha o documento: é o último
     # bloco e nunca compartilha espaço com nenhum outro elemento.
     composer.draw_physician_signature_block()
     return composer.finish()

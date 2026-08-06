@@ -291,3 +291,78 @@ decidir sobre autorização. `PUT` e `HEAD` seguem bloqueados.
 `crm_display` e `especialidade` — que a M25.3 tornou graváveis — ganharam
 campos no formulário de perfil médico. Sem eles o laudo saía sem
 especialidade e com o CRM em dígitos crus.
+
+## M25.5 — laudo enxuto, dois selos e a assinatura autorizada
+
+### O que mudou no PDF
+
+O laudo passou a seguir a organização de um laudo emitido em papel
+timbrado, num único bloco de identificação em vez de cartões empilhados.
+
+| Antes (M25.4) | Agora (M25.5) |
+| --- | --- |
+| Faixa de topo solta, com régua | Moldura de 3 células: marca \| local \| validação |
+| Título de 19pt + linha de estado | Barra de título única, 20pt de altura |
+| Dois cartões (Paciente, Exame), 11 campos em 2 linhas cada | Uma moldura, duas colunas, "Rótulo: valor" |
+| Local de realização como campo do corpo | Local encabeça o documento |
+| Cartão "Identificação e validação" no meio | QR e código no cabeçalho; onde conferir, no rodapé |
+| Conclusão em caixa de destaque | Conclusão em texto corrido sob o título |
+| Um selo, ao lado da assinatura | Dois selos, emoldurando a assinatura |
+
+Nenhum dado saiu do documento. O que saiu foi repetição: código e versão
+apareciam três vezes, o rótulo "Pós-broncodilatador" era seguido do valor
+"exame com fase pós-broncodilatador", e o endereço aparecia no corpo tendo
+já um lugar natural no topo.
+
+### Os dois selos
+
+À esquerda, o selo do **tipo de assinatura**. À direita, o selo
+**institucional** da SoproLife. A assinatura manuscrita fica no centro,
+entre os dois, em coluna própria — nenhum selo é desenhado sobre ela.
+
+O selo do tipo lê `content.signature_kind`, que vem de
+`_seal_signature_kind()` no router, que por sua vez aplica o mesmo critério
+do portão `_qualified_signature_evidence()`. Enquanto não houver provedor
+ICP-Brasil conectado, ele declara **liberação institucional** — que é o que
+de fato acontece. Quando a assinatura qualificada entrar, o mesmo selo passa
+a declarar ICP-Brasil/PAdES sozinho, sem tocar no desenho do laudo.
+
+`test_selo_declara_o_tipo_real_e_nunca_antecipa_icp_brasil` trava isso: o
+PDF liberado não pode conter "assinado digitalmente" nem "padrão PAdES", e
+"ICP-Brasil" só pode aparecer **uma vez**, na frase que NEGA a assinatura
+qualificada.
+
+O texto dentro dos anéis é ajustado contra a corda real do círculo
+(`_draw_seal_text`). Estimar isso à mão foi o que fez "INSTITUCIONAL" e
+"E SOLUÇÕES EM SAÚDE" vazarem para fora do anel.
+
+### Proporção da assinatura: uma premissa que estava errada
+
+`MIN_ASPECT_RATIO` era 0.8, escrito sob a premissa de que "assinatura é um
+traço largo e baixo". A primeira assinatura autorizada real é um floreio
+**vertical**, de proporção 0.42 — e era recusada.
+
+O piso desceu para 0.25. Vale registrar o que essa guarda é e o que não é:
+ela nunca foi controle de segurança, e sim sanidade de formato. Quem protege
+o ativo é o RBAC do cadastro e a conferência visual do admin. Dois testes
+cobrem o novo contorno: proporção alta é aceita, proporção absurda
+(1:15 e 15:1) continua recusada.
+
+### Ativo de assinatura da médica
+
+O PNG foi extraído da foto enviada pela direção, recortando **apenas o traço
+de caneta**. O carimbo tipografado que acompanhava a foto (nome,
+especialidade, CRM) foi descartado de propósito: essa informação já é
+composta em texto vivo a partir do cadastro do perfil médico, e rasterizá-la
+congelaria um CRM dentro de uma imagem, criando duas fontes de verdade.
+
+O arquivo vive só em `M15_REPORTS_STORAGE_DIR/assinaturas/<perfil>/<id>.png`,
+com permissão 0600, fora do Git. Ele **não viaja entre máquinas**: em cada
+ambiente precisa ser cadastrado pela tela de Administração.
+
+### Ainda pendente
+
+A liberação continua **não sendo** assinatura qualificada ICP-Brasil. O
+caminho para isso está desenhado em `signature_provider.py` e depende de
+decisão comercial (certificado em nuvem da médica, credenciais de
+homologação) — não de código.

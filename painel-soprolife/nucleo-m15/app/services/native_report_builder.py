@@ -36,6 +36,7 @@ from .report_native_pdf import (
     NativeReportContent,
     PatientBlock,
     PhysicianBlock,
+    SIGNATURE_KIND_INSTITUTIONAL,
     SignatureImage,
 )
 from .report_storage import ReportStorageError, StoredPdfIntegrityError
@@ -207,10 +208,17 @@ def build_native_content(
     released_at: datetime | None = None,
     validation_code: str | None = None,
     signature_image: SignatureImage | None = None,
+    signature_kind: str = SIGNATURE_KIND_INSTITUTIONAL,
     addenda: tuple[AddendumBlock, ...] = (),
     pilot_warning: str | None = None,
 ) -> NativeReportContent:
-    """Conteúdo completo do laudo nativo, já no fuso de apresentação."""
+    """Conteúdo completo do laudo nativo, já no fuso de apresentação.
+
+    `signature_kind` decide o que o selo lateral DECLARA e por isso nunca
+    tem valor esperto: quem chama precisa saber qual assinatura de fato
+    existe. O padrão é a liberação institucional, que é o pior caso do
+    ponto de vista de promessa — declarar de menos nunca engana ninguém.
+    """
 
     settings = get_settings()
     return NativeReportContent(
@@ -244,6 +252,7 @@ def build_native_content(
         validation_code=validation_code,
         validation_url=validation_url(validation_code),
         signature_image=signature_image,
+        signature_kind=signature_kind,
         addenda=addenda,
         pilot_warning=pilot_warning,
         timezone_label=settings.display_timezone,
