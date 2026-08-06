@@ -61,6 +61,10 @@
     interpretation: "",
     selectedTemplateId: "",
     statusFilter: "",
+    // M25.6 — unidade escolhida antes de ver a fila. `null` significa "ainda
+    // não escolheu"; string vazia significa "todas as unidades", que é uma
+    // escolha deliberada da médica e não o mesmo que não ter escolhido.
+    unitFilter: null,
     busy: false,
     notice: "",
     noticeKind: "",
@@ -282,9 +286,80 @@
       </div>`;
   }
 
+  // M25.6 — a médica lauda exames de lugares diferentes (Pastore Ipanema,
+  // atendimento SoproLife, empresa…). Misturar tudo numa lista só obriga a
+  // ler o local de cada linha para saber onde está pisando.
+  function queueUnits() {
+    const porChave = new Map();
+    state.queue.forEach((item) => {
+      const chave = item.location_key
+        || `origem:${item.origin_type || "outro"}`;
+      const atual = porChave.get(chave) || {
+        chave,
+        // O backend resolve o nome pela MESMA função que imprime o local no
+        // laudo. Só caímos no rótulo de origem se a rota não mandou nada.
+        nome: item.location_name || originLabel(item.origin_type),
+        total: 0,
+        pendentes: 0,
+      };
+      atual.total += 1;
+      if (item.status !== "liberado") atual.pendentes += 1;
+      porChave.set(chave, atual);
+    });
+    return Array.from(porChave.values())
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }
+
+  function visibleQueue() {
+    if (!state.unitFilter) return state.queue;
+    return state.queue.filter((item) => (
+      (item.location_key || `origem:${item.origin_type || "outro"}`)
+        === state.unitFilter
+    ));
+  }
+
+  function renderUnitChooser(unidades) {
+    const cartoes = unidades.map((unidade) => `
+      <button type="button" class="report-unit-card"
+        data-report-unit="${esc(unidade.chave)}">
+        <strong>${esc(unidade.nome)}</strong>
+        <span>${unidade.pendentes} ${
+          unidade.pendentes === 1 ? "exame aguardando" : "exames aguardando"
+        }</span>
+        <span class="report-unit-total">${unidade.total} no total</span>
+      </button>`).join("");
+    return `
+      <section class="report-panel report-unit-panel"
+        aria-labelledby="reportUnitTitle">
+        <div class="report-panel-heading">
+          <div>
+            <p class="eyebrow">Passo 1 de 2</p>
+            <h3 id="reportUnitTitle">De qual unidade você vai laudar?</h3>
+          </div>
+        </div>
+        <div class="report-unit-grid">
+          ${cartoes}
+          <button type="button" class="report-unit-card is-all"
+            data-report-unit="__todas">
+            <strong>Todas as unidades</strong>
+            <span>${state.queue.length} ${
+              state.queue.length === 1 ? "laudo" : "laudos"
+            }</span>
+          </button>
+        </div>
+      </section>`;
+  }
+
   function renderQueue() {
-    const items = state.queue.length
-      ? state.queue.map((item) => `
+    const unidades = queueUnits();
+    // Com uma única unidade, obrigar a escolher seria um clique sem decisão.
+    if (state.unitFilter === null && unidades.length > 1) {
+      return renderUnitChooser(unidades);
+    }
+    const lista = visibleQueue();
+    const unidadeAtual = unidades.find((u) => u.chave === state.unitFilter);
+    const items = lista.length
+      ? lista.map((item) => `
           <button type="button" class="report-queue-item${
             item.document_id === state.selectedDocumentId ? " is-selected" : ""
           }" data-report-open="${esc(item.document_id)}"
@@ -303,13 +378,20 @@
               ? `<span class="report-queue-flag is-locked">liberado</span>` : ""}
           </button>`).join("")
       : `<div class="report-empty">Nenhum laudo atribuído neste filtro.</div>`;
+    const trocar = unidades.length > 1
+      ? `<button type="button" class="report-unit-switch"
+          data-report-unit-reset="1">Trocar unidade</button>`
+      : "";
     return `
       <section class="report-panel report-queue-panel" aria-labelledby="myReportsTitle">
         <div class="report-panel-heading">
           <div>
-            <p class="eyebrow">Fila clínica restrita</p>
+            <p class="eyebrow">${
+              unidadeAtual ? esc(unidadeAtual.nome) : "Fila clínica restrita"
+            }</p>
             <h3 id="myReportsTitle">Meus laudos</h3>
           </div>
+          ${trocar}
           <label class="report-compact-field" for="reportStatusFilter">
             Status
             <select id="reportStatusFilter">
@@ -1756,6 +1838,23 @@
   function handleClick(event) {
     const button = event.target.closest("button");
     if (!button) return;
+    if (button.matches("[data-report-unit]")) {
+      const escolha = button.getAttribute("data-report-unit");
+      // "__todas" é escolha explícita por ver tudo; guardá-la como string
+      // vazia evita cair de volta na tela de seleção a cada render.
+      state.unitFilter = escolha === "__todas" ? "" : escolha;
+      render();
+      return;
+    }
+    if (button.matches("[data-report-unit-reset]")) {
+      state.unitFilter = null;
+      // Sair da unidade sem fechar o laudo aberto deixaria em tela um
+      // documento que não pertence à unidade que a médica vai escolher.
+      state.selectedDocumentId = "";
+      state.detail = null;
+      render();
+      return;
+    }
     if (button.matches("[data-report-open]")) {
       loadDocument(button.getAttribute("data-report-open"), true);
       return;

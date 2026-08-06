@@ -1390,3 +1390,63 @@ def test_cabecalho_traz_o_local_estruturado_da_unidade(client, case, db):
     assert "Local de realização" not in texto
     # O nome da unidade aparece uma vez só, no cabeçalho.
     assert texto.count("Espaço de atendimento SoproLife") == 1
+
+
+def test_fila_medica_expoe_a_unidade_para_agrupar(client, case, db):
+    """A fila entrega chave e nome da unidade, prontos para agrupar.
+
+    M25.6 — a médica lauda exames de lugares diferentes e escolhe a unidade
+    antes de ver a lista. A chave vem do id da unidade (ou da origem, quando
+    não há unidade cadastrada) e NUNCA do nome, que muda quando a clínica é
+    renomeada. O nome sai da mesma função que imprime o local no laudo.
+    """
+
+    resposta = client.get("/api/v1/laudos/meus", headers=case["doctor_auth"])
+    assert resposta.status_code == 200, resposta.text
+    linhas = resposta.json()
+    alvo = next(
+        linha for linha in linhas
+        if linha["report_code"] == case["document"]["public_code"]
+    )
+
+    # Este caso é criado com origem "coworking" e sem unidade parceira.
+    assert alvo["location_key"] == "origem:coworking"
+    assert alvo["location_name"] == "Espaço de atendimento SoproLife"
+
+
+def test_fila_agrupa_pela_unidade_parceira_quando_existe(
+    client, auth, db, person
+):
+    """Com unidade cadastrada, a chave é o id dela — não o rótulo textual."""
+
+    partner = Partner(public_code="CLI-990702", nome="TESTE APAGAR Fila")
+    db.add(partner)
+    db.flush()
+    unit = PartnerUnit(
+        public_code="UNI-990702",
+        partner_id=partner.id,
+        nome="Unidade Fila Teste",
+        cidade="Rio de Janeiro",
+    )
+    db.add(unit)
+    db.commit()
+
+    caso = _make_case(client, auth, db, person, com_bd=True, suffix="702")
+    enviado = _upload(
+        client,
+        auth,
+        _create_exam(client, auth, person, com_bd=True),
+        caso["profile"],
+        origin="clinica_parceira",
+        unit_id=unit.id,
+    )
+    assert enviado.status_code == 201, enviado.text
+
+    resposta = client.get("/api/v1/laudos/meus", headers=caso["doctor_auth"])
+    assert resposta.status_code == 200, resposta.text
+    alvo = next(
+        linha for linha in resposta.json()
+        if linha["report_code"] == enviado.json()["public_code"]
+    )
+    assert alvo["location_key"] == f"unidade:{unit.id}"
+    assert alvo["location_name"] == "TESTE APAGAR Fila — Unidade Fila Teste"

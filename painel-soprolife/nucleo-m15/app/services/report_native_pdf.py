@@ -683,18 +683,26 @@ class _Composer:
             text_y -= 11
         self.y = top - height - 7
 
-    def draw_section_heading(self, title: str) -> None:
+    def draw_section_heading(self, title: str, *, space_before: float = 0.0) -> None:
+        """Título de seção, com respiro configurável acima.
+
+        M25.6 — `space_before` existe porque "OBSERVAÇÕES COMPLEMENTARES"
+        colava na última linha da conclusão: as duas seções pareciam um
+        bloco só. O respiro é do CHAMADOR porque ele sabe o que veio antes.
+        """
+
         # A régua fica 8pt abaixo da linha de base, não 5: com 5 ela passava
         # dentro da cedilha de "CONCLUSÕES" e parecia um risco no texto.
-        self.ensure(22)
+        self.ensure(22 + space_before)
+        self.y -= space_before
         c = self.canvas
-        c.setFont(FONT_BOLD, 9.0)
+        c.setFont(FONT_BOLD, 9.6)
         c.setFillColor(NAVY)
         c.drawString(MARGIN_X, self.y - 10, pdf_safe(title.upper()))
         c.setStrokeColor(TEAL)
         c.setLineWidth(1.0)
         c.line(MARGIN_X, self.y - 18, MARGIN_X + 22, self.y - 18)
-        self.y -= 21
+        self.y -= 22
 
     def draw_identification_table(
         self,
@@ -710,8 +718,8 @@ class _Composer:
         uma moldura só, e nenhum dado foi removido.
         """
 
-        label_size = 8.2
-        value_size = 8.2
+        label_size = 8.4
+        value_size = 8.4
         padding = 10.0
         column_width = (CONTENT_WIDTH - 3 * padding) / 2
 
@@ -1294,19 +1302,26 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
     ]
     composer.draw_identification_table(patient_fields, exam_fields)
 
+    # Hierarquia tipográfica (M25.6). Antes tudo vivia entre 8.2 e 10pt, e
+    # sem contraste de corpo a conclusão — o que a médica assina — pesava o
+    # mesmo que uma observação de rodapé. A conclusão agora é o maior texto
+    # do documento, com folga sobre título de seção, observação e tabela.
     composer.draw_section_heading("Conclusões")
-    composer.draw_paragraph(content.conclusion_text, size=10, leading=14)
+    composer.draw_paragraph(content.conclusion_text, size=11.6, leading=16.5)
 
     if content.observations:
-        composer.draw_section_heading("Observações complementares")
-        composer.draw_paragraph(content.observations, size=9.4, leading=13)
+        composer.draw_section_heading(
+            "Observações complementares", space_before=12
+        )
+        composer.draw_paragraph(content.observations, size=9.2, leading=13.2)
 
     for addendum in content.addenda:
         composer.draw_section_heading(
             f"Adendo {addendum.sequence} — "
-            f"{format_datetime(addendum.created_at)}"
+            f"{format_datetime(addendum.created_at)}",
+            space_before=12,
         )
-        composer.draw_paragraph(addendum.body_text, size=9.4, leading=13)
+        composer.draw_paragraph(addendum.body_text, size=9.2, leading=13.2)
 
     composer.space(2)
     composer.draw_mir_notice()

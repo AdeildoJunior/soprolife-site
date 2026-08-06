@@ -974,12 +974,36 @@ def _selectable_template(
     return template
 
 
+def _queue_location(
+    db: Session, document: ReportDocument, exam: SpirometryExam
+) -> dict:
+    """Unidade da linha da fila, para agrupar exames por local.
+
+    M25.6 — reusa `resolve_report_location`, a MESMA função que decide o
+    local impresso no laudo. Duplicar aqui a ordem de precedência criaria a
+    chance de a fila agrupar por um local e o PDF imprimir outro.
+
+    `chave` é o que o painel usa para agrupar: o id da unidade quando existe
+    uma cadastrada, senão a origem controlada. Nunca o nome, que muda quando
+    a clínica é renomeada.
+    """
+
+    local = resolve_report_location(db, document=document, exam=exam)
+    chave = (
+        f"unidade:{local.partner_unit_id}"
+        if local.partner_unit_id
+        else f"origem:{(document.origin_type or 'outro').strip().lower()}"
+    )
+    return {"chave": chave, "nome": local.name}
+
+
 def _technical_report_row(
     document: ReportDocument,
     exam: SpirometryExam,
     assignment: ReportAssignment | None,
     *,
     include_assignment_ids: bool = False,
+    location: dict | None = None,
 ) -> dict:
     data = {
         "report_code": document.public_code,
@@ -988,6 +1012,10 @@ def _technical_report_row(
         "exam_date": d(exam.data_exame),
         "origin_type": document.origin_type,
         "origin_label": document.origin_label,
+        # Agrupamento por unidade na fila médica (M25.6). Ausente quando a
+        # rota não resolve local — nunca inventado a partir do rótulo.
+        "location_key": (location or {}).get("chave"),
+        "location_name": (location or {}).get("nome"),
         "assignment_timestamp": (
             assignment.assigned_at.isoformat() if assignment else None
         ),
@@ -1791,7 +1819,12 @@ def list_my_report_queue(
         statement.order_by(ReportAssignment.assigned_at.desc()).limit(200)
     ).all()
     return [
-        _technical_report_row(document, exam, assignment)
+        _technical_report_row(
+            document,
+            exam,
+            assignment,
+            location=_queue_location(db, document, exam),
+        )
         for document, exam, assignment in rows
     ]
 
