@@ -1839,3 +1839,149 @@ class ReportAddendum(Base):
             "length(trim(body_text)) >= 3", name="body_text_present"
         ),
     )
+
+
+# ------------------------------------------------- M25.7 — VIDaaS/IntegraICP
+#
+# Assinatura QUALIFICADA ICP-Brasil pelo certificado em nuvem da médica.
+# Esta tabela guarda o CICLO DE VIDA da solicitação — nunca a chave privada,
+# nunca o certificado da médica, nunca o PDF e nunca dado de paciente.
+#
+# Segredos transitórios (o code_verifier do PKCE) ficam CIFRADOS na coluna
+# dedicada; state e nonce só existem como hash, para comparação de uso único.
+
+# Estados do fluxo. A ordem aqui é a ordem em que acontecem; os quatro
+# últimos são terminais ou quase — "falha_recuperavel" é o único estado de
+# erro do qual a médica pode tentar de novo.
+QSR_RASCUNHO = "rascunho"
+QSR_AGUARDANDO_AUTENTICACAO = "aguardando_autenticacao"
+QSR_AGUARDANDO_AUTORIZACAO = "aguardando_autorizacao"
+QSR_ASSINATURA_RECEBIDA = "assinatura_recebida"
+QSR_VALIDANDO = "validando"
+QSR_ASSINADO_LIBERADO = "assinado_liberado"
+QSR_RECUSADO = "recusado"
+QSR_EXPIRADO = "expirado"
+QSR_FALHA_RECUPERAVEL = "falha_recuperavel"
+QSR_FALHA_DEFINITIVA = "falha_definitiva"
+
+QUALIFIED_SIGNATURE_STATUSES = (
+    QSR_RASCUNHO,
+    QSR_AGUARDANDO_AUTENTICACAO,
+    QSR_AGUARDANDO_AUTORIZACAO,
+    QSR_ASSINATURA_RECEBIDA,
+    QSR_VALIDANDO,
+    QSR_ASSINADO_LIBERADO,
+    QSR_RECUSADO,
+    QSR_EXPIRADO,
+    QSR_FALHA_RECUPERAVEL,
+    QSR_FALHA_DEFINITIVA,
+)
+
+# Estados em que uma NOVA solicitação para o mesmo laudo é proibida: já
+# existe uma viva. É isto que impede solicitação duplicada quando a médica
+# atualiza a página ou clica duas vezes.
+QUALIFIED_SIGNATURE_ACTIVE_STATUSES = (
+    QSR_RASCUNHO,
+    QSR_AGUARDANDO_AUTENTICACAO,
+    QSR_AGUARDANDO_AUTORIZACAO,
+    QSR_ASSINATURA_RECEBIDA,
+    QSR_VALIDANDO,
+)
+
+
+class QualifiedSignatureRequest(Base, TimestampMixin):
+    """Uma tentativa de assinatura qualificada de UMA versão do laudo.
+
+    Guarda os DOIS hashes separadamente, de propósito:
+    `signed_digest_sha256` é o que foi enviado à AC (o conteúdo coberto pelo
+    ByteRange) e `final_sha256` é o arquivo depois da injeção do CMS. Os dois
+    nunca coincidem, e tratá-los como um só é o erro clássico deste fluxo.
+    """
+
+    __tablename__ = "qualified_signature_requests"
+
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    report_document_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_documents.id"), nullable=False, index=True
+    )
+    # Versão PREPARADA (com o campo de assinatura vazio) que originou o
+    # digest. Amarra a solicitação a bytes exatos: se a médica reeditar o
+    # laudo, a versão muda e a solicitação antiga deixa de servir.
+    report_document_version_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("report_document_versions.id"), nullable=False
+    )
+    physician_profile_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("physician_profiles.id"), nullable=False
+    )
+    requested_by_user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), default=QSR_RASCUNHO, nullable=False, index=True
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+
+    # --- amarração do retorno (uso único) -------------------------------
+    # Só o hash: quem tiver acesso de leitura ao banco não consegue forjar
+    # um callback, porque não recupera o valor original a partir do hash.
+    state_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    nonce_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # code_verifier do PKCE, CIFRADO. É segredo de curta duração e some
+    # assim que a solicitação chega a um estado terminal.
+    pkce_verifier_encrypted: Mapped[str | None] = mapped_column(Text)
+    callback_consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+    # --- os dois hashes -------------------------------------------------
+    prepared_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    signed_digest_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    final_sha256: Mapped[str | None] = mapped_column(String(64))
+
+    # --- evidência devolvida pela AC ------------------------------------
+    external_reference: Mapped[str | None] = mapped_column(String(120))
+    # Identificador da credencial guardado como HASH: serve para conferir
+    # que o callback seguinte é da mesma credencial, sem reter o valor.
+    credential_id_hash: Mapped[str | None] = mapped_column(String(64))
+    signer_subject: Mapped[str | None] = mapped_column(String(300))
+    signer_issuer: Mapped[str | None] = mapped_column(String(300))
+    signer_serial: Mapped[str | None] = mapped_column(String(80))
+    certificate_not_before: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    certificate_not_after: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    # Nível PAdES REALMENTE obtido e validado. Nunca preenchido com o nível
+    # desejado — só com o que a validação provou.
+    pades_level: Mapped[str | None] = mapped_column(String(20))
+
+    # --- janelas de validade --------------------------------------------
+    clearance_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    credential_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # --- diagnóstico ----------------------------------------------------
+    error_code: Mapped[str | None] = mapped_column(String(60))
+    error_message: Mapped[str | None] = mapped_column(String(300))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {QUALIFIED_SIGNATURE_STATUSES!r}",
+            name="qualified_signature_status_valido",
+        ),
+        CheckConstraint("attempts >= 0", name="qualified_signature_attempts"),
+        # Um laudo assinado e liberado só pode ter UMA solicitação vencedora.
+        Index(
+            "uq_qualified_signature_liberado",
+            "report_document_id",
+            unique=True,
+            sqlite_where=text("status = 'assinado_liberado'"),
+            postgresql_where=text("status = 'assinado_liberado'"),
+        ),
+    )

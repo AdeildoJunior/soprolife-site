@@ -1,9 +1,11 @@
 alembic==1.18.5
 annotated-types==0.8.0
 anyio==4.14.2
+asn1crypto==1.5.1
 certifi==2026.7.22
 charset-normalizer==3.4.9
 click==8.4.2
+cryptography==49.0.0
 fastapi==0.115.14
 greenlet==3.5.4
 h11==0.16.0
@@ -20,8 +22,8 @@ pluggy==1.6.0
 psycopg==3.3.4
 psycopg-binary==3.3.4
 pydantic==2.13.4
-pydantic-settings==2.14.2
 pydantic_core==2.46.4
+pydantic-settings==2.14.2
 Pygments==2.20.0
 pypdf==6.14.2
 pytest==9.1.1
@@ -31,8 +33,8 @@ PyYAML==6.0.3
 reportlab==5.0.0
 SQLAlchemy==2.0.51
 starlette==0.41.3
-typing-inspection==0.4.2
 typing_extensions==4.16.0
+typing-inspection==0.4.2
 uvicorn==0.51.0
 uvloop==0.22.1
 watchfiles==1.2.0

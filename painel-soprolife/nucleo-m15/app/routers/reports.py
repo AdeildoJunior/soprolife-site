@@ -1864,6 +1864,12 @@ def get_report_document(
             ),
             "assignment": ser_report_assignment(assignment),
             "physician": ser_physician_profile(profile),
+            # M25.7 — a tela da médica precisa saber se a assinatura
+            # qualificada existe neste ambiente. Só o BOOLEANO: o diagnóstico
+            # completo é admin-only, e nem ele expõe valores.
+            "assinatura_qualificada_disponivel": (
+                get_settings().integraicp_ready()
+            ),
             "exam": {
                 "public_code": exam.public_code,
                 "exam_date": d(exam.data_exame),
@@ -2389,6 +2395,364 @@ def _seal_signature_kind(
     ):
         return SIGNATURE_KIND_QUALIFIED_ICP
     return SIGNATURE_KIND_INSTITUTIONAL
+
+
+# ------------------------------------------- M25.7 — assinatura qualificada
+
+
+def _qualified_or_404(db: Session, document: ReportDocument):
+    from ..services import qualified_signature as qs
+
+    pedido = qs.active_request(db, document_id=document.id)
+    if pedido is None:
+        raise ReportDomainError(
+            404,
+            "solicitacao_inexistente",
+            "Não há solicitação de assinatura em andamento para este laudo.",
+        )
+    return qs.expire_if_due(db, pedido)
+
+
+def _qualified_payload(pedido) -> dict:
+    """Estado para a tela da médica. Sem segredo, sem hash interno cru."""
+
+    return {
+        "id": pedido.id,
+        "status": pedido.status,
+        "provedor": pedido.provider,
+        "tentativas": pedido.attempts,
+        "expira_em": (
+            pedido.clearance_expires_at.isoformat()
+            if pedido.clearance_expires_at else None
+        ),
+        "concluido_em": (
+            pedido.completed_at.isoformat() if pedido.completed_at else None
+        ),
+        "nivel_pades": pedido.pades_level,
+        # Motivo legível quando houver; nunca o corpo devolvido pela AC.
+        "erro": pedido.error_message,
+        "pode_tentar_novamente": pedido.status == "falha_recuperavel",
+    }
+
+
+@router.get("/admin/assinatura-qualificada/diagnostico")
+def qualified_signature_diagnostics(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(ROLE_ADMIN)),
+):
+    """Diagnóstico da integração — apenas booleanos, nunca valores."""
+
+    from ..services import qualified_signature as qs
+
+    _require_reports_enabled()
+    return qs.diagnostics(get_settings())
+
+
+@router.post("/{document_id}/assinatura-qualificada/iniciar", status_code=201)
+def start_qualified_signature(
+    document_id: str,
+    payload: ReportReleaseRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Prepara o laudo e devolve o endereço para autorizar no VIDaaS.
+
+    Exige exatamente as mesmas provas da liberação institucional — prévia
+    atual e texto conferido —, porque assinar qualificado é MAIS sério, não
+    menos. Nenhum byte do PDF e nenhum dado do paciente sai daqui: só o
+    digest viaja, e só depois, no retorno.
+    """
+
+    from ..services import qualified_signature as qs
+    from ..services import qualified_signature_store as qstore
+
+    _require_reports_enabled()
+    settings = get_settings()
+    document = _lock_document_or_404(db, document_id)
+    profile, _assignment = _require_assigned_physician(
+        db, physician_user, document, lock=True
+    )
+    if document.status == STATUS_LAUDO_LIBERADO:
+        raise ReportDomainError(
+            409,
+            "laudo_ja_liberado",
+            "Este laudo já foi liberado; use adendo ou versão corretiva.",
+        )
+    if document.status != STATUS_EM_ELABORACAO:
+        raise ReportDomainError(
+            409,
+            "laudo_fora_de_elaboracao",
+            "Gere a prévia do laudo antes de assinar.",
+        )
+    draft = db.get(ReportDocumentVersion, document.current_version_id)
+    if (
+        draft is None
+        or draft.report_document_id != document.id
+        or draft.kind != KIND_LAUDO_PREVIA
+    ):
+        raise ReportDomainError(
+            409, "previa_laudo_ausente", "Gere a prévia do laudo antes de assinar."
+        )
+    if payload.expected_version_id != draft.id:
+        raise ReportDomainError(
+            409,
+            "previa_desatualizada",
+            "A prévia mudou desde a conferência; revise antes de assinar.",
+        )
+    if payload.expected_text_sha256 != (draft.interpretation_text_sha256 or ""):
+        raise ReportDomainError(
+            409,
+            "conteudo_divergente_da_previa",
+            "O texto conferido não corresponde ao texto atual da prévia.",
+        )
+
+    exam, person, location = _document_context(db, document)
+    resolved_signature = _resolve_signature(db, profile.id)
+    now = datetime.now(timezone.utc)
+    content = build_native_content(
+        db,
+        document=document,
+        exam=exam,
+        person=person,
+        profile=profile,
+        location=location,
+        version_number=_next_version_number(db, document.id),
+        conclusion_text=draft.interpretation_text_snapshot or "",
+        observations=draft.observations_snapshot,
+        issued_at=now,
+        released=True,
+        released_at=now,
+        validation_code=document.validation_code or generate_validation_code(),
+        signature_image=(
+            resolved_signature.image if resolved_signature else None
+        ),
+        # O selo só declara ICP-Brasil DEPOIS da validação. Aqui ainda não
+        # houve assinatura nenhuma.
+        signature_kind=SIGNATURE_KIND_INSTITUTIONAL,
+        addenda=load_addenda(db, document.id),
+        pilot_warning=_pilot_warning(),
+    )
+    try:
+        iniciada = qs.start(
+            db,
+            settings=settings,
+            document=document,
+            version=draft,
+            prepared_pdf=_native_pdf_bytes(content),
+            physician_profile_id=profile.id,
+            requested_by_user_id=physician_user.id,
+            reason="Laudo de espirometria - SoproLife",
+            location=location.name,
+        )
+    except qs.QualifiedSignatureError as exc:
+        raise ReportDomainError(exc.http_status, exc.codigo, exc.mensagem) from None
+
+    qstore.store_prepared_pdf(
+        _storage_root(settings),
+        request_id=iniciada.request.id,
+        data=iniciada.prepared.data,
+    )
+    record_audit(
+        db,
+        actor_user_id=physician_user.id,
+        acao="laudo_assinatura_qualificada_iniciada",
+        entidade="report_documents",
+        entidade_id=document.id,
+        request=request,
+        detalhes={"solicitacao_id": iniciada.request.id, "provedor": "integraicp"},
+    )
+    db.commit()
+    return {
+        **_qualified_payload(iniciada.request),
+        "url_autorizacao": iniciada.authorization_url,
+    }
+
+
+@router.get("/{document_id}/assinatura-qualificada")
+def get_qualified_signature(
+    document_id: str,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Acompanhamento do estado — é o que a tela consulta enquanto espera."""
+
+    _require_reports_enabled()
+    document = _lock_document_or_404(db, document_id)
+    _require_assigned_physician(db, physician_user, document, lock=False)
+    pedido = _qualified_or_404(db, document)
+    db.commit()
+    return _qualified_payload(pedido)
+
+
+@router.post("/{document_id}/assinatura-qualificada/cancelar")
+def cancel_qualified_signature(
+    document_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Cancelamento consciente pela própria médica."""
+
+    from ..services import qualified_signature as qs
+    from ..services import qualified_signature_store as qstore
+
+    _require_reports_enabled()
+    document = _lock_document_or_404(db, document_id)
+    _require_assigned_physician(db, physician_user, document, lock=True)
+    pedido = _qualified_or_404(db, document)
+    try:
+        qs.cancel(db, pedido)
+    except qs.QualifiedSignatureError as exc:
+        raise ReportDomainError(exc.http_status, exc.codigo, exc.mensagem) from None
+    qstore.discard_prepared_pdf(
+        _storage_root(get_settings()), request_id=pedido.id
+    )
+    record_audit(
+        db,
+        actor_user_id=physician_user.id,
+        acao="laudo_assinatura_qualificada_cancelada",
+        entidade="report_documents",
+        entidade_id=document.id,
+        request=request,
+        detalhes={"solicitacao_id": pedido.id},
+    )
+    db.commit()
+    return _qualified_payload(pedido)
+
+
+@router.post("/{document_id}/assinatura-qualificada/retorno")
+def resolve_qualified_signature(
+    document_id: str,
+    payload: QualifiedSignatureCallback,
+    request: Request,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Consome o retorno do VIDaaS, valida e libera — ou não libera nada.
+
+    O laudo só é marcado como assinado depois de `validate_pades` passar. Se
+    a validação falhar, a solicitação vai para falha e o documento continua
+    em elaboração, intocado.
+    """
+
+    from ..services import qualified_signature as qs
+    from ..services import qualified_signature_store as qstore
+
+    _require_reports_enabled()
+    settings = get_settings()
+    document = _lock_document_or_404(db, document_id)
+    profile, _assignment = _require_assigned_physician(
+        db, physician_user, document, lock=True
+    )
+    try:
+        pedido = qs.resolve_callback(
+            db,
+            settings=settings,
+            state=payload.state,
+            nonce=payload.nonce,
+            credential_id=payload.credential_id,
+            acting_user_id=physician_user.id,
+        )
+    except qs.QualifiedSignatureError as exc:
+        db.commit()
+        raise ReportDomainError(exc.http_status, exc.codigo, exc.mensagem) from None
+    if pedido.report_document_id != document.id:
+        raise ReportDomainError(
+            403, "retorno_de_outro_laudo", "Retorno de assinatura inválido."
+        )
+    if pedido.physician_profile_id != profile.id:
+        raise ReportDomainError(
+            403,
+            "retorno_de_outra_medica",
+            "Este retorno pertence a outra médica.",
+        )
+
+    root = _storage_root(settings)
+    prepared_bytes = qstore.read_prepared_pdf(root, request_id=pedido.id)
+    prepared = qs.rebuild_prepared(prepared_bytes)
+    try:
+        final_pdf = qs.complete(
+            db,
+            settings=settings,
+            request=pedido,
+            prepared=prepared,
+            credential_id=payload.credential_id,
+        )
+    except qs.QualifiedSignatureError as exc:
+        db.commit()
+        raise ReportDomainError(exc.http_status, exc.codigo, exc.mensagem) from None
+
+    draft = db.get(ReportDocumentVersion, document.current_version_id)
+    exam, _person, _location = _document_context(db, document)
+    now = datetime.now(timezone.utc)
+    with report_publication_transaction(db) as publication:
+        released = _publish_native_version(
+            db,
+            publication=publication,
+            document=document,
+            exam=exam,
+            profile=profile,
+            kind=KIND_LAUDO_LIBERADO,
+            data=final_pdf,
+            created_by_user_id=physician_user.id,
+            final_text=draft.interpretation_text_snapshot or "",
+            extra={},
+        )
+        document.status = STATUS_LAUDO_LIBERADO
+        document.current_version_id = released.id
+        document.released_at = now
+        document.released_by_user_id = physician_user.id
+        document.released_physician_profile_id = profile.id
+        document.signed_at = now
+        document.signature_status = SIGNATURE_STATUS_ASSINADA
+        if not document.validation_code:
+            document.validation_code = generate_validation_code()
+        signature = ReportSignature(
+            report_document_version_id=released.id,
+            provider="integraicp",
+            status=SIGNATURE_STATUS_ASSINADA,
+            external_reference=pedido.external_reference or pedido.id,
+            requested_by_user_id=physician_user.id,
+            requested_at=pedido.created_at,
+            completed_at=now,
+            verification_metadata={
+                "qualified_signature": True,
+                "standard": "PAdES",
+                "trust_chain": "ICP-Brasil",
+                "pades_level": pedido.pades_level,
+                "signer_physician_profile_id": profile.id,
+                # Os DOIS hashes, nomeados sem ambiguidade.
+                "prepared_sha256": pedido.prepared_sha256,
+                "signed_digest_sha256": pedido.signed_digest_sha256,
+                "document_sha256": released.sha256,
+                "signer_serial": pedido.signer_serial,
+                "signer_issuer": pedido.signer_issuer,
+            },
+        )
+        db.add(signature)
+        record_audit(
+            db,
+            actor_user_id=physician_user.id,
+            acao="laudo_assinado_icp_brasil",
+            entidade="report_documents",
+            entidade_id=document.id,
+            request=request,
+            detalhes={
+                "solicitacao_id": pedido.id,
+                "nivel_pades": pedido.pades_level,
+                "versao_liberada": released.id,
+            },
+        )
+        publication.commit()
+
+    qstore.discard_prepared_pdf(root, request_id=pedido.id)
+    db.commit()
+    return {
+        **_qualified_payload(pedido),
+        "versao_liberada_id": released.id,
+        "validation_code": document.validation_code,
+    }
 
 
 @router.post("/{document_id}/nova-versao-corretiva", status_code=201)

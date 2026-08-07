@@ -1021,3 +1021,25 @@ class ReportAddendumCreate(StrictModel):
 
     body_text: str = Field(min_length=3, max_length=4000)
     confirmacao: Literal["PUBLICAR ADENDO"]
+
+
+class QualifiedSignatureCallback(BaseModel):
+    """M25.7 — retorno do VIDaaS, amarrado à solicitação que o originou.
+
+    Os três campos são obrigatórios: `state` localiza a solicitação, `nonce`
+    prova que o retorno pertence àquela ida específica, e `credential_id` é
+    o que a autoridade devolveu. Faltando qualquer um, não há como distinguir
+    um retorno legítimo de um reenvio.
+    """
+
+    state: str = Field(min_length=16, max_length=200)
+    nonce: str = Field(min_length=8, max_length=200)
+    credential_id: str = Field(min_length=1, max_length=200)
+
+    @field_validator("state", "nonce", "credential_id")
+    @classmethod
+    def _sem_espacos(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Valor obrigatório ausente.")
+        return normalized

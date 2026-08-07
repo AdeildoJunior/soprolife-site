@@ -243,6 +243,13 @@ def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
         "locked",
         "is_corrective",
         "validation_code",
+        # M25.6 — agrupamento da fila por unidade. `location_key` é um id de
+        # unidade (ou a origem controlada) e `location_name` é o nome
+        # institucional da clínica: os dois são carimbos de LOCAL, da mesma
+        # natureza de `origin_type`/`origin_label`, que já estavam nesta
+        # lista. Nenhum dado de paciente e nenhum texto clínico.
+        "location_key",
+        "location_name",
     }
     assert "patient" not in operational.text
     assert person["nome_completo"] not in operational.text

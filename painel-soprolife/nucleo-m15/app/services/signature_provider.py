@@ -144,11 +144,67 @@ class UnconfiguredSignatureProvider(SignatureProvider):
         )
 
 
+class IntegraICPSignatureProvider(SignatureProvider):
+    """M25.7 — provedor ICP-Brasil real (VIDaaS, via API IntegraICP).
+
+    Este adapter existe para que `get_signature_provider()` deixe de ser uma
+    constante e passe a refletir a configuração. Ele NÃO assina sozinho: a
+    assinatura qualificada exige autorização consciente da médica no
+    aplicativo dela, o que é um fluxo com ida ao navegador e volta por
+    callback — modelado em `app/services/qualified_signature.py`.
+
+    `request_signature` aqui apenas recusa de forma explícita e auditável um
+    uso NÃO interativo. Fingir sucesso, ou tentar assinar sem a autorização
+    dela, violaria a regra central do módulo: nenhuma assinatura sem ação
+    consciente da médica autenticada.
+    """
+
+    name = "integraicp"
+
+    def request_signature(
+        self, *, document_bytes: bytes, document_sha256: str, requested_by_user_id: str
+    ) -> SignatureRequestResult:
+        return SignatureRequestResult(
+            status=SIGNATURE_STATUS_PENDENTE,
+            provider=self.name,
+            external_reference=None,
+            verification_metadata=None,
+            error_message=(
+                "A assinatura qualificada exige autorização consciente da "
+                "médica no VIDaaS e não pode ser solicitada por este caminho."
+            ),
+        )
+
+    def check_status(self, *, external_reference: str) -> SignatureStatusResult:
+        # O estado real vive em `qualified_signature_requests`, consultado
+        # pelo endpoint de acompanhamento. Este adapter não tem como
+        # descobrir nada sozinho e não inventa um estado.
+        return SignatureStatusResult(
+            status=SIGNATURE_STATUS_PENDENTE,
+            verification_metadata=None,
+            completed_at=None,
+        )
+
+
 def get_signature_provider() -> SignatureProvider:
-    """Fábrica única. Devolve sempre o provedor nulo nesta etapa — trocar
-    isto por um provedor real é uma decisão de produto/infra em aberto
-    (custódia de certificado, contrato com AC, credenciais) e nunca deve
-    acontecer sem uma implementação de `SignatureProvider` auditada."""
+    """Fábrica única, agora dirigida por configuração — e fail-closed.
+
+    Só devolve o provedor ICP-Brasil quando a configuração está COMPLETA
+    (`Settings.integraicp_ready()`: habilitado, provedor selecionado, base,
+    canal e callback presentes). Faltando qualquer peça, volta ao provedor
+    nulo, que nunca assina e nunca finge sucesso — o mesmo comportamento de
+    antes da M25.7.
+    """
+
+    from ..config import get_settings
+
+    try:
+        settings = get_settings()
+    except Exception:
+        # Configuração inválida nunca pode ABRIR o caminho qualificado.
+        return UnconfiguredSignatureProvider()
+    if settings.integraicp_ready():
+        return IntegraICPSignatureProvider()
     return UnconfiguredSignatureProvider()
 
 

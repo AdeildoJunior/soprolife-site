@@ -65,6 +65,13 @@
     // não escolheu"; string vazia significa "todas as unidades", que é uma
     // escolha deliberada da médica e não o mesmo que não ter escolhido.
     unitFilter: null,
+    // M25.7 — assinatura qualificada. `qualifiedDiagnostics` é o que a API
+    // diz sobre a integração (só booleanos); `qualifiedRequest` é a
+    // solicitação em andamento, quando existe.
+    qualifiedDiagnostics: null,
+    qualifiedRequest: null,
+    confirmQualified: false,
+    qualifiedTimer: null,
     busy: false,
     notice: "",
     noticeKind: "",
@@ -586,6 +593,107 @@
           data-report-release-open${state.busy ? " disabled" : ""}>
           Assinar e liberar laudo
         </button>
+        ${renderQualifiedAction(detail)}
+      </div>`;
+  }
+
+  // M25.7 — assinatura QUALIFICADA ICP-Brasil pelo VIDaaS. Fica ao lado da
+  // liberação institucional, nunca no lugar dela: são coisas diferentes e a
+  // tela precisa deixar isso óbvio para a médica.
+  const QUALIFIED_LABELS = {
+    rascunho: "Preparando o documento…",
+    aguardando_autenticacao: "Abrindo o VIDaaS…",
+    aguardando_autorizacao: "Aguardando sua autorização no app VIDaaS",
+    assinatura_recebida: "Autorização recebida — obtendo a assinatura…",
+    validando: "Validando a assinatura…",
+    assinado_liberado: "Assinado com certificado ICP-Brasil",
+    recusado: "Assinatura recusada ou cancelada",
+    expirado: "A janela de autorização expirou",
+    falha_recuperavel: "Não deu certo desta vez",
+    falha_definitiva: "Não foi possível assinar com o VIDaaS",
+  };
+
+  const QUALIFIED_WAITING = [
+    "rascunho", "aguardando_autenticacao", "aguardando_autorizacao",
+    "assinatura_recebida", "validando",
+  ];
+
+  function renderQualifiedAction(detail) {
+    // A disponibilidade vem do próprio detalhe do laudo: o diagnóstico
+    // completo é admin-only e a médica não precisa dele para trabalhar.
+    const diag = detail.assinatura_qualificada_disponivel === undefined
+      ? state.qualifiedDiagnostics
+      : { integracao_pronta: detail.assinatura_qualificada_disponivel };
+    const pedido = state.qualifiedRequest;
+
+    if (pedido) {
+      const esperando = QUALIFIED_WAITING.includes(pedido.status);
+      const rotulo = QUALIFIED_LABELS[pedido.status] || pedido.status;
+      return `
+        <div class="report-qualified" role="status" aria-live="polite">
+          <p class="report-qualified-status${esperando ? " is-waiting" : ""}">
+            ${esc(rotulo)}
+          </p>
+          ${esperando
+            ? `<p class="report-help">Abra o aplicativo VIDaaS no seu celular e
+                autorize a assinatura. Esta tela se atualiza sozinha.</p>`
+            : ""}
+          ${pedido.erro && !esperando
+            ? `<p class="report-qualified-erro">${esc(pedido.erro)}</p>` : ""}
+          <div class="report-release-buttons">
+            ${pedido.pode_tentar_novamente
+              ? `<button type="button" class="m15-btn m15-btn-primary"
+                  data-report-qualified-retry>Tentar novamente</button>` : ""}
+            ${esperando
+              ? `<button type="button" class="m15-btn"
+                  data-report-qualified-cancel>Cancelar assinatura</button>` : ""}
+          </div>
+        </div>`;
+    }
+
+    if (!diag) return "";
+    if (!diag.integracao_pronta) {
+      return `
+        <div class="report-qualified is-unavailable">
+          <p class="report-qualified-status">Integração aguardando credencial da Valid</p>
+          <p class="report-help">A assinatura ICP-Brasil pelo VIDaaS ainda não
+            está disponível neste ambiente. A liberação acima continua válida
+            como assinatura eletrônica interna.</p>
+        </div>`;
+    }
+    if (state.confirmQualified) {
+      return `
+        <div class="report-qualified report-release-confirm" role="alertdialog"
+          aria-labelledby="reportQualifiedTitle">
+          <h4 id="reportQualifiedTitle" tabindex="-1">Assinar com certificado ICP-Brasil</h4>
+          <p>Você será levada ao <strong>VIDaaS</strong> para autorizar a
+            assinatura com o seu certificado. A autorização acontece no
+            aplicativo, no seu celular — ninguém pode fazer isso por você.</p>
+          <ul>
+            <li>Somente o <strong>resumo criptográfico</strong> do laudo é
+              enviado à autoridade certificadora. O PDF e os dados do paciente
+              não saem daqui.</li>
+            <li>O laudo só é liberado depois que a assinatura for validada.</li>
+          </ul>
+          <div class="report-release-buttons">
+            <button type="button" class="m15-btn m15-btn-primary"
+              data-report-qualified-confirm${state.busy ? " disabled" : ""}>
+              Continuar para o VIDaaS
+            </button>
+            <button type="button" class="m15-btn" data-report-qualified-abort>
+              Voltar
+            </button>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="report-qualified">
+        <button type="button" class="m15-btn report-qualified-cta"
+          data-report-qualified-open${state.busy ? " disabled" : ""}>
+          Assinar com VIDaaS (ICP-Brasil)
+        </button>
+        <p class="report-help">Assinatura digital qualificada, com o seu
+          certificado. Exige autorização no aplicativo VIDaaS.</p>
       </div>`;
   }
 
@@ -1462,6 +1570,105 @@
     }
   }
 
+  // ------------------------------------- M25.7 — assinatura qualificada
+
+  function stopQualifiedPolling() {
+    if (state.qualifiedTimer) {
+      clearTimeout(state.qualifiedTimer);
+      state.qualifiedTimer = null;
+    }
+  }
+
+  async function startQualifiedSignature() {
+    if (!state.previewVersionId || !state.previewTextSha256) {
+      announce("Gere a prévia do laudo antes de assinar.", "erro");
+      return;
+    }
+    state.busy = true;
+    state.confirmQualified = false;
+    announce("Preparando o laudo para assinatura com VIDaaS…", "");
+    render();
+    try {
+      const resposta = await client().api(
+        `/laudos/${encodeURIComponent(state.selectedDocumentId)}`
+        + "/assinatura-qualificada/iniciar",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            confirmacao: RELEASE_CONFIRMATION,
+            expected_version_id: state.previewVersionId,
+            expected_text_sha256: state.previewTextSha256,
+          }),
+        },
+      );
+      state.qualifiedRequest = resposta;
+      // A médica autoriza no VIDaaS, em outra aba. O painel continua vivo
+      // aqui e detecta a conclusão pelo acompanhamento abaixo.
+      if (resposta.url_autorizacao) {
+        window.open(resposta.url_autorizacao, "_blank", "noopener");
+      }
+      announce("Autorize a assinatura no aplicativo VIDaaS.", "");
+      scheduleQualifiedPoll();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.busy = false;
+      render();
+    }
+  }
+
+  function scheduleQualifiedPoll() {
+    stopQualifiedPolling();
+    // 4s é rápido o suficiente para parecer imediato e devagar o bastante
+    // para não martelar a API enquanto a médica procura o celular.
+    state.qualifiedTimer = setTimeout(pollQualifiedSignature, 4000);
+  }
+
+  async function pollQualifiedSignature() {
+    if (!state.selectedDocumentId) return;
+    try {
+      const pedido = await client().api(
+        `/laudos/${encodeURIComponent(state.selectedDocumentId)}`
+        + "/assinatura-qualificada",
+      );
+      state.qualifiedRequest = pedido;
+      if (QUALIFIED_WAITING.includes(pedido.status)) {
+        scheduleQualifiedPoll();
+      } else {
+        stopQualifiedPolling();
+        if (pedido.status === "assinado_liberado") {
+          announce("Laudo assinado com certificado ICP-Brasil.", "ok");
+          await loadDocument(state.selectedDocumentId, false);
+        }
+      }
+      render();
+    } catch (error) {
+      // Falha de acompanhamento não pode derrubar a tela: a solicitação
+      // continua viva no servidor e o próximo ciclo tenta de novo.
+      stopQualifiedPolling();
+      render();
+    }
+  }
+
+  async function cancelQualifiedSignature() {
+    state.busy = true;
+    render();
+    try {
+      state.qualifiedRequest = await client().api(
+        `/laudos/${encodeURIComponent(state.selectedDocumentId)}`
+        + "/assinatura-qualificada/cancelar",
+        { method: "POST" },
+      );
+      stopQualifiedPolling();
+      announce("Assinatura com VIDaaS cancelada.", "");
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.busy = false;
+      render();
+    }
+  }
+
   async function releaseReport() {
     if (!state.previewVersionId || !state.previewTextSha256) {
       announce("Gere a prévia do laudo antes de assinar e liberar.", "erro");
@@ -1838,6 +2045,25 @@
   function handleClick(event) {
     const button = event.target.closest("button");
     if (!button) return;
+    if (button.matches("[data-report-qualified-open]")) {
+      state.confirmQualified = true;
+      render();
+      return;
+    }
+    if (button.matches("[data-report-qualified-abort]")) {
+      state.confirmQualified = false;
+      render();
+      return;
+    }
+    if (button.matches("[data-report-qualified-confirm]")
+        || button.matches("[data-report-qualified-retry]")) {
+      startQualifiedSignature();
+      return;
+    }
+    if (button.matches("[data-report-qualified-cancel]")) {
+      cancelQualifiedSignature();
+      return;
+    }
     if (button.matches("[data-report-unit]")) {
       const escolha = button.getAttribute("data-report-unit");
       // "__todas" é escolha explícita por ver tudo; guardá-la como string

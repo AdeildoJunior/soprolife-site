@@ -94,6 +94,69 @@ class Settings(BaseSettings):
     # Tamanho máximo do PNG de assinatura manuscrita (bytes).
     reports_signature_max_bytes: int = 2 * 1024 * 1024
 
+    # ------------------------------------------ M25.7 — VIDaaS/IntegraICP
+    #
+    # Assinatura QUALIFICADA ICP-Brasil pelo certificado em nuvem da médica.
+    # Tudo fail-closed: sem `report_signature_provider="integraicp"` E
+    # `integraicp_enabled=True` E as três configurações obrigatórias abaixo,
+    # a fábrica devolve o provedor nulo e o caminho qualificado permanece
+    # inalcançável — exatamente como antes desta etapa.
+    #
+    # A liberação institucional (assinatura eletrônica interna) NUNCA depende
+    # destas variáveis: ela continua funcionando com a integração desligada.
+    report_signature_provider: Literal["unconfigured", "integraicp"] = "unconfigured"
+    integraicp_enabled: bool = False
+    # Sem valor padrão de propósito: endpoint, canal e callback são dados de
+    # contrato com a Valid e nunca podem estar escritos no repositório.
+    integraicp_base_url: str | None = None
+    integraicp_channel_id: str | None = None
+    integraicp_callback_url: str | None = None
+    # Política de assinatura CMS (OID ou identificador acordado com a AC).
+    integraicp_signature_policy: str | None = None
+    # Timeouts finitos: uma chamada pendurada trava a médica na tela.
+    integraicp_request_timeout_seconds: float = 20.0
+    # Janela em que a credencial devolvida pelo callback continua utilizável.
+    integraicp_credential_lifetime_seconds: int = 300
+    # Janela total do clearance: da solicitação até a autorização no app.
+    integraicp_clearance_lifetime_seconds: int = 600
+
+    @field_validator("integraicp_base_url", "integraicp_callback_url")
+    @classmethod
+    def _integraicp_https(cls, value: str | None) -> str | None:
+        """Base e callback só podem ser HTTPS.
+
+        O callback carrega o CredentialId; o base URL recebe o digest. Nenhum
+        dos dois pode trafegar em claro, nem mesmo em homologação.
+        """
+
+        if value is None:
+            return None
+        normalized = value.strip().rstrip("/")
+        if not normalized:
+            return None
+        if not normalized.startswith("https://"):
+            raise ValueError(
+                "M15_INTEGRAICP_BASE_URL e M15_INTEGRAICP_CALLBACK_URL "
+                "precisam ser URLs HTTPS."
+            )
+        return normalized
+
+    def integraicp_ready(self) -> bool:
+        """Integração utilizável de verdade — sem isso, nada é chamado.
+
+        Não basta `enabled=True`: sem base, canal e callback a integração
+        está incompleta, e uma tentativa de uso viraria uma chamada a um
+        endpoint indefinido. Fail-closed: na dúvida, não está pronta.
+        """
+
+        return bool(
+            self.integraicp_enabled
+            and self.report_signature_provider == "integraicp"
+            and self.integraicp_base_url
+            and self.integraicp_channel_id
+            and self.integraicp_callback_url
+        )
+
     @field_validator("reports_validation_base_url")
     @classmethod
     def _validation_url_https(cls, value: str | None) -> str | None:

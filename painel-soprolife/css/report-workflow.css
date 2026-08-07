@@ -1116,3 +1116,59 @@ body.report-physician-only .section:not(#laudos-espirometria) {
 .report-unit-switch:focus-visible {
   border-color: var(--teal);
 }
+
+/* M25.7 — assinatura qualificada ICP-Brasil (VIDaaS). Fica ao lado da
+   liberação institucional e nunca no lugar dela: a tela precisa deixar
+   claro que são duas coisas diferentes. */
+.report-qualified {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+  display: grid;
+  gap: 8px;
+}
+
+.report-qualified.is-unavailable {
+  opacity: 0.75;
+}
+
+.report-qualified-cta {
+  justify-self: start;
+}
+
+.report-qualified-status {
+  margin: 0;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--navy);
+}
+
+.report-qualified-status.is-waiting::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--teal);
+  animation: report-qualified-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes report-qualified-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.report-qualified-erro {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger, #b3261e);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-qualified-status.is-waiting::before { animation: none; }
+}
+
+@media (max-width: 640px) {
+  .report-qualified-cta { justify-self: stretch; width: 100%; }
+}
