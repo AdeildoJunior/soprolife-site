@@ -1100,6 +1100,15 @@ class PhysicianProfile(Base, TimestampMixin):
     # só formatação e é validado para conter EXATAMENTE os mesmos dígitos
     # de `crm_number` (ver ck_physician_profiles_crm_display_digits).
     crm_display: Mapped[str | None] = mapped_column(String(30))
+    # M25.8 — certificado ICP-Brasil com que a médica assina fora do painel.
+    # Vinculado na PRIMEIRA assinatura validada e conferido em todas as
+    # seguintes: é isso que faz o sistema recusar um laudo assinado por
+    # outra pessoa. Guarda o subject do certificado — dado profissional
+    # público. Nunca CPF, nunca chave, nunca biometria.
+    icp_signer_subject: Mapped[str | None] = mapped_column(String(300))
+    icp_signer_bound_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     # Especialidade impressa no bloco médico (ex.: "Médica Pneumologista").
     especialidade: Mapped[str | None] = mapped_column(String(120))
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -1314,6 +1323,15 @@ class ReportDocument(Base, TimestampMixin):
     # Código único e opaco de verificação impresso no laudo (texto + QR).
     # Não é derivado de dado do paciente e não revela nada por si só.
     validation_code: Mapped[str | None] = mapped_column(String(24), unique=True)
+    # M25.8 — rastreio da assinatura externa em lote. `signature_prepared_at`
+    # marca o congelamento do PDF para assinatura; `signature_downloaded_at`
+    # marca a saída dele no ZIP. É o que separa "revisado" de "já baixado".
+    signature_prepared_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    signature_downloaded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     __table_args__ = (
         CheckConstraint(
             f"status IN {STATUS_LAUDO_VALUES!r}", name="status_valido",
@@ -1376,13 +1394,21 @@ class ReportDocument(Base, TimestampMixin):
         # M25.2 — evidência de liberação só existe em documento liberado.
         # Nenhum estado anterior pode carregar carimbo de liberação, e
         # nenhum código de validação é alocado antes da ação consciente.
+        # M25.8 — `validation_code` deixou de ser exclusivo de 'liberado'.
+        # Ele é IMPRESSO no PDF (texto e QR) e precisa existir ANTES da
+        # assinatura externa, quando o laudo está em 'assinatura_pendente':
+        # depois de assinado o arquivo não pode mais ser alterado para
+        # receber o código. O que é evidência de LIBERAÇÃO de verdade —
+        # `released_at`, `released_by_user_id` e
+        # `released_physician_profile_id` — continua exclusivo de 'liberado'.
         CheckConstraint(
             "status = 'liberado' OR ("
             "released_at IS NULL AND "
             "released_by_user_id IS NULL AND "
-            "released_physician_profile_id IS NULL AND "
-            "validation_code IS NULL"
-            ")",
+            "released_physician_profile_id IS NULL AND ("
+            "validation_code IS NULL OR "
+            "status IN ('assinatura_pendente', 'assinado')"
+            "))",
             name="release_evidence_coherent",
         ),
     )

@@ -1172,3 +1172,102 @@ body.report-physician-only .section:not(#laudos-espirometria) {
 @media (max-width: 640px) {
   .report-qualified-cta { justify-self: stretch; width: 100%; }
 }
+
+/* M25.8 — lote de assinatura externa. Só aparece quando há laudos
+   revisados esperando assinatura. */
+.report-batch {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--teal-pale);
+  display: grid;
+  gap: 10px;
+}
+
+.report-batch-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+  color: var(--navy);
+}
+
+.report-batch-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.report-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.report-batch-upload {
+  display: inline-grid;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.report-batch-upload input[type="file"] {
+  font-size: 11px;
+  max-width: 220px;
+}
+
+/* Caixa de seleção da linha da fila. É um elemento próprio dentro do botão
+   que abre o laudo, e o clique nela é interceptado antes. */
+.report-queue-pick {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 8px;
+  border: 2px solid var(--teal);
+  border-radius: 4px;
+  vertical-align: middle;
+  cursor: pointer;
+  background: var(--card);
+}
+
+.report-queue-pick.is-picked {
+  background: var(--teal);
+  box-shadow: inset 0 0 0 2px var(--card);
+}
+
+.report-batch-results {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  font-size: 12px;
+}
+
+.report-batch-results ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.report-batch-result {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border-left: 3px solid var(--line);
+  background: var(--card);
+}
+
+.report-batch-result.is-ok { border-left-color: var(--teal); }
+.report-batch-result.is-error { border-left-color: #b3261e; }
+.report-batch-result em { color: var(--muted); font-style: normal; }
+
+@media (max-width: 640px) {
+  .report-batch-actions { flex-direction: column; align-items: stretch; }
+  .report-batch-upload input[type="file"] { max-width: none; }
+}

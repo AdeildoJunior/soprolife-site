@@ -72,6 +72,11 @@
     qualifiedRequest: null,
     confirmQualified: false,
     qualifiedTimer: null,
+    // M25.8 — lote de assinatura externa. `batchSelection` guarda os ids
+    // marcados; `batchResults` é o resultado por arquivo do último envio.
+    batchSelection: [],
+    batchResults: null,
+    batchBusy: false,
     busy: false,
     notice: "",
     noticeKind: "",
@@ -139,11 +144,13 @@
 
   function statusLabel(value) {
     return {
-      atribuido: "Atribuído",
+      atribuido: "Pendente de laudo",
       em_elaboracao: "Em elaboração clínica",
-      assinatura_pendente: "Assinatura qualificada pendente",
-      assinado: "Assinado",
-      liberado: "Laudo liberado",
+      // M25.8 — revisado pela médica, congelado, AINDA NÃO assinado. Este
+      // estado não vai ao paciente.
+      assinatura_pendente: "Laudado — aguardando assinatura digital",
+      assinado: "Assinado com ICP-Brasil",
+      liberado: "Liberado (assinatura eletrônica interna)",
     }[value] || value || "—";
   }
 
@@ -357,6 +364,82 @@
       </section>`;
   }
 
+  // M25.8 — barra de lote: só aparece quando há laudos revisados esperando
+  // assinatura, porque fora disso ela não teria o que fazer.
+  function renderBatchBar(lista) {
+    const aguardando = lista.filter(
+      (item) => item.status === "assinatura_pendente"
+    );
+    if (!aguardando.length && !state.batchResults) return "";
+    const marcados = state.batchSelection.length;
+    const resultados = state.batchResults;
+    return `
+      <div class="report-batch">
+        <div class="report-batch-head">
+          <strong>${aguardando.length} laudo(s) aguardando assinatura</strong>
+          <span class="report-batch-count">${
+            marcados ? `${marcados} selecionado(s)` : "nenhum selecionado"
+          }</span>
+        </div>
+        <div class="report-batch-actions">
+          <button type="button" class="m15-btn" data-report-batch-all>
+            Selecionar todos
+          </button>
+          <button type="button" class="m15-btn" data-report-batch-none>
+            Limpar seleção
+          </button>
+          <button type="button" class="m15-btn m15-btn-primary"
+            data-report-batch-download${state.batchBusy ? " disabled" : ""}>
+            ${marcados
+              ? `Baixar ${marcados} selecionado(s) para assinatura`
+              : "Baixar todos os laudos revisados"}
+          </button>
+          <label class="report-batch-upload">
+            <span>Enviar laudos assinados</span>
+            <input type="file" id="reportBatchUpload" multiple
+              accept="application/pdf,.pdf,.zip">
+          </label>
+        </div>
+        <p class="report-help">
+          Assine os PDFs com o seu certificado no VIDaaS e devolva aqui.
+          Pode enviar vários de uma vez, ou um ZIP com todos.
+          Não foi confirmado que o VIDaaS assina vários numa sessão só —
+          considere assinar arquivo por arquivo.
+        </p>
+        ${resultados ? renderBatchResults(resultados) : ""}
+      </div>`;
+  }
+
+  function renderBatchResults(resultados) {
+    const linhas = resultados.arquivos.map((item) => `
+      <li class="report-batch-result${item.ok ? " is-ok" : " is-error"}">
+        <strong>${esc(item.arquivo)}</strong>
+        <span>${esc(batchOutcomeLabel(item.resultado))}</span>
+        ${item.mensagem ? `<em>${esc(item.mensagem)}</em>` : ""}
+      </li>`).join("");
+    return `
+      <div class="report-batch-results" role="status" aria-live="polite">
+        <p><strong>${resultados.resumo.validados}</strong> validado(s) e
+          <strong>${resultados.resumo.com_erro}</strong> com erro, de
+          ${resultados.resumo.total} arquivo(s).</p>
+        <ul>${linhas}</ul>
+      </div>`;
+  }
+
+  function batchOutcomeLabel(valor) {
+    return {
+      validado_e_liberado: "Assinatura ICP-Brasil validada",
+      arquivo_duplicado: "Já processado",
+      laudo_nao_encontrado: "Laudo não encontrado",
+      versao_divergente: "Versão divergente",
+      assinatura_ausente: "Sem assinatura digital",
+      assinatura_invalida: "Assinatura inválida",
+      certificado_de_outra_pessoa: "Certificado de outra pessoa",
+      documento_alterado: "Documento alterado",
+      falha_tecnica_recuperavel: "Falha técnica — tente de novo",
+    }[valor] || valor;
+  }
+
   function renderQueue() {
     const unidades = queueUnits();
     // Com uma única unidade, obrigar a escolher seria um clique sem decisão.
@@ -373,6 +456,14 @@
             role="option" aria-selected="${
               item.document_id === state.selectedDocumentId ? "true" : "false"
             }">
+            ${item.status === "assinatura_pendente"
+              ? `<span class="report-queue-pick${
+                  state.batchSelection.includes(item.document_id)
+                    ? " is-picked" : ""
+                }" data-report-batch-pick="${esc(item.document_id)}"
+                  role="checkbox" aria-checked="${
+                    state.batchSelection.includes(item.document_id)
+                  }" title="Selecionar para assinatura"></span>` : ""}
             <strong>${esc(item.report_code)}</strong>
             <span>${esc(item.exam_code)} · ${fmtDate(item.exam_date, false)}</span>
             <span>${esc(originLabel(item.origin_type))}</span>
@@ -404,15 +495,16 @@
             <select id="reportStatusFilter">
               ${options([
                 ["", "Todos"],
-                ["atribuido", "Pendente"],
+                ["atribuido", "Pendentes de laudo"],
                 ["em_elaboracao", "Em elaboração"],
-                ["liberado", "Liberado"],
-                ["assinatura_pendente", "Assinatura pendente"],
-                ["assinado", "Assinado"],
+                ["assinatura_pendente", "Laudados — aguardando assinatura"],
+                ["assinado", "Assinados com ICP-Brasil"],
+                ["liberado", "Liberados"],
               ], state.statusFilter)}
             </select>
           </label>
         </div>
+        ${renderBatchBar(lista)}
         <div class="report-queue-list" role="listbox"
           aria-label="Laudos atribuídos ao médico autenticado">
           ${items}
@@ -1570,6 +1662,67 @@
     }
   }
 
+  // ----------------------------------- M25.8 — lote de assinatura externa
+
+  async function downloadSigningBatch() {
+    state.batchBusy = true;
+    state.batchResults = null;
+    announce("Preparando o pacote de assinatura…", "");
+    render();
+    try {
+      const blob = await client().apiBlob("/laudos/lote/baixar", {
+        method: "POST",
+        body: JSON.stringify({
+          document_ids: state.batchSelection,
+          incluir_mir: false,
+        }),
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "laudos-para-assinar.zip";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Libera a URL depois do clique: revogar antes cancela o download.
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      announce("Pacote baixado. Assine os PDFs e devolva aqui.", "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.batchBusy = false;
+      render();
+    }
+  }
+
+  async function uploadSignedBatch(arquivos) {
+    if (!arquivos || !arquivos.length) return;
+    state.batchBusy = true;
+    announce(`Validando ${arquivos.length} arquivo(s)…`, "");
+    render();
+    try {
+      const corpo = new FormData();
+      for (const arquivo of arquivos) corpo.append("arquivos", arquivo);
+      state.batchResults = await client().api("/laudos/lote/enviar", {
+        method: "POST",
+        body: corpo,
+      });
+      const { validados, com_erro: comErro } = state.batchResults.resumo;
+      announce(
+        `${validados} laudo(s) assinado(s) e liberado(s); ${comErro} com erro.`,
+        comErro ? "erro" : "ok",
+      );
+      state.batchSelection = [];
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.batchBusy = false;
+      render();
+    }
+  }
+
   // ------------------------------------- M25.7 — assinatura qualificada
 
   function stopQualifiedPolling() {
@@ -2043,8 +2196,37 @@
   }
 
   function handleClick(event) {
+    // A caixa de seleção do lote é um elemento DENTRO do botão que abre o
+    // laudo. Sem tratá-la primeiro, marcar um laudo abriria o documento.
+    const pick = event.target.closest("[data-report-batch-pick]");
+    if (pick) {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = pick.getAttribute("data-report-batch-pick");
+      const indice = state.batchSelection.indexOf(id);
+      if (indice >= 0) state.batchSelection.splice(indice, 1);
+      else state.batchSelection.push(id);
+      render();
+      return;
+    }
     const button = event.target.closest("button");
     if (!button) return;
+    if (button.matches("[data-report-batch-all]")) {
+      state.batchSelection = visibleQueue()
+        .filter((item) => item.status === "assinatura_pendente")
+        .map((item) => item.document_id);
+      render();
+      return;
+    }
+    if (button.matches("[data-report-batch-none]")) {
+      state.batchSelection = [];
+      render();
+      return;
+    }
+    if (button.matches("[data-report-batch-download]")) {
+      downloadSigningBatch();
+      return;
+    }
     if (button.matches("[data-report-qualified-open]")) {
       state.confirmQualified = true;
       render();
@@ -2167,6 +2349,12 @@
   }
 
   function handleChange(event) {
+    if (event.target.id === "reportBatchUpload") {
+      const arquivos = Array.from(event.target.files || []);
+      event.target.value = "";
+      uploadSignedBatch(arquivos);
+      return;
+    }
     if (event.target.id === "reportStatusFilter") {
       state.statusFilter = event.target.value;
       loadAuthenticatedData();

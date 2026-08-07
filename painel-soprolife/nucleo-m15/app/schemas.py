@@ -1043,3 +1043,24 @@ class QualifiedSignatureCallback(BaseModel):
         if not normalized:
             raise ValueError("Valor obrigatório ausente.")
         return normalized
+
+
+class BatchDownloadRequest(BaseModel):
+    """M25.8 — seleção para o pacote de assinatura.
+
+    `document_ids` vazio significa "todos os laudos aguardando assinatura
+    atribuídos a mim" — a opção "baixar todos os revisados" da tela. Nunca
+    significa "todos do sistema": o filtro por médica é aplicado no servidor,
+    não confiando na lista que o navegador mandou.
+    """
+
+    document_ids: list[str] = Field(default_factory=list, max_length=500)
+    incluir_mir: bool = False
+
+    @field_validator("document_ids")
+    @classmethod
+    def _sem_vazios(cls, value: list[str]) -> list[str]:
+        limpos = [item.strip() for item in value if item and item.strip()]
+        if len(set(limpos)) != len(limpos):
+            raise ValueError("A seleção tem laudos repetidos.")
+        return limpos

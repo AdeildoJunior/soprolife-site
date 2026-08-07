@@ -54,7 +54,9 @@ from ..models import (
 )
 from ..normalize import contains_clinical_info, contains_pii_like, crm_display_matches
 from ..schemas import (
+    BatchDownloadRequest,
     PhysicianProfileAdminUpdate,
+    QualifiedSignatureCallback,
     ReportAddendumCreate,
     ReportCorrectiveCreate,
     ReportDocumentCompose,
@@ -143,6 +145,7 @@ from ..services.signature_asset import (
 )
 from ..services.signature_provider import (
     PROVIDER_INSTITUTIONAL_RELEASE,
+    SIGNATURE_STATUS_ASSINADA,
     SIGNATURE_STATUS_LIBERADA_INSTITUCIONAL,
     SIGNATURE_STATUS_PENDENTE,
     get_signature_provider,
@@ -2397,6 +2400,509 @@ def _seal_signature_kind(
     return SIGNATURE_KIND_INSTITUTIONAL
 
 
+# --------------------------------- M25.8 — assinatura externa em lote
+
+
+def _laudos_aguardando_assinatura(db: Session, *, profile_id: str):
+    """Laudos DESTA médica congelados e esperando assinatura externa.
+
+    O filtro por médica é aplicado aqui, no servidor. A lista que o
+    navegador manda só pode ESTREITAR esta seleção, nunca ampliá-la.
+    """
+
+    return db.execute(
+        select(ReportDocument, SpirometryExam, ReportAssignment)
+        .join(
+            ReportAssignment,
+            (ReportAssignment.report_document_id == ReportDocument.id)
+            & ReportAssignment.active.is_(True),
+        )
+        .join(
+            SpirometryExam,
+            SpirometryExam.id == ReportDocument.spirometry_exam_id,
+        )
+        .where(
+            ReportAssignment.physician_profile_id == profile_id,
+            ReportDocument.status == STATUS_ASSINATURA_PENDENTE,
+        )
+        .order_by(ReportDocument.public_code)
+    ).all()
+
+
+@router.post("/{document_id}/finalizar-revisao", status_code=201)
+def finalize_review_for_signature(
+    document_id: str,
+    payload: ReportReleaseRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Congela o laudo revisado e o coloca em "aguardando assinatura".
+
+    Este estado NÃO é assinado, NÃO é liberado e NÃO vai ao paciente. Ele
+    existe para que a médica possa revisar vários exames em sequência e só
+    depois assinar todos fora do painel, com o certificado dela.
+
+    Exige as mesmas provas da liberação institucional — prévia atual e texto
+    conferido —, porque a partir daqui o conteúdo fica imutável: o PDF
+    congelado é exatamente o que será assinado.
+    """
+
+    from ..services.external_signature import (
+        ExternalSignatureError,
+        stamp_signing_metadata,
+    )
+
+    _require_reports_enabled()
+    settings = get_settings()
+    document = _lock_document_or_404(db, document_id)
+    profile, _assignment = _require_assigned_physician(
+        db, physician_user, document, lock=True
+    )
+    if document.status == STATUS_LAUDO_LIBERADO:
+        raise ReportDomainError(
+            409,
+            "laudo_ja_liberado",
+            "Este laudo já foi liberado; use adendo ou versão corretiva.",
+        )
+    if document.status == STATUS_ASSINATURA_PENDENTE:
+        raise ReportDomainError(
+            409,
+            "laudo_ja_aguardando_assinatura",
+            "Este laudo já está aguardando assinatura digital.",
+        )
+    if document.status != STATUS_EM_ELABORACAO:
+        raise ReportDomainError(
+            409,
+            "laudo_fora_de_elaboracao",
+            "Gere a prévia do laudo antes de finalizar a revisão.",
+        )
+    draft = db.get(ReportDocumentVersion, document.current_version_id)
+    if (
+        draft is None
+        or draft.report_document_id != document.id
+        or draft.kind != KIND_LAUDO_PREVIA
+    ):
+        raise ReportDomainError(
+            409,
+            "previa_laudo_ausente",
+            "Gere a prévia do laudo antes de finalizar a revisão.",
+        )
+    if payload.expected_version_id != draft.id:
+        raise ReportDomainError(
+            409,
+            "previa_desatualizada",
+            "A prévia mudou desde a conferência; revise antes de finalizar.",
+        )
+    if payload.expected_text_sha256 != (draft.interpretation_text_sha256 or ""):
+        raise ReportDomainError(
+            409,
+            "conteudo_divergente_da_previa",
+            "O texto conferido não corresponde ao texto atual da prévia.",
+        )
+
+    exam, person, location = _document_context(db, document)
+    resolved_signature = _resolve_signature(db, profile.id)
+    now = datetime.now(timezone.utc)
+    version_number = _next_version_number(db, document.id)
+    # O código entra no PDF (texto e QR), então precisa existir ANTES de
+    # congelar. Mas só pode ser GRAVADO no documento junto com a mudança de
+    # status: a constraint de coerência recusa código em laudo que ainda
+    # está em elaboração. Por isso ele vive numa variável até lá.
+    validation_code = document.validation_code or generate_validation_code()
+
+    content = build_native_content(
+        db,
+        document=document,
+        exam=exam,
+        person=person,
+        profile=profile,
+        location=location,
+        version_number=version_number,
+        conclusion_text=draft.interpretation_text_snapshot or "",
+        observations=draft.observations_snapshot,
+        issued_at=now,
+        released=True,
+        released_at=now,
+        validation_code=validation_code,
+        signature_image=(
+            resolved_signature.image if resolved_signature else None
+        ),
+        # Ainda não há assinatura qualificada: o selo declara a liberação
+        # institucional até a assinatura externa ser validada de volta.
+        signature_kind=SIGNATURE_KIND_INSTITUTIONAL,
+        addenda=load_addenda(db, document.id),
+        pilot_warning=_pilot_warning(),
+    )
+    try:
+        carimbado = stamp_signing_metadata(
+            _native_pdf_bytes(content),
+            document_code=document.public_code,
+            version_number=version_number,
+            physician_name=profile.professional_name,
+            crm=f"CRM-{profile.crm_state} {profile.crm_display or profile.crm_number}",
+        )
+    except ExternalSignatureError as exc:
+        raise ReportDomainError(500, exc.codigo, exc.mensagem) from None
+
+    with report_publication_transaction(db) as publication:
+        congelada = _publish_native_version(
+            db,
+            publication=publication,
+            document=document,
+            exam=exam,
+            profile=profile,
+            kind=KIND_ASSINATURA_PENDENTE,
+            data=carimbado,
+            created_by_user_id=physician_user.id,
+            final_text=draft.interpretation_text_snapshot or "",
+            extra={},
+        )
+        # Status primeiro: só depois dele o código de validação é aceito
+        # pela constraint de coerência de liberação.
+        document.status = STATUS_ASSINATURA_PENDENTE
+        document.validation_code = validation_code
+        document.current_version_id = congelada.id
+        document.signature_prepared_at = now
+        document.ready_for_signature_at = now
+        audit(
+            db,
+            "laudo_revisao_finalizada_para_assinatura",
+            entidade="report_documents",
+            entidade_id=document.id,
+            user_id=physician_user.id,
+            request_id=_request_id(request),
+            detalhes={
+                "versao": congelada.id,
+                "hash_preparado": congelada.sha256,
+            },
+        )
+        publication.commit()
+    db.commit()
+    return {
+        "document_id": document.id,
+        "report_code": document.public_code,
+        "status": document.status,
+        "versao_preparada_id": congelada.id,
+        "hash_preparado_sha256": congelada.sha256,
+        "versao": version_number,
+    }
+
+
+@router.post("/lote/baixar")
+def download_signing_batch(
+    payload: BatchDownloadRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Devolve um ZIP com os laudos revisados prontos para assinatura.
+
+    Só entram laudos JÁ revisados e atribuídos a quem pediu — um exame ainda
+    em elaboração nunca cai no pacote, mesmo que o id venha na lista.
+    """
+
+    from ..services.external_signature import (
+        BatchEntry,
+        ExternalSignatureError,
+        build_signing_package,
+    )
+
+    _require_reports_enabled()
+    settings = get_settings()
+    profile = _require_active_physician(db, physician_user)
+    linhas = _laudos_aguardando_assinatura(db, profile_id=profile.id)
+    escolhidos = set(payload.document_ids)
+    if escolhidos:
+        linhas = [linha for linha in linhas if linha[0].id in escolhidos]
+    if not linhas:
+        raise ReportDomainError(
+            409,
+            "lote_vazio",
+            "Nenhum laudo revisado e aguardando assinatura foi encontrado.",
+        )
+
+    entradas: list[BatchEntry] = []
+    for document, exam, _assignment in linhas:
+        versao = db.get(ReportDocumentVersion, document.current_version_id)
+        if versao is None or versao.kind != KIND_ASSINATURA_PENDENTE:
+            continue
+        person = db.get(Person, exam.person_id)
+        mir = None
+        if payload.incluir_mir:
+            original = db.execute(
+                select(ReportDocumentVersion)
+                .where(
+                    ReportDocumentVersion.report_document_id == document.id,
+                    ReportDocumentVersion.kind == KIND_ORIGINAL,
+                )
+                .order_by(ReportDocumentVersion.version_number)
+            ).scalars().first()
+            if original is not None:
+                mir = _read_stored_version(original).data
+        entradas.append(BatchEntry(
+            document_code=document.public_code,
+            version_number=versao.version_number,
+            patient_reference=(person.public_code if person else "SEM-REGISTRO"),
+            prepared_sha256=versao.sha256,
+            exam_code=exam.public_code,
+            physician_name=profile.professional_name,
+            crm=f"CRM-{profile.crm_state} {profile.crm_display or profile.crm_number}",
+            rqe=profile.rqe,
+            prepared_at=document.signature_prepared_at,
+            pdf=_read_stored_version(versao).data,
+            mir_pdf=mir,
+        ))
+
+    try:
+        pacote = build_signing_package(
+            entradas,
+            include_mir=payload.incluir_mir,
+            validation_base_url=settings.reports_validation_base_url,
+        )
+    except ExternalSignatureError as exc:
+        raise ReportDomainError(409, exc.codigo, exc.mensagem) from None
+
+    agora = datetime.now(timezone.utc)
+    for document, _exam, _assignment in linhas:
+        document.signature_downloaded_at = agora
+    audit(
+        db,
+        "laudos_baixados_para_assinatura",
+        entidade="report_documents",
+        entidade_id=None,
+        user_id=physician_user.id,
+        request_id=_request_id(request),
+        detalhes={
+            "quantidade": len(entradas),
+            "incluiu_mir": payload.incluir_mir,
+        },
+    )
+    db.commit()
+    nome = f"laudos-para-assinar-{agora.strftime('%Y%m%d-%H%M')}.zip"
+    return Response(
+        content=pacote,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{nome}"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.post("/lote/enviar")
+async def upload_signed_batch(
+    request: Request,
+    arquivos: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    """Recebe os PDFs assinados e valida UM A UM.
+
+    Um arquivo ruim nunca derruba o lote: cada um recebe seu próprio
+    veredito, e só os aprovados mudam para "assinado e liberado". Os demais
+    ficam esperando correção, com a versão anterior intacta.
+    """
+
+    from ..services.external_signature import (
+        VALIDATION_DUPLICADO,
+        VALIDATION_FALHA_TECNICA,
+        VALIDATION_NAO_ENCONTRADO,
+        FileVerdict,
+        extract_pdfs,
+        read_signing_marker,
+        summarize,
+        verify_signed_pdf,
+    )
+
+    _require_reports_enabled()
+    settings = get_settings()
+    profile = _require_active_physician(db, physician_user)
+
+    brutos: list[tuple[str, bytes]] = []
+    for enviado in arquivos:
+        dados = await _read_upload_bounded(
+            enviado, max_size_bytes=settings.reports_max_upload_bytes
+        )
+        brutos.append((enviado.filename or "arquivo.pdf", dados))
+    itens = extract_pdfs(brutos)
+    if not itens:
+        raise ReportDomainError(
+            422, "envio_vazio", "Nenhum PDF foi encontrado no envio."
+        )
+
+    veredictos: list[FileVerdict] = []
+    ja_vistos: set[str] = set()
+    for nome, dados in itens:
+        marcador = read_signing_marker(dados)
+        if marcador is None:
+            veredictos.append(FileVerdict(
+                filename=nome,
+                outcome=VALIDATION_NAO_ENCONTRADO,
+                message="O arquivo não traz a identificação da SoproLife.",
+            ))
+            continue
+        if marcador.document_code in ja_vistos:
+            veredictos.append(FileVerdict(
+                filename=nome,
+                outcome=VALIDATION_DUPLICADO,
+                document_code=marcador.document_code,
+                message="Este laudo apareceu duas vezes no mesmo envio.",
+            ))
+            continue
+        ja_vistos.add(marcador.document_code)
+
+        document = db.execute(
+            select(ReportDocument)
+            .where(ReportDocument.public_code == marcador.document_code)
+            .with_for_update()
+        ).scalar_one_or_none()
+        if document is None:
+            veredictos.append(FileVerdict(
+                filename=nome,
+                outcome=VALIDATION_NAO_ENCONTRADO,
+                document_code=marcador.document_code,
+                message="Laudo não encontrado neste painel.",
+            ))
+            continue
+        try:
+            dono, _atribuicao = _require_assigned_physician(
+                db, physician_user, document, lock=True
+            )
+        except ReportDomainError:
+            veredictos.append(FileVerdict(
+                filename=nome,
+                outcome=VALIDATION_NAO_ENCONTRADO,
+                document_code=marcador.document_code,
+                message="Este laudo não está atribuído a você.",
+            ))
+            continue
+        # Reenvio de algo já fechado — assinado com certificado OU liberado
+        # institucionalmente. Nos dois casos é duplicata, não "não
+        # encontrado": a médica precisa saber que aquele laudo já está
+        # pronto, e não que o arquivo dela é estranho ao sistema.
+        if document.status in (STATUS_ASSINADO, STATUS_LAUDO_LIBERADO):
+            veredictos.append(FileVerdict(
+                filename=nome,
+                outcome=VALIDATION_DUPLICADO,
+                document_code=marcador.document_code,
+                message="Este laudo já foi assinado e liberado.",
+            ))
+            continue
+        if document.status != STATUS_ASSINATURA_PENDENTE:
+            veredictos.append(FileVerdict(
+                filename=nome,
+                outcome=VALIDATION_NAO_ENCONTRADO,
+                document_code=marcador.document_code,
+                message="Este laudo não está aguardando assinatura.",
+            ))
+            continue
+
+        preparada = db.get(ReportDocumentVersion, document.current_version_id)
+        if preparada is None or preparada.kind != KIND_ASSINATURA_PENDENTE:
+            veredictos.append(FileVerdict(
+                filename=nome,
+                outcome=VALIDATION_FALHA_TECNICA,
+                document_code=marcador.document_code,
+                message="A versão preparada deste laudo não está disponível.",
+            ))
+            continue
+        preparado_bytes = _read_stored_version(preparada).data
+        esperado = read_signing_marker(preparado_bytes)
+        veredicto = verify_signed_pdf(
+            filename=nome,
+            signed=dados,
+            prepared=preparado_bytes,
+            expected_marker=esperado,
+            expected_signer_subject=dono.icp_signer_subject,
+        )
+        if not veredicto.ok:
+            veredictos.append(veredicto)
+            continue
+
+        exam, _person, _location = _document_context(db, document)
+        agora = datetime.now(timezone.utc)
+        with report_publication_transaction(db) as publication:
+            liberada = _publish_native_version(
+                db,
+                publication=publication,
+                document=document,
+                exam=exam,
+                profile=dono,
+                kind=KIND_LAUDO_LIBERADO,
+                data=dados,
+                created_by_user_id=physician_user.id,
+                final_text=preparada.interpretation_text_snapshot or "",
+                extra={},
+            )
+            # Assinatura QUALIFICADA termina em 'assinado', não em
+            # 'liberado'. `liberado` é, por desenho da M25.2, a liberação
+            # institucional — e a constraint de coerência clínica exige que
+            # ele venha com `signed_at` NULO e assinatura institucional.
+            # Misturar os dois estados apagaria justamente a distinção que o
+            # projeto criou entre assinar com certificado e liberar sem ele.
+            document.status = STATUS_ASSINADO
+            document.current_version_id = liberada.id
+            document.signed_at = agora
+            document.signature_status = SIGNATURE_STATUS_ASSINADA
+            # Vínculo do certificado na PRIMEIRA assinatura validada: a
+            # partir daqui, um laudo assinado por outro certificado é
+            # recusado sem precisar de cadastro manual.
+            if not dono.icp_signer_subject and veredicto.signer_subject:
+                dono.icp_signer_subject = veredicto.signer_subject[:300]
+                dono.icp_signer_bound_at = agora
+            db.add(ReportSignature(
+                report_document_version_id=liberada.id,
+                provider="vidaas_externo",
+                status=SIGNATURE_STATUS_ASSINADA,
+                external_reference=veredicto.signed_sha256,
+                requested_by_user_id=physician_user.id,
+                requested_at=document.signature_prepared_at or agora,
+                completed_at=agora,
+                verification_metadata={
+                    "qualified_signature": True,
+                    "standard": "PAdES",
+                    "trust_chain": "ICP-Brasil",
+                    "signer_physician_profile_id": dono.id,
+                    "prepared_sha256": preparada.sha256,
+                    "document_sha256": liberada.sha256,
+                    "signer_subject": veredicto.signer_subject,
+                    "assinado_fora_do_painel": True,
+                },
+            ))
+            audit(
+                db,
+                "laudo_assinado_externamente_validado",
+                entidade="report_documents",
+                entidade_id=document.id,
+                user_id=physician_user.id,
+                request_id=_request_id(request),
+                detalhes={
+                    "versao_liberada": liberada.id,
+                    "arquivo": nome,
+                },
+            )
+            publication.commit()
+        veredicto.version_number = liberada.version_number
+        veredictos.append(veredicto)
+
+    db.commit()
+    return {
+        "resumo": summarize(veredictos),
+        "arquivos": [
+            {
+                "arquivo": v.filename,
+                "resultado": v.outcome,
+                "codigo_laudo": v.document_code,
+                "versao": v.version_number,
+                "mensagem": v.message,
+                "ok": v.ok,
+            }
+            for v in veredictos
+        ],
+    }
+
+
 # ------------------------------------------- M25.7 — assinatura qualificada
 
 
@@ -2553,13 +3059,13 @@ def start_qualified_signature(
         request_id=iniciada.request.id,
         data=iniciada.prepared.data,
     )
-    record_audit(
+    audit(
         db,
-        actor_user_id=physician_user.id,
-        acao="laudo_assinatura_qualificada_iniciada",
+        "laudo_assinatura_qualificada_iniciada",
         entidade="report_documents",
         entidade_id=document.id,
-        request=request,
+        user_id=physician_user.id,
+        request_id=_request_id(request),
         detalhes={"solicitacao_id": iniciada.request.id, "provedor": "integraicp"},
     )
     db.commit()
@@ -2608,13 +3114,13 @@ def cancel_qualified_signature(
     qstore.discard_prepared_pdf(
         _storage_root(get_settings()), request_id=pedido.id
     )
-    record_audit(
+    audit(
         db,
-        actor_user_id=physician_user.id,
-        acao="laudo_assinatura_qualificada_cancelada",
+        "laudo_assinatura_qualificada_cancelada",
         entidade="report_documents",
         entidade_id=document.id,
-        request=request,
+        user_id=physician_user.id,
+        request_id=_request_id(request),
         detalhes={"solicitacao_id": pedido.id},
     )
     db.commit()
@@ -2699,15 +3205,12 @@ def resolve_qualified_signature(
             final_text=draft.interpretation_text_snapshot or "",
             extra={},
         )
-        document.status = STATUS_LAUDO_LIBERADO
+        # Igual ao fluxo externo: assinatura qualificada termina em
+        # 'assinado'. Ver a constraint ck_report_documents_clinical_state.
+        document.status = STATUS_ASSINADO
         document.current_version_id = released.id
-        document.released_at = now
-        document.released_by_user_id = physician_user.id
-        document.released_physician_profile_id = profile.id
         document.signed_at = now
         document.signature_status = SIGNATURE_STATUS_ASSINADA
-        if not document.validation_code:
-            document.validation_code = generate_validation_code()
         signature = ReportSignature(
             report_document_version_id=released.id,
             provider="integraicp",
@@ -2731,13 +3234,13 @@ def resolve_qualified_signature(
             },
         )
         db.add(signature)
-        record_audit(
+        audit(
             db,
-            actor_user_id=physician_user.id,
-            acao="laudo_assinado_icp_brasil",
+            "laudo_assinado_icp_brasil",
             entidade="report_documents",
             entidade_id=document.id,
-            request=request,
+            user_id=physician_user.id,
+            request_id=_request_id(request),
             detalhes={
                 "solicitacao_id": pedido.id,
                 "nivel_pades": pedido.pades_level,

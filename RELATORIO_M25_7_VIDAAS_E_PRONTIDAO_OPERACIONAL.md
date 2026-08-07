@@ -564,19 +564,78 @@ reenvio do corrigido; PDF de outro laudo; versão antiga; documento reescrito
 em vez de assinado; assinatura de outro certificado; certificado vinculado
 correto; assinatura corrompida; arquivo de outro sistema; contadores.
 
-## 28. O que FALTA para a médica usar
+## 28. Endpoints, migration e interface — ENTREGUES
 
-O núcleo está pronto e testado, mas **ainda não é alcançável pela tela**.
-Falta, nesta ordem:
+### Migration `d4a71c88b2e6`
 
-1. **Migration + colunas de rastreio**: `preparado_em`, `baixado_em` em
-   `report_documents`, e o vínculo do certificado da médica
-   (`icp_signer_subject`) em `physician_profiles`.
-2. **Endpoints**: finalizar revisão (congela o PDF com kind
-   `assinatura_pendente` e status homônimo — ambos já existem no schema, sem
-   necessidade de migration), baixar lote (ZIP) e enviar assinados.
-3. **Interface**: filtros por estado, caixas de seleção, contadores, botões
-   de baixar e enviar, e resultado individual por arquivo.
+Aditiva e reversível (`upgrade → downgrade → upgrade` testado). Acrescenta
+`signature_prepared_at` e `signature_downloaded_at` em `report_documents`, e
+`icp_signer_subject` + `icp_signer_bound_at` em `physician_profiles`.
 
-Nada disso foi entregue nesta sessão. Preferi fechar o núcleo provado a
-subir endpoints pela metade.
+Também **relaxa uma constraint, de propósito e no ponto mínimo**:
+`release_evidence_coherent` exigia status `liberado` para qualquer campo de
+liberação, inclusive `validation_code`. Isso inviabilizava o fluxo externo,
+porque o código de validação é **impresso no PDF** (texto e QR) e precisa
+existir antes da assinatura — depois de assinado o arquivo não pode mais ser
+alterado. O código passou a ser aceito também em `assinatura_pendente` e
+`assinado`. O que é evidência de liberação de verdade — `released_at`,
+`released_by_user_id`, `released_physician_profile_id` — continua exclusivo
+de `liberado`.
+
+### Endpoints
+
+| Método | Rota | Papel |
+| --- | --- | --- |
+| POST | `/laudos/{id}/finalizar-revisao` | congela o laudo revisado, carimba e passa a "aguardando assinatura" |
+| POST | `/laudos/lote/baixar` | ZIP com os laudos da médica prontos para assinar |
+| POST | `/laudos/lote/enviar` | recebe PDFs ou ZIP e valida um a um |
+
+O filtro por médica é aplicado **no servidor**: a lista que o navegador manda
+só pode estreitar a seleção, nunca ampliá-la. Um exame ainda em elaboração
+nunca entra no pacote, mesmo que o id venha na requisição.
+
+### Descoberta que corrigiu o modelo de estados
+
+A constraint `clinical_state_coherent` revelou que eu estava enganado sobre o
+estado final. `liberado` é, por desenho da M25.2, a **liberação
+institucional** — exige `signed_at` nulo e `signature_status =
+liberada_institucional`. A assinatura **qualificada** termina em `assinado`.
+
+Eu estava gravando `liberado` + `signed_at` + `assinada`, o que apagaria
+justamente a distinção que o projeto criou entre assinar com certificado e
+liberar sem ele. Corrigido no fluxo externo **e no callback da M25.7**, que
+tinha o mesmo defeito e não era coberto por teste.
+
+### Três nomes que só quebrariam em produção
+
+`BatchDownloadRequest`, `QualifiedSignatureCallback` e
+`SIGNATURE_STATUS_ASSINADA` eram usados sem estar importados em
+`reports.py`. Com `from __future__ import annotations`, a anotação vira
+string e o erro só apareceria **na primeira chamada real** do endpoint — os
+dois primeiros afetavam a M25.7, entregue na sessão anterior. Corrigidos.
+
+### Interface
+
+Filtro da fila com os seis estados pedidos. Caixa de seleção por linha nos
+laudos aguardando assinatura, "Selecionar todos", "Limpar seleção",
+contador de selecionados, botão de baixar (que muda de texto conforme haja
+ou não seleção) e campo de envio aceitando vários PDFs ou um ZIP.
+
+O resultado do envio aparece por arquivo, com rótulo legível para cada um
+dos nove desfechos, e um resumo de validados/com erro. As instruções na tela
+repetem que **não foi confirmado** que o VIDaaS assina vários numa sessão.
+
+Detalhe de implementação que vale registrar: a caixa de seleção é um
+elemento **dentro** do botão que abre o laudo. Sem interceptar o clique
+antes de resolver o botão, marcar um laudo abriria o documento.
+
+## 29. O que ainda falta
+
+- **Deploy** da M25.5 até a M25.8 (nada foi implantado).
+- **Cadastrar a assinatura manuscrita** da Dra. Ana na VPS.
+- **Confirmar com a Valid** se a ferramenta oficial assina em lote, e testar
+  o Assinador SERPRO com o certificado em nuvem dela.
+- **Confirmar o domínio real** da URL de validação (hoje é placeholder).
+- A falha dependente de ordem em `test_m24d_pilot_deployment` continua em
+  aberto — passa isolada, falha na execução completa, e não tem relação com
+  assinatura.
