@@ -10,6 +10,7 @@ validação precisa recusar.
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 
 from asn1crypto import algos, cms, core, x509 as asn1_x509
 from cryptography import x509
@@ -121,3 +122,48 @@ class SigningAuthorityFake:
         return cms.ContentInfo({
             "content_type": "signed_data", "content": signed_data
         }).dump()
+
+
+# ------------------------------- assinatura externa simulada (M25.8)
+
+_PLACEHOLDER_BYTES = 8192
+
+
+def sign_incrementally(prepared: bytes, authority: SigningAuthorityFake) -> bytes:
+    """Assina ANEXANDO ao PDF, como Adobe Reader e VIDaaS fazem de verdade.
+
+    Assinar um PDF não o reescreve: acrescenta uma seção de atualização
+    incremental ao final. Por isso o arquivo preparado continua sendo
+    PREFIXO EXATO do assinado — propriedade que a reimportação usa para
+    provar que o conteúdo clínico não foi adulterado.
+
+    Simular isso reescrevendo o arquivo daria um teste que passa e um fluxo
+    real que falha, porque a verificação de prefixo cairia.
+    """
+
+    base = prepared if prepared.endswith(b"\n") else prepared + b"\n"
+    corpo = (
+        b"1000 0 obj\n<< /Type /Sig /Filter /Adobe.PPKLite "
+        b"/SubFilter /ETSI.CAdES.detached /ByteRange "
+        b"[ 0 9999999999 9999999999 9999999999 ] /Contents <"
+        + b"0" * (_PLACEHOLDER_BYTES * 2)
+        + b"> >>\nendobj\n"
+    )
+    montado = bytearray(base + corpo)
+
+    marcador = b"/Contents <"
+    inicio = montado.rfind(marcador) + len(marcador) - 1
+    fim = inicio + 2 + _PLACEHOLDER_BYTES * 2
+    byte_range = (0, inicio, fim, len(montado) - fim)
+
+    alvo = b"[ 0 9999999999 9999999999 9999999999 ]"
+    posicao = montado.rfind(alvo)
+    novo = ("[ " + " ".join(str(v) for v in byte_range) + " ]").encode("ascii")
+    novo = novo[:-1] + b" " * (len(alvo) - len(novo)) + b"]"
+    montado[posicao : posicao + len(alvo)] = novo
+
+    coberto = bytes(montado[: byte_range[1]]) + bytes(montado[byte_range[2] :])
+    cms = authority.build_cms(hashlib.sha256(coberto).hexdigest())
+    hexado = cms.hex().encode("ascii")
+    montado[inicio + 1 : inicio + 1 + len(hexado)] = hexado
+    return bytes(montado)

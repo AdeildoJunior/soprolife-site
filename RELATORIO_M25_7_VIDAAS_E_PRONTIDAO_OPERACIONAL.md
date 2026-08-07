@@ -477,3 +477,106 @@ já roda em produção, e implantá-la causaria regressão.
 ```
 /home/adeildo/soprolife-site/RELATORIO_M25_7_VIDAAS_E_PRONTIDAO_OPERACIONAL.md
 ```
+
+---
+
+# ADENDO M25.8 — Fluxo gratuito de assinatura externa em lote
+
+Data: 2026-08-06 (mesma sessão)
+
+## 24. Correção de escopo
+
+A Dra. Ana **já tem certificado ICP-Brasil e já assina pelo VIDaaS**. A API
+comercial IntegraICP (M25.7) deixa de ser o caminho principal e passa a ser
+uma alternativa futura, desligada. O caminho prioritário é gratuito: o painel
+prepara os laudos, ela assina fora com o que já usa, e devolve em lote.
+
+## 25. O que o VIDaaS permite em lote — resposta objetiva
+
+Pesquisa feita sem contratar serviço e sem enviar dado real.
+
+| Ferramenta | Assina vários PDFs numa sessão? | Base |
+| --- | --- | --- |
+| Ferramenta oficial "Assinar com VIDaaS" | **NÃO CONFIRMADO** | a página pública não descreve a funcionalidade; nada encontrado documenta lote |
+| VIDaaS Connect (Adobe Reader) | **NÃO CONFIRMADO** | o material oficial demonstra assinatura de *um* documento |
+| API IntegraICP (comercial) | **SIM** — até 20 documentos por requisição | documentação de integração da Valid |
+| Assinador SERPRO (gratuito) | **SIM** — função "Assinar em Lote", seleção múltipla com Ctrl/Shift | tutorial oficial do SERPRO |
+
+**Conclusão honesta: não foi possível comprovar que a ferramenta oficial do
+VIDaaS assina em lote.** Enquanto isso não for confirmado com a Valid, o
+sistema não afirma que existe — as instruções dentro do ZIP dizem
+explicitamente para considerar assinatura arquivo por arquivo, e há teste
+travando esse texto (`test_instrucoes_nao_prometem_assinatura_em_lote`).
+
+Caminho a investigar com a médica: o **Assinador SERPRO** documenta lote e é
+gratuito, mas a compatibilidade dele com certificado em nuvem VIDaaS **não
+foi confirmada** — precisa ser testada por ela, na máquina dela.
+
+Fontes:
+- <https://assinar-com.vidaas.com.br/visualiza/>
+- <https://valid-sa.atlassian.net/wiki/spaces/PDD/pages/958365697/Manual+de+Integra+o+com+VIDaaS+-+Certificado+em+Nuvem>
+- <https://tutorial.assinadorserpro.estaleiro.serpro.gov.br/html/demo_17.html>
+- <https://validcertificadora.com.br/pages/certificado-em-nuvem/>
+
+## 26. O que foi implementado nesta etapa
+
+`app/services/external_signature.py` — núcleo completo e testado:
+
+- **Carimbo de identificação** (`stamp_signing_metadata`): grava código do
+  laudo, versão e hash do conteúdo em `/Keywords`. É o que reencontra o
+  laudo na volta, **sem depender do nome do arquivo**.
+- **Pacote de assinatura** (`build_signing_package`): ZIP com os PDFs
+  nativos em `assinar/`, `manifesto.json`, `manifesto.csv` e
+  `COMO-ASSINAR.txt`. O PDF técnico da MIR fica **fora por padrão** e, quando
+  pedido, vai para `exame-tecnico-mir-NAO-ASSINAR/`.
+- **Entrada flexível** (`extract_pdfs`): aceita PDFs soltos ou um ZIP.
+- **Verificação por arquivo** (`verify_signed_pdf`): nove desfechos
+  distintos, nunca um booleano para o lote inteiro.
+- **Contadores** (`summarize`): total, validados, com erro.
+
+### Duas decisões de projeto que precisam ficar registradas
+
+**1. O carimbo guarda o hash do CONTEÚDO, não o do arquivo.** A primeira
+versão tentou gravar no PDF o hash do próprio PDF — impossível por
+construção. O carimbo passou a levar o hash do laudo renderizado *antes* do
+carimbo; o hash do arquivo entregue (o que ela assina) vive no banco e no
+manifesto.
+
+**2. A prova de integridade é o PREFIXO, não um hash.** Assinar um PDF
+**anexa** uma atualização incremental — não reescreve. Então o preparado tem
+de continuar sendo prefixo exato do assinado. Isso detecta reimpressão e
+exportação, que um hash simples não pegaria. O assinador de teste
+(`sign_incrementally`) anexa de verdade, justamente para o teste não passar
+com um fluxo que quebraria na vida real.
+
+## 27. Testes desta etapa
+
+`tests/test_m25_8_external_batch.py` — **20 testes, todos passando**
+(58 somando com a M25.7).
+
+Cobrem: carimbo lido de volta; hash do conteúdo distinto do hash do arquivo;
+PDF sem carimbo; nome de arquivo sem nome de paciente e sem acento; ZIP com
+três laudos e os dois manifestos; manifesto sem padrão de CPF e sem termo
+clínico; MIR fora por padrão e em pasta separada quando pedido; lote vazio
+recusado; instruções que não prometem lote; ZIP e PDFs soltos equivalentes;
+**três enviados, dois válidos e um inválido, com liberação só dos válidos**;
+reenvio do corrigido; PDF de outro laudo; versão antiga; documento reescrito
+em vez de assinado; assinatura de outro certificado; certificado vinculado
+correto; assinatura corrompida; arquivo de outro sistema; contadores.
+
+## 28. O que FALTA para a médica usar
+
+O núcleo está pronto e testado, mas **ainda não é alcançável pela tela**.
+Falta, nesta ordem:
+
+1. **Migration + colunas de rastreio**: `preparado_em`, `baixado_em` em
+   `report_documents`, e o vínculo do certificado da médica
+   (`icp_signer_subject`) em `physician_profiles`.
+2. **Endpoints**: finalizar revisão (congela o PDF com kind
+   `assinatura_pendente` e status homônimo — ambos já existem no schema, sem
+   necessidade de migration), baixar lote (ZIP) e enviar assinados.
+3. **Interface**: filtros por estado, caixas de seleção, contadores, botões
+   de baixar e enviar, e resultado individual por arquivo.
+
+Nada disso foi entregue nesta sessão. Preferi fechar o núcleo provado a
+subir endpoints pela metade.
