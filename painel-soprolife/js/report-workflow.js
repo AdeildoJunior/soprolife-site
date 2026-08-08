@@ -1365,11 +1365,18 @@
   }
 
   function renderAdminWorkspace() {
+    // M25.10 — a administração vem RECOLHIDA. Ela competia visualmente com o
+    // fluxo operacional e fazia a tela parecer um painel de configuração, e
+    // não o lugar onde se recebe exame e se lauda. Continua inteira, a um
+    // clique de distância.
     return `
-      <div class="report-admin-shell">
+      <details class="report-admin-shell">
+        <summary>Administração restrita — contas médicas e catálogo técnico</summary>
+        <p class="report-help">Ajustes de cadastro. Não é necessário para
+          receber exames nem para laudar.</p>
         ${renderProfileAdmin()}
         ${renderTemplateAdmin()}
-      </div>`;
+      </details>`;
   }
 
   function render() {
@@ -1382,6 +1389,21 @@
     }
     const blocks = [];
     if (explicit("medico")) blocks.push(renderPhysicianWorkspace());
+    else if (can("admin") || can("operacional")) {
+      // Sem esta nota, um administrador conclui que "a tela sumiu". Ela não
+      // sumiu: o papel médico é EXPLÍCITO por desenho — uma conta
+      // administrativa nunca ganha autoria clínica por herança.
+      blocks.push(`
+        <section class="report-panel report-role-note">
+          <h3>Fila médica não aparece nesta conta</h3>
+          <p>Você está autenticado com perfil administrativo/operacional.
+            A fila de laudos e a assinatura só aparecem para contas com o
+            <strong>papel médico explícito</strong> — uma conta administrativa
+            nunca recebe autoria clínica por herança.</p>
+          <p class="report-help">Para conferir o fluxo clínico, entre com a
+            conta da médica responsável.</p>
+        </section>`);
+    }
     if (can("operacional")) blocks.push(renderOperationalWorkspace());
     if (can("admin")) blocks.push(renderAdminWorkspace());
     if (!blocks.length) {

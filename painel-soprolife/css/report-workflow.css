@@ -1271,3 +1271,40 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   .report-batch-actions { flex-direction: column; align-items: stretch; }
   .report-batch-upload input[type="file"] { max-width: none; }
 }
+
+/* M25.10 — administração recolhida e nota de papel. A tela operacional
+   principal não pode ser dominada por cadastro e catálogo técnico. */
+details.report-admin-shell {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  padding: 0 14px 4px;
+}
+
+details.report-admin-shell > summary {
+  cursor: pointer;
+  padding: 12px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  list-style: none;
+}
+
+details.report-admin-shell > summary::-webkit-details-marker { display: none; }
+
+details.report-admin-shell > summary::before {
+  content: "▸ ";
+  color: var(--teal);
+}
+
+details.report-admin-shell[open] > summary::before { content: "▾ "; }
+
+details.report-admin-shell[open] { padding-bottom: 14px; }
+
+.report-role-note {
+  border-left: 3px solid var(--teal);
+}
+
+.report-role-note h3 { margin: 0 0 6px; font-size: 15px; color: var(--navy); }
+.report-role-note p { margin: 0 0 6px; font-size: 13px; }
