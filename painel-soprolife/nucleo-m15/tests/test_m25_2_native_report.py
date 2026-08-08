@@ -1450,3 +1450,76 @@ def test_fila_agrupa_pela_unidade_parceira_quando_existe(
     )
     assert alvo["location_key"] == f"unidade:{unit.id}"
     assert alvo["location_name"] == "TESTE APAGAR Fila — Unidade Fila Teste"
+
+
+# ------------------------------------------------------------------ M25.11
+
+
+def test_verificar_perfil_exige_referencia_e_persiste(client, auth, db, person):
+    """Regressão: o formulário não enviava `verification_reference`.
+
+    O contrato da API sempre exigiu a referência para marcar "verified", mas
+    o payload do painel não a incluía. O servidor recusava com 422 e a tela
+    voltava mostrando "Pendente" — parecendo que o salvamento não persistia,
+    quando na verdade ele era rejeitado a cada tentativa.
+    """
+
+    caso = _make_case(client, auth, db, person, com_bd=True, suffix="911")
+    caminho = f"/api/v1/laudos/admin/medicos/{caso['doctor'].id}"
+    base = {
+        "grant_physician_role": True,
+        "professional_name": "TESTE APAGAR Profissional M25",
+        "crm_number": "00911",
+        "crm_state": "RJ",
+        "active": True,
+    }
+
+    # Sem a referência: recusado, e nada é ativado.
+    sem = client.patch(
+        caminho, json={**base, "verification_status": "verified"},
+        headers=auth("admin"),
+    )
+    assert sem.status_code == 422, sem.text
+    assert sem.json()["erro"]["codigo"] == "referencia_verificacao_obrigatoria"
+
+    # Com a referência: aceita e PERSISTE.
+    com = client.patch(
+        caminho,
+        json={
+            **base,
+            "verification_status": "verified",
+            "verification_reference": "CREMERJ-BUSCA-PUBLICA-20260808",
+        },
+        headers=auth("admin"),
+    )
+    assert com.status_code == 200, com.text
+    perfil = com.json()["profile"]
+    assert perfil["verification_status"] == "verified"
+    assert perfil["active"] is True
+    # A referência volta na resposta — sem isso o formulário não consegue
+    # exibi-la e o operador reenvia sem ela na recarga seguinte.
+    assert perfil["verification_reference"] == "CREMERJ-BUSCA-PUBLICA-20260808"
+
+    # E continua assim ao reler.
+    relido = client.get("/api/v1/laudos/admin/medicos", headers=auth("admin"))
+    assert relido.status_code == 200
+    alvo = next(
+        item for item in relido.json()
+        if item.get("profile") and item["profile"]["id"] == perfil["id"]
+    )
+    assert alvo["profile"]["verification_status"] == "verified"
+    assert alvo["profile"]["active"] is True
+
+
+def test_medica_verificada_deixa_de_receber_perfil_indisponivel(
+    client, auth, db, person
+):
+    """Depois de verificada e ativa, a médica acessa a própria fila."""
+
+    caso = _make_case(client, auth, db, person, com_bd=True, suffix="912")
+    fila = client.get("/api/v1/laudos/meus", headers=caso["doctor_auth"])
+    assert fila.status_code == 200, fila.text
+    assert any(
+        item["report_code"] == caso["document"]["public_code"]
+        for item in fila.json()
+    )

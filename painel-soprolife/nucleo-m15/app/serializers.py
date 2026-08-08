@@ -478,6 +478,12 @@ def ser_physician_profile(p: m.PhysicianProfile) -> dict:
         "verification_status": p.verification_status,
         "verified_at": iso(p.verified_at),
         "verified_by_user_id": p.verified_by_user_id,
+        # M25.11 — referência técnica da checagem no conselho. É obrigatória
+        # para marcar "verified" e precisava voltar para o formulário poder
+        # exibi-la; sem isso o campo aparecia vazio a cada recarga e o
+        # operador reenviava sem ela. Não é segredo: é o identificador de uma
+        # consulta pública ao CRM.
+        "verification_reference": p.verification_reference,
         **_stamps(p),
     }
 

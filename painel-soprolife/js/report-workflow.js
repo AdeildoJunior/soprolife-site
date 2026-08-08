@@ -77,6 +77,7 @@
     batchSelection: [],
     batchResults: null,
     batchBusy: false,
+    profileError: "",
     busy: false,
     notice: "",
     noticeKind: "",
@@ -1226,11 +1227,26 @@
                 ], profile && profile.verification_status || "pending")}
               </select>
             </label>
+            <label for="reportVerificationReference">Referência da verificação
+              <input id="reportVerificationReference" name="verification_reference"
+                maxlength="120" aria-describedby="verificationReferenceHelp"
+                placeholder="CREMERJ-BUSCA-PUBLICA-20260808-CRM5262307-5"
+                value="${esc(profile && profile.verification_reference)}">
+              <span id="verificationReferenceHelp" class="report-help">
+                Obrigatória para marcar <strong>Verificado</strong>: o código
+                ou identificador da consulta que você fez ao conselho. Sem
+                ela o servidor recusa a verificação.
+              </span>
+            </label>
             <label class="report-check">
               <input type="checkbox" name="active"${
                 profile && profile.active ? " checked" : ""
               }> Perfil ativo
             </label>
+            ${state.profileError
+              ? `<p class="report-profile-error" role="alert">${
+                  esc(state.profileError)
+                }</p>` : ""}
             <p class="report-verification-state">Estado atual: <strong>${
               esc(profile ? profile.verification_status : "perfil ainda não criado")
             }</strong>${profile && profile.verified_at
@@ -1282,7 +1298,7 @@
           <label for="reportSignatureFile">Arquivo PNG com fundo transparente
             <input id="reportSignatureFile" name="arquivo" type="file"
               accept="image/png,.png" required>
-            <span class="report-help">Até 2 MiB, proporção entre 0,8:1 e 12:1.
+            <span class="report-help">Até 2 MiB, proporção entre 0,25:1 e 12:1.
               O arquivo é gravado fora do repositório, em raiz privada 0700.</span>
           </label>
           <label class="report-check">
@@ -2069,6 +2085,12 @@
       crm_display: form.elements.crm_display.value || null,
       especialidade: form.elements.especialidade.value || null,
       verification_status: form.elements.verification_status.value,
+      // M25.11 — o campo EXISTIA no contrato da API e nunca era enviado pelo
+      // formulário. Sem ele o servidor recusa "Verificado" com 422, e a tela
+      // voltava mostrando "Pendente" — parecendo que o salvamento não
+      // persistia, quando na verdade ele era rejeitado.
+      verification_reference:
+        form.elements.verification_reference.value.trim() || null,
       active: form.elements.active.checked,
     };
     state.busy = true;
@@ -2078,10 +2100,14 @@
         `/laudos/admin/medicos/${encodeURIComponent(form.elements.user_id.value)}`,
         { method: "PATCH", body: JSON.stringify(payload) }
       );
+      state.profileError = "";
       announce("Perfil médico atualizado.", "ok");
       await loadAuthenticatedData();
     } catch (error) {
-      announce(readableError(error), "erro");
+      // Também fica FIXO na tela: o toast some em segundos e o operador
+      // conclui que salvou.
+      state.profileError = readableError(error);
+      announce(state.profileError, "erro");
       render();
     } finally {
       state.busy = false;

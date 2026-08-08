@@ -361,6 +361,10 @@
 .report-check input,
 .report-placement-grid fieldset input {
   width: auto;
+  /* Não encolhe nem se estica: a caixa fica do tamanho dela, na primeira
+     linha, mesmo com texto longo ao lado. */
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 
 .report-template-card abbr {
@@ -504,8 +508,13 @@
 
 .report-check {
   display: flex !important;
-  align-items: center;
+  /* M25.11 — `center` alinhava a caixa pelo MEIO do bloco de texto. Quando a
+     confirmação quebra em duas ou três linhas, a caixa descia para o meio
+     do parágrafo e encostava nas palavras. Alinhar pelo topo mantém a caixa
+     na primeira linha, que é onde o olho a procura. */
+  align-items: flex-start;
   gap: 8px;
+  line-height: 1.45;
 }
 
 .report-workflow-root button:focus-visible,
