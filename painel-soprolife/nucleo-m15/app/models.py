@@ -1046,6 +1046,16 @@ SIGNATURE_STATUS_VALUES = (
     SIGNATURE_STATUS_REJEITADA,
     SIGNATURE_STATUS_LIBERADA_INSTITUCIONAL,
 )
+# M25.14 — largura das colunas que guardam esses valores. Era VARCHAR(20) nos
+# dois lugares (report_documents.signature_status e report_signatures.status),
+# mas "liberada_institucional" tem 22 caracteres: em PostgreSQL a liberação
+# abortava com StringDataRightTruncation, e em SQLite passava porque lá o
+# limite de VARCHAR é ignorado. A largura é derivada dos próprios valores,
+# com folga, para não voltar a divergir quando um status novo entrar na lista.
+SIGNATURE_STATUS_LEN = 40
+assert SIGNATURE_STATUS_LEN >= max(len(v) for v in SIGNATURE_STATUS_VALUES), (
+    "SIGNATURE_STATUS_LEN não comporta todos os SIGNATURE_STATUS_VALUES"
+)
 
 BRAZIL_UF_VALUES = (
     "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT",
@@ -1283,7 +1293,9 @@ class ReportDocument(Base, TimestampMixin):
     )
     # Preenchido apenas quando `status == finalizado`. Representa o
     # "signing-required" do item 7 — sempre PENDENTE nesta etapa.
-    signature_status: Mapped[str | None] = mapped_column(String(20))
+    signature_status: Mapped[str | None] = mapped_column(
+        String(SIGNATURE_STATUS_LEN)
+    )
     # Sem FK de verdade de propósito: report_document_versions referencia
     # report_documents (não o contrário) — declarar os dois lados como FK
     # criaria uma dependência circular entre as tabelas. A referência é
@@ -1744,7 +1756,11 @@ class ReportSignature(Base, TimestampMixin):
         nullable=False,
     )
     provider: Mapped[str | None] = mapped_column(String(60))
-    status: Mapped[str] = mapped_column(String(20), default=SIGNATURE_STATUS_PENDENTE, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(SIGNATURE_STATUS_LEN),
+        default=SIGNATURE_STATUS_PENDENTE,
+        nullable=False,
+    )
     external_reference: Mapped[str | None] = mapped_column(String(120))
     requested_by_user_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
     requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
