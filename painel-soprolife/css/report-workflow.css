@@ -254,15 +254,49 @@
   margin: 14px 0;
 }
 
-.report-comparison article {
+/* M25.12 — bancada clínica: exame técnico à ESQUERDA, laudo e conclusão à
+   DIREITA. A coluna do exame gruda no topo enquanto a médica rola a coluna de
+   trabalho, para que o traçado da MIR continue à vista durante a escolha das
+   siglas, a edição do texto e a geração da prévia. */
+.report-clinical-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.report-source-pane {
+  position: sticky;
+  top: 12px;
+}
+
+.report-work-pane {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.report-comparison article,
+.report-clinical-split .report-source-pane,
+.report-clinical-split .report-preview-pane {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-xs);
   background: #f8fafc;
 }
 
-.report-comparison h4 {
+.report-comparison h4,
+.report-clinical-split h4 {
   margin-bottom: 8px;
+}
+
+/* Dentro da bancada o formulário já vem separado pelo cartão da prévia; a
+   linha divisória extra do padrão `.report-clinical-form` empilhava duas
+   bordas seguidas. */
+.report-work-pane > .report-clinical-form {
+  border-top: 0;
+  padding-top: 0;
 }
 
 .report-pdf-frame {
@@ -439,6 +473,92 @@
   gap: 8px 16px;
 }
 
+/* M25.12 — desfecho da busca por código institucional, FIXO na tela.
+   O toast anterior sumia em segundos: quem digitava um código inexistente
+   ficava sem nenhuma explicação do porquê o formulário de upload não
+   apareceu. */
+.report-locate-feedback {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: var(--radius-xs);
+  font-size: 13px;
+}
+
+.report-locate-feedback strong {
+  overflow-wrap: anywhere;
+}
+
+.report-locate-feedback span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.report-locate-feedback.is-erro {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.report-locate-feedback.is-aviso {
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.report-locate-feedback.is-ok {
+  border-left-color: var(--ok);
+  background: var(--ok-soft);
+}
+
+/* Escolher o exame numa lista em vez de adivinhar o código de cabeça. */
+.report-exam-catalog {
+  margin-top: 12px;
+}
+
+.report-exam-catalog summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.report-exam-pick-list {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.report-exam-pick {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+  align-items: baseline;
+  gap: 4px 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--ease-fast), box-shadow var(--ease-fast);
+}
+
+.report-exam-pick:hover,
+.report-exam-pick.is-selected {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(23, 181, 165, .12);
+}
+
+.report-exam-pick span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .report-signature-panel {
   margin-top: 14px;
   border-color: rgba(231, 169, 63, .35);
@@ -544,6 +664,19 @@ body.report-physician-only .section:not(#laudos-espirometria) {
 
   .report-exam-context {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Abaixo desta largura as duas colunas da bancada ficariam estreitas demais
+   para ler um traçado de espirometria. Empilha e solta o `sticky`: a leitura
+   sequencial é melhor do que duas colunas ilegíveis. */
+@media (max-width: 1100px) {
+  .report-clinical-split {
+    grid-template-columns: 1fr;
+  }
+
+  .report-source-pane {
+    position: static;
   }
 }
 

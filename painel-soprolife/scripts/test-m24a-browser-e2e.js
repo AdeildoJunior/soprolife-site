@@ -486,6 +486,10 @@ async function main() {
             crm_state: "AC",
             rqe: "RQE-TESTE-001",
             verification_status: "verified",
+            // M25.11 passou a exigir a referência técnica para aceitar o
+            // status verified. Sem ela o PATCH responde 422 e este roteiro
+            // parava antes de chegar ao fluxo clínico.
+            verification_reference: "CRM-VERIF-TESTE-BROWSER-M24C",
             active: true,
           }),
         }

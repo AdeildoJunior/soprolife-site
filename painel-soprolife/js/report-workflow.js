@@ -17,7 +17,13 @@
   const PILOT_WARNING =
     "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR AO PACIENTE";
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+  // M25.12 — o código institucional de espirometria é SEMPRE emitido por
+  // `app/ids.py` como `ESP-` + 6 dígitos zero-preenchidos. Nenhum caminho do
+  // sistema produz letras depois do hífen. A expressão continua a mesma; o
+  // que mudou é que a recusa agora é explicada na tela em vez de bloquear o
+  // envio silenciosamente (ver `renderExamLocator`).
   const EXAM_CODE_RE = /^ESP-\d{1,9}$/i;
+  const EXAM_CODE_HINT = "ESP- seguido só de números, por exemplo ESP-000001.";
   const UF_VALUES = [
     "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT",
     "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO",
@@ -58,6 +64,13 @@
     selectedAdminTemplateId: "",
     detail: null,
     locatedExam: null,
+    // M25.12 — resultado da última busca por código institucional, FIXO na
+    // tela. O toast sumia em segundos e a leitura natural de quem digitava um
+    // código inexistente era "o sistema não fez nada".
+    // { tipo: "erro"|"aviso"|"ok", titulo, mensagem, detalhe }
+    locateFeedback: null,
+    // Espirometrias recentes para escolher sem digitar código nenhum.
+    recentExams: [],
     interpretation: "",
     selectedTemplateId: "",
     statusFilter: "",
@@ -960,27 +973,37 @@
 
         ${renderExamAndLocation(detail)}
 
-        <div class="report-comparison" aria-label="Exame técnico da MIR e laudo da SoproLife">
-          <article>
+        ${/* M25.12 — a bancada clínica.
+              O exame técnico da MIR e o trabalho sobre o laudo passaram a
+              ficar lado a lado: antes, os dois PDFs ocupavam a largura toda e
+              as siglas de conclusão ficavam ABAIXO deles, então escolher a
+              conclusão obrigava a rolar para longe do exame — exatamente o
+              "ficar mudando de tela" relatado. A coluna da esquerda é
+              `sticky`: o traçado da MIR permanece visível enquanto a médica
+              escolhe as siglas, edita o texto e gera a prévia. */""}
+        <div class="report-clinical-split" aria-label="Exame técnico da MIR e laudo da SoproLife">
+          <article class="report-source-pane">
             <h4>Exame técnico (MIR)</h4>
             <p class="report-help">Documento original, nunca alterado nem assinado por cima.</p>
             ${renderPdfFrame("original", "PDF original", original)}
           </article>
-          <article>
-            <h4>${current && current.kind !== "original"
-              ? kindLabel(current.kind) : "Laudo SoproLife"}</h4>
-            <p class="report-help">Laudo médico próprio, gerado pelo Centro de Comando.</p>
-            ${renderPdfFrame(
-              "generated",
-              "PDF gerado para comparação",
-              current && current.kind !== "original" ? current : null
-            )}
-          </article>
+          <div class="report-work-pane">
+            <article class="report-preview-pane">
+              <h4>${current && current.kind !== "original"
+                ? kindLabel(current.kind) : "Laudo SoproLife"}</h4>
+              <p class="report-help">Laudo médico próprio, gerado pelo Centro de Comando.</p>
+              ${renderPdfFrame(
+                "generated",
+                "PDF gerado para comparação",
+                current && current.kind !== "original" ? current : null
+              )}
+            </article>
+            ${renderNativeReportForm(detail)}
+            ${renderReleaseAction(detail)}
+          </div>
         </div>
 
         ${renderDocumentsPanel()}
-        ${renderNativeReportForm(detail)}
-        ${renderReleaseAction(detail)}
         ${renderAddendumForm(detail)}
 
         ${editable ? `
@@ -1049,6 +1072,76 @@
       </div>`;
   }
 
+  // M25.12 — localizador de exame.
+  //
+  // O campo tinha `pattern="ESP-[0-9]{1,9}"`. Um código com letras (o caso
+  // relatado, `ESP-TF0001`) fazia a validação NATIVA do navegador abortar o
+  // submit: `locateExam` nunca era chamada, nenhuma requisição saía, nenhuma
+  // mensagem da aplicação aparecia e o formulário de anexar o PDF nunca
+  // surgia. Falha silenciosa por construção.
+  //
+  // A regra de formato continua idêntica (o servidor a repete em
+  // `_SAFE_EXAM_CODE_RE`); o que muda é que quem recusa agora é a aplicação,
+  // que explica o motivo e permanece na tela. E, acima de tudo: não é mais
+  // obrigatório adivinhar código nenhum — a lista de exames recentes fica ao
+  // lado do campo.
+  function renderExamLocator() {
+    const feedback = state.locateFeedback;
+    const semLaudo = examsWithoutReport();
+    return `
+      <form id="reportLocateExamForm" class="report-inline-form" novalidate>
+        <label for="reportExamCode">Código institucional do exame
+          <input id="reportExamCode" name="exam_code" autocomplete="off"
+            inputmode="text" maxlength="14" placeholder="ESP-000001"
+            aria-describedby="reportExamCodeHelp">
+          <span id="reportExamCodeHelp" class="report-help">${esc(EXAM_CODE_HINT)}</span>
+        </label>
+        <button class="m15-btn" type="submit"${state.busy ? " disabled" : ""}>Localizar exame</button>
+      </form>
+      ${feedback ? `
+        <div class="report-locate-feedback is-${esc(feedback.tipo)}"
+          id="reportLocateFeedback" role="status" tabindex="-1">
+          <strong>${esc(feedback.titulo)}</strong>
+          <span>${esc(feedback.mensagem)}</span>
+          ${feedback.detalhe
+            ? `<span class="report-help">${esc(feedback.detalhe)}</span>` : ""}
+        </div>` : ""}
+      ${renderRecentExams(semLaudo)}`;
+  }
+
+  // Exames que ainda não têm laudo no fluxo. O cruzamento é feito com a lista
+  // operacional que já está carregada — nenhuma consulta nova, nenhum dado de
+  // paciente na tela: só o código institucional e a data.
+  function examsWithoutReport() {
+    const comLaudo = new Set(
+      (state.operational || []).map((item) => item.exam_code)
+    );
+    return (state.recentExams || []).filter(
+      (exam) => exam && exam.public_code && !comLaudo.has(exam.public_code)
+    );
+  }
+
+  function renderRecentExams(exams) {
+    if (!exams.length) {
+      return `<p class="report-help">Nenhuma espirometria recente sem laudo. Localize pelo código acima.</p>`;
+    }
+    const rows = exams.slice(0, 12).map((exam) => `
+      <button type="button" class="report-exam-pick${
+        state.locatedExam && state.locatedExam.public_code === exam.public_code
+          ? " is-selected" : ""
+      }" data-report-exam-pick="${esc(exam.public_code)}">
+        <strong>${esc(exam.public_code)}</strong>
+        <span>${fmtDate(exam.data_exame, false)}</span>
+        <span>${esc(statusLabel(exam.status))}</span>
+      </button>`).join("");
+    return `
+      <details class="report-exam-catalog" open>
+        <summary>Espirometrias recentes sem laudo (${exams.length})</summary>
+        <p class="report-help">Clique para localizar sem digitar o código. Só o código institucional e a data aparecem aqui.</p>
+        <div class="report-exam-pick-list">${rows}</div>
+      </details>`;
+  }
+
   function renderOperationalList() {
     const selected = selectedOperational();
     const rows = state.operational.length
@@ -1107,13 +1200,7 @@
         <section class="report-panel" aria-labelledby="uploadTitle">
           <p class="eyebrow">Recebimento e atribuição</p>
           <h3 id="uploadTitle">Novo PDF original</h3>
-          <form id="reportLocateExamForm" class="report-inline-form">
-            <label for="reportExamCode">Código institucional do exame
-              <input id="reportExamCode" name="exam_code" autocomplete="off"
-                placeholder="ESP-000001" pattern="ESP-[0-9]{1,9}" required>
-            </label>
-            <button class="m15-btn" type="submit">Localizar exame</button>
-          </form>
+          ${renderExamLocator()}
           ${state.locatedExam ? `
             <div class="report-technical-confirmation" role="status">
               <strong>${esc(state.locatedExam.public_code)}</strong>
@@ -1465,6 +1552,11 @@
         // deixar o campo vazio e perder o endereço no laudo.
         calls.push(client().api("/unidades?tamanho=100"));
         labels.push("units");
+        // M25.12 — espirometrias recentes para escolher sem digitar código.
+        // O motivo desta chamada é a falha relatada: o único caminho para
+        // anexar um PDF era acertar de cabeça um código exato.
+        calls.push(client().api("/espirometrias?tamanho=50"));
+        labels.push("recentExams");
       }
       if (can("admin")) {
         calls.push(client().api("/laudos/admin/medicos"));
@@ -1476,8 +1568,9 @@
       if (epoch !== state.loadEpoch) return;
       labels.forEach((label, index) => {
         const value = values[index];
-        // `/unidades` é paginado ({itens, total}); os demais devolvem lista.
-        state[label] = (label === "units" && value && Array.isArray(value.itens))
+        // `/unidades` e `/espirometrias` são paginados ({itens, total}); os
+        // demais devolvem lista.
+        state[label] = (value && Array.isArray(value.itens))
           ? value.itens
           : value;
       });
@@ -1944,30 +2037,95 @@
     }
   }
 
+  // M25.12 — cada desfecho da busca tem um estado NOMEADO e visível: formato
+  // recusado, não encontrado, já tem laudo, erro de API, encontrado. Antes,
+  // "formato recusado" nem chegava aqui (o navegador barrava o submit) e os
+  // demais viravam o mesmo toast passageiro.
+  function setLocateFeedback(tipo, titulo, mensagem, detalhe) {
+    state.locateFeedback = { tipo, titulo, mensagem, detalhe: detalhe || "" };
+  }
+
   async function locateExam(code) {
-    const normalized = String(code || "").trim().toUpperCase();
+    const digitado = String(code || "").trim();
+    const normalized = digitado.toUpperCase();
+    if (!normalized) {
+      state.locatedExam = null;
+      setLocateFeedback(
+        "erro", "Informe um código",
+        "Digite o código institucional do exame ou escolha um da lista abaixo.",
+        EXAM_CODE_HINT
+      );
+      render();
+      return;
+    }
     if (!EXAM_CODE_RE.test(normalized)) {
-      announce("Informe um código institucional no formato ESP-000001.", "erro");
+      state.locatedExam = null;
+      setLocateFeedback(
+        "erro", `Formato não reconhecido: ${normalized}`,
+        "Este não é um código institucional de espirometria. Os códigos são emitidos pelo sistema e não contêm letras depois do hífen.",
+        `${EXAM_CODE_HINT} Se você viu um código começando com LAU-, ele identifica o laudo, não o exame — escolha o exame na lista abaixo.`
+      );
+      render();
       return;
     }
     state.busy = true;
     announce("Localizando exame…", "");
+    render();
     try {
       const response = await client().api(
         `/espirometrias?public_code=${encodeURIComponent(normalized)}`
       );
       const items = Array.isArray(response) ? response : response.itens || [];
-      state.locatedExam = items.find((item) => item.public_code === normalized) || null;
-      if (!state.locatedExam) throw new Error("Exame não encontrado pelo código informado.");
+      const found = items.find((item) => item.public_code === normalized) || null;
+      if (!found) {
+        state.locatedExam = null;
+        setLocateFeedback(
+          "erro", `${normalized} não existe`,
+          "Nenhuma espirometria cadastrada com este código institucional.",
+          "O exame precisa existir no CRM de Espirometria antes de receber um laudo. Confira a lista abaixo ou cadastre o exame primeiro."
+        );
+        announce(`Exame ${normalized} não encontrado.`, "erro");
+        return;
+      }
+      const jaTemLaudo = (state.operational || []).some(
+        (item) => item.exam_code === normalized
+      );
+      state.locatedExam = found;
+      if (jaTemLaudo) {
+        setLocateFeedback(
+          "aviso", `${normalized} localizado — já possui laudo`,
+          "Este exame já tem um documento no fluxo. Enviar outro PDF cria um segundo laudo para a mesma espirometria.",
+          "Confira “Acompanhamento operacional” antes de continuar."
+        );
+      } else {
+        setLocateFeedback(
+          "ok", `${normalized} localizado`,
+          `Exame de ${fmtDate(found.data_exame, false)} · ${statusLabel(found.status)}.`,
+          "Complete a atribuição técnica abaixo e anexe o PDF do equipamento."
+        );
+      }
       announce("Exame localizado. Complete a atribuição técnica.", "ok");
     } catch (error) {
       state.locatedExam = null;
+      const http = error && error.status ? ` (HTTP ${error.status})` : "";
+      setLocateFeedback(
+        "erro", `Não foi possível consultar ${normalized}`,
+        `${readableError(error)}${http}`,
+        error && error.status === 401
+          ? "A sessão expirou. Entre novamente e repita a busca."
+          : "A busca falhou antes de chegar a uma resposta. Tente de novo; se persistir, o problema é no servidor, não no código digitado."
+      );
       announce(readableError(error), "erro");
     } finally {
       state.busy = false;
       render();
       const physician = document.getElementById("reportPhysician");
-      if (physician) physician.focus();
+      if (physician) {
+        physician.focus();
+      } else {
+        const feedback = document.getElementById("reportLocateFeedback");
+        if (feedback) feedback.focus();
+      }
     }
   }
 
@@ -1994,10 +2152,22 @@
       const result = await client().api("/laudos", {
         method: "POST", body: payload,
       });
+      const examCode = state.locatedExam && state.locatedExam.public_code;
       state.locatedExam = null;
+      setLocateFeedback(
+        "ok", `${result.public_code} recebido e atribuído`,
+        `O PDF técnico de ${examCode || "o exame"} foi armazenado e o laudo entrou na fila da médica atribuída.`,
+        "Acompanhe o estado em “Acompanhamento operacional”."
+      );
       announce(`${result.public_code} recebido e atribuído com segurança.`, "ok");
       await loadAuthenticatedData();
     } catch (error) {
+      const http = error && error.status ? ` (HTTP ${error.status})` : "";
+      setLocateFeedback(
+        "erro", "O PDF não foi armazenado",
+        `${readableError(error)}${http}`,
+        "O exame continua localizado. Corrija o apontamento acima e reenvie."
+      );
       announce(readableError(error), "erro");
       render();
     } finally {
@@ -2313,6 +2483,13 @@
     }
     if (button.matches("[data-report-open]")) {
       loadDocument(button.getAttribute("data-report-open"), true);
+      return;
+    }
+    if (button.matches("[data-report-exam-pick]")) {
+      const code = button.getAttribute("data-report-exam-pick");
+      const input = document.getElementById("reportExamCode");
+      if (input) input.value = code;
+      locateExam(code);
       return;
     }
     if (button.matches("[data-report-operational]")) {

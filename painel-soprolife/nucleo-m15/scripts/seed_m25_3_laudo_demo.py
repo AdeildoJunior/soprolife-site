@@ -326,7 +326,12 @@ def _perfil_medica(client, admin_headers, medica: User) -> dict:
             # presumir o tratamento de nenhum profissional.
             "professional_name": "Dra. Ana Cristina do Nascimento Cunha",
             "crm_number": "52623075",
-            "crm_display": "5262307-5",
+            # M25.12 — o CRM formatado é `52.62307-5`. O seed gravava
+            # `5262307-5` (sem o ponto), então o laudo saía com um formato que
+            # não é o do documento e a checagem 25 do roteiro E2E falhava.
+            # `crm_display` é só apresentação: os dígitos continuam idênticos
+            # a `crm_number`, que é o que `crm_display_matches` exige.
+            "crm_display": "52.62307-5",
             "crm_state": "RJ",
             "rqe": "58224",
             "especialidade": "Médica Pneumologista",
