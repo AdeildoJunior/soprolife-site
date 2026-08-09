@@ -2252,10 +2252,18 @@ def prepare_report_signature(
         or draft.report_document_id != document.id
         or draft.kind != KIND_RASCUNHO
     ):
+        # M25.14 — a mensagem antiga ("Gere uma prévia antes de preparar a
+        # assinatura") era impossível de cumprir: a médica com a prévia do
+        # laudo já gerada recebia ordem de gerar o que já existia. O que este
+        # passo exige é o rascunho do OUTRO caminho, o da anotação sobre o PDF
+        # da MIR.
         raise ReportDomainError(
             409,
             "rascunho_composto_ausente",
-            "Gere uma prévia antes de preparar a assinatura.",
+            "Este passo pertence ao fluxo de anotação técnica sobre o PDF da "
+            "MIR e exige que essa anotação já esteja composta. A prévia do "
+            "laudo SoproLife não se aplica aqui — para liberar o laudo "
+            "próprio, use “Assinar e liberar laudo”.",
         )
     _validate_ready_snapshot(
         db, draft=draft, profile=profile, document=document

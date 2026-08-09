@@ -943,6 +943,12 @@
     const current = currentVersion();
     const editable = ["atribuido", "em_elaboracao"].includes(detail.status);
     const ready = detail.status === "em_elaboracao";
+    // M25.14 — `preparar-assinatura` exige que a versão CORRENTE seja um
+    // rascunho composto (kind "rascunho", do fluxo de anotação sobre o PDF da
+    // MIR). A prévia do laudo nativo não serve. Sem esta checagem a médica
+    // recebia "Gere uma prévia antes de preparar a assinatura" mesmo com a
+    // prévia gerada — instrução impossível de cumprir.
+    const hasComposedDraft = Boolean(current && current.kind === "rascunho");
     const signed = detail.status === "assinado";
     const released = detail.status === "liberado";
     const native = latestNativeVersion();
@@ -1043,9 +1049,14 @@
           <summary>Preparar assinatura qualificada (ICP-Brasil, pendente)</summary>
           <div class="report-ready-action">
             <p>Congela os snapshots e deixa o documento aguardando um provedor de assinatura qualificada. Nenhum provedor está configurado nesta versão.</p>
-            <button type="button" class="m15-btn" data-report-prepare-signature${
-              state.busy ? " disabled" : ""
-            }>Marcar conteúdo pronto para assinatura</button>
+            <p class="report-help">Este passo pertence ao caminho da <strong>anotação técnica sobre o PDF da MIR</strong> (fluxo M24C), acima. Ele não usa a prévia do laudo SoproLife — para liberar o laudo próprio, use <strong>“Assinar e liberar laudo”</strong>.</p>
+            ${hasComposedDraft ? `
+              <button type="button" class="m15-btn" data-report-prepare-signature${
+                state.busy ? " disabled" : ""
+              }>Marcar conteúdo pronto para assinatura</button>` : `
+              <button type="button" class="m15-btn" data-report-prepare-signature disabled
+                aria-describedby="reportPrepareBlocked">Marcar conteúdo pronto para assinatura</button>
+              <p id="reportPrepareBlocked" class="report-help">Indisponível: ainda não há anotação técnica composta sobre o PDF da MIR. Gere-a no bloco acima se for mesmo este o caminho desejado.</p>`}
           </div>
           </details>` : ""}
 
@@ -1787,9 +1798,13 @@
       await loadAuthenticatedData();
     } catch (error) {
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -1984,9 +1999,13 @@
     } catch (error) {
       state.confirmRelease = false;
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -2011,9 +2030,13 @@
       await loadAuthenticatedData();
     } catch (error) {
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -2169,9 +2192,13 @@
         "O exame continua localizado. Corrija o apontamento acima e reenvie."
       );
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -2195,9 +2222,13 @@
       await loadAuthenticatedData();
     } catch (error) {
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -2214,9 +2245,13 @@
       await loadAuthenticatedData();
     } catch (error) {
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -2237,9 +2272,13 @@
       await loadAuthenticatedData();
     } catch (error) {
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -2278,9 +2317,13 @@
       // conclui que salvou.
       state.profileError = readableError(error);
       announce(state.profileError, "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -2333,9 +2376,13 @@
       await loadSignatureAsset(profileId);
     } catch (error) {
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -2358,9 +2405,13 @@
       await loadSignatureAsset(profileId);
     } catch (error) {
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -2385,9 +2436,13 @@
       await loadAuthenticatedData();
     } catch (error) {
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 
@@ -2407,9 +2462,13 @@
       await loadAuthenticatedData();
     } catch (error) {
       announce(readableError(error), "erro");
-      render();
     } finally {
+      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
+      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
+      // `busy = true`: os botões nasciam desabilitados e nada repintava
+      // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
+      render();
     }
   }
 

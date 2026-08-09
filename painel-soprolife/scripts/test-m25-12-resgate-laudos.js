@@ -211,10 +211,21 @@ check(
     "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR AO PACIENTE"
   )
 );
+// M25.14 — a asserção era pregada na versão exata `2026080901` e quebrava a
+// cada publicação nova. O que realmente importa é o contrato: JS e CSS
+// carimbados com a MESMA versão (senão um dos dois volta do cache antigo) e
+// nunca anterior à publicação que trouxe a bancada clínica.
+const versaoJs = (index.match(/report-workflow\.js\?v=(\d+)/) || [])[1];
+const versaoCss = (index.match(/report-workflow\.css\?v=(\d+)/) || [])[1];
 check(
-  "o cache-bust foi renovado junto com o JS e o CSS",
-  /report-workflow\.js\?v=2026080901/.test(index)
-    && /report-workflow\.css\?v=2026080901/.test(index)
+  "o cache-bust foi renovado junto no JS e no CSS",
+  Boolean(versaoJs) && versaoJs === versaoCss,
+  `js=${versaoJs} css=${versaoCss}`
+);
+check(
+  "o cache-bust não regrediu para antes da bancada clínica",
+  Number(versaoJs) >= 2026080901,
+  `versão encontrada: ${versaoJs}`
 );
 
 console.log(
