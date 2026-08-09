@@ -614,9 +614,15 @@
   flex: 1 1 220px;
 }
 
+/* M25.15 — esta linha era `minmax(0,1fr) auto auto`: três colunas para os
+   três campos curtos de antes (LAU | ESP | status). Com o nome do paciente
+   no lugar do código a linha passou a ter quatro filhos, e as duas colunas
+   `auto` espremiam a primeira até o nome quebrar letra a letra, na
+   vertical. Empilhado, é a mesma composição de `.report-queue-item`, que já
+   acomodava nomes longos sem coluna fixa. */
 .report-operation-row {
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
 }
 
 .report-admin-template.is-provisional {
