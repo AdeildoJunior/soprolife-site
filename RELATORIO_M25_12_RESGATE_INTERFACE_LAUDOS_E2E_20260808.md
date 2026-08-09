@@ -14,6 +14,10 @@ Commit criado: `029f7da`
 > desta máquina não há SSH para a VPS nem credencial de nenhuma conta de
 > produção — e eu não vou pedir, redefinir nem procurar senha. O deploy e a
 > repetição do roteiro em produção dependem de você. Detalhes na seção 14.
+>
+> **O código já está integrado no GitHub** (`painel-soprolife-v01`, por
+> fast-forward — seção 17-A). **A VPS continua em `b5f8a80`**, servindo a
+> versão antiga: o deploy ainda não foi feito.
 
 ---
 
@@ -502,6 +506,51 @@ curl -s https://soprolife-painel-01.tailcaf0e4.ts.net/painel-soprolife/ | grep -
 **Não usei e não recomendo:** `git reset --hard`, `push --force`,
 `--force-with-lease`, exclusão de histórico, remoção de worktrees com
 trabalho. A branch foi construída por commits normais sobre `b5f8a80`.
+
+## 17-A. Integração no GitHub — CONCLUÍDA (deploy NÃO)
+
+Etapa autorizada e executada em 08/08/2026, **somente Git**. A VPS não foi
+tocada: continua sem SSH funcional a partir desta máquina (seção 14).
+
+**Verificações feitas ANTES de qualquer escrita:**
+
+| Verificação | Resultado |
+| --- | --- |
+| `git fetch --all --prune` | sem divergência |
+| `git ls-remote origin refs/heads/painel-soprolife-v01` (ao vivo) | `b5f8a80…` — **inalterado** |
+| `git merge-base --is-ancestor origin/painel-soprolife-v01 HEAD` | **verdadeiro** — fast-forward possível |
+| `git log HEAD..origin/painel-soprolife-v01` | **vazio** — nada a reconciliar |
+| `git status` no worktree | limpo |
+| `git status` em `/home/fedorasurf/soprolife-site` | limpo, em `painel-soprolife-v01` @ `b5f8a80` |
+
+**Integração:** `git merge --ff-only`, seguido de `git push` normal. **Sem
+`--force`, sem `--force-with-lease`, sem `reset --hard`, sem `rebase`.** O
+histórico da branch oficial só avançou; nada foi reescrito.
+
+**Commits M25.12 que entraram em `painel-soprolife-v01`:**
+
+| Commit | Conteúdo |
+| --- | --- |
+| `029f7da` | correção do localizador de exame e a bancada clínica lado a lado |
+| `d707329` | registro do commit criado no relatório |
+| *(este)* | esta seção 17-A |
+
+### O que continua pendente
+
+| Item | Estado |
+| --- | --- |
+| Código no GitHub | ✅ integrado em `painel-soprolife-v01` |
+| **Deploy na VPS** | ❌ **NÃO feito.** A VPS permanece em `b5f8a80`, servindo `v=2026080802`. |
+| **Evidência visual de produção** | ❌ **pendente.** Depende do deploy e de login manual. |
+| `reports_mode` | `pilot`, **inalterado** |
+
+O deploy precisa ser feito de uma máquina com SSH para a VPS — o notebook de
+trabalho (`/home/adeildo/soprolife-site`), que foi de onde as etapas M25.9 a
+M25.11 rodaram. Procedimento na seção 17, passos 1, 2, 4 e 5 (o passo 3 já
+está feito).
+
+**A M25.12 NÃO está concluída.** A prova que importa — você abrir a produção
+e reencontrar a bancada clínica — ainda não aconteceu.
 
 ## 18. Rollback
 
