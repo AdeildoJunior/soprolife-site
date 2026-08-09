@@ -1428,7 +1428,9 @@
                 state.busy || semMedico ? " disabled" : ""
               }>Enviar e atribuir</button>
             </form>` : `
-            <p class="report-help">A atribuição só é criada depois da localização exata pelo código ESP.</p>`}
+            <p class="report-help">Localize o paciente acima — por nome ou por
+              código — para anexar o PDF. A atribuição só é criada depois que
+              um exame exato for escolhido.</p>`}
         </section>
         ${renderOperationalList()}
       </div>`;
