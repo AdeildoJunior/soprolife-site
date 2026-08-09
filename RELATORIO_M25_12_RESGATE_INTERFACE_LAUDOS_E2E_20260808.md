@@ -3,6 +3,7 @@
 Data: 2026-08-08
 Branch: `claude-m25-12-resgate-laudos-e2e`
 Base: `b5f8a8064d4b3c1378f43681c73e88e47942b84a`
+Commit criado: `029f7da`
 
 > **Estado desta etapa:**
 > **IMPLEMENTAÇÃO CONCLUÍDA ATÉ O GATE DE LOGIN MANUAL — EVIDÊNCIA VISUAL FINAL PENDENTE**
