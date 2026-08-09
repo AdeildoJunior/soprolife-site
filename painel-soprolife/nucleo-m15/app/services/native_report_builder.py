@@ -28,6 +28,7 @@ from ..models import (
     ReportDocument,
     SpirometryExam,
 )
+from .crm_display import format_crm_number
 from .report_locations import ReportLocation, resolve_report_location
 from .report_native_pdf import (
     AddendumBlock,
@@ -179,14 +180,24 @@ def load_addenda(db: Session, document_id: str) -> tuple[AddendumBlock, ...]:
 def physician_block(profile: PhysicianProfile) -> PhysicianBlock:
     """Bloco médico impresso.
 
-    `crm_display` é opcional: sem ele, imprime-se o CRM normalizado. Nada é
-    formatado por adivinhação.
+    M25.15 — o número passa por `format_crm_number`, a MESMA função usada
+    pela interface e pela rota de validação. Um CRM desenhado de um jeito na
+    tela e de outro no papel é o tipo de divergência que faz alguém duvidar
+    do documento certo.
+
+    A canonicalização é só de apresentação: fora da UF com máscara
+    conferida, o valor cai no `crm_display` cadastrado ou no número puro.
+    Nada é formatado por adivinhação.
     """
 
     return PhysicianBlock(
         professional_name=profile.professional_name,
         specialty=profile.especialidade,
-        crm_display=(profile.crm_display or profile.crm_number),
+        crm_display=format_crm_number(
+            profile.crm_number,
+            profile.crm_state,
+            crm_display=profile.crm_display,
+        ),
         crm_state=profile.crm_state,
         rqe=profile.rqe,
     )

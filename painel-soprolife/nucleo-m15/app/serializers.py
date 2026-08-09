@@ -9,6 +9,11 @@ from decimal import ROUND_HALF_UP, Decimal
 from zoneinfo import ZoneInfo
 
 from .config import get_settings
+from .services.crm_display import (
+    format_crm_full,
+    format_crm_number,
+    format_physician_credentials,
+)
 from .status_display import exam_status_display
 from . import models as m
 
@@ -473,6 +478,24 @@ def ser_physician_profile(p: m.PhysicianProfile) -> dict:
         # M25.3 — identificação impressa no laudo. São dados profissionais
         # institucionais (nunca do paciente), então podem ser devolvidos.
         "crm_display": p.crm_display,
+        # M25.15 — apresentação canônica derivada de `crm_number`. É um campo
+        # NOVO e calculado: `crm_number` e `crm_display` continuam devolvidos
+        # exatamente como gravados, para que a identidade persistida siga
+        # rastreável e a correção seja só de fachada.
+        "crm_formatted": format_crm_number(
+            p.crm_number, p.crm_state, crm_display=p.crm_display
+        ),
+        "crm_full": format_crm_full(
+            p.crm_number, p.crm_state, crm_display=p.crm_display
+        ),
+        "credentials_label": format_physician_credentials(
+            p.professional_name,
+            crm_number=p.crm_number,
+            crm_state=p.crm_state,
+            crm_display=p.crm_display,
+            rqe=p.rqe,
+            especialidade=p.especialidade,
+        ),
         "especialidade": p.especialidade,
         "active": p.active,
         "verification_status": p.verification_status,

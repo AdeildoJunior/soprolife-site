@@ -133,6 +133,26 @@ def _from_unit(
     )
 
 
+def resolve_exam_location_name(db: Session, exam: SpirometryExam) -> str:
+    """Nome do local de um exame que ainda NÃO tem laudo.
+
+    M25.15 — serve só ao localizador, para separar homônimos ("qual João da
+    Silva? o da Pastore ou o do domicílio?"). Não é o local impresso: esse
+    continua saindo de `resolve_report_location`, que só existe depois que a
+    operação escolheu a unidade ao atribuir o laudo.
+
+    Por isso aqui não há fallback por origem controlada — a origem é campo
+    do DOCUMENTO e ainda não foi decidida. Sem unidade cadastrada, usa-se o
+    texto operacional do exame; sem ele, um rótulo neutro. Nada inventado.
+    """
+
+    if exam.partner_unit_id:
+        unit = db.get(PartnerUnit, exam.partner_unit_id)
+        if unit is not None:
+            return _from_unit(db, unit, source=SOURCE_EXAM_UNIT).name
+    return _clean(exam.local_atendimento) or "Local não informado"
+
+
 def resolve_report_location(
     db: Session, *, document: ReportDocument, exam: SpirometryExam
 ) -> ReportLocation:

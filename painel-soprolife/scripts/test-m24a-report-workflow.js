@@ -135,9 +135,15 @@ for (const origin of [
     && reports.includes(`"${origin}"`));
 }
 check(
-  "upload localiza ESP e atribui no mesmo POST",
+  // M25.15 — o localizador deixou de ser só `public_code=` no endpoint
+  // genérico de espirometrias: passou a `/laudos/exames`, que aceita nome do
+  // paciente, ESP e LAU. O que esta checagem protege não mudou — localizar e
+  // atribuir continuam acontecendo no MESMO POST, com os dois campos
+  // obrigatórios no servidor.
+  "upload localiza exame e atribui no mesmo POST",
   /EXAM_CODE_RE = \/\^ESP-/.test(workflow)
-    && workflow.includes("public_code=")
+    && /REPORT_CODE_RE = \/\^LAU-/.test(workflow)
+    && workflow.includes("/laudos/exames?q=")
     && workflow.includes('client().api("/laudos"')
     && /exam_code: str = Form\(\.\.\.\)/.test(reports)
     && /physician_profile_id: str = Form\(\.\.\.\)/.test(reports)
@@ -165,13 +171,22 @@ check(
     && reports.includes("_technical_report_row")
 );
 check(
-  "identidade aparece só dentro do detalhe atribuído",
+  // M25.15 inverteu a regra desta checagem para as interfaces AUTENTICADAS:
+  // o nome do paciente passou a ser a referência humana das filas. O que
+  // continua valendo — e é o que se verifica agora — é que a identidade
+  // exposta na fila é um bloco FECHADO (nome + código do cadastro), montado
+  // por uma função única, e que a rota PÚBLICA de validação segue sem
+  // qualquer dado de paciente.
+  "identidade na fila é bloco fechado e não vaza na validação pública",
   workflow.includes("detail.patient.full_name")
     && reports.includes('"patient": {')
-    && !/patient|nome_completo/.test(
+    && reports.includes("def _patient_reference(")
+    && /"full_name": person\.nome_completo,\s*\n\s*"public_code": person\.public_code,/
+      .test(reports)
+    && !/patient|nome_completo|full_name/.test(
       reports.slice(
-        reports.indexOf("def _technical_report_row"),
-        reports.indexOf("def _safe_template_payload")
+        reports.indexOf("def validate_released_report"),
+        reports.indexOf("def _ser_signature_asset")
       )
     )
 );

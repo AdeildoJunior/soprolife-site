@@ -531,10 +531,13 @@
   margin-top: 8px;
 }
 
+/* M25.15 — o cartão era uma LINHA de três colunas (código | data | status),
+   que só funcionava porque os três campos eram curtos. Com o nome do
+   paciente como primeira informação, um nome longo espremeria a data e a
+   unidade contra a borda. Empilhado, o nome ocupa a largura que precisar e
+   o contexto vem abaixo, na mesma hierarquia das filas. */
 .report-exam-pick {
   display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
-  align-items: baseline;
   gap: 4px 10px;
   width: 100%;
   padding: 9px 11px;
@@ -1450,3 +1453,59 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
 
 .report-role-note h3 { margin: 0 0 6px; font-size: 15px; color: var(--navy); }
 .report-role-note p { margin: 0 0 6px; font-size: 13px; }
+
+/* ------------------------------------------- identidade do paciente (M25.15)
+ *
+ * A partir da M25.15 o NOME é a referência humana das telas autenticadas de
+ * laudo, e os códigos (ESP/LAU) viram metadado. A hierarquia é só
+ * tipográfica: o nome ganha peso e tamanho, a trilha de códigos perde cor e
+ * corpo. Nenhum código foi escondido — esconder obrigaria a operação a
+ * abrir o detalhe justamente quando precisa conferir rastreabilidade.
+ */
+.report-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--navy);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* Os códigos ficam em uma linha própria, monoespaçada e discreta. A regra
+ * precisa vencer `.report-queue-item span`, que pinta todo span da fila com
+ * 12px: por isso repete o seletor do contêiner em vez de subir a
+ * especificidade com !important. */
+.report-code-trail,
+.report-queue-item .report-code-trail,
+.report-operation-row .report-code-trail,
+.report-exam-pick .report-code-trail {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: .02em;
+  color: var(--muted);
+  opacity: .85;
+}
+
+.report-exam-pick-flag {
+  justify-self: start;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: rgba(214, 158, 46, .14);
+  color: #8a6100;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Cabeçalho da bancada: o nome é o <h3>, então herda o tamanho do painel;
+ * só a trilha de códigos precisa de tratamento. */
+.report-panel-heading .report-code-trail {
+  display: block;
+  margin: 3px 0 0;
+}
+
+.report-doc-owner {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}

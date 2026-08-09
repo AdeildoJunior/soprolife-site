@@ -224,11 +224,16 @@ def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
         == 200
     )
     queue_row = physician_queue.json()[0]
-    # Conjunto EXATO de chaves da fila: nenhuma identidade de paciente,
-    # texto clínico, nome de arquivo ou caminho pode aparecer aqui. As
-    # chaves M25.2 acrescentadas são só carimbos institucionais de estado
-    # (liberado / corretivo / código de verificação).
+    # Conjunto EXATO de chaves da fila. A trava continua sendo a mesma: só
+    # entra aqui o que foi decidido explicitamente. Nenhum texto clínico,
+    # nome de arquivo ou caminho de storage pode aparecer.
     assert set(queue_row) == {
+        # M25.15 — referência humana principal da linha. É o ÚNICO campo de
+        # identidade admitido, e o seu conteúdo é verificado logo abaixo:
+        # nome e código do cadastro, nada mais. Rotas autenticadas e já
+        # filtradas por papel/atribuição; a validação pública não usa esta
+        # estrutura.
+        "patient",
         "report_code",
         "document_id",
         "exam_code",
@@ -251,10 +256,16 @@ def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
         "location_key",
         "location_name",
     }
-    assert "patient" not in operational.text
-    assert person["nome_completo"] not in operational.text
-    assert "patient" not in physician_queue.text
-    assert person["nome_completo"] not in physician_queue.text
+    # M25.15 — o nome passou a ser a referência humana das DUAS filas
+    # autenticadas, e o bloco de identidade é fechado: só nome e código do
+    # cadastro. Nascimento, contato e id interno continuam fora da fila.
+    assert set(queue_row["patient"]) == {"full_name", "public_code"}
+    assert queue_row["patient"]["full_name"] == person["nome_completo"]
+    assert operational.json()[0]["patient"]["full_name"] == person[
+        "nome_completo"
+    ]
+    assert person["id"] not in physician_queue.text
+    assert person["id"] not in operational.text
     assert detail.json()["patient"]["full_name"] == person["nome_completo"]
     assert detail.json()["exam"]["public_code"] == assigned_case["exam"][
         "public_code"

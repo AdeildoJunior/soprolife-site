@@ -52,7 +52,12 @@ from ..models import (
     SpirometryExam,
     User,
 )
-from ..normalize import contains_clinical_info, contains_pii_like, crm_display_matches
+from ..normalize import (
+    contains_clinical_info,
+    contains_pii_like,
+    crm_display_matches,
+    normalize_name,
+)
 from ..schemas import (
     BatchDownloadRequest,
     PhysicianProfileAdminUpdate,
@@ -124,7 +129,13 @@ from ..services.report_native_pdf import (
     SIGNATURE_KIND_QUALIFIED_ICP,
     build_native_report_pdf,
 )
-from ..services.report_locations import resolve_report_location
+from ..services.crm_display import format_crm_full, format_crm_number
+from ..services.report_compliance import relatorio_conformidade
+from ..status_display import exam_status_display
+from ..services.report_locations import (
+    resolve_exam_location_name,
+    resolve_report_location,
+)
 from ..services.report_pdf import PdfCompositionError, compose_report_pdf
 from ..services.report_publication import (
     ReportPublicationTransaction,
@@ -855,7 +866,13 @@ def _render_test_footer(
         rendered = footer.body_template.format(
             physician_name=profile.professional_name,
             crm_state=profile.crm_state,
-            crm_number=profile.crm_number,
+            # M25.15 — o rodapé imprime o CRM na MESMA apresentação
+            # canônica da tela, do PDF e da rota de validação.
+            crm_number=format_crm_number(
+                profile.crm_number,
+                profile.crm_state,
+                crm_display=profile.crm_display,
+            ),
             rqe=profile.rqe or "",
             exam_code=exam.public_code,
             origin=_origin_display(document),
@@ -907,7 +924,13 @@ def _render_pilot_footer(
         rendered = footer.body_template.format(
             physician_name=profile.professional_name,
             crm_state=profile.crm_state,
-            crm_number=profile.crm_number,
+            # M25.15 — o rodapé imprime o CRM na MESMA apresentação
+            # canônica da tela, do PDF e da rota de validação.
+            crm_number=format_crm_number(
+                profile.crm_number,
+                profile.crm_state,
+                crm_display=profile.crm_display,
+            ),
             rqe=profile.rqe or "",
             exam_code=exam.public_code,
             origin=_origin_display(document),
@@ -1000,6 +1023,34 @@ def _queue_location(
     return {"chave": chave, "nome": local.name}
 
 
+def _patient_reference(person: Person | None) -> dict | None:
+    """Referência humana do paciente para uma linha de fila autenticada.
+
+    M25.15. Até aqui a fila era só de códigos, e a identidade só existia
+    dentro do workspace atribuído. Isso protegia bem e operava mal: quem
+    recebe o PDF na recepção e quem vai laudar pensam em "a senhora que veio
+    ontem", não em ESP-000016, e a conferência virava decorar código.
+
+    O que muda é ONDE o nome aparece, não QUEM pode vê-lo: estas linhas só
+    são produzidas por rotas que já exigem sessão e papel — a fila
+    operacional (`require_role(ROLE_OPERACIONAL)`) e a fila da médica, que
+    além do papel filtra pela atribuição ativa dela. A rota pública de
+    validação NÃO usa esta função, e nenhum campo daqui entra em auditoria,
+    URL ou log.
+
+    O conteúdo é o mínimo para identificar e desambiguar homônimos junto com
+    a data e a unidade que já viajam na linha: nome e o código do cadastro.
+    Nascimento, contato e qualquer dado clínico continuam fora.
+    """
+
+    if person is None:
+        return None
+    return {
+        "full_name": person.nome_completo,
+        "public_code": person.public_code,
+    }
+
+
 def _technical_report_row(
     document: ReportDocument,
     exam: SpirometryExam,
@@ -1007,8 +1058,14 @@ def _technical_report_row(
     *,
     include_assignment_ids: bool = False,
     location: dict | None = None,
+    person: Person | None = None,
 ) -> dict:
     data = {
+        # M25.15 — `patient` é a referência humana principal da linha; os
+        # códigos abaixo continuam presentes e obrigatórios, como metadado
+        # de rastreabilidade. Fica `None` quando quem chamou não resolveu a
+        # pessoa: nenhuma rota inventa identidade por conta própria.
+        "patient": _patient_reference(person),
         "report_code": document.public_code,
         "document_id": document.id,
         "exam_code": exam.public_code,
@@ -1277,6 +1334,99 @@ def list_available_physicians(
         ):
             result.append(ser_physician_profile(profile))
     return result
+
+
+# ------------------------------------------- localizador de exame (M25.15)
+
+_SAFE_REPORT_CODE_RE = re.compile(r"^LAU-\d{1,9}$")
+_EXAM_SEARCH_LIMIT = 40
+
+
+@router.get("/exames")
+def search_exams_for_report(
+    q: str | None = Query(default=None, max_length=120),
+    somente_sem_laudo: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    """Localiza o exame que vai receber o PDF técnico.
+
+    M25.15 — antes só existia busca por código exato, e o operador precisava
+    saber de cor um ESP para anexar qualquer coisa. Agora o mesmo campo
+    aceita as três formas como as pessoas de fato se referem a um exame: o
+    código do exame, o código do laudo já criado e o NOME do paciente.
+
+    Não é uma busca de pacientes: o resultado é sempre uma lista de exames,
+    com o mínimo para decidir qual é o certo — nome, data, unidade e código.
+    Entre homônimos, data + unidade + ESP separam sem obrigar ninguém a
+    decorar código. Contato, nascimento e qualquer dado clínico ficam fora,
+    e o termo pesquisado nunca vai para auditoria ou log.
+
+    Rota AUTENTICADA e restrita a `ROLE_OPERACIONAL`, como o restante do
+    recebimento. `q` viaja como query string; por isso a busca por nome é
+    feita por termo normalizado e a resposta é limitada — nada aqui deve
+    virar um jeito de listar a base inteira de pacientes.
+    """
+
+    statement = (
+        select(SpirometryExam, Person, ReportDocument)
+        .join(Person, Person.id == SpirometryExam.person_id)
+        .outerjoin(
+            ReportDocument,
+            ReportDocument.spirometry_exam_id == SpirometryExam.id,
+        )
+    )
+    termo = (q or "").strip()
+    if termo:
+        codigo = termo.upper()
+        if _SAFE_EXAM_CODE_RE.fullmatch(codigo):
+            statement = statement.where(
+                SpirometryExam.public_code == codigo
+            )
+        elif _SAFE_REPORT_CODE_RE.fullmatch(codigo):
+            statement = statement.where(ReportDocument.public_code == codigo)
+        else:
+            normalizado = normalize_name(termo)
+            if len(normalizado) < 3:
+                raise ReportDomainError(
+                    422,
+                    "termo_de_busca_curto",
+                    "Informe ao menos 3 letras do nome, um código ESP ou "
+                    "um código LAU.",
+                )
+            statement = statement.where(
+                Person.nome_normalizado.like(f"%{normalizado}%")
+            )
+    if somente_sem_laudo:
+        statement = statement.where(ReportDocument.id.is_(None))
+    rows = db.execute(
+        statement.order_by(SpirometryExam.created_at.desc()).limit(
+            _EXAM_SEARCH_LIMIT
+        )
+    ).all()
+    return [
+        {
+            # Referência humana primeiro; os códigos seguem logo abaixo e
+            # continuam sendo o que identifica o registro sem ambiguidade.
+            "patient": _patient_reference(person),
+            "exam_code": exam.public_code,
+            "exam_date": d(exam.data_exame),
+            "exam_status": exam.status,
+            "exam_status_display": exam_status_display(exam.status),
+            "location_name": (
+                _queue_location(db, document, exam)["nome"]
+                if document is not None
+                else resolve_exam_location_name(db, exam)
+            ),
+            # Já tem laudo no fluxo? É o que decide se este exame ainda pode
+            # receber um PDF original ou se o operador está olhando para um
+            # trabalho que já começou.
+            "report_code": document.public_code if document else None,
+            "report_document_id": document.id if document else None,
+            "report_status": document.status if document else None,
+        }
+        for exam, person, document in rows
+    ]
 
 
 # ----------------------------------------------------------- templates
@@ -1569,11 +1719,15 @@ def list_report_documents_operational(
     _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
     statement = (
-        select(ReportDocument, SpirometryExam, ReportAssignment)
+        select(ReportDocument, SpirometryExam, ReportAssignment, Person)
         .join(
             SpirometryExam,
             SpirometryExam.id == ReportDocument.spirometry_exam_id,
         )
+        # M25.15 — `outerjoin` de propósito: um exame sem pessoa resolvível é
+        # um defeito de dado, mas sumir com a linha inteira do acompanhamento
+        # operacional esconderia justamente o caso que precisa ser visto.
+        .outerjoin(Person, Person.id == SpirometryExam.person_id)
         .outerjoin(
             ReportAssignment,
             (ReportAssignment.report_document_id == ReportDocument.id)
@@ -1598,9 +1752,14 @@ def list_report_documents_operational(
     ).all()
     return [
         _technical_report_row(
-            document, exam, assignment, include_assignment_ids=True
+            document,
+            exam,
+            assignment,
+            include_assignment_ids=True,
+            person=person,
+            location=_queue_location(db, document, exam),
         )
-        for document, exam, assignment in rows
+        for document, exam, assignment, person in rows
     ]
 
 
@@ -1804,7 +1963,7 @@ def list_my_report_queue(
             422, "status_laudo_invalido", "Status de laudo inválido."
         )
     statement = (
-        select(ReportDocument, SpirometryExam, ReportAssignment)
+        select(ReportDocument, SpirometryExam, ReportAssignment, Person)
         .join(
             ReportAssignment,
             (ReportAssignment.report_document_id == ReportDocument.id)
@@ -1814,6 +1973,11 @@ def list_my_report_queue(
             SpirometryExam,
             SpirometryExam.id == ReportDocument.spirometry_exam_id,
         )
+        .outerjoin(Person, Person.id == SpirometryExam.person_id)
+        # O isolamento continua sendo ESTE filtro, e ele não mudou com a
+        # M25.15: a médica vê apenas as atribuições ativas do próprio perfil.
+        # O nome do paciente entra na linha DEPOIS desse recorte, então não
+        # amplia em nada o conjunto de laudos visível a ela.
         .where(ReportAssignment.physician_profile_id == profile.id)
     )
     if status:
@@ -1827,8 +1991,9 @@ def list_my_report_queue(
             exam,
             assignment,
             location=_queue_location(db, document, exam),
+            person=person,
         )
-        for document, exam, assignment in rows
+        for document, exam, assignment, person in rows
     ]
 
 
@@ -1902,7 +2067,13 @@ def get_report_document(
         raise ReportDomainError(
             409, "exame_nao_encontrado", "Exame do laudo não encontrado."
         )
-    return _technical_report_row(document, exam, assignment)
+    return _technical_report_row(
+        document,
+        exam,
+        assignment,
+        person=db.get(Person, exam.person_id),
+        location=_queue_location(db, document, exam),
+    )
 
 
 @router.get("/{document_id}/versoes/{version_id}/conteudo")
@@ -2960,6 +3131,82 @@ def qualified_signature_diagnostics(
 
     _require_reports_enabled()
     return qs.diagnostics(get_settings())
+
+
+@router.get("/{document_id}/conformidade-cfm")
+def report_cfm_compliance(
+    document_id: str,
+    db: Session = Depends(get_db),
+    _admin_user: User = Depends(require_role(ROLE_ADMIN)),
+):
+    """Confere um laudo concreto contra a Resolução CFM 2.381/2024.
+
+    M25.15 — é o GATE objetivo que a missão exige antes de qualquer troca de
+    `M15_REPORTS_MODE`. Monta o MESMO conteúdo que iria para o PDF e devolve
+    requisito a requisito o que está atendido, o que falta e uma das duas
+    conclusões possíveis.
+
+    Admin-only e somente leitura: não gera versão, não grava nada e não
+    altera o documento. A conclusão é calculada, nunca digitada — não existe
+    caminho por onde alguém declare conformidade sem que os requisitos a
+    sustentem.
+    """
+
+    document = _get_document_or_404(db, document_id)
+    exam, person, location = _document_context(db, document)
+    profile = (
+        db.get(PhysicianProfile, document.released_physician_profile_id)
+        if document.released_physician_profile_id
+        else None
+    )
+    if profile is None:
+        assignment = _active_assignment(db, document.id)
+        profile = (
+            db.get(PhysicianProfile, assignment.physician_profile_id)
+            if assignment
+            else None
+        )
+    if profile is None:
+        raise ReportDomainError(
+            409,
+            "medico_do_laudo_indisponivel",
+            "O laudo não tem médico atribuído nem liberador para conferir.",
+        )
+    version = (
+        db.get(ReportDocumentVersion, document.current_version_id)
+        if document.current_version_id
+        else None
+    )
+    content = build_native_content(
+        db,
+        document=document,
+        exam=exam,
+        person=person,
+        profile=profile,
+        location=location,
+        version_number=version.version_number if version else 1,
+        # A conferência é de ESTRUTURA do documento, não do texto clínico.
+        # Um marcador explícito evita que a ausência de conclusão numa
+        # versão ainda em elaboração seja lida como campo faltando.
+        conclusion_text=(
+            "[conferência de conformidade — texto clínico não avaliado]"
+        ),
+        observations=None,
+        issued_at=datetime.now(timezone.utc),
+        released=document.status == STATUS_LAUDO_LIBERADO,
+        released_at=document.released_at,
+        validation_code=document.validation_code,
+        signature_kind=_seal_signature_kind(
+            db, version=version, profile=profile
+        ),
+        pilot_warning=_pilot_warning(),
+    )
+    return {
+        "report_code": document.public_code,
+        "status": document.status,
+        "reports_mode": get_settings().reports_mode,
+        **relatorio_conformidade(content),
+    }
 
 
 @router.post("/{document_id}/assinatura-qualificada/iniciar", status_code=201)
@@ -4187,9 +4434,17 @@ def list_report_documents_for_delivery(
             ),
         }
 
+    exam = db.get(SpirometryExam, document.spirometry_exam_id)
+    person = db.get(Person, exam.person_id) if exam else None
     return {
         "document_id": document.id,
         "report_code": document.public_code,
+        # M25.15 — de quem são estes dois PDFs. Baixar e enviar o laudo da
+        # pessoa errada é falha grave, e até aqui a tela de download mostrava
+        # só LAU-xxxxxx. Rota já restrita ao médico ATRIBUÍDO a este
+        # documento, que enxerga a mesma identidade dentro da bancada.
+        "patient": _patient_reference(person),
+        "exam_code": exam.public_code if exam else None,
         "status": document.status,
         "locked": document.status == STATUS_LAUDO_LIBERADO,
         "validation_code": document.validation_code,
@@ -4249,9 +4504,16 @@ def validate_released_report(
         "version_number": version.version_number if version else None,
         "document_sha256": version.sha256 if version else None,
         "physician_name": profile.professional_name if profile else None,
+        # M25.15 — mesma apresentação canônica da tela e do PDF. Conferir um
+        # laudo é comparar o que está no papel com o que a rota devolve; um
+        # CRM formatado de outro jeito aqui faria a conferência falhar por
+        # divergência puramente cosmética.
         "physician_crm": (
-            f"CRM-{profile.crm_state} "
-            f"{profile.crm_display or profile.crm_number}"
+            format_crm_full(
+                profile.crm_number,
+                profile.crm_state,
+                crm_display=profile.crm_display,
+            )
             if profile
             else None
         ),

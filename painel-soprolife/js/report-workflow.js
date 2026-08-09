@@ -24,6 +24,12 @@
   // envio silenciosamente (ver `renderExamLocator`).
   const EXAM_CODE_RE = /^ESP-\d{1,9}$/i;
   const EXAM_CODE_HINT = "ESP- seguido só de números, por exemplo ESP-000001.";
+  // M25.15 — o localizador passou a aceitar também o código do LAUDO. Antes
+  // digitar um LAU- era um beco sem saída ("formato não reconhecido"), ainda
+  // que seja o código que aparece em quase toda conversa sobre um laudo.
+  const REPORT_CODE_RE = /^LAU-\d{1,9}$/i;
+  const EXAM_SEARCH_HINT =
+    "Nome do paciente, código do exame (ESP-000001) ou do laudo (LAU-000001).";
   const UF_VALUES = [
     "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT",
     "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO",
@@ -69,6 +75,9 @@
     // código inexistente era "o sistema não fez nada".
     // { tipo: "erro"|"aviso"|"ok", titulo, mensagem, detalhe }
     locateFeedback: null,
+    // M25.15 — candidatos quando a busca por nome casa com mais de um exame.
+    // Vazio significa "sem ambiguidade pendente", nunca "nada encontrado".
+    locateMatches: [],
     // Espirometrias recentes para escolher sem digitar código nenhum.
     recentExams: [],
     interpretation: "",
@@ -164,8 +173,56 @@
       // estado não vai ao paciente.
       assinatura_pendente: "Laudado — aguardando assinatura digital",
       assinado: "Assinado com ICP-Brasil",
-      liberado: "Liberado (assinatura eletrônica interna)",
+      // M25.15 — "assinatura eletrônica interna" soava a um tipo de
+      // assinatura que este documento teria; ele não tem nenhuma. O que
+      // existe é liberação institucional autenticada, e enquanto não houver
+      // provedor ICP-Brasil o rótulo diz exatamente o que falta. É a mesma
+      // declaração que o PDF já imprimia — a tela só parou de ser mais
+      // otimista que o papel.
+      liberado: "Liberado — aguardando assinatura qualificada",
     }[value] || value || "—";
+  }
+
+  // ------------------------------------------------ identidade (M25.15)
+  //
+  // A partir da M25.15 a referência humana das telas AUTENTICADAS de laudo é
+  // o NOME do paciente; os códigos continuam sempre visíveis, mas como
+  // metadado de rastreabilidade, não como aquilo que a operação precisa
+  // reconhecer. Estes três helpers existem para que todas as listas usem a
+  // MESMA hierarquia: nome forte, contexto no meio, códigos discretos.
+  //
+  // Nada disto é usado em superfície pública: a rota de validação não
+  // devolve `patient`, e por isso `patientName` cai num rótulo neutro em vez
+  // de inventar um nome.
+
+  function patientName(item) {
+    const patient = item && item.patient;
+    const nome = patient && patient.full_name;
+    return nome ? String(nome) : "Paciente não identificado";
+  }
+
+  // Códigos de rastreabilidade em uma linha só. Sem laudo criado, mostra
+  // apenas o ESP — nunca um "LAU-—" que pareceria um código existente.
+  function codeTrail(item) {
+    const codigos = [item.exam_code, item.report_code].filter(Boolean);
+    return codigos.length
+      ? `<span class="report-code-trail">${
+          codigos.map((c) => esc(c)).join(" · ")
+        }</span>`
+      : "";
+  }
+
+  // Linha de contexto que separa homônimos sem expor dado pessoal extra:
+  // exame, data e unidade já viajam em todas as filas.
+  function contextLine(item, extras) {
+    return [
+      "Espirometria",
+      fmtDate(item.exam_date, false),
+      item.location_name || null,
+    ].concat(extras || [])
+      .filter(Boolean)
+      .map((parte) => esc(parte))
+      .join(" • ");
   }
 
   function kindLabel(value) {
@@ -478,12 +535,15 @@
                   role="checkbox" aria-checked="${
                     state.batchSelection.includes(item.document_id)
                   }" title="Selecionar para assinatura"></span>` : ""}
-            <strong>${esc(item.report_code)}</strong>
-            <span>${esc(item.exam_code)} · ${fmtDate(item.exam_date, false)}</span>
-            <span>${esc(originLabel(item.origin_type))}</span>
+            ${/* M25.15 — a fila era LAU-000045 / ESP-000016 / origem. A
+                  médica reconhece a paciente, não o código: o nome sobe para
+                  o topo e os códigos descem para a última linha, sem sumir. */""}
+            <strong class="report-item-name">${esc(patientName(item))}</strong>
+            <span>${contextLine(item)}</span>
             <span class="report-status-chip report-${esc(item.status)}">${
               esc(statusLabel(item.status))
             }</span>
+            ${codeTrail(item)}
             ${item.is_corrective
               ? `<span class="report-queue-flag">corrigido</span>` : ""}
             ${item.locked && item.status !== "liberado"
@@ -843,6 +903,13 @@
     return `
       <aside class="report-documents-panel" aria-labelledby="reportDocsTitle">
         <h4 id="reportDocsTitle">Documentos do exame</h4>
+        ${/* M25.15 — de quem são estes PDFs. Baixar e entregar o laudo da
+              pessoa errada é o pior desfecho possível deste painel, e até
+              aqui a única pista era o código do laudo. */""}
+        <p class="report-doc-owner">
+          <strong class="report-item-name">${esc(patientName(docs))}</strong>
+          ${codeTrail(docs)}
+        </p>
         <ul class="report-documents-list">
           ${entry(docs.tecnico_mir, "Exame técnico (MIR)",
             "PDF original do equipamento, sem qualquer alteração.")}
@@ -936,7 +1003,7 @@
       return `
         <section class="report-panel report-detail-empty">
           <h3>Área clínica</h3>
-          <p>Selecione um item de “Meus laudos”. A identidade do paciente aparece somente dentro do documento atribuído.</p>
+          <p>Selecione um paciente em “Meus laudos”. O exame e o histórico clínico aparecem somente dentro do documento atribuído a você.</p>
         </section>`;
     }
     const original = versionByKind("original");
@@ -958,8 +1025,23 @@
       <section class="report-panel report-clinical-panel" aria-labelledby="reportDetailHeading">
         <div class="report-panel-heading">
           <div>
-            <p class="eyebrow">${esc(detail.public_code)} · ${esc(detail.exam.public_code)}</p>
-            <h3 id="reportDetailHeading" tabindex="-1">Documento atribuído</h3>
+            ${/* M25.15 — o cabeçalho da bancada dizia "Documento atribuído"
+                  sob dois códigos. Quem está laudando precisa ver, sem
+                  procurar, DE QUEM é o exame aberto: o nome vira o título e
+                  os códigos ficam logo abaixo, íntegros. */""}
+            <p class="eyebrow">${
+              [
+                "Espirometria",
+                fmtDate(detail.exam && detail.exam.exam_date, false),
+                detail.location && detail.location.nome,
+              ].filter(Boolean).map((p) => esc(p)).join(" • ")
+            }</p>
+            <h3 id="reportDetailHeading" tabindex="-1">${
+              esc(detail.patient.full_name)
+            }</h3>
+            <p class="report-code-trail">${
+              esc(detail.exam.public_code)
+            } · ${esc(detail.public_code)}</p>
           </div>
           <div class="report-status-badges">
             <span class="report-status-chip report-${esc(detail.status)}">${
@@ -1101,14 +1183,19 @@
     const semLaudo = examsWithoutReport();
     return `
       <form id="reportLocateExamForm" class="report-inline-form" novalidate>
-        <label for="reportExamCode">Código institucional do exame
+        ${/* M25.15 — o campo aceitava SÓ o código exato do exame, então
+              anexar um PDF exigia saber um ESP de cabeça. Agora aceita
+              também o nome do paciente e o código do laudo: as três formas
+              como uma pessoa de fato se refere a um exame. */""}
+        <label for="reportExamCode">Paciente ou código do exame
           <input id="reportExamCode" name="exam_code" autocomplete="off"
-            inputmode="text" maxlength="14" placeholder="ESP-000001"
+            inputmode="text" maxlength="120" placeholder="Nome do paciente ou ESP-000001"
             aria-describedby="reportExamCodeHelp">
-          <span id="reportExamCodeHelp" class="report-help">${esc(EXAM_CODE_HINT)}</span>
+          <span id="reportExamCodeHelp" class="report-help">${esc(EXAM_SEARCH_HINT)}</span>
         </label>
         <button class="m15-btn" type="submit"${state.busy ? " disabled" : ""}>Localizar exame</button>
       </form>
+      ${renderLocatorMatches()}
       ${feedback ? `
         <div class="report-locate-feedback is-${esc(feedback.tipo)}"
           id="reportLocateFeedback" role="status" tabindex="-1">
@@ -1120,36 +1207,67 @@
       ${renderRecentExams(semLaudo)}`;
   }
 
-  // Exames que ainda não têm laudo no fluxo. O cruzamento é feito com a lista
-  // operacional que já está carregada — nenhuma consulta nova, nenhum dado de
-  // paciente na tela: só o código institucional e a data.
+  // Exames que ainda não têm laudo no fluxo. A lista já vem filtrada do
+  // servidor (`somente_sem_laudo`), mas o cruzamento com o acompanhamento
+  // operacional continua: entre carregar a lista e enviar um PDF, um laudo
+  // pode ter sido criado nesta mesma sessão.
   function examsWithoutReport() {
     const comLaudo = new Set(
       (state.operational || []).map((item) => item.exam_code)
     );
     return (state.recentExams || []).filter(
-      (exam) => exam && exam.public_code && !comLaudo.has(exam.public_code)
+      (exam) => exam && exam.exam_code && !comLaudo.has(exam.exam_code)
     );
+  }
+
+  // Um cartão de exame no padrão nome-primeiro. Serve tanto para os
+  // resultados da busca quanto para a lista de recentes, para que os dois
+  // caminhos até o mesmo exame tenham exatamente a mesma aparência.
+  function renderExamPick(exam) {
+    const jaTemLaudo = Boolean(exam.report_code);
+    return `
+      <button type="button" class="report-exam-pick${
+        state.locatedExam && state.locatedExam.exam_code === exam.exam_code
+          ? " is-selected" : ""
+      }" data-report-exam-pick="${esc(exam.exam_code)}">
+        <strong class="report-item-name">${esc(patientName(exam))}</strong>
+        <span>${contextLine(exam, [exam.exam_status_display])}</span>
+        ${codeTrail(exam)}
+        ${jaTemLaudo
+          ? `<span class="report-exam-pick-flag">já possui laudo</span>` : ""}
+      </button>`;
+  }
+
+  // M25.15 — resultados da busca. Com homônimos, o operador vê nome, data,
+  // unidade e ESP de cada um: o suficiente para escolher sem decorar código
+  // e sem que a tela exponha contato ou nascimento.
+  function renderLocatorMatches() {
+    const matches = state.locateMatches;
+    if (!matches || !matches.length) return "";
+    return `
+      <div class="report-exam-catalog is-matches">
+        <p class="report-help">${
+          matches.length === 1
+            ? "1 exame encontrado."
+            : `${matches.length} exames encontrados — confira a data e a unidade antes de escolher.`
+        }</p>
+        <div class="report-exam-pick-list">${
+          matches.map(renderExamPick).join("")
+        }</div>
+      </div>`;
   }
 
   function renderRecentExams(exams) {
     if (!exams.length) {
-      return `<p class="report-help">Nenhuma espirometria recente sem laudo. Localize pelo código acima.</p>`;
+      return `<p class="report-help">Nenhuma espirometria recente sem laudo. Busque pelo nome do paciente ou pelo código acima.</p>`;
     }
-    const rows = exams.slice(0, 12).map((exam) => `
-      <button type="button" class="report-exam-pick${
-        state.locatedExam && state.locatedExam.public_code === exam.public_code
-          ? " is-selected" : ""
-      }" data-report-exam-pick="${esc(exam.public_code)}">
-        <strong>${esc(exam.public_code)}</strong>
-        <span>${fmtDate(exam.data_exame, false)}</span>
-        <span>${esc(statusLabel(exam.status))}</span>
-      </button>`).join("");
     return `
       <details class="report-exam-catalog" open>
         <summary>Espirometrias recentes sem laudo (${exams.length})</summary>
-        <p class="report-help">Clique para localizar sem digitar o código. Só o código institucional e a data aparecem aqui.</p>
-        <div class="report-exam-pick-list">${rows}</div>
+        <p class="report-help">Clique para localizar sem digitar nada.</p>
+        <div class="report-exam-pick-list">${
+          exams.slice(0, 12).map(renderExamPick).join("")
+        }</div>
       </details>`;
   }
 
@@ -1160,15 +1278,16 @@
           <button type="button" class="report-operation-row${
             item.document_id === state.selectedOperationalId ? " is-selected" : ""
           }" data-report-operational="${esc(item.document_id)}">
-            <strong>${esc(item.report_code)}</strong>
-            <span>${esc(item.exam_code)}</span>
+            <strong class="report-item-name">${esc(patientName(item))}</strong>
+            <span>${contextLine(item)}</span>
             <span>${esc(statusLabel(item.status))}</span>
+            ${codeTrail(item)}
           </button>`).join("")
       : `<div class="report-empty">Nenhum documento no fluxo.</div>`;
     return `
       <section class="report-panel" aria-labelledby="operationalListTitle">
         <h3 id="operationalListTitle">Acompanhamento operacional</h3>
-        <p class="report-help">Somente códigos, origem, atribuição e estado técnico; a interpretação clínica não é exposta.</p>
+        <p class="report-help">Paciente, local, atribuição e estado técnico. A interpretação clínica não é exposta aqui.</p>
         <div class="report-operation-list">${rows}</div>
         ${selected && selected.status === "atribuido" ? `
           <form id="reportReassignForm" class="report-reassign-form">
@@ -1181,8 +1300,8 @@
                 ${state.physicians
                   .filter((item) => item.id !== selected.physician_profile_id)
                   .map((item) => `<option value="${esc(item.id)}">${
-                    esc(item.professional_name)
-                  } · CRM/${esc(item.crm_state)} ${esc(item.crm_number)}</option>`).join("")}
+                    esc(physicianLabel(item))
+                  }</option>`).join("")}
               </select>
             </label>
             <label for="reportReassignReason">Motivo técnico fechado
@@ -1195,11 +1314,61 @@
       </section>`;
   }
 
+  // M25.15 — quem vai laudar.
+  //
+  // A lista NUNCA é fixa no código: vem de `/laudos/medicos-disponiveis`,
+  // que só devolve perfil ativo, conta ativa, papel médico explícito e
+  // `verification_status = verified`. Um médico novo devidamente cadastrado
+  // e verificado passa a aparecer aqui sozinho; um suspenso ou pendente
+  // desaparece sozinho. Hoje isso resulta em uma única médica elegível.
+  //
+  // As três situações têm tratamento próprio e explícito:
+  //
+  //   0 elegíveis — o formulário inteiro é bloqueado (fail closed). Enviar
+  //     um PDF sem destinatário criaria um laudo que ninguém pode laudar.
+  //   1 elegível  — vem pré-selecionado, MAS o seletor continua visível:
+  //     quem envia precisa ver para quem está enviando.
+  //   2 ou mais   — nenhum vem marcado. A escolha é consciente; escolher o
+  //     primeiro em silêncio mandaria o exame para o médico errado sem que
+  //     ninguém percebesse.
+  function physicianLabel(profile) {
+    return profile.credentials_label
+      || `${profile.professional_name} • CRM-${profile.crm_state} ${
+           profile.crm_formatted || profile.crm_number}`;
+  }
+
+  function renderPhysicianChooser() {
+    const eligiveis = state.physicians || [];
+    if (!eligiveis.length) {
+      return `
+        <div class="report-locate-feedback is-erro" role="status">
+          <strong>Nenhum médico elegível para receber o laudo</strong>
+          <span>O envio está bloqueado: só recebe laudo um perfil médico
+            ativo, com conta ativa e verificação de CRM concluída.</span>
+          <span class="report-help">Cadastre ou verifique o perfil médico em
+            “Contas médicas” antes de anexar o PDF.</span>
+        </div>`;
+    }
+    const unico = eligiveis.length === 1;
+    return `
+      <label for="reportPhysician">Médico responsável pelo laudo
+        <select id="reportPhysician" name="physician_profile_id" required>
+          ${unico ? "" : `<option value="">Selecione o médico responsável</option>`}
+          ${eligiveis.map((profile) => `
+            <option value="${esc(profile.id)}"${
+              unico ? " selected" : ""
+            }>${esc(physicianLabel(profile))}</option>`).join("")}
+        </select>
+        <span class="report-help">${
+          unico
+            ? "Único médico elegível hoje — este laudo será atribuído a ele."
+            : "Escolha explícita: o laudo vai para a fila de quem for selecionado aqui."
+        }</span>
+      </label>`;
+  }
+
   function renderOperationalWorkspace() {
-    const physicianOptions = state.physicians.map((profile) =>
-      `<option value="${esc(profile.id)}">${esc(profile.professional_name)} · ` +
-      `CRM/${esc(profile.crm_state)} ${esc(profile.crm_number)}</option>`
-    ).join("");
+    const semMedico = !(state.physicians || []).length;
     const unitOptions = (state.units || []).map((unit) => {
       const lugar = [unit.bairro, unit.cidade].filter(Boolean).join(", ");
       return `<option value="${esc(unit.id)}">${esc(unit.nome)}${
@@ -1213,18 +1382,20 @@
           <h3 id="uploadTitle">Novo PDF original</h3>
           ${renderExamLocator()}
           ${state.locatedExam ? `
+            ${/* Confirmação do exame localizado: o operador confere a PESSOA
+                  antes de anexar o PDF. Anexar o exame de outra pessoa é o
+                  erro mais caro deste fluxo, e um código sozinho não deixa
+                  ninguém perceber que errou. */""}
             <div class="report-technical-confirmation" role="status">
-              <strong>${esc(state.locatedExam.public_code)}</strong>
-              <span>${fmtDate(state.locatedExam.data_exame, false)} · ${esc(state.locatedExam.status)}</span>
+              <strong class="report-item-name">${esc(patientName(state.locatedExam))}</strong>
+              <span>${contextLine(state.locatedExam, [
+                state.locatedExam.exam_status_display,
+              ])}</span>
+              ${codeTrail(state.locatedExam)}
             </div>
             <form id="reportUploadForm" class="report-upload-form">
-              <input type="hidden" name="exam_code" value="${esc(state.locatedExam.public_code)}">
-              <label for="reportPhysician">Médico responsável
-                <select id="reportPhysician" name="physician_profile_id" required>
-                  <option value="">Selecione um perfil ativo e verificado</option>
-                  ${physicianOptions}
-                </select>
-              </label>
+              <input type="hidden" name="exam_code" value="${esc(state.locatedExam.exam_code)}">
+              ${renderPhysicianChooser()}
               <label for="reportOriginType">Origem do exame
                 <select id="reportOriginType" name="origin_type" required>
                   ${options(ORIGINS, "")}
@@ -1247,8 +1418,14 @@
                 <input id="reportPdfFile" name="file" type="file"
                   accept="application/pdf,.pdf" required>
               </label>
+              ${/* Fail closed (M25.15): sem médico elegível o botão não é
+                    clicável. O servidor recusaria de qualquer forma
+                    (`medico_nao_eligivel`), mas deixar o operador anexar um
+                    arquivo, preencher tudo e só então levar erro é gastar o
+                    trabalho dele para descobrir algo já sabido na abertura
+                    da tela. */""}
               <button class="m15-btn m15-btn-primary" type="submit"${
-                state.busy ? " disabled" : ""
+                state.busy || semMedico ? " disabled" : ""
               }>Enviar e atribuir</button>
             </form>` : `
             <p class="report-help">A atribuição só é criada depois da localização exata pelo código ESP.</p>`}
@@ -1566,7 +1743,12 @@
         // M25.12 — espirometrias recentes para escolher sem digitar código.
         // O motivo desta chamada é a falha relatada: o único caminho para
         // anexar um PDF era acertar de cabeça um código exato.
-        calls.push(client().api("/espirometrias?tamanho=50"));
+        //
+        // M25.15 — passou de `/espirometrias` para `/laudos/exames`, que já
+        // devolve o NOME do paciente e a unidade junto do exame. O endpoint
+        // genérico não traz identidade, e cruzar exame com paciente no
+        // navegador exigiria baixar a base de pessoas inteira para a tela.
+        calls.push(client().api("/laudos/exames?somente_sem_laudo=true"));
         labels.push("recentExams");
       }
       if (can("admin")) {
@@ -2068,25 +2250,33 @@
     state.locateFeedback = { tipo, titulo, mensagem, detalhe: detalhe || "" };
   }
 
-  async function locateExam(code) {
-    const digitado = String(code || "").trim();
-    const normalized = digitado.toUpperCase();
-    if (!normalized) {
+  // M25.15 — a busca aceita nome do paciente, ESP ou LAU e o servidor decide
+  // qual das três é. Quando o termo casa com mais de um exame (homônimos, ou
+  // a mesma pessoa com vários exames), NADA é escolhido automaticamente: os
+  // candidatos são listados com data e unidade para o operador decidir.
+  async function locateExam(termo) {
+    const digitado = String(termo || "").trim();
+    if (!digitado) {
       state.locatedExam = null;
+      state.locateMatches = [];
       setLocateFeedback(
-        "erro", "Informe um código",
-        "Digite o código institucional do exame ou escolha um da lista abaixo.",
-        EXAM_CODE_HINT
+        "erro", "Informe um paciente ou um código",
+        "Digite o nome do paciente, o código do exame ou escolha um da lista abaixo.",
+        EXAM_SEARCH_HINT
       );
       render();
       return;
     }
-    if (!EXAM_CODE_RE.test(normalized)) {
+    const comoCodigo = digitado.toUpperCase();
+    const ehCodigoExame = EXAM_CODE_RE.test(comoCodigo);
+    if (!ehCodigoExame && !REPORT_CODE_RE.test(comoCodigo)
+        && digitado.replace(/\s+/g, "").length < 3) {
       state.locatedExam = null;
+      state.locateMatches = [];
       setLocateFeedback(
-        "erro", `Formato não reconhecido: ${normalized}`,
-        "Este não é um código institucional de espirometria. Os códigos são emitidos pelo sistema e não contêm letras depois do hífen.",
-        `${EXAM_CODE_HINT} Se você viu um código começando com LAU-, ele identifica o laudo, não o exame — escolha o exame na lista abaixo.`
+        "erro", "Busca curta demais",
+        "Informe ao menos 3 letras do nome do paciente, ou um código completo.",
+        EXAM_SEARCH_HINT
       );
       render();
       return;
@@ -2095,36 +2285,57 @@
     announce("Localizando exame…", "");
     render();
     try {
+      const busca = ehCodigoExame || REPORT_CODE_RE.test(comoCodigo)
+        ? comoCodigo : digitado;
       const response = await client().api(
-        `/espirometrias?public_code=${encodeURIComponent(normalized)}`
+        `/laudos/exames?q=${encodeURIComponent(busca)}`
       );
-      const items = Array.isArray(response) ? response : response.itens || [];
-      const found = items.find((item) => item.public_code === normalized) || null;
-      if (!found) {
+      const items = Array.isArray(response) ? response : [];
+      if (!items.length) {
         state.locatedExam = null;
+        state.locateMatches = [];
         setLocateFeedback(
-          "erro", `${normalized} não existe`,
-          "Nenhuma espirometria cadastrada com este código institucional.",
+          "erro", `Nada encontrado para “${digitado}”`,
+          ehCodigoExame
+            ? "Nenhuma espirometria cadastrada com este código institucional."
+            : "Nenhum exame de paciente com este nome. Confira a grafia ou busque pelo código.",
           "O exame precisa existir no CRM de Espirometria antes de receber um laudo. Confira a lista abaixo ou cadastre o exame primeiro."
         );
-        announce(`Exame ${normalized} não encontrado.`, "erro");
+        announce(`Nada encontrado para ${digitado}.`, "erro");
         return;
       }
-      const jaTemLaudo = (state.operational || []).some(
-        (item) => item.exam_code === normalized
-      );
+      if (items.length > 1) {
+        // Ambiguidade real: escolher sozinho aqui é como o PDF ia parar no
+        // paciente errado. A decisão volta para quem sabe qual é o certo.
+        state.locatedExam = null;
+        state.locateMatches = items;
+        setLocateFeedback(
+          "aviso", `${items.length} exames encontrados`,
+          "Mais de um exame corresponde à busca. Escolha abaixo conferindo a data e a unidade.",
+          "Pacientes com o mesmo nome se distinguem pela data do exame, pela unidade e pelo código ESP."
+        );
+        announce(`${items.length} exames encontrados. Escolha um.`, "aviso");
+        return;
+      }
+      const found = items[0];
       state.locatedExam = found;
+      state.locateMatches = [];
+      const jaTemLaudo = Boolean(found.report_code)
+        || (state.operational || []).some(
+          (item) => item.exam_code === found.exam_code
+        );
       if (jaTemLaudo) {
         setLocateFeedback(
-          "aviso", `${normalized} localizado — já possui laudo`,
+          "aviso", `${patientName(found)} — exame já possui laudo`,
           "Este exame já tem um documento no fluxo. Enviar outro PDF cria um segundo laudo para a mesma espirometria.",
           "Confira “Acompanhamento operacional” antes de continuar."
         );
       } else {
         setLocateFeedback(
-          "ok", `${normalized} localizado`,
-          `Exame de ${fmtDate(found.data_exame, false)} · ${statusLabel(found.status)}.`,
-          "Complete a atribuição técnica abaixo e anexe o PDF do equipamento."
+          "ok", `${patientName(found)} — exame localizado`,
+          `${found.exam_code} · ${fmtDate(found.exam_date, false)} · ${
+            found.location_name || "local não informado"}.`,
+          "Confira se é a pessoa certa, escolha o médico responsável e anexe o PDF do equipamento."
         );
       }
       announce("Exame localizado. Complete a atribuição técnica.", "ok");
@@ -2175,11 +2386,15 @@
       const result = await client().api("/laudos", {
         method: "POST", body: payload,
       });
-      const examCode = state.locatedExam && state.locatedExam.public_code;
+      const localizado = state.locatedExam;
+      const examCode = localizado && localizado.exam_code;
       state.locatedExam = null;
+      state.locateMatches = [];
       setLocateFeedback(
         "ok", `${result.public_code} recebido e atribuído`,
-        `O PDF técnico de ${examCode || "o exame"} foi armazenado e o laudo entrou na fila da médica atribuída.`,
+        `O PDF técnico de ${
+          localizado ? patientName(localizado) : "o exame"
+        }${examCode ? ` (${examCode})` : ""} foi armazenado e o laudo entrou na fila da médica atribuída.`,
         "Acompanhe o estado em “Acompanhamento operacional”."
       );
       announce(`${result.public_code} recebido e atribuído com segurança.`, "ok");

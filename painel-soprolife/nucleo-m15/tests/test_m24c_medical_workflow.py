@@ -497,9 +497,19 @@ def test_referencia_de_unidade_exige_origem_clinica_parceira(
     )
 
 
-def test_upload_cria_uma_atribuicao_e_fila_minima_sem_paciente(
+def test_upload_cria_uma_atribuicao_e_fila_com_nome_sem_id_interno(
     client, auth, db, medical_case, person
 ):
+    """M25.15 substituiu a fila anônima pela fila com nome do paciente.
+
+    Até a M25.14 este teste exigia que NENHUM traço do paciente aparecesse
+    na fila. A missão M25.15 inverteu essa regra para as interfaces
+    autenticadas — o nome passou a ser a referência humana principal —, mas
+    manteve intactas as outras três garantias que o teste protegia: o id
+    interno da pessoa continua fora, texto clínico continua fora, e os
+    códigos continuam presentes como metadado de rastreabilidade.
+    """
+
     document_id = medical_case["document"]["id"]
     db.expire_all()
     assignments = db.execute(
@@ -520,8 +530,13 @@ def test_upload_cria_uma_atribuicao_e_fila_minima_sem_paciente(
     assert row["exam_code"] == medical_case["exam"]["public_code"]
     assert row["origin_type"] == "coworking"
     assert row["status"] == "atribuido"
+    # M25.15 — o nome É a referência humana da linha, e o código do cadastro
+    # o acompanha como metadado discreto.
+    assert row["patient"]["full_name"] == person["nome_completo"]
+    assert row["patient"]["public_code"] == person["public_code"]
     dump = queue.text
-    assert person["nome_completo"] not in dump
+    # O id interno continua fora: ele não ajuda ninguém a reconhecer um
+    # paciente e serve só para correlacionar registros entre sistemas.
     assert person["id"] not in dump
     assert "interpretation" not in dump
 
@@ -529,7 +544,9 @@ def test_upload_cria_uma_atribuicao_e_fila_minima_sem_paciente(
         f"/api/v1/laudos/{document_id}", headers=auth("operacional")
     )
     assert operational.status_code == 200
-    assert "patient" not in operational.text
+    # O acompanhamento operacional também identifica por nome, mas continua
+    # sem qualquer conteúdo clínico ou histórico de versões.
+    assert operational.json()["patient"]["full_name"] == person["nome_completo"]
     assert "versoes" not in operational.text
 
 
