@@ -8,9 +8,12 @@
 | | |
 | --- | --- |
 | HEAD inicial | `f548b4a53aa463a868437bd870d8fcba1d852e67` |
-| HEAD final | `2e11c52` (código) + este relatório |
+| HEAD final | `e31a263dc3a38cf61cdd67ec8cb420154e994593` |
+| HEAD final da VPS | `e31a263dc3a38cf61cdd67ec8cb420154e994593` |
 | Migration | **nenhuma** — a mudança é HTML/CSS/JS |
 | Backup pré-deploy | não aplicável (sem alteração de backend nem de banco) |
+| Serviço reiniciado | **nenhum** — ver §8 |
+| Produção | **publicado e verificado em 2026-08-10** |
 
 Integração por **fast-forward**. Nenhum `reset --hard`, `force push`,
 `force-with-lease` ou remoção de trabalho concorrente.
@@ -191,70 +194,119 @@ desapareceu.
 
 ## 8. Deploy
 
-- **Migration:** nenhuma. O diff toca apenas `js/`, `css/`, testes e um script
-  de teste — **registrado que não há migration e não há alteração de banco**,
-  portanto sem backup pré-deploy.
-- **Restart:** somente `soprolife-painel` seria necessário se os assets forem
-  servidos por ele; a API não muda de comportamento.
+- **Migration:** nenhuma. `git diff f548b4a..HEAD --name-only -- "*migrations*"`
+  na própria VPS devolve **0 arquivos**. Nenhuma alteração de banco, portanto
+  **sem backup pré-deploy**.
+- **Estado anterior da VPS:** `f548b4a53aa463a868437bd870d8fcba1d852e67`,
+  branch `painel-soprolife-v01`, `git status` limpo, três serviços `active` —
+  ou seja, ainda no HEAD anterior, como esperado.
+- **Integração:** `git fetch` + `git merge --ff-only origin/painel-soprolife-v01`.
+  Fast-forward `f548b4a..e31a263`, 5 arquivos. Sem `reset --hard`, sem force.
 
-| Etapa | Estado |
+### Reautenticação do Tailscale
+
+O deploy ficou parado até a aprovação humana da sessão SSH
+(`# Tailscale SSH requires an additional check`), o mesmo bloqueio que partiu
+o deploy da M25.18 em duas etapas. Concluída a reautenticação, o deploy correu
+em uma única etapa.
+
+### Nenhum serviço foi reiniciado — e por quê
+
+`command-center-local-server.py` trata os assets estáticos caindo no
+`SimpleHTTPRequestHandler.do_GET()`, que **lê o arquivo do disco a cada
+requisição**. Nenhum dos três processos guarda cópia do `report-workflow.js`
+ou do `.css` em memória, e a API não teve uma linha alterada. Reiniciar
+serviço aqui seria derrubar conexão de produção sem motivo.
+
+A hipótese não ficou no papel: o smoke da §9 foi feito **antes** de qualquer
+restart e o painel já respondia com o arquivo novo. Nenhum restart foi
+necessário e nenhum foi feito.
+
+### Verificações pós-deploy
+
+| Verificação | Resultado |
 | --- | --- |
-| Commit `2e11c52` | ✅ |
-| Fast-forward `f548b4a..2e11c52 → origin/painel-soprolife-v01` | ✅ |
-| Push da branch de trabalho | ✅ |
-| Atualização da VPS | ⏳ **bloqueado** |
-
-### Bloqueio: Tailscale SSH pediu reautenticação humana
-
-```
-# Tailscale SSH requires an additional check.
-# To authenticate, visit: https://login.tailscale.com/a/l131a2af2371f5b
-```
-
-Mesmo bloqueio que partiu o deploy da M25.18 em duas etapas. A rede está boa
-(`tailscale status` → `soprolife-painel-01 … idle`, ping 70 ms); o que falta é
-a aprovação humana da sessão SSH. **Nenhum comando foi executado na VPS.**
-
-<!-- ETAPA 2 — preencher após a reautenticação:
-| HEAD da VPS | |
-| git status da VPS | |
-| Alembic | |
-| Health | |
-| Banco | |
-| Painel | |
-| Serviços | |
--->
+| HEAD da VPS | `e31a263dc3a38cf61cdd67ec8cb420154e994593` |
+| `git status` da VPS | **limpo** |
+| Branch da VPS | `painel-soprolife-v01` |
+| Alembic | `d1e7b9c34a25 (head)` — **idêntico ao da M25.18** |
+| Health | `{"status":"ok","versao":"0.1.0","ambiente":"prod","banco":"ok"}` |
+| Banco | **ok** |
+| Painel | **HTTP 200** |
+| Serviços | `soprolife-m15-api`, `soprolife-painel`, `soprolife-painel-loopback` → `active` |
+| Serviços reiniciados | **nenhum** |
 
 ---
 
 ## 9. Smoke em produção
 
-Pendente do deploy. O roteiro, sem tocar em nenhum paciente real:
+Feito sobre o **asset realmente servido** pelo painel em produção
+(`http://127.0.0.1:8765/painel-soprolife/{js,css}/report-workflow.*`,
+126.919 B de JS e 34.332 B de CSS), sem login e **sem tocar em nenhum
+paciente real**. Só requisições `GET` de arquivo estático, uma leitura de
+contagem no banco e uma consulta ao `git` da VPS.
 
-1. abrir "Laudos de espirometria";
-2. rolar até **Administração restrita — contas médicas**;
-3. confirmar que **não existe** "Catálogo versionado";
-4. confirmar que **não existe** nenhum card `*_PROVISORIO`;
-5. confirmar que **"Contas médicas"** continua disponível;
-6. confirmar que não sobrou coluna vazia ao lado do painel;
-7. confirmar que a bancada (PDF à esquerda, siglas à direita) está intacta.
+### Sumiu da tela (esperado: 0 ocorrências)
 
-Verificação objetiva equivalente, que pode ser feita sem login e sem tocar em
-dado nenhum: baixar o asset servido e conferir que as strings sumiram.
+| String | Ocorrências |
+| --- | --- |
+| `Catálogo versionado` | **0** |
+| `Templates clínicos` | **0** |
+| `NÃO UTILIZAR EM PRODUÇÃO` | **0** |
+| `_PROVISORIO` (qualquer card provisório) | **0** |
+| `reportTemplateRevisionForm` | **0** |
+| `report-admin-template` | **0** |
+| `catalog=admin` | **0** |
+| `contas médicas e catálogo técnico` (resumo antigo) | **0** |
 
+### Continua na tela (esperado: ≥ 1)
+
+| String | Ocorrências |
+| --- | --- |
+| `Administração restrita — contas médicas` | 1 |
+| `Contas médicas` | 2 |
+| `reportAdminUser` (seletor de conta existente) | 3 |
+| `report-clinical-split` (PDF à esquerda / laudo à direita) | 1 |
+| `data-report-conclusion` (siglas clínicas) | 3 |
+| `data-report-bd` (complementos pós-BD) | 3 |
+| `PERSONALIZADO` | 3 |
+| `Concluir laudo` | 3 |
+| `report-item-name` (fila pelo nome do paciente) | 5 |
+
+### Layout — sem coluna vazia
+
+O CSS servido em produção:
+
+```css
+.report-admin-shell        { grid-template-columns: minmax(0, 1fr); }
+.report-admin-shell > .report-panel { max-width: 760px; }
+.report-operational-shell  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 ```
-curl -s https://<painel>/painel-soprolife/js/report-workflow.js \
-  | grep -c "Catálogo versionado"     # esperado: 0
-```
+
+A administração ficou em **uma** coluna compacta; a área operacional
+**continua** com duas, intocada.
+
+### O catálogo continua íntegro no servidor
+
+| Verificação em produção | Resultado |
+| --- | --- |
+| Templates no banco | `total=6 provisorios=6` — **nada apagado** |
+| `catalog: str = Query(default="clinical", pattern="^(clinical\|admin)$")` em `reports.py` | presente |
+| Arquivos de backend alterados pelo deploy | **nenhum** |
+
+Uma tentativa de sonda sem token devolveu `401`, mas **isso não prova nada**
+sobre a rota: a rota de controle inexistente também devolveu `401`, porque a
+autenticação roda antes do roteamento. A prova de preservação é a contagem no
+banco e o código inalterado em produção, acima.
 
 ### Screenshots
 
-**Não foi possível capturar screenshots neste notebook**: não há Chrome
-(`/usr/bin/google-chrome` ausente, exigido por `test-m24a-browser-e2e.js`) nem
-`jsdom` instalado. A verificação equivalente feita aqui foi **estática e
-determinística** — as 13 asserções do arquivo novo mais o check do M24A, todas
-lendo o `report-workflow.js` e o `report-workflow.css` reais que vão para
-produção. A confirmação visual fica para o smoke.
+**Não foi possível capturar screenshots**: o notebook não tem Chrome
+(`/usr/bin/google-chrome`, exigido por `test-m24a-browser-e2e.js`) nem
+`jsdom`. A verificação entregue no lugar é mais forte para o que esta missão
+mudou — ela lê o **byte servido em produção**, não uma imagem dele. O que a
+tabela acima não cobre é o julgamento estético do resultado; essa parte pede
+um olho humano na tela.
 
 ---
 
@@ -270,3 +322,31 @@ As 17 conclusões, o `PERSONALIZADO`, os 5 complementos pós-BD, o **DVO Leve**,
 o **RBD+**, a edição manual, a prévia, a conclusão, a rubrica, os downloads
 pelo nome do paciente e a fila continuam exatamente como estavam — e agora com
 teste que quebra se alguém os remover junto com uma futura limpeza de UX.
+
+---
+
+## 11. Conclusão
+
+A M25.19 está **publicada em produção**. A tela de "Laudos de espirometria"
+não exibe mais catálogo técnico: quem abre a administração restrita encontra
+**contas médicas** e nada além disso, em uma coluna compacta, sem faixa branca
+ao lado.
+
+O que mudou foi **onde** o catálogo mora, não **se** ele existe. Os seis
+templates continuam no banco de produção, o endpoint administrativo continua
+registrado com o mesmo RBAC, o versionamento imutável continua valendo e o
+servidor continua sendo quem recusa um template não aprovado. A médica deixou
+de ver metadado técnico que nunca foi decisão dela.
+
+**Ressalvas honestas desta entrega:**
+
+1. **Sem screenshots** — não há navegador neste notebook. A verificação foi
+   feita sobre o byte servido em produção; o julgamento visual do resultado
+   ainda depende de um olho humano abrindo a tela.
+2. **Falha pré-existente no quality gate** — `test-marketing credencial
+   durável (M21)` falhava antes desta missão e continua falhando. Reproduzida
+   no HEAD limpo `f548b4a` com `git stash`. Fora do escopo, não corrigida.
+3. **Editar catálogo virou tarefa de API** — não existe mais tela para criar
+   revisão de template. Foi decisão explícita da missão; se algum dia for
+   preciso editar o catálogo pela interface, isso volta como tela
+   administrativa própria, longe da bancada da médica.
