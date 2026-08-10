@@ -60,6 +60,7 @@ import json
 import os
 import pathlib
 import sys
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -1036,6 +1037,101 @@ def _verificar_consolidacao(db, antes, depois, duplicate, canonical) -> list[str
     return problemas
 
 
+def cmd_arquivar_cadastro(args) -> int:
+    """M25.17 — tira um cadastro interno de teste da operação normal.
+
+    Não apaga nada: marca `people.arquivado`, com data e motivo. Auditoria,
+    versões de laudo, hashes e evidência das missões anteriores continuam
+    exatamente onde estão — o registro apenas para de aparecer nas filas e
+    buscas do dia a dia.
+
+    Dry-run por padrão. Exige `--motivo` porque um arquivamento sem
+    explicação é o registro que ninguém consegue justificar depois.
+    """
+
+    from sqlalchemy import select
+
+    from .audit import audit
+    from .models import Person, ReportDocument, SpirometryExam
+
+    db = _session()
+    try:
+        alvos = []
+        for codigo in args.pessoa:
+            pessoa = db.execute(
+                select(Person).where(Person.public_code == codigo)
+            ).scalar_one_or_none()
+            if pessoa is None:
+                print(
+                    json.dumps({"ok": False, "code": "pessoa_nao_encontrada",
+                                "public_code": codigo}),
+                    file=sys.stderr,
+                )
+                return 1
+            exames = db.execute(
+                select(SpirometryExam).where(
+                    SpirometryExam.person_id == pessoa.id
+                )
+            ).scalars().all()
+            laudos = db.execute(
+                select(ReportDocument).where(
+                    ReportDocument.spirometry_exam_id.in_(
+                        [e.id for e in exames]
+                    )
+                )
+            ).scalars().all() if exames else []
+            alvos.append({
+                "public_code": pessoa.public_code,
+                "ja_arquivado": pessoa.arquivado,
+                "exames": [e.public_code for e in exames],
+                "laudos": [d.public_code for d in laudos],
+                "_pessoa": pessoa,
+            })
+
+        if not args.executar:
+            print(json.dumps({
+                "ok": True,
+                "dry_run": True,
+                "motivo": args.motivo,
+                "alvos": [
+                    {k: v for k, v in a.items() if not k.startswith("_")}
+                    for a in alvos
+                ],
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        agora = datetime.now(timezone.utc)
+        for alvo in alvos:
+            pessoa = alvo["_pessoa"]
+            if pessoa.arquivado:
+                continue
+            pessoa.arquivado = True
+            pessoa.arquivado_em = agora
+            pessoa.arquivado_motivo = args.motivo[:200]
+            audit(
+                db,
+                "pessoa.arquivada",
+                "people",
+                pessoa.id,
+                None,
+                None,
+                {
+                    "public_code": pessoa.public_code,
+                    "motivo": pessoa.arquivado_motivo,
+                    "exames": alvo["exames"],
+                    "laudos": alvo["laudos"],
+                },
+            )
+        db.commit()
+        print(json.dumps({
+            "ok": True,
+            "dry_run": False,
+            "arquivados": [a["public_code"] for a in alvos],
+        }, ensure_ascii=False))
+        return 0
+    finally:
+        db.close()
+
 def cmd_exportar_snapshots(args) -> int:
     """M23 — gera os snapshots do painel a partir do PostgreSQL.
 
@@ -1427,6 +1523,18 @@ def main(argv: list[str] | None = None) -> int:
                    help="Grava de verdade (sem isso é dry-run)")
     p.add_argument("--json", action="store_true", help="Saída em JSON")
     p.set_defaults(func=cmd_exportar_snapshots)
+
+    p = sub.add_parser(
+        "arquivar-cadastro",
+        help="M25.17 — tira cadastro interno de teste da operação normal",
+    )
+    p.add_argument("--pessoa", action="append", required=True,
+                   help="Código público da pessoa (repetível)")
+    p.add_argument("--motivo", required=True,
+                   help="Por que este cadastro sai da operação")
+    p.add_argument("--executar", action="store_true",
+                   help="Grava de verdade (sem isso é dry-run)")
+    p.set_defaults(func=cmd_arquivar_cadastro)
 
     args = parser.parse_args(argv)
     return args.func(args)

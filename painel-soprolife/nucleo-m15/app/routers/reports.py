@@ -132,6 +132,16 @@ from ..services.report_native_pdf import (
 from ..services.crm_display import format_crm_full, format_crm_number
 from ..services.report_compliance import relatorio_conformidade
 from ..status_display import exam_status_display
+from ..services.download_names import (
+    content_disposition,
+    report_download_filename,
+)
+from ..services.report_origin import (
+    DerivedOrigin,
+    OriginDerivationError,
+    derive_report_origin,
+    derived_origin_payload,
+)
 from ..services.report_locations import (
     resolve_exam_location_name,
     resolve_report_location,
@@ -836,6 +846,76 @@ def _validate_origin(
     return normalized_type, normalized_label, normalized_unit
 
 
+def _derived_origin_or_422(db: Session, exam: SpirometryExam) -> DerivedOrigin:
+    """Contexto do exame, ou uma recusa que diz onde corrigir o cadastro.
+
+    M25.17 — 422 e não 409 porque, do ponto de vista de quem chamou, o
+    pedido é impossível de atender com os dados atuais: falta informação no
+    atendimento. A mensagem carrega `como_corrigir` para que o operador não
+    fique tentando adivinhar combinações no formulário — que foi exatamente
+    o que aconteceu no primeiro uso real.
+    """
+
+    try:
+        return derive_report_origin(db, exam)
+    except OriginDerivationError as exc:
+        raise ReportDomainError(
+            422,
+            exc.codigo,
+            f"{exc.mensagem} {exc.como_corrigir}",
+        ) from None
+
+
+def _resolve_origin_with_override(
+    derived: DerivedOrigin,
+    *,
+    origin_type: str | None,
+    partner_unit_id: str | None,
+) -> tuple[str, str | None]:
+    """Decide a origem final entre o que o exame sabe e o que veio no payload.
+
+    O formulário não manda mais estes campos: quem os manda é um cliente
+    antigo ou alguém montando a requisição à mão. A regra é quem tem
+    autoridade sobre o dado:
+
+    * **Exame com local registrado** (`completo`) — o exame ganha, e um
+      payload divergente é recusado. Aceitar em silêncio uma unidade
+      diferente da vinculada ao atendimento gravaria no laudo o endereço de
+      uma clínica onde o exame não aconteceu, e creditaria o parceiro
+      errado no financeiro.
+
+    * **Exame sem local registrado** — não há nada a contradizer, e a
+      origem explícita é a ÚNICA informação disponível sobre onde o exame
+      foi feito. Recusá-la seria descartar o único dado existente em nome de
+      uma autoridade que o exame não exerce. O valor ainda passa por
+      `_validate_origin`, que continua barrando unidade fora de clínica
+      parceira — a combinação inválida do primeiro uso real segue impossível.
+    """
+
+    enviado_tipo = (origin_type or "").strip().lower() or None
+    enviado_unidade = (partner_unit_id or "").strip() or None
+
+    if not derived.completo:
+        return (
+            enviado_tipo or derived.origin_type,
+            enviado_unidade or derived.partner_unit_id,
+        )
+
+    if enviado_tipo is not None and enviado_tipo != derived.origin_type:
+        raise ReportDomainError(
+            422,
+            "origem_divergente_do_exame",
+            "A origem enviada não corresponde ao local registrado no exame.",
+        )
+    if enviado_unidade is not None and enviado_unidade != derived.partner_unit_id:
+        raise ReportDomainError(
+            422,
+            "unidade_divergente_do_exame",
+            "A unidade enviada não corresponde à unidade vinculada ao exame.",
+        )
+    return derived.origin_type, derived.partner_unit_id
+
+
 def _origin_display(document: ReportDocument) -> str:
     base = ORIGIN_LABELS.get(document.origin_type or "", "origem não registrada")
     return f"{base} — {document.origin_label}" if document.origin_label else base
@@ -1346,6 +1426,10 @@ _EXAM_SEARCH_LIMIT = 40
 def search_exams_for_report(
     q: str | None = Query(default=None, max_length=120),
     somente_sem_laudo: bool = Query(default=False),
+    # M25.17 — modo técnico explícito. O padrão da operação é NÃO ver
+    # cadastro interno de teste; quem precisa auditar um cenário antigo
+    # pede por ele conscientemente.
+    incluir_arquivados: bool = Query(default=False),
     db: Session = Depends(get_db),
     _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
@@ -1399,6 +1483,8 @@ def search_exams_for_report(
             )
     if somente_sem_laudo:
         statement = statement.where(ReportDocument.id.is_(None))
+    if not incluir_arquivados:
+        statement = statement.where(Person.arquivado.is_(False))
     rows = db.execute(
         statement.order_by(SpirometryExam.created_at.desc()).limit(
             _EXAM_SEARCH_LIMIT
@@ -1424,6 +1510,12 @@ def search_exams_for_report(
             "report_code": document.public_code if document else None,
             "report_document_id": document.id if document else None,
             "report_status": document.status if document else None,
+            # M25.17 — o local do exame, já derivado, para a tela mostrar em
+            # modo somente leitura em vez de pedir origem + unidade. Quando
+            # o cadastro é inconsistente, vem `ok: false` com o que corrigir
+            # — a linha continua aparecendo, porque é assim que o operador
+            # descobre que existe algo a consertar.
+            "origem_derivada": derived_origin_payload(db, exam),
         }
         for exam, person, document in rows
     ]
@@ -1627,7 +1719,12 @@ async def upload_report_document(
     request: Request,
     exam_code: str = Form(...),
     physician_profile_id: str = Form(...),
-    origin_type: str = Form(...),
+    # M25.17 — origem e unidade deixaram de ser perguntadas ao operador e
+    # passaram a sair do exame (ver `report_origin.derive_report_origin`).
+    # Os campos continuam ACEITOS e opcionais por dois motivos: clientes
+    # antigos não quebram, e quando vêm preenchidos servem de conferência —
+    # divergir do que o exame diz é erro, não preferência do chamador.
+    origin_type: str | None = Form(default=None),
     origin_label: str | None = Form(default=None),
     origin_partner_unit_id: str | None = Form(default=None),
     file: UploadFile = File(...),
@@ -1636,11 +1733,19 @@ async def upload_report_document(
 ):
     exam = _get_exam_by_code_or_404(db, exam_code)
     profile, _account = _profile_for_assignment(db, physician_profile_id)
+    derived = _derived_origin_or_422(db, exam)
+    origem_final, unidade_final = _resolve_origin_with_override(
+        derived,
+        origin_type=origin_type,
+        partner_unit_id=origin_partner_unit_id,
+    )
+    # O rótulo livre continua sendo do operador (é texto operacional seguro,
+    # não decide local nem dinheiro); origem e unidade agora são do exame.
     safe_origin, safe_label, safe_unit = _validate_origin(
         db,
-        origin_type=origin_type,
+        origin_type=origem_final,
         origin_label=origin_label,
-        partner_unit_id=origin_partner_unit_id,
+        partner_unit_id=unidade_final,
     )
     settings = get_settings()
     raw = await _read_upload_bounded(
@@ -1698,6 +1803,11 @@ async def upload_report_document(
                 "exam_code": exam.public_code,
                 "status": document.status,
                 "origin_type": document.origin_type,
+                # M25.17 — de qual campo estruturado do exame o local saiu.
+                # Sem isso, um laudo com endereço errado não teria como ser
+                # rastreado até a decisão que o escolheu.
+                "origin_source": derived.source,
+                "origin_partner_unit_id": document.origin_partner_unit_id,
                 "physician_profile_id": profile.id,
                 "assignment_id": assignment.id,
                 "report_version_id": version.id,
@@ -1715,6 +1825,7 @@ async def upload_report_document(
 def list_report_documents_operational(
     status: str | None = None,
     exam_code: str | None = None,
+    incluir_arquivados: bool = False,
     db: Session = Depends(get_db),
     _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
@@ -1747,6 +1858,12 @@ def list_report_documents_operational(
                 422, "codigo_exame_invalido", "Código de exame inválido."
             )
         statement = statement.where(SpirometryExam.public_code == normalized)
+    if not incluir_arquivados:
+        # M25.17 — `is_not(True)` e não `is_(False)`: o join com Person é
+        # externo, então um laudo cujo exame perdeu a pessoa produz NULL
+        # aqui. Esse caso é defeito de dado e precisa continuar VISÍVEL no
+        # acompanhamento; `is_(False)` o esconderia junto com os testes.
+        statement = statement.where(Person.arquivado.is_not(True))
     rows = db.execute(
         statement.order_by(ReportDocument.created_at.desc()).limit(200)
     ).all()
@@ -1957,6 +2074,9 @@ def list_my_report_queue(
     db: Session = Depends(get_db),
     physician_user: User = Depends(get_current_user),
 ):
+    # M25.17 — a fila clínica NÃO tem modo técnico: a médica nunca deve
+    # receber cadastro de teste, nem por engano nem por parâmetro de URL.
+    # Auditar cenário antigo é trabalho de administração, em outra tela.
     profile = _require_active_physician(db, physician_user)
     if status and status not in CLINICAL_STATUSES:
         raise ReportDomainError(
@@ -1979,6 +2099,7 @@ def list_my_report_queue(
         # O nome do paciente entra na linha DEPOIS desse recorte, então não
         # amplia em nada o conjunto de laudos visível a ela.
         .where(ReportAssignment.physician_profile_id == profile.id)
+        .where(Person.arquivado.is_not(True))
     )
     if status:
         statement = statement.where(ReportDocument.status == status)
@@ -2101,31 +2222,18 @@ def download_report_version(
     version = _get_version_or_404(db, document_id, version_id)
     stored = _read_stored_version(version, missing_status=404)
     exam = db.get(SpirometryExam, document.spirometry_exam_id)
-    exam_code = (
-        exam.public_code
-        if exam is not None and _SAFE_EXAM_CODE_RE.fullmatch(exam.public_code)
-        else "ESP"
-    )
-    safe_kind = (
-        version.kind
-        if version.kind
-        in {
-            KIND_ORIGINAL,
-            KIND_RASCUNHO,
-            KIND_ASSINATURA_PENDENTE,
-            KIND_ASSINADO,
-            KIND_FINALIZADO_LEGADO,
-            KIND_LAUDO_PREVIA,
-            KIND_LAUDO_LIBERADO,
-            KIND_LAUDO_ADENDO,
-        }
-        else "documento"
-    )
-    # M25.2 — o nome deixa claro QUAL dos dois documentos foi baixado: o
-    # exame técnico da MIR ou o laudo médico da SoproLife.
-    prefix = "exame-tecnico-mir" if version.kind == KIND_ORIGINAL else "laudo"
-    safe_name = (
-        f"{prefix}-{exam_code}-v{version.version_number}-{safe_kind}.pdf"
+    person = db.get(Person, exam.person_id) if exam is not None else None
+    # M25.17 — nome humano. Antes saía
+    # `laudo-ESP-000017-v3-laudo_liberado.pdf`: correto e ilegível. Quem
+    # recebe o arquivo reconhece o paciente, não o código da versão.
+    #
+    # O texto do PDF continua sendo a autoridade sobre o tipo de liberação:
+    # "Assinado" aqui nomeia o ARQUIVO entregue, e não altera
+    # `signature_status`, o selo nem a declaração impressa.
+    safe_name = report_download_filename(
+        patient_name=person.nome_completo if person is not None else None,
+        fallback_code=document.public_code,
+        is_technical_exam=version.kind == KIND_ORIGINAL,
     )
     disposition = "attachment" if modo == "download" else "inline"
     audit(
@@ -2146,7 +2254,9 @@ def download_report_version(
         content=stored.data,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'{disposition}; filename="{safe_name}"',
+            "Content-Disposition": content_disposition(
+                safe_name, disposition=disposition
+            ),
             "Cache-Control": "private, no-store",
             "X-Content-Type-Options": "nosniff",
         },

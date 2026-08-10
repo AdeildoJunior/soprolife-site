@@ -10,7 +10,14 @@ from ..dates import parse_incomplete_date
 from ..db import get_db
 from ..domain import ensure_sem_pcmso
 from ..ids import allocate_public_code
-from ..models import Consultation, Lead, Person, SpirometryExam, User
+from ..models import (
+    Consultation,
+    Lead,
+    PartnerUnit,
+    Person,
+    SpirometryExam,
+    User,
+)
 from ..pagination import PageParams, paginate
 from ..schemas import (
     ConsultationCreate,
@@ -297,6 +304,67 @@ def update_exam(
     if payload.observacao is not None:
         exam.observacao = payload.observacao
         changed.append("observacao")
+    # M25.17 — local de realização. É o cadastro que o laudo passou a ler
+    # para derivar origem e unidade, então a coerência é validada AQUI, na
+    # escrita, e não só na hora de emitir: descobrir a contradição no
+    # momento de anexar o PDF foi justamente a falha do primeiro uso real.
+    if payload.modalidade is not None:
+        exam.modalidade = payload.modalidade
+        changed.append("modalidade")
+    if payload.partner_id is not None:
+        novo = payload.partner_id.strip() or None
+        if novo:
+            ensure_partner_exists(db, novo)
+        exam.partner_id = novo
+        changed.append("partner_id")
+    if payload.partner_unit_id is not None:
+        nova_unidade = payload.partner_unit_id.strip() or None
+        if nova_unidade:
+            unidade = db.get(PartnerUnit, nova_unidade)
+            if unidade is None or not unidade.ativo:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "codigo": "unidade_invalida",
+                        "mensagem": (
+                            "A unidade parceira informada não existe ou "
+                            "não está ativa."
+                        ),
+                    },
+                )
+            if exam.partner_id is None:
+                # Escolher "Pastore Ipanema" já diz que o parceiro é Pastore.
+                # Preencher sozinho evita obrigar o operador a informar duas
+                # vezes a mesma coisa — e a errar em uma delas.
+                exam.partner_id = unidade.partner_id
+                changed.append("partner_id")
+            elif unidade.partner_id != exam.partner_id:
+                # A unidade precisa pertencer ao parceiro do exame; sem isso
+                # o laudo imprimiria o endereço de uma clínica e o
+                # financeiro creditaria outra.
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "codigo": "unidade_de_outro_parceiro",
+                        "mensagem": (
+                            "A unidade informada pertence a outro parceiro."
+                        ),
+                    },
+                )
+        exam.partner_unit_id = nova_unidade
+        changed.append("partner_unit_id")
+    if {"modalidade", "partner_id", "partner_unit_id"} & set(changed):
+        if exam.partner_unit_id and exam.modalidade != "clinica_parceira":
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "codigo": "unidade_incompativel_com_modalidade",
+                    "mensagem": (
+                        "Unidade parceira só se aplica a exame de clínica "
+                        "parceira. Ajuste a modalidade ou remova a unidade."
+                    ),
+                },
+            )
     # recalcula/cancela o follow-up na MESMA transação da mudança de origem
     person = db.get(Person, exam.person_id)
     fup_info = _sync_exam_followup(db, person, exam)

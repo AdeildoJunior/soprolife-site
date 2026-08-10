@@ -36,6 +36,15 @@ ALLOWED_KEYS = {
     "qualified_signature", "addendum_sequence", "addendum_sha256",
     "supersedes_version_id", "size_bytes", "image_width", "image_height",
     "revoked_previous_asset_id",
+    # M25.17 — de qual campo estruturado do exame o local do laudo foi
+    # derivado, e qual unidade acabou gravada. São id e rótulo fechado de
+    # cadastro institucional (a clínica), nunca do paciente. Sem eles, um
+    # laudo impresso com o endereço errado não teria como ser rastreado até
+    # a decisão que escolheu aquele endereço.
+    "origin_source", "origin_partner_unit_id",
+    # Arquivamento de cadastro interno de teste: por que saiu da operação e
+    # o que saiu junto. `exames` e `laudos` são listas de código público.
+    "exames", "laudos",
 }
 
 _MAX_STR = 120

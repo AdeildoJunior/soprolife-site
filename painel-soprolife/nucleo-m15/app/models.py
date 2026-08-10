@@ -148,8 +148,33 @@ class Person(Base, TimestampMixin, LegacyMixin):
     # inferido: sem informação cadastrada o laudo imprime "não informado".
     sexo: Mapped[str | None] = mapped_column(String(20))
     observacao: Mapped[str | None] = mapped_column(Text)
+    # M25.17 — cadastro interno de teste, fora da operação normal.
+    #
+    # Segue a MESMA convenção de `Partner.arquivado` (M20): o registro nunca é
+    # apagado — sai das listas operacionais e continua íntegro para auditoria,
+    # versões e hashes. É o que permite tirar os cenários das M25.13/M25.14 da
+    # fila da médica sem destruir a evidência que provou aquelas missões.
+    #
+    # É um SINALIZADOR EXPLÍCITO, marcado registro a registro. A alternativa
+    # tentadora — esconder quem se chama "TESTE…" — transformaria o nome do
+    # paciente em regra de negócio: um paciente real chamado Teste sumiria da
+    # fila, e um registro de teste renomeado voltaria a aparecer.
+    arquivado: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, server_default="0"
+    )
+    arquivado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    arquivado_motivo: Mapped[str | None] = mapped_column(String(200))
     contacts: Mapped[list["PersonContact"]] = relationship(
         back_populates="person", lazy="selectin"
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "(arquivado = 0 AND arquivado_em IS NULL "
+            "AND arquivado_motivo IS NULL) OR "
+            "(arquivado = 1 AND arquivado_em IS NOT NULL "
+            "AND arquivado_motivo IS NOT NULL)",
+            name="arquivamento_com_evidencia",
+        ),
     )
 
 

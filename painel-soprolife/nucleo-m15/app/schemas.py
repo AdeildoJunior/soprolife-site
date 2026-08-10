@@ -177,6 +177,20 @@ class ExamUpdate(StrictModel):
     broncodilatador: bool | None = None
     responsavel: str | None = Field(default=None, max_length=120)
     observacao: str | None = Field(default=None, max_length=4000)
+    # M25.17 — local de realização editável.
+    #
+    # A M25.17 fez o laudo DERIVAR origem e unidade destes campos, em vez de
+    # perguntá-los ao operador. Isso só é honesto se existir onde corrigi-los:
+    # 13 dos 18 exames em produção vieram de importação sem `modalidade`, e
+    # sem esta edição a mensagem "corrija o cadastro do atendimento" apontaria
+    # para uma tela que não existe.
+    #
+    # `partner_unit_id` aceita string vazia para DESVINCULAR — distinguir
+    # "não mexa" (ausente) de "remova" (vazio) é necessário para desfazer um
+    # vínculo errado.
+    modalidade: Literal["residencial", "cowork", "clinica_parceira"] | None = None
+    partner_id: str | None = None
+    partner_unit_id: str | None = None
 
 
 class ConsultationCreate(StrictModel):

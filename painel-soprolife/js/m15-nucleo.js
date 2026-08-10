@@ -118,6 +118,41 @@
     };
   }
 
+  // M25.17 — lê o nome do arquivo de um Content-Disposition.
+  //
+  // Prefere `filename*` (RFC 5987, UTF-8 percent-encoded), que é quem
+  // carrega os acentos; `filename` ASCII é a reserva para o caso de o
+  // servidor mandar só ele. Devolve string vazia quando não dá para
+  // confiar no valor — aí quem chama decide o fallback.
+  function nomeDoContentDisposition(valor) {
+    if (!valor) return "";
+    var estendido = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(valor);
+    var nome = "";
+    if (estendido) {
+      try {
+        nome = decodeURIComponent(estendido[1]);
+      } catch (e) {
+        nome = "";
+      }
+    }
+    if (!nome) {
+      var simples = /filename\s*=\s*"([^"]*)"/i.exec(valor)
+        || /filename\s*=\s*([^;]+)/i.exec(valor);
+      if (simples) nome = simples[1].trim();
+    }
+    // Última barreira do lado do cliente: separador de caminho e caractere
+    // de controle nunca chegam ao atributo `download`. Espaço e hífen são
+    // preservados — fazem parte do nome pedido ("Fulano - Assinado.pdf").
+    // O filtro é por código de caractere, e não por classe de regex com
+    // escapes hexadecimais, para que nenhuma edição futura deste arquivo
+    // consiga gravar um byte de controle real no lugar do escape.
+    nome = nome.split("").filter(function (c) {
+      var codigo = c.charCodeAt(0);
+      return codigo >= 32 && codigo !== 127 && c !== '/' && c !== '\\';
+    }).join("").trim();
+    return nome === "." || nome === ".." ? "" : nome;
+  }
+
   function api(path, options) {
     // Guarda de contexto seguro (M15.5A): em origem bloqueada NENHUMA
     // requisição de autenticação sai do navegador — nem senha, nem token.
@@ -164,7 +199,17 @@
         if (contentType.indexOf("application/pdf") !== 0) {
           throw new Error("A API não devolveu um PDF válido para visualização.");
         }
-        return resp.blob();
+        // M25.17 — o nome do arquivo é decidido pelo SERVIDOR
+        // (Content-Disposition) e precisa sobreviver até o clique de
+        // download. Como a resposta vira um Blob e depois uma object URL, o
+        // navegador perde o cabeçalho: sem carregá-lo junto, o arquivo cai
+        // na pasta do usuário com um nome gerado, que foi exatamente o
+        // problema relatado.
+        var disposicao = resp.headers.get("Content-Disposition") || "";
+        return resp.blob().then(function (blob) {
+          blob.nomeSugerido = nomeDoContentDisposition(disposicao);
+          return blob;
+        });
       }
       return resp.json().catch(function () { return {}; }).then(function (body) {
         if (!resp.ok) {

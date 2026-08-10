@@ -59,7 +59,6 @@
     queue: [],
     operational: [],
     physicians: [],
-    units: [],
     signatureAsset: null,
     templates: [],
     adminAccounts: [],
@@ -1367,14 +1366,44 @@
       </label>`;
   }
 
+  // M25.17 — LOCAL DO EXAME, somente leitura.
+  //
+  // Três estados, e nenhum deles pede combinação ao operador:
+  //   derivado e completo   — mostra unidade e endereço;
+  //   derivado sem registro — diz que o atendimento não tem local e oferece
+  //                           completar, sem travar o envio;
+  //   cadastro contraditório — bloqueia, porque seguir imprimiria o
+  //                           endereço de uma clínica onde o exame não foi
+  //                           feito, e explica onde consertar.
+  function renderExamLocation(exame) {
+    const origem = exame && exame.origem_derivada;
+    if (!origem) return "";
+    if (!origem.ok) {
+      return `
+        <div class="report-location-readonly is-bloqueado" role="status">
+          <span class="report-field-label">Local do exame</span>
+          <strong>Cadastro do atendimento incompleto</strong>
+          <span>${esc(origem.mensagem || "")}</span>
+          <span class="report-help">${esc(origem.como_corrigir || "")}</span>
+        </div>`;
+    }
+    const incompleto = origem.completo === false;
+    return `
+      <div class="report-location-readonly${incompleto ? " is-incompleto" : ""}" role="status">
+        <span class="report-field-label">Local do exame</span>
+        <strong>${esc(origem.display_name || "—")}</strong>
+        ${origem.address_line
+          ? `<span>${esc(origem.address_line)}</span>` : ""}
+        <span class="report-help">${
+          incompleto
+            ? "O atendimento não registra onde o exame foi feito. O laudo sai sem endereço; complete o atendimento para que ele apareça."
+            : "Vem do atendimento e é o endereço impresso no laudo."
+        }</span>
+      </div>`;
+  }
+
   function renderOperationalWorkspace() {
     const semMedico = !(state.physicians || []).length;
-    const unitOptions = (state.units || []).map((unit) => {
-      const lugar = [unit.bairro, unit.cidade].filter(Boolean).join(", ");
-      return `<option value="${esc(unit.id)}">${esc(unit.nome)}${
-        lugar ? ` · ${esc(lugar)}` : ""
-      }</option>`;
-    }).join("");
     return `
       <div class="report-operational-shell">
         <section class="report-panel" aria-labelledby="uploadTitle">
@@ -1396,24 +1425,16 @@
             <form id="reportUploadForm" class="report-upload-form">
               <input type="hidden" name="exam_code" value="${esc(state.locatedExam.exam_code)}">
               ${renderPhysicianChooser()}
-              <label for="reportOriginType">Origem do exame
-                <select id="reportOriginType" name="origin_type" required>
-                  ${options(ORIGINS, "")}
-                </select>
-              </label>
-              <label for="reportOriginLabel">Rótulo operacional seguro (opcional)
-                <input id="reportOriginLabel" name="origin_label" maxlength="120"
-                  aria-describedby="originHelp">
-                <span id="originHelp" class="report-help">Não informe paciente, contato ou observação clínica.</span>
-              </label>
-              <label for="reportPartnerUnit">Unidade parceira (define o local no laudo)
-                <select id="reportPartnerUnit" name="origin_partner_unit_id">
-                  <option value="">Sem unidade — usar o rótulo da origem</option>
-                  ${unitOptions}
-                </select>
-                <span class="report-help">Só se aplica à origem “clínica
-                  parceira”. É daqui que sai o endereço impresso no laudo.</span>
-              </label>
+              ${/* M25.17 — o LOCAL deixou de ser pergunta.
+                    Antes havia dois campos livres, "Origem do exame" e
+                    "Unidade parceira", e cabia ao operador descobrir quais
+                    combinações o servidor aceita. No primeiro uso real isso
+                    custou um `unidade_origem_incompativel`: origem "Pastore"
+                    com unidade "Pastore Ipanema" é recusada, porque unidade
+                    só vale para "clínica parceira".
+                    O exame já sabia onde foi feito. Agora ele responde, e a
+                    tela apenas mostra — em modo leitura. */""}
+              ${renderExamLocation(state.locatedExam)}
               <label for="reportPdfFile">PDF original
                 <input id="reportPdfFile" name="file" type="file"
                   accept="application/pdf,.pdf" required>
@@ -1737,11 +1758,11 @@
         labels.push("operational");
         calls.push(client().api("/laudos/medicos-disponiveis"));
         labels.push("physicians");
-        // M25.4 — unidades para o seletor de local. Antes o formulário pedia
-        // o UUID da unidade digitado à mão, o que na prática significava
-        // deixar o campo vazio e perder o endereço no laudo.
-        calls.push(client().api("/unidades?tamanho=100"));
-        labels.push("units");
+        // M25.17 — a chamada a `/unidades` saiu junto com o seletor de
+        // unidade parceira. O local do exame vem resolvido dentro de
+        // `/laudos/exames` (`origem_derivada`), então baixar o catálogo de
+        // unidades a cada carga virou trabalho para uma lista que ninguém
+        // mais escolhe.
         // M25.12 — espirometrias recentes para escolher sem digitar código.
         // O motivo desta chamada é a falha relatada: o único caminho para
         // anexar um PDF era acertar de cabeça um código exato.
@@ -2234,7 +2255,10 @@
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = "";
+      // M25.17 — o nome vem do servidor (Content-Disposition), transportado
+      // pelo cliente da API. `download = ""` deixava o navegador inventar um
+      // nome a partir da object URL, que é o arquivo aleatório relatado.
+      anchor.download = blob.nomeSugerido || "";
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
@@ -2376,10 +2400,12 @@
       return;
     }
     const payload = new FormData();
-    [
-      "exam_code", "physician_profile_id", "origin_type",
-      "origin_label", "origin_partner_unit_id",
-    ].forEach((name) => payload.append(name, form.elements[name].value || ""));
+    // M25.17 — só o que ainda é decisão humana. Origem e unidade saem do
+    // exame no servidor; mandá-las daqui reintroduziria a chance de o
+    // formulário contradizer o atendimento.
+    ["exam_code", "physician_profile_id"].forEach(
+      (name) => payload.append(name, form.elements[name].value || "")
+    );
     payload.append("file", file);
     state.busy = true;
     announce("Validando, armazenando e atribuindo o PDF…", "");
