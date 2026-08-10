@@ -25,6 +25,7 @@
 | --- | --- |
 | `eb50cda` | O arquivo continuava saindo com nome aleatório — as duas causas, remoção do piloto, nova semântica, CPF |
 | `094bed4` | A data acima da assinatura ainda dizia "Liberado em" |
+| `20a6113` | Relatório desta missão |
 
 Integração por **fast-forward**. Nenhum `reset --hard`, `force push`,
 `force-with-lease` ou remoção de worktree.
@@ -254,7 +255,7 @@ continuaria em produção com o código já atualizado no disco.
 
 | Verificação | Resultado |
 | --- | --- |
-| HEAD da VPS | `eb50cda4ba97b4111df96e2ea79a19ab3401f600` |
+| HEAD da VPS | `20a6113e7d1b1025b73f9758b74a4470c835773d` |
 | `git status` da VPS | limpo |
 | Alembic | `d1e7b9c34a25 (head)` |
 | Health | `{"status":"ok","ambiente":"prod","banco":"ok"}` |
@@ -263,28 +264,19 @@ continuaria em produção com o código já atualizado no disco.
 | Serviços | `soprolife-m15-api`, `soprolife-painel`, `soprolife-painel-loopback` → `active` |
 | `M15_REPORTS_MODE` | **`pilot`** — não alterado |
 
-### Pendência de deploy
+### Deploy em duas etapas
 
-O commit **`094bed4`** (rótulo `Liberado em` → `Concluído em` no PDF) está
-commitado e **pushado para `origin`**, mas ainda **não aplicado na VPS**: o
-acesso SSH via Tailscale passou a exigir reautenticação humana no meio da
-última sessão.
+O deploy foi feito em duas etapas porque o acesso SSH via Tailscale passou a
+exigir reautenticação humana no meio da última sessão:
 
-É uma mudança **cosmética e isolada** — uma linha de rótulo no bloco de
-assinatura. Todo o restante da M25.18 (as duas correções do nome do arquivo,
-a remoção do piloto, o selo, o rodapé, o botão, o status, o CPF e a
-migration) já está em produção em `eb50cda`.
+| Etapa | Commits | Serviços reiniciados |
+| --- | --- | --- |
+| 1 | `eb50cda` — a missão inteira, com a migration | API + os **dois** que executam o proxy |
+| 2 | `094bed4` + `20a6113` — rótulo do PDF e relatório | somente a API (o diff toca apenas o gerador de PDF) |
 
-Para concluir, após reautenticar o Tailscale:
-
-```bash
-ssh root@soprolife-painel-01 'cd /opt/soprolife/soprolife-site \
-  && git fetch origin painel-soprolife-v01 \
-  && git merge --ff-only origin/painel-soprolife-v01 \
-  && systemctl restart soprolife-m15-api.service'
-```
-
-Não há migration nova nesse commit.
+Depois da reautenticação, a etapa 2 foi aplicada por fast-forward
+(`eb50cda → 20a6113`), sem migration nova — `alembic current` e
+`alembic heads` já coincidiam em `d1e7b9c34a25` — e verificada.
 
 ---
 
@@ -298,6 +290,7 @@ Sem criar paciente e sem alterar conteúdo clínico.
 | Nome inline (o que o visualizador recebe) | `inline; filename="ANTONIO LOPES DA SILVA - Para assinatura.pdf"; …` ✅ |
 | Cabeçalho sobrevive ao proxy | ✅ — era exatamente onde morria |
 | PDF novo sem faixa de piloto | ✅ |
+| Rótulo `Concluído em` (e nunca `Liberado em`) | ✅ — conferido após a etapa 2 |
 | Selo `CONCLUÍDO / PELA MÉDICA` | ✅ |
 | Rodapé aponta o arquivo assinado | ✅ |
 | Rubrica, CRM-RJ 52.62307-5, RQE 58224 | ✅ |
@@ -305,6 +298,10 @@ Sem criar paciente e sem alterar conteúdo clínico.
 | ICP-Brasil só na negativa | ✅ (1 ocorrência) |
 
 ### LAU-000003 / ANTONIO LOPES DA SILVA — intacto
+
+Reconferido ao final do deploy: `status=liberado`, `v3`,
+`sha256 526e46b044ddd80a…`, conclusão `Distúrbio ventilatório obstrutivo
+leve.` — os mesmos valores de antes da missão.
 
 **Nenhuma versão foi substituída.** O PDF já liberado permanece como estava;
 as mudanças de layout e semântica valem para **novos** documentos, conforme a
@@ -323,19 +320,18 @@ rubrica, ativo privado da médica.
 
 1. **Assinatura qualificada ICP-Brasil** — continua fora do sistema, por
    decisão desta missão. É o que mantém `reports_mode=pilot`.
-2. **Deploy de `094bed4`** — aguarda reautenticação do Tailscale (seção 10).
-3. **Anexar PDF assinado externamente** (seção 10 da missão, explicitamente
+2. **Anexar PDF assinado externamente** (seção 10 da missão, explicitamente
    opcional) — **não implementado**, para não bloquear o hotfix do nome do
    arquivo, como a própria missão autoriza. A infraestrutura mais próxima já
    existe (`/laudos/lote/enviar`, da M25.8, com SHA-256, versão separada,
    auditoria e validação de PDF); o que falta é o caminho de documento único
    e o estado "PDF assinado externamente recebido — validação da assinatura
    pendente". Próxima etapa natural.
-4. **Rodapé do fluxo legado M24C** ainda contém "PILOTO INTERNO" (seção 5).
-5. **CPF dos pacientes existentes** — nenhum foi preenchido
+3. **Rodapé do fluxo legado M24C** ainda contém "PILOTO INTERNO" (seção 5).
+4. **CPF dos pacientes existentes** — nenhum foi preenchido
    automaticamente; é trabalho humano de cadastro. O portão CFM continua
    contando a ausência como pendência por documento.
-6. **12 exames sem local registrado** e **`test_finance_duplicate_revenue_postgres.py`**
+5. **12 exames sem local registrado** e **`test_finance_duplicate_revenue_postgres.py`**
    — pendências herdadas das M25.15/M25.17, sem mudança.
 
 ---
