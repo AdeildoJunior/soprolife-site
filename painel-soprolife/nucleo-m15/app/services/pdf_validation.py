@@ -62,6 +62,22 @@ _FORBIDDEN_ANNOTATION_SUBTYPES = {
     "/Widget": "pdf_conteudo_ativo_formulario",
 }
 
+# M25.20 — o PDF que volta assinado por fora.
+#
+# Uma assinatura PAdES é gravada como campo de formulário: o documento ganha
+# um `/AcroForm` e uma anotação `/Widget`. Sem abrir exceção para esses dois,
+# NENHUM PDF assinado seria aceito de volta — o perfil padrão recusaria
+# justamente o arquivo que o fluxo inteiro existe para receber.
+#
+# A exceção é do tamanho exato do aparato de assinatura, e de mais nada.
+# `/XFA` continua proibido (formulário dinâmico é outra coisa, e perigosa),
+# assim como JavaScript, `/Launch`, arquivo embutido, mídia ativa,
+# `/OpenAction`, `/AA` e `/SubmitForm`. O grafo continua sendo percorrido
+# inteiro: um `/Widget` que carregue ação automática por dentro continua
+# sendo recusado pelas outras regras.
+_SIGNATURE_FORM_KEYS = frozenset({"/AcroForm"})
+_SIGNATURE_FORM_SUBTYPES = frozenset({"/Widget"})
+
 
 class InvalidPdfError(ValueError):
     """Erro de validação com código de domínio estável."""
@@ -130,11 +146,20 @@ def _uri_action_is_approved(value) -> bool:
     return origin is not None and origin in APPROVED_EXTERNAL_URI_ORIGINS
 
 
-def _validate_no_active_content(reader: PdfReader) -> None:
+def _validate_no_active_content(
+    reader: PdfReader, *, allow_signature_form: bool = False
+) -> None:
     """Percorre o grafo PDF com detecção de ciclos, sem ler streams binários."""
     seen_indirect: set[tuple[int, int]] = set()
     seen_direct: set[int] = set()
     visited = 0
+    chaves_proibidas = dict(_FORBIDDEN_KEYS)
+    subtipos_proibidos = dict(_FORBIDDEN_ANNOTATION_SUBTYPES)
+    if allow_signature_form:
+        for chave in _SIGNATURE_FORM_KEYS:
+            chaves_proibidas.pop(chave, None)
+        for subtipo in _SIGNATURE_FORM_SUBTYPES:
+            subtipos_proibidos.pop(subtipo, None)
 
     def walk(value, *, automatic_action: bool = False, depth: int = 0) -> None:
         nonlocal visited
@@ -170,7 +195,7 @@ def _validate_no_active_content(reader: PdfReader) -> None:
 
         if isinstance(value, (DictionaryObject, dict)):
             string_keys = {str(key): item for key, item in value.items()}
-            for key, codigo in _FORBIDDEN_KEYS.items():
+            for key, codigo in chaves_proibidas.items():
                 if key in string_keys:
                     raise InvalidPdfError(
                         codigo,
@@ -184,9 +209,9 @@ def _validate_no_active_content(reader: PdfReader) -> None:
                     "PDF contém ação ativa não permitida.",
                 )
             subtype = str(_resolved_scalar(string_keys.get("/Subtype", "")))
-            if subtype in _FORBIDDEN_ANNOTATION_SUBTYPES:
+            if subtype in subtipos_proibidos:
                 raise InvalidPdfError(
-                    _FORBIDDEN_ANNOTATION_SUBTYPES[subtype],
+                    subtipos_proibidos[subtype],
                     "PDF contém mídia ativa, formulário ou anexo não permitido.",
                 )
             if action_type == "/URI" and not _uri_action_is_approved(
@@ -228,7 +253,16 @@ def validate_pdf_bytes(
     max_size_bytes: int,
     declared_content_type: str | None = None,
     max_pages: int = MAX_PAGES,
+    allow_signature_form: bool = False,
 ) -> ValidatedPdf:
+    """Valida bytes de PDF hostil. Fail-closed em todos os caminhos.
+
+    `allow_signature_form` só deve ser ligado para o PDF que volta assinado
+    de fora (M25.20): ele libera `/AcroForm` e `/Widget`, que são a forma
+    como uma assinatura PAdES é gravada, e nada além disso. O padrão
+    continua sendo o perfil fechado.
+    """
+
     if not data:
         raise InvalidPdfError("pdf_vazio", "Arquivo vazio.")
     if len(data) > max_size_bytes:
@@ -283,7 +317,9 @@ def validate_pdf_bytes(
             f"PDF excede o limite de {max_pages} páginas.",
         )
 
-    _validate_no_active_content(reader)
+    _validate_no_active_content(
+        reader, allow_signature_form=allow_signature_form
+    )
 
     return ValidatedPdf(
         sha256=hashlib.sha256(data).hexdigest(),

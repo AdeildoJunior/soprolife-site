@@ -83,8 +83,16 @@ def test_fk_ciclica_e_preseed_pg(pg_engine):
     fks = {fk["name"] for fk in insp.get_foreign_keys("partner_referrals")}
     assert "fk_partner_referrals_financial_entry_id_financial_entries" in fks
     with pg_engine.connect() as conn:
-        count = conn.execute(text("SELECT count(*) FROM code_sequences")).scalar()
-        assert count == 13
+        prefixos = sorted(
+            r[0] for r in conn.execute(text("SELECT prefix FROM code_sequences"))
+        )
+    # M25.20 — ancorado em `PREFIXES` e não num número fixo: a asserção passa
+    # a provar que TODO prefixo emitido pela aplicação tem sequência
+    # preseedada, em vez de apenas contar linhas. Uma entidade nova que
+    # esqueça a migration falha aqui, e não na primeira alocação real.
+    from app.ids import PREFIXES
+
+    assert prefixos == sorted(PREFIXES.values())
 
 
 def test_audit_append_only_trigger_pg(pg_engine):

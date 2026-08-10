@@ -7,6 +7,7 @@ existe na M15. Dados históricos permanecem apenas nas fontes legadas.
 from datetime import date
 from decimal import Decimal
 import re
+import unicodedata
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -1084,3 +1085,86 @@ class BatchDownloadRequest(BaseModel):
         if len(set(limpos)) != len(limpos):
             raise ValueError("A seleção tem laudos repetidos.")
         return limpos
+
+
+# --------------------------------------------- M25.20 — assinatura externa
+
+
+class SignatureBatchDownloadRequest(BaseModel):
+    """Quais laudos concluídos a médica quer levar para assinar.
+
+    Diferente da M25.8, aqui a seleção é OBRIGATÓRIA e explícita. "Baixar
+    tudo" sem escolher já produziu, na prática, pacotes com laudos que a
+    médica não pretendia assinar naquele momento; a tela oferece
+    "Selecionar todos", que preenche a lista de forma visível.
+    """
+
+    document_ids: list[str] = Field(min_length=1, max_length=200)
+
+    @field_validator("document_ids")
+    @classmethod
+    def _sem_vazios(cls, value: list[str]) -> list[str]:
+        limpos = [item.strip() for item in value if item and item.strip()]
+        if not limpos:
+            raise ValueError("Selecione ao menos um laudo.")
+        if len(set(limpos)) != len(limpos):
+            raise ValueError("A seleção tem laudos repetidos.")
+        return limpos
+
+
+class SignatureBatchConfirmRequest(BaseModel):
+    """Confirmação ÚNICA do lote conferido.
+
+    A médica confirma o lote inteiro uma vez, depois de ver a tela de
+    conferência. `signed_document_ids` é o recorte que ela aceitou — sempre
+    um subconjunto do que o servidor identificou naquele lote.
+    """
+
+    batch_id: str = Field(min_length=1, max_length=36)
+    signed_document_ids: list[str] = Field(min_length=1, max_length=200)
+
+    @field_validator("signed_document_ids")
+    @classmethod
+    def _sem_vazios(cls, value: list[str]) -> list[str]:
+        limpos = [item.strip() for item in value if item and item.strip()]
+        if not limpos:
+            raise ValueError("Nenhum documento foi confirmado.")
+        if len(set(limpos)) != len(limpos):
+            raise ValueError("A confirmação tem documentos repetidos.")
+        return limpos
+
+
+class ExternalValidationRequest(BaseModel):
+    """Registro de uma conferência de assinatura feita FORA da SoproLife.
+
+    O sistema não valida a cadeia ICP-Brasil. O que é gravado aqui é o
+    testemunho de que alguém conferiu em um validador externo — e o registro
+    diz exatamente isso. Nunca guarda senha, certificado ou chave.
+    """
+
+    metodo: Literal["validar_iti", "conferencia_externa_equivalente"]
+    confirmacao: str = Field(min_length=1, max_length=120)
+    referencia: str | None = Field(default=None, max_length=200)
+
+    @field_validator("confirmacao")
+    @classmethod
+    def _confirmacao_consciente(cls, value: str) -> str:
+        esperado = "confirmo a conferencia externa"
+        normalizado = (
+            unicodedata.normalize("NFKD", value.strip().lower())
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+        if normalizado != esperado:
+            raise ValueError(
+                "Digite 'Confirmo a conferência externa' para registrar."
+            )
+        return value.strip()
+
+    @field_validator("referencia")
+    @classmethod
+    def _referencia_limpa(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        limpo = value.strip()
+        return limpo or None

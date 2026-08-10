@@ -1049,6 +1049,17 @@ VERSAO_TIPO_FINALIZADO = "finalizado"
 VERSAO_TIPO_LAUDO_PREVIA = "laudo_previa"
 VERSAO_TIPO_LAUDO_LIBERADO = "laudo_liberado"
 VERSAO_TIPO_LAUDO_ADENDO = "laudo_adendo"
+# M25.20 — o PDF que VOLTA assinado por fora, com o certificado da médica.
+#
+# É uma versão NOVA e separada: o laudo concluído para assinatura e o PDF
+# técnico da MIR continuam intactos, cada um na sua versão. Sobrescrever
+# qualquer um dos dois apagaria justamente a prova de que o arquivo assinado
+# corresponde ao que foi concluído.
+#
+# O nome NÃO diz "validado": receber um PDF que parece assinado não é o
+# mesmo que ter conferido a cadeia ICP-Brasil. O que o sistema fez até aqui
+# foi RECEBER e PAREAR — a validação vive em `external_signed_documents`.
+VERSAO_TIPO_LAUDO_ASSINADO_EXTERNO = "laudo_assinado_externo_recebido"
 VERSAO_TIPO_VALUES = (
     VERSAO_TIPO_ORIGINAL,
     VERSAO_TIPO_RASCUNHO,
@@ -1058,6 +1069,7 @@ VERSAO_TIPO_VALUES = (
     VERSAO_TIPO_LAUDO_PREVIA,
     VERSAO_TIPO_LAUDO_LIBERADO,
     VERSAO_TIPO_LAUDO_ADENDO,
+    VERSAO_TIPO_LAUDO_ASSINADO_EXTERNO,
 )
 # Versões que representam o laudo médico próprio (baixável separadamente do
 # PDF técnico da MIR).
@@ -1577,7 +1589,11 @@ class ReportDocumentVersion(Base):
     report_document_id: Mapped[str] = mapped_column(
         String(UUID_LEN), ForeignKey("report_documents.id"), index=True, nullable=False
     )
-    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # original|rascunho|finalizado
+    # M25.20 — 40 caracteres. Era String(20), estreito demais para
+    # `laudo_assinado_externo_recebido`. Alargar é aditivo: nenhum valor
+    # existente muda, e o CHECK `kind_valido` continua sendo quem decide
+    # quais tipos são aceitos de fato.
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)  # original|rascunho|finalizado
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_path: Mapped[str] = mapped_column(String(300), nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -1810,6 +1826,218 @@ class ReportSignature(Base, TimestampMixin):
     error_message: Mapped[str | None] = mapped_column(String(300))
     __table_args__ = (
         CheckConstraint(f"status IN {SIGNATURE_STATUS_VALUES!r}", name="status_valido"),
+    )
+
+
+# ----------------------------------------------- M25.20 — assinatura externa
+# em lote. A médica lauda um a um; o trabalho burocrático seguinte é o que
+# acontece em lote.
+
+
+# Direção de um lote. Baixar e devolver são eventos distintos e auditáveis
+# separadamente: um lote baixado pode nunca voltar, e um lote que volta pode
+# misturar laudos de vários downloads.
+BATCH_DIRECAO_DOWNLOAD = "download"
+BATCH_DIRECAO_UPLOAD = "upload"
+BATCH_DIRECAO_VALUES = (BATCH_DIRECAO_DOWNLOAD, BATCH_DIRECAO_UPLOAD)
+
+# Como o arquivo devolvido foi amarrado ao laudo de origem. A ordem é a da
+# confiança: metadado carimbado > código impresso no conteúdo > código de
+# verificação. O nome do arquivo NUNCA aparece aqui, porque nome de arquivo
+# não é identificação — é pista.
+PAREAMENTO_METADADO = "metadado_soprolife"
+PAREAMENTO_CODIGO_LAUDO = "codigo_laudo_no_conteudo"
+PAREAMENTO_CODIGO_VALIDACAO = "codigo_validacao_no_conteudo"
+PAREAMENTO_VALUES = (
+    PAREAMENTO_METADADO,
+    PAREAMENTO_CODIGO_LAUDO,
+    PAREAMENTO_CODIGO_VALIDACAO,
+)
+
+# Ciclo do documento assinado que voltou.
+#
+# `recebido_validacao_pendente` é o estado HONESTO logo após o upload:
+# o arquivo chegou e foi pareado, mas ninguém verificou criptograficamente a
+# cadeia ICP-Brasil. Só a conferência externa registrada por um administrador
+# leva a `validado_externamente` — e mesmo esse nome diz quem validou (alguém,
+# fora daqui), não que a SoproLife validou.
+ASSINADO_EM_CONFERENCIA = "em_conferencia"
+ASSINADO_RECEBIDO_VALIDACAO_PENDENTE = "recebido_validacao_pendente"
+ASSINADO_VALIDADO_EXTERNAMENTE = "validado_externamente"
+ASSINADO_ENTREGUE = "entregue"
+ASSINADO_STATUS_VALUES = (
+    ASSINADO_EM_CONFERENCIA,
+    ASSINADO_RECEBIDO_VALIDACAO_PENDENTE,
+    ASSINADO_VALIDADO_EXTERNAMENTE,
+    ASSINADO_ENTREGUE,
+)
+
+
+class ExternalSignatureBatch(Base):
+    """Um download ou uma devolução em lote — BAT-000001.
+
+    Existe para auditoria: responde "que arquivos saíram juntos, para quem,
+    quando" sem precisar reconstruir isso a partir de timestamps soltos. O
+    código público NÃO é protagonista na interface (M25.20 §19): a tela fala
+    em médica, data e quantidade.
+    """
+
+    __tablename__ = "external_signature_batches"
+    id: Mapped[str] = mapped_column(
+        String(UUID_LEN), primary_key=True, default=new_uuid
+    )
+    public_code: Mapped[str] = mapped_column(
+        String(12), unique=True, nullable=False
+    )
+    direction: Mapped[str] = mapped_column(String(12), nullable=False)
+    physician_profile_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("physician_profiles.id"),
+        nullable=False,
+        index=True,
+    )
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id"), nullable=False
+    )
+    # Quantos documentos o lote carregou. No download é o que entrou no ZIP;
+    # no upload é quantos ARQUIVOS chegaram — inclusive os não identificados,
+    # que não viram linha em `external_signed_documents` mas precisam ser
+    # contados para a conferência bater.
+    document_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    __table_args__ = (
+        CheckConstraint(
+            f"direction IN {BATCH_DIRECAO_VALUES!r}", name="direction_valida"
+        ),
+        CheckConstraint("document_count >= 0", name="document_count_nao_negativo"),
+    )
+
+
+class ExternalSignedDocument(Base):
+    """Um PDF assinado que VOLTOU e foi pareado com segurança.
+
+    Um arquivo que não pôde ser identificado com segurança NUNCA vira linha
+    aqui: ele é reportado na conferência e devolvido à médica como "não
+    identificado". Associar por semelhança de nome seria o modo mais fácil de
+    anexar o laudo assinado ao paciente errado.
+
+    A versão do PDF recebido é uma versão NOVA em `report_document_versions`;
+    esta tabela guarda a evidência do recebimento e o ciclo de validação.
+    """
+
+    __tablename__ = "external_signed_documents"
+    id: Mapped[str] = mapped_column(
+        String(UUID_LEN), primary_key=True, default=new_uuid
+    )
+    report_document_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("report_documents.id"),
+        nullable=False,
+        index=True,
+    )
+    # A versão criada para os bytes assinados recebidos.
+    report_document_version_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("report_document_versions.id"),
+        unique=True,
+        nullable=False,
+    )
+    # A versão CONCLUÍDA que originou o arquivo — o "laudo para assinatura"
+    # que a médica levou para fora. Sem ela não há como provar depois que o
+    # assinado corresponde ao que foi concluído.
+    source_version_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("report_document_versions.id"),
+        nullable=False,
+    )
+    source_sha256: Mapped[str | None] = mapped_column(String(64))
+    batch_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("external_signature_batches.id"),
+        nullable=False,
+        index=True,
+    )
+    physician_profile_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("physician_profiles.id"),
+        nullable=False,
+        index=True,
+    )
+    uploader_user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id"), nullable=False
+    )
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Nome COMO CHEGOU, para a médica reconhecer o arquivo na conferência.
+    # Pode ter sido reescrito pelo iPhone ou pelo assinador; é registro do
+    # que aconteceu, nunca critério de pareamento.
+    received_filename: Mapped[str | None] = mapped_column(String(260))
+    match_method: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(40), default=ASSINADO_EM_CONFERENCIA, nullable=False
+    )
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    # ------------------------------------------------ conferência externa
+    # Quem conferiu a assinatura FORA daqui (Validar ITI ou equivalente) e
+    # registrou o resultado. Nunca guarda senha, certificado nem chave.
+    validated_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    validated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    validation_method: Mapped[str | None] = mapped_column(String(40))
+    validation_reference: Mapped[str | None] = mapped_column(String(200))
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    delivered_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    __table_args__ = (
+        # Idempotência: o MESMO arquivo reenviado para o MESMO laudo não cria
+        # uma segunda versão. É o caso real de quem manda o lote duas vezes
+        # por não ter certeza se o primeiro envio funcionou.
+        UniqueConstraint(
+            "report_document_id", "sha256", name="uq_assinado_documento_sha256"
+        ),
+        CheckConstraint(
+            f"match_method IN {PAREAMENTO_VALUES!r}", name="match_method_valido"
+        ),
+        CheckConstraint(
+            f"status IN {ASSINADO_STATUS_VALUES!r}", name="assinado_status_valido"
+        ),
+        CheckConstraint("size_bytes > 0", name="assinado_size_bytes_positivo"),
+        # Validação externa é tudo-ou-nada: quem validou, quando e por qual
+        # método andam juntos. Meia evidência não é evidência.
+        CheckConstraint(
+            "("
+            "validated_by_user_id IS NULL AND validated_at IS NULL AND "
+            "validation_method IS NULL"
+            ") OR ("
+            "validated_by_user_id IS NOT NULL AND validated_at IS NOT NULL AND "
+            "validation_method IS NOT NULL"
+            ")",
+            name="validacao_externa_coerente",
+        ),
+        # Não existe "validado externamente" sem quem validou.
+        CheckConstraint(
+            "status NOT IN ('validado_externamente', 'entregue') OR "
+            "validated_by_user_id IS NOT NULL",
+            name="status_validado_exige_validador",
+        ),
     )
 
 

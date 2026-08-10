@@ -106,6 +106,21 @@
     batchSelection: [],
     batchResults: null,
     batchBusy: false,
+    // ----------------------------------------------------------- M25.20
+    // Central de assinatura externa. A médica lauda um a um; aqui ela
+    // resolve em lote o que vem DEPOIS de concluir.
+    //
+    // `signaturePending` é a lista que o servidor diz estar aguardando
+    // assinatura — nunca uma lista montada no navegador. `signatureSelection`
+    // são os ids marcados. `signatureReview` é a conferência devolvida pelo
+    // upload, que fica na tela até a médica confirmar ou descartar.
+    signaturePending: [],
+    signatureSelection: [],
+    signatureReview: null,
+    signatureBusy: false,
+    // Fila de entrega da administração e o estado filtrado na tela.
+    deliveryQueue: null,
+    deliveryFilter: "",
     profileError: "",
     busy: false,
     notice: "",
@@ -239,6 +254,10 @@
       laudo_previa: "Prévia do laudo",
       laudo_liberado: "Laudo concluído",
       laudo_adendo: "Laudo com adendo",
+      // M25.20 — o arquivo que voltou assinado por fora. O rótulo diz
+      // "recebido", e não "validado": a cadeia ICP-Brasil não foi conferida
+      // por este sistema.
+      laudo_assinado_externo_recebido: "Assinado recebido — validação pendente",
     }[value] || value || "Versão";
   }
 
@@ -1166,9 +1185,142 @@
       </section>`;
   }
 
+  // ------------------------------- M25.20 — central de assinatura externa
+  //
+  // Seção própria, acima da bancada: é o primeiro lugar onde a médica olha
+  // quando volta de uma sessão de assinatura. Toda a interação é por toque —
+  // nenhum caminho depende de arrastar arquivo, clique direito ou desktop.
+
+  function renderSignatureCenter() {
+    const lista = state.signaturePending;
+    const marcados = state.signatureSelection.length;
+    const corpo = lista.length
+      ? lista.map(renderSignatureItem).join("")
+      : `<p class="report-signature-empty">
+           Nenhum laudo aguardando assinatura.
+         </p>`;
+    return `
+      <section class="report-panel report-signature"
+        aria-labelledby="signatureCenterTitle">
+        <div class="report-panel-heading">
+          <div>
+            <p class="eyebrow">Assinatura externa</p>
+            <h3 id="signatureCenterTitle">
+              Aguardando assinatura qualificada — ${lista.length}
+            </h3>
+          </div>
+        </div>
+
+        ${lista.length ? `
+          <div class="report-signature-actions">
+            <button type="button" class="m15-btn" data-signature-all>
+              ${marcados === lista.length
+                ? "Limpar seleção" : "Selecionar todos"}
+            </button>
+            <button type="button" class="m15-btn m15-btn-primary"
+              data-signature-download${
+                state.signatureBusy || !marcados ? " disabled" : ""
+              }>
+              ${marcados
+                ? `Baixar ${marcados} para assinatura`
+                : "Baixar selecionados para assinatura"}
+            </button>
+          </div>` : ""}
+
+        <div class="report-signature-list" role="group"
+          aria-label="Laudos aguardando assinatura qualificada">
+          ${corpo}
+        </div>
+
+        ${renderSignatureUpload()}
+        ${state.signatureReview ? renderSignatureReview() : ""}
+      </section>`;
+  }
+
+  function renderSignatureItem(item) {
+    const marcado = state.signatureSelection.includes(item.document_id);
+    // `<label>` embrulhando o input: a área de toque passa a ser a linha
+    // inteira, e não um quadradinho de 13px. É o que torna a seleção
+    // possível num iPhone sem zoom.
+    return `
+      <label class="report-signature-item${marcado ? " is-picked" : ""}">
+        <input type="checkbox" data-signature-pick="${esc(item.document_id)}"
+          ${marcado ? "checked" : ""}>
+        <span class="report-signature-body">
+          <strong class="report-signature-name">${
+            esc(patientName(item))
+          }</strong>
+          <span class="report-signature-context">${contextLine(item)}</span>
+          ${codeTrail(item)}
+        </span>
+      </label>`;
+  }
+
+  function renderSignatureUpload() {
+    return `
+      <div class="report-signature-return">
+        <h4>Enviar lote assinado</h4>
+        <p class="report-help">
+          Selecione os PDFs assinados, ou um único ZIP com todos. Nada é
+          gravado antes de você conferir a lista.
+        </p>
+        <label class="report-signature-upload">
+          <span class="report-signature-upload-label">
+            Selecionar PDFs assinados
+          </span>
+          <input type="file" id="reportSignatureUpload" multiple
+            accept=".pdf,application/pdf,.zip,application/zip"
+            data-signature-upload${state.signatureBusy ? " disabled" : ""}>
+        </label>
+      </div>`;
+  }
+
+  function renderSignatureReview() {
+    const revisao = state.signatureReview;
+    const resumo = revisao.resumo || {};
+    const linhas = (revisao.arquivos || []).map((item) => `
+      <li class="report-signature-result${
+        item.ok ? " is-ok" : " is-problem"
+      }">
+        <span class="report-signature-mark" aria-hidden="true">${
+          item.ok ? "✓" : "⚠"
+        }</span>
+        <span class="report-signature-result-body">
+          <strong>${esc(item.paciente || item.arquivo)}</strong>
+          ${item.codigo_laudo
+            ? `<span>${esc(item.codigo_laudo)}</span>` : ""}
+          <em>${esc(item.mensagem || "")}</em>
+        </span>
+      </li>`).join("");
+    const identificados = resumo.identificados || 0;
+    return `
+      <div class="report-signature-review" role="status" aria-live="polite">
+        <h4>Arquivos recebidos — ${resumo.total || 0}</h4>
+        <ul class="report-signature-results">${linhas}</ul>
+        <p class="report-signature-summary">
+          <strong>${identificados}</strong> identificado(s),
+          <strong>${resumo.com_problema || 0}</strong> com problema.
+        </p>
+        ${identificados ? `
+          <button type="button" class="m15-btn m15-btn-primary"
+            data-signature-confirm${state.signatureBusy ? " disabled" : ""}>
+            Confirmar ${identificados} identificado(s)
+          </button>` : ""}
+        <button type="button" class="m15-btn" data-signature-discard>
+          ${identificados ? "Cancelar" : "Fechar"}
+        </button>
+        ${resumo.com_problema ? `
+          <p class="report-help">
+            Os arquivos com problema não foram associados a nenhum laudo e
+            não serão gravados. Confira e envie novamente.
+          </p>` : ""}
+      </div>`;
+  }
+
   function renderPhysicianWorkspace() {
     return `
       <div class="report-physician-shell">
+        ${renderSignatureCenter()}
         ${renderQueue()}
         ${renderPhysicianDetail()}
       </div>`;
@@ -1463,8 +1615,101 @@
               código — para anexar o PDF. A atribuição só é criada depois que
               um exame exato for escolhido.</p>`}
         </section>
+        ${renderDeliveryQueue()}
         ${renderOperationalList()}
       </div>`;
+  }
+
+  // ------------------------------ M25.20 — fila de entrega administrativa
+  //
+  // Os cinco estados do percurso do documento até o paciente. Todos são
+  // DERIVADOS do que está gravado — nenhum é um campo que alguém marca à
+  // mão. A transição para "assinado recebido" acontece sozinha quando a
+  // médica confirma o lote devolvido: ninguém avisa a administração por
+  // WhatsApp de que os laudos voltaram.
+
+  function renderDeliveryQueue() {
+    const fila = state.deliveryQueue;
+    if (!fila) return "";
+    const chips = (fila.estados || []).map((estado) => `
+      <button type="button" class="report-delivery-chip${
+        state.deliveryFilter === estado.chave ? " is-active" : ""
+      }" data-delivery-filter="${esc(estado.chave)}">
+        ${esc(estado.rotulo)} <span>${estado.total}</span>
+      </button>`).join("");
+    const visiveis = state.deliveryFilter
+      ? (fila.itens || []).filter((i) => i.estado === state.deliveryFilter)
+      : (fila.itens || []);
+    const linhas = visiveis.length
+      ? visiveis.map(renderDeliveryRow).join("")
+      : `<p class="report-help">Nenhum laudo neste estado.</p>`;
+    return `
+      <section class="report-panel report-delivery"
+        aria-labelledby="deliveryQueueTitle">
+        <div class="report-panel-heading">
+          <div>
+            <p class="eyebrow">Entrega</p>
+            <h3 id="deliveryQueueTitle">Fila de laudos</h3>
+          </div>
+        </div>
+        <div class="report-delivery-chips">
+          <button type="button" class="report-delivery-chip${
+            state.deliveryFilter ? "" : " is-active"
+          }" data-delivery-filter="">Todos</button>
+          ${chips}
+        </div>
+        <div class="report-delivery-list">${linhas}</div>
+      </section>`;
+  }
+
+  function renderDeliveryRow(item) {
+    const assinado = item.assinado;
+    return `
+      <div class="report-delivery-row report-delivery-${esc(item.estado)}">
+        <div class="report-delivery-body">
+          <strong class="report-item-name">${esc(patientName(item))}</strong>
+          <span>${contextLine(item)}</span>
+          ${codeTrail(item)}
+          <span class="report-delivery-state">${esc(item.estado_rotulo)}</span>
+          ${assinado ? `
+            <span class="report-delivery-note">
+              ${esc(assinado.pareado_por_rotulo || "")}
+              ${/* A negativa fica na tela, e não só na API: uma linha que
+                    diga só "assinado" convida a conclusão errada. */""}
+              — a SoproLife não verificou a assinatura criptograficamente.
+            </span>` : ""}
+        </div>
+        <div class="report-delivery-actions">
+          <a class="m15-btn" download
+            href="${esc(apiHref(`/laudos/${item.document_id}/exame-tecnico/conteudo`))}">
+            Baixar exame técnico
+          </a>
+          ${assinado ? `
+            <a class="m15-btn" download
+              href="${esc(apiHref(`/laudos/${item.document_id}/assinado/conteudo`))}">
+              Baixar laudo assinado
+            </a>` : ""}
+          ${assinado && assinado.status === "recebido_validacao_pendente"
+            ? `<button type="button" class="m15-btn m15-btn-primary"
+                 data-delivery-validate="${esc(assinado.signed_document_id)}">
+                 Registrar validação da assinatura
+               </button>` : ""}
+          ${assinado && assinado.status === "validado_externamente"
+            ? `<button type="button" class="m15-btn"
+                 data-delivery-deliver="${esc(assinado.signed_document_id)}">
+                 Marcar como entregue
+               </button>` : ""}
+        </div>
+      </div>`;
+  }
+
+  // Link de download autenticado pelo COOKIE de sessão — um `<a download>`
+  // não manda cabeçalho `Authorization`. É o mesmo caminho que a M25.18
+  // abriu para o visualizador de PDF, e por isso só é oferecido quando há
+  // sessão de verdade.
+  function apiHref(path) {
+    const c = client();
+    return c && c.hasSession() ? c.apiUrl(path) : "#";
   }
 
   function renderProfileAdmin() {
@@ -1716,6 +1961,12 @@
         labels.push("queue");
         calls.push(client().api("/laudos/templates?catalog=clinical"));
         labels.push("templates");
+        // M25.20 — o que está aguardando assinatura qualificada. Lista
+        // própria, e não um filtro da fila clínica: o recorte é do
+        // servidor (laudo concluído, desta médica, ainda sem assinado
+        // recebido) e o navegador nunca o recalcula.
+        calls.push(client().api("/laudos/assinatura-externa/pendentes"));
+        labels.push("signaturePending");
       }
       if (can("operacional")) {
         calls.push(client().api("/laudos"));
@@ -1737,6 +1988,11 @@
         // navegador exigiria baixar a base de pessoas inteira para a tela.
         calls.push(client().api("/laudos/exames?somente_sem_laudo=true"));
         labels.push("recentExams");
+        // M25.20 — a fila de entrega, com os cinco estados do percurso do
+        // documento. Os estados são derivados no servidor; o navegador só
+        // filtra o que já recebeu.
+        calls.push(client().api("/laudos/assinatura-externa/fila"));
+        labels.push("deliveryQueue");
       }
       if (can("admin")) {
         calls.push(client().api("/laudos/admin/medicos"));
@@ -2072,6 +2328,182 @@
       announce(readableError(error), "erro");
     } finally {
       state.batchBusy = false;
+      render();
+    }
+  }
+
+  // ------------------------ M25.20 — central de assinatura externa em lote
+
+  async function downloadForSignature() {
+    if (!state.signatureSelection.length) return;
+    const total = state.signatureSelection.length;
+    state.signatureBusy = true;
+    announce(
+      total === 1
+        ? "Preparando o laudo para assinatura…"
+        : `Preparando ${total} laudos para assinatura…`,
+      ""
+    );
+    render();
+    try {
+      const blob = await client().apiBlob("/laudos/assinatura-externa/baixar", {
+        method: "POST",
+        body: JSON.stringify({ document_ids: state.signatureSelection }),
+      });
+      // O nome vem do servidor pelo `Content-Disposition`: é ele que sabe se
+      // saiu um PDF com o nome da paciente ou o ZIP do dia.
+      saveBlob(blob);
+      state.signatureSelection = [];
+      announce(
+        total === 1
+          ? "Laudo baixado. Assine e devolva aqui."
+          : "Pacote baixado. Assine os PDFs e devolva aqui.",
+        "ok"
+      );
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.signatureBusy = false;
+      render();
+    }
+  }
+
+  // Download por âncora, com o nome que o servidor mandou. Sem isso o
+  // navegador salva um nome aleatório vindo da object URL — a falha que a
+  // M25.18 rastreou até o `Content-Disposition` descartado.
+  function saveBlob(blob) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = blob.nomeSugerido || "";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // Revogar antes do clique cancelaria o download em curso.
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
+
+  async function uploadSignedForReview(arquivos) {
+    if (!arquivos || !arquivos.length) return;
+    state.signatureBusy = true;
+    state.signatureReview = null;
+    announce(`Conferindo ${arquivos.length} arquivo(s)…`, "");
+    render();
+    try {
+      const corpo = new FormData();
+      for (const arquivo of arquivos) corpo.append("arquivos", arquivo);
+      state.signatureReview = await client().api(
+        "/laudos/assinatura-externa/enviar",
+        { method: "POST", body: corpo }
+      );
+      const resumo = state.signatureReview.resumo || {};
+      announce(
+        `${resumo.identificados || 0} identificado(s), ${
+          resumo.com_problema || 0
+        } com problema. Confira antes de confirmar.`,
+        resumo.com_problema ? "erro" : "ok"
+      );
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.signatureBusy = false;
+      render();
+    }
+  }
+
+  async function confirmSignedBatch() {
+    const revisao = state.signatureReview;
+    if (!revisao || !revisao.identificados || !revisao.identificados.length) {
+      return;
+    }
+    state.signatureBusy = true;
+    announce("Confirmando o lote…", "");
+    render();
+    try {
+      const resposta = await client().api(
+        "/laudos/assinatura-externa/confirmar",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            batch_id: revisao.batch_id,
+            signed_document_ids: revisao.identificados.map(
+              (item) => item.signed_document_id
+            ),
+          }),
+        }
+      );
+      state.signatureReview = null;
+      state.signatureSelection = [];
+      announce(
+        `${resposta.confirmados} laudo(s) assinado(s) recebido(s). A ` +
+        "validação da assinatura segue pendente.",
+        "ok"
+      );
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.signatureBusy = false;
+      render();
+    }
+  }
+
+  // A confirmação é DIGITADA, e não um "ok" de caixa de diálogo. O que está
+  // sendo registrado é o testemunho de uma pessoa identificada de que
+  // conferiu a assinatura num validador externo — não uma verificação que a
+  // SoproLife tenha feito. Um clique distraído não deve produzir isso.
+  const VALIDACAO_FRASE = "Confirmo a conferência externa";
+
+  async function registerExternalValidation(signedId) {
+    const digitado = window.prompt(
+      "Você conferiu esta assinatura no Validar ITI (ou equivalente)?\n\n" +
+      "A SoproLife NÃO valida a cadeia ICP-Brasil — o que será registrado é " +
+      "a sua conferência externa, com seu usuário e a data/hora.\n\n" +
+      `Para confirmar, digite: ${VALIDACAO_FRASE}`
+    );
+    if (digitado === null) return;
+    state.busy = true;
+    render();
+    try {
+      await client().api(
+        `/laudos/assinatura-externa/${encodeURIComponent(signedId)}` +
+        "/validacao-externa",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            metodo: "validar_iti",
+            confirmacao: digitado,
+          }),
+        }
+      );
+      announce(
+        "Conferência externa registrada. O laudo está pronto para entrega.",
+        "ok"
+      );
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.busy = false;
+      render();
+    }
+  }
+
+  async function registerDelivery(signedId) {
+    state.busy = true;
+    render();
+    try {
+      await client().api(
+        `/laudos/assinatura-externa/${encodeURIComponent(signedId)}/entrega`,
+        { method: "POST" }
+      );
+      announce("Entrega registrada.", "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.busy = false;
       render();
     }
   }
@@ -2702,6 +3134,44 @@
     }
     const button = event.target.closest("button");
     if (!button) return;
+    // ---------------------------------------------------------- M25.20
+    if (button.matches("[data-signature-all]")) {
+      const todos = state.signaturePending.map((item) => item.document_id);
+      // O mesmo botão alterna: com tudo marcado, ele limpa. Dois botões
+      // separados ocupariam a linha inteira num iPhone.
+      state.signatureSelection =
+        state.signatureSelection.length === todos.length ? [] : todos;
+      render();
+      return;
+    }
+    if (button.matches("[data-signature-download]")) {
+      downloadForSignature();
+      return;
+    }
+    if (button.matches("[data-signature-confirm]")) {
+      confirmSignedBatch();
+      return;
+    }
+    if (button.matches("[data-signature-discard]")) {
+      state.signatureReview = null;
+      render();
+      return;
+    }
+    if (button.matches("[data-delivery-filter]")) {
+      state.deliveryFilter = button.getAttribute("data-delivery-filter");
+      render();
+      return;
+    }
+    if (button.matches("[data-delivery-validate]")) {
+      registerExternalValidation(
+        button.getAttribute("data-delivery-validate")
+      );
+      return;
+    }
+    if (button.matches("[data-delivery-deliver]")) {
+      registerDelivery(button.getAttribute("data-delivery-deliver"));
+      return;
+    }
     if (button.matches("[data-report-batch-all]")) {
       state.batchSelection = visibleQueue()
         .filter((item) => item.status === "assinatura_pendente")
@@ -2837,6 +3307,23 @@
   }
 
   function handleChange(event) {
+    // ------------------------------------------------------------ M25.20
+    if (event.target.matches("[data-signature-pick]")) {
+      const id = event.target.getAttribute("data-signature-pick");
+      const indice = state.signatureSelection.indexOf(id);
+      if (indice >= 0) state.signatureSelection.splice(indice, 1);
+      else state.signatureSelection.push(id);
+      render();
+      return;
+    }
+    if (event.target.id === "reportSignatureUpload") {
+      const arquivos = Array.from(event.target.files || []);
+      // Zerar o input permite reenviar o MESMO arquivo depois de corrigir
+      // algo; sem isso o segundo `change` nunca dispara.
+      event.target.value = "";
+      uploadSignedForReview(arquivos);
+      return;
+    }
     if (event.target.id === "reportBatchUpload") {
       const arquivos = Array.from(event.target.files || []);
       event.target.value = "";

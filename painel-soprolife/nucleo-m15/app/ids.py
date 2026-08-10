@@ -24,7 +24,18 @@ PREFIXES = {
     "followups": "FUP",
     "financial_entries": "LAN",
     "report_documents": "LAU",
+    # M25.20 — lote de assinatura externa.
+    "external_signature_batches": "BAT",
 }
+
+# Tabelas cujo código público é INTERNO: emitido e auditado normalmente, mas
+# fora do dicionário que o usuário consulta e fora do resolvedor de códigos.
+#
+# O lote de assinatura existe para responder "que arquivos saíram juntos,
+# para quem, quando". Ele não é protagonista em nenhuma tela (M25.20 §19) —
+# quem identifica o lote para a médica é o nome dela, a data e a quantidade.
+# Listá-lo no dicionário prometeria uma busca por BAT-000001 que não existe.
+INTERNAL_CODE_TABLES = frozenset({"external_signature_batches"})
 
 # Dicionário de apresentação (M19 §14): rótulo humano ao lado do código
 # técnico, idêntico em todas as telas. NUNCA renumera nem reusa código —
@@ -45,12 +56,23 @@ ENTITY_LABELS = {
     "report_documents": "Laudo",
 }
 
-# prefixo -> (tabela, rótulo)
-PREFIX_TO_ENTITY = {prefix: table for table, prefix in PREFIXES.items()}
+# prefixo -> tabela. Só o que é resolvível por busca: um prefixo interno não
+# tem tela, não tem rótulo e não tem modelo registrado em `CODE_MODELS`;
+# deixá-lo aqui faria o resolvedor estourar ao receber "BAT-000001".
+PREFIX_TO_ENTITY = {
+    prefix: table
+    for table, prefix in PREFIXES.items()
+    if table not in INTERNAL_CODE_TABLES
+}
 
 
 def code_dictionary() -> list[dict]:
-    """Dicionário de prefixos para uso uniforme em toda a interface."""
+    """Dicionário de prefixos para uso uniforme em toda a interface.
+
+    Prefixos internos ficam de fora — a exclusão é por lista explícita, e
+    não por rótulo ausente: uma entidade nova que esqueça o rótulo continua
+    estourando aqui, em vez de sumir do catálogo em silêncio.
+    """
     return [
         {
             "prefixo": prefix,
@@ -59,6 +81,7 @@ def code_dictionary() -> list[dict]:
             "formato": f"{prefix}-000000",
         }
         for table, prefix in sorted(PREFIXES.items(), key=lambda kv: kv[1])
+        if table not in INTERNAL_CODE_TABLES
     ]
 
 

@@ -13,7 +13,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from app.ids import PREFIXES, code_dictionary
+from app.ids import INTERNAL_CODE_TABLES, PREFIXES, code_dictionary
 from app.models import Followup, LegacyAlias, Person
 from app.services import crm as csvc
 from app.services.followup import today_local
@@ -649,8 +649,28 @@ def test_historico_nunca_expoe_telefone(client, auth, db, paciente):
 
 def test_dicionario_de_prefixos_cobre_todas_as_tabelas():
     dicionario = code_dictionary()
-    assert {d["prefixo"] for d in dicionario} == set(PREFIXES.values())
+    # M25.20 — o catálogo cobre tudo MENOS os prefixos internos, que são
+    # emitidos e auditados mas não têm tela nem busca (hoje, só o lote de
+    # assinatura externa). A exclusão é por lista explícita: uma entidade
+    # nova sem rótulo continua estourando aqui em vez de sumir calada.
+    esperados = {
+        prefixo
+        for tabela, prefixo in PREFIXES.items()
+        if tabela not in INTERNAL_CODE_TABLES
+    }
+    assert {d["prefixo"] for d in dicionario} == esperados
     assert all(d["formato"].endswith("-000000") for d in dicionario)
+
+
+def test_prefixo_interno_nao_vira_busca_nem_catalogo(client, auth):
+    """BAT não aparece no catálogo e resolver BAT-000001 não quebra."""
+
+    assert "BAT" not in {d["prefixo"] for d in code_dictionary()}
+    resp = client.get(
+        "/api/v1/crm/codigos/resolver?codigo=BAT-000001", headers=auth("leitura")
+    )
+    assert resp.status_code == 200
+    assert resp.json()["encontrado"] is False
 
 
 def test_resolver_codigo_canonico(client, auth, paciente):

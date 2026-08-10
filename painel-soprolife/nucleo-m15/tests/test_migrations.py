@@ -141,34 +141,24 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
 
     with engine.connect() as conn:
         prefixes = sorted(r[0] for r in conn.execute(text("SELECT prefix FROM code_sequences")))
-    assert prefixes == sorted(
-        [
-            "PES",
-            "LEA",
-            "ESP",
-            "CON",
-            "CLI",
-            "UNI",
-            "CTT",
-            "PAR",
-            "ENC",
-            "INT",
-            "FUP",
-            "LAN",
-            "LAU",
-        ]
-    )
+    # Ancorado em `PREFIXES` e não numa cópia congelada: assim a asserção
+    # prova o que interessa — TODO prefixo emitido pela aplicação tem
+    # sequência preseedada — e uma entidade nova que esqueça a migration
+    # falha aqui, em vez de só falhar na primeira alocação em produção.
+    from app.ids import PREFIXES
+
+    assert prefixes == sorted(PREFIXES.values())
     engine.dispose()
 
 
 def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     cfg = _alembic_config(f"sqlite:///{tmp_path}/heads.db")
-    # A migração M25.18 (d1e7b9c34a25, CPF opcional do paciente) é a head
-    # atual — o valor esperado aqui é atualizado a cada nova migration; o que
-    # a asserção realmente prova é continuar existindo EXATAMENTE uma head
-    # (sem ponto de ramificação acidental).
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["d1e7b9c34a25"]
+    # A migração M25.20 (e7c4b03a91df, central de assinatura externa em
+    # lote) é a head atual — o valor esperado aqui é atualizado a cada nova
+    # migration; o que a asserção realmente prova é continuar existindo
+    # EXATAMENTE uma head (sem ponto de ramificação acidental).
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["e7c4b03a91df"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(

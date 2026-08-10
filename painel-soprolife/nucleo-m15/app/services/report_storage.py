@@ -369,15 +369,24 @@ def read_and_validate_stored_pdf(
     expected_size_bytes: int,
     expected_page_count: int,
     max_size_bytes: int,
+    allow_signature_form: bool = False,
 ) -> StoredPdf:
     """Único caminho seguro de releitura: bytes + estrutura + metadados.
 
     Corrupção, substituição, alteração de tamanho/páginas/hash ou conteúdo
     ativo nunca são aceitos silenciosamente.
+
+    `allow_signature_form` acompanha o perfil usado na GRAVAÇÃO. Um PDF
+    assinado por fora foi aceito com o campo de assinatura; relê-lo com o
+    perfil fechado o declararia corrompido logo depois de gravado.
     """
     data = _read_stored_pdf_bytes(path, root=root)
     try:
-        validated = validate_pdf_bytes(data, max_size_bytes=max_size_bytes)
+        validated = validate_pdf_bytes(
+            data,
+            max_size_bytes=max_size_bytes,
+            allow_signature_form=allow_signature_form,
+        )
     except InvalidPdfError as exc:
         raise StoredPdfIntegrityError(
             "pdf_armazenado_invalido",

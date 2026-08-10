@@ -45,6 +45,12 @@ MAX_BASE_LEN = 120
 # fluxo externo, não este código.
 SUFIXO_LAUDO = "Para assinatura"
 SUFIXO_MIR = "Exame técnico"
+# M25.20 — o arquivo que VOLTOU assinado por fora. Este sufixo nomeia
+# exatamente o que a M25.18 previu: "`- Assinado.pdf` é o nome do arquivo que
+# volta depois". Ele descreve o ARQUIVO, e continua sem afirmar que a cadeia
+# ICP-Brasil foi verificada por este sistema — quem responde por isso é o
+# estado do documento, não o nome do download.
+SUFIXO_ASSINADO = "Assinado"
 
 
 def sanitize_filename_base(nome: str | None) -> str:
@@ -87,6 +93,22 @@ def report_download_filename(
     if not base:
         base = sanitize_filename_base(fallback_code) or "documento"
     sufixo = SUFIXO_MIR if is_technical_exam else SUFIXO_LAUDO
+    return f"{base} - {sufixo}.pdf"
+
+
+def named_download_filename(
+    *, patient_name: str | None, fallback_code: str, sufixo: str
+) -> str:
+    """``<Paciente> - <sufixo>.pdf`` com a mesma sanitização única.
+
+    Existe para que nenhum ponto do sistema monte esse nome à mão. Um
+    `f"{nome} - Assinado.pdf"` solto perderia a sanitização e devolveria
+    um nome com barra, dois-pontos ou quebra de linha para o cabeçalho HTTP.
+    """
+
+    base = sanitize_filename_base(patient_name)
+    if not base:
+        base = sanitize_filename_base(fallback_code) or "documento"
     return f"{base} - {sufixo}.pdf"
 
 
