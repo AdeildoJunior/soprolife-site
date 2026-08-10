@@ -496,7 +496,132 @@ da central.
 
 ---
 
-## 13. Pendências
+## 13. Backup
+
+Diretório `700` em `/opt/soprolife/backups/m25-20/20260810T165527Z/`, feito
+**antes** de qualquer alteração:
+
+| Item | Prova |
+| --- | --- |
+| `HEAD_ANTERIOR.txt` | `1eb85391e68721c4f9c0767e6049d6a5388e1b18`, `painel-soprolife-v01` |
+| `m15.dump` (`pg_dump -Fc`) | 455.533 bytes — **validado** com `pg_restore -l`: 377 entradas de TOC, 53 objetos das tabelas de laudo |
+| `m15.env.bak` | copiado com `install -m 600`; **nenhum segredo impresso** — só linhas, permissão e SHA-256 |
+| `private-reports.tar.gz` | 1.637.463 bytes, **9 PDFs** clínicos |
+
+---
+
+## 14. Deploy
+
+| Passo | Resultado |
+| --- | --- |
+| Commit | `05f7cad908e40e79d562e508fa65e2a177efa2eb` |
+| `origin/painel-soprolife-v01` antes | `1eb8539` — 0 atrás, 1 à frente. Sem alteração concorrente |
+| Push | **fast-forward normal**. Sem force, sem `--force-with-lease`, sem `reset --hard` |
+| VPS | `git merge --ff-only` → `1eb8539..05f7cad`, 17 arquivos, `git status` **limpo** |
+| Migration | `d1e7b9c34a25` → **`e7c4b03a91df (head)`** |
+| Restart | **somente `soprolife-m15-api`** — o painel e o loopback servem asset do disco a cada requisição e não têm código Python alterado |
+| `M15_REPORTS_MODE` | `pilot` — **não alterado** |
+
+### Schema conferido no banco real
+
+```
+tabelas novas:                2   (external_signature_batches, external_signed_documents)
+report_document_versions.kind: VARCHAR(40)
+sequência BAT:                1
+```
+
+### Verificações pós-deploy
+
+| Verificação | Resultado |
+| --- | --- |
+| HEAD da VPS | `05f7cad908e40e79d562e508fa65e2a177efa2eb` |
+| `git status` da VPS | **limpo** |
+| Health | `{"status":"ok","versao":"0.1.0","ambiente":"prod","banco":"ok"}` |
+| Banco | **ok** |
+| Painel | **HTTP 200** |
+| Serviços | `soprolife-m15-api`, `soprolife-painel`, `soprolife-painel-loopback`, `postgresql` → `active` |
+
+---
+
+## 15. Smoke de produção
+
+**Nenhum paciente real teve estado alterado.** O smoke usa endpoints de
+leitura, dados fictícios em memória e uma verificação read-only do banco.
+
+### As 9 rotas estão vivas
+
+Lidas do `openapi.json` do serviço em produção — `/pendentes`, `/baixar`,
+`/enviar`, `/confirmar`, `/fila`, `/{id}/validacao-externa`, `/{id}/entrega`,
+`/{doc}/assinado/conteudo`, `/{doc}/exame-tecnico/conteudo`.
+
+### Autorização fail-closed
+
+| Rota, sem sessão | HTTP |
+| --- | --- |
+| `GET /assinatura-externa/pendentes` | **401** |
+| `GET /assinatura-externa/fila` | **401** |
+| `POST /assinatura-externa/baixar` | **401** |
+| `GET /laudos/validacao/{codigo}` | **401** (inalterada) |
+
+### Fluxo funcional, executado NO servidor de produção, sem gravar nada
+
+```
+1. carimbo e releitura      codigo: LAU-999001 | verificacao: ABCDEFGHJKMN | versao: 2
+2. sobrevive a assinatura   LAU-999001
+3. retroativo (conteudo)    LAU no conteudo: LAU-999001 | verificacao: ABCDEFGHJKMN
+4. ZIP plano                SoproLife - Laudos para assinatura - 2026-08-10.zip
+                            - Conceicao Ramalhao Junior - Para assinatura.pdf
+                            - Jose Alvares D Avila - Para assinatura.pdf
+                            estrutura plana: True
+5. protecoes                zip slip vira nome simples: mal.pdf
+                            zip aninhado aceito? False
+                            zip bomb aceito?    False
+                            nao-PDF aceito?     False
+```
+
+### Compatibilidade retroativa provada contra dados REAIS
+
+Os **3 laudos concluídos que já existiam** em produção são anteriores ao
+carimbo. Leitura read-only dos PDFs efetivamente armazenados:
+
+```
+laudos concluidos anteriores a M25.20: 3
+  carimbo? False | LAU do conteudo confere? True | codigo de verificacao confere? True
+  carimbo? False | LAU do conteudo confere? True | codigo de verificacao confere? True
+  carimbo? False | LAU do conteudo confere? True | codigo de verificacao confere? True
+```
+
+Sem carimbo — como esperado — e mesmo assim **identificáveis pelos dois
+códigos impressos**, nos três casos. É exatamente o §9 funcionando sobre
+documentos reais. Nenhum dado de paciente foi impresso: a saída diz só se o
+código extraído bate com o do banco.
+
+### Asset realmente servido pelo painel
+
+`renderSignatureCenter`, as quatro rotas da central, `renderDeliveryQueue`,
+*"Nenhum laudo aguardando assinatura."*, *"Selecionar PDFs assinados"*,
+`data-signature-upload` e a frase *"não verificou a assinatura
+criptograficamente"* — todos presentes no `report-workflow.js` baixado do
+painel. No CSS: `.report-signature-item`, `.report-signature-upload-label`,
+`.report-delivery-row` e `min-height: 44px`. O `index.html` aponta para
+`?v=2026081001`.
+
+### Nenhuma regressão na bancada
+
+```
+versoes por tipo:    laudo_liberado = 3 | laudo_previa = 3 | original = 4
+documentos:          atribuido = 1 | liberado = 3
+assinados recebidos: 0
+lotes:               0
+```
+
+Os 10 arquivos clínicos que existiam continuam existindo, com os mesmos tipos.
+Os **3 laudos concluídos** são exatamente o que a médica verá na central como
+*"Aguardando assinatura qualificada — 3"* — ela não nasce vazia.
+
+---
+
+## 16. Pendências
 
 1. **`/lote/enviar` da M25.8 continua declarando `qualified_signature: True` e
    `trust_chain: "ICP-Brasil"`.** A rota é hoje **inalcançável com sucesso**:
@@ -520,3 +645,36 @@ da central.
    `google-api-python-client`, ausente do `requirements.lock`. Instalado no
    venv local para o gate ficar verde; **o `requirements.lock` não foi
    alterado**, então a pendência de empacotamento permanece.
+
+---
+
+## 17. HEAD final
+
+| | |
+| --- | --- |
+| HEAD inicial | `1eb85391e68721c4f9c0767e6049d6a5388e1b18` |
+| Commit do código | `05f7cad908e40e79d562e508fa65e2a177efa2eb` |
+| `origin/painel-soprolife-v01` | `05f7cad` |
+| HEAD da VPS | `05f7cad` |
+| Alembic | `e7c4b03a91df (head)` |
+| Health | `{"status":"ok","versao":"0.1.0","ambiente":"prod","banco":"ok"}` |
+
+O HEAD acima é o do **código**. Este relatório entra num commit seguinte, que
+não altera uma linha de aplicação — a distinção que a M25.19 pediu que fosse
+registrada explicitamente.
+
+---
+
+## Conclusão
+
+**M25.20 — CENTRAL DE ASSINATURA EXTERNA EM LOTE PUBLICADA EM PRODUÇÃO**
+
+A médica continua laudando um a um. Depois de concluir, ela vê numa seção
+própria o que está aguardando assinatura, marca o que quiser, baixa um PDF
+(ou um ZIP plano com nomes que ela reconhece), assina fora com o certificado
+dela, devolve vários PDFs ou um ZIP pelo botão grande, confere a lista e
+confirma **uma vez**. A administração recebe a fila sozinha.
+
+O que o sistema **não** afirma continua tão importante quanto o que ele faz:
+nenhum caminho declara assinatura ICP-Brasil verificada, porque nenhuma cadeia
+é conferida aqui.
