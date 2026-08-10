@@ -76,13 +76,33 @@ def test_consentimento_rastreavel(client, auth, person):
 
 
 def test_payload_com_campo_extra_rejeitado(client, auth):
+    """`extra='forbid'`: campo desconhecido nunca é aceito em silêncio.
+
+    O exemplo original era `cpf`, que a M25.18 transformou em campo REAL do
+    cadastro. Trocado por um campo que continua não existindo — senão este
+    teste passaria a medir a validação do CPF em vez da recusa de payload
+    desconhecido, que é o que ele existe para proteger.
+    """
+
+    resp = client.post(
+        "/api/v1/pessoas",
+        json={"nome_completo": "Teste", "campo_que_nao_existe": "x"},
+        headers=auth("operacional"),
+    )
+    assert resp.status_code == 422
+    assert resp.json()["erro"]["codigo"] == "validacao"
+
+
+def test_cpf_invalido_e_recusado_com_codigo_proprio(client, auth):
+    """M25.18 — CPF preenchido e inválido não entra no cadastro."""
+
     resp = client.post(
         "/api/v1/pessoas",
         json={"nome_completo": "Teste", "cpf": "111.222.333-44"},
         headers=auth("operacional"),
     )
     assert resp.status_code == 422
-    assert resp.json()["erro"]["codigo"] == "validacao"
+    assert resp.json()["erro"]["mensagem"]["codigo"] == "cpf_invalido"
 
 
 def test_paginacao(client, auth):

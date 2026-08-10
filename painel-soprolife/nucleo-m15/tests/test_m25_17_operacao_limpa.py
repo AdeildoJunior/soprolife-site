@@ -757,17 +757,31 @@ def test_ativo_de_rubrica_nao_tem_rota_publica(client, auth, medica):
 def test_rubrica_real_nao_esta_versionada():
     """A imagem da médica é ativo privado — nunca entra no Git."""
 
+    import pathlib
     import subprocess
 
+    raiz = pathlib.Path(__file__).resolve().parents[3]
     saida = subprocess.run(
         ["git", "ls-files"],
         capture_output=True,
         text=True,
-        cwd="/home/fedorasurf/soprolife-worktrees/"
-        "claude-m25-15-laudos-operacao-real",
-    ).stdout.lower()
-    for proibido in ("rubrica", "assinatura-ana", "signature-asset"):
-        assert proibido not in saida, proibido
+        cwd=raiz,
+    ).stdout.splitlines()
+    # O que não pode existir é a IMAGEM, em qualquer formato. A checagem
+    # anterior procurava a palavra "rubrica" em qualquer caminho e passou a
+    # acusar o próprio relatório da M25.17, cujo nome de arquivo a contém —
+    # um falso positivo que escondia o que o teste realmente protege.
+    imagens = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif"}
+    suspeitos = [
+        caminho
+        for caminho in saida
+        if pathlib.PurePath(caminho).suffix.lower() in imagens
+        and any(
+            marca in pathlib.PurePath(caminho).name.lower()
+            for marca in ("rubrica", "assinatura", "signature")
+        )
+    ]
+    assert suspeitos == [], suspeitos
 
 
 # ------------------------------------------------- 4. nome do download
@@ -776,18 +790,22 @@ def test_rubrica_real_nao_esta_versionada():
 @pytest.mark.parametrize(
     "nome,mir,esperado",
     [
-        ("Geoffrey Kirk Barnes", False, "Geoffrey Kirk Barnes - Assinado.pdf"),
+        (
+            "Geoffrey Kirk Barnes",
+            False,
+            "Geoffrey Kirk Barnes - Para assinatura.pdf",
+        ),
         (
             "Geoffrey Kirk Barnes",
             True,
             "Geoffrey Kirk Barnes - Exame técnico.pdf",
         ),
-        ("João da Silva", False, "João da Silva - Assinado.pdf"),
-        ("Maria / Souza", False, "Maria Souza - Assinado.pdf"),
-        (None, False, "LAU-000123 - Assinado.pdf"),
-        ("", False, "LAU-000123 - Assinado.pdf"),
-        ("..", False, "LAU-000123 - Assinado.pdf"),
-        (".", False, "LAU-000123 - Assinado.pdf"),
+        ("João da Silva", False, "João da Silva - Para assinatura.pdf"),
+        ("Maria / Souza", False, "Maria Souza - Para assinatura.pdf"),
+        (None, False, "LAU-000123 - Para assinatura.pdf"),
+        ("", False, "LAU-000123 - Para assinatura.pdf"),
+        ("..", False, "LAU-000123 - Para assinatura.pdf"),
+        (".", False, "LAU-000123 - Para assinatura.pdf"),
     ],
 )
 def test_nome_do_arquivo_e_humano_e_sanitizado(nome, mir, esperado):

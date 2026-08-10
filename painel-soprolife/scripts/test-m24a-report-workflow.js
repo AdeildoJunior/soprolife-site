@@ -198,8 +198,12 @@ check(
     && (workflow.match(/report-pdf-frame/g) || []).length >= 1
 );
 check(
+  // M25.18 — `pdfUrls` passou a guardar object URL (token da CLI) OU um
+  // endereço da própria API (sessão por cookie), porque o visualizador de
+  // PDF precisava receber o Content-Disposition para nomear o download. A
+  // revogação continua obrigatória, agora condicionada ao que É blob.
   "object URLs são sempre revogados",
-  /URL\.revokeObjectURL\(state\.pdfUrls\[key\]\)/.test(workflow)
+  /startsWith\("blob:"\)\)\s*URL\.revokeObjectURL\(valor\)/.test(workflow)
     && /beforeunload", releasePdfUrls/.test(workflow)
 );
 check(
@@ -319,10 +323,18 @@ check(
     && catalog.includes(PILOT_WARNING)
 );
 check(
-  "workspace mostra o aviso PILOTO INTERNO só em modo piloto",
-  workflow.includes(PILOT_WARNING)
+  // M25.18 — a faixa "PILOTO INTERNO" saiu da tela. O fluxo virou operação
+  // real com assinatura qualificada aplicada fora do sistema, e um alarme
+  // vermelho permanente virava ruído. O que ficou no lugar não é silêncio:
+  // o estado de cada laudo diz o que falta, onde a informação é usada. O
+  // modo continua sendo lido — só não vira faixa.
+  "workspace não tem mais faixa de piloto e diz o que falta",
+  !workflow.includes('class="report-pilot-warning"')
+    && !workflow.includes("const PILOT_WARNING =")
     && workflow.includes('config.reports_mode === "pilot"')
-    && css.includes("report-pilot-warning")
+    && workflow.includes(
+      'liberado: "Concluído — aguardando assinatura qualificada"'
+    )
 );
 check(
   "config pública traz reports_mode consistente com reports_enabled",

@@ -96,6 +96,10 @@ class ContactIn(StrictModel):
 
 class PersonCreate(StrictModel):
     nome_completo: str = Field(min_length=2, max_length=300)
+    # M25.18 — CFM 2.381/2024 pede CPF "quando houver". Opcional de verdade:
+    # aceita máscara ou só dígitos, e a validação dos verificadores acontece
+    # em `services/cpf.py` (única porta de entrada do valor).
+    cpf: str | None = Field(default=None, max_length=20)
     data_nascimento: date | None = None
     observacao: str | None = Field(default=None, max_length=4000)
     contatos: list[ContactIn] = []
@@ -104,6 +108,8 @@ class PersonCreate(StrictModel):
 
 class PersonUpdate(StrictModel):
     nome_completo: str | None = Field(default=None, min_length=2, max_length=300)
+    # String vazia DESVINCULA o CPF; ausente significa "não mexa".
+    cpf: str | None = Field(default=None, max_length=20)
     data_nascimento: date | None = None
     status: Literal["ativo", "inativo"] | None = None
     nao_contatar: bool | None = None

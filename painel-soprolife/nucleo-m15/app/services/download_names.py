@@ -35,7 +35,15 @@ _ESPACOS = re.compile(r"\s+")
 
 MAX_BASE_LEN = 120
 
-SUFIXO_LAUDO = "Assinado"
+# M25.18 — o PDF que sai da SoproLife ainda NÃO está assinado.
+#
+# A M25.17 chamava o laudo de "Assinado", o que descrevia o arquivo errado:
+# a assinatura qualificada acontece FORA do sistema, com o certificado da
+# médica. O arquivo que este endpoint entrega é o que ela vai levar para
+# assinar — daí "Para assinatura". Depois de assinado externamente, o
+# arquivo final é que pode se chamar "- Assinado.pdf", e quem o nomeia é o
+# fluxo externo, não este código.
+SUFIXO_LAUDO = "Para assinatura"
 SUFIXO_MIR = "Exame técnico"
 
 

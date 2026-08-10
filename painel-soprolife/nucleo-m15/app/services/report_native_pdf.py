@@ -91,14 +91,27 @@ MIR_SEPARATE_NOTICE = (
 # M25.4 — encurtada sem perder nenhuma das três afirmações que precisam
 # constar: quem liberou e como, o que prova a integridade, e o que esta
 # liberação NÃO é.
+# M25.18 — o texto do rodapé descreve o que este arquivo É.
+#
+# A frase anterior começava com "Liberado eletronicamente", o que numa
+# leitura rápida soa como assinatura eletrônica aplicada. O documento que
+# sai daqui é o laudo concluído pela médica no sistema, destinado à
+# assinatura qualificada que ela aplica FORA da SoproLife, com o próprio
+# certificado. Quem receber o arquivo precisa saber onde conferir a
+# assinatura: no arquivo assinado, não neste.
+#
+# A negativa explícita sobre ICP-Brasil continua, porque é ela que impede a
+# leitura errada enquanto não houver prova criptográfica.
 RELEASE_STATEMENT = (
-    "Liberado eletronicamente pela médica acima, com autenticação "
-    "individual e ação consciente registradas. Integridade verificável "
-    "pelo código e pelo hash SHA-256 deste laudo. Esta liberação não "
-    "constitui, por si só, assinatura digital qualificada ICP-Brasil."
+    "Documento concluído pela médica responsável no sistema SoproLife, com "
+    "autenticação individual e ação consciente registradas. Integridade "
+    "verificável pelo código e pelo hash SHA-256 deste laudo. A "
+    "autenticidade da assinatura digital deve ser verificada no arquivo "
+    "eletronicamente assinado; esta conclusão não constitui, por si só, "
+    "assinatura digital qualificada ICP-Brasil."
 )
 
-PREVIEW_WATERMARK = "PRÉVIA — DOCUMENTO NÃO LIBERADO"
+PREVIEW_WATERMARK = "PRÉVIA — DOCUMENTO NÃO CONCLUÍDO"
 
 DEFAULT_LOGO_PATH = (
     Path(__file__).resolve().parents[3] / "assets" / "soprolife-logo.png"
@@ -167,6 +180,10 @@ class PatientBlock:
     birth_date: date | None
     sex: str | None
     public_code: str | None
+    # M25.18 — já formatado por quem monta o conteúdo. `None` quando o
+    # cadastro não tem CPF: o laudo simplesmente não imprime a linha, em vez
+    # de imprimir "não informado" no lugar de um documento de identidade.
+    cpf: str | None = None
 
 
 @dataclass(frozen=True)
@@ -838,8 +855,8 @@ class _Composer:
             RELEASE_STATEMENT
             if self.content.released
             else (
-                "Prévia sem validade: a identificação e a assinatura médica "
-                "só são aplicadas após a ação \"Assinar e liberar laudo\"."
+                "Prévia sem validade: a identificação e a rubrica da médica "
+                "só são aplicadas após a ação \"Concluir laudo\"."
             )
         )
 
@@ -1047,15 +1064,22 @@ class _Composer:
         )
 
         inner = radius - 4.2
+        # M25.18 — o selo dizia "ASSINADO ELETRONICAMENTE / LIBERAÇÃO
+        # INSTITUCIONAL". "Assinado" num carimbo redondo é lido como
+        # assinatura, e a distinção fina entre "eletronicamente" e
+        # "digitalmente" não sobrevive à leitura de quem recebe o papel.
+        #
+        # Antes da assinatura externa o selo passa a dizer o que de fato
+        # aconteceu: a médica CONCLUIU o laudo. Quando houver prova
+        # criptográfica gravada, o mesmo selo volta a declarar assinatura —
+        # o texto continua saindo de `signature_kind`, nunca de intenção.
         self._draw_seal_text(
-            "ASSINADO",
+            "ASSINADO" if qualified else "CONCLUÍDO",
             center_x=center_x, center_y=center_y, dy=16.0,
             inner=inner, size=5.8, color=NAVY,
         )
         self._draw_seal_text(
-            # "eletronicamente" e "digitalmente" NÃO são sinônimos aqui: a
-            # segunda forma é reservada à assinatura com certificado.
-            "DIGITALMENTE" if qualified else "ELETRONICAMENTE",
+            "DIGITALMENTE" if qualified else "PELA MÉDICA",
             center_x=center_x, center_y=center_y, dy=9.4,
             inner=inner, size=5.0, color=NAVY,
         )
@@ -1067,12 +1091,12 @@ class _Composer:
 
         accent = NAVY if qualified else TEAL
         self._draw_seal_text(
-            "ICP-BRASIL" if qualified else "LIBERAÇÃO",
+            "ICP-BRASIL" if qualified else "AGUARDANDO",
             center_x=center_x, center_y=center_y, dy=-6.0,
             inner=inner, size=6.0, color=accent,
         )
         self._draw_seal_text(
-            "PADRÃO PAdES" if qualified else "INSTITUCIONAL",
+            "PADRÃO PAdES" if qualified else "ASSINATURA",
             center_x=center_x, center_y=center_y, dy=-14.0,
             inner=inner, size=4.8, color=accent,
         )
@@ -1284,6 +1308,10 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
         ("Nascimento", birth),
         ("Sexo", format_sex(patient.sex)),
     ]
+    # CPF é exigido pela CFM 2.381/2024 "quando houver": presente, entra logo
+    # abaixo da identificação; ausente, a linha não existe.
+    if patient.cpf:
+        patient_fields.append(("CPF", patient.cpf))
     if patient.public_code:
         patient_fields.append(("Registro", patient.public_code))
 

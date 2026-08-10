@@ -11,11 +11,18 @@
   const SECTION_ID = "laudos-espirometria";
   const ROOT_ID = "reportWorkflowRoot";
   const CONFIG_URL = "data/m15-config.json";
-  // M24D — aviso obrigatório do piloto interno controlado. Precisa
-  // aparecer, ao vivo, sempre que o modo ativo for "pilot" — o mesmo texto
-  // exato usado no rodapé congelado do PDF (services/report_catalog.py).
-  const PILOT_WARNING =
-    "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR AO PACIENTE";
+  // M25.18 — a faixa "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR
+  // AO PACIENTE" saiu.
+  //
+  // Ela descrevia um protótipo; o fluxo virou operação real, com paciente
+  // real e assinatura qualificada aplicada FORA do sistema. Manter um alarme
+  // vermelho permanente no topo de uma tela usada todo dia não informa mais
+  // nada — vira ruído que se aprende a ignorar, inclusive quando um aviso de
+  // verdade aparecer no mesmo lugar.
+  //
+  // O que substitui NÃO é silêncio: o estado do documento passou a dizer
+  // exatamente o que falta ("Concluído — aguardando assinatura qualificada"),
+  // no lugar onde a informação é usada.
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
   // M25.12 — o código institucional de espirometria é SEMPRE emitido por
   // `app/ids.py` como `ESP-` + 6 dígitos zero-preenchidos. Nenhum caminho do
@@ -170,15 +177,13 @@
       em_elaboracao: "Em elaboração clínica",
       // M25.8 — revisado pela médica, congelado, AINDA NÃO assinado. Este
       // estado não vai ao paciente.
-      assinatura_pendente: "Laudado — aguardando assinatura digital",
+      assinatura_pendente: "Laudado — aguardando assinatura qualificada",
       assinado: "Assinado com ICP-Brasil",
-      // M25.15 — "assinatura eletrônica interna" soava a um tipo de
-      // assinatura que este documento teria; ele não tem nenhuma. O que
-      // existe é liberação institucional autenticada, e enquanto não houver
-      // provedor ICP-Brasil o rótulo diz exatamente o que falta. É a mesma
-      // declaração que o PDF já imprimia — a tela só parou de ser mais
-      // otimista que o papel.
-      liberado: "Liberado — aguardando assinatura qualificada",
+      // M25.18 — "Liberado" sugeria documento pronto para entrega. Ele não
+      // está: falta a assinatura qualificada, que a médica aplica fora do
+      // sistema. O rótulo diz o estado real e o que falta, na ordem em que
+      // importa para quem lê a fila.
+      liberado: "Concluído — aguardando assinatura qualificada",
     }[value] || value || "—";
   }
 
@@ -231,7 +236,7 @@
       assinatura_pendente: "Preparado para assinatura",
       assinado: "Versão assinada",
       laudo_previa: "Prévia do laudo",
-      laudo_liberado: "Laudo liberado",
+      laudo_liberado: "Laudo concluído",
       laudo_adendo: "Laudo com adendo",
     }[value] || value || "Versão";
   }
@@ -289,7 +294,12 @@
 
   function releasePdfUrls() {
     Object.keys(state.pdfUrls).forEach((key) => {
-      if (state.pdfUrls[key]) URL.revokeObjectURL(state.pdfUrls[key]);
+      // M25.18 — `pdfUrls` passou a guardar object URL (token da CLI) OU um
+      // endereço da própria API (sessão por cookie). Revogar só faz sentido
+      // para o primeiro; chamar `revokeObjectURL` num caminho comum é
+      // silenciosamente inócuo, mas testar deixa claro que são dois casos.
+      const valor = state.pdfUrls[key];
+      if (valor && valor.startsWith("blob:")) URL.revokeObjectURL(valor);
       state.pdfUrls[key] = "";
     });
   }
@@ -356,11 +366,10 @@
     }</div>`;
   }
 
+  // M25.18 — sem faixa. O estado real do laudo aparece no chip de status de
+  // cada documento, que é onde ele muda e onde é consultado.
   function renderPilotWarning() {
-    if (state.reportsMode !== "pilot") return "";
-    return `<div id="reportPilotWarning" class="report-pilot-warning" role="alert">${
-      esc(PILOT_WARNING)
-    }</div>`;
+    return "";
   }
 
   function renderUnauthenticated() {
@@ -546,7 +555,7 @@
             ${item.is_corrective
               ? `<span class="report-queue-flag">corrigido</span>` : ""}
             ${item.locked && item.status !== "liberado"
-              ? `<span class="report-queue-flag is-locked">liberado</span>` : ""}
+              ? `<span class="report-queue-flag is-locked">concluído</span>` : ""}
           </button>`).join("")
       : `<div class="report-empty">Nenhum laudo atribuído neste filtro.</div>`;
     const trocar = unidades.length > 1
@@ -572,7 +581,7 @@
                 ["em_elaboracao", "Em elaboração"],
                 ["assinatura_pendente", "Laudados — aguardando assinatura"],
                 ["assinado", "Assinados com ICP-Brasil"],
-                ["liberado", "Liberados"],
+                ["liberado", "Concluídos"],
               ], state.statusFilter)}
             </select>
           </label>
@@ -733,17 +742,22 @@
       return `
         <div class="report-release-confirm" role="alertdialog"
           aria-labelledby="reportReleaseConfirmTitle" aria-modal="false">
-          <h4 id="reportReleaseConfirmTitle" tabindex="-1">Confirmar assinatura e liberação</h4>
-          <p>Você vai <strong>assinar e liberar</strong> este laudo com a sua identificação profissional. O conteúdo será congelado e o documento passa a valer para entrega.</p>
+          ${/* M25.18 — a ação não assina nada. A assinatura qualificada
+                acontece fora da SoproLife, com o certificado da médica. O
+                que este passo faz é congelar o conteúdo e produzir o PDF
+                que ela vai levar para assinar. */""}
+          <h4 id="reportReleaseConfirmTitle" tabindex="-1">Confirmar conclusão do laudo</h4>
+          <p>Você vai <strong>concluir</strong> este laudo com a sua identificação profissional. O conteúdo será congelado e o PDF ficará disponível para assinatura digital qualificada externa.</p>
           <ul>
             <li>Confira a prévia exibida acima — é exatamente o PDF final.</li>
-            <li>Depois da liberação, correções só entram como <strong>adendo</strong> ou <strong>versão corretiva</strong>; a versão anterior é preservada.</li>
-            <li>A liberação é registrada com seu usuário, data e hora.</li>
+            <li>Depois de concluído, correções só entram como <strong>adendo</strong> ou <strong>versão corretiva</strong>; a versão anterior é preservada.</li>
+            <li>A conclusão é registrada com seu usuário, data e hora.</li>
+            <li>A assinatura qualificada é aplicada por você, fora do sistema, no arquivo baixado.</li>
           </ul>
           <div class="report-release-buttons">
             <button type="button" class="m15-btn m15-btn-danger"
               data-report-release-confirm${state.busy ? " disabled" : ""}>
-              Sim, assinar e liberar laudo
+              Sim, concluir laudo
             </button>
             <button type="button" class="m15-btn" data-report-release-cancel>
               Cancelar
@@ -753,10 +767,10 @@
     }
     return `
       <div class="report-release-action">
-        <p>Confira a prévia. A assinatura só é aplicada após a sua confirmação consciente.</p>
+        <p>Confira a prévia. O conteúdo só é congelado após a sua confirmação consciente.</p>
         <button type="button" class="m15-btn m15-btn-primary report-release-cta"
           data-report-release-open${state.busy ? " disabled" : ""}>
-          Assinar e liberar laudo
+          Concluir laudo
         </button>
         ${renderQualifiedAction(detail)}
       </div>`;
@@ -822,8 +836,9 @@
         <div class="report-qualified is-unavailable">
           <p class="report-qualified-status">Integração aguardando credencial da Valid</p>
           <p class="report-help">A assinatura ICP-Brasil pelo VIDaaS ainda não
-            está disponível neste ambiente. A liberação acima continua válida
-            como assinatura eletrônica interna.</p>
+            está disponível neste ambiente. O laudo concluído acima segue para
+            assinatura qualificada <strong>externa</strong>: baixe o PDF e
+            assine com o seu certificado digital.</p>
         </div>`;
     }
     if (state.confirmQualified) {
@@ -932,7 +947,7 @@
         <summary>Assinatura digital qualificada — ${
           pending ? "pendente" : "provedor não configurado"
         }</summary>
-        <p>A liberação institucional deste fluxo não é assinatura ICP-Brasil.</p>
+        <p>A conclusão clínica deste fluxo não é assinatura ICP-Brasil. A assinatura qualificada é aplicada por você, fora do sistema, no PDF baixado.</p>
         <ul>
           <li>ICP-Brasil A1 — indisponível</li>
           <li>VIDaaS — pendente de seleção e integração</li>
@@ -1130,7 +1145,7 @@
           <summary>Preparar assinatura qualificada (ICP-Brasil, pendente)</summary>
           <div class="report-ready-action">
             <p>Congela os snapshots e deixa o documento aguardando um provedor de assinatura qualificada. Nenhum provedor está configurado nesta versão.</p>
-            <p class="report-help">Este passo pertence ao caminho da <strong>anotação técnica sobre o PDF da MIR</strong> (fluxo M24C), acima. Ele não usa a prévia do laudo SoproLife — para liberar o laudo próprio, use <strong>“Assinar e liberar laudo”</strong>.</p>
+            <p class="report-help">Este passo pertence ao caminho da <strong>anotação técnica sobre o PDF da MIR</strong> (fluxo M24C), acima. Ele não usa a prévia do laudo SoproLife — para concluir o laudo próprio, use <strong>“Concluir laudo”</strong>.</p>
             ${hasComposedDraft ? `
               <button type="button" class="m15-btn" data-report-prepare-signature${
                 state.busy ? " disabled" : ""
@@ -1578,7 +1593,7 @@
         <p class="report-help">
           Elemento visual de identificação. <strong>Não é</strong> assinatura
           digital qualificada ICP-Brasil. É aplicada somente depois de a médica
-          clicar em “Assinar e liberar laudo” — nunca na prévia.
+          clicar em “Concluir laudo” — nunca na prévia.
         </p>
         ${carregado ? `
           <p class="report-signature-asset-state">
@@ -1815,14 +1830,50 @@
     }
   }
 
+  // M25.18 — a SEGUNDA causa do arquivo com nome aleatório.
+  //
+  // O PDF é exibido num <iframe>, e o visualizador embutido do Chrome tem o
+  // próprio botão de download — que é o botão à mão de quem está lendo o
+  // laudo. Com `src` apontando para uma object URL (`blob:`), esse download
+  // não tem nome nenhum para herdar, e o Chrome inventa um: `UWNAUiEo.pdf`.
+  // Nenhum ajuste no botão "Baixar" do painel alcançava esse caminho.
+  //
+  // Com sessão por cookie o iframe se autentica sozinho e pode apontar
+  // direto para a API: aí o visualizador recebe o `Content-Disposition` e o
+  // botão dele passa a salvar com o nome certo. Com token da CLI o iframe
+  // não tem como autenticar, então o blob continua sendo o único caminho —
+  // é modo avançado, e a visualização continua funcionando.
+  function pdfViewerSource(version) {
+    const c = client();
+    if (c && typeof c.hasSession === "function" && c.hasSession()
+        && typeof c.apiUrl === "function") {
+      return c.apiUrl(
+        reportContentPath(state.selectedDocumentId, version.id, "inline")
+      );
+    }
+    return null;
+  }
+
   async function loadPdf(version, slot, epoch) {
     if (!version) return;
+    const direto = pdfViewerSource(version);
+    if (direto) {
+      if (epoch !== state.loadEpoch) return;
+      if (state.pdfUrls[slot] && state.pdfUrls[slot].startsWith("blob:")) {
+        URL.revokeObjectURL(state.pdfUrls[slot]);
+      }
+      state.pdfUrls[slot] = direto;
+      render();
+      return;
+    }
     try {
       const blob = await client().apiBlob(
         reportContentPath(state.selectedDocumentId, version.id, "inline")
       );
       if (epoch !== state.loadEpoch) return;
-      if (state.pdfUrls[slot]) URL.revokeObjectURL(state.pdfUrls[slot]);
+      if (state.pdfUrls[slot] && state.pdfUrls[slot].startsWith("blob:")) {
+        URL.revokeObjectURL(state.pdfUrls[slot]);
+      }
       state.pdfUrls[slot] = URL.createObjectURL(blob);
       render();
     } catch (error) {
@@ -2175,7 +2226,7 @@
 
   async function releaseReport() {
     if (!state.previewVersionId || !state.previewTextSha256) {
-      announce("Gere a prévia do laudo antes de assinar e liberar.", "erro");
+      announce("Gere a prévia do laudo antes de concluir.", "erro");
       return;
     }
     state.busy = true;
@@ -3003,9 +3054,10 @@
     ) {
       return;
     }
-    // M24D — o aviso PILOTO INTERNO só aparece quando o backend está
-    // realmente em modo piloto; qualquer outro valor mantém o padrão
-    // seguro "disabled" (sem aviso, sem capacidade extra).
+    // O modo continua sendo lido e guardado: é o que distingue "piloto" de
+    // "desabilitado" para qualquer capacidade futura, e o padrão seguro
+    // continua sendo "disabled". A M25.18 apenas parou de usá-lo para
+    // desenhar uma faixa de alarme permanente.
     state.reportsMode = config.reports_mode === "pilot" ? "pilot" : "disabled";
     document.querySelectorAll("[data-report-entry]").forEach((entry) => {
       entry.hidden = false;

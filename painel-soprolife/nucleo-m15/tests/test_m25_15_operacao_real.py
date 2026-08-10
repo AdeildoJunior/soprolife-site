@@ -937,12 +937,19 @@ def test_frontend_busca_exame_por_nome_ou_codigo():
 def test_frontend_nao_promete_assinatura_qualificada_na_liberacao():
     """O rótulo de "liberado" precisa dizer o que ainda falta."""
 
-    assert 'liberado: "Liberado — aguardando assinatura qualificada"' in (
+    # M25.18 — "Liberado" virou "Concluído": o documento não está pronto para
+    # entrega, falta a assinatura qualificada que a médica aplica fora do
+    # sistema. O que este teste protege continua sendo o mesmo — o rótulo diz
+    # o que FALTA, em vez de sugerir documento finalizado.
+    assert 'liberado: "Concluído — aguardando assinatura qualificada"' in (
         WORKFLOW_JS
     )
-    # O rótulo ANTIGO não pode voltar. A checagem mira a linha do mapa de
-    # status, e não a expressão solta: ela também aparece no comentário que
-    # explica por que foi trocada.
+    # Nenhum dos rótulos anteriores pode voltar. A checagem mira a linha do
+    # mapa de status, e não a expressão solta: ela também aparece nos
+    # comentários que explicam por que foi trocada.
     assert 'liberado: "Liberado (assinatura eletrônica interna)"' not in (
+        WORKFLOW_JS
+    )
+    assert 'liberado: "Liberado — aguardando assinatura qualificada"' not in (
         WORKFLOW_JS
     )

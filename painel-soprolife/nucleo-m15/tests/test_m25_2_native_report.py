@@ -1237,7 +1237,13 @@ def test_selo_institucional_so_aparece_em_laudo_liberado(client, case, db):
     assert preview.status_code == 200, preview.text
     previa = db.get(ReportDocumentVersion, preview.json()["preview_version_id"])
     texto_previa = _pdf_text(_stored_bytes(db, previa))
-    assert "LIBERAÇÃO" not in texto_previa.upper()
+    # M25.18 — o selo passou a dizer "CONCLUÍDO / PELA MÉDICA"; numa prévia
+    # ele continua não existindo, que é o que este teste protege.
+    #
+    # A asserção mira "PELA MÉDICA", e não "CONCLUÍDO": a marca d'água da
+    # prévia é "PRÉVIA — DOCUMENTO NÃO CONCLUÍDO", então a segunda palavra
+    # aparece legitimamente na página sem que exista selo nenhum.
+    assert "PELA MÉDICA" not in texto_previa.upper()
     # Encerra a transação de leitura antes de voltar à API: no SQLite uma
     # transação ORM aberta faz o commit da liberação falhar com
     # "database is locked".
@@ -1251,8 +1257,11 @@ def test_selo_institucional_so_aparece_em_laudo_liberado(client, case, db):
     texto = _pdf_text(_stored_bytes(db, liberada))
     # O selo imprime o estado em duas linhas dentro do anel.
     assert "SOPROLIFE" in texto
-    assert "LIBERAÇÃO" in texto.upper()
-    assert "INSTITUCIONAL" in texto.upper()
+    # M25.18 — "ASSINADO ELETRONICAMENTE / LIBERAÇÃO INSTITUCIONAL" saiu: num
+    # carimbo redondo "assinado" é lido como assinatura, e este PDF ainda vai
+    # ser assinado fora do sistema. O selo declara o que de fato aconteceu.
+    assert "CONCLUÍDO" in texto.upper()
+    assert "PELA MÉDICA" in texto.upper()
     # E nunca sugere assinatura qualificada.
     assert "assinado digitalmente" not in texto.lower()
 
@@ -1359,9 +1368,10 @@ def test_selo_declara_o_tipo_real_e_nunca_antecipa_icp_brasil(
     texto = _pdf_text(_stored_bytes(db, version))
     alto = texto.upper()
 
-    # O selo do tipo declara o que de fato houve.
-    assert "ASSINADO" in alto and "ELETRONICAMENTE" in alto
-    assert "LIBERAÇÃO" in alto and "INSTITUCIONAL" in alto
+    # O selo do tipo declara o que de fato houve (M25.18): o laudo foi
+    # CONCLUÍDO pela médica e AGUARDA a assinatura qualificada externa.
+    assert "CONCLUÍDO" in alto and "PELA MÉDICA" in alto
+    assert "AGUARDANDO" in alto and "ASSINATURA" in alto
 
     # E nunca as marcas reservadas à assinatura qualificada.
     assert "ASSINADO DIGITALMENTE" not in alto

@@ -2454,6 +2454,14 @@
     idemKey: idemKey,
     hasToken: autenticado,
     hasSession: function () { return state.sessao === true; },
+    // M25.18 — URL absoluta de mesma origem para um caminho da API.
+    //
+    // Serve a um caso específico: um <iframe> que precisa ser autenticado
+    // pelo COOKIE de sessão. Um iframe não manda cabeçalho `Authorization`,
+    // então este endereço só é utilizável quando `hasSession()` é verdade —
+    // e é justamente aí que o visualizador de PDF do navegador passa a
+    // receber o `Content-Disposition` com o nome do arquivo.
+    apiUrl: function (path) { return state.apiBase + path; },
     getUser: function () { return state.user; },
     access: function () { classifyAccess(); return state.access; },
     login: function (email, senha, manterConectado) {

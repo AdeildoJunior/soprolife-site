@@ -3937,7 +3937,25 @@ def _native_pdf_bytes(content) -> bytes:
 
 
 def _pilot_warning() -> str | None:
-    return PILOT_WARNING if get_settings().reports_mode == "pilot" else None
+    """M25.18 — o laudo nativo não carrega mais faixa de piloto.
+
+    A faixa dizia "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR AO
+    PACIENTE" e ocupava o topo de todo PDF. Ela era verdadeira quando o
+    fluxo era um protótipo; hoje o documento é produzido em atendimento real
+    e segue para assinatura qualificada externa, então a faixa passou a
+    descrever errado o que o papel é.
+
+    O que a substitui não é omissão: o bloco de assinatura declara, por
+    escrito, que o documento foi concluído pela médica no sistema e que a
+    autenticidade da assinatura digital se verifica no arquivo
+    eletronicamente assinado. `reports_mode` continua `pilot`, e continua
+    sendo o que impede o modo produção — só deixou de virar faixa.
+
+    A função continua existindo (e continua devolvendo `None` de propósito)
+    para manter um único ponto de decisão sobre avisos de topo do laudo.
+    """
+
+    return None
 
 
 def _document_context(db: Session, document: ReportDocument):

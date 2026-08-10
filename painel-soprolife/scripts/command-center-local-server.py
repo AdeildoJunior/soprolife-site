@@ -133,8 +133,24 @@ _M15_REPORT_CONTENT_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
     r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/conteudo$"
 )
+# M25.18 — ESTA regra era a causa do arquivo baixado com nome aleatório.
+#
+# A M25.17 passou a mandar `Geoffrey Kirk Barnes - Assinado.pdf`, com espaços,
+# e um `filename*` em RFC 5987 para carregar os acentos. A expressão antiga
+# (`[A-Za-z0-9._-]` e `$` logo após as aspas) recusava as duas coisas, e o
+# proxy então DESCARTAVA o cabeçalho inteiro. O navegador ficava sem nome
+# nenhum e o Chrome gerava um: `UWNAUiEo.pdf`.
+#
+# O nome técnico anterior (`laudo-ESP-000017-v3-...`) passava, então a
+# regressão só apareceu depois da melhoria — e passou despercebida porque a
+# conferência foi feita direto na API, sem atravessar este proxy.
+#
+# Continua sendo allowlist estrita: nada de aspas, barra, ponto-e-vírgula ou
+# controle dentro do nome, e o parâmetro estendido só aceita percent-encoding.
 _M15_SAFE_DISPOSITION_RE = re.compile(
-    r'^(?:inline|attachment); filename="[A-Za-z0-9._-]{1,180}"$'
+    r'^(?:inline|attachment); '
+    r'filename="[A-Za-z0-9 ()._,+-]{1,180}"'
+    r"(?:; filename\*=UTF-8''[A-Za-z0-9%._~!$&()*+,=:@-]{1,300})?$"
 )
 
 
@@ -207,7 +223,8 @@ def _is_report_content(method: str, suffix: str) -> bool:
 
 
 def _safe_content_disposition(value: str | None) -> str | None:
-    if not value or len(value) > 220 or "\r" in value or "\n" in value:
+    # 220 não cabia mais: o cabeçalho passou a ter `filename` e `filename*`.
+    if not value or len(value) > 520 or "\r" in value or "\n" in value:
         return None
     return value if _M15_SAFE_DISPOSITION_RE.fullmatch(value) else None
 

@@ -16,6 +16,7 @@ from ..models import (
     User,
 )
 from ..normalize import normalize_name, normalize_phone
+from ..services.cpf import CPFInvalidoError, normalizar_cpf
 from ..pagination import PageParams, paginate
 from ..schemas import (
     ConsentIn,
@@ -136,6 +137,23 @@ def check_duplicates(
     }
 
 
+def _cpf_ou_422(valor: str | None) -> str | None:
+    """CPF normalizado, ou 422 explicando o que corrigir.
+
+    M25.18 — o valor entra no sistema SÓ por aqui. Vazio é ausência
+    legítima; preenchido e inválido é recusado, porque um CPF que não fecha
+    impresso num laudo é pior que nenhum CPF.
+    """
+
+    try:
+        return normalizar_cpf(valor)
+    except CPFInvalidoError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"codigo": exc.codigo, "mensagem": exc.mensagem},
+        ) from None
+
+
 @router.post("", status_code=201)
 def create_person(
     payload: PersonCreate,
@@ -147,6 +165,7 @@ def create_person(
         public_code=allocate_public_code(db, "people"),
         nome_completo=payload.nome_completo,
         nome_normalizado=normalize_name(payload.nome_completo),
+        cpf=_cpf_ou_422(payload.cpf),
         data_nascimento=payload.data_nascimento,
         observacao=payload.observacao,
     )
@@ -209,6 +228,11 @@ def update_person(
 ):
     person = _get_person(db, person_id)
     changed = []
+    if payload.cpf is not None:
+        # String vazia DESVINCULA; ausente significa "não mexa". Sem essa
+        # distinção não haveria como corrigir um CPF cadastrado por engano.
+        person.cpf = _cpf_ou_422(payload.cpf)
+        changed.append("cpf")
     if payload.nome_completo is not None:
         person.nome_completo = payload.nome_completo
         person.nome_normalizado = normalize_name(payload.nome_completo)

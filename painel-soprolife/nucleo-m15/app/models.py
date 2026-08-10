@@ -159,6 +159,14 @@ class Person(Base, TimestampMixin, LegacyMixin):
     # tentadora — esconder quem se chama "TESTE…" — transformaria o nome do
     # paciente em regra de negócio: um paciente real chamado Teste sumiria da
     # fila, e um registro de teste renomeado voltaria a aparecer.
+    # M25.18 — CPF do paciente, exigido pela CFM 2.381/2024 "quando houver".
+    #
+    # OPCIONAL de propósito: existe paciente sem CPF aplicável, e um campo
+    # obrigatório produziria número inventado só para destravar o cadastro.
+    # Guardado somente em dígitos (máscara é apresentação) e único quando
+    # preenchido — dois cadastros com o mesmo CPF são a mesma pessoa, e é
+    # esse índice que impede o prontuário partido em dois.
+    cpf: Mapped[str | None] = mapped_column(String(11), unique=True, index=True)
     arquivado: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default="0"
     )
@@ -168,6 +176,14 @@ class Person(Base, TimestampMixin, LegacyMixin):
         back_populates="person", lazy="selectin"
     )
     __table_args__ = (
+        # `length` é portável entre SQLite e PostgreSQL; a checagem de que
+        # são DÍGITOS (e de que os verificadores fecham) vive em
+        # `services/cpf.py`, único ponto por onde o valor entra. Um GLOB ou
+        # regex aqui só funcionaria num dos dois bancos.
+        CheckConstraint(
+            "cpf IS NULL OR length(cpf) = 11",
+            name="cpf_com_onze_digitos",
+        ),
         CheckConstraint(
             "(arquivado = 0 AND arquivado_em IS NULL "
             "AND arquivado_motivo IS NULL) OR "

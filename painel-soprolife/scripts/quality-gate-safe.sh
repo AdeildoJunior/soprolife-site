@@ -54,6 +54,7 @@ run "node --check js/report-workflow.js"     node --check painel-soprolife/js/re
 run "node --check test-m21-browser-e2e.js"   node --check painel-soprolife/scripts/test-m21-browser-e2e.js
 run "node --check test-m22-pastore.js"       node --check painel-soprolife/scripts/test-m22-pastore.js
 run "node --check test-m24a-report-workflow.js" node --check painel-soprolife/scripts/test-m24a-report-workflow.js
+run "node --check test-m25-18-download-e2e.js" node --check painel-soprolife/scripts/test-m25-18-download-e2e.js
 run "node --check test-m24a-browser-e2e.js"  node --check painel-soprolife/scripts/test-m24a-browser-e2e.js
 
 secao "2/10 Testes JS (M4 e M5)"

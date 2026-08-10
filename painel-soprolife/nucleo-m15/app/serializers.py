@@ -9,6 +9,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from zoneinfo import ZoneInfo
 
 from .config import get_settings
+from .services.cpf import mascarar_cpf
 from .services.crm_display import (
     format_crm_full,
     format_crm_number,
@@ -84,6 +85,12 @@ def ser_person(p: m.Person, with_contacts: bool = True) -> dict:
         "status": p.status,
         "nao_contatar": p.nao_contatar,
         "data_nascimento": d(p.data_nascimento),
+        # M25.18 — o CPF NUNCA sai cru por aqui. `ser_person` alimenta
+        # listagens, buscas e telas de cadastro; para todas elas basta saber
+        # que existe um CPF e poder conferi-lo parcialmente. O número
+        # completo só é montado dentro do laudo, a partir do modelo.
+        "cpf_mascarado": mascarar_cpf(p.cpf),
+        "tem_cpf": bool(p.cpf),
         "observacao": p.observacao,
         **_legacy(p),
         **_stamps(p),

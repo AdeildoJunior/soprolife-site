@@ -45,10 +45,13 @@ VEREDITO_AGUARDANDO = (
 # migration, nem entrada de formulário). Enquanto isso for verdade, o laudo
 # não pode imprimir CPF de forma alguma, e esta constante é o registro
 # explícito da pendência para o relatório e para a próxima missão.
+# M25.18 — o campo passou a existir (`people.cpf`, opcional e validado).
+# A pendência deixou de ser "o sistema não sabe guardar" e virou "este
+# paciente não tem CPF cadastrado", que é uma condição por documento e não
+# uma limitação do produto.
 PENDENCIA_CPF = (
-    "O cadastro de pessoas não possui campo de CPF. Enquanto a coluna não "
-    "existir, nenhum laudo pode imprimir CPF, e nada deve ser preenchido no "
-    "lugar dele."
+    "O cadastro deste paciente não tem CPF preenchido. Informe o CPF no "
+    "cadastro da pessoa, ou confirme que não há CPF aplicável."
 )
 
 
@@ -142,12 +145,14 @@ def avaliar_cfm_2381(content: NativeReportContent) -> list[Requisito]:
         Requisito(
             chave="cpf_paciente",
             exigencia="CPF do paciente, quando houver",
-            # NUNCA atendido hoje, e de propósito: declarar atendido porque
-            # "não há CPF cadastrado" transformaria uma limitação do sistema
-            # em conformidade aparente.
-            atendido=False,
+            # M25.18 — agora depende do cadastro, não do produto. Continua
+            # bloqueante: "quando houver" só é dispensa depois que alguém
+            # confirmou que não há, e essa confirmação ainda não existe como
+            # dado. Enquanto não existir, a ausência é pendência — nunca
+            # conformidade presumida.
+            atendido=_preenchido(paciente.cpf),
             bloqueia_entrega_oficial=True,
-            detalhe=PENDENCIA_CPF,
+            detalhe=paciente.cpf or PENDENCIA_CPF,
         ),
         Requisito(
             chave="data_emissao",

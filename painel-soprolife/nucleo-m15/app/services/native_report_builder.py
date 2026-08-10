@@ -28,6 +28,7 @@ from ..models import (
     ReportDocument,
     SpirometryExam,
 )
+from .cpf import formatar_cpf
 from .crm_display import format_crm_number
 from .report_locations import ReportLocation, resolve_report_location
 from .report_native_pdf import (
@@ -240,6 +241,10 @@ def build_native_content(
             birth_date=person.data_nascimento,
             sex=person.sexo,
             public_code=person.public_code,
+            # M25.18 — o número completo aparece SÓ aqui, dentro do laudo,
+            # que é o contexto clínico autorizado. Filas, buscas e a rota de
+            # validação continuam sem ele (ver `ser_person`).
+            cpf=formatar_cpf(person.cpf),
         ),
         exam=ExamBlock(
             public_code=exam.public_code,
