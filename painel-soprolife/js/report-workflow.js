@@ -69,11 +69,12 @@
     signatureAsset: null,
     templates: [],
     adminAccounts: [],
-    adminTemplates: [],
+    // M25.19 — a lista administrativa de templates e a seleção dela saíram
+    // do estado. O catálogo continua íntegro no servidor; o que saiu foi a
+    // vitrine dele nesta tela.
     selectedDocumentId: "",
     selectedOperationalId: "",
     selectedAdminUserId: "",
-    selectedAdminTemplateId: "",
     detail: null,
     locatedExam: null,
     // M25.12 — resultado da última busca por código institucional, FIXO na
@@ -349,12 +350,6 @@
   function selectedAdminAccount() {
     return state.adminAccounts.find(
       (item) => item.user.id === state.selectedAdminUserId
-    ) || null;
-  }
-
-  function selectedAdminTemplate() {
-    return state.adminTemplates.find(
-      (item) => item.id === state.selectedAdminTemplateId
     ) || null;
   }
 
@@ -1631,67 +1626,22 @@
       </section>`;
   }
 
-  function renderTemplateAdmin() {
-    const rows = state.adminTemplates.map((template) => `
-      <button type="button" class="report-admin-template${
-        template.id === state.selectedAdminTemplateId ? " is-selected" : ""
-      }${template.status === "draft" ? " is-provisional" : ""}"
-        data-report-admin-template="${esc(template.id)}">
-        <span><abbr title="${esc(template.texto_tooltip || template.titulo)}">${
-          esc(template.codigo)
-        }</abbr> · v${esc(template.versao)}</span>
-        <strong>${esc(template.titulo)}</strong>
-        <span class="report-template-state">${
-          template.clinically_approved ? "APROVADO" :
-            "PROVISÓRIO — NÃO UTILIZAR EM PRODUÇÃO"
-        }</span>
-      </button>`).join("");
-    const selected = selectedAdminTemplate();
-    return `
-      <section class="report-panel" aria-labelledby="templateAdminTitle">
-        <p class="eyebrow">Catálogo versionado</p>
-        <h3 id="templateAdminTitle">Templates clínicos</h3>
-        <div class="report-admin-template-list">${rows}</div>
-        ${selected ? `
-          <form id="reportTemplateRevisionForm" class="report-template-revision-form">
-            <h4>Nova revisão de ${esc(selected.codigo)}</h4>
-            <p class="report-warning">A revisão anterior permanece imutável. Os seis textos atuais são placeholders provisórios.</p>
-            <input type="hidden" name="template_id" value="${esc(selected.id)}">
-            <label for="reportTemplateTitle">Rótulo
-              <input id="reportTemplateTitle" name="titulo" maxlength="200"
-                required value="${esc(selected.titulo)}">
-            </label>
-            <label for="reportTemplateTooltip">Tooltip
-              <input id="reportTemplateTooltip" name="texto_tooltip" maxlength="240"
-                value="${esc(selected.texto_tooltip)}">
-            </label>
-            <label for="reportTemplateBody">Texto da revisão
-              <textarea id="reportTemplateBody" name="texto_completo"
-                maxlength="8000" required>${esc(selected.texto_completo)}</textarea>
-            </label>
-            <label for="reportTemplateStatus">Status
-              <select id="reportTemplateStatus" name="status">
-                ${options([
-                  ["draft", "Rascunho / provisório"],
-                  ["approved", "Aprovado"],
-                  ["retired", "Retirado"],
-                ], selected.status)}
-              </select>
-            </label>
-            <label class="report-check">
-              <input type="checkbox" name="clinically_approved"${
-                selected.clinically_approved ? " checked" : ""
-              }> Aprovação clínica confirmada
-            </label>
-            <label class="report-check">
-              <input type="checkbox" name="ativo"${
-                selected.ativo ? " checked" : ""
-              }> Revisão ativa
-            </label>
-            <button class="m15-btn" type="submit">Criar nova revisão</button>
-          </form>` : ""}
-      </section>`;
-  }
+  // M25.19 — o catálogo técnico versionado saiu daqui.
+  //
+  // Havia um bloco administrativo que listava todo o catálogo de templates do
+  // servidor como cards — inclusive os seis placeholders provisórios,
+  // carimbados como impróprios para produção — e um formulário de nova
+  // revisão. Nada disso é operação: a médica lauda pelas
+  // conclusões clínicas definitivas da bancada (M25.2), e o catálogo de
+  // templates só alimenta o fluxo legado de anotação sobre o PDF da MIR
+  // (M24C).
+  //
+  // O que ficou de fora é APENAS a vitrine. Os templates continuam no banco,
+  // os endpoints de leitura administrativa e de nova revisão continuam
+  // existindo com o mesmo RBAC, o versionamento imutável continua valendo e o
+  // E2E continua provando que os provisórios seguem em rascunho e não
+  // aprovados. Editar o catálogo passou a ser tarefa de API, não de tela
+  // operacional.
 
   function renderAdminWorkspace() {
     // M25.10 — a administração vem RECOLHIDA. Ela competia visualmente com o
@@ -1700,11 +1650,10 @@
     // clique de distância.
     return `
       <details class="report-admin-shell">
-        <summary>Administração restrita — contas médicas e catálogo técnico</summary>
+        <summary>Administração restrita — contas médicas</summary>
         <p class="report-help">Ajustes de cadastro. Não é necessário para
           receber exames nem para laudar.</p>
         ${renderProfileAdmin()}
-        ${renderTemplateAdmin()}
       </details>`;
   }
 
@@ -1792,8 +1741,10 @@
       if (can("admin")) {
         calls.push(client().api("/laudos/admin/medicos"));
         labels.push("adminAccounts");
-        calls.push(client().api("/laudos/templates?catalog=admin"));
-        labels.push("adminTemplates");
+        // M25.19 — a carga do catálogo administrativo de templates saiu junto
+        // com o bloco visual dele. Sem tela que o consuma, baixar o catálogo
+        // inteiro a cada carga era trabalho para ninguém ver. O endpoint
+        // continua no servidor, restrito a admin.
       }
       const values = await Promise.all(calls);
       if (epoch !== state.loadEpoch) return;
@@ -2709,37 +2660,6 @@
     }
   }
 
-  async function saveTemplateRevision(form) {
-    const payload = {
-      titulo: form.elements.titulo.value,
-      texto_tooltip: form.elements.texto_tooltip.value || null,
-      texto_completo: form.elements.texto_completo.value,
-      status: form.elements.status.value,
-      clinically_approved: form.elements.clinically_approved.checked,
-      ativo: form.elements.ativo.checked,
-    };
-    state.busy = true;
-    announce("Criando revisão imutável do template…", "");
-    try {
-      const revision = await client().api(
-        `/laudos/templates/${encodeURIComponent(form.elements.template_id.value)}`,
-        { method: "PATCH", body: JSON.stringify(payload) }
-      );
-      state.selectedAdminTemplateId = revision.id;
-      announce(`Revisão v${revision.versao} criada sem reescrever a anterior.`, "ok");
-      await loadAuthenticatedData();
-    } catch (error) {
-      announce(readableError(error), "erro");
-    } finally {
-      // M25.14 — repintar SEMPRE depois de zerar `busy`. Antes o render
-      // ficava no `catch`, ou seja, a tela era desenhada AINDA com
-      // `busy = true`: os botões nasciam desabilitados e nada repintava
-      // depois, então a bancada da médica congelava até um F5.
-      state.busy = false;
-      render();
-    }
-  }
-
   async function openCorrection(form) {
     state.busy = true;
     announce("Abrindo documento corretivo separado…", "");
@@ -2858,16 +2778,6 @@
     }
     if (button.matches("[data-report-signature-revoke]")) {
       revokeSignatureAsset(button.getAttribute("data-report-signature-revoke"));
-      return;
-    }
-    if (button.matches("[data-report-admin-template]")) {
-      state.selectedAdminTemplateId = button.getAttribute("data-report-admin-template");
-      render();
-      const heading = document.querySelector("#reportTemplateRevisionForm h4");
-      if (heading) {
-        heading.setAttribute("tabindex", "-1");
-        heading.focus();
-      }
       return;
     }
     if (button.matches("[data-report-prepare-signature]")) {
@@ -3007,8 +2917,6 @@
       reassign(event.target);
     } else if (event.target.id === "reportPhysicianAdminForm") {
       savePhysician(event.target);
-    } else if (event.target.id === "reportTemplateRevisionForm") {
-      saveTemplateRevision(event.target);
     } else if (event.target.id === "reportCorrectionForm") {
       openCorrection(event.target);
     } else if (event.target.id === "reportSignatureAssetForm") {

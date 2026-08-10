@@ -266,11 +266,17 @@ check(
     && reports.includes("template_nao_aprovado")
     && backendConfig.includes("reports_test_allow_provisional_templates")
 );
+// M25.19 — este check exigia o contrário: que o painel MOSTRASSE o carimbo
+// provisório e o formulário de nova revisão. O catálogo técnico saiu da tela
+// operacional, então a garantia mudou de lugar — quem impede o uso de um
+// template provisório é o servidor (os dois checks acima), não um aviso
+// vermelho na interface da médica.
 check(
-  "admin sinaliza provisório e cria revisão",
-  workflow.includes("PROVISÓRIO — NÃO UTILIZAR EM PRODUÇÃO")
-    && workflow.includes("Criar nova revisão")
-    && workflow.includes("A revisão anterior permanece imutável")
+  "catálogo técnico não polui mais a tela operacional",
+  !workflow.includes("PROVISÓRIO — NÃO UTILIZAR EM PRODUÇÃO")
+    && !workflow.includes("Criar nova revisão")
+    && !workflow.includes("Catálogo versionado")
+    && !workflow.includes("reportTemplateRevisionForm")
 );
 
 console.log("\nF) Rodapé e assinatura fail-closed");
