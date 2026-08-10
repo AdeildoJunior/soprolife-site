@@ -8,8 +8,9 @@
 | | |
 | --- | --- |
 | HEAD inicial | `f548b4a53aa463a868437bd870d8fcba1d852e67` |
-| HEAD final | `e31a263dc3a38cf61cdd67ec8cb420154e994593` |
-| HEAD final da VPS | `e31a263dc3a38cf61cdd67ec8cb420154e994593` |
+| HEAD final do código | `2e11c52` — a mudança de produto inteira |
+| HEAD da VPS no deploy verificado | `e31a263dc3a38cf61cdd67ec8cb420154e994593` |
+| HEAD da VPS ao encerrar | o commit deste relatório, sempre à frente por documentação apenas |
 | Migration | **nenhuma** — a mudança é HTML/CSS/JS |
 | Backup pré-deploy | não aplicável (sem alteração de backend nem de banco) |
 | Serviço reiniciado | **nenhum** — ver §8 |
