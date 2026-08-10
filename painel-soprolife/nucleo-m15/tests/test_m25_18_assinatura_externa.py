@@ -405,6 +405,10 @@ def test_pdf_novo_declara_conclusao_e_nao_assinatura():
     # E o texto discreto que diz ONDE conferir a assinatura de verdade.
     assert "Documento concluído pela médica responsável" in texto
     assert "deve ser verificada no arquivo" in texto
+    # A data acima da assinatura também descreve conclusão, não liberação
+    # para entrega — o documento ainda vai ser assinado fora do sistema.
+    assert "Concluído em" in texto
+    assert "Liberado em" not in texto
     # ICP-Brasil aparece UMA vez — na frase que NEGA a assinatura.
     assert alto.count("ICP-BRASIL") == 1
     assert "não constitui" in texto

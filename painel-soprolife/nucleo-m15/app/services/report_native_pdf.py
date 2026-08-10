@@ -920,7 +920,12 @@ class _Composer:
         moment = self.content.released_at_local or self.content.issued_at_local
         c.setFont(FONT, 7.6)
         c.setFillColor(MUTED)
-        prefix = "Liberado em" if self.content.released else "Prévia gerada em"
+        # M25.18 — "Liberado" sugeria documento pronto para entrega; ele
+        # ainda vai ser assinado fora do sistema. A data é a da conclusão
+        # clínica, e o rótulo passou a dizer isso.
+        prefix = (
+            "Concluído em" if self.content.released else "Prévia gerada em"
+        )
         c.drawCentredString(
             center_x,
             top - 14,
