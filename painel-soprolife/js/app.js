@@ -4002,7 +4002,23 @@ function updateLeadsFilterTip(el) {
   el.setAttribute("aria-label", `Filtro de leads: ${el.value}. ${tip}`);
 }
 
-init();
+// M25.23 — o painel legado só começa depois que o papel real voltou do
+// servidor. Antes disto, init() disparava a leitura de todos os data/*.json
+// imediatamente, para qualquer visitante. Papel exclusivamente clínico não
+// carrega dado administrativo: os JSONs correspondentes respondem 403 e as
+// seções nem existem mais no DOM, então buscá-los seria só ruído de erro.
+(function () {
+  const gate = window.SoproBootGate;
+  if (!gate || !gate.pronto || typeof gate.pronto.then !== "function") {
+    // Sem o gate carregado, fail-closed: não monta o painel legado.
+    console.warn("Gate de boot ausente — painel administrativo não iniciado.");
+    return;
+  }
+  gate.pronto.then((identidade) => {
+    if (!identidade || gate.somenteClinico) return;
+    init();
+  });
+})();
 
 
 function renderTaskGroup(selector, tasks) {

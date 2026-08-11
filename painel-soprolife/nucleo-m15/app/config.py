@@ -50,7 +50,19 @@ class Settings(BaseSettings):
     # Cookie assinado, HttpOnly, SameSite=Strict, Path restrito ao prefixo
     # público da API. Nunca guarda o token bearer nem a senha.
     session_cookie_name: str = "soprolife_m15_sessao"
-    session_cookie_path: str = "/painel-soprolife/api/m15"
+    # M25.23 — alargado de "/painel-soprolife/api/m15" para "/painel-soprolife".
+    #
+    # O escopo antigo fazia o navegador enviar o cookie SÓ para a API. Com ele,
+    # a camada estática do painel era estruturalmente incapaz de saber quem
+    # estava pedindo a página — e foi exatamente por isso que ela servia o
+    # conteúdo restrito a qualquer um. O gate de boot depende de reconhecer a
+    # sessão em GET /painel-soprolife/ e em /painel-soprolife/data/*.
+    #
+    # O que NÃO mudou: HttpOnly, SameSite=strict e Secure (obrigatório em prod).
+    # O cookie continua preso ao painel — nunca vaza para o site institucional
+    # na mesma origem — e o proxy segue filtrando por allowlist de nome antes
+    # de repassar qualquer cookie à API.
+    session_cookie_path: str = "/painel-soprolife"
     # Em prod o validador abaixo força True; em dev loopback (http) o padrão
     # False permite desenvolver sem TLS sem jamais afrouxar produção.
     session_cookie_secure: bool = False

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Acesso — SoproLife</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <!--
+    M25.23 — Casca MINIMA de autenticacao.
+
+    O servidor entrega este arquivo em /painel-soprolife/ enquanto nao houver
+    sessao valida. Esconder area restrita por CSS nao resolveria: o conteudo
+    ainda chegaria ao navegador e bastaria o DevTools para le-lo.
+
+    Contrato deste arquivo, verificado por teste automatizado:
+      - nenhuma area restrita, nenhum modulo, nenhum menu;
+      - nenhum valor operacional;
+      - nenhuma requisicao de dados;
+      - so marca, campos de credencial e mensagem de erro.
+
+    O teste tambem proibe o VOCABULARIO das areas restritas neste HTML: citar
+    os nomes dos modulos aqui, ainda que so em comentario, ja seria informacao
+    entregue antes do login. Nao acrescente nada que precise de dado do
+    servidor, e nao nomeie area restrita alguma.
+  -->
+  <link rel="icon" href="./assets/soprolife-logo.png" />
+  <style>
+    /* Estilo embutido de propósito: a tela de login não carrega a folha de
+       estilo da área restrita, para nunca herdar um seletor que faça algo
+       aparecer aqui. */
+    :root {
+      --navy: #0b2545;
+      --navy-soft: #13315c;
+      --teal: #1db7a6;
+      --line: #dfe6ee;
+      --text: #1a2b42;
+      --muted: #5b6b80;
+      --danger: #b4232c;
+      --danger-bg: #fdeced;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: linear-gradient(160deg, #0b2545 0%, #13315c 55%, #1d4e6b 100%);
+      font-family: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: var(--text);
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: #fff;
+      border-radius: 16px;
+      padding: 36px 32px 30px;
+      box-shadow: 0 24px 60px rgba(5, 20, 40, .34);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+    .brand img { width: 44px; height: 44px; object-fit: contain; }
+    .brand strong { display: block; font-size: 1.05rem; color: var(--navy); letter-spacing: .01em; }
+    .brand span { display: block; font-size: .78rem; color: var(--muted); }
+    h1 { margin: 0 0 6px; font-size: 1.28rem; color: var(--navy); }
+    .sub { margin: 0 0 24px; font-size: .87rem; color: var(--muted); line-height: 1.5; }
+    label { display: block; font-size: .82rem; font-weight: 600; color: var(--navy); margin-bottom: 6px; }
+    .field { margin-bottom: 16px; }
+    input[type="email"], input[type="password"] {
+      width: 100%;
+      padding: 11px 13px;
+      font-size: .95rem;
+      font-family: inherit;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: #fbfcfe;
+    }
+    input:focus { outline: 2px solid var(--teal); outline-offset: 1px; border-color: var(--teal); }
+    .keep { display: flex; align-items: center; gap: 8px; margin: 4px 0 20px; font-size: .84rem; color: var(--muted); }
+    .keep input { width: 16px; height: 16px; accent-color: var(--teal); }
+    button {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: .96rem;
+      font-weight: 700;
+      font-family: inherit;
+      color: #fff;
+      background: var(--navy);
+      border: 0;
+      border-radius: 9px;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { background: var(--navy-soft); }
+    button:disabled { opacity: .6; cursor: progress; }
+    .msg {
+      margin: 0 0 18px;
+      padding: 11px 13px;
+      border-radius: 9px;
+      font-size: .86rem;
+      line-height: 1.45;
+      background: var(--danger-bg);
+      color: var(--danger);
+      border: 1px solid #f3c5c9;
+    }
+    .msg[hidden] { display: none; }
+    .foot { margin: 22px 0 0; font-size: .74rem; color: var(--muted); text-align: center; line-height: 1.5; }
+    @media (max-width: 480px) {
+      body { padding: 16px; }
+      .card { padding: 28px 22px 24px; border-radius: 14px; }
+      h1 { font-size: 1.16rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">
+      <img src="./assets/soprolife-logo.png" alt="" />
+      <div>
+        <strong>SoproLife</strong>
+        <span>Acesso restrito</span>
+      </div>
+    </div>
+
+    <h1>Entrar no painel</h1>
+    <p class="sub">Área privada da equipe SoproLife. Use as credenciais que você recebeu.</p>
+
+    <p class="msg" id="loginErro" role="alert" aria-live="polite" hidden></p>
+
+    <form id="loginForm" autocomplete="on" novalidate>
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" autocomplete="username"
+               required autocapitalize="none" spellcheck="false" />
+      </div>
+      <div class="field">
+        <label for="password">Senha</label>
+        <input id="password" name="password" type="password"
+               autocomplete="current-password" required />
+      </div>
+      <label class="keep">
+        <input type="checkbox" id="manterConectado" />
+        Manter conectado neste dispositivo
+      </label>
+      <button type="submit" id="entrarBtn">Entrar</button>
+    </form>
+
+    <p class="foot">Acesso monitorado e registrado.<br />Nenhum dado de paciente é exibido antes da autenticação.</p>
+  </main>
+
+  <script src="./js/m15-security.js"></script>
+  <script src="./js/login.js"></script>
+</body>
+</html>

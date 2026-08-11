@@ -309,6 +309,12 @@ def issue_csrf(db: Session, sessao: AuthSession) -> str:
     return csrf
 
 
+# M25.23 — escopo anterior do cookie de sessão. Continua listado APENAS para
+# ser apagado no próximo login: um cookie antigo, de path mais específico, tem
+# precedência no cabeçalho Cookie e sombrearia a sessão nova recém-emitida.
+_LEGACY_COOKIE_PATHS = ("/painel-soprolife/api/m15",)
+
+
 def set_session_cookie(response: Response, cookie_value: str, persistente: bool) -> None:
     """HttpOnly + Secure + SameSite=Strict + Path restrito, sempre.
 
@@ -316,6 +322,19 @@ def set_session_cookie(response: Response, cookie_value: str, persistente: bool)
     navegador. Com "manter conectado" recebe o teto configurado (<=7 dias).
     """
     settings = get_settings()
+    # Apaga primeiro o resíduo do escopo antigo. Sem isto, quem já estava
+    # logado quando a M25.23 subiu ficaria com dois cookies de mesmo nome, e o
+    # navegador mandaria o antigo (path mais longo) na frente — o painel
+    # pareceria recusar um login que acabou de dar certo.
+    for legado in _LEGACY_COOKIE_PATHS:
+        if legado != settings.session_cookie_path:
+            response.delete_cookie(
+                key=settings.session_cookie_name,
+                path=legado,
+                secure=settings.session_cookie_secure,
+                httponly=True,
+                samesite="strict",
+            )
     response.set_cookie(
         key=settings.session_cookie_name,
         value=cookie_value,

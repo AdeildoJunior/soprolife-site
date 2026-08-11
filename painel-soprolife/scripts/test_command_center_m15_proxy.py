@@ -213,22 +213,187 @@ class ProxyM15Tests(unittest.TestCase):
         self.assertEqual((conn.host, conn.port), ("127.0.0.1", 8015))
         self.assertNotIn("X-Upstream", conn.request_args[3])
 
-    def test_prefixo_incorreto_post_retorna_404(self):
+    def test_prefixo_incorreto_nao_e_proxiado(self):
+        """Um prefixo parecido com o do M15 NUNCA vira chamada ao upstream.
+
+        M25.23 — o POST continua 404. O GET passou a 401 porque o caminho fica
+        sob /painel-soprolife/ e o gate é fail-closed: para quem não tem
+        sessão, "não existe" e "não pode" respondem igual, e é assim que se
+        evita usar 404/401 para mapear o que existe no servidor.
+        """
+        antes = len(FakeConnection.instances)
+
         handler = Harness("/painel-soprolife/api/m15-externo/health")
         handler.command = "POST"
         handler.do_POST()
         self.assertEqual(handler.statuses[-1], 404)
-        handler = Harness("/painel-soprolife/api/m15-externo/health")
-        handler.do_GET()
-        self.assertEqual(handler.statuses[-1], 404)
 
-    def test_arquivo_estatico_continua_delegado(self):
+        handler = Harness("/painel-soprolife/api/m15-externo/health")
+        with mock.patch.object(server, "_session_identity", return_value=None):
+            handler.do_GET()
+        self.assertEqual(handler.statuses[-1], 401)
+
+        self.assertEqual(len(FakeConnection.instances), antes,
+                         "prefixo incorreto não pode abrir conexão upstream")
+
+    def test_arquivo_estatico_delegado_somente_com_sessao(self):
+        """M25.23 — a entrega do painel passou a depender da sessão.
+
+        Antes, `/painel-soprolife/index.html` ia direto para o servidor de
+        arquivos, para qualquer um: era exatamente por isso que o conteúdo
+        restrito chegava ao navegador antes do login.
+        """
+        # COM sessão administrativa: delega ao servidor de arquivos, como antes.
         handler = Harness("/painel-soprolife/index.html")
         with mock.patch.object(
-            server.http.server.SimpleHTTPRequestHandler, "do_GET", autospec=True
-        ) as inherited:
-            handler.do_GET()
+            server, "_session_identity",
+            return_value={"id": "u1", "papeis_efetivos": ["gestor"]},
+        ):
+            with mock.patch.object(
+                server.http.server.SimpleHTTPRequestHandler, "do_GET", autospec=True
+            ) as inherited:
+                handler.do_GET()
         inherited.assert_called_once_with(handler)
+
+        # SEM sessão: nunca delega — entrega a casca de login.
+        handler = Harness("/painel-soprolife/index.html")
+        with mock.patch.object(server, "_session_identity", return_value=None):
+            with mock.patch.object(
+                server.http.server.SimpleHTTPRequestHandler, "do_GET", autospec=True
+            ) as inherited:
+                # PosixPath não aceita patch de método na instância; troca-se o
+                # objeto inteiro por um dublê com a mesma interface mínima.
+                with mock.patch.object(
+                    server, "_LOGIN_PAGE",
+                    types.SimpleNamespace(read_bytes=lambda: b"<form id=loginForm>"),
+                ):
+                    handler.do_GET()
+        inherited.assert_not_called()
+        self.assertEqual(handler.statuses[-1], 200)
+        self.assertEqual(handler.response_headers.get("cache-control"), "no-store")
+
+    def test_dado_operacional_exige_sessao_administrativa(self):
+        """Sem sessão 401; sessão só clínica 403; administrativa delega."""
+        alvo = "/painel-soprolife/data/financeiro-summary.local.json"
+
+        handler = Harness(alvo)
+        with mock.patch.object(server, "_session_identity", return_value=None):
+            handler.do_GET()
+        self.assertEqual(handler.statuses[-1], 401)
+
+        handler = Harness(alvo)
+        with mock.patch.object(
+            server, "_session_identity",
+            return_value={"id": "u2", "papeis_efetivos": ["medico"]},
+        ):
+            handler.do_GET()
+        self.assertEqual(handler.statuses[-1], 403)
+
+        handler = Harness(alvo)
+        with mock.patch.object(
+            server, "_session_identity",
+            return_value={"id": "u1", "papeis_efetivos": ["leitura"]},
+        ):
+            with mock.patch.object(
+                server.http.server.SimpleHTTPRequestHandler, "do_GET", autospec=True
+            ) as inherited:
+                handler.do_GET()
+        inherited.assert_called_once_with(handler)
+
+    def test_fonte_privada_e_repositorio_nunca_saem(self):
+        """404 mesmo com sessão administrativa: não é conteúdo web."""
+        for alvo in (
+            "/painel-soprolife/data-private/followup-pacientes.local.json",
+            "/painel-soprolife/data-private/",
+            "/.git/config",
+            "/painel-soprolife/nucleo-m15/app/config.py",
+            "/painel-soprolife/scripts/command-center-local-server.py",
+        ):
+            handler = Harness(alvo)
+            with mock.patch.object(
+                server, "_session_identity",
+                return_value={"id": "u1", "papeis_efetivos": ["admin", "gestor"]},
+            ):
+                with mock.patch.object(
+                    server.http.server.SimpleHTTPRequestHandler, "do_GET", autospec=True
+                ) as inherited:
+                    handler.do_GET()
+            self.assertEqual(handler.statuses[-1], 404, alvo)
+            inherited.assert_not_called()
+
+    def test_listagem_de_diretorio_desativada(self):
+        """Era a listagem que entregava o índice inteiro da fonte privada."""
+        handler = Harness("/painel-soprolife/templates/")
+        self.assertIsNone(handler.list_directory("/qualquer/caminho"))
+        self.assertEqual(handler.statuses[-1], 404)
+
+    def test_head_passa_pelo_mesmo_gate_do_get(self):
+        """Sem isto, HEAD ainda confirmaria existência e tamanho dos arquivos."""
+        handler = Harness("/painel-soprolife/data-private/leads.local.json")
+        handler.command = "HEAD"
+        with mock.patch.object(
+            server.http.server.SimpleHTTPRequestHandler, "do_HEAD", autospec=True
+        ) as inherited:
+            handler.do_HEAD()
+        self.assertEqual(handler.statuses[-1], 404)
+        inherited.assert_not_called()
+
+    def test_sessao_e_fail_closed_quando_a_api_nao_responde(self):
+        """Backend fora do ar FECHA o painel — nunca abre."""
+        with mock.patch.object(
+            server.http.client, "HTTPConnection", side_effect=OSError("recusado")
+        ):
+            self.assertIsNone(
+                server._session_identity("soprolife_m15_sessao=qualquer")
+            )
+
+    def test_sessao_sem_papel_resolvido_nao_vale(self):
+        """Resposta degradada da API não pode virar acesso liberado."""
+        casos = (
+            (200, b'{"id":"u1"}'),                     # sem papéis
+            (200, b'{"id":"u1","papeis_efetivos":[]}'),  # papéis vazios
+            (200, b"{}"),                              # sem identidade
+            (200, b"nao-e-json"),                      # corpo ilegível
+            (401, b'{"detail":"Token ausente."}'),     # recusado pela API
+            (500, b'{"erro":"interno"}'),              # API com defeito
+        )
+        original = FakeConnection.response
+        try:
+            for status, corpo in casos:
+                FakeConnection.response = FakeResponse(status=status, body=corpo)
+                with mock.patch.object(
+                    server.http.client, "HTTPConnection", FakeConnection
+                ):
+                    self.assertIsNone(
+                        server._session_identity("soprolife_m15_sessao=qualquer"),
+                        f"status={status} corpo={corpo!r}",
+                    )
+        finally:
+            FakeConnection.response = original
+
+    def test_sessao_administrativa_reconhecida(self):
+        """O caminho feliz também é fixado: papéis chegam do /auth/me."""
+        original = FakeConnection.response
+        try:
+            FakeConnection.response = FakeResponse(
+                status=200, body=b'{"id":"u1","papeis_efetivos":["gestor","leitura"]}'
+            )
+            with mock.patch.object(server.http.client, "HTTPConnection", FakeConnection):
+                identidade = server._session_identity("soprolife_m15_sessao=qualquer")
+            self.assertIsNotNone(identidade)
+            self.assertTrue(server._is_administrative(identidade))
+            self.assertFalse(
+                server._is_administrative({"id": "u2", "papeis_efetivos": ["medico"]})
+            )
+        finally:
+            FakeConnection.response = original
+
+    def test_cookie_fora_da_allowlist_nao_vira_sessao(self):
+        """Sem o cookie do painel não há consulta ao /auth/me — nem sessão."""
+        antes = len(FakeConnection.instances)
+        self.assertIsNone(server._session_identity(None))
+        self.assertIsNone(server._session_identity("outro_cookie=abc"))
+        self.assertEqual(len(FakeConnection.instances), antes)
 
     def test_path_traversal_rejeitado(self):
         for path in (

@@ -58,12 +58,41 @@ def _login(client, email=None, *, senha=SENHA, manter=False):
     )
 
 
+def _set_cookies(resp) -> list[str]:
+    """TODOS os Set-Cookie da resposta, na ordem em que foram emitidos.
+
+    `headers.get("set-cookie")` NÃO serve: com mais de um cabeçalho o httpx
+    devolve os dois concatenados por vírgula, e o par vira uma string só.
+    """
+    if hasattr(resp.headers, "get_list"):
+        return list(resp.headers.get_list("set-cookie"))
+    if hasattr(resp.headers, "raw_items"):
+        return [
+            valor.decode()
+            for nome, valor in resp.headers.raw_items()
+            if nome.decode().lower() == "set-cookie"
+        ]
+    unico = resp.headers.get("set-cookie", "")
+    return [unico] if unico else []
+
+
+def _e_remocao(bruto: str) -> bool:
+    """Set-Cookie de REMOÇÃO: valor vazio e/ou Max-Age=0."""
+    return f'{COOKIE}=""' in bruto or "Max-Age=0" in bruto
+
+
 def _set_cookie_header(resp) -> str:
-    for nome, valor in resp.headers.raw_items() if hasattr(resp.headers, "raw_items") else []:
-        if nome.decode().lower() == "set-cookie":
-            return valor.decode()
-    # httpx expõe múltiplos Set-Cookie assim:
-    return resp.headers.get("set-cookie", "")
+    """O Set-Cookie que EMITE a sessão.
+
+    M25.23 — o login passou a mandar dois Set-Cookie: primeiro a remoção do
+    escopo antigo (`/painel-soprolife/api/m15`), depois o cookie novo. Pegar
+    cegamente o primeiro faria os testes de atributo lerem o de remoção, que
+    por definição carrega Max-Age=0 e expires.
+    """
+    for bruto in _set_cookies(resp):
+        if not _e_remocao(bruto):
+            return bruto
+    return ""
 
 
 def _logout(client, csrf):
@@ -90,9 +119,19 @@ def test_login_emite_cookie_de_sessao_com_flags_corretas(client):
 
 
 def test_path_padrao_e_restrito_ao_prefixo_do_painel(monkeypatch):
-    """O default de produção NÃO é "/": o cookie só viaja para a API do painel."""
+    """O default de produção NÃO é "/": o cookie fica preso ao painel.
+
+    M25.23 — o escopo passou de ".../api/m15" para "/painel-soprolife". O
+    ponto do teste continua o mesmo e é o que importa: o cookie NUNCA vale
+    para a origem inteira, então não vaza para o site institucional. Ele
+    precisou alargar para dentro do painel porque a camada estática também
+    precisa reconhecer a sessão — sem isso ela servia o painel a qualquer um.
+    """
     monkeypatch.delenv("M15_SESSION_COOKIE_PATH", raising=False)
-    assert Settings().session_cookie_path == "/painel-soprolife/api/m15"
+    path = Settings().session_cookie_path
+    assert path == "/painel-soprolife"
+    assert path != "/"
+    assert not path.startswith("/painel-soprolife/api")
 
 
 def test_path_de_cookie_invalido_e_recusado():
@@ -170,6 +209,32 @@ def test_sem_manter_conectado_o_cookie_morre_com_o_navegador(client):
     # cookie de sessão do navegador: sem Max-Age e sem Expires
     assert "Max-Age" not in bruto and "expires" not in bruto.lower()
     assert resp.json()["sessao"]["persistente"] is False
+
+
+def test_login_apaga_o_cookie_do_escopo_antigo(client):
+    """M25.23 — o login limpa o resíduo do path anterior.
+
+    Sem isto, quem já estava logado quando o escopo mudou ficaria com dois
+    cookies de mesmo nome. O navegador manda o de path mais específico
+    primeiro, então o antigo sombrearia a sessão recém-criada e o painel
+    pareceria recusar um login que acabou de dar certo.
+    """
+    resp = _login(client, manter=False)
+    brutos = _set_cookies(resp)
+    remocoes = [b for b in brutos if _e_remocao(b)]
+    emissoes = [b for b in brutos if not _e_remocao(b)]
+
+    assert len(emissoes) == 1, "deve emitir exatamente um cookie de sessão"
+    assert len(remocoes) == 1, "deve apagar exatamente o escopo legado"
+    assert "Path=/painel-soprolife/api/m15" in remocoes[0]
+    assert "Max-Age=0" in remocoes[0]
+    # A remoção vem ANTES da emissão: a ordem importa no navegador.
+    assert brutos.index(remocoes[0]) < brutos.index(emissoes[0])
+    # O escopo do cookie EMITIDO é o configurado (aqui "/", por causa da
+    # fixture do TestClient); o valor real de produção é fixado em
+    # test_path_padrao_e_restrito_ao_prefixo_do_painel.
+    assert "Path=" in emissoes[0]
+    assert "Path=/painel-soprolife/api/m15" not in emissoes[0]
 
 
 def test_com_manter_conectado_o_cookie_persiste_com_teto_de_7_dias(client, db):

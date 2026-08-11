@@ -41,6 +41,13 @@ import time
 import urllib.parse
 from pathlib import Path
 
+# O gate vive ao lado deste arquivo. main() faz chdir para a raiz do repo, então
+# o diretório do script entra no sys.path explicitamente — depender do cwd aqui
+# quebraria o import justamente em produção, que é onde ele importa.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import panel_access_gate as _gate  # noqa: E402
+
 HOST = os.environ.get("SOPROLIFE_PANEL_HOST", "127.0.0.1")
 PORT = int(os.environ.get("SOPROLIFE_PANEL_PORT", "8765"))
 
@@ -229,6 +236,79 @@ def _safe_content_disposition(value: str | None) -> str | None:
     return value if _M15_SAFE_DISPOSITION_RE.fullmatch(value) else None
 
 
+# ── Gate de sessão (M25.23) ───────────────────────────────────────────────────
+#
+# A camada estática não tinha noção de sessão: servia o repositório inteiro a
+# quem pedisse. Agora, antes de qualquer arquivo protegido, o proxy pergunta à
+# própria API M15 quem é o portador do cookie. A resposta do /auth/me é a
+# ÚNICA autoridade — nada de papel lido do navegador, nada de cache local de
+# identidade. Sem cookie válido não há leitura de dado operacional.
+
+_LOGIN_PAGE = Path("painel-soprolife/login.html")
+_INDEX_PAGE = Path("painel-soprolife/index.html")
+_AUTH_ME_PATH = "/auth/me"
+_SESSION_TIMEOUT = 5
+
+
+# Papéis que enxergam dado operacional. `medico` está fora de propósito: a
+# autoria clínica não implica acesso administrativo (ROLE_IMPLIES no núcleo diz
+# o mesmo, e é lá que a autorização real acontece).
+_PAPEIS_ADMINISTRATIVOS = frozenset({"admin", "gestor", "operacional", "leitura"})
+
+
+def _is_administrative(identidade: dict | None) -> bool:
+    if not identidade:
+        return False
+    papeis = identidade.get("papeis_efetivos")
+    if not isinstance(papeis, list):
+        return False
+    return any(p in _PAPEIS_ADMINISTRATIVOS for p in papeis if isinstance(p, str))
+
+
+def _session_identity(cookie_header: str | None) -> dict | None:
+    """Identidade real do portador do cookie, ou None.
+
+    Fail-closed em TODO caminho de erro: sem cookie, upstream inválido, timeout,
+    conexão recusada, status != 200 ou corpo ilegível ⇒ None ⇒ tratado como não
+    autenticado. Um backend fora do ar fecha o painel; nunca o abre.
+    """
+    cookie = _filter_request_cookie(cookie_header)
+    if not cookie:
+        return None
+    try:
+        host, port, base_path = _m15_upstream()
+    except ValueError:
+        return None
+    connection = None
+    try:
+        connection = http.client.HTTPConnection(host, port, timeout=_SESSION_TIMEOUT)
+        connection.request(
+            "GET", base_path + _AUTH_ME_PATH,
+            headers={"Cookie": cookie, "Accept": "application/json"},
+        )
+        response = connection.getresponse()
+        raw = response.read(_M15_MAX_RESPONSE_BODY)
+        if response.status != 200:
+            return None
+        identidade = json.loads(raw.decode("utf-8"))
+    except (OSError, http.client.HTTPException, ValueError, UnicodeDecodeError):
+        return None
+    finally:
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:  # pragma: no cover - fechamento best-effort
+                pass
+    if not isinstance(identidade, dict) or not identidade.get("id"):
+        return None
+    papeis = identidade.get("papeis_efetivos")
+    if not isinstance(papeis, list) or not papeis:
+        # Identidade sem papel resolvido não é sessão utilizável. Recusar aqui
+        # evita que uma resposta degradada da API vire acesso liberado.
+        return None
+    return identidade
+
+
 # ── Handler ───────────────────────────────────────────────────────────────────
 
 class _Handler(http.server.SimpleHTTPRequestHandler):
@@ -243,8 +323,103 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             self._handle_m15("GET", m15)
         elif self.path == _STATUS_PATH:
             self._handle_status()
-        else:
+        elif self._static_allowed("GET"):
             super().do_GET()
+
+    # ── Gate estático (M25.23) ────────────────────────────────────────────
+    #
+    # Ponto único por onde TODO arquivo passa antes de existir na resposta.
+    # Devolve True só quando o arquivo pode ser servido; quando devolve False,
+    # a resposta já foi escrita aqui.
+
+    def _static_allowed(self, method: str) -> bool:
+        try:
+            kind = _gate.classify(self.path)
+        except _gate.InvalidPath:
+            # Caminho malformado/travessia: 404 seco. Um 400 explicando o
+            # motivo ensinaria o formato aceito a quem está sondando.
+            self._deny(404, "Não encontrado.", method)
+            return False
+
+        if kind == _gate.PUBLIC:
+            return True
+        if kind == _gate.FORBIDDEN:
+            # Nunca sai por HTTP, nem com sessão. 404 e não 403: confirmar a
+            # existência de `data-private/` ou `.git/` já é informação.
+            self._deny(404, "Não encontrado.", method)
+            return False
+
+        identidade = _session_identity(self.headers.get("cookie"))
+
+        if identidade is None:
+            # Sem sessão válida.
+            if _gate.is_panel_entry(self.path):
+                self._serve_login(method)
+                return False
+            self._deny(401, "Sessão necessária.", method)
+            return False
+
+        # Com sessão — o papel ainda decide o DADO. A casca do painel é comum
+        # a todo mundo que entrou (a médica precisa dela para a bancada), mas
+        # os summaries operacionais são administrativos: uma sessão só clínica
+        # não os lê nem digitando a URL do arquivo.
+        if kind == _gate.PROTECTED_DATA and not _is_administrative(identidade):
+            self._deny(403, "Permissão insuficiente para este dado.", method)
+            return False
+
+        self._no_store = True
+        return True
+
+    def _deny(self, status: int, message: str, method: str) -> None:
+        body = json.dumps({"ok": False, "error": message}).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        if method != "HEAD":
+            self.wfile.write(body)
+
+    def _serve_login(self, method: str) -> None:
+        """Entrega a tela de login NO MESMO endereço do painel.
+
+        Mesma URL, conteúdo diferente: o Command Center simplesmente não
+        existe nesta resposta. Nada de overlay, nada de `display:none` — o
+        HTML administrativo não é montado porque não foi enviado.
+        """
+        try:
+            body = _LOGIN_PAGE.read_bytes()
+        except OSError:
+            self._deny(503, "Tela de login indisponível.", method)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        # no-store é parte do contrato: um proxy ou o cache do navegador
+        # guardando "a página do painel" reintroduziria o vazamento.
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "same-origin")
+        self.end_headers()
+        if method != "HEAD":
+            self.wfile.write(body)
+
+    def list_directory(self, path):
+        """Listagem de diretório desativada.
+
+        Era ela que entregava o índice completo de `data-private/` — os nomes
+        dos doze arquivos privados, de graça, sem sessão.
+        """
+        self._deny(404, "Não encontrado.", self.command or "GET")
+        return None
+
+    def end_headers(self):
+        if getattr(self, "_no_store", False):
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self._no_store = False
+        super().end_headers()
 
     def do_POST(self):
         try:
@@ -270,7 +445,9 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             return
         if m15 is not None:
             self._m15_error(405, "Método não permitido.", {"Allow": _M15_ALLOW_HEADER})
-        else:
+        elif self._static_allowed("HEAD"):
+            # HEAD passa pelo MESMO gate do GET: sem isto, o tamanho e a
+            # existência de cada arquivo privado continuariam consultáveis.
             super().do_HEAD()
 
     def do_PUT(self):
