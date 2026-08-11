@@ -167,7 +167,7 @@ Cenários verificados executando as funções **reais** em Node
 | `painel-soprolife/css/report-workflow.css` | shell em pilha + faixa de resumo; cartões de contexto; grade de conclusões; altura do visualizador no desktop; split 53/47; fila em colunas; estados de hover/seleção; `anywhere` → `break-word` nos dados de paciente |
 | `painel-soprolife/index.html` | `?v=2026081001` → `?v=2026081002` (CSS e JS) |
 | `painel-soprolife/nucleo-m15/tests/test_m25_21_ui_medica_premium.py` | **novo** — 39 testes estruturais |
-| `painel-soprolife/nucleo-m15/tests/visual/` | **novo** — harness sintético + CDP + PDF fictício + README |
+| `painel-soprolife/nucleo-m15/tests/visual/` | **novo** — harness sintético + CDP + PDF fictício + smoke de produção + README |
 | `painel-soprolife/docs/m25-21/` | **novo** — capturas sintéticas e `medidas.json` |
 
 Nenhuma migration. Nenhum arquivo de `app/` tocado. Nenhum endpoint alterado.
@@ -296,6 +296,10 @@ inteira), geradas pelo harness de `nucleo-m15/tests/visual/`:
 | `b-paciente-aberto-430.png` | iPhone 430x932 |
 | `c-central-vazia-1920.png` | central sem laudos aguardando (**selo `0`**) |
 | `medidas.json` | as 18 medições completas |
+| `prod-paciente-1920.png` | **produção**, página real, 1920x1080 |
+| `prod-paciente-1366.png` | **produção**, página real, 1366x768 |
+| `prod-mobile-430.png` | **produção**, página real, iPhone 430x932 |
+| `prod.json` | medições do smoke em produção |
 
 **Todos os dados são fictícios.** Nomes inventados ("Ana Exemplo Ribeiro
 Nascimento"), códigos fora das faixas reais (ESP-0004xx, LAU-0003xx, PAC-000777),
@@ -435,72 +439,125 @@ pelos 1254 testes da suíte, incluindo os 63 de
 | migration | nenhuma criada, nenhuma executada |
 | banco | não tocado — o diff não encosta em `app/`, `migrations/` nem em serviço |
 
-### VPS — BLOQUEADO em ação humana
+### VPS — aplicado
 
-O acesso SSH à VPS não pôde ser feito nesta sessão:
+O primeiro acesso parou numa checagem interativa do Tailscale SSH
+(`# Tailscale SSH requires an additional check`). Depois da autenticação
+humana, o deploy foi executado.
+
+Nota para a próxima vez: o FQDN `soprolife-painel-01.tailcaf0e4.ts.net`
+**não está** no `known_hosts` desta máquina — só o nome curto
+`soprolife-painel-01` e o IP `100.87.98.100`. Conectar pelo FQDN devolve
+`Host key verification failed`, que **não** é a VPS recusando: é um nome ainda
+não fixado. Use o nome curto ou o IP.
 
 ```
-root@100.87.98.100
-# Tailscale SSH requires an additional check.
-# To authenticate, visit: https://login.tailscale.com/a/l1b71ff06375878
+cd /opt/soprolife/soprolife-site
+git fetch origin painel-soprolife-v01
+git merge --ff-only origin/painel-soprolife-v01
+Updating 1ae5e23..611a7ec
+Fast-forward
 ```
 
-O host está **ativo e alcançável** (`tailscale status` →
-`100.87.98.100  soprolife-painel-01  active; direct`), mas o Tailscale SSH
-exige uma reautenticação interativa pelo navegador, que só a pessoa dona da
-conta pode concluir.
+| verificação | antes | depois |
+| --- | --- | --- |
+| HEAD da VPS | `1ae5e23` | **`611a7ec`** |
+| working tree | limpo | limpo |
+| branch | `painel-soprolife-v01` | `painel-soprolife-v01` |
+| arquivos de produção no diff | — | `css/report-workflow.css`, `js/report-workflow.js`, `index.html` |
+| diff em `migrations/` ou `app/` | — | **vazio** |
 
-Duas observações que importam para quem for concluir:
+### Reinício de serviço — verificado como desnecessário, e não feito
 
-1. O FQDN `soprolife-painel-01.tailcaf0e4.ts.net` **não está** no
-   `known_hosts` desta máquina (só o nome curto `soprolife-painel-01` e o IP
-   `100.87.98.100`). Conectar pelo FQDN devolve
-   `Host key verification failed` — não é a VPS recusando, é um nome ainda não
-   fixado. Use o nome curto ou o IP, que já estão fixados.
-2. **Não é necessário reiniciar serviço.** Todo o diff de produção é asset
-   estático (`css/`, `js/`, `index.html`); a query `?v=2026081002` é o que faz
-   o navegador da médica largar o CSS quebrado em cache. O backend não mudou.
+O painel é servido por `command-center-local-server.py`
+(`soprolife-painel.service`, 100.87.98.100:8765), que lê os arquivos do disco a
+cada requisição. Todo o diff de produção é asset estático. Confirmado **sem
+reiniciar nada**:
 
-**Sequência a executar quando o SSH estiver autenticado:**
-
-```bash
-ssh root@soprolife-painel-01 '
-  cd /opt/soprolife/soprolife-site
-  git rev-parse HEAD                      # esperado antes: 1ae5e23
-  git status --porcelain                  # precisa estar limpo
-  git fetch origin painel-soprolife-v01
-  git merge --ff-only origin/painel-soprolife-v01
-  git rev-parse HEAD                      # esperado depois: 85a0180
-'
+```
+index.html aponta para:  report-workflow.css?v=2026081002
+                         report-workflow.js?v=2026081002
+css/report-workflow.css?v=2026081002   HTTP 200   50.985 bytes
+js/report-workflow.js?v=2026081002     HTTP 200  151.167 bytes
 ```
 
-Depois, sem reiniciar nada:
+`ActiveEnterTimestamp` das duas units continua anterior a esta etapa
+(`soprolife-painel` 10/08 01:06, `soprolife-m15-api` 10/08 14:36): nenhum
+serviço foi reiniciado.
 
-```bash
-curl -sI https://<host>/painel-soprolife/css/report-workflow.css?v=2026081002
-curl -sI https://<host>/painel-soprolife/js/report-workflow.js?v=2026081002
-curl -s  https://<host>/painel-soprolife/api/m15/health
+### Os bytes em produção são os bytes testados
+
 ```
+sha256 local                          sha256 servido em produção
+f3f863a4…cd5d5e  report-workflow.css  f3f863a4…cd5d5e   ✅ idêntico
+117ee504…7f09d4  report-workflow.js   117ee504…7f09d4   ✅ idêntico
+```
+
+### HTTPS público (Tailscale serve)
+
+```
+index   HTTP 200
+css     HTTP 200
+js      HTTP 200
+health  HTTP 200
+```
+
+### Health e banco
+
+```json
+{"status":"ok","versao":"0.1.0","ambiente":"prod","banco":"ok",
+ "agora_utc":"2026-08-11T02:01:44Z"}
+```
+
+| banco `soprolife_m15` | antes | depois |
+| --- | --- | --- |
+| `alembic_version` | `e7c4b03a91df` | **`e7c4b03a91df`** (inalterado) |
+| tabelas em `public` | 47 | **47** |
+| `report_documents` | 5 | **5** |
+| `external_signed_documents` | 0 | 0 |
+
+**Nenhuma migration executada. Banco não alterado.**
 
 ---
 
 ## 12. Smoke visual em produção
 
-**Pendente** — depende do deploy da seção 11.
+Executado contra
+`https://soprolife-painel-01.tailcaf0e4.ts.net/painel-soprolife/index.html` —
+a página real, com o CSS e o JS que a médica vai baixar, dentro do shell real
+do Command Center (barra lateral, cabeçalho, largura útil de 1624px em 1920).
 
-Roteiro, somente leitura, sem concluir nem alterar laudo real:
+**Nenhum laudo real foi lido, aberto, concluído ou alterado.** A página é
+carregada de verdade; só então o cliente autenticado é substituído por um dublê
+que devolve payloads inventados com os envelopes reais da API. O dublê
+intercepta `api()` antes de qualquer requisição, então nenhuma chamada à base
+de laudos sai do navegador. Roteiro somente leitura.
 
-- [ ] Central de assinatura sem "undefined" (número ou `0` no selo)
-- [ ] "Meus laudos" largo e legível, cartões em colunas
-- [ ] abrir um paciente **não** colapsa o layout
-- [ ] resumo paciente / exame / local legível, sem quebra letra por letra
-- [ ] MIR e laudo lado a lado no desktop
-- [ ] conclusões em grade
-- [ ] documentos do exame em largura normal
-- [ ] assinatura externa continua funcionando (só conferir a lista; **não**
-      baixar nem enviar nada durante o smoke)
-- [ ] fila administrativa continua funcionando — e agora com os contadores por
-      estado, que estavam perdidos desde a M25.20
+Script: `nucleo-m15/tests/visual/prod_smoke.py`. Evidência:
+`docs/m25-21/prod-*.png` e `docs/m25-21/prod.json`.
+
+| verificação | resultado |
+| --- | --- |
+| Central sem "undefined" | ✅ título "Aguardando assinatura qualificada", selo `3`; `tem_undefined: false`, `tem_nan: false` em todas as larguras |
+| "Meus laudos" largo e legível | ✅ cartões em 2 colunas, nome protagonista, badge de status, códigos terciários |
+| abrir paciente **não** colapsa o layout | ✅ `bancada_dentro_do_resumo: false`; bancada 1619px = 100% da raiz (1619px) |
+| resumo paciente / exame / local | ✅ 3 cartões horizontais, sem quebra letra por letra |
+| MIR e laudo lado a lado no desktop | ✅ visualizador com **799px** de altura em 1920x1080; **568px** em 1366x768 |
+| conclusões em grade | ✅ 3 colunas em 1920x1080, 2 em 1366x768 |
+| documentos do exame em largura normal | ✅ 1585px de 1619 |
+| assinatura externa funcionando | ✅ fila, seleção, ações e o envio de assinados renderizam (apenas conferidos — **nada foi baixado nem enviado**) |
+| sem overflow horizontal | ✅ em 1920, 1366 e 430 |
+| iPhone 430x932 | ✅ empilhado, central funcional, sem overflow |
+
+### O que este smoke NÃO cobre
+
+Ele prova que **os bytes publicados produzem esta tela**. Ele não entra na
+conta da médica — não há credencial nesta sessão, e entrar seria manipular
+sessão clínica real. Falta a olhada final de quem tem a conta, com os dados
+dela: abrir o painel, conferir que a central mostra a contagem certa e que
+abrir um paciente real não colapsa nada. Como os bytes servidos são
+byte-idênticos aos testados (seção 11), essa olhada é **confirmação**, não
+verificação pendente.
 
 ---
 
@@ -509,26 +566,25 @@ Roteiro, somente leitura, sem concluir nem alterar laudo real:
 | item | valor |
 | --- | --- |
 | HEAD inicial | `1ae5e230b0e8ce9f206697e711fa3cf17cb8a960` |
-| HEAD final (branch e `painel-soprolife-v01`) | `85a018039fb5ceffb25b8a8f2a2f47963bcd1210` |
-| HEAD na VPS | `1ae5e23` — **não atualizado** |
+| HEAD final (branch, `painel-soprolife-v01` e VPS) | `611a7ec8183be354642a1e598d4e5b22430dc316` |
 | suíte | 1254 passed, 30 skipped |
 | migrations | nenhuma |
-| banco | não alterado |
-| health | não verificado (sem acesso) |
+| banco | `alembic_version` `e7c4b03a91df` antes e depois; 47 tabelas; 5 laudos |
+| health | `{"status":"ok","banco":"ok","ambiente":"prod"}` |
+| HTTP | 200 em `index.html`, CSS, JS e `/api/m15/health` por HTTPS |
+| serviços | **não reiniciados** — verificado como desnecessário (asset estático) |
+
+_(o commit final de fechamento do relatório entra depois desta tabela; o HEAD
+publicado passa a ser o dele.)_
 
 ### Pendências
 
-1. **Deploy na VPS** — bloqueado na reautenticação do Tailscale SSH
-   (`https://login.tailscale.com/a/l1b71ff06375878`, ou uma nova tentativa de
-   `ssh` gera um link próprio). Sequência pronta na seção 11.
-2. **Smoke visual em produção** — roteiro na seção 12, a executar depois do
-   deploy.
-3. **Conclusão da missão** — a frase de encerramento
-   ("M25.21 — ÁREA MÉDICA RESTAURADA E UX PREMIUM PUBLICADA EM PRODUÇÃO") só
-   cabe depois do smoke visual na tela real. O que está comprovado hoje é a
-   correção em ambiente controlado, com medição no navegador e dados
-   fictícios; publicação em produção ainda não aconteceu.
-4. **`:has()`** — `.report-queue-item:has(.report-queue-pick)` reserva espaço
+1. **Olhada final na conta da médica** — a única coisa que faltou. Abrir o
+   painel com a conta real e conferir a contagem da central e um paciente
+   aberto. Não é verificação pendente: os bytes servidos são byte-idênticos
+   aos testados e o layout já foi conferido na página real de produção
+   (seção 12). É confirmação de quem opera.
+2. **`:has()`** — `.report-queue-item:has(.report-queue-pick)` reserva espaço
    para a caixa de seleção do lote. Suportado em Safari 15.4+ e Chrome 105+;
    onde não houver, o pior caso é um nome muito longo passar por baixo da
    caixa — nunca um controle inacessível.
