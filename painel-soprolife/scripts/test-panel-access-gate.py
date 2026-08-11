@@ -119,6 +119,16 @@ espera("/painel-soprolife/js/m15-security.js", PUBLIC)
 espera("/painel-soprolife/css/style.css", PUBLIC)
 espera("/painel-soprolife/assets/soprolife-logo.png", PUBLIC)
 
+print("── Documentação interna não sai por HTTP ──")
+# Os relatórios descrevem arquitetura, caminhos internos e números
+# operacionais; o da própria M25.23 descreve o desenho do gate.
+espera("/RELATORIO_M25_23_GATE_AUTENTICACAO_PRIVACIDADE_20260811.md", FORBIDDEN)
+espera("/RELATORIO_M25_22_VERIFICACAO_FINANCEIRO_INTEGRADO_20260811.md", FORBIDDEN)
+espera("/CLAUDE.md", FORBIDDEN)
+espera("/docs/qualquer-nota.md", FORBIDDEN)
+espera("/painel-soprolife/README.md", FORBIDDEN)
+espera("/painel-soprolife/SECURITY.md", FORBIDDEN)
+
 print("── Site institucional intacto (não pode regredir) ──")
 espera("/", PUBLIC)
 espera("/index.html", PUBLIC)

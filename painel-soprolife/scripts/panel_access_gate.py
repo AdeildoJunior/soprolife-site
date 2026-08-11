@@ -66,6 +66,16 @@ FORBIDDEN_SUFFIXES = (
     ".env", ".pem", ".key", ".crt", ".p12", ".pfx",
     ".log", ".lock", ".bak", ".swp", ".ini", ".cfg", ".toml",
     ".service", ".timer", ".gs",
+    # Documentação interna. Os RELATORIO_*.md da raiz descrevem arquitetura,
+    # caminhos internos, números operacionais e — no caso da própria M25.23 —
+    # o desenho do gate. Nenhum é conteúdo do site: verificado que nenhuma
+    # página pública referencia um .md. Ficam versionados e legíveis no
+    # repositório, nunca por HTTP.
+    #
+    # `.txt` NÃO entra nesta lista: robots.txt é conteúdo público obrigatório
+    # do site. O único .txt sensível (data-private/README.local.txt) já está
+    # coberto pela proibição da pasta inteira.
+    ".md",
 )
 
 # Subárvores do painel liberadas sem sessão. São exclusivamente apresentação:
