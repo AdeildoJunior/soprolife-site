@@ -3,8 +3,9 @@
 **Data:** 10/08/2026
 **Branch:** `claude-m25-21-ui-medica-premium`
 **HEAD inicial:** `1ae5e230b0e8ce9f206697e711fa3cf17cb8a960`
-**Escopo:** UX/UI e bug de contagem. Nenhuma migration, nenhuma alteração de
-texto clínico, nenhum endpoint novo.
+**Escopo:** UX/UI, bug de contagem e o texto do selo do PDF pré-assinatura
+(seção 12-A). Nenhuma migration, nenhuma alteração de texto clínico, nenhum
+endpoint novo.
 
 ---
 
@@ -167,10 +168,14 @@ Cenários verificados executando as funções **reais** em Node
 | `painel-soprolife/css/report-workflow.css` | shell em pilha + faixa de resumo; cartões de contexto; grade de conclusões; altura do visualizador no desktop; split 53/47; fila em colunas; estados de hover/seleção; `anywhere` → `break-word` nos dados de paciente |
 | `painel-soprolife/index.html` | `?v=2026081001` → `?v=2026081002` (CSS e JS) |
 | `painel-soprolife/nucleo-m15/tests/test_m25_21_ui_medica_premium.py` | **novo** — 39 testes estruturais |
+| `painel-soprolife/nucleo-m15/app/services/report_native_pdf.py` | selo pré-assinatura sem "AGUARDANDO ASSINATURA" (seção 12-A) |
+| `painel-soprolife/nucleo-m15/tests/test_m25_21_selo_pdf_pre_assinatura.py` | **novo** — 16 testes do selo |
 | `painel-soprolife/nucleo-m15/tests/visual/` | **novo** — harness sintético + CDP + PDF fictício + smoke de produção + README |
 | `painel-soprolife/docs/m25-21/` | **novo** — capturas sintéticas e `medidas.json` |
 
-Nenhuma migration. Nenhum arquivo de `app/` tocado. Nenhum endpoint alterado.
+Nenhuma migration. Nenhum endpoint alterado. O único arquivo de `app/` tocado
+é o gerador do PDF, e só no desenho do selo (seção 12-A) — a correção da UI em
+si não encosta em `app/`.
 
 ---
 
@@ -561,13 +566,126 @@ verificação pendente.
 
 ---
 
+## 12-A. Adendo — o carimbo que não sobrevivia ao próprio prazo
+
+Correção pequena e obrigatória, pedida depois do deploy da UI.
+
+### O problema
+
+O selo do laudo pré-assinatura tinha quatro linhas:
+
+```
+   CONCLUÍDO          →  CONCLUÍDO
+   PELA MÉDICA           PELA MÉDICA
+   ─────────
+   AGUARDANDO
+   ASSINATURA
+```
+
+As duas de baixo eram **verdadeiras no instante em que o PDF era gerado e
+falsas alguns minutos depois**. O fluxo é este: a médica baixa **exatamente
+este arquivo**, aplica a assinatura qualificada nele por fora (VIDaaS, com o
+certificado dela) e devolve o mesmo PDF assinado. A assinatura entra na camada
+PDF; o desenho do selo continua impresso como saiu daqui. O documento **já
+assinado** ficaria carimbado "AGUARDANDO ASSINATURA" para sempre — e quem o
+recebesse leria, no próprio arquivo, a negativa mais forte que existe sobre
+ele.
+
+"CONCLUÍDO PELA MÉDICA" não tem esse problema: é um fato sobre o ato clínico,
+permanece verdadeiro antes e depois da assinatura, e não afirma nada sobre
+ICP-Brasil.
+
+### O que mudou
+
+`app/services/report_native_pdf.py`, `draw_signature_type_seal()`:
+
+- **ramo não-qualificado** — duas linhas, centralizadas no anel (dy +4,6 /
+  −4,4, corpo 6,6 / 5,6). A régua divisória saiu junto: ela separava duas
+  afirmações, e agora há uma só;
+- **ramo qualificado** — **idêntico**. Continua com quatro linhas,
+  "ASSINADO / DIGITALMENTE / ICP-BRASIL / PADRÃO PAdES".
+
+Conferido visualmente: os dois selos renderizados a 150 dpi, texto folgado
+dentro do anel nos dois casos.
+
+### O que não foi tocado
+
+Verificado no PDF gerado: rubrica, nome da médica, CRM-RJ 52.62307-5, RQE
+58224, selo institucional SoproLife, código de verificação, declaração de
+hash SHA-256, conclusão, observações, códigos LAU/ESP, versionamento e a faixa
+"DOCUMENTO LIBERADO".
+
+**A negativa continua no rodapé** (`RELEASE_STATEMENT`), e era ela que
+carregava a informação útil — onde conferir a assinatura de verdade. Ela é
+texto que descreve o que o arquivo **é**, não um estado que expira.
+"ICP-Brasil" continua aparecendo exatamente **uma vez**, na frase que a nega.
+
+### O estado operacional não saiu de lugar nenhum
+
+Continua onde sempre esteve, no Centro de Comando, que sabe a hora em que cada
+um deixa de valer — coisa que um carimbo impresso não sabe:
+
+`Aguardando assinatura qualificada` · `Assinado recebido — validação pendente`
+· `Pronto para entrega` · `Entregue`
+
+### Nada retroativo
+
+O gerador roda na **emissão**, e o resultado vira versão imutável no
+armazenamento. Um teste amarra as duas pontas: `report_storage.py` não conhece
+o gerador, e **todas** as chamadas a `_native_pdf_bytes` estão dentro de
+funções que criam versão nova (`compose_native_report_preview`,
+`finalize_review_for_signature`, `sign_and_release_report`,
+`add_report_addendum`, `start_qualified_signature`). A rota de download
+(`download_report_version`) não constrói PDF. Laudos já emitidos mantêm os
+bytes — e o hash — de então. **Só os novos saem com o selo corrigido.**
+
+### Testes
+
+`test_m25_21_selo_pdf_pre_assinatura.py` — **16 testes**, exatamente as quatro
+provas pedidas e mais as guardas de escopo:
+
+| prova | teste |
+| --- | --- |
+| PDF pré-assinatura contém "CONCLUÍDO PELA MÉDICA" | `test_selo_pre_assinatura_diz_concluido_pela_medica` |
+| PDF pré-assinatura **não** contém "AGUARDANDO ASSINATURA" | `test_selo_pre_assinatura_nao_diz_aguardando_assinatura` |
+| a UI ainda contém "Aguardando assinatura qualificada" | `test_estado_operacional_continua_na_interface`, `test_a_fila_da_medica_continua_rotulando_o_que_aguarda_assinatura` |
+| a M25.20 continua identificando o PDF depois da assinatura | `test_o_pareamento_do_retorno_nao_depende_do_texto_do_selo`, `test_o_texto_que_a_m25_20_procura_continua_no_pdf` |
+
+Dois detalhes que mudaram a forma das asserções:
+
+1. **A asserção mira "AGUARDANDO", não "ASSINATURA".** A palavra "assinatura"
+   aparece legitimamente no rótulo acima da rubrica e na frase que nega a
+   ICP-Brasil. Quem só existia no carimbo era "AGUARDANDO".
+2. **A presença de "PELA MÉDICA" é contada, não checada.** O rodapé já diz
+   "concluído pela médica responsável" — procurar presença passaria mesmo com
+   o selo apagado. A **dupla** ocorrência é o que só existe com o carimbo
+   desenhado (pré-assinatura = 2; qualificado = 1).
+
+O pareamento do retorno usa `META_REPORT_CODE` (metadado do PDF), o regex
+`\bLAU-\d{6}\b` sobre o texto e o código de verificação — **nada que leia o
+carimbo**. Se lesse, remover duas linhas dele quebraria o retorno do lote; o
+teste trava essa independência.
+
+Dois testes anteriores afirmavam o texto antigo
+(`test_m25_2_native_report.py`, `test_m25_18_assinatura_externa.py`) e foram
+invertidos, com o motivo registrado no lugar.
+
+**Verificação de que o teste pega a regressão:** rodado contra o
+`report_native_pdf.py` de `HEAD`,
+`test_selo_pre_assinatura_nao_diz_aguardando_assinatura` e
+`test_o_selo_pre_assinatura_tem_duas_linhas_e_nao_quatro` falham.
+
+**Suíte completa: 1270 passed, 30 skipped.**
+
+---
+
 ## 13. Estado final
 
 | item | valor |
 | --- | --- |
 | HEAD inicial | `1ae5e230b0e8ce9f206697e711fa3cf17cb8a960` |
 | HEAD final (branch, `painel-soprolife-v01` e VPS) | `611a7ec8183be354642a1e598d4e5b22430dc316` |
-| suíte | 1254 passed, 30 skipped |
+| suíte | 1270 passed, 30 skipped |
 | migrations | nenhuma |
 | banco | `alembic_version` `e7c4b03a91df` antes e depois; 47 tabelas; 5 laudos |
 | health | `{"status":"ok","banco":"ok","ambiente":"prod"}` |

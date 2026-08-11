@@ -1078,33 +1078,75 @@ class _Composer:
         # aconteceu: a médica CONCLUIU o laudo. Quando houver prova
         # criptográfica gravada, o mesmo selo volta a declarar assinatura —
         # o texto continua saindo de `signature_kind`, nunca de intenção.
-        self._draw_seal_text(
-            "ASSINADO" if qualified else "CONCLUÍDO",
-            center_x=center_x, center_y=center_y, dy=16.0,
-            inner=inner, size=5.8, color=NAVY,
-        )
-        self._draw_seal_text(
-            "DIGITALMENTE" if qualified else "PELA MÉDICA",
-            center_x=center_x, center_y=center_y, dy=9.4,
-            inner=inner, size=5.0, color=NAVY,
-        )
+        #
+        # M25.21 — o selo pré-assinatura perdeu as duas linhas de baixo
+        # ("AGUARDANDO / ASSINATURA").
+        #
+        # Elas eram VERDADEIRAS no instante em que o PDF era gerado e
+        # FALSAS logo depois: a médica baixa exatamente este arquivo, aplica
+        # a assinatura qualificada nele por fora (VIDaaS) e devolve o mesmo
+        # PDF assinado. A assinatura entra na camada PDF; o desenho do selo
+        # continua impresso do jeito que saiu daqui. O documento assinado
+        # ficaria carimbado "AGUARDANDO ASSINATURA" para sempre — e quem o
+        # recebesse leria a negativa mais forte que o próprio arquivo.
+        #
+        # "CONCLUÍDO PELA MÉDICA" não tem esse problema: é um fato sobre o
+        # ato clínico, permanece verdadeiro antes e depois da assinatura, e
+        # não afirma nada sobre ICP-Brasil. A negativa explícita sobre a
+        # assinatura qualificada continua no rodapé (`RELEASE_STATEMENT`),
+        # que é texto do documento e não carimbo.
+        #
+        # O ESTADO OPERACIONAL não mudou. "Aguardando assinatura
+        # qualificada", "Assinado recebido — validação pendente", "Pronto
+        # para entrega" e "Entregue" continuam onde sempre estiveram: no
+        # Centro de Comando, que sabe a hora certa de cada um. Um carimbo
+        # impresso não sabe.
+        #
+        # O ramo qualificado segue idêntico: quando houver prova
+        # criptográfica gravada, o selo volta a ter quatro linhas e a
+        # declarar ICP-Brasil / PADRÃO PAdES.
+        if qualified:
+            self._draw_seal_text(
+                "ASSINADO",
+                center_x=center_x, center_y=center_y, dy=16.0,
+                inner=inner, size=5.8, color=NAVY,
+            )
+            self._draw_seal_text(
+                "DIGITALMENTE",
+                center_x=center_x, center_y=center_y, dy=9.4,
+                inner=inner, size=5.0, color=NAVY,
+            )
 
-        c.setStrokeColor(RULE)
-        c.setLineWidth(0.5)
-        c.line(center_x - inner * 0.62, center_y + 3.4,
-               center_x + inner * 0.62, center_y + 3.4)
+            c.setStrokeColor(RULE)
+            c.setLineWidth(0.5)
+            c.line(center_x - inner * 0.62, center_y + 3.4,
+                   center_x + inner * 0.62, center_y + 3.4)
 
-        accent = NAVY if qualified else TEAL
-        self._draw_seal_text(
-            "ICP-BRASIL" if qualified else "AGUARDANDO",
-            center_x=center_x, center_y=center_y, dy=-6.0,
-            inner=inner, size=6.0, color=accent,
-        )
-        self._draw_seal_text(
-            "PADRÃO PAdES" if qualified else "ASSINATURA",
-            center_x=center_x, center_y=center_y, dy=-14.0,
-            inner=inner, size=4.8, color=accent,
-        )
+            self._draw_seal_text(
+                "ICP-BRASIL",
+                center_x=center_x, center_y=center_y, dy=-6.0,
+                inner=inner, size=6.0, color=NAVY,
+            )
+            self._draw_seal_text(
+                "PADRÃO PAdES",
+                center_x=center_x, center_y=center_y, dy=-14.0,
+                inner=inner, size=4.8, color=NAVY,
+            )
+        else:
+            # Duas linhas só: elas se centralizam no anel em vez de ficarem
+            # empurradas para o topo, deixando meio selo vazio. A régua
+            # divisória sai junto — ela separava duas afirmações, e agora há
+            # uma só.
+            self._draw_seal_text(
+                "CONCLUÍDO",
+                center_x=center_x, center_y=center_y, dy=4.6,
+                inner=inner, size=6.6, color=NAVY,
+            )
+            self._draw_seal_text(
+                "PELA MÉDICA",
+                center_x=center_x, center_y=center_y, dy=-5.4,
+                inner=inner, size=5.6, color=NAVY,
+            )
         c.restoreState()
 
     def draw_institutional_seal(

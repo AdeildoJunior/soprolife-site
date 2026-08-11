@@ -398,7 +398,10 @@ def test_pdf_novo_declara_conclusao_e_nao_assinatura():
     alto = texto.upper()
     # Selo semanticamente inequívoco.
     assert "CONCLUÍDO" in alto and "PELA MÉDICA" in alto
-    assert "AGUARDANDO" in alto and "ASSINATURA" in alto
+    # M25.21 — e SÓ isso. "AGUARDANDO ASSINATURA" saiu do carimbo: ele
+    # sobreviveria à assinatura qualificada aplicada sobre este mesmo
+    # arquivo. Ver `test_m25_21_selo_pdf_pre_assinatura.py`.
+    assert "AGUARDANDO" not in alto
     # Nunca as marcas reservadas à assinatura qualificada.
     assert "ASSINADO DIGITALMENTE" not in alto
     assert "PADRÃO PADES" not in alto

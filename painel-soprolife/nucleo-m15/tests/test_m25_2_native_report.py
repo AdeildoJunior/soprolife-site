@@ -1369,9 +1369,13 @@ def test_selo_declara_o_tipo_real_e_nunca_antecipa_icp_brasil(
     alto = texto.upper()
 
     # O selo do tipo declara o que de fato houve (M25.18): o laudo foi
-    # CONCLUÍDO pela médica e AGUARDA a assinatura qualificada externa.
+    # CONCLUÍDO pela médica.
     assert "CONCLUÍDO" in alto and "PELA MÉDICA" in alto
-    assert "AGUARDANDO" in alto and "ASSINATURA" in alto
+    # M25.21 — "AGUARDANDO ASSINATURA" saiu do selo. A médica assina ESTE
+    # arquivo por fora e devolve o mesmo PDF; o carimbo continuaria impresso
+    # no documento já assinado. O estado "aguardando" vive no Centro de
+    # Comando, que sabe quando ele deixa de valer.
+    assert "AGUARDANDO" not in alto
 
     # E nunca as marcas reservadas à assinatura qualificada.
     assert "ASSINADO DIGITALMENTE" not in alto
