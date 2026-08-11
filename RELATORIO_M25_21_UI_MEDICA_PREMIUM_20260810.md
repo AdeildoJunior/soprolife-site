@@ -305,6 +305,9 @@ inteira), geradas pelo harness de `nucleo-m15/tests/visual/`:
 | `prod-paciente-1366.png` | **produção**, página real, 1366x768 |
 | `prod-mobile-430.png` | **produção**, página real, iPhone 430x932 |
 | `prod.json` | medições do smoke em produção |
+| `selo-pre-assinatura.png` | o selo corrigido, ampliado |
+| `selo-qualificado.png` | o selo do ramo ICP-Brasil, inalterado |
+| `laudo-pre-assinatura-completo.png` | a página inteira do laudo sintético |
 
 **Todos os dados são fictícios.** Nomes inventados ("Ana Exemplo Ribeiro
 Nascimento"), códigos fora das faixas reais (ESP-0004xx, LAU-0003xx, PAC-000777),
@@ -677,6 +680,40 @@ invertidos, com o motivo registrado no lugar.
 
 **Suíte completa: 1270 passed, 30 skipped.**
 
+### Deploy do adendo — aqui o restart FOI necessário
+
+Diferente do deploy da UI: este commit toca `app/`, e o módulo Python fica
+carregado na memória do processo. Servir o arquivo novo do disco não bastaria.
+
+```
+cd /opt/soprolife/soprolife-site
+git merge --ff-only origin/painel-soprolife-v01
+Updating 51dba59..1604ba1
+
+diff em app/:         painel-soprolife/nucleo-m15/app/services/report_native_pdf.py
+diff em migrations/:  (vazio)
+
+systemctl restart soprolife-m15-api.service
+```
+
+| verificação | resultado |
+| --- | --- |
+| HEAD da VPS | `1604ba1` |
+| serviço | `active`, MainPID 1409973 → **1420857**, sem erro no journal |
+| health | `{"status":"ok","banco":"ok","ambiente":"prod"}` |
+| `alembic_version` | `e7c4b03a91df` — inalterado |
+| tabelas / laudos | 47 / 5 — inalterados |
+
+**Prova de que o código publicado produz o selo corrigido**, executada no
+próprio venv da VPS, com laudo sintético em memória — sem tocar no banco, sem
+gravar arquivo, sem criar versão de documento:
+
+```
+PRE-ASSINATURA  | 'AGUARDANDO': 0 | 'PELA MÉDICA': 2 | ICP-BRASIL: 1
+QUALIFICADO     | PADRÃO PAdES: 1 | 'AGUARDANDO': 0
+RESULTADO: OK
+```
+
 ---
 
 ## 13. Estado final
@@ -684,13 +721,13 @@ invertidos, com o motivo registrado no lugar.
 | item | valor |
 | --- | --- |
 | HEAD inicial | `1ae5e230b0e8ce9f206697e711fa3cf17cb8a960` |
-| HEAD final (branch, `painel-soprolife-v01` e VPS) | `611a7ec8183be354642a1e598d4e5b22430dc316` |
+| HEAD final (branch, `painel-soprolife-v01` e VPS) | `1604ba1d4e7cee822884e4c74bcfc120f704e411` |
 | suíte | 1270 passed, 30 skipped |
 | migrations | nenhuma |
 | banco | `alembic_version` `e7c4b03a91df` antes e depois; 47 tabelas; 5 laudos |
 | health | `{"status":"ok","banco":"ok","ambiente":"prod"}` |
 | HTTP | 200 em `index.html`, CSS, JS e `/api/m15/health` por HTTPS |
-| serviços | **não reiniciados** — verificado como desnecessário (asset estático) |
+| serviços | UI: **não reiniciados** (asset estático). Adendo do selo: `soprolife-m15-api` reiniciado, porque toca `app/` |
 
 _(o commit final de fechamento do relatório entra depois desta tabela; o HEAD
 publicado passa a ser o dele.)_
