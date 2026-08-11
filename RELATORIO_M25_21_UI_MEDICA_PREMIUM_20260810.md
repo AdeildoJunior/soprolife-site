@@ -424,16 +424,114 @@ pelos 1254 testes da suíte, incluindo os 63 de
 
 ## 11. Deploy
 
-_(preenchido na execução — ver seção 13)_
+### Git — concluído
+
+| passo | resultado |
+| --- | --- |
+| commit | `85a0180` |
+| push da branch | `claude-m25-21-ui-medica-premium` → origin, novo branch |
+| `painel-soprolife-v01` | **fast-forward** `1ae5e23..85a0180`, sem `--force` |
+| verificação de FF | `git merge-base --is-ancestor origin/painel-soprolife-v01 HEAD` antes do push |
+| migration | nenhuma criada, nenhuma executada |
+| banco | não tocado — o diff não encosta em `app/`, `migrations/` nem em serviço |
+
+### VPS — BLOQUEADO em ação humana
+
+O acesso SSH à VPS não pôde ser feito nesta sessão:
+
+```
+root@100.87.98.100
+# Tailscale SSH requires an additional check.
+# To authenticate, visit: https://login.tailscale.com/a/l1b71ff06375878
+```
+
+O host está **ativo e alcançável** (`tailscale status` →
+`100.87.98.100  soprolife-painel-01  active; direct`), mas o Tailscale SSH
+exige uma reautenticação interativa pelo navegador, que só a pessoa dona da
+conta pode concluir.
+
+Duas observações que importam para quem for concluir:
+
+1. O FQDN `soprolife-painel-01.tailcaf0e4.ts.net` **não está** no
+   `known_hosts` desta máquina (só o nome curto `soprolife-painel-01` e o IP
+   `100.87.98.100`). Conectar pelo FQDN devolve
+   `Host key verification failed` — não é a VPS recusando, é um nome ainda não
+   fixado. Use o nome curto ou o IP, que já estão fixados.
+2. **Não é necessário reiniciar serviço.** Todo o diff de produção é asset
+   estático (`css/`, `js/`, `index.html`); a query `?v=2026081002` é o que faz
+   o navegador da médica largar o CSS quebrado em cache. O backend não mudou.
+
+**Sequência a executar quando o SSH estiver autenticado:**
+
+```bash
+ssh root@soprolife-painel-01 '
+  cd /opt/soprolife/soprolife-site
+  git rev-parse HEAD                      # esperado antes: 1ae5e23
+  git status --porcelain                  # precisa estar limpo
+  git fetch origin painel-soprolife-v01
+  git merge --ff-only origin/painel-soprolife-v01
+  git rev-parse HEAD                      # esperado depois: 85a0180
+'
+```
+
+Depois, sem reiniciar nada:
+
+```bash
+curl -sI https://<host>/painel-soprolife/css/report-workflow.css?v=2026081002
+curl -sI https://<host>/painel-soprolife/js/report-workflow.js?v=2026081002
+curl -s  https://<host>/painel-soprolife/api/m15/health
+```
 
 ---
 
 ## 12. Smoke visual em produção
 
-_(preenchido na execução — ver seção 13)_
+**Pendente** — depende do deploy da seção 11.
+
+Roteiro, somente leitura, sem concluir nem alterar laudo real:
+
+- [ ] Central de assinatura sem "undefined" (número ou `0` no selo)
+- [ ] "Meus laudos" largo e legível, cartões em colunas
+- [ ] abrir um paciente **não** colapsa o layout
+- [ ] resumo paciente / exame / local legível, sem quebra letra por letra
+- [ ] MIR e laudo lado a lado no desktop
+- [ ] conclusões em grade
+- [ ] documentos do exame em largura normal
+- [ ] assinatura externa continua funcionando (só conferir a lista; **não**
+      baixar nem enviar nada durante o smoke)
+- [ ] fila administrativa continua funcionando — e agora com os contadores por
+      estado, que estavam perdidos desde a M25.20
 
 ---
 
-## 13. Execução
+## 13. Estado final
 
-_(a completar)_
+| item | valor |
+| --- | --- |
+| HEAD inicial | `1ae5e230b0e8ce9f206697e711fa3cf17cb8a960` |
+| HEAD final (branch e `painel-soprolife-v01`) | `85a018039fb5ceffb25b8a8f2a2f47963bcd1210` |
+| HEAD na VPS | `1ae5e23` — **não atualizado** |
+| suíte | 1254 passed, 30 skipped |
+| migrations | nenhuma |
+| banco | não alterado |
+| health | não verificado (sem acesso) |
+
+### Pendências
+
+1. **Deploy na VPS** — bloqueado na reautenticação do Tailscale SSH
+   (`https://login.tailscale.com/a/l1b71ff06375878`, ou uma nova tentativa de
+   `ssh` gera um link próprio). Sequência pronta na seção 11.
+2. **Smoke visual em produção** — roteiro na seção 12, a executar depois do
+   deploy.
+3. **Conclusão da missão** — a frase de encerramento
+   ("M25.21 — ÁREA MÉDICA RESTAURADA E UX PREMIUM PUBLICADA EM PRODUÇÃO") só
+   cabe depois do smoke visual na tela real. O que está comprovado hoje é a
+   correção em ambiente controlado, com medição no navegador e dados
+   fictícios; publicação em produção ainda não aconteceu.
+4. **`:has()`** — `.report-queue-item:has(.report-queue-pick)` reserva espaço
+   para a caixa de seleção do lote. Suportado em Safari 15.4+ e Chrome 105+;
+   onde não houver, o pior caso é um nome muito longo passar por baixo da
+   caixa — nunca um controle inacessível.
+5. **Lote M25.8** — continua no código, recolhido. Se a central da M25.20 se
+   confirmar como caminho único na operação, o bloco pode ser aposentado numa
+   etapa própria, com a decisão registrada. Esta missão não fez essa escolha.
