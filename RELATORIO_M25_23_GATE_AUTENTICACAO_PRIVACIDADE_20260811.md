@@ -3,8 +3,8 @@
 **Data:** 2026-08-11
 **Branch de trabalho:** `claude-m25-22-verificacao-financeiro-integrado`
 **Branch oficial:** `painel-soprolife-v01` — fast-forward `075528b..d4deb4a`
-**Commit:** `d4deb4a` — *fix(m25.23): o Command Center inteiro era servido antes de qualquer login*
-**VPS:** `root@soprolife-painel-01` — `/opt/soprolife/soprolife-site`, HEAD **`d4deb4a`**, working tree limpo
+**Commits:** `d4deb4a` (gate) · `4076903` (relatórios) · `bcb97f8` (relatórios internos fora do HTTP)
+**VPS:** `root@soprolife-painel-01` — `/opt/soprolife/soprolife-site`, HEAD **`bcb97f8`**, working tree limpo
 **Migration:** **nenhuma criada, nenhuma executada**
 
 ---
@@ -431,7 +431,29 @@ minutos (o hash de senha é deliberadamente lento) e foi interrompida — chegou
 ~5% sem falha. **Não afirmo que ela está verde por inteiro.** Vale rodá-la numa
 janela dedicada antes da próxima etapa.
 
-### 9.7 Sessões antigas
+### 9.7 Achado da própria verificação final: os relatórios eram servidos
+
+A checagem pós-deploy pegou um item que **eu mesmo tinha acabado de criar**:
+`GET /RELATORIO_M25_23_*.md` respondia **200**. Os relatórios desta série
+descrevem arquitetura, caminhos internos e números operacionais — e o desta
+etapa descreve o desenho do próprio gate.
+
+Corrigido no commit `bcb97f8`: `.md` entrou na lista de sufixos proibidos.
+`.txt` **não** entrou, porque `robots.txt` é conteúdo público obrigatório do
+site; o único `.txt` sensível já estava coberto pela proibição de
+`data-private/`. Verificado que nenhuma página pública referencia um `.md`.
+
+Depois da correção, em produção: `RELATORIO_M25_23_*.md` **404**,
+`RELATORIO_M25_22_*.md` **404**, `CLAUDE.md` **404**, `robots.txt` **200**,
+`sitemap.xml` **200**, site institucional **200**.
+
+Registro isto porque é a lição operacional da etapa: a superfície estática
+vazava por **default**, e qualquer arquivo novo na raiz herda esse default. O
+gate agora é fail-closed sob `painel-soprolife/`, mas a raiz do repositório
+segue sendo território público por natureza — todo arquivo novo ali precisa
+ser pensado como publicado.
+
+### 9.8 Sessões antigas
 
 Cookies emitidos antes do deploy usam o escopo antigo. O login novo os apaga
 explicitamente (`security.py`), e a revogação de sessão sempre foi server-side,
