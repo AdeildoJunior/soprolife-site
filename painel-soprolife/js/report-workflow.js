@@ -466,8 +466,25 @@
     if (!aguardando.length && !state.batchResults) return "";
     const marcados = state.batchSelection.length;
     const resultados = state.batchResults;
+    // M25.21 — este bloco (M25.8) faz o MESMO trabalho da central de
+    // assinatura externa da M25.20: contar o que aguarda assinatura, baixar
+    // em lote e receber os assinados de volta. Com os dois abertos na mesma
+    // tela, "Meus laudos" nascia com um formulário de upload em cima da
+    // lista de pacientes — o oposto de uma fila legível — e havia duas
+    // contagens concorrentes do mesmo fato.
+    //
+    // Nada foi removido: os botões, o input e os handlers são exatamente os
+    // mesmos, e o caminho continua disponível. O que mudou é a hierarquia —
+    // ele desceu para o fim do painel e nasce RECOLHIDO, como o caminho
+    // anterior que é. A central da M25.20, com conferência antes de gravar,
+    // é a porta principal.
     return `
-      <div class="report-batch">
+      <details class="report-batch report-legacy-batch"${
+        resultados ? " open" : ""
+      }>
+        <summary>Lote de assinatura (fluxo M25.8) — ${
+          aguardando.length
+        } aguardando</summary>
         <div class="report-batch-head">
           <strong>${aguardando.length} laudo(s) aguardando assinatura</strong>
           <span class="report-batch-count">${
@@ -500,7 +517,7 @@
           considere assinar arquivo por arquivo.
         </p>
         ${resultados ? renderBatchResults(resultados) : ""}
-      </div>`;
+      </details>`;
   }
 
   function renderBatchResults(resultados) {
@@ -600,11 +617,11 @@
             </select>
           </label>
         </div>
-        ${renderBatchBar(lista)}
         <div class="report-queue-list" role="listbox"
           aria-label="Laudos atribuídos ao médico autenticado">
           ${items}
         </div>
+        ${renderBatchBar(lista)}
       </section>`;
   }
 
@@ -991,35 +1008,50 @@
     // M25.4 — um contexto só. Antes havia a faixa de identidade (paciente,
     // código, nascimento, origem) MAIS este bloco: o mesmo exame aparecia
     // duas vezes e a "origem" repetia o local em código técnico.
+    //
+    // M25.21 — o mesmo conteúdo, outra forma. Cada cartão era uma pilha de
+    // linhas `rótulo | valor` com uma coluna fixa de 96px para o rótulo:
+    // dentro de uma coluna estreita sobravam ~60px para o valor, e um nome
+    // completo descia letra por letra. Agora cada cartão tem UM protagonista
+    // (o nome, o código do exame, a unidade) e o resto vira uma linha de
+    // apoio separada por "•". Nenhum dado saiu da tela — o que saiu foi a
+    // coluna de rótulos que espremia o valor.
+    const nascimento = fmtDate(detail.patient.date_of_birth, false);
+    const registro = esc(detail.patient.public_code);
     return `
       <div class="report-exam-context">
-        <article>
+        <article class="report-context-card">
           <h4>Paciente</h4>
-          <div><span>Nome</span><strong>${esc(detail.patient.full_name)}</strong></div>
-          <div><span>Nascimento</span><strong>${
-            fmtDate(detail.patient.date_of_birth, false)
-          }</strong></div>
-          <div><span>Registro</span><strong>${esc(detail.patient.public_code)}</strong></div>
+          <strong class="report-context-main">${
+            esc(detail.patient.full_name)
+          }</strong>
+          <span class="report-context-meta">Nasc. ${nascimento} • ${registro}</span>
         </article>
-        <article>
+        <article class="report-context-card">
           <h4>Exame</h4>
-          <div><span>Código</span><strong>${esc(exam.public_code || "—")}</strong></div>
-          <div><span>Data</span><strong>${dataHora}</strong></div>
-          <div><span>Broncodil.</span><strong>${bd}</strong></div>
-          <div><span>Indicação</span><strong>${
-            exam.clinical_indication ? esc(exam.clinical_indication) : `<em class="report-empty-value">não informada</em>`
-          }</strong></div>
+          <strong class="report-context-main report-context-code">${
+            esc(exam.public_code || "—")
+          }</strong>
+          <span class="report-context-meta">${dataHora} • ${bd}</span>
+          <span class="report-context-meta">Indicação: ${
+            exam.clinical_indication
+              ? esc(exam.clinical_indication)
+              : `<em class="report-empty-value">não informada</em>`
+          }</span>
         </article>
-        <article>
+        <article class="report-context-card">
           <h4>Local de realização</h4>
           ${local
-            ? `<div><span>Unidade</span><strong>${esc(local.nome || "—")}</strong></div>
-               <div><span>Endereço</span><strong>${
+            ? `<strong class="report-context-main">${
+                 esc(local.nome || "—")
+               }</strong>
+               <span class="report-context-meta">${
                  local.endereco ? esc(local.endereco) : naoInformado
-               }</strong></div>
-               <div><span>Contato</span><strong>${
-                 local.contato ? esc(local.contato) : naoInformado
-               }</strong></div>`
+               }</span>
+               ${local.contato
+                 ? `<span class="report-context-meta">${
+                      esc(local.contato)
+                    }</span>` : ""}`
             : `<p class="report-help">Local não resolvido para este documento.</p>`}
         </article>
       </div>`;
@@ -1191,10 +1223,21 @@
   // quando volta de uma sessão de assinatura. Toda a interação é por toque —
   // nenhum caminho depende de arrastar arquivo, clique direito ou desktop.
 
+  // M25.21 — a contagem NUNCA é lida direto do que chegou da rede.
+  //
+  // `signaturePending` só é lista porque `unwrapPayload` a normaliza; esta
+  // função não confia nisso. Uma carga parcial, um endpoint fora do ar ou um
+  // envelope novo devolvem 0 aqui — nunca `undefined`, `NaN` ou `null` no
+  // título de uma tela clínica.
+  function pendingSignatureList() {
+    return Array.isArray(state.signaturePending) ? state.signaturePending : [];
+  }
+
   function renderSignatureCenter() {
-    const lista = state.signaturePending;
+    const lista = pendingSignatureList();
+    const total = lista.length;
     const marcados = state.signatureSelection.length;
-    const corpo = lista.length
+    const corpo = total
       ? lista.map(renderSignatureItem).join("")
       : `<p class="report-signature-empty">
            Nenhum laudo aguardando assinatura.
@@ -1202,20 +1245,23 @@
     return `
       <section class="report-panel report-signature"
         aria-labelledby="signatureCenterTitle">
-        <div class="report-panel-heading">
+        ${/* M25.21 — a contagem saiu do título e virou selo. Concatenada,
+              ela transformava o título numa frase que mudava de tamanho a
+              cada carga; como selo, o número é o que o olho encontra
+              primeiro e o título fica estável. */""}
+        <div class="report-signature-head">
           <div>
             <p class="eyebrow">Assinatura externa</p>
-            <h3 id="signatureCenterTitle">
-              Aguardando assinatura qualificada — ${lista.length}
-            </h3>
+            <h3 id="signatureCenterTitle">Aguardando assinatura qualificada</h3>
           </div>
+          <span class="report-signature-count${total ? "" : " is-zero"}"
+            aria-hidden="true">${total}</span>
         </div>
 
-        ${lista.length ? `
+        ${total ? `
           <div class="report-signature-actions">
             <button type="button" class="m15-btn" data-signature-all>
-              ${marcados === lista.length
-                ? "Limpar seleção" : "Selecionar todos"}
+              ${marcados === total ? "Limpar seleção" : "Selecionar todos"}
             </button>
             <button type="button" class="m15-btn m15-btn-primary"
               data-signature-download${
@@ -1223,7 +1269,7 @@
               }>
               ${marcados
                 ? `Baixar ${marcados} para assinatura`
-                : "Baixar selecionados para assinatura"}
+                : "Baixar selecionados"}
             </button>
           </div>` : ""}
 
@@ -1317,12 +1363,42 @@
       </div>`;
   }
 
+  // M25.21 — a CAUSA RAIZ da bancada estrangulada, e o conserto.
+  //
+  // `.report-physician-shell` era uma grade de DUAS colunas fixas
+  // (`minmax(260px,320px) minmax(0,1fr)`) com exatamente dois filhos: a fila
+  // à esquerda, a bancada à direita. A M25.20 acrescentou um TERCEIRO filho,
+  // a central de assinatura, sem tocar na grade. O posicionamento automático
+  // fez o resto:
+  //
+  //     linha 1 | central (col. estreita) | fila (col. larga)
+  //     linha 2 | BANCADA (col. estreita) | vazio
+  //
+  // A bancada clínica inteira — resumo do paciente, PDF da MIR, painel do
+  // laudo, botões de conclusão — passou a viver numa faixa de 260–320px, com
+  // 70–80% da página em branco à direita. Nada no CSS "quebrou": a grade fez
+  // o que grade faz quando chega um item a mais.
+  //
+  // A correção não é largura forçada em filho nenhum. São dois NÍVEIS:
+  //
+  //   `.report-physician-summary`  — a faixa de resumo, e só ela é grade de
+  //       duas colunas (assinatura ~34% | meus laudos ~66%);
+  //   `.report-physician-workbench` — irmão da faixa, não filho dela, com a
+  //       largura útil inteira para a bancada.
+  //
+  // Qualquer bloco novo colocado no shell passa a empilhar em largura total,
+  // que é o comportamento seguro. Repetir o acidente exigiria colocá-lo
+  // deliberadamente dentro da faixa de resumo.
   function renderPhysicianWorkspace() {
     return `
       <div class="report-physician-shell">
-        ${renderSignatureCenter()}
-        ${renderQueue()}
-        ${renderPhysicianDetail()}
+        <div class="report-physician-summary">
+          ${renderSignatureCenter()}
+          ${renderQueue()}
+        </div>
+        <div class="report-physician-workbench">
+          ${renderPhysicianDetail()}
+        </div>
       </div>`;
   }
 
@@ -1943,6 +2019,44 @@
       ${blocks.join("")}`;
   }
 
+  // M25.21 — o envelope de cada resposta é DECLARADO, não adivinhado.
+  //
+  // A carga tinha uma heurística única: "se vier `{itens: [...]}`, a lista é
+  // `itens`; senão, a resposta inteira É a lista". Ela funcionava enquanto
+  // todo endpoint devolvesse ou uma lista crua ou o envelope paginado. A
+  // M25.20 trouxe dois endpoints com envelopes próprios e a heurística errou
+  // os dois, em silêncio:
+  //
+  //   /assinatura-externa/pendentes → {total, laudos}
+  //     `state.signaturePending` virava o OBJETO. `lista.length` era
+  //     `undefined` — o "Aguardando assinatura qualificada — undefined" da
+  //     tela — e, como `undefined` é falso, a central mostrava "nenhum laudo
+  //     aguardando" mesmo com laudos aguardando.
+  //
+  //   /assinatura-externa/fila → {estados, itens}
+  //     aqui a heurística ACERTAVA o `itens` e jogava fora o `estados`. A
+  //     fila administrativa perdia os contadores por estado e, sem
+  //     `fila.itens`, listava "nenhum laudo neste estado" sempre.
+  //
+  // Declarar o envelope custa uma linha por endpoint e faz a próxima
+  // resposta de forma nova falhar no lugar certo, e não três telas adiante.
+  const PAYLOAD_ENVELOPES = {
+    // rótulo do estado → chave da lista dentro da resposta ("" = objeto cru)
+    signaturePending: "laudos",
+    deliveryQueue: "",
+  };
+
+  function unwrapPayload(label, value) {
+    if (Object.prototype.hasOwnProperty.call(PAYLOAD_ENVELOPES, label)) {
+      const chave = PAYLOAD_ENVELOPES[label];
+      if (!chave) return value || null;
+      return value && Array.isArray(value[chave]) ? value[chave] : [];
+    }
+    // `/unidades` e `/espirometrias` são paginados ({itens, total}); os
+    // demais devolvem lista.
+    return (value && Array.isArray(value.itens)) ? value.itens : value;
+  }
+
   async function loadAuthenticatedData() {
     const epoch = ++state.loadEpoch;
     if (!authenticated()) {
@@ -2005,12 +2119,7 @@
       const values = await Promise.all(calls);
       if (epoch !== state.loadEpoch) return;
       labels.forEach((label, index) => {
-        const value = values[index];
-        // `/unidades` e `/espirometrias` são paginados ({itens, total}); os
-        // demais devolvem lista.
-        state[label] = (value && Array.isArray(value.itens))
-          ? value.itens
-          : value;
+        state[label] = unwrapPayload(label, values[index]);
       });
       if (state.selectedDocumentId &&
           !state.queue.some((item) => item.document_id === state.selectedDocumentId)) {
@@ -3136,7 +3245,7 @@
     if (!button) return;
     // ---------------------------------------------------------- M25.20
     if (button.matches("[data-signature-all]")) {
-      const todos = state.signaturePending.map((item) => item.document_id);
+      const todos = pendingSignatureList().map((item) => item.document_id);
       // O mesmo botão alterna: com tudo marcado, ele limpa. Dois botões
       // separados ocupariam a linha inteira num iPhone.
       state.signatureSelection =

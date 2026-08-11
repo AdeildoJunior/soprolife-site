@@ -96,11 +96,61 @@
   overflow-wrap: anywhere;
 }
 
+/* ================================================== M25.21 — dois níveis
+   da conta médica.
+
+   Esta grade tinha DUAS colunas fixas e dois filhos. Quando a M25.20 somou a
+   central de assinatura, o terceiro filho caiu na linha de baixo, na coluna
+   ESTREITA — e a bancada clínica inteira passou a viver em 260–320px com a
+   página vazia à direita. Ver o comentário de `renderPhysicianWorkspace`.
+
+   O shell agora é uma PILHA. Quem decide sobre colunas é a faixa de resumo,
+   e só ela. Um bloco novo acrescentado aqui ocupa a largura inteira, que é o
+   comportamento seguro por omissão. */
 .report-physician-shell {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
+}
+
+/* NÍVEL 2 — resumo operacional. A central de assinatura é o lugar por onde
+   se passa; "Meus laudos" é o lugar onde se trabalha, e por isso leva ~2/3
+   da faixa. As proporções são relativas, nunca pixels fixos. */
+.report-physician-summary {
+  display: grid;
+  grid-template-columns: minmax(280px, 34%) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* A bancada é IRMÃ da faixa de resumo, não filha: ela recebe a largura útil
+   inteira assim que um paciente é aberto. */
+.report-physician-workbench {
+  min-width: 0;
+}
+
+/* Sem paciente aberto, a bancada não pode virar uma faixa branca do tamanho
+   da tela. O convite fica discreto: fundo pontilhado, altura mínima, sem
+   sombra de cartão. */
+.report-physician-workbench > .report-detail-empty {
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+}
+
+.report-physician-workbench > .report-detail-empty h3 {
+  margin-bottom: 6px;
+  font-size: 15px;
+  color: var(--navy);
+}
+
+.report-physician-workbench > .report-detail-empty p {
+  margin: 0 auto;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .report-operational-shell {
@@ -130,9 +180,12 @@
   max-width: 760px;
 }
 
+/* M25.21 — o `sticky` saiu junto com a coluna lateral. A fila deixou de ser
+   uma barra que acompanha a rolagem da bancada e virou a metade direita de
+   uma faixa de resumo com altura própria; grudar no topo só produziria um
+   painel flutuando sobre o trabalho. */
 .report-queue-panel {
-  position: sticky;
-  top: 12px;
+  position: static;
 }
 
 .report-compact-field {
@@ -148,39 +201,78 @@
 .report-operation-list {
   display: grid;
   gap: 8px;
-  max-height: 640px;
+  /* M25.21 — a fila agora fica numa faixa acima da bancada. Uma lista de
+     640px empurraria o trabalho clínico para fora da primeira tela; 460px
+     mostram ~5 pacientes e rolam o resto. */
+  max-height: 460px;
   overflow-y: auto;
   margin-top: 14px;
+  /* Espaço para o anel de foco/seleção não ser cortado pelo `overflow`. */
+  padding: 2px;
+}
+
+/* M25.21 — em "Meus laudos" a fila ganhou ~2/3 da faixa. Uma linha de 1200px
+   para um nome de 300px é espaço desperdiçado e faz a lista parecer uma
+   tabela administrativa esticada. A partir de 1100px os cartões se acomodam
+   em colunas de ~340px: cabem mais pacientes na primeira tela e cada cartão
+   tem a largura em que o nome, o contexto e o selo de status já se leem
+   bem. `auto-fill` decide o número de colunas; não há contagem fixa. */
+@media (min-width: 1100px) {
+  .report-queue-list {
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    align-content: start;
+    max-height: 420px;
+  }
 }
 
 .report-queue-item,
 .report-operation-row {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   width: 100%;
-  padding: 11px;
+  /* Âncora da caixa de seleção do lote (`.report-queue-pick`). */
+  position: relative;
+  /* 12/16: o cartão respira sem virar um bloco alto. A altura importa
+     porque a fila inteira precisa caber na faixa de resumo. */
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-xs);
   background: #fff;
   color: var(--text);
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--ease-fast), box-shadow var(--ease-fast);
+  transition:
+    border-color var(--ease-fast),
+    box-shadow var(--ease-fast),
+    background var(--ease-fast);
 }
 
+/* M25.21 — hover e seleção deixaram de ser o MESMO estado. Antes o cartão
+   sob o cursor ficava idêntico ao cartão aberto, e a fila parecia ter dois
+   pacientes selecionados. O hover é um convite (borda teal, fundo levíssimo);
+   a seleção é um fato (faixa navy à esquerda). */
 .report-queue-item:hover,
-.report-operation-row:hover,
+.report-operation-row:hover {
+  border-color: var(--teal);
+  background: #fbfdff;
+}
+
 .report-queue-item.is-selected,
 .report-operation-row.is-selected {
   border-color: var(--teal);
-  box-shadow: 0 0 0 2px rgba(23, 181, 165, .12);
+  box-shadow:
+    inset 3px 0 0 var(--navy),
+    0 0 0 2px rgba(23, 181, 165, .16);
+  background: var(--teal-pale, #f2fbfa);
 }
 
 .report-queue-item span,
 .report-operation-row span {
   color: var(--muted);
   font-size: 12px;
-  overflow-wrap: anywhere;
+  /* Dado de paciente quebra por PALAVRA. `anywhere` participa do cálculo de
+     largura mínima e, em coluna estreita, desce o nome letra por letra. */
+  overflow-wrap: break-word;
 }
 
 .report-status-chip {
@@ -206,53 +298,59 @@
 }
 
 /* M25.3/M25.4 — contexto único: paciente + exame + local em três colunas.
-   Substituiu a faixa de identidade separada, que repetia os mesmos dados. */
+   Substituiu a faixa de identidade separada, que repetia os mesmos dados.
+
+   M25.21 — resumo HORIZONTAL. Cada cartão perdeu a coluna fixa de rótulos
+   (96px para "Nascimento", "Broncodil.", "Endereço") que sobrava ~60px para
+   o valor. Agora o cartão tem um protagonista e linhas de apoio, e o texto
+   corre na largura inteira do cartão. */
 .report-exam-context {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 14px 0;
+  gap: 12px;
+  margin: 16px 0;
 }
 
 .report-exam-context > article {
-  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 14px 16px;
   border: 1px solid var(--line-light);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: #f9fbfd;
 }
 
 .report-exam-context h4 {
-  margin: 0 0 8px;
-  font-size: 12px;
-  letter-spacing: .04em;
+  margin: 0 0 2px;
+  font-size: 11px;
+  letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-.report-exam-context > article > div {
-  display: grid;
-  grid-template-columns: minmax(0, 96px) minmax(0, 1fr);
-  gap: 8px;
-  align-items: baseline;
-  padding: 4px 0;
-  border-top: 1px solid var(--line-light);
+/* O nome do paciente, o código do exame, a unidade. É o que a médica
+   procura ao conferir se abriu o documento certo. */
+.report-context-main {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--navy);
+  /* Quebra por palavra. Nunca `anywhere`/`break-all`: os dois participam do
+     cálculo de largura mínima e verticalizam o nome. */
+  overflow-wrap: break-word;
 }
 
-.report-exam-context > article > div:first-of-type {
-  border-top: 0;
+.report-context-code {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
 }
 
-.report-exam-context span {
+.report-context-meta {
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-}
-
-.report-exam-context strong {
-  font-weight: 600;
-  overflow-wrap: anywhere;
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: break-word;
 }
 
 .report-exam-context .report-empty-value {
@@ -276,13 +374,23 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
-  gap: 12px;
-  margin: 14px 0;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+/* M25.21 — o traçado da MIR é o que se LÊ; o painel do laudo é o que se
+   opera. A partir de 1280px o exame técnico fica um pouco mais largo
+   (~53% / ~47%), sem que nenhuma das duas colunas deixe de ser ampla. */
+@media (min-width: 1280px) {
+  .report-clinical-split {
+    grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr);
+  }
 }
 
 .report-source-pane {
   position: sticky;
   top: 12px;
+  min-width: 0;
 }
 
 .report-work-pane {
@@ -294,9 +402,9 @@
 .report-comparison article,
 .report-clinical-split .report-source-pane,
 .report-clinical-split .report-preview-pane {
-  padding: 10px;
+  padding: 12px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   background: #f8fafc;
 }
 
@@ -321,6 +429,17 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fff;
+}
+
+/* M25.21 — num monitor de trabalho o visualizador precisa mostrar a curva
+   fluxo-volume e a tabela de valores sem obrigar a rolar dentro do iframe.
+   `clamp` mantém o piso confortável em telas de 768px de altura e deixa o
+   PDF crescer nas maiores. */
+@media (min-width: 1280px) {
+  .report-pdf-frame {
+    height: clamp(560px, 74vh, 880px);
+    min-height: 560px;
+  }
 }
 
 .report-pdf-placeholder {
@@ -571,7 +690,7 @@
 .report-exam-pick span {
   color: var(--muted);
   font-size: 12px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .report-signature-panel {
@@ -669,12 +788,19 @@ body.report-physician-only .section:not(#laudos-espirometria) {
 }
 
 @media (max-width: 1180px) {
-  .report-physician-shell {
-    grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+  .report-physician-summary {
+    grid-template-columns: minmax(240px, 38%) minmax(0, 1fr);
+    gap: 12px;
   }
 
+  /* Tablet: paciente + exame lado a lado, local de realização embaixo em
+     largura inteira (2 + 1). */
   .report-exam-context {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-exam-context > article:last-child {
+    grid-column: 1 / -1;
   }
 }
 
@@ -692,14 +818,12 @@ body.report-physician-only .section:not(#laudos-espirometria) {
 }
 
 @media (max-width: 900px) {
-  /* M25.19 — `.report-admin-shell` saiu daqui: já nasce em uma coluna. */
-  .report-physician-shell,
+  /* M25.19 — `.report-admin-shell` saiu daqui: já nasce em uma coluna.
+     M25.21 — `.report-physician-shell` também: quem tem colunas agora é a
+     faixa de resumo, e é ela que empilha. */
+  .report-physician-summary,
   .report-operational-shell {
     grid-template-columns: 1fr;
-  }
-
-  .report-queue-panel {
-    position: static;
   }
 
   .report-queue-list {
@@ -715,11 +839,12 @@ body.report-physician-only .section:not(#laudos-espirometria) {
     grid-template-columns: 1fr;
   }
 
-  /* Rótulo acima do valor: em telas estreitas a coluna fixa de 96px
-     espremeria o endereço da clínica. */
-  .report-exam-context > article > div {
-    grid-template-columns: 1fr;
-    gap: 2px;
+  /* M25.21 — a regra que empilhava rótulo e valor saiu junto com a coluna
+     fixa de 96px: o cartão de contexto não tem mais linhas `rótulo | valor`.
+     A regra de `:last-child` em largura inteira, herdada do breakpoint de
+     tablet, também precisa ser desfeita numa grade de coluna única. */
+  .report-exam-context > article:last-child {
+    grid-column: auto;
   }
 
   .report-panel-heading,
@@ -832,27 +957,45 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   text-transform: uppercase;
 }
 
+/* M25.21 — GRADE, não fila que embrulha.
+   Com `flex-wrap`, cada botão tinha a largura do próprio texto: as 17
+   conclusões formavam linhas irregulares e, numa coluna estreita, uma
+   coluna única altíssima de siglas. Em grade os botões têm a mesma largura,
+   e o número de colunas é consequência do espaço disponível — 3 a 4 em
+   1440px+, 2 a 3 em telas médias, 2 no celular. */
 .report-chip-grid {
-  display: flex;
-  flex-wrap: wrap;
+  /* 170px é a faixa calibrada com o painel do laudo medido no navegador:
+     4 colunas em 1920x1080, 3 em 1440x900 e em 1366x768, 2 no iPhone (regra
+     própria abaixo de 480px). Nenhuma dessas contagens está escrita aqui —
+     todas são consequência do espaço disponível. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .report-conclusion-chip,
 .report-bd-chip {
-  padding: 9px 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-xs);
   background: var(--card);
   color: var(--navy);
   font-size: 13px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.25;
+  text-align: center;
   cursor: pointer;
-  /* Alvo confortável de toque no celular. */
-  min-height: 40px;
-  transition: background .15s ease, border-color .15s ease;
+  /* Alvo confortável de toque no celular, e altura uniforme na grade. */
+  min-height: 44px;
+  /* A sigla é curta; se um rótulo longo aparecer, ele quebra por palavra e
+     o botão cresce — nunca esmaga o texto nem corta letras. */
+  overflow-wrap: break-word;
+  transition: background .15s ease, border-color .15s ease,
+    box-shadow .15s ease;
 }
 
 .report-conclusion-chip:hover,
@@ -866,6 +1009,7 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   border-color: var(--navy);
   background: var(--navy);
   color: #fff;
+  box-shadow: 0 1px 2px rgba(11, 37, 69, .18);
 }
 
 .report-conclusion-chip.is-custom {
@@ -1039,7 +1183,7 @@ body.report-physician-only .section:not(#laudos-espirometria) {
 .report-documents-list span {
   color: var(--muted);
   font-size: 11px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .report-doc-meta {
@@ -1114,16 +1258,18 @@ body.report-physician-only .section:not(#laudos-espirometria) {
 }
 
 @media (max-width: 480px) {
+  /* M25.21 — duas colunas explícitas no celular. O `flex: 1 1 calc(50%)` de
+     antes ficou sem efeito quando a lista virou grade; o equivalente em
+     grade é fixar duas colunas. */
   .report-chip-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
   }
 
   .report-conclusion-chip,
   .report-bd-chip {
-    flex: 1 1 calc(50% - 6px);
     padding: 10px 8px;
     font-size: 12px;
-    text-align: center;
   }
 }
 
@@ -1328,13 +1474,48 @@ body.report-physician-only .section:not(#laudos-espirometria) {
 /* M25.8 — lote de assinatura externa. Só aparece quando há laudos
    revisados esperando assinatura. */
 .report-batch {
-  margin: 14px 0;
-  padding: 14px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   background: var(--teal-pale);
   display: grid;
   gap: 10px;
+}
+
+/* M25.21 — o lote da M25.8 virou `<details>` recolhido no rodapé do painel
+   (ver o comentário de `renderBatchBar`). Fechado ele é uma linha; aberto,
+   continua exatamente o mesmo bloco de antes. */
+.report-legacy-batch:not([open]) {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.report-legacy-batch > summary {
+  padding: 8px 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.report-legacy-batch > summary::-webkit-details-marker { display: none; }
+
+.report-legacy-batch > summary::before { content: "▸ "; }
+
+.report-legacy-batch[open] > summary {
+  margin-bottom: 4px;
+  padding: 0;
+  color: var(--navy);
+}
+
+.report-legacy-batch[open] > summary::before { content: "▾ "; }
+
+.report-legacy-batch > summary:focus-visible {
+  outline: 3px solid rgba(23, 181, 165, .32);
+  outline-offset: 2px;
 }
 
 .report-batch-head {
@@ -1375,16 +1556,28 @@ body.report-physician-only .section:not(#laudos-espirometria) {
 
 /* Caixa de seleção da linha da fila. É um elemento próprio dentro do botão
    que abre o laudo, e o clique nela é interceptado antes. */
+/* M25.21 — a caixa de seleção do lote era o PRIMEIRO filho do cartão e, numa
+   grade, ocupava a linha inteira acima do nome: o cartão da paciente marcável
+   ficava mais alto que os vizinhos e o nome descia um degrau. Ela passa a
+   flutuar no canto superior direito, fora do fluxo — o alvo de toque continua
+   o mesmo elemento e o mesmo handler. */
 .report-queue-pick {
-  display: inline-block;
-  width: 15px;
-  height: 15px;
-  margin-right: 8px;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 18px;
+  height: 18px;
   border: 2px solid var(--teal);
   border-radius: 4px;
-  vertical-align: middle;
   cursor: pointer;
   background: var(--card);
+}
+
+/* Só o cartão que TEM caixa reserva espaço para ela. Onde `:has` não existir,
+   o pior caso é um nome muito longo passar por baixo da caixa — nunca um
+   controle inacessível. */
+.report-queue-item:has(.report-queue-pick) {
+  padding-right: 42px;
 }
 
 .report-queue-pick.is-picked {
@@ -1474,7 +1667,11 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   font-weight: 600;
   color: var(--navy);
   line-height: 1.3;
-  overflow-wrap: anywhere;
+  /* M25.21 — `anywhere` fazia o NOME DA PACIENTE descer letra por letra
+     quando o contêiner ficava estreito, porque ele também zera a largura
+     mínima do elemento. Nome quebra por palavra; `break-word` só parte uma
+     palavra que sozinha não caiba. */
+  overflow-wrap: break-word;
 }
 
 /* Os códigos ficam em uma linha própria, monoespaçada e discreta. A regra
@@ -1545,7 +1742,7 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   color: var(--navy);
   font-size: 14px;
   font-weight: 600;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .report-location-readonly span:not(.report-field-label):not(.report-help) {
@@ -1583,22 +1780,72 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
 
 .report-signature {
   border-left: 3px solid var(--teal);
+  /* M25.21 — a central é uma PARADA no caminho, não o destino. Ela ocupa a
+     coluna de ~34% e não compete com "Meus laudos". */
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+/* M25.21 — cabeçalho com selo de contagem. `.report-panel-heading` é flex
+   com `justify-content: space-between`, que servia enquanto a contagem
+   estava colada no título; aqui o número é um elemento próprio, alinhado
+   pelo topo com o bloco de texto. */
+.report-signature-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-signature-head h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--navy);
+}
+
+.report-signature-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  background: var(--navy);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Zero não é alarme: some para o fundo em vez de gritar em navy. */
+.report-signature-count.is-zero {
+  background: var(--line-light);
+  color: var(--muted);
 }
 
 .report-signature-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
 }
 
 .report-signature-actions .m15-btn {
+  flex: 1 1 auto;
   min-height: 44px;
 }
 
 .report-signature-list {
   display: grid;
   gap: 8px;
+  /* Uma fila longa não pode empurrar o envio do lote assinado para fora da
+     tela: a lista rola dentro do cartão. */
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 2px;
 }
 
 .report-signature-empty {
@@ -1645,7 +1892,8 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   font-size: 1rem;
   line-height: 1.3;
   color: var(--navy);
-  overflow-wrap: anywhere;
+  /* M25.21 — nome de paciente quebra por palavra. */
+  overflow-wrap: break-word;
 }
 
 .report-signature-context {
@@ -1655,14 +1903,22 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
 
 /* ---------------------------------------------------- devolução do lote */
 
+/* M25.21 — o envio não disputa atenção com a fila. Fica abaixo de uma linha
+   divisória, com o rótulo em caixa alta discreta: é a segunda etapa do
+   percurso, e só é procurado por quem já voltou de assinar. */
 .report-signature-return {
-  margin-top: 16px;
-  padding-top: 16px;
+  margin-top: 4px;
+  padding-top: 14px;
   border-top: 1px solid var(--line-light);
 }
 
 .report-signature-return h4 {
   margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 /* Botão grande de verdade. O `input` fica escondido mas continua sendo o
@@ -1759,7 +2015,7 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
 }
 
 .report-signature-result-body strong {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .report-signature-result-body em {

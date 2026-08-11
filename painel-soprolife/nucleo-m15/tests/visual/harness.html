@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M25.21 — bancada médica (dados fictícios)</title>
+<link rel="stylesheet" href="./css/style.css">
+<link rel="stylesheet" href="./css/m15.css">
+<link rel="stylesheet" href="./css/report-workflow.css">
+<style>
+  /* Só o enquadramento do harness. Nada aqui influencia o layout medido:
+     replica a moldura da seção real (main + padding do painel). */
+  body { margin: 0; background: var(--bg, #f4f7fb); }
+  .harness-shell { padding: 20px 24px; }
+  .harness-tag {
+    margin: 0 0 12px; padding: 6px 10px; border-radius: 6px;
+    background: #fff3cd; color: #7c550f; font: 700 12px/1.4 system-ui;
+  }
+</style>
+</head>
+<body>
+<div class="harness-shell">
+  <p class="harness-tag">HARNESS DE TESTE — TODOS OS DADOS SÃO FICTÍCIOS</p>
+  <section id="laudos-espirometria" class="section active">
+    <div id="reportWorkflowRoot" class="report-workflow-root"></div>
+  </section>
+</div>
+
+<script>
+// ===================================================================
+// Cliente falso window.SoproM15 — só dados sintéticos.
+// Nenhum paciente, exame, código ou clínica real aparece aqui.
+// ===================================================================
+(function () {
+  const PARAMS = new URLSearchParams(location.search);
+  const CENARIO = PARAMS.get("cenario") || "lista";
+
+  const PENDENTES = [
+    { document_id: "doc-p1", patient: { full_name: "Paciente Exemplo Um de Souza" },
+      report_code: "LAU-000101", exam_code: "ESP-000201",
+      exam_date: "2026-08-04", location_name: "Clínica Exemplo Ipanema" },
+    { document_id: "doc-p2", patient: { full_name: "Paciente Exemplo Dois Andrade" },
+      report_code: "LAU-000102", exam_code: "ESP-000202",
+      exam_date: "2026-08-05", location_name: "Clínica Exemplo Ipanema" },
+    { document_id: "doc-p3", patient: { full_name: "Paciente Exemplo Três Nogueira" },
+      report_code: "LAU-000103", exam_code: "ESP-000203",
+      exam_date: "2026-08-06", location_name: "Coworking Exemplo" },
+  ];
+
+  const NOMES = [
+    "Ana Exemplo Ribeiro Nascimento", "Bruno Exemplo Carvalho",
+    "Carla Exemplo de Andrade Fontenelle", "Daniel Exemplo Moreira",
+    "Elisa Exemplo Vasconcelos", "Fábio Exemplo Tavares",
+    "Gabriela Exemplo Sampaio Lins",
+  ];
+  const STATUS = [
+    "atribuido", "em_elaboracao", "assinatura_pendente", "liberado",
+    "atribuido", "atribuido", "em_elaboracao",
+  ];
+
+  const FILA = NOMES.map((nome, i) => ({
+    document_id: `doc-${i + 1}`,
+    patient: { full_name: nome },
+    public_code: `LAU-00030${i + 1}`,
+    exam_code: `ESP-00040${i + 1}`,
+    report_code: `LAU-00030${i + 1}`,
+    exam_date: `2026-08-0${(i % 7) + 1}`,
+    location_name: i % 2 ? "Clínica Exemplo Ipanema" : "Coworking Exemplo",
+    status: STATUS[i],
+    locked: STATUS[i] === "liberado",
+    is_corrective: false,
+    unidade_chave: "exemplo-ipanema",
+    unidade_nome: "Clínica Exemplo Ipanema",
+  }));
+
+  const DETALHE = {
+    document_id: "doc-1",
+    public_code: "LAU-000301",
+    status: "em_elaboracao",
+    locked: false,
+    corrects_document_id: null,
+    current_version_id: "v2",
+    patient: {
+      full_name: "Ana Exemplo Ribeiro Nascimento",
+      date_of_birth: "1979-04-17",
+      public_code: "PAC-000777",
+    },
+    exam: {
+      public_code: "ESP-000401",
+      exam_date: "2026-08-01",
+      exam_time: "09:40",
+      post_bronchodilator: true,
+      clinical_indication:
+        "Avaliação de dispneia aos esforços e tosse crônica há seis meses.",
+    },
+    location: {
+      nome: "Clínica Exemplo Ipanema",
+      endereco: "Rua Fictícia 100, sala 4 — Ipanema, Rio de Janeiro/RJ",
+      contato: "(21) 0000-0000",
+    },
+    versoes: [
+      { id: "v1", kind: "original", version_number: 1, page_count: 2,
+        sha256: "0".repeat(64) },
+      { id: "v2", kind: "laudo_previa", version_number: 2,
+        interpretation_text_snapshot:
+          "Espirometria com curvas fluxo-volume reprodutíveis. Relação " +
+          "VEF1/CVF reduzida, com VEF1 em 68% do previsto. Após " +
+          "broncodilatador, ganho de 260 mL e 14% no VEF1.",
+        observations_snapshot:
+          "Exame realizado com boa colaboração. Sugerida correlação clínica.",
+        conclusion_code_snapshot: "DVO_MODERADO",
+        bronchodilator_code_snapshot: "RESPOSTA_SIGNIFICATIVA",
+        interpretation_text_sha256: "a".repeat(64),
+        sha256: "b".repeat(64), version_number: 2 },
+    ],
+  };
+
+  const CATALOGO = {
+    exame_com_pos_bd: true,
+    conclusoes: [
+      ["NORMAL", "Normal"], ["DVO_LEVE", "DVO leve"],
+      ["DVO_MODERADO", "DVO moderado"], ["DVO_ACENTUADO", "DVO acentuado"],
+      ["DVR_LEVE", "DVR leve"], ["DVR_MODERADO", "DVR moderado"],
+      ["DVR_ACENTUADO", "DVR acentuado"], ["DVC_LEVE", "DVC leve"],
+      ["DVC_MODERADO", "DVC moderado"], ["DVC_ACENTUADO", "DVC acentuado"],
+      ["DVO_PEQ_VIAS", "DVO peq. vias"], ["LIMITACAO_INESPECIFICA", "Inespecífico"],
+      ["EXAME_INSUFICIENTE", "Insuficiente"], ["NORMAL_LIMITROFE", "Limítrofe"],
+      ["OBSTRUCAO_VIAS_SUP", "Vias superiores"], ["NAO_CONCLUSIVO", "Não conclusivo"],
+      ["PERSONALIZADO", "Personalizado"],
+    ].map(([codigo, rotulo]) => ({
+      codigo, rotulo, texto: `Texto fictício da conclusão ${rotulo}.`,
+      personalizado: codigo === "PERSONALIZADO",
+    })),
+    complementos_bd: [
+      ["SEM_COMPLEMENTO", "Sem complemento"],
+      ["RESPOSTA_SIGNIFICATIVA", "Resposta significativa"],
+      ["RESPOSTA_AUSENTE", "Sem resposta"],
+      ["RESPOSTA_PARCIAL", "Resposta parcial"],
+      ["NORMALIZACAO", "Normalização"],
+    ].map(([codigo, rotulo]) => ({
+      codigo, rotulo, texto: `Frase fictícia — ${rotulo}.`,
+    })),
+  };
+
+  const DOCUMENTOS = {
+    patient: { full_name: DETALHE.patient.full_name },
+    report_code: "LAU-000301",
+    exam_code: "ESP-000401",
+    validation_code: "EXEMPLO-0000-0000",
+    tecnico_mir: { kind: "original", version_number: 1, version_id: "v1",
+      sha256: "0".repeat(64) },
+    laudo_soprolife: { kind: "laudo_previa", version_number: 2,
+      version_id: "v2", sha256: "b".repeat(64) },
+  };
+
+  function rota(path) {
+    const limpo = path.split("?")[0];
+    if (limpo === "/laudos/meus") return FILA;
+    if (limpo === "/laudos/templates") return [];
+    if (limpo === "/laudos/assinatura-externa/pendentes") {
+      // O envelope REAL do servidor: {total, laudos}. É este formato que
+      // produzia "— undefined" antes da M25.21.
+      const laudos = CENARIO === "vazio" ? [] : PENDENTES;
+      return { total: laudos.length, laudos };
+    }
+    if (limpo === "/laudos/doc-1/catalogo-conclusoes") return CATALOGO;
+    if (limpo === "/laudos/doc-1/documentos") return DOCUMENTOS;
+    if (limpo === "/laudos/doc-1") return DETALHE;
+    if (/^\/laudos\/[^/]+$/.test(limpo)) return DETALHE;
+    if (limpo.includes("/catalogo-conclusoes")) return CATALOGO;
+    if (limpo.includes("/documentos")) return DOCUMENTOS;
+    return [];
+  }
+
+  window.SoproM15 = {
+    hasToken: () => true,
+    hasSession: () => true,
+    can: (papel) => papel === "medico",
+    getUser: () => ({ nome: "Dra. Exemplo (fictícia)", papeis: ["medico"] }),
+    onSessionChange: (cb) => { window.__soproCb = cb; setTimeout(cb, 0); },
+    apiUrl: () => "./_harness_exemplo.pdf",
+    api: (path) => Promise.resolve(rota(path)),
+    apiBlob: () => Promise.resolve(new Blob([], { type: "application/pdf" })),
+  };
+
+  window.__harness = { cenario: CENARIO };
+})();
+</script>
+<script src="./js/report-workflow.js"></script>
+</body>
+</html>
