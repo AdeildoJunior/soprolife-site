@@ -337,6 +337,50 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
     hora_exame: Mapped[str | None] = mapped_column(String(5))  # HH:MM
     indicacao_clinica: Mapped[str | None] = mapped_column(Text)
     observacao: Mapped[str | None] = mapped_column(Text)
+    # M25.24 — ENCERRAMENTO OPERACIONAL do exame.
+    #
+    # Responde a uma pergunta que `status` não responde e não deveria:
+    # "este exame ainda gera trabalho para alguém?". `status` descreve o
+    # ATO — o exame foi realizado, liberado etc. — e é dado clínico/
+    # operacional do atendimento. Reaproveitá-lo para dizer "não me mostre
+    # mais" misturaria as duas coisas e, pior, faria a fila depender de um
+    # campo que a operação edita por outros motivos.
+    #
+    # O caso concreto que criou isto: exames antigos cujos pacientes já
+    # receberam o laudo POR FORA da plataforma. Eles não são pendência —
+    # mas também não são "laudados aqui", e fabricar um laudo inexistente
+    # para calá-los seria falsificar prontuário. O encerramento diz a
+    # verdade: houve laudo, ele não passou por aqui, e não há o que fazer.
+    #
+    # NADA é apagado. Paciente, exame, MIR, laudos, versões e auditoria
+    # continuam intactos e localizáveis na visão de históricos. É por isso
+    # que o encerramento é REVERSÍVEL: reabrir apenas limpa estes quatro
+    # campos e o exame volta para a fila como estava.
+    #
+    # Por exame, e nunca pela PESSOA: arquivar o cadastro inteiro (M25.17)
+    # é para cenário de teste, e esconderia também os exames futuros de um
+    # paciente real que continua sendo atendido.
+    encerramento_motivo: Mapped[str | None] = mapped_column(String(40))
+    encerrado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    encerrado_por_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    encerramento_observacao: Mapped[str | None] = mapped_column(String(200))
+    __table_args__ = (
+        # Mesma forma da `arquivamento_com_evidencia` de `people`: ou os
+        # quatro campos estão vazios, ou os quatro estão preenchidos. Um
+        # encerramento sem quem, quando e por quê é exatamente o registro
+        # que ninguém consegue justificar seis meses depois.
+        CheckConstraint(
+            "(encerramento_motivo IS NULL AND encerrado_em IS NULL "
+            "AND encerrado_por_user_id IS NULL "
+            "AND encerramento_observacao IS NULL) OR "
+            "(encerramento_motivo IS NOT NULL AND encerrado_em IS NOT NULL "
+            "AND encerrado_por_user_id IS NOT NULL "
+            "AND encerramento_observacao IS NOT NULL)",
+            name="encerramento_com_evidencia",
+        ),
+    )
 
 
 class Consultation(Base, TimestampMixin, LegacyMixin):

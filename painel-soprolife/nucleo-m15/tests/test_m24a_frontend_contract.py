@@ -255,7 +255,14 @@ def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
         # lista. Nenhum dado de paciente e nenhum texto clínico.
         "location_key",
         "location_name",
+        # M25.24 — carimbo do encerramento operacional do EXAME: motivo
+        # fechado, rótulo do catálogo, data e a observação da decisão. É
+        # metadado de FILA, da mesma natureza dos carimbos acima — não
+        # carrega nome, contato, texto clínico nem caminho de arquivo. Vem
+        # `None` em toda linha ativa, que é o caso desta fila.
+        "encerramento",
     }
+    assert queue_row["encerramento"] is None
     # M25.15 — o nome passou a ser a referência humana das DUAS filas
     # autenticadas, e o bloco de identidade é fechado: só nome e código do
     # cadastro. Nascimento, contato e id interno continuam fora da fila.

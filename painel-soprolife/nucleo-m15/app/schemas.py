@@ -873,6 +873,16 @@ ReportCorrectionReason = Literal[
     "identification_correction",
     "technical_document_correction",
 ]
+# M25.24 — encerramento operacional do EXAME. Fechado de propósito: o campo
+# decide o que some da fila, e texto livre viraria vinte grafias da mesma
+# coisa. Precisa ficar igual a `services/exam_closure.CLOSURE_REASONS` — há
+# teste que falha se as duas listas divergirem.
+ExamClosureReason = Literal[
+    "laudo_externo_ja_entregue",
+    "laudo_externo_e_teste_do_fluxo",
+    "duplicidade_operacional",
+    "atendimento_cancelado",
+]
 
 
 def normalize_crm_number(value: str) -> str:
@@ -944,6 +954,25 @@ class ReportReassignment(StrictModel):
     physician_profile_id: str = Field(min_length=36, max_length=36)
     expected_assignment_id: str = Field(min_length=36, max_length=36)
     reason_code: ReportReassignmentReason
+
+
+class ExamOperationalClosure(StrictModel):
+    """M25.24 — encerra UM exame como histórico, sem apagar nada.
+
+    A observação é obrigatória e curta: é o único lugar onde o caso concreto
+    fica escrito ("laudo entregue pela Pastore em julho"), e sem ela o motivo
+    fechado sozinho não explica nada seis meses depois. Ela é metadado
+    OPERACIONAL — não entra em PDF clínico nem em laudo nenhum.
+    """
+
+    motivo: ExamClosureReason
+    observacao: str = Field(min_length=3, max_length=200)
+
+
+class ExamOperationalReopen(StrictModel):
+    """Devolve o exame à fila. Motivo obrigatório, pela mesma razão."""
+
+    observacao: str = Field(min_length=3, max_length=200)
 
 
 class ReportPhysicianRecovery(StrictModel):

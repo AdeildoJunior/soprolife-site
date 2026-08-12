@@ -45,6 +45,10 @@ ALLOWED_KEYS = {
     # Arquivamento de cadastro interno de teste: por que saiu da operação e
     # o que saiu junto. `exames` e `laudos` são listas de código público.
     "exames", "laudos",
+    # M25.24 — encerramento operacional do exame. `exam_code` e `reason_code`
+    # já estavam na allowlist; o que entra aqui é a competência do
+    # fechamento Pastore e o total documentado, ambos institucionais.
+    "competencia", "valor_documentado", "itens",
 }
 
 _MAX_STR = 120

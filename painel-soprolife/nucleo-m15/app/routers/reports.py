@@ -71,6 +71,8 @@ from ..normalize import (
 )
 from ..schemas import (
     BatchDownloadRequest,
+    ExamOperationalClosure,
+    ExamOperationalReopen,
     ExternalValidationRequest,
     SignatureBatchConfirmRequest,
     SignatureBatchDownloadRequest,
@@ -105,6 +107,13 @@ from ..serializers import (
     ser_report_signature,
     ser_report_template,
     ser_user,
+)
+from ..services.exam_closure import (
+    CLOSURE_REASONS,
+    ExamClosureError,
+    close_exam,
+    closure_payload,
+    reopen_exam,
 )
 from ..services.pdf_validation import InvalidPdfError, validate_pdf_bytes
 from ..services.report_catalog import (
@@ -1223,6 +1232,11 @@ def _technical_report_row(
         "locked": document.status == STATUS_LAUDO_LIBERADO,
         "is_corrective": document.corrects_document_id is not None,
         "validation_code": document.validation_code,
+        # M25.24 — carimbo do encerramento operacional do EXAME. `None` na
+        # fila ativa. Presente, a linha tem de aparecer marcada como
+        # histórico: uma lista que junta encerrado e pendente sem etiqueta
+        # é pior do que uma lista que só mostra pendente.
+        "encerramento": closure_payload(exam),
     }
     if include_assignment_ids:
         data.update(
@@ -1483,6 +1497,9 @@ def search_exams_for_report(
     # cadastro interno de teste; quem precisa auditar um cenário antigo
     # pede por ele conscientemente.
     incluir_arquivados: bool = Query(default=False),
+    # M25.24 — o mesmo desenho do modo técnico acima: quem precisa ver um
+    # exame encerrado como histórico pede por ele conscientemente.
+    incluir_encerrados: bool = Query(default=False),
     db: Session = Depends(get_db),
     _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
@@ -1538,6 +1555,15 @@ def search_exams_for_report(
         statement = statement.where(ReportDocument.id.is_(None))
     if not incluir_arquivados:
         statement = statement.where(Person.arquivado.is_(False))
+    # M25.24 — "Espirometrias recentes sem laudo" é uma lista de TRABALHO. Um
+    # exame encerrado como histórico já teve o laudo entregue por fora: ele
+    # não é pendência, e continuar cobrando por ele todo dia é o defeito que
+    # esta missão veio consertar. Continua achável por código exato e na
+    # visão explícita de históricos.
+    if not incluir_encerrados:
+        statement = statement.where(
+            SpirometryExam.encerramento_motivo.is_(None)
+        )
     rows = db.execute(
         statement.order_by(SpirometryExam.created_at.desc()).limit(
             _EXAM_SEARCH_LIMIT
@@ -1569,9 +1595,191 @@ def search_exams_for_report(
             # — a linha continua aparecendo, porque é assim que o operador
             # descobre que existe algo a consertar.
             "origem_derivada": derived_origin_payload(db, exam),
+            # M25.24 — `None` quando o exame está ativo. Presente, diz por
+            # que ele não é mais trabalho e desde quando.
+            "encerramento": closure_payload(exam),
         }
         for exam, person, document in rows
     ]
+
+
+# --------------------------------- M25.24 — encerramento operacional
+#
+# Três rotas: encerrar, reabrir e listar os encerrados. Todas trabalham por
+# CÓDIGO do exame (ESP-…), e não por id interno: quem opera isto está olhando
+# para uma lista impressa ou para a tela, e o código é o que ela reconhece.
+#
+# Encerrar é `ROLE_OPERACIONAL`; REABRIR é `ROLE_ADMIN`. A assimetria é
+# deliberada — tirar da fila é rotina de operação, devolver um exame ao
+# trabalho clínico é decisão de gestão.
+
+
+def _exam_by_code_or_404(db: Session, exam_code: str) -> SpirometryExam:
+    codigo = (exam_code or "").strip().upper()
+    if not _SAFE_EXAM_CODE_RE.fullmatch(codigo):
+        raise ReportDomainError(
+            422, "codigo_exame_invalido", "Código de exame inválido."
+        )
+    exam = db.execute(
+        select(SpirometryExam).where(SpirometryExam.public_code == codigo)
+    ).scalar_one_or_none()
+    if exam is None:
+        raise ReportDomainError(
+            404, "exame_nao_encontrado", "Exame não encontrado."
+        )
+    return exam
+
+
+@router.get("/exames/encerrados")
+def list_closed_exams(
+    db: Session = Depends(get_db),
+    _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    """A visão explícita de "Históricos / encerrados".
+
+    Sair da fila de trabalho não pode significar sumir. Sem este lugar, o
+    encerramento seria indistinguível de uma exclusão para quem opera — e a
+    primeira dúvida honesta ("cadê o exame do paciente X?") não teria
+    resposta.
+    """
+
+    _require_reports_enabled()
+    rows = db.execute(
+        select(SpirometryExam, Person, ReportDocument)
+        .join(Person, Person.id == SpirometryExam.person_id)
+        .outerjoin(
+            ReportDocument,
+            ReportDocument.spirometry_exam_id == SpirometryExam.id,
+        )
+        .where(SpirometryExam.encerramento_motivo.is_not(None))
+        .order_by(SpirometryExam.encerrado_em.desc())
+        .limit(300)
+    ).all()
+    return {
+        "total": len(rows),
+        "itens": [
+            {
+                "patient": _patient_reference(person),
+                "exam_code": exam.public_code,
+                "exam_date": d(exam.data_exame),
+                "exam_status": exam.status,
+                "exam_status_display": exam_status_display(exam.status),
+                "location_name": resolve_exam_location_name(db, exam),
+                "report_code": document.public_code if document else None,
+                "report_document_id": document.id if document else None,
+                "report_status": document.status if document else None,
+                "encerramento": closure_payload(exam),
+            }
+            for exam, person, document in rows
+        ],
+    }
+
+
+@router.get("/exames/motivos-encerramento")
+def list_closure_reasons(
+    _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    """O catálogo fechado, para a tela montar o seletor sem repeti-lo."""
+
+    _require_reports_enabled()
+    return {
+        "motivos": [
+            {"chave": chave, "rotulo": rotulo}
+            for chave, rotulo in CLOSURE_REASONS.items()
+        ]
+    }
+
+
+@router.post("/exames/{exam_code}/encerramento")
+def close_exam_operationally(
+    exam_code: str,
+    payload: ExamOperationalClosure,
+    request: Request,
+    db: Session = Depends(get_db),
+    operator: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    """Tira UM exame da fila operacional, preservando tudo.
+
+    Idempotente: repetir com o MESMO motivo devolve `alterado: false` e não
+    reescreve data nem autoria da decisão original. Repetir com motivo
+    diferente é recusado — a operação precisa reabrir primeiro, para que as
+    duas decisões fiquem na trilha em vez de a segunda apagar a primeira.
+    """
+
+    _require_reports_enabled()
+    exam = _exam_by_code_or_404(db, exam_code)
+    try:
+        alterado = close_exam(
+            db,
+            exam=exam,
+            motivo=payload.motivo,
+            observacao=payload.observacao,
+            user_id=operator.id,
+        )
+    except ExamClosureError as exc:
+        raise ReportDomainError(
+            exc.http_status, exc.codigo, exc.mensagem
+        ) from None
+    if alterado:
+        audit(
+            db,
+            "exame_encerrado_operacionalmente",
+            entidade="spirometry_exams",
+            entidade_id=exam.id,
+            user_id=operator.id,
+            request_id=_request_id(request),
+            # Código institucional e valores fechados. A observação entra
+            # porque é a evidência da decisão — e por isso ela nunca deve
+            # receber nome, contato ou dado clínico de paciente.
+            detalhes={
+                "exam_code": exam.public_code,
+                "reason_code": exam.encerramento_motivo,
+                "motivo": exam.encerramento_observacao,
+            },
+        )
+    db.commit()
+    return {
+        "exam_code": exam.public_code,
+        "alterado": alterado,
+        "encerramento": closure_payload(exam),
+    }
+
+
+@router.post("/exames/{exam_code}/reabertura")
+def reopen_exam_operationally(
+    exam_code: str,
+    payload: ExamOperationalReopen,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_role(ROLE_ADMIN)),
+):
+    """"Reabrir para laudo": devolve o exame às filas, exatamente como estava.
+
+    Idempotente: reabrir um exame que já está aberto devolve
+    `alterado: false`. Nada além dos quatro campos de encerramento é tocado —
+    status do exame, laudos, versões e hashes continuam como estavam.
+    """
+
+    _require_reports_enabled()
+    exam = _exam_by_code_or_404(db, exam_code)
+    anterior = exam.encerramento_motivo
+    alterado = reopen_exam(db, exam=exam)
+    if alterado:
+        audit(
+            db,
+            "exame_reaberto_para_laudo",
+            entidade="spirometry_exams",
+            entidade_id=exam.id,
+            user_id=admin.id,
+            request_id=_request_id(request),
+            detalhes={
+                "exam_code": exam.public_code,
+                "reason_code": anterior,
+                "motivo": payload.observacao[:200],
+            },
+        )
+    db.commit()
+    return {"exam_code": exam.public_code, "alterado": alterado}
 
 
 # ----------------------------------------------------------- templates
@@ -1879,6 +2087,14 @@ def list_report_documents_operational(
     status: str | None = None,
     exam_code: str | None = None,
     incluir_arquivados: bool = False,
+    # M25.24 — o "Todos" desta fila não pode misturar pendência de hoje com
+    # histórico encerrado sem distinção: quem olha para contar trabalho
+    # contaria errado. O padrão é a fila ATIVA; os encerrados têm visão
+    # própria (`somente_encerrados`), e `incluir_encerrados` junta as duas
+    # para quem quiser o quadro completo — sempre com o carimbo em cada
+    # linha, nunca misturados sem etiqueta.
+    incluir_encerrados: bool = False,
+    somente_encerrados: bool = False,
     db: Session = Depends(get_db),
     _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
@@ -1917,6 +2133,14 @@ def list_report_documents_operational(
         # aqui. Esse caso é defeito de dado e precisa continuar VISÍVEL no
         # acompanhamento; `is_(False)` o esconderia junto com os testes.
         statement = statement.where(Person.arquivado.is_not(True))
+    if somente_encerrados:
+        statement = statement.where(
+            SpirometryExam.encerramento_motivo.is_not(None)
+        )
+    elif not incluir_encerrados:
+        statement = statement.where(
+            SpirometryExam.encerramento_motivo.is_(None)
+        )
     rows = db.execute(
         statement.order_by(ReportDocument.created_at.desc()).limit(200)
     ).all()
@@ -2153,6 +2377,11 @@ def list_my_report_queue(
         # amplia em nada o conjunto de laudos visível a ela.
         .where(ReportAssignment.physician_profile_id == profile.id)
         .where(Person.arquivado.is_not(True))
+        # M25.24 — exame encerrado como histórico NUNCA volta a aparecer
+        # para a médica como trabalho novo, em nenhum filtro, nem em
+        # "Todos". Se a operação precisar dele de volta, o caminho é
+        # reabrir explicitamente — e aí ele reaparece aqui.
+        .where(SpirometryExam.encerramento_motivo.is_(None))
     )
     if status:
         statement = statement.where(ReportDocument.status == status)
@@ -3300,6 +3529,13 @@ def _aguardando_assinatura_externa(db: Session, *, profile_id: str):
             ReportAssignment.physician_profile_id == profile_id,
             ReportDocument.status == STATUS_LAUDO_LIBERADO,
             Person.arquivado.is_not(True),
+            # M25.24 — os cinco atendimentos Pastore já tinham laudo
+            # entregue por fora; os laudos que existem aqui foram a médica
+            # exercitando o fluxo. Pedir assinatura com certificado real
+            # sobre um documento que ninguém vai entregar é trabalho
+            # inventado. Os documentos continuam intactos — o que sai é a
+            # COBRANÇA por eles.
+            SpirometryExam.encerramento_motivo.is_(None),
             ReportDocument.id.not_in(ja_recebidos),
         )
         .order_by(ReportDocument.released_at.desc())
@@ -4018,6 +4254,9 @@ def list_delivery_queue(
             & ReportAssignment.active.is_(True),
         )
         .where(Person.arquivado.is_not(True))
+        # M25.24 — a fila de ENTREGA também é lista de trabalho. Um exame
+        # encerrado como histórico não tem entrega a fazer.
+        .where(SpirometryExam.encerramento_motivo.is_(None))
         .order_by(ReportDocument.created_at.desc())
         .limit(300)
     ).all()

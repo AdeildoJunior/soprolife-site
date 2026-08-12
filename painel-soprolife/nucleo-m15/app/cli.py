@@ -1132,6 +1132,237 @@ def cmd_arquivar_cadastro(args) -> int:
     finally:
         db.close()
 
+def _usuario_por_email(db, email: str):
+    """Quem está tomando a decisão. Sem isto o encerramento não tem autor."""
+
+    from sqlalchemy import select
+
+    from .models import User
+
+    return db.execute(
+        select(User).where(User.email == email.strip().lower())
+    ).scalar_one_or_none()
+
+
+def cmd_encerrar_exame_historico(args) -> int:
+    """M25.24 — encerra exames que já tiveram laudo entregue POR FORA.
+
+    Dry-run por padrão, e o dry-run é a parte importante: ele imprime a
+    fotografia do lote ANTES de qualquer escrita — quais códigos, em que
+    estado, quais já estavam encerrados. É esse texto que vira a lista
+    congelada do relatório.
+
+    Idempotente: reexecutar não cria um segundo encerramento nem reescreve a
+    autoria do primeiro (ver `services/exam_closure.close_exam`).
+    """
+
+    from sqlalchemy import select
+
+    from .audit import audit
+    from .models import Person, ReportDocument, SpirometryExam
+    from .services.exam_closure import (
+        CLOSURE_REASONS,
+        ExamClosureError,
+        close_exam,
+        is_closed,
+    )
+
+    if args.motivo not in CLOSURE_REASONS:
+        print(json.dumps({
+            "ok": False,
+            "code": "motivo_invalido",
+            "motivos_validos": sorted(CLOSURE_REASONS),
+        }, ensure_ascii=False), file=sys.stderr)
+        return 1
+
+    db = _session()
+    try:
+        usuario = _usuario_por_email(db, args.usuario)
+        if usuario is None:
+            print(json.dumps({"ok": False, "code": "usuario_nao_encontrado"}),
+                  file=sys.stderr)
+            return 1
+
+        alvos = []
+        for codigo in args.exame:
+            exame = db.execute(
+                select(SpirometryExam).where(
+                    SpirometryExam.public_code == codigo.strip().upper()
+                )
+            ).scalar_one_or_none()
+            if exame is None:
+                print(
+                    json.dumps({"ok": False, "code": "exame_nao_encontrado",
+                                "public_code": codigo}),
+                    file=sys.stderr,
+                )
+                return 1
+            pessoa = db.get(Person, exame.person_id)
+            laudos = db.execute(
+                select(ReportDocument).where(
+                    ReportDocument.spirometry_exam_id == exame.id
+                )
+            ).scalars().all()
+            alvos.append({
+                "exam_code": exame.public_code,
+                "data_exame": (
+                    exame.data_exame.isoformat() if exame.data_exame else None
+                ),
+                "status_exame": exame.status,
+                # Código institucional da pessoa, nunca o nome: este JSON vai
+                # para relatório e terminal.
+                "paciente_public_code": pessoa.public_code if pessoa else None,
+                "laudos": [d.public_code for d in laudos],
+                "laudos_status": [d.status for d in laudos],
+                "ja_encerrado": is_closed(exame),
+                "motivo_atual": exame.encerramento_motivo,
+                "_exame": exame,
+            })
+
+        if not args.executar:
+            print(json.dumps({
+                "ok": True,
+                "dry_run": True,
+                "motivo": args.motivo,
+                "motivo_label": CLOSURE_REASONS[args.motivo],
+                "observacao": args.observacao,
+                "alvos": [
+                    {k: v for k, v in a.items() if not k.startswith("_")}
+                    for a in alvos
+                ],
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        alterados, inalterados = [], []
+        for alvo in alvos:
+            exame = alvo["_exame"]
+            try:
+                mudou = close_exam(
+                    db,
+                    exam=exame,
+                    motivo=args.motivo,
+                    observacao=args.observacao,
+                    user_id=usuario.id,
+                )
+            except ExamClosureError as exc:
+                db.rollback()
+                print(json.dumps({"ok": False, "code": exc.codigo,
+                                  "exam_code": exame.public_code,
+                                  "mensagem": exc.mensagem},
+                                 ensure_ascii=False), file=sys.stderr)
+                return 1
+            if not mudou:
+                inalterados.append(exame.public_code)
+                continue
+            alterados.append(exame.public_code)
+            audit(
+                db,
+                "exame_encerrado_operacionalmente",
+                "spirometry_exams",
+                exame.id,
+                usuario.id,
+                None,
+                {
+                    "exam_code": exame.public_code,
+                    "reason_code": exame.encerramento_motivo,
+                    "motivo": exame.encerramento_observacao,
+                },
+            )
+        db.commit()
+        print(json.dumps({
+            "ok": True,
+            "dry_run": False,
+            "encerrados": alterados,
+            "ja_estavam_encerrados": inalterados,
+        }, ensure_ascii=False))
+        return 0
+    finally:
+        db.close()
+
+
+def cmd_reabrir_exame(args) -> int:
+    """M25.24 — "Reabrir para laudo". Devolve o exame às filas."""
+
+    from sqlalchemy import select
+
+    from .audit import audit
+    from .models import SpirometryExam
+    from .services.exam_closure import is_closed, reopen_exam
+
+    db = _session()
+    try:
+        usuario = _usuario_por_email(db, args.usuario)
+        if usuario is None:
+            print(json.dumps({"ok": False, "code": "usuario_nao_encontrado"}),
+                  file=sys.stderr)
+            return 1
+
+        alvos = []
+        for codigo in args.exame:
+            exame = db.execute(
+                select(SpirometryExam).where(
+                    SpirometryExam.public_code == codigo.strip().upper()
+                )
+            ).scalar_one_or_none()
+            if exame is None:
+                print(
+                    json.dumps({"ok": False, "code": "exame_nao_encontrado",
+                                "public_code": codigo}),
+                    file=sys.stderr,
+                )
+                return 1
+            alvos.append({
+                "exam_code": exame.public_code,
+                "encerrado": is_closed(exame),
+                "motivo_atual": exame.encerramento_motivo,
+                "_exame": exame,
+            })
+
+        if not args.executar:
+            print(json.dumps({
+                "ok": True,
+                "dry_run": True,
+                "observacao": args.observacao,
+                "alvos": [
+                    {k: v for k, v in a.items() if not k.startswith("_")}
+                    for a in alvos
+                ],
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        reabertos, inalterados = [], []
+        for alvo in alvos:
+            exame = alvo["_exame"]
+            anterior = exame.encerramento_motivo
+            if not reopen_exam(db, exam=exame):
+                inalterados.append(exame.public_code)
+                continue
+            reabertos.append(exame.public_code)
+            audit(
+                db,
+                "exame_reaberto_para_laudo",
+                "spirometry_exams",
+                exame.id,
+                usuario.id,
+                None,
+                {
+                    "exam_code": exame.public_code,
+                    "reason_code": anterior,
+                    "motivo": args.observacao[:200],
+                },
+            )
+        db.commit()
+        print(json.dumps({
+            "ok": True,
+            "dry_run": False,
+            "reabertos": reabertos,
+            "ja_estavam_abertos": inalterados,
+        }, ensure_ascii=False))
+        return 0
+    finally:
+        db.close()
+
+
 def cmd_exportar_snapshots(args) -> int:
     """M23 — gera os snapshots do painel a partir do PostgreSQL.
 
@@ -1535,6 +1766,38 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--executar", action="store_true",
                    help="Grava de verdade (sem isso é dry-run)")
     p.set_defaults(func=cmd_arquivar_cadastro)
+
+    p = sub.add_parser(
+        "encerrar-exame-historico",
+        help="M25.24 — tira exames já laudados por fora da fila operacional",
+    )
+    p.add_argument("--exame", action="append", required=True,
+                   help="Código público do exame, ESP-… (repetível)")
+    p.add_argument("--motivo", required=True,
+                   help="Motivo estruturado: laudo_externo_ja_entregue, "
+                        "laudo_externo_e_teste_do_fluxo, "
+                        "duplicidade_operacional ou atendimento_cancelado")
+    p.add_argument("--observacao", required=True,
+                   help="Uma frase explicando o caso concreto")
+    p.add_argument("--usuario", required=True,
+                   help="E-mail do usuário que está tomando a decisão")
+    p.add_argument("--executar", action="store_true",
+                   help="Grava de verdade (sem isso é dry-run)")
+    p.set_defaults(func=cmd_encerrar_exame_historico)
+
+    p = sub.add_parser(
+        "reabrir-exame",
+        help="M25.24 — devolve um exame encerrado à fila de laudo",
+    )
+    p.add_argument("--exame", action="append", required=True,
+                   help="Código público do exame, ESP-… (repetível)")
+    p.add_argument("--observacao", required=True,
+                   help="Por que este exame volta para a fila")
+    p.add_argument("--usuario", required=True,
+                   help="E-mail do gestor que está reabrindo")
+    p.add_argument("--executar", action="store_true",
+                   help="Grava de verdade (sem isso é dry-run)")
+    p.set_defaults(func=cmd_reabrir_exame)
 
     args = parser.parse_args(argv)
     return args.func(args)

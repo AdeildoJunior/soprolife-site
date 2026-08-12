@@ -154,11 +154,11 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
 def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     cfg = _alembic_config(f"sqlite:///{tmp_path}/heads.db")
-    # A migração M25.20 (e7c4b03a91df, central de assinatura externa em
-    # lote) é a head atual — o valor esperado aqui é atualizado a cada nova
+    # A migração M25.24 (a2f6c81d4b73, encerramento operacional por exame) é
+    # a head atual — o valor esperado aqui é atualizado a cada nova
     # migration; o que a asserção realmente prova é continuar existindo
     # EXATAMENTE uma head (sem ponto de ramificação acidental).
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["e7c4b03a91df"]
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["a2f6c81d4b73"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(
