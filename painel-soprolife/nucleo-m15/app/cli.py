@@ -1363,6 +1363,103 @@ def cmd_reabrir_exame(args) -> int:
         db.close()
 
 
+def cmd_corrigir_broncodilatador(args) -> int:
+    """M25.24 — corrige `broncodilatador` a partir de evidência documental.
+
+    Existe porque `PATCH /espirometrias/{id}` não tem onde registrar de ONDE
+    veio a correção. Um exame histórico com `broncodilatador` nulo passar a
+    `true` é uma afirmação sobre o que foi feito no paciente: sem a evidência
+    gravada junto, ninguém consegue, depois, distinguir a correção baseada em
+    documento de um palpite.
+
+    Só toca em exames cujo valor DIVERGE do alvo — `--para true` num exame já
+    `true` não gera escrita nem auditoria. Dry-run por padrão.
+    """
+
+    from sqlalchemy import select
+
+    from .audit import audit
+    from .models import SpirometryExam
+
+    alvo = args.para.strip().lower() == "true"
+
+    db = _session()
+    try:
+        usuario = _usuario_por_email(db, args.usuario)
+        if usuario is None:
+            print(json.dumps({"ok": False, "code": "usuario_nao_encontrado"}),
+                  file=sys.stderr)
+            return 1
+
+        alvos = []
+        for codigo in args.exame:
+            exame = db.execute(
+                select(SpirometryExam).where(
+                    SpirometryExam.public_code == codigo.strip().upper()
+                )
+            ).scalar_one_or_none()
+            if exame is None:
+                print(
+                    json.dumps({"ok": False, "code": "exame_nao_encontrado",
+                                "public_code": codigo}),
+                    file=sys.stderr,
+                )
+                return 1
+            alvos.append({
+                "exam_code": exame.public_code,
+                "valor_atual": exame.broncodilatador,
+                "valor_alvo": alvo,
+                "muda": exame.broncodilatador != alvo,
+                "_exame": exame,
+            })
+
+        if not args.executar:
+            print(json.dumps({
+                "ok": True,
+                "dry_run": True,
+                "evidencia": args.evidencia,
+                "alvos": [
+                    {k: v for k, v in a.items() if not k.startswith("_")}
+                    for a in alvos
+                ],
+            }, ensure_ascii=False, indent=2))
+            return 0
+
+        alterados, inalterados = [], []
+        for item in alvos:
+            exame = item["_exame"]
+            if not item["muda"]:
+                inalterados.append(exame.public_code)
+                continue
+            exame.broncodilatador = alvo
+            alterados.append(exame.public_code)
+            audit(
+                db,
+                "espirometria.broncodilatador_corrigido_por_evidencia",
+                "spirometry_exams",
+                exame.id,
+                usuario.id,
+                None,
+                {
+                    "exam_code": exame.public_code,
+                    "campos": ["broncodilatador"],
+                    # A EVIDÊNCIA, e não só o novo valor. É o que separa
+                    # correção documentada de chute.
+                    "motivo": args.evidencia,
+                },
+            )
+        db.commit()
+        print(json.dumps({
+            "ok": True,
+            "dry_run": False,
+            "corrigidos": alterados,
+            "ja_estavam_corretos": inalterados,
+        }, ensure_ascii=False))
+        return 0
+    finally:
+        db.close()
+
+
 def cmd_exportar_snapshots(args) -> int:
     """M23 — gera os snapshots do painel a partir do PostgreSQL.
 
@@ -1798,6 +1895,22 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--executar", action="store_true",
                    help="Grava de verdade (sem isso é dry-run)")
     p.set_defaults(func=cmd_reabrir_exame)
+
+    p = sub.add_parser(
+        "corrigir-broncodilatador",
+        help="M25.24 — corrige broncodilatador a partir de evidência documental",
+    )
+    p.add_argument("--exame", action="append", required=True,
+                   help="Código público do exame, ESP-… (repetível)")
+    p.add_argument("--para", required=True, choices=["true", "false"],
+                   help="Valor correto comprovado pela evidência")
+    p.add_argument("--evidencia", required=True,
+                   help="De onde veio a correção (documento, data, quem forneceu)")
+    p.add_argument("--usuario", required=True,
+                   help="E-mail de quem aplica a correção")
+    p.add_argument("--executar", action="store_true",
+                   help="Grava de verdade (sem isso é dry-run)")
+    p.set_defaults(func=cmd_corrigir_broncodilatador)
 
     args = parser.parse_args(argv)
     return args.func(args)

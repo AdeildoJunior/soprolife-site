@@ -957,6 +957,134 @@ def test_a_tela_diz_que_nada_foi_apagado():
     assert "nada foi apagado" in WORKFLOW_JS.lower()
 
 
+# =====================================================================
+# 10. A CLI — dry-run e correção com evidência
+# =====================================================================
+
+
+def _cli(monkeypatch, engine, argv):
+    """Roda a CLI contra o MESMO banco do teste, capturando o stdout."""
+
+    import contextlib
+    import json as _json
+
+    from app import cli, db as db_module
+
+    monkeypatch.setenv("M15_DATABASE_URL", str(engine.url))
+    get_settings.cache_clear()
+    # `app.db` guarda engine e sessionmaker em globais de MÓDULO. Sem zerar
+    # os dois, a primeira chamada da CLI no processo prende o banco e todas
+    # as seguintes conversam com o banco de outro teste — a falha aparece
+    # como "exame não encontrado" num exame que existe.
+    db_module._engine = None
+    db_module._SessionLocal = None
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        codigo = cli.main(argv)
+    saida = buffer.getvalue().strip()
+    return codigo, (_json.loads(saida) if saida else None)
+
+
+def test_cli_de_encerramento_e_dry_run_por_padrao(
+    monkeypatch, engine, db, client, auth, users
+):
+    """O dry-run é o que produz a fotografia do lote ANTES de qualquer escrita."""
+
+    _pessoa, exame = _criar_exame(client, auth, nome="TESTE APAGAR Lote Dry Run")
+    db.rollback()
+
+    codigo, saida = _cli(monkeypatch, engine, [
+        "encerrar-exame-historico",
+        "--exame", exame["public_code"],
+        "--motivo", "laudo_externo_ja_entregue",
+        "--observacao", "Laudo entregue por fora antes da plataforma.",
+        "--usuario", users["operacional"].email,
+    ])
+    assert codigo == 0
+    assert saida["dry_run"] is True
+    assert saida["alvos"][0]["exam_code"] == exame["public_code"]
+    assert saida["alvos"][0]["ja_encerrado"] is False
+    # E o exame continua ABERTO: dry-run não escreve.
+    db.expire_all()
+    atual = db.execute(
+        select(SpirometryExam).where(
+            SpirometryExam.public_code == exame["public_code"]
+        )
+    ).scalar_one()
+    assert not is_closed(atual)
+
+
+def test_cli_de_encerramento_e_idempotente(
+    monkeypatch, engine, db, client, auth, users
+):
+    _pessoa, exame = _criar_exame(client, auth, nome="TESTE APAGAR Lote Repetido")
+    db.rollback()
+    argv = [
+        "encerrar-exame-historico",
+        "--exame", exame["public_code"],
+        "--motivo", "laudo_externo_ja_entregue",
+        "--observacao", "Laudo entregue por fora antes da plataforma.",
+        "--usuario", users["operacional"].email,
+        "--executar",
+    ]
+    _codigo, primeira = _cli(monkeypatch, engine, argv)
+    assert primeira["encerrados"] == [exame["public_code"]]
+    _codigo, segunda = _cli(monkeypatch, engine, argv)
+    assert segunda["encerrados"] == []
+    assert segunda["ja_estavam_encerrados"] == [exame["public_code"]]
+
+
+def test_cli_corrige_broncodilatador_so_quando_diverge(
+    monkeypatch, engine, db, client, auth, users
+):
+    """`--para true` num exame que já é `true` não escreve nem audita.
+
+    É a garantia de "corrigir BD já true não gera alteração desnecessária":
+    reprocessar os cinco Pastore não pode carimbar auditoria em três exames
+    que já estavam certos.
+    """
+
+    _pessoa, ja_true = _criar_exame(client, auth, nome="TESTE APAGAR BD Correto")
+    nulo = SpirometryExam(
+        public_code="ESP-900010",
+        person_id=db.execute(select(Person.id)).scalars().first(),
+        data_exame=None,
+        status="Realizado",
+        broncodilatador=None,
+    )
+    db.add(nulo)
+    db.commit()
+    db.rollback()
+
+    _codigo, saida = _cli(monkeypatch, engine, [
+        "corrigir-broncodilatador",
+        "--exame", ja_true["public_code"],
+        "--exame", "ESP-900010",
+        "--para", "true",
+        "--evidencia", "Extrato Pastore fornecido pelo gestor em 11/08/2026",
+        "--usuario", users["operacional"].email,
+        "--executar",
+    ])
+    assert saida["corrigidos"] == ["ESP-900010"]
+    assert saida["ja_estavam_corretos"] == [ja_true["public_code"]]
+
+    db.expire_all()
+    assert db.execute(
+        select(SpirometryExam.broncodilatador).where(
+            SpirometryExam.public_code == "ESP-900010"
+        )
+    ).scalar_one() is True
+    # UMA entrada de auditoria, e ela carrega a evidência.
+    trilha = db.execute(
+        select(AuditLog).where(
+            AuditLog.acao
+            == "espirometria.broncodilatador_corrigido_por_evidencia"
+        )
+    ).scalars().all()
+    assert len(trilha) == 1
+    assert "Extrato Pastore" in trilha[0].detalhes["motivo"]
+
+
 def test_o_envelope_da_lista_de_encerrados_e_declarado():
     """M25.21 — envelope adivinhado já cegou duas filas por uma etapa inteira."""
 
