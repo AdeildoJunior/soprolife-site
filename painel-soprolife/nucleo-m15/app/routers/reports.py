@@ -1641,22 +1641,38 @@ def list_closed_exams(
     encerramento seria indistinguível de uma exclusão para quem opera — e a
     primeira dúvida honesta ("cadê o exame do paciente X?") não teria
     resposta.
+
+    É uma lista de EXAMES, e um exame aparece uma vez só. O `outerjoin` com
+    `report_documents` multiplica a linha quando o exame tem mais de um laudo
+    — foi o que aconteceu com o ESP-000019, que tem dois (o original e o
+    corretivo) e contava como dois históricos. Os laudos vêm agregados numa
+    lista dentro da linha, que é o que a tela precisa mostrar mesmo.
     """
 
     _require_reports_enabled()
-    rows = db.execute(
-        select(SpirometryExam, Person, ReportDocument)
+    exams = db.execute(
+        select(SpirometryExam, Person)
         .join(Person, Person.id == SpirometryExam.person_id)
-        .outerjoin(
-            ReportDocument,
-            ReportDocument.spirometry_exam_id == SpirometryExam.id,
-        )
         .where(SpirometryExam.encerramento_motivo.is_not(None))
         .order_by(SpirometryExam.encerrado_em.desc())
         .limit(300)
     ).all()
+    documentos: dict[str, list[ReportDocument]] = {}
+    if exams:
+        for documento in db.execute(
+            select(ReportDocument)
+            .where(
+                ReportDocument.spirometry_exam_id.in_(
+                    [exam.id for exam, _person in exams]
+                )
+            )
+            .order_by(ReportDocument.public_code)
+        ).scalars():
+            documentos.setdefault(
+                documento.spirometry_exam_id, []
+            ).append(documento)
     return {
-        "total": len(rows),
+        "total": len(exams),
         "itens": [
             {
                 "patient": _patient_reference(person),
@@ -1665,12 +1681,22 @@ def list_closed_exams(
                 "exam_status": exam.status,
                 "exam_status_display": exam_status_display(exam.status),
                 "location_name": resolve_exam_location_name(db, exam),
-                "report_code": document.public_code if document else None,
-                "report_document_id": document.id if document else None,
-                "report_status": document.status if document else None,
+                # Todos os laudos deste exame, do mais antigo ao mais novo.
+                # Vazio quando o laudo nunca passou pela plataforma — que é
+                # justamente o caso do lote histórico.
+                "laudos": [
+                    {
+                        "report_code": documento.public_code,
+                        "report_document_id": documento.id,
+                        "report_status": documento.status,
+                        "is_corrective": documento.corrects_document_id
+                        is not None,
+                    }
+                    for documento in documentos.get(exam.id, [])
+                ],
                 "encerramento": closure_payload(exam),
             }
-            for exam, person, document in rows
+            for exam, person in exams
         ],
     }
 

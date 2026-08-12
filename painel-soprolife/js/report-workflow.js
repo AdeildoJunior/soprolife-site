@@ -1945,12 +1945,28 @@
     const linhas = lista.length
       ? lista.map((item) => {
           const enc = item.encerramento || {};
+          // M25.24 — os laudos vêm agregados: um exame com laudo original e
+          // corretivo (o caso do ESP-000019) tem dois, e mostrar só um
+          // esconderia metade da evidência preservada.
+          const laudos = Array.isArray(item.laudos) ? item.laudos : [];
+          const trilha = [item.exam_code]
+            .concat(laudos.map((l) => l.report_code))
+            .filter(Boolean);
           return `
             <li class="report-closed-row">
               <div class="report-closed-body">
                 <strong class="report-item-name">${esc(patientName(item))}</strong>
                 <span>${contextLine(item, [item.exam_status_display])}</span>
-                ${codeTrail(item)}
+                <span class="report-code-trail">${
+                  trilha.map((c) => esc(c)).join(" · ")
+                }</span>
+                ${laudos.length
+                  ? `<span class="report-help">${
+                      laudos.length === 1
+                        ? "1 laudo preservado"
+                        : `${laudos.length} laudos preservados`
+                    }, sem alteração.</span>`
+                  : ""}
                 <span class="report-closed-reason">${
                   esc(enc.motivo_label || enc.motivo || "encerrado")
                 }</span>

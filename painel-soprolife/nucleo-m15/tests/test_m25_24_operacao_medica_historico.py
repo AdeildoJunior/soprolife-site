@@ -466,7 +466,7 @@ def test_encerrado_continua_localizavel(client, auth, caso):
     assert corpo["total"] == 1
     item = corpo["itens"][0]
     assert item["exam_code"] == caso["exame"]["public_code"]
-    assert item["report_code"] == caso["report_code"]
+    assert [l["report_code"] for l in item["laudos"]] == [caso["report_code"]]
     assert item["encerramento"]["motivo_label"] == CLOSURE_REASONS[
         "laudo_externo_ja_entregue"
     ]
@@ -478,6 +478,36 @@ def test_encerrado_continua_localizavel(client, auth, caso):
         headers=auth("operacional"),
     ).json()
     assert [i["exam_code"] for i in achado] == [caso["exame"]["public_code"]]
+
+
+def test_exame_com_dois_laudos_conta_como_UM_historico(client, auth, db, caso):
+    """O ESP-000019 real tem laudo original + corretivo.
+
+    O `outerjoin` com `report_documents` multiplicava a linha do exame: a
+    tela mostrava o mesmo paciente duas vezes e o contador dizia 19 para 18
+    exames encerrados. É lista de EXAMES — um exame, uma linha, com os
+    laudos agregados dentro.
+    """
+
+    # Segundo laudo no MESMO exame, como o corretivo de produção.
+    corretivo = client.post(
+        f"/api/v1/laudos/{caso['document_id']}/nova-versao-corretiva",
+        json={"reason_code": "clinical_correction"},
+        headers=caso["medica"]["auth"],
+    )
+    assert corretivo.status_code == 201, corretivo.text
+    _encerrar(client, auth, caso["exame"]["public_code"])
+
+    corpo = client.get(
+        "/api/v1/laudos/exames/encerrados", headers=auth("operacional")
+    ).json()
+    assert corpo["total"] == 1
+    assert len(corpo["itens"]) == 1
+    # E os DOIS laudos continuam visíveis dentro da linha.
+    codigos = [l["report_code"] for l in corpo["itens"][0]["laudos"]]
+    assert len(codigos) == 2
+    assert caso["report_code"] in codigos
+    assert any(l["is_corrective"] for l in corpo["itens"][0]["laudos"])
 
 
 # =====================================================================
