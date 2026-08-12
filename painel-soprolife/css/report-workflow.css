@@ -2151,3 +2151,352 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
     flex: 1 1 auto;
   }
 }
+
+/* ================================================ M25.24 — ajuda contextual
+
+   Um "?" ao lado do controle, e uma bolha irmã. O componente precisa
+   sobreviver a três ambientes diferentes ao mesmo tempo: mouse (hover),
+   teclado (foco + Esc) e toque (tocar abre, tocar fora fecha). O CSS aqui
+   trata só de aparência e posição — a abertura é sempre atributo (`hidden`
+   + `.is-open`), nunca `:hover` puro, porque `:hover` não existe no iPhone
+   e não é alcançável por teclado. */
+
+.report-help-tip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  flex: 0 0 auto;
+}
+
+.report-help-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 28px é o menor alvo que ainda se acerta com o polegar sem zoom; o ícone
+     desenhado tem 18px e os 5px restantes são área de toque invisível. */
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: help;
+  line-height: 1;
+}
+
+.report-help-toggle > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.report-help-toggle:hover,
+.report-help-toggle:focus-visible {
+  color: var(--navy);
+}
+
+/* Estado aberto NÃO é só cor: o ícone inverte (fundo cheio), de modo que
+   quem não distingue o teal do navy ainda vê qual "?" está ativo. */
+.report-help-tip.is-open .report-help-toggle > span {
+  border-color: var(--navy);
+  background: var(--navy);
+  color: #fff;
+}
+
+.report-help-toggle:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: var(--radius-pill);
+}
+
+.report-help-bubble {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  /* Ancorada à ESQUERDA do ícone e crescendo para a direita seria a escolha
+     natural, mas quase toda ajuda fica no fim de um título, encostada na
+     borda direita do cartão. Ancorar à direita mantém a bolha dentro do
+     painel nos dois casos. */
+  right: 0;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  /* Nome de paciente nunca entra aqui, mas a bolha convive com títulos que
+     têm; `break-word` (e nunca `anywhere`) mantém a quebra por palavra. */
+  overflow-wrap: break-word;
+}
+
+/* A seta repete a borda do balão para que ele não pareça flutuar solto sobre
+   o cartão — é a única pista de qual "?" abriu esta bolha. */
+.report-help-bubble::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: 9px;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  background: var(--card);
+  transform: rotate(45deg);
+}
+
+.report-help-bubble[hidden] {
+  display: none;
+}
+
+/* O campo Status e o de motivo da correção: rótulo e "?" lado a lado, com o
+   "?" fora do <label> (dentro dele, cada toque abriria o seletor). */
+.report-compact-field-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+/* Frase que explica o estado ESCOLHIDO no filtro. Fica sempre visível — é
+   ajuda que não exige descobrir que existe um "?". */
+.report-status-explainer {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--teal);
+  border-radius: var(--radius-xs);
+  background: var(--teal-pale);
+  color: var(--navy);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ------------------------------------------------ M25.24 — Como funciona */
+
+.report-howto {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+
+.report-howto > summary {
+  cursor: pointer;
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 800;
+  /* Alvo de toque confortável sem virar um bloco: o padding negativo do
+     conteúdo abaixo compensa quando fechado. */
+  padding: 2px 0;
+}
+
+.report-howto > summary:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
+}
+
+.report-howto-list {
+  display: grid;
+  /* Seis passos: em telas largas cabem três colunas sem virar uma parede de
+     texto; no celular vira uma coluna só. */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px 18px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.report-howto-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+}
+
+.report-howto-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-howto-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.report-howto-body strong {
+  color: var(--navy);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.report-howto-body > span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  /* No celular a bolha ocupa a largura útil e para de tentar caber ao lado
+     do ícone. */
+  .report-help-bubble {
+    max-width: calc(100vw - 40px);
+  }
+}
+
+/* ============================= M25.24 — encerramento operacional de exame */
+
+/* O par "localizar exame" + "encerrar como histórico". O segundo botão é
+   discreto de propósito: encerrar é a exceção, localizar é a rotina. */
+.report-exam-pick-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.report-exam-pick-wrap > .report-exam-pick {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.report-exam-close {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.report-exam-close:hover,
+.report-exam-close[aria-expanded="true"] {
+  border-color: var(--navy);
+  color: var(--navy);
+}
+
+.report-exam-close:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.report-closure-form {
+  display: grid;
+  gap: 10px;
+  margin: 8px 0 4px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--navy);
+  border-radius: var(--radius-sm);
+  background: var(--line-light);
+}
+
+.report-closure-form h4 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.report-closure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------------------------------------- a visão de históricos encerrados */
+
+.report-closed-catalog {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+}
+
+.report-closed-catalog > summary {
+  cursor: pointer;
+  color: var(--navy);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.report-closed-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.report-closed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--line-light);
+}
+
+.report-closed-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* O motivo do encerramento é a informação que justifica a linha estar aqui:
+   ele precisa se distinguir do contexto, não se misturar a ele. */
+.report-closed-reason {
+  color: var(--navy);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.report-closed-when {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 640px) {
+  .report-exam-pick-wrap {
+    flex-direction: column;
+  }
+
+  .report-exam-close {
+    align-self: stretch;
+  }
+
+  .report-closed-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

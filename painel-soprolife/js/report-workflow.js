@@ -61,6 +61,136 @@
   const RELEASE_CONFIRMATION = "ASSINAR E LIBERAR";
   const ADDENDUM_CONFIRMATION = "PUBLICAR ADENDO";
 
+  // ------------------------------------------ M25.24 — ajuda contextual
+  //
+  // Catálogo ÚNICO de explicações da área médica. Cada texto descreve o que
+  // o controle faz de fato — nunca o que seria bom que ele fizesse. Se uma
+  // regra clínica mudar, o texto muda junto; nenhum destes textos existe
+  // para "vender" um comportamento que o servidor não implementa.
+  //
+  // REGRA DE PRIVACIDADE: só cabe aqui explicação FUNCIONAL. Nenhum nome de
+  // paciente, valor, número de negócio ou informação administrativa entra
+  // neste catálogo — os textos são estáticos e iguais para todo mundo, e é
+  // essa estaticidade que garante que uma bolha de ajuda nunca vaze dado.
+  const HELP = {
+    "assinatura-externa": {
+      rotulo: "Ajuda sobre a assinatura externa",
+      texto:
+        "Laudos que você já concluiu clinicamente e que ainda precisam da "
+        + "sua assinatura qualificada, aplicada fora deste painel. Baixe, "
+        + "assine com o seu certificado e devolva os arquivos aqui.",
+    },
+    "assinatura-contador": {
+      rotulo: "Ajuda sobre o número ao lado do título",
+      texto:
+        "Quantos laudos seus estão aguardando assinatura neste momento. O "
+        + "número vem do servidor e some sozinho conforme os assinados "
+        + "voltam.",
+    },
+    "assinatura-selecionar-todos": {
+      rotulo: "Ajuda sobre selecionar todos",
+      texto:
+        "Marca todos os laudos desta lista de uma vez. Com tudo marcado, o "
+        + "mesmo botão limpa a seleção.",
+    },
+    "assinatura-baixar": {
+      rotulo: "Ajuda sobre baixar selecionados",
+      texto:
+        "Um laudo baixa como PDF. Dois ou mais são reunidos num único ZIP. "
+        + "Assine os arquivos como eles foram baixados: reimprimir ou "
+        + "exportar de novo altera o PDF e o envio de volta é recusado.",
+    },
+    "assinatura-enviar": {
+      rotulo: "Ajuda sobre enviar os PDFs assinados",
+      texto:
+        "Depois de assinar por fora, envie vários PDFs de uma vez ou um ZIP "
+        + "com todos. Nada é gravado antes de você conferir a lista que "
+        + "aparece na tela.",
+    },
+    "meus-laudos": {
+      rotulo: "Ajuda sobre Meus laudos",
+      texto:
+        "Somente os laudos atribuídos ao seu perfil médico. Exames de outras "
+        + "médicas nunca aparecem aqui, e exames encerrados como histórico "
+        + "saem desta fila.",
+    },
+    "status-filtro": {
+      rotulo: "Ajuda sobre o filtro de estados",
+      texto:
+        "Filtra a fila por etapa do laudo. Cada etapa é explicada na frase "
+        + "logo abaixo do campo quando você a escolhe.",
+    },
+    "exame-mir": {
+      rotulo: "Ajuda sobre o exame técnico da MIR",
+      texto:
+        "PDF original produzido pelo equipamento. Ele nunca é alterado, "
+        + "assinado por cima nem substituído pelo laudo — fica guardado como "
+        + "está e continua disponível junto com o laudo.",
+    },
+    "laudo-soprolife": {
+      rotulo: "Ajuda sobre o laudo SoproLife",
+      texto:
+        "Documento médico produzido aqui no Centro de Comando, com a sua "
+        + "interpretação. É ele que recebe a sua assinatura — o exame do "
+        + "equipamento continua sendo anexo.",
+    },
+    "adendo": {
+      rotulo: "Ajuda sobre adendo",
+      texto:
+        "Cria uma versão complementar do laudo já concluído, sem apagar nem "
+        + "reescrever a anterior. As duas versões continuam existindo e "
+        + "acessíveis.",
+    },
+    "documento-corretivo": {
+      rotulo: "Ajuda sobre documento corretivo",
+      texto:
+        "Abre um laudo NOVO que substitui o anterior por erro. O documento "
+        + "antigo não é apagado: ele passa a apontar para o corretivo, e o "
+        + "corretivo nasce marcado como tal. Para complementar sem "
+        + "substituir, use adendo.",
+    },
+    "motivo-correcao": {
+      rotulo: "Ajuda sobre o motivo técnico da correção",
+      texto:
+        "Registra POR QUE o laudo está sendo refeito. O motivo fica na "
+        + "auditoria do documento corretivo e não aparece dentro do PDF "
+        + "clínico.",
+    },
+    "corrigido": {
+      rotulo: "Ajuda sobre a marca de corrigido",
+      texto:
+        "Este laudo substitui um anterior. O documento substituído continua "
+        + "guardado e localizável.",
+    },
+  };
+  // A explicação de cada estado do filtro, na linguagem de quem lauda. Vem
+  // da lógica REAL do servidor (ver a auditoria da M25.24), não do rótulo.
+  const STATUS_HELP = {
+    "": "Mostra todos os laudos atribuídos a você, em qualquer etapa.",
+    atribuido:
+      "O exame chegou com o PDF do equipamento e está atribuído a você; "
+      + "nenhum texto clínico foi escrito ainda. Sai daqui quando você gera "
+      + "a primeira prévia. Próximo passo: abrir e laudar.",
+    em_elaboracao:
+      "Você já gerou pelo menos uma prévia e o texto ainda pode ser "
+      + "alterado. Sai daqui ao concluir o laudo. Próximo passo: revisar e "
+      + "concluir.",
+    assinatura_pendente:
+      "Fluxo antigo de anotação sobre o PDF do equipamento: o conteúdo foi "
+      + "congelado e o sistema espera o arquivo assinado voltar. Sai daqui "
+      + "quando o PDF assinado é aceito na conferência.",
+    assinado:
+      "O PDF assinado voltou e o sistema conferiu que é o mesmo documento, "
+      + "que não foi reescrito e que a assinatura digital confere com o "
+      + "certificado já vinculado a você. O sistema NÃO verifica a cadeia "
+      + "ICP-Brasil nem a revogação do certificado. Nada mais é exigido de "
+      + "você.",
+    liberado:
+      "Laudo clinicamente concluído por você, com código de validação. "
+      + "Falta a assinatura qualificada, que é aplicada fora do painel. "
+      + "Próximo passo: baixar em “Assinatura externa”, assinar e devolver.",
+  };
+
   const state = {
     reportsMode: "disabled",
     queue: [],
@@ -121,6 +251,16 @@
     // Fila de entrega da administração e o estado filtrado na tela.
     deliveryQueue: null,
     deliveryFilter: "",
+    // M25.24 — `null` = "ainda não mexeu nesta sessão, use a preferência
+    // guardada". true/false = escolha explícita da médica agora.
+    howItWorksOpen: null,
+    // M25.24 — encerramento operacional de exame (visão da administração).
+    // `closedExams` é a lista de históricos; `closureTarget` é o ESP que a
+    // operação escolheu encerrar e para o qual o formulário está aberto.
+    closedExams: [],
+    closureReasons: [],
+    closureTarget: "",
+    closureBusy: false,
     profileError: "",
     busy: false,
     notice: "",
@@ -170,6 +310,104 @@
     ).join("");
   }
 
+  // ------------------------------------------ M25.24 — o componente de ajuda
+  //
+  // Por que NÃO é `title=""`, que seria uma linha em vez de trinta:
+  //
+  //   - `title` não abre por toque. No iPhone da médica ele simplesmente não
+  //     existe, e a ajuda precisa funcionar exatamente lá;
+  //   - `title` não abre por teclado e não tem como ser fechado com Esc;
+  //   - o tempo até aparecer, o tamanho e a quebra de linha são do sistema
+  //     operacional, não nossos — textos de três linhas viram uma tira
+  //     ilegível;
+  //   - leitores de tela tratam `title` de forma inconsistente, e em vários
+  //     casos ele é ignorado quando o elemento já tem nome acessível.
+  //
+  // O que se usa aqui: um <button> REAL (foco natural na ordem de Tab,
+  // Enter/Espaço nativos, alvo de toque de 28px) seguido de um irmão
+  // `role="tooltip"`. O botão aponta para a bolha por `aria-describedby` —
+  // assim a explicação é anunciada ao pousar no botão, mesmo antes de a
+  // bolha estar visível, e não depende de hover em lugar nenhum.
+  //
+  // A bolha não depende só de cor para se distinguir: tem borda, sombra e
+  // uma seta, e o botão fechado/aberto muda de forma além de tom.
+  let helpSeq = 0;
+
+  function helpTip(chave) {
+    const item = HELP[chave];
+    if (!item) return "";
+    helpSeq += 1;
+    const id = `reportHelp-${chave}-${helpSeq}`;
+    return `<span class="report-help-tip" data-help-tip>
+      <button type="button" class="report-help-toggle" data-help-toggle
+        aria-describedby="${esc(id)}" aria-expanded="false"
+        aria-label="${esc(item.rotulo)}"><span aria-hidden="true">?</span></button>
+      <span class="report-help-bubble" role="tooltip" id="${esc(id)}"
+        hidden>${esc(item.texto)}</span>
+    </span>`;
+  }
+
+  // A abertura é DOM puro, nunca `render()`. Reconstruir a árvore para abrir
+  // uma bolha fecharia o <details>, perderia o foco do teclado e faria a
+  // seleção de laudos piscar — e a ajuda existe justamente para quem está no
+  // meio de uma tarefa.
+  function setHelpOpen(toggle, aberto) {
+    const tip = toggle.closest("[data-help-tip]");
+    if (!tip) return;
+    const bubble = tip.querySelector(".report-help-bubble");
+    if (!bubble) return;
+    toggle.setAttribute("aria-expanded", aberto ? "true" : "false");
+    bubble.hidden = !aberto;
+    tip.classList.toggle("is-open", Boolean(aberto));
+  }
+
+  function closeAllHelp(exceto) {
+    document.querySelectorAll("[data-help-tip].is-open").forEach((tip) => {
+      if (exceto && tip === exceto) return;
+      const toggle = tip.querySelector("[data-help-toggle]");
+      if (toggle) setHelpOpen(toggle, false);
+    });
+  }
+
+  // Hover e foco abrem; toque ALTERNA. As três entradas convivem porque um
+  // mesmo aparelho pode ter as três (iPad com teclado, notebook com tela
+  // sensível ao toque) — nenhuma delas é escolhida por detecção de
+  // dispositivo, que erra exatamente nesses casos.
+  function bindHelpTips(scope) {
+    scope.addEventListener("mouseover", (event) => {
+      const toggle = event.target.closest && event.target.closest("[data-help-toggle]");
+      if (toggle) setHelpOpen(toggle, true);
+    });
+    scope.addEventListener("mouseout", (event) => {
+      const toggle = event.target.closest && event.target.closest("[data-help-toggle]");
+      // Sair para dentro da própria bolha não fecha: ela é irmã do botão e o
+      // texto precisa poder ser lido (e selecionado) com o ponteiro em cima.
+      if (!toggle) return;
+      const indo = event.relatedTarget;
+      const tip = toggle.closest("[data-help-tip]");
+      if (indo && tip && tip.contains(indo)) return;
+      if (toggle !== document.activeElement) setHelpOpen(toggle, false);
+    });
+    scope.addEventListener("focusin", (event) => {
+      const toggle = event.target.closest && event.target.closest("[data-help-toggle]");
+      if (toggle) setHelpOpen(toggle, true);
+    });
+    scope.addEventListener("focusout", (event) => {
+      const toggle = event.target.closest && event.target.closest("[data-help-toggle]");
+      if (toggle) setHelpOpen(toggle, false);
+    });
+    scope.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" && event.key !== "Esc") return;
+      if (!document.querySelector("[data-help-tip].is-open")) return;
+      const toggle = event.target.closest
+        && event.target.closest("[data-help-toggle]");
+      closeAllHelp();
+      // Devolve o foco a quem estava com ele: fechar não pode jogar quem usa
+      // teclado de volta para o início da página.
+      if (toggle) toggle.focus();
+    });
+  }
+
   function fmtDate(value, withTime) {
     if (!value) return "—";
     const parsed = new Date(value);
@@ -194,7 +432,22 @@
       // M25.8 — revisado pela médica, congelado, AINDA NÃO assinado. Este
       // estado não vai ao paciente.
       assinatura_pendente: "Laudado — aguardando assinatura qualificada",
-      assinado: "Assinado com ICP-Brasil",
+      // M25.24 — o rótulo dizia "Assinado com ICP-Brasil". O sistema não
+      // sabe disso. O que ele confere ao receber o PDF de volta é: o
+      // marcador bate (mesmo laudo, mesma versão, mesmo hash de conteúdo),
+      // o arquivo é o preparado + apêndice, existe campo PAdES, o CMS é
+      // válido e a assinatura confere contra a chave pública do PRÓPRIO
+      // certificado que assinou. Ninguém verifica a cadeia até uma AC da
+      // ICP-Brasil, nem CRL/OCSP, nem carimbo de tempo. Afirmar
+      // "ICP-Brasil" é afirmar exatamente a parte que não foi feita.
+      //
+      // O rótulo também evita a fórmula que `test-m24a-report-workflow.js`
+      // barra em toda a tela ("assinado" + "digitalmente" na mesma frase),
+      // para que a liberação institucional nunca seja vendida como
+      // assinatura. O que sobra é o que é verdade: está assinado, e a
+      // assinatura foi conferida — o alcance dessa conferência está na
+      // ajuda do estado.
+      assinado: "Assinado — assinatura conferida",
       // M25.18 — "Liberado" sugeria documento pronto para entrega. Ele não
       // está: falta a assinatura qualificada, que a médica aplica fora do
       // sistema. O rótulo diz o estado real e o que falta, na ordem em que
@@ -538,7 +791,10 @@
 
   function batchOutcomeLabel(valor) {
     return {
-      validado_e_liberado: "Assinatura ICP-Brasil validada",
+      // M25.24 — mesma correção do rótulo de status: o que foi validado é a
+      // assinatura digital contra o certificado do signatário, não a cadeia
+      // ICP-Brasil.
+      validado_e_liberado: "Assinatura digital conferida",
       arquivo_duplicado: "Já processado",
       laudo_nao_encontrado: "Laudo não encontrado",
       versao_divergente: "Versão divergente",
@@ -600,23 +856,41 @@
             <p class="eyebrow">${
               unidadeAtual ? esc(unidadeAtual.nome) : "Fila clínica restrita"
             }</p>
-            <h3 id="myReportsTitle">Meus laudos</h3>
+            <h3 id="myReportsTitle">Meus laudos ${helpTip("meus-laudos")}</h3>
           </div>
           ${trocar}
-          <label class="report-compact-field" for="reportStatusFilter">
-            Status
-            <select id="reportStatusFilter">
-              ${options([
-                ["", "Todos"],
-                ["atribuido", "Pendentes de laudo"],
-                ["em_elaboracao", "Em elaboração"],
-                ["assinatura_pendente", "Laudados — aguardando assinatura"],
-                ["assinado", "Assinados com ICP-Brasil"],
-                ["liberado", "Concluídos"],
-              ], state.statusFilter)}
-            </select>
-          </label>
+          ${/* M25.24 — o <option> nativo não aceita ajuda: não há tooltip
+                confiável dentro de um select em nenhum navegador, e no iOS o
+                seletor vira uma roda do sistema onde nada além do rótulo
+                aparece. Por isso o select fica SIMPLES, o "?" ao lado
+                explica todos os estados de uma vez, e a frase abaixo do
+                campo explica o estado ESCOLHIDO — que é o que importa
+                depois da escolha. O "?" fica FORA do <label>: dentro dele,
+                cada toque no ícone abriria o seletor de estados junto. */""}
+          <div class="report-compact-field-wrap">
+            <label class="report-compact-field" for="reportStatusFilter">
+              Status
+              <select id="reportStatusFilter"
+                aria-describedby="reportStatusFilterHelp">
+                ${options([
+                  ["", "Todos"],
+                  ["atribuido", "Pendentes de laudo"],
+                  ["em_elaboracao", "Em elaboração"],
+                  ["assinatura_pendente", "Laudados — aguardando assinatura"],
+                  // M25.24 — ver `statusLabel`: a cadeia ICP-Brasil não é
+                  // conferida por este sistema em nenhum caminho.
+                  ["assinado", "Assinados — assinatura conferida"],
+                  ["liberado", "Concluídos — aguardando assinatura"],
+                ], state.statusFilter)}
+              </select>
+            </label>
+            ${helpTip("status-filtro")}
+          </div>
         </div>
+        <p class="report-status-explainer" id="reportStatusFilterHelp"
+          role="status" aria-live="polite">${
+            esc(STATUS_HELP[state.statusFilter] || STATUS_HELP[""])
+          }</p>
         <div class="report-queue-list" role="listbox"
           aria-label="Laudos atribuídos ao médico autenticado">
           ${items}
@@ -912,7 +1186,7 @@
     if (detail.status !== "liberado") return "";
     return `
       <form id="reportAddendumForm" class="report-addendum-form">
-        <h4>Adendo ao laudo liberado</h4>
+        <h4>Adendo ao laudo liberado ${helpTip("adendo")}</h4>
         <p class="report-help">O adendo gera uma versão nova preservando integralmente a versão liberada anterior.</p>
         <label for="reportAddendumText">
           Texto do adendo
@@ -1107,9 +1381,15 @@
             <span class="report-status-chip report-${esc(detail.status)}">${
               esc(statusLabel(detail.status))
             }</span>
-            ${hasAddendum ? `<span class="report-status-chip report-adendo-flag">Com adendo</span>` : ""}
+            ${hasAddendum
+              ? `<span class="report-status-chip report-adendo-flag">Com adendo</span>${
+                  helpTip("adendo")
+                }`
+              : ""}
             ${detail.corrects_document_id
-              ? `<span class="report-status-chip report-corrigido-flag">Documento corretivo</span>`
+              ? `<span class="report-status-chip report-corrigido-flag">Documento corretivo</span>${
+                  helpTip("corrigido")
+                }`
               : ""}
             ${/* M25.4 — "Liberado" e "Conteúdo bloqueado" repetiam o chip de
                   status: liberado JÁ implica bloqueado. Só mostramos o
@@ -1131,14 +1411,16 @@
               escolhe as siglas, edita o texto e gera a prévia. */""}
         <div class="report-clinical-split" aria-label="Exame técnico da MIR e laudo da SoproLife">
           <article class="report-source-pane">
-            <h4>Exame técnico (MIR)</h4>
+            <h4>Exame técnico (MIR) ${helpTip("exame-mir")}</h4>
             <p class="report-help">Documento original, nunca alterado nem assinado por cima.</p>
             ${renderPdfFrame("original", "PDF original", original)}
           </article>
           <div class="report-work-pane">
             <article class="report-preview-pane">
               <h4>${current && current.kind !== "original"
-                ? kindLabel(current.kind) : "Laudo SoproLife"}</h4>
+                ? kindLabel(current.kind) : "Laudo SoproLife"} ${
+                helpTip("laudo-soprolife")
+              }</h4>
               <p class="report-help">Laudo médico próprio, gerado pelo Centro de Comando.</p>
               ${renderPdfFrame(
                 "generated",
@@ -1204,14 +1486,18 @@
 
         ${signed || released ? `
           <form id="reportCorrectionForm" class="report-correction-form">
-            <label for="reportCorrectionReason">Motivo técnico da correção
-              <select id="reportCorrectionReason" name="reason_code" required>
-                <option value="clinical_correction">Correção clínica</option>
-                <option value="identification_correction">Correção de identificação</option>
-                <option value="technical_document_correction">Correção técnica do documento</option>
-              </select>
-            </label>
+            <div class="report-compact-field-wrap">
+              <label for="reportCorrectionReason">Motivo técnico da correção
+                <select id="reportCorrectionReason" name="reason_code" required>
+                  <option value="clinical_correction">Correção clínica</option>
+                  <option value="identification_correction">Correção de identificação</option>
+                  <option value="technical_document_correction">Correção técnica do documento</option>
+                </select>
+              </label>
+              ${helpTip("motivo-correcao")}
+            </div>
             <button class="m15-btn" type="submit">Abrir documento corretivo</button>
+            ${helpTip("documento-corretivo")}
           </form>` : ""}
         ${renderSignaturePanel(detail)}
       </section>`;
@@ -1251,11 +1537,14 @@
               primeiro e o título fica estável. */""}
         <div class="report-signature-head">
           <div>
-            <p class="eyebrow">Assinatura externa</p>
+            <p class="eyebrow">Assinatura externa ${
+              helpTip("assinatura-externa")
+            }</p>
             <h3 id="signatureCenterTitle">Aguardando assinatura qualificada</h3>
           </div>
           <span class="report-signature-count${total ? "" : " is-zero"}"
             aria-hidden="true">${total}</span>
+          ${helpTip("assinatura-contador")}
         </div>
 
         ${total ? `
@@ -1263,6 +1552,7 @@
             <button type="button" class="m15-btn" data-signature-all>
               ${marcados === total ? "Limpar seleção" : "Selecionar todos"}
             </button>
+            ${helpTip("assinatura-selecionar-todos")}
             <button type="button" class="m15-btn m15-btn-primary"
               data-signature-download${
                 state.signatureBusy || !marcados ? " disabled" : ""
@@ -1271,6 +1561,7 @@
                 ? `Baixar ${marcados} para assinatura`
                 : "Baixar selecionados"}
             </button>
+            ${helpTip("assinatura-baixar")}
           </div>` : ""}
 
         <div class="report-signature-list" role="group"
@@ -1305,7 +1596,7 @@
   function renderSignatureUpload() {
     return `
       <div class="report-signature-return">
-        <h4>Enviar lote assinado</h4>
+        <h4>Enviar lote assinado ${helpTip("assinatura-enviar")}</h4>
         <p class="report-help">
           Selecione os PDFs assinados, ou um único ZIP com todos. Nada é
           gravado antes de você conferir a lista.
@@ -1389,9 +1680,80 @@
   // Qualquer bloco novo colocado no shell passa a empilhar em largura total,
   // que é o comportamento seguro. Repetir o acidente exigiria colocá-lo
   // deliberadamente dentro da faixa de resumo.
+  // ------------------------------------------- M25.24 — "Como funciona"
+  //
+  // Seis passos, o percurso inteiro numa tela, e nada além disso. É o mapa
+  // que faltava para quem abre a área médica sem treinamento.
+  //
+  // O passo 6 diz "a SoproLife entrega ao paciente", e essa formulação é
+  // deliberada: o ato médico e a assinatura são responsabilidade da médica;
+  // a entrega é operação da empresa. Um texto que sugerisse que ela manda o
+  // resultado ao paciente atribuiria a ela uma tarefa que não é dela.
+  //
+  // Nasce ABERTO para quem ainda não trabalhou aqui e recolhido para quem já
+  // conhece o fluxo. Quem lauda todo dia não precisa de seis passos ocupando
+  // o topo da tela; quem chega pela primeira vez não deveria ter de
+  // descobrir que existe um bloco recolhido.
+  //
+  // "Já conhece" é DERIVADO da própria fila, e não guardado no navegador:
+  // nada deste fluxo pode ser gravado em armazenamento do navegador — é
+  // trava de privacidade do M24A, verificada por
+  // `scripts/test-m24a-report-workflow.js`, e ela vale mais do que a
+  // conveniência de lembrar a preferência entre recargas. Se existe ao
+  // menos um laudo que já saiu de "pendente de laudo", esta médica já
+  // percorreu o caminho pelo menos uma vez.
+  const HOW_IT_WORKS_STEPS = [
+    ["Abrir o exame", "Em “Meus laudos”, escolha o paciente. O PDF do equipamento abre ao lado do laudo."],
+    ["Interpretar e concluir", "Escolha a conclusão, revise o texto e gere a prévia. Concluir fecha o laudo para edição."],
+    ["Baixar para assinatura", "Em “Assinatura externa”, baixe os laudos concluídos. Um vira PDF; vários viram um ZIP."],
+    ["Assinar por fora", "Assine os arquivos com o seu certificado, fora deste painel."],
+    ["Devolver os assinados", "Envie os PDFs assinados de volta aqui. Você confere a lista antes de qualquer coisa ser gravada."],
+    ["Entrega", "A SoproLife cuida da etapa administrativa de entrega ao paciente."],
+  ];
+
+  function howItWorksSeen() {
+    // Qualquer laudo além de "pendente de laudo" significa que esta médica
+    // já abriu, laudou ou concluiu alguma coisa aqui dentro.
+    return (state.queue || []).some(
+      (item) => item && item.status && item.status !== "atribuido"
+    );
+  }
+
+  // Enquanto a médica não mexer no bloco nesta sessão, vale o que a fila
+  // sugere. Depois que ela abre ou fecha, vale a escolha dela — senão a
+  // próxima renderização (que acontece a cada carga de fila) desfaria o que
+  // ela acabou de fazer.
+  function howItWorksOpen() {
+    if (state.howItWorksOpen !== null) return state.howItWorksOpen;
+    return !howItWorksSeen();
+  }
+
+  function renderHowItWorks() {
+    const passos = HOW_IT_WORKS_STEPS.map(([titulo, texto], indice) => `
+      <li class="report-howto-step">
+        <span class="report-howto-num" aria-hidden="true">${indice + 1}</span>
+        <span class="report-howto-body">
+          <strong>${esc(titulo)}</strong>
+          <span>${esc(texto)}</span>
+        </span>
+      </li>`).join("");
+    return `
+      <details class="report-howto" data-report-howto${
+        howItWorksOpen() ? " open" : ""
+      }>
+        <summary>Como funciona</summary>
+        <ol class="report-howto-list">${passos}</ol>
+        <p class="report-help">A sua responsabilidade é o ato médico e a
+          assinatura. A operação e a entrega são da SoproLife.</p>
+      </details>`;
+  }
+
   function renderPhysicianWorkspace() {
     return `
       <div class="report-physician-shell">
+        ${/* M25.21 — bloco novo no shell nasce em LARGURA INTEIRA. Devolver
+              colunas aqui repetiria o acidente que espremeu a bancada. */""}
+        ${renderHowItWorks()}
         <div class="report-physician-summary">
           ${renderSignatureCenter()}
           ${renderQueue()}
@@ -1498,13 +1860,124 @@
     if (!exams.length) {
       return `<p class="report-help">Nenhuma espirometria recente sem laudo. Busque pelo nome do paciente ou pelo código acima.</p>`;
     }
+    // M25.24 — cada exame ganha, ao lado, a saída para o caso em que ele NÃO
+    // é trabalho: o paciente já recebeu o laudo por fora. O botão fica fora
+    // do <button> que localiza o exame (botão dentro de botão é HTML
+    // inválido e o clique vira loteria entre os dois).
+    const alvo = state.closureTarget;
+    const linhas = exams.slice(0, 12).map((exam) => `
+      <div class="report-exam-pick-wrap">
+        ${renderExamPick(exam)}
+        <button type="button" class="report-exam-close"
+          data-closure-open="${esc(exam.exam_code)}"
+          aria-expanded="${alvo === exam.exam_code ? "true" : "false"}">
+          Encerrar como histórico
+        </button>
+      </div>
+      ${alvo === exam.exam_code ? renderClosureForm(exam) : ""}`).join("");
     return `
       <details class="report-exam-catalog" open>
         <summary>Espirometrias recentes sem laudo (${exams.length})</summary>
-        <p class="report-help">Clique para localizar sem digitar nada.</p>
-        <div class="report-exam-pick-list">${
-          exams.slice(0, 12).map(renderExamPick).join("")
-        }</div>
+        <p class="report-help">Clique no paciente para localizar sem digitar
+          nada. Se o laudo deste exame já foi entregue por fora da
+          plataforma, use “Encerrar como histórico”.</p>
+        <div class="report-exam-pick-list">${linhas}</div>
+      </details>`;
+  }
+
+  // ------------------------------- M25.24 — encerramento e históricos
+  //
+  // Duas telas que existem porque uma exige a outra: se a operação pode
+  // tirar um exame da fila, ela precisa poder encontrá-lo depois e devolvê-lo
+  // — senão "encerrar" é indistinguível de "apagar" para quem usa, e ninguém
+  // clica num botão do qual não sabe voltar.
+
+  function closureReasonOptions() {
+    const lista = Array.isArray(state.closureReasons)
+      ? state.closureReasons : [];
+    // Fail closed: sem catálogo carregado, nenhuma opção — em vez de uma
+    // lista inventada no navegador que o servidor recusaria.
+    return lista.map((item) => [item.chave, item.rotulo]);
+  }
+
+  function renderClosureForm(exam) {
+    const motivos = closureReasonOptions();
+    if (!motivos.length) {
+      return `<p class="report-help">Catálogo de motivos indisponível —
+        recarregue a página antes de encerrar.</p>`;
+    }
+    return `
+      <form id="reportClosureForm" class="report-closure-form">
+        <h4>Encerrar como histórico</h4>
+        <p class="report-help">Nada é apagado. O exame, o PDF do equipamento,
+          os laudos e a auditoria continuam íntegros e localizáveis em
+          “Históricos encerrados”. Um gestor pode reabrir quando precisar.</p>
+        <input type="hidden" name="exam_code" value="${esc(exam.exam_code)}">
+        <div class="report-technical-confirmation" role="status">
+          <strong class="report-item-name">${esc(patientName(exam))}</strong>
+          <span>${contextLine(exam, [exam.exam_status_display])}</span>
+          ${codeTrail(exam)}
+        </div>
+        <label for="reportClosureReason">Motivo do encerramento
+          <select id="reportClosureReason" name="motivo" required>
+            <option value="">Selecione</option>
+            ${options(motivos, "")}
+          </select>
+        </label>
+        <label for="reportClosureNote">Observação
+          <input id="reportClosureNote" name="observacao" maxlength="200"
+            required aria-describedby="reportClosureNoteHelp"
+            placeholder="Ex.: laudo entregue pela clínica parceira em julho">
+          <span id="reportClosureNoteHelp" class="report-help">Uma frase sobre
+            ESTE caso. Não escreva dado clínico nem contato do paciente.</span>
+        </label>
+        <div class="report-closure-actions">
+          <button class="m15-btn m15-btn-primary" type="submit"${
+            state.closureBusy ? " disabled" : ""
+          }>Encerrar exame</button>
+          <button type="button" class="m15-btn" data-closure-cancel>Cancelar</button>
+        </div>
+      </form>`;
+  }
+
+  function renderClosedExams() {
+    const lista = Array.isArray(state.closedExams) ? state.closedExams : [];
+    const linhas = lista.length
+      ? lista.map((item) => {
+          const enc = item.encerramento || {};
+          return `
+            <li class="report-closed-row">
+              <div class="report-closed-body">
+                <strong class="report-item-name">${esc(patientName(item))}</strong>
+                <span>${contextLine(item, [item.exam_status_display])}</span>
+                ${codeTrail(item)}
+                <span class="report-closed-reason">${
+                  esc(enc.motivo_label || enc.motivo || "encerrado")
+                }</span>
+                ${enc.observacao
+                  ? `<span class="report-help">${esc(enc.observacao)}</span>`
+                  : ""}
+                <span class="report-closed-when">Encerrado em ${
+                  fmtDate(enc.encerrado_em, true)
+                }</span>
+              </div>
+              ${/* Reabrir é ROLE_ADMIN no servidor; o botão só aparece para
+                    quem de fato consegue executá-lo, para não oferecer uma
+                    ação que devolveria 403. */""}
+              ${can("admin") ? `
+                <button type="button" class="m15-btn"
+                  data-reopen-exam="${esc(item.exam_code)}"${
+                    state.closureBusy ? " disabled" : ""
+                  }>Reabrir para laudo</button>` : ""}
+            </li>`;
+        }).join("")
+      : `<div class="report-empty">Nenhum exame encerrado como histórico.</div>`;
+    return `
+      <details class="report-closed-catalog">
+        <summary>Históricos encerrados (${lista.length})</summary>
+        <p class="report-help">Exames que saíram da fila operacional por
+          decisão explícita. Continuam completos: nada foi apagado.</p>
+        <ul class="report-closed-list">${linhas}</ul>
       </details>`;
   }
 
@@ -1526,6 +1999,7 @@
         <h3 id="operationalListTitle">Acompanhamento operacional</h3>
         <p class="report-help">Paciente, local, atribuição e estado técnico. A interpretação clínica não é exposta aqui.</p>
         <div class="report-operation-list">${rows}</div>
+        ${renderClosedExams()}
         ${selected && selected.status === "atribuido" ? `
           <form id="reportReassignForm" class="report-reassign-form">
             <h4>Reatribuir antes do primeiro rascunho</h4>
@@ -2044,6 +2518,10 @@
     // rótulo do estado → chave da lista dentro da resposta ("" = objeto cru)
     signaturePending: "laudos",
     deliveryQueue: "",
+    // M25.24 — declarado, e não adivinhado pelo `{itens}` genérico. Foi
+    // exatamente a heurística que cegou duas filas na M25.20.
+    closedExams: "itens",
+    closureReasons: "motivos",
   };
 
   function unwrapPayload(label, value) {
@@ -2107,6 +2585,13 @@
         // filtra o que já recebeu.
         calls.push(client().api("/laudos/assinatura-externa/fila"));
         labels.push("deliveryQueue");
+        // M25.24 — os exames encerrados como histórico. Sair da fila de
+        // trabalho não pode virar sumir: sem esta lista, a administração
+        // não teria como responder "cadê o exame do paciente X?".
+        calls.push(client().api("/laudos/exames/encerrados"));
+        labels.push("closedExams");
+        calls.push(client().api("/laudos/exames/motivos-encerramento"));
+        labels.push("closureReasons");
       }
       if (can("admin")) {
         calls.push(client().api("/laudos/admin/medicos"));
@@ -3068,6 +3553,79 @@
     }
   }
 
+  // ------------------------------- M25.24 — encerrar e reabrir um exame
+
+  async function closeExamAsHistorical(form) {
+    const codigo = form.elements.exam_code.value;
+    const payload = {
+      motivo: form.elements.motivo.value,
+      observacao: form.elements.observacao.value.trim(),
+    };
+    if (!payload.motivo || !payload.observacao) {
+      announce("Escolha o motivo e escreva uma observação.", "erro");
+      return;
+    }
+    state.closureBusy = true;
+    render();
+    try {
+      const resposta = await client().api(
+        `/laudos/exames/${encodeURIComponent(codigo)}/encerramento`,
+        { method: "POST", body: JSON.stringify(payload) }
+      );
+      // `alterado: false` é sucesso, não erro: alguém já havia encerrado
+      // este exame. Dizer isso é melhor do que fingir que a ação aconteceu
+      // agora ou do que mostrar um erro para um estado que já é o desejado.
+      announce(
+        resposta && resposta.alterado === false
+          ? `${codigo} já estava encerrado como histórico.`
+          : `${codigo} encerrado como histórico. Nada foi apagado.`,
+        "ok"
+      );
+      state.closureTarget = "";
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.closureBusy = false;
+      render();
+    }
+  }
+
+  async function reopenExam(codigo) {
+    // Reabrir devolve trabalho clínico à fila de uma médica. Não é um
+    // clique distraído: a frase digitada é a mesma exigência do registro de
+    // conferência externa da M25.20.
+    const motivo = window.prompt(
+      `Reabrir ${codigo} para laudo. Por que este exame volta para a fila?`
+    );
+    if (motivo === null) return;
+    const texto = String(motivo).trim();
+    if (texto.length < 3) {
+      announce("Escreva uma frase explicando a reabertura.", "erro");
+      return;
+    }
+    state.closureBusy = true;
+    render();
+    try {
+      const resposta = await client().api(
+        `/laudos/exames/${encodeURIComponent(codigo)}/reabertura`,
+        { method: "POST", body: JSON.stringify({ observacao: texto }) }
+      );
+      announce(
+        resposta && resposta.alterado === false
+          ? `${codigo} já estava na fila.`
+          : `${codigo} voltou para a fila de laudo.`,
+        "ok"
+      );
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.closureBusy = false;
+      render();
+    }
+  }
+
   async function savePhysician(form) {
     const payload = {
       grant_physician_role: form.elements.grant_physician_role.checked,
@@ -3228,6 +3786,31 @@
   }
 
   function handleClick(event) {
+    // M25.24 — a ajuda vem ANTES de tudo. O ícone pode estar dentro de uma
+    // linha de laudo ou ao lado de um botão de ação; sem interromper aqui,
+    // tocar no "?" abriria o documento ou dispararia um download.
+    const helpToggle = event.target.closest("[data-help-toggle]");
+    if (helpToggle) {
+      event.preventDefault();
+      event.stopPropagation();
+      const tip = helpToggle.closest("[data-help-tip]");
+      const aberto = helpToggle.getAttribute("aria-expanded") === "true";
+      closeAllHelp(tip);
+      setHelpOpen(helpToggle, !aberto);
+      return;
+    }
+    // Tocar em qualquer outro lugar da área médica fecha o que estiver
+    // aberto — inclusive na própria bolha, que não é interativa.
+    closeAllHelp();
+    // M25.24 — "Como funciona". `toggle` de <details> NÃO borbulha, então a
+    // delegação tem de ser pelo clique no <summary>. Nada de
+    // `preventDefault`: o próprio <details> abre e fecha sozinho, aqui só se
+    // registra a escolha. `open` ainda é o valor ANTES do toggle.
+    const howto = event.target.closest("[data-report-howto] > summary");
+    if (howto) {
+      state.howItWorksOpen = !howto.parentElement.open;
+      return;
+    }
     // A caixa de seleção do lote é um elemento DENTRO do botão que abre o
     // laudo. Sem tratá-la primeiro, marcar um laudo abriria o documento.
     const pick = event.target.closest("[data-report-batch-pick]");
@@ -3264,6 +3847,24 @@
     if (button.matches("[data-signature-discard]")) {
       state.signatureReview = null;
       render();
+      return;
+    }
+    // ---------------------------------------------------------- M25.24
+    if (button.matches("[data-closure-open]")) {
+      const codigo = button.getAttribute("data-closure-open");
+      // O mesmo botão alterna: reabrir o formulário do exame já escolhido
+      // fecha, em vez de não fazer nada visível.
+      state.closureTarget = state.closureTarget === codigo ? "" : codigo;
+      render();
+      return;
+    }
+    if (button.matches("[data-closure-cancel]")) {
+      state.closureTarget = "";
+      render();
+      return;
+    }
+    if (button.matches("[data-reopen-exam]")) {
+      reopenExam(button.getAttribute("data-reopen-exam"));
       return;
     }
     if (button.matches("[data-delivery-filter]")) {
@@ -3517,6 +4118,8 @@
       openCorrection(event.target);
     } else if (event.target.id === "reportSignatureAssetForm") {
       uploadSignatureAsset(event.target);
+    } else if (event.target.id === "reportClosureForm") {
+      closeExamAsHistorical(event.target);
     }
   }
 
@@ -3570,6 +4173,16 @@
     mount.addEventListener("change", handleChange);
     mount.addEventListener("input", handleInput);
     mount.addEventListener("submit", handleSubmit);
+    // M25.24 — hover, foco e Esc. O clique/toque é tratado dentro de
+    // `handleClick`, que já intercepta antes de qualquer ação clínica.
+    bindHelpTips(mount);
+    // Tocar FORA da área médica também fecha. No iPhone não há "sair com o
+    // ponteiro": sem isto, uma bolha aberta ficaria na tela até a próxima
+    // renderização.
+    document.addEventListener("click", (event) => {
+      if (event.target.closest && event.target.closest("[data-help-tip]")) return;
+      closeAllHelp();
+    });
     const nav = document.querySelector(
       `.nav-item[data-section="${SECTION_ID}"]`
     );
