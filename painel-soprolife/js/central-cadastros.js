@@ -144,15 +144,76 @@
     if (value !== "" && value != null) payload[key] = value;
   }
 
+  /* M25.26 — ajuda contextual no padrão firmado pela M25.24.
+   *
+   * Botão real + irmão `role="tooltip"`, e não `title=""`: `title` não abre
+   * por toque (o celular do operador em campo simplesmente não o mostra),
+   * não abre por teclado e tem aparência decidida pelo sistema. A explicação
+   * é anunciada por `aria-describedby` já ao pousar no botão.
+   *
+   * Usada com parcimônia: só onde a escolha tem consequência que a tela não
+   * consegue mostrar sozinha (modalidade, local, valor, pessoa sem
+   * atendimento). Texto permanente em todo campo vira ruído e ninguém lê.
+   */
+  let ajudaSeq = 0;
+
+  function ajudaTip(texto, rotulo) {
+    if (!texto) return "";
+    ajudaSeq += 1;
+    const id = "cadAjuda-" + ajudaSeq;
+    return `<span class="cad-help" data-cad-help>
+      <button type="button" class="cad-help-toggle" data-cad-help-toggle
+        aria-describedby="${esc(id)}" aria-expanded="false"
+        aria-label="${esc(rotulo || "Ajuda")}"><span aria-hidden="true">?</span></button>
+      <span class="cad-help-bubble" role="tooltip" id="${esc(id)}" hidden>${esc(texto)}</span>
+    </span>`;
+  }
+
+  // Abre/fecha sem re-render: reconstruir a árvore perderia o foco do teclado
+  // e o que o operador já digitou no meio do formulário.
+  function wireAjuda(root) {
+    if (!root || root.getAttribute("data-cad-help-wired")) return;
+    root.setAttribute("data-cad-help-wired", "1");
+    root.addEventListener("click", (ev) => {
+      const toggle = ev.target.closest("[data-cad-help-toggle]");
+      if (!toggle) {
+        root.querySelectorAll("[data-cad-help-toggle][aria-expanded='true']")
+          .forEach((t) => setAjudaOpen(t, false));
+        return;
+      }
+      ev.preventDefault();
+      const aberto = toggle.getAttribute("aria-expanded") === "true";
+      root.querySelectorAll("[data-cad-help-toggle][aria-expanded='true']")
+        .forEach((t) => { if (t !== toggle) setAjudaOpen(t, false); });
+      setAjudaOpen(toggle, !aberto);
+    });
+    root.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Escape") return;
+      const abertos = root.querySelectorAll("[data-cad-help-toggle][aria-expanded='true']");
+      if (!abertos.length) return;
+      abertos.forEach((t) => setAjudaOpen(t, false));
+      ev.stopPropagation();
+    });
+  }
+
+  function setAjudaOpen(toggle, aberto) {
+    const wrap = toggle.closest("[data-cad-help]");
+    const bolha = wrap && wrap.querySelector(".cad-help-bubble");
+    if (!bolha) return;
+    toggle.setAttribute("aria-expanded", aberto ? "true" : "false");
+    bolha.hidden = !aberto;
+  }
+
   // Campos no MESMO sistema visual do núcleo (m15-form / grid de 12 colunas)
   function fld(label, inner, opt) {
-    let span = 3, help = "", req = false;
+    let span = 3, help = "", req = false, ajuda = "";
     if (typeof opt === "number") span = opt;
     else if (opt && typeof opt === "object") {
       span = opt.span || 3; help = opt.help || ""; req = !!opt.req;
+      ajuda = opt.ajuda || "";
     }
     const cls = "m15-field " + (span >= 12 ? "m15-form-full" : "m15-span-" + span);
-    return `<label class="${cls}"><span class="m15-field-label" title="${esc(label)}">${esc(label)}${req ? ' <b class="cad-req" title="Campo obrigatório">*</b>' : ""}</span>${inner}` +
+    return `<label class="${cls}"><span class="m15-field-label" title="${esc(label)}">${esc(label)}${req ? ' <b class="cad-req" title="Campo obrigatório">*</b>' : ""}${ajudaTip(ajuda, label)}</span>${inner}` +
       (help ? `<span class="m15-field-help">${esc(help)}</span>` : "") + "</label>";
   }
 
@@ -221,14 +282,70 @@
           // erro genérico por cima.
           if (err && err.silencioso) return;
           const msg = (err && err.message) || String(err);
+          // M25.26 — o erro deixou de ser só uma frase. O 422 traz
+          // `campos_faltantes` em formato de máquina, e o campo correspondente
+          // é marcado na tela: dizer "falta a data do exame" sem mostrar ONDE
+          // ainda deixa o operador procurando num formulário longo.
+          destacarCamposFaltantes(form, err);
+          const comoCorrigir = err && err.detalhe && err.detalhe.como_corrigir;
           if (status) {
             status.hidden = false;
-            status.textContent = "Erro: " + msg;
+            status.textContent = "Erro: " + msg +
+              (comoCorrigir ? " — " + comoCorrigir : "");
             status.className = "cad-submit-status cad-erro";
           }
           toast("Erro: " + msg, "erro");
         });
     });
+  }
+
+  /* Caminho do payload -> campo do formulário desta tela.
+   *
+   * O servidor devolve `espirometria.data_exame`; aqui o input se chama
+   * `esp_data`. A ponte é explícita e curta de propósito: um caminho sem
+   * tradução conhecida simplesmente não destaca nada, em vez de adivinhar um
+   * seletor e marcar o campo errado. */
+  const CAMPO_PARA_INPUT = {
+    "espirometria.data_exame": "esp_data",
+    "espirometria.modalidade": "esp_modalidade",
+    "espirometria.local_atendimento": "esp_local",
+    "espirometria.origem": "esp_origem",
+    "espirometria.responsavel": "esp_responsavel",
+    "espirometria.status": "esp_status",
+    "consulta.data_consulta": "con_data",
+    "consulta.status": "con_status",
+    "consulta.profissional": "con_profissional",
+    "consulta.retorno_data": "con_retorno_data",
+    "consulta.retorno_intervalo_meses": "con_retorno_meses",
+    "financeiro.espirometria.valor": "esp_valor",
+    "financeiro.espirometria.data_recebimento": "esp_pgto_data",
+    "financeiro.consulta.valor_bruto": "con_valor",
+    "financeiro.consulta.data_recebimento": "con_pgto_data",
+    "pessoa.nome_completo": "cadAtP_nome",
+    "pessoa.data_nascimento": "cadAtP_nasc",
+    "pessoa.cpf": "cadAtP_cpf",
+  };
+
+  function destacarCamposFaltantes(form, err) {
+    form.querySelectorAll(".cad-campo-pendente").forEach((el) => {
+      el.classList.remove("cad-campo-pendente");
+    });
+    const faltantes = (err && err.detalhe && err.detalhe.campos_faltantes) || [];
+    let primeiro = null;
+    faltantes.forEach((f) => {
+      const nome = CAMPO_PARA_INPUT[f.campo];
+      if (!nome) return;
+      const campo = form.elements[nome];
+      if (!campo) return;
+      // O calendário troca o input original por um portador escondido; marcar
+      // o invisível não mostraria nada. O rótulo é o que o operador enxerga.
+      const alvo = campo.closest(".m15-field") || campo;
+      alvo.classList.add("cad-campo-pendente");
+      if (!primeiro) primeiro = alvo;
+    });
+    if (primeiro && primeiro.scrollIntoView) {
+      primeiro.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   }
 
   function successBanner(container, html) {
@@ -315,37 +432,54 @@
 
   // -------------------------------------------------- seletor de pessoa (base)
 
-  /* Componente reutilizável: busca por nome/telefone, contexto suficiente
-   * para distinguir candidatos, criação inline e aviso de duplicado.
-   * API do componente (após wire): picker.resolve() → Promise<pessoa>
-   * (cria a pessoa inline quando o modo "nova" está ativo). */
+  /* Seletor de pessoa — M25.26 reescreveu a ordem da conversa.
+   *
+   * ANTES: a tela abria só com um campo de busca. Os dados de um paciente
+   * NOVO (nome, WhatsApp, nascimento) só existiam depois de descobrir e
+   * clicar em "+ Cadastrar nova pessoa". Como todo atendimento pertence
+   * obrigatoriamente a uma pessoa, esse clique não decidia nada — era um
+   * enigma antes do trabalho, e foi onde o teste real travou.
+   *
+   * AGORA: buscar em cima; abaixo, o formulário do paciente novo JÁ VISÍVEL.
+   * Escolher alguém existente substitui o formulário pelo cartão da pessoa.
+   * Nenhum clique é exigido para chegar aos campos, e nenhuma pessoa
+   * duplicada nasce disso — a busca continua sendo o primeiro elemento e o
+   * aviso de duplicado continua antes da criação.
+   *
+   * API (após wire):
+   *   picker.selecionada()      → pessoa existente escolhida, ou null
+   *   picker.dadosNovaPessoa()  → payload da pessoa nova (lança se inválido)
+   *   picker.resolve()          → Promise<pessoa> PERSISTIDA (cria se nova)
+   */
   function personPickerHtml(prefix, opts) {
     opts = opts || {};
     return `
     <div class="cad-picker" id="${prefix}Picker">
       <div class="cad-picker-search">
         <input id="${prefix}Q" type="search" placeholder="Buscar por nome, telefone ou PES-…"
-          aria-label="Buscar pessoa por nome, telefone ou código">
+          aria-label="Buscar paciente já cadastrado por nome, telefone ou código">
         <button type="button" class="m15-btn m15-btn-sec" id="${prefix}Buscar">Buscar</button>
-        ${opts.semCriar ? "" : `<button type="button" class="m15-btn m15-btn-sec" id="${prefix}Nova">+ Cadastrar nova pessoa</button>`}
       </div>
       <div class="cad-picker-results" id="${prefix}Resultados" hidden></div>
       <div class="cad-picker-selected" id="${prefix}Selecionada" hidden></div>
       ${opts.semCriar ? "" : `
-      <div class="cad-picker-nova" id="${prefix}NovaBox" hidden>
-        <p class="cad-picker-nova-titulo">Nova pessoa — criada junto com este cadastro</p>
-        ${opts.somentePessoaOpcao ? `
-        <label class="cad-check cad-check-somente-pessoa">
-          <input type="checkbox" id="${prefix}SoPessoa">
-          <span>Cadastrar apenas a pessoa, sem criar exame ou consulta</span>
-        </label>` : ""}
+      <div class="cad-picker-nova" id="${prefix}NovaBox">
+        <p class="cad-picker-nova-titulo">
+          Paciente novo — preencha abaixo, ou busque acima se ele já tem cadastro
+        </p>
         <div class="m15-form cad-subgrid">
           ${fld("Nome completo", inp(prefix + "_nome", "", 'minlength="2" autocomplete="off"'), { span: 6, req: true })}
           ${fld("WhatsApp", inp(prefix + "_fone", "", 'type="tel" placeholder="(21) 99999-9999" autocomplete="off"'), 3)}
           ${fld("Nascimento", dateInp(prefix + "_nasc", ""), 3)}
-          ${fld("E-mail (opcional)", inp(prefix + "_email", "", 'type="email" autocomplete="off"'), 6)}
+          ${fld("E-mail (opcional)", inp(prefix + "_email", "", 'type="email" autocomplete="off"'), 4)}
+          ${fld("CPF", inp(prefix + "_cpf", "", 'inputmode="numeric" placeholder="000.000.000-00" autocomplete="off"'),
+            { span: 4, ajuda: "A CFM 2.381/2024 pede o CPF no laudo. Sem ele o laudo sai, mas fica marcado como pendente para entrega oficial. Deixe em branco se não houver CPF." })}
+          ${fld("Sexo", sel(prefix + "_sexo",
+            [["", "não informado"], ["feminino", "feminino"], ["masculino", "masculino"],
+             ["outro", "outro"]], ""),
+            { span: 4, ajuda: "Entra na identificação impressa do laudo." })}
           ${fld("Consentimento WhatsApp", sel(prefix + "_consent",
-            [["", "não informado"], "concedido", "desconhecido", "revogado"], "concedido"), 3)}
+            [["", "não informado"], "concedido", "desconhecido", "revogado"], "concedido"), 4)}
         </div>
         <div class="cad-guardian" id="${prefix}GuardianBox" hidden>
           <p class="cad-picker-nova-titulo">Paciente menor de idade — responsável legal</p>
@@ -413,7 +547,6 @@
     opts = opts || {};
     const picker = {
       selected: null,          // pessoa existente escolhida
-      modoNova: false,
       dupConfirmado: false,    // humano confirmou criar apesar do aviso
       guardianSelected: null,
     };
@@ -421,32 +554,160 @@
     const buscar = root.querySelector("#" + prefix + "Buscar");
     const resultados = root.querySelector("#" + prefix + "Resultados");
     const selecionada = root.querySelector("#" + prefix + "Selecionada");
-    const novaBtn = root.querySelector("#" + prefix + "Nova");
     const novaBox = root.querySelector("#" + prefix + "NovaBox");
-    const soPessoaEl = opts.somentePessoaOpcao ? root.querySelector("#" + prefix + "SoPessoa") : null;
 
     function notifyChange() {
       if (opts.onChange) opts.onChange();
     }
 
+    // Cartão do paciente escolhido: contexto suficiente para confirmar que é
+    // a pessoa certa, MAIS o que falta no cadastro dela. A pendência aparece
+    // aqui, no instante da escolha — antes era descoberta semanas depois, na
+    // emissão do laudo, por outra pessoa.
+    function cartaoPessoa(p) {
+      const nasc = p.data_nascimento ? fmtDate(p.data_nascimento) : "não informado";
+      const fone = (p.contatos || []).find((c) => c.tipo === "whatsapp" || c.tipo === "telefone");
+      const pend = p.cadastro_pendencias || [];
+      const linhas = [
+        `<span class="cad-cartao-linha">Nascimento: ${esc(nasc)}</span>`,
+        `<span class="cad-cartao-linha">Contato: ${esc(fone ? fone.valor : "não informado")}</span>`,
+        `<span class="cad-cartao-linha">CPF: ${esc(p.cpf_mascarado || "não informado")}</span>`,
+      ].join("");
+      const pendHtml = pend.length
+        ? `<div class="cad-pendencias" id="${prefix}Pendencias">
+             <strong>Falta no cadastro deste paciente:</strong>
+             <ul>${pend.map((x) =>
+               `<li>${esc(x.rotulo)}${x.bloqueia_laudo
+                 ? ' <span class="cad-pend-bloqueia">pendência para o laudo</span>' : ""}
+                 <span class="cad-pend-porque">${esc(x.por_que)}</span></li>`).join("")}</ul>
+             <button type="button" class="m15-btn m15-btn-sec cad-btn-mini"
+               id="${prefix}Corrigir">Corrigir cadastro</button>
+           </div>`
+        : `<p class="cad-cartao-ok">Cadastro completo.</p>`;
+      return `<div class="cad-cartao-pessoa">
+        <div class="cad-cartao-topo">
+          <span class="cad-chip-pessoa"><strong>${esc(p.nome_completo)}</strong> ${esc(p.public_code)}</span>
+          <button type="button" class="m15-btn m15-btn-sec cad-btn-mini" id="${prefix}Trocar">Trocar paciente</button>
+        </div>
+        <div class="cad-cartao-dados">${linhas}</div>
+        ${pendHtml}
+        <div class="cad-corrigir-box" id="${prefix}CorrigirBox" hidden></div>
+      </div>`;
+    }
+
     function showSelected(p) {
       picker.selected = p;
-      picker.modoNova = false;
       if (novaBox) novaBox.hidden = true;
       resultados.hidden = true;
       selecionada.hidden = false;
-      selecionada.innerHTML =
-        `<span class="cad-chip-pessoa"><strong>${esc(p.nome_completo)}</strong> ${esc(p.public_code)}</span>
-         <button type="button" class="m15-btn m15-btn-sec cad-btn-mini" id="${prefix}Trocar">Trocar</button>`;
+      selecionada.innerHTML = cartaoPessoa(p);
       selecionada.querySelector("#" + prefix + "Trocar").addEventListener("click", () => {
         picker.selected = null;
         selecionada.hidden = true;
+        if (novaBox) novaBox.hidden = false;
+        q.value = "";
         q.focus();
         notifyChange();
       });
+      const corrigir = selecionada.querySelector("#" + prefix + "Corrigir");
+      if (corrigir) {
+        corrigir.addEventListener("click", () => abrirCorrecao(p));
+      }
       state.dirty = true;
       if (opts.onSelect) opts.onSelect(p);
       notifyChange();
+    }
+
+    /* "Corrigir cadastro" — Fase C.
+     *
+     * Edita SÓ os campos pendentes, dentro do cartão, sem trocar de tela e
+     * sem re-renderizar o formulário do atendimento. É o que garante a
+     * exigência da missão: nada do que já foi digitado no exame se perde.
+     * Ao salvar, o cartão é redesenhado com as pendências recalculadas pelo
+     * servidor — nunca por dedução do navegador.
+     */
+    function abrirCorrecao(p) {
+      const box = selecionada.querySelector("#" + prefix + "CorrigirBox");
+      if (!box) return;
+      if (!box.hidden) { box.hidden = true; box.innerHTML = ""; return; }
+      const pend = p.cadastro_pendencias || [];
+      const campos = pend.map((x) => {
+        if (x.campo === "cpf") {
+          return fld("CPF", inp(prefix + "_fixCpf", "", 'inputmode="numeric" placeholder="000.000.000-00"'), 4);
+        }
+        if (x.campo === "data_nascimento") {
+          return fld("Data de nascimento", dateInp(prefix + "_fixNasc", ""), 4);
+        }
+        if (x.campo === "sexo") {
+          return fld("Sexo", sel(prefix + "_fixSexo",
+            [["", "não informado"], ["feminino", "feminino"], ["masculino", "masculino"],
+             ["outro", "outro"]], ""), 4);
+        }
+        return fld("WhatsApp", inp(prefix + "_fixFone", "", 'type="tel" placeholder="(21) 99999-9999"'), 4);
+      }).join("");
+      box.hidden = false;
+      box.innerHTML = `<p class="cad-microcopy">Preencha o que falta. O atendimento
+        que você já começou a digitar continua aqui.</p>
+        <div class="m15-form cad-subgrid">${campos}</div>
+        <div class="cad-actions">
+          <button type="button" class="m15-btn" id="${prefix}SalvarFix">Salvar cadastro</button>
+          <span class="cad-submit-status" id="${prefix}FixStatus" hidden></span>
+        </div>`;
+      const fixFone = box.querySelector(`[name="${prefix}_fixFone"]`);
+      if (fixFone) phoneMask(fixFone);
+      attachDates(box);
+      wireAjuda(box);
+      box.querySelector("#" + prefix + "SalvarFix").addEventListener("click", () => {
+        salvarCorrecao(p, box);
+      });
+    }
+
+    function salvarCorrecao(p, box) {
+      const btn = box.querySelector("#" + prefix + "SalvarFix");
+      const status = box.querySelector("#" + prefix + "FixStatus");
+      const leia = (nome) => {
+        const el = box.querySelector(`[name="${prefix}_${nome}"]`);
+        return el ? (el.value || "").trim() : "";
+      };
+      const patch = {};
+      setIf(patch, "cpf", leia("fixCpf"));
+      setIf(patch, "data_nascimento", leia("fixNasc"));
+      setIf(patch, "sexo", leia("fixSexo"));
+      const fone = leia("fixFone");
+      if (!Object.keys(patch).length && !fone) {
+        toast("Preencha ao menos um campo para salvar.", "erro");
+        return;
+      }
+      btn.disabled = true;
+      status.hidden = false;
+      status.className = "cad-submit-status";
+      status.textContent = "Salvando…";
+      const passos = [];
+      if (Object.keys(patch).length) {
+        passos.push(api("/pessoas/" + encodeURIComponent(p.id), {
+          method: "PATCH", body: JSON.stringify(patch),
+        }));
+      }
+      if (fone) {
+        passos.push(api(`/pessoas/${encodeURIComponent(p.id)}/contatos`, {
+          method: "POST",
+          body: JSON.stringify({ tipo: "whatsapp", valor: fone, principal: true }),
+        }));
+      }
+      Promise.all(passos)
+        // Relê do servidor: as pendências que sobraram são as que ELE
+        // reconhece, não as que o navegador imagina ter resolvido.
+        .then(() => api("/pessoas/" + encodeURIComponent(p.id)))
+        .then((atualizada) => {
+          showSelected(atualizada);
+          toast("Cadastro atualizado.");
+        })
+        .catch((err) => {
+          btn.disabled = false;
+          status.hidden = false;
+          status.className = "cad-submit-status cad-erro";
+          status.textContent = "Erro: " + (err.message || err);
+        });
     }
 
     wireMiniSearch(q, buscar, resultados, showSelected);
@@ -459,21 +720,7 @@
       buscar.click();
     }
 
-    if (novaBtn) {
-      novaBtn.addEventListener("click", () => {
-        picker.modoNova = !picker.modoNova;
-        novaBox.hidden = !picker.modoNova;
-        if (picker.modoNova) {
-          picker.selected = null;
-          selecionada.hidden = true;
-          const nome = root.querySelector(`[name="${prefix}_nome"]`);
-          if (nome) nome.focus();
-        }
-        notifyChange();
-      });
-      if (soPessoaEl) {
-        soPessoaEl.addEventListener("change", notifyChange);
-      }
+    if (novaBox) {
       const fone = root.querySelector(`[name="${prefix}_fone"]`);
       if (fone) phoneMask(fone);
       const gfone = root.querySelector(`[name="${prefix}_gfone"]`);
@@ -501,28 +748,17 @@
       }
     }
 
-    // Só faz sentido "cadastrar apenas a pessoa" dentro do fluxo de pessoa
-    // NOVA — uma pessoa já existente não pode ser "só cadastrada" de novo,
-    // então o resultado ignora o checkbox quando uma pessoa existente foi
-    // selecionada (mesmo que o checkbox tenha ficado marcado de uma
-    // interação anterior, hidden dentro da novaBox).
-    picker.somentePessoaAtivo = function () {
-      return picker.modoNova && !!(soPessoaEl && soPessoaEl.checked);
-    };
-
-    // Volta o seletor ao estado inicial (busca) após um envio bem-sucedido —
-    // sem isto, "+ Cadastrar nova pessoa" continuava marcado como aberto internamente
-    // e o SEGUNDO clique (para o próximo cadastro na mesma aba) o FECHAVA em
-    // vez de abrir, quebrando o próximo envio silenciosamente.
+    // Volta o seletor ao estado inicial após um envio bem-sucedido. O estado
+    // inicial agora é "formulário de paciente novo visível", que é o mesmo do
+    // primeiro carregamento — sem isto o segundo cadastro na mesma aba
+    // começaria num estado diferente do primeiro.
     picker.resetState = function () {
       picker.selected = null;
-      picker.modoNova = false;
       picker.dupConfirmado = false;
       picker.guardianSelected = null;
-      if (novaBox) novaBox.hidden = true;
-      if (selecionada) selecionada.hidden = true;
+      if (novaBox) novaBox.hidden = false;
+      if (selecionada) { selecionada.hidden = true; selecionada.innerHTML = ""; }
       if (resultados) resultados.hidden = true;
-      if (soPessoaEl) soPessoaEl.checked = false;
       if (q) q.value = "";
       const dupAviso = root.querySelector("#" + prefix + "DupAviso");
       if (dupAviso) dupAviso.hidden = true;
@@ -530,18 +766,81 @@
       if (gBox) gBox.hidden = true;
     };
 
-    // Resolve a seleção em UMA pessoa persistida (criando quando "nova").
+    picker.selecionada = function () { return picker.selected; };
+
+    picker.confirmouDuplicado = function () { return picker.dupConfirmado; };
+
+    /* Dados do paciente novo, SEM persistir nada.
+     *
+     * Existe para o fluxo atômico: quem envia é `POST /atendimentos/
+     * novo-paciente`, que cria pessoa e atendimento na mesma transação. O
+     * navegador não cria mais a pessoa por conta própria e depois torce para
+     * o atendimento dar certo. */
+    picker.dadosNovaPessoa = function () {
+      if (!novaBox) throw new Error("Formulário de paciente novo indisponível.");
+      const leia = (nome) => {
+        const el = root.querySelector(`[name="${prefix}_${nome}"]`);
+        return el ? (el.value || "").trim() : "";
+      };
+      const nome = leia("nome");
+      if (nome.length < 2) {
+        throw new Error("Informe o nome completo do paciente, ou busque um paciente já cadastrado.");
+      }
+      const fone = leia("fone");
+      const email = leia("email");
+      const payload = { nome_completo: nome, contatos: [] };
+      if (fone) payload.contatos.push({ tipo: "whatsapp", valor: fone, principal: true });
+      if (email) payload.contatos.push({ tipo: "email", valor: email, principal: !fone });
+      setIf(payload, "data_nascimento", leia("nasc"));
+      setIf(payload, "cpf", leia("cpf"));
+      setIf(payload, "sexo", leia("sexo"));
+      setIf(payload, "consentimento_whatsapp", leia("consent"));
+      return payload;
+    };
+
+    // Mostra os candidatos a duplicado devolvidos pelo servidor e registra a
+    // decisão humana. Fusão automática continua não existindo.
+    picker.mostrarDuplicados = function (candidatos) {
+      const dupAviso = root.querySelector("#" + prefix + "DupAviso");
+      if (!dupAviso) return;
+      dupAviso.hidden = false;
+      dupAviso.innerHTML =
+        `<strong>Possível duplicado (${candidatos.length}):</strong> já existe cadastro ` +
+        `parecido. Escolha um existente abaixo ou confirme a criação.` +
+        candidatos.map((c) =>
+          `<button type="button" class="cad-cand" data-dup="${esc(c.id)}">
+             <strong>${esc(c.nome_completo)}</strong>
+             <span>${esc(c.public_code)}${c.data_nascimento ? " · nasc. " + fmtDate(c.data_nascimento) : ""} · motivo: ${esc(c.motivo === "telefone_igual" ? "telefone igual" : "nome igual")}</span>
+           </button>`).join("") +
+        `<button type="button" class="m15-btn m15-btn-sec" data-dup-confirmar>Criar mesmo assim</button>`;
+      dupAviso.querySelectorAll("[data-dup]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          api("/pessoas/" + btn.dataset.dup).then((p) => {
+            dupAviso.hidden = true;
+            showSelected(p);
+          }).catch((e) => toast("Erro: " + e.message, "erro"));
+        });
+      });
+      dupAviso.querySelector("[data-dup-confirmar]").addEventListener("click", () => {
+        picker.dupConfirmado = true;
+        dupAviso.hidden = true;
+        toast("Confirmação registrada — envie o formulário novamente para criar.");
+      });
+    };
+
+    // Resolve a seleção em UMA pessoa PERSISTIDA (cria quando é nova).
+    // Continua sendo o caminho do Lead, que não tem operação combinada.
     picker.resolve = function () {
       if (picker.selected) return Promise.resolve(picker.selected);
-      if (!picker.modoNova || !novaBox) {
-        return Promise.reject(new Error("Selecione uma pessoa (busque acima) ou cadastre uma nova."));
+      let payload;
+      try {
+        payload = picker.dadosNovaPessoa();
+      } catch (err) {
+        return Promise.reject(err);
       }
-      const nome = root.querySelector(`[name="${prefix}_nome"]`).value.trim();
+      const nome = payload.nome_completo;
       const fone = root.querySelector(`[name="${prefix}_fone"]`).value.trim();
       const nasc = root.querySelector(`[name="${prefix}_nasc"]`).value.trim();
-      const email = root.querySelector(`[name="${prefix}_email"]`).value.trim();
-      const consent = root.querySelector(`[name="${prefix}_consent"]`).value;
-      if (nome.length < 2) return Promise.reject(new Error("Informe o nome completo da nova pessoa."));
 
       const dupAviso = root.querySelector("#" + prefix + "DupAviso");
       const preCheck = picker.dupConfirmado
@@ -580,11 +879,6 @@
           });
           throw new Error("Possível duplicado — escolha uma pessoa existente ou confirme a criação.");
         }
-        const payload = { nome_completo: nome, contatos: [] };
-        if (fone) payload.contatos.push({ tipo: "whatsapp", valor: fone, principal: true });
-        if (email) payload.contatos.push({ tipo: "email", valor: email, principal: !fone });
-        setIf(payload, "data_nascimento", nasc);
-        setIf(payload, "consentimento_whatsapp", consent);
         return api("/pessoas", { method: "POST", body: JSON.stringify(payload) })
           .then((pessoa) => criarResponsavelSePreciso(root, prefix, picker, pessoa, nasc)
             .then(() => pessoa));
@@ -634,7 +928,7 @@
         const link = document.createElement("link");
         link.id = id;
         link.rel = "stylesheet";
-        link.href = href + "?v=2026072301";
+        link.href = href + "?v=2026081201";
         document.head.appendChild(link);
       }
     });
@@ -860,6 +1154,18 @@
    *
    * "Cadastrar somente paciente" é ação SECUNDÁRIA daqui — não é aba. */
 
+  /* Catálogo do fluxo (M25.26): modalidades, rótulo/sugestões de local e o
+   * valor de tabela. Vem do servidor para não existir uma segunda lista aqui
+   * que um dia discorde da que o backend valida — e para o preço não virar
+   * número mágico espalhado por arquivos de tela.
+   *
+   * Falha de rede não derruba o formulário: sem catálogo o operador ainda
+   * cadastra, apenas sem sugestão de modalidade/valor. O que NÃO acontece é
+   * o navegador inventar uma lista de reserva. */
+  function resolveConfigAtendimento() {
+    return api("/atendimentos/configuracao").catch(() => ({}));
+  }
+
   function resolvePastore() {
     // O backend aplica a resolução canônica fail-closed e devolve somente
     // unidades ativas da Pastore; o navegador não tenta adivinhar por nome.
@@ -880,7 +1186,7 @@
     </div>`;
   }
 
-  function blocoEspirometriaConteudoHtml(pastore, ehPastore) {
+  function blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg) {
     const commonStart = `
       <h4 class="cad-bloco-titulo">Espirometria</h4>
       ${ehPastore ? '<div class="cad-pastore-aviso" id="cadAtPastoreAviso"></div>' : ""}
@@ -902,21 +1208,46 @@
       </div>`;
 
     if (!ehPastore) {
+      /* M25.26 — modalidade e local pararam de ser duas listas concorrentes.
+       *
+       * O catálogo vem do servidor (`GET /atendimentos/configuracao`): as
+       * modalidades oferecidas, o rótulo do local para cada uma e o valor de
+       * tabela. Nada disso é constante escrita aqui — inclusive o R$ 220,00,
+       * que antes só existia como placeholder e agora nasce preenchido e
+       * editável, vindo de `M15_ESPIROMETRIA_SOPROLIFE_VALOR_PADRAO`.
+       *
+       * "Clínica parceira" saiu da lista: o tipo SoproLife não aceita
+       * parceiro/unidade, então escolhê-la produzia um exame que a emissão do
+       * laudo depois recusava por falta de unidade. Existe um registro assim
+       * em produção, criado exatamente por essa armadilha. */
+      const cfgEsp = (cfg && cfg.espirometria_soprolife) || {};
+      const modalidades = cfgEsp.modalidades || [];
+      const indisponiveis = cfgEsp.modalidades_indisponiveis || [];
+      const valorPadrao = cfgEsp.valor_padrao
+        ? String(cfgEsp.valor_padrao).replace(".", ",") : "";
+      const ajudaModalidade =
+        "A natureza do atendimento — onde o exame foi feito, em termos de tipo. " +
+        "Decide o local que o laudo imprime." +
+        (indisponiveis.length
+          ? " " + indisponiveis.map((m) => m.motivo).join(" ")
+          : "");
       return commonStart + `
         ${fld("Modalidade", sel("esp_modalidade",
-          [["", "—"], ["residencial", "residencial (domiciliar)"], ["cowork", "cowork"],
-           ["clinica_parceira", "clínica parceira"]], ""), 3)}
-        ${fld("Local / unidade de atendimento", inp("esp_local", "", 'list="cadLocais"'), 4)}
-        ${fld("Origem", inp("esp_origem", "", 'list="cadOrigens"'), 4)}
-        ${fld("Valor da espirometria (R$)", inp("esp_valor", "",
+          [["", "selecione…"]].concat(modalidades.map((m) => [m.valor, m.rotulo])), ""),
+          { span: 4, ajuda: ajudaModalidade })}
+        ${fld("Local do atendimento", inp("esp_local", "", 'list="cadLocais" disabled placeholder="escolha a modalidade primeiro"'),
+          { span: 4, ajuda: "Onde especificamente o exame aconteceu — o NOME do lugar, não uma categoria. A modalidade já diz o tipo." })}
+        ${fld("Origem", inp("esp_origem", "", 'list="cadOrigens"'),
+          { span: 4, ajuda: "Como o paciente chegou até a SoproLife (Google, indicação, empresa…). Não é o lugar do exame." })}
+        ${fld("Valor da espirometria (R$)", inp("esp_valor", valorPadrao,
           'inputmode="decimal" placeholder="220,00"'),
-          { span: 4, help: "Opcional. Nenhum valor é inferido — em branco, nenhum lançamento." })}
+          { span: 4, ajuda: "Nasce com o valor de tabela e pode ser alterado. Apagando o campo, nenhum lançamento financeiro é criado — nada é inferido." })}
         ${fld("Status do pagamento", sel("esp_pgto_status",
           ["Recebido", "Pendente", "Parcial", "Cortesia"], "Recebido"), 4)}
         ${fld("Data de recebimento", dateInp("esp_pgto_data", ""), 4)}
         ${fld("Forma de pagamento", sel("esp_pgto_forma",
           [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"], "Pix"), 4)}
-        ${datalist("cadLocais", ["Domiciliar", "Clínica", "Empresa", "Parceiro", "Outro"])}
+        ${datalist("cadLocais", [])}
       ` + commonEnd;
     }
 
@@ -941,10 +1272,10 @@
       ` + commonEnd;
   }
 
-  function blocoEspirometriaHtml(pastore, ehPastore) {
+  function blocoEspirometriaHtml(pastore, ehPastore, cfg) {
     return `
       <div class="cad-bloco" id="cadAtBlocoEsp" hidden>
-        ${blocoEspirometriaConteudoHtml(pastore, ehPastore)}
+        ${blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg)}
       </div>`;
   }
 
@@ -991,7 +1322,8 @@
 
   LOADERS.atendimento = function (bodyEl) {
     const pre = state.prefill || {};
-    return resolvePastore().then((pastore) => {
+    return Promise.all([resolvePastore(), resolveConfigAtendimento()])
+      .then(([pastore, cfg]) => {
       const tipoInicial = TIPOS_ATENDIMENTO.some((t) => t[0] === pre.tipo)
         ? pre.tipo : "espirometria_soprolife";
       const somentePacienteInicial = !!pre.somente_paciente;
@@ -1007,7 +1339,7 @@
 
             <div class="m15-form-full cad-passo">
               <h4 class="cad-passo-titulo"><span class="cad-passo-num">1</span> Paciente</h4>
-              ${personPickerHtml("cadAtP", { somentePessoaOpcao: true })}
+              ${personPickerHtml("cadAtP")}
             </div>
 
             <div class="m15-form-full cad-passo" id="cadAtPasso2">
@@ -1024,20 +1356,34 @@
 
             <div class="m15-form-full cad-passo" id="cadAtPasso3">
               <h4 class="cad-passo-titulo"><span class="cad-passo-num">3</span> Dados do atendimento</h4>
-              ${blocoEspirometriaHtml(pastore, tipoInicial === TIPO_PASTORE)}
+              ${blocoEspirometriaHtml(pastore, tipoInicial === TIPO_PASTORE, cfg)}
               ${blocoConsultaHtml()}
             </div>
 
             ${submitBtn("Salvar atendimento")}
           </form>
-          ${datalist("cadOrigens", ORIGENS)}${datalist("cadResp", RESPONSAVEIS)}
+
+          <!-- M25.26 — Fase B. Cadastrar só a pessoa saiu do caminho
+               principal. Era um checkbox grande NO MEIO do passo 1 que, ao
+               ser marcado, apagava os passos 2 e 3 — parecia etapa normal do
+               Novo atendimento e escondia metade do formulário. É uma
+               operação DIFERENTE (pré-cadastro, contato, CRM), então virou
+               ação secundária, separada e rotulada pelo que faz. -->
+          <div class="cad-acao-secundaria">
+            <button type="button" class="m15-btn m15-btn-sec" id="cadAtSoPessoa">
+              Cadastrar pessoa sem atendimento
+            </button>
+            <span class="cad-acao-secundaria-nota">
+              Cria somente o cadastro da pessoa e seus contatos. Nenhum exame ou
+              consulta será criado agora.
+            </span>
+          </div>
         </div>
         ${recentsPanel("Atendimentos recentes", "Espirometrias e consultas — na hora")}`;
 
       const form = bodyEl.querySelector("#cadFormAtend");
       markDirtyOn(form);
       const picker = wirePersonPicker(form, "cadAtP", {
-        somentePessoaOpcao: true,
         onChange: () => aplicarModo(),
       });
       const passo2 = bodyEl.querySelector("#cadAtPasso2");
@@ -1052,12 +1398,42 @@
         return marcado ? marcado.value : "";
       }
 
+      /* Local depende da modalidade — Fase D.
+       *
+       * Enquanto não há modalidade, o campo de local fica desabilitado e diz
+       * por quê. Escolhida a modalidade, ele ganha o rótulo, o placeholder e
+       * as sugestões DAQUELA modalidade, vindos do servidor. É o que impede a
+       * contradição "residencial + Clínica" de ser digitável, em vez de
+       * recusá-la só depois do envio. */
+      function aplicarModalidade() {
+        const modSel = form.elements.esp_modalidade;
+        const localEl = form.elements.esp_local;
+        if (!modSel || !localEl) return;
+        const cfgEsp = (cfg && cfg.espirometria_soprolife) || {};
+        const escolhida = (cfgEsp.modalidades || [])
+          .find((m) => m.valor === modSel.value);
+        const dl = bodyEl.querySelector("#cadLocais");
+        if (!escolhida) {
+          localEl.disabled = true;
+          localEl.placeholder = "escolha a modalidade primeiro";
+          if (!localEl.dataset.tocado) localEl.value = "";
+          if (dl) dl.innerHTML = "";
+          return;
+        }
+        localEl.disabled = false;
+        localEl.placeholder = escolhida.local_rotulo || "Local do atendimento";
+        // Só preenche sozinho o que o operador ainda não tocou — nunca
+        // sobrescreve um lugar que ele digitou.
+        if (!localEl.dataset.tocado) {
+          localEl.value = escolhida.local_padrao || "";
+        }
+        if (dl) {
+          dl.innerHTML = (escolhida.local_sugestoes || [])
+            .map((v) => `<option value="${esc(v)}">`).join("");
+        }
+      }
+
       function aplicarModo() {
-        const soPessoa = picker.somentePessoaAtivo();
-        passo2.hidden = soPessoa;
-        passo3.hidden = soPessoa;
-        btnSalvar.textContent = soPessoa ? "Salvar pessoa" : "Salvar atendimento";
-        if (soPessoa) return;
         const tipo = tipoAtual();
         const temEsp = TIPOS_COM_ESPIROMETRIA.indexOf(tipo) !== -1;
         const temCon = TIPOS_COM_CONSULTA.indexOf(tipo) !== -1;
@@ -1065,13 +1441,15 @@
         blocoCon.hidden = !temCon;
         const ehPastore = tipo === TIPO_PASTORE;
         if (temEsp && renderedPastore !== ehPastore) {
-          blocoEsp.innerHTML = blocoEspirometriaConteudoHtml(pastore, ehPastore);
+          blocoEsp.innerHTML = blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg);
           renderedPastore = ehPastore;
           // attachDates só roda uma vez no carregamento inicial da aba; sem
           // chamar de novo aqui, o "Data do exame" recém-injetado ao trocar
           // para/de Pastore ficava sem o calendário (attachAll é idempotente
           // via data-m15-date-attached, então repetir a chamada é seguro).
           attachDates(blocoEsp);
+          wireAjuda(blocoEsp);
+          wireModalidade();
         }
         if (ehPastore) {
           const pastoreAviso = bodyEl.querySelector("#cadAtPastoreAviso");
@@ -1090,70 +1468,122 @@
         }
       }
 
+      function wireModalidade() {
+        const modSel = form.elements.esp_modalidade;
+        const localEl = form.elements.esp_local;
+        if (modSel) modSel.addEventListener("change", aplicarModalidade);
+        if (localEl) {
+          localEl.addEventListener("input", () => {
+            localEl.dataset.tocado = localEl.value.trim() ? "1" : "";
+          });
+        }
+        aplicarModalidade();
+      }
+
       form.querySelectorAll('input[name="tipo"]').forEach((r) => {
         r.addEventListener("change", aplicarModo);
       });
 
-      // Deep-link contextual (M4/M19): abre direto no fluxo de pessoa nova
-      // com "somente pessoa" já marcado — outras telas (CRM, aba Pessoas)
-      // usam este atalho para "cadastrar só a pessoa" sem duplicar formulário.
+      wireAjuda(bodyEl);
+      wireModalidade();
+
+      // Deep-link contextual (M4/M19): outras telas (CRM, aba Pessoas) abrem
+      // a Central pedindo "cadastrar só a pessoa". Agora isso é a ação
+      // secundária explícita, e não um checkbox escondido dentro do passo 1.
       if (somentePacienteInicial) {
-        const novaBtn = bodyEl.querySelector("#cadAtPNova");
-        if (novaBtn && !picker.modoNova) novaBtn.click();
-        const soPessoaEl = bodyEl.querySelector("#cadAtPSoPessoa");
-        if (soPessoaEl) {
-          soPessoaEl.checked = true;
-          soPessoaEl.dispatchEvent(new Event("change"));
-        }
+        const nome = bodyEl.querySelector('[name="cadAtP_nome"]');
+        if (nome) nome.focus();
+        toast("Preencha os dados e use “Cadastrar pessoa sem atendimento”.");
       }
       aplicarModo();
 
-      wireSubmit(form, () => {
-        if (picker.somentePessoaAtivo()) {
-          // Ação secundária: cria a pessoa e NADA mais — sem atendimento,
-          // sem espirometria, sem consulta, sem lançamento financeiro.
-          return picker.resolve().then((pessoa) => ({ somentePessoa: true, pessoa }));
+      // Fase B — ação secundária: cria a pessoa e NADA mais. Sem atendimento,
+      // sem espirometria, sem consulta, sem lançamento financeiro.
+      const btnSoPessoa = bodyEl.querySelector("#cadAtSoPessoa");
+      btnSoPessoa.addEventListener("click", () => {
+        if (picker.selecionada()) {
+          toast("Este paciente já está cadastrado — use “Trocar paciente” para cadastrar outro.", "erro");
+          return;
         }
+        btnSoPessoa.disabled = true;
+        picker.resolve().then((pessoa) => {
+          state.dirty = false;
+          successBanner(bodyEl,
+            `<strong>Pessoa ${esc(pessoa.public_code)} criada</strong> — ` +
+            `${esc(pessoa.nome_completo)}. Nenhum exame ou consulta foi criado.`);
+          form.reset();
+          picker.resetState();
+          aplicarModo();
+          if (m15() && m15().refresh) m15().refresh();
+        }).catch((err) => {
+          toast("Erro: " + (err.message || err), "erro");
+        }).then(() => { btnSoPessoa.disabled = false; });
+      });
+
+      wireSubmit(form, () => {
         const tipo = tipoAtual();
         if (!tipo) throw new Error("Escolha o tipo do atendimento.");
         if (tipo === TIPO_PASTORE && (pastore.erro || !pastore.unidades.length)) {
           throw new Error("Pastore indisponível: " +
             (pastore.erro || "nenhuma unidade operacional ativa."));
         }
-        return picker.resolve().then((pessoa) => {
-          const payload = {
-            person_id: pessoa.id,
-            tipo,
-            idempotency_key: m15().idemKey(),
-          };
-          if (TIPOS_COM_ESPIROMETRIA.indexOf(tipo) !== -1) {
-            payload.espirometria = montarEspirometria(form, tipo, pastore);
+        const blocos = { tipo, idempotency_key: m15().idemKey() };
+        if (TIPOS_COM_ESPIROMETRIA.indexOf(tipo) !== -1) {
+          blocos.espirometria = montarEspirometria(form, tipo, pastore, cfg);
+        }
+        if (TIPOS_COM_CONSULTA.indexOf(tipo) !== -1) {
+          blocos.consulta = montarConsulta(form);
+        }
+        const financeiro = montarFinanceiro(form, tipo);
+        if (financeiro) blocos.financeiro = financeiro;
+
+        const existente = picker.selecionada();
+        if (existente) {
+          return api("/atendimentos", {
+            method: "POST",
+            body: JSON.stringify(Object.assign({ person_id: existente.id }, blocos)),
+          }).then((criado) => ({ criado, pessoa: existente }));
+        }
+
+        /* Paciente novo: UMA operação. Antes eram duas chamadas (POST
+         * /pessoas e depois POST /atendimentos) e uma falha na segunda
+         * deixava o paciente criado sozinho — o operador então recomeçava e
+         * criava a mesma pessoa de novo. */
+        const pessoa = picker.dadosNovaPessoa();
+        const corpo = Object.assign({ pessoa }, blocos);
+        if (picker.confirmouDuplicado()) corpo.confirmar_duplicado = true;
+        return api("/atendimentos/novo-paciente", {
+          method: "POST", body: JSON.stringify(corpo),
+        }).then((criado) => ({
+          criado, pessoa: { public_code: criado.person_public_code, nome_completo: pessoa.nome_completo },
+        })).catch((err) => {
+          const cands = err && err.detalhe && err.detalhe.candidatos;
+          if (err && err.code === "possivel_duplicado" && cands) {
+            picker.mostrarDuplicados(cands);
           }
-          if (TIPOS_COM_CONSULTA.indexOf(tipo) !== -1) {
-            payload.consulta = montarConsulta(form);
-          }
-          const financeiro = montarFinanceiro(form, tipo);
-          if (financeiro) payload.financeiro = financeiro;
-          return api("/atendimentos", { method: "POST", body: JSON.stringify(payload) })
-            .then((criado) => ({ criado, pessoa }));
+          throw err;
         });
       }, (res) => {
-        if (res.somentePessoa) {
-          successBanner(bodyEl,
-            `<strong>Pessoa ${esc(res.pessoa.public_code)} criada</strong> — ` +
-            `${esc(res.pessoa.nome_completo)}. Nenhum atendimento foi criado.`);
-        } else {
-          const c = res.criado;
-          const partes = [];
-          if (c.espirometria) partes.push("Espirometria " + c.espirometria.public_code);
-          if (c.consulta) partes.push("Consulta " + c.consulta.public_code);
-          const lanc = (c.lancamentos || [])
-            .map((l) => `${l.public_code} (${l.componente}, ${l.tipo})`).join(", ");
-          successBanner(bodyEl,
-            `<strong>${esc(partes.join(" + "))} criada(s)</strong> para ` +
-            `${esc(res.pessoa.nome_completo)} (${esc(res.pessoa.public_code)}).` +
-            (lanc ? ` Lançamentos: ${esc(lanc)}.` : " Nenhum lançamento financeiro criado."));
-        }
+        const c = res.criado;
+        const partes = [];
+        if (c.espirometria) partes.push("Espirometria " + c.espirometria.public_code);
+        if (c.consulta) partes.push("Consulta " + c.consulta.public_code);
+        const lanc = (c.lancamentos || [])
+          .map((l) => `${l.public_code} (${l.componente}, ${l.tipo})`).join(", ");
+        // Pendência de cadastro aparece no SUCESSO, não como erro: o exame
+        // aconteceu e está registrado. O que falta é o cadastro do paciente,
+        // e quem acabou de atendê-lo é quem tem a informação à mão.
+        const pend = c.cadastro_pendencias || [];
+        const avisoPend = pend.length
+          ? `<span class="cad-sucesso-pendencia">Falta no cadastro do paciente: ` +
+            `${esc(pend.map((x) => x.rotulo).join(", "))}. ` +
+            `Busque o paciente acima e use “Corrigir cadastro”.</span>`
+          : "";
+        successBanner(bodyEl,
+          `<strong>${esc(partes.join(" + "))} criada(s)</strong> para ` +
+          `${esc(res.pessoa.nome_completo)} (${esc(res.pessoa.public_code)}).` +
+          (lanc ? ` Lançamentos: ${esc(lanc)}.` : " Nenhum lançamento financeiro criado.") +
+          avisoPend);
         form.reset();
         picker.resetState();
         aplicarModo();
@@ -1163,7 +1593,7 @@
     });
   };
 
-  function montarEspirometria(form, tipo, pastore) {
+  function montarEspirometria(form, tipo, pastore, cfg) {
     const bloco = { status: val(form, "esp_status") };
     if (!val(form, "esp_data")) throw new Error("Informe a data do exame.");
     bloco.data_exame = val(form, "esp_data");
@@ -1178,8 +1608,33 @@
       bloco.partner_id = pastore.partner.id;
       bloco.partner_unit_id = unidade;
     } else {
-      setIf(bloco, "modalidade", val(form, "esp_modalidade"));
-      setIf(bloco, "local_atendimento", val(form, "esp_local"));
+      const modalidade = val(form, "esp_modalidade");
+      const local = val(form, "esp_local");
+      /* Fase D — a combinação é conferida ANTES do envio.
+       *
+       * O servidor aplica as mesmas regras (report_origin), então isto não é
+       * a única defesa: é a que evita o operador descobrir o problema depois
+       * de preencher a tela inteira. A ausência total continua permitida —
+       * 13 exames em produção vieram de importação sem modalidade, e exigi-la
+       * agora quebraria a compatibilidade com o histórico. */
+      const cfgEsp = (cfg && cfg.espirometria_soprolife) || {};
+      const escolhida = (cfgEsp.modalidades || []).find((m) => m.valor === modalidade);
+      if (modalidade && !escolhida) {
+        throw new Error("Modalidade não reconhecida — escolha uma das opções da lista.");
+      }
+      if (escolhida && escolhida.local_obrigatorio && !local) {
+        throw new Error(
+          `Informe o local do atendimento (${escolhida.local_rotulo}) para a modalidade "${escolhida.rotulo}".`
+        );
+      }
+      if (!modalidade && local) {
+        throw new Error(
+          "Escolha a modalidade do atendimento — sem ela, o local sozinho não " +
+          "diz onde o exame aconteceu e o laudo não consegue derivar o endereço."
+        );
+      }
+      setIf(bloco, "modalidade", modalidade);
+      setIf(bloco, "local_atendimento", local);
       setIf(bloco, "origem", val(form, "esp_origem"));
     }
     return bloco;

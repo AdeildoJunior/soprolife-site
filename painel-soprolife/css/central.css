@@ -356,3 +356,216 @@
   .cad-actions { flex-direction: column; align-items: stretch; }
   .cad-tipos { grid-template-columns: 1fr; }
 }
+
+/* ══════════════════════════════════════════════════════════ M25.26 ════════
+   O fluxo de Espirometria SoproLife passou a se explicar sozinho. O que
+   entra aqui: o cartão do paciente com suas pendências, a correção inline
+   de cadastro, a ação secundária "só pessoa", o destaque de campo faltante
+   e a ajuda contextual.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ---------------------------------------- cartão do paciente selecionado */
+.cad-picker-selected { display: block; }
+
+.cad-cartao-pessoa {
+  border: 1px solid var(--teal, #1db7a6);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #f7fdfc;
+}
+
+.cad-cartao-topo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.cad-cartao-dados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 10px;
+}
+
+.cad-cartao-linha { font-size: 12.5px; color: var(--muted, #6d7b8a); }
+
+.cad-cartao-ok {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--teal-dark, #0f8f83);
+  font-weight: 600;
+}
+
+/* --------------------------------------------- pendências do cadastro
+   Âmbar, não vermelho: falta de CPF não é erro do operador nem impede o
+   atendimento — é trabalho pendente. Vermelho aqui treinaria a equipe a
+   ignorar alertas vermelhos, que precisam continuar significando bloqueio. */
+.cad-pendencias {
+  margin-top: 10px;
+  border-top: 1px dashed var(--border, #d7e2ea);
+  padding-top: 10px;
+  font-size: 12.5px;
+}
+
+.cad-pendencias > strong { color: #8a5a00; }
+
+.cad-pendencias ul { margin: 6px 0 10px; padding-left: 18px; }
+
+.cad-pendencias li { margin-bottom: 5px; }
+
+.cad-pend-bloqueia {
+  display: inline-block;
+  background: #fff4d6;
+  border: 1px solid #e8c266;
+  color: #8a5a00;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 8px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+
+.cad-pend-porque {
+  display: block;
+  color: var(--muted, #6d7b8a);
+  font-size: 11.5px;
+}
+
+.cad-corrigir-box {
+  margin-top: 10px;
+  border: 1px dashed var(--teal, #1db7a6);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+/* --------------------------------- ação secundária: pessoa sem atendimento
+   Separada do <form> e do botão primário de propósito: é outra operação,
+   não um modo do Novo atendimento. */
+.cad-acao-secundaria {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border, #d7e2ea);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cad-acao-secundaria-nota {
+  font-size: 12px;
+  color: var(--muted, #6d7b8a);
+  max-width: 46ch;
+}
+
+/* ------------------------------------------------ campo faltante marcado */
+.m15-field.cad-campo-pendente {
+  position: relative;
+  border-left: 3px solid #e8a33d;
+  padding-left: 9px;
+  border-radius: 3px;
+  background: #fffaf0;
+}
+
+.m15-field.cad-campo-pendente .m15-field-label { color: #8a5a00; }
+
+.cad-sucesso-pendencia {
+  display: block;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: #8a5a00;
+}
+
+/* ------------------------------------------------------ ajuda contextual
+   Mesmo contrato da M25.24: botão real (foco, Enter/Espaço, alvo de toque)
+   + irmão role="tooltip". Não usa `title`, que não abre por toque nem por
+   teclado — e é no celular que a ajuda mais precisa funcionar. */
+.cad-help {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.cad-help-toggle {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border, #d7e2ea);
+  background: #fff;
+  color: var(--muted, #6d7b8a);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Alvo de toque confortável sem inflar o desenho: a área clicável cresce
+   por pseudo-elemento, o círculo visível continua com 18px. */
+.cad-help-toggle::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+.cad-help-toggle:hover,
+.cad-help-toggle[aria-expanded="true"] {
+  background: var(--teal, #1db7a6);
+  border-color: var(--teal, #1db7a6);
+  color: #fff;
+}
+
+.cad-help-toggle:focus-visible {
+  outline: 2px solid var(--teal, #1db7a6);
+  outline-offset: 2px;
+}
+
+.cad-help-bubble {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 280px;
+  background: var(--navy, #0b1f36);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: 0;
+  border-radius: 8px;
+  padding: 9px 11px;
+  box-shadow: 0 6px 20px rgba(11,31,54,.28);
+}
+
+.cad-help-bubble::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: var(--navy, #0b1f36);
+}
+
+/* Perto da borda direita da tela o balão centralizado vaza; ancorar à
+   direita mantém o texto legível no celular. */
+@media (max-width: 560px) {
+  .cad-help-bubble {
+    left: auto;
+    right: 0;
+    transform: none;
+    max-width: min(280px, 78vw);
+  }
+  .cad-help-bubble::before { left: auto; right: 10px; transform: none; }
+  .cad-acao-secundaria-nota { max-width: none; }
+}
