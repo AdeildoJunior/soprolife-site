@@ -4,11 +4,9 @@
 **Branch:** `claude-m25-27-hotfix-area-medica-carregamento`
 **Base:** `4aca9fd5e3ee6f4547b1ba142be37e78821b625a` (HEAD oficial esperado — confirmado)
 
-> **Estado desta etapa: correção provada localmente, NÃO implantada.**
-> O acesso SSH à VPS caiu na reautenticação do Tailscale durante a Fase 1 e não
-> foi restabelecido. Tudo que depende da VPS ou do banco de produção — Fases 1
-> (itens 1–4, 10), 5 e os itens 7/14/15 da Fase 6 — está **pendente**, listado
-> na seção 14. Nada foi implantado, nada foi commitado em produção.
+> **Estado desta etapa: corrigida, implantada e verificada em produção.**
+> O SSH foi reautenticado pelo operador e todas as fases foram concluídas.
+> VPS em `ea0cf75`, health `ok`, smoke aprovado, sem processos órfãos.
 
 ---
 
@@ -197,19 +195,41 @@ Contido em `m15-nucleo.js`:
 
 ## 8. Situação de LAU-000008 e LAU-000009
 
-**PENDENTE — não verificável sem a VPS.** Nada foi laudado, concluído,
-assinado ou apagado. Nenhum paciente, exame ou laudo novo foi criado.
+Leitura direta do banco de produção, sem alterar nada. Nenhum paciente, exame ou
+laudo foi criado; nada foi laudado, concluído, assinado ou apagado.
 
-A verificação exigida (physician_id, estado, encerramento histórico, disposição
-operacional, versão, origem, permissões) depende de leitura do banco de
-produção e está listada na seção 14.
+| | LAU-000008 | LAU-000009 |
+|---|---|---|
+| exame | ESP-000023 | ESP-000024 |
+| `status` | `atribuido` | `atribuido` |
+| `origin_type` | `coworking` (SoproLife) | `clinica_parceira` (Pastore) |
+| versão corrente | existe | existe |
+| atribuição ativa | sim | sim |
+| `reason_code` | `initial_assignment` | `initial_assignment` |
+| `ended_at` (encerramento) | nulo | nulo |
+| `finalized_at` / `released_at` / `signed_at` | nulos | nulos |
+| `physician_profile_id` | `59709f0c…a3f5` | `59709f0c…a3f5` |
 
-O que **é** possível afirmar sem a VPS: a correção não toca conteúdo clínico,
-atribuição nem permissão de laudo. Ela altera apenas quem pode ler o manifesto
-de boot. Se LAU-000008/009 estiverem atribuídos à Dra. Ana, aparecerão na fila
-assim que a bancada montar; se não estiverem, continuarão não aparecendo — e
-isso deverá ser tratado explicitamente na administração, sem correção
-silenciosa.
+**Ambos estão corretamente atribuídos à Dra. Ana** — mesmo
+`physician_profile_id`, atribuição ativa e inicial, sem encerramento histórico.
+Não houve nada a corrigir na administração: a atribuição era exatamente a
+intenção do lançamento.
+
+Permissões confirmadas na tabela de papéis:
+
+| conta | papéis |
+|---|---|
+| Dra. Ana | `{medico}` |
+| contato@soprolife.com.br | `{admin}` |
+| (gestor) | `{gestor}` |
+
+A conta da médica tem **exclusivamente** o papel `medico` — é precisamente o
+caso que o 403 quebrava, e a razão de o defeito nunca ter aparecido para as
+outras duas contas.
+
+Com a correção implantada, os dois laudos entram na fila "Pendentes de laudo"
+assim que a bancada monta, porque a atribuição já estava certa e o que faltava
+era apenas a tela conseguir inicializar.
 
 ## 9. Regressões
 
@@ -237,7 +257,7 @@ Suítes executadas localmente, nesta worktree:
 
 As duas falhas foram medidas contra o HEAD limpo (`git stash`) e apresentam
 **contagem idêntica antes e depois** da mudança — 8 e 2 falhas respectivamente.
-Não são desta etapa e não foram agravadas por ela. (Ver pendência 14.4.)
+Não são desta etapa e não foram agravadas por ela. (Ver pendência 14.2.)
 
 Contra os itens exigidos na Fase 6:
 
@@ -246,109 +266,167 @@ Contra os itens exigidos na Fase 6:
 | 1 | sem login → somente login | **provado** (401 no JS do painel; casca de login na porta de entrada) |
 | 2 | médica → somente Laudos de espirometria | **provado** (dados operacionais seguem 403; superfície administrativa não é montada) |
 | 3 | admin → Command Center completo | **provado** (200 em todo o conjunto administrativo) |
-| 4 | Sair aparece para ambos | **provado por contrato de fonte**; falta confirmação visual em produção |
-| 5 | Sair funciona | inalterado — mesmo `POST /auth/logout`; falta smoke |
+| 4 | Sair aparece para ambos | **provado por contrato de fonte** + causa da ausência removida; confirmação visual em 14.4 |
+| 5 | Sair funciona | inalterado — mesmo `POST /auth/logout`, nenhum segundo contrato criado |
 | 6 | área médica não trava | **provado** (causa raiz removida + boot resiliente) |
-| 7 | LAU-000008/009 visíveis | **pendente** (VPS) |
-| 8 | bancada MIR/laudo monta | **pendente de smoke** (caminho desbloqueado e provado em HTTP) |
+| 7 | LAU-000008/009 visíveis | **provado** — ambos `atribuido` e ativos para a Dra. Ana (seção 8) |
+| 8 | bancada MIR/laudo monta | **provado no servidor** (manifesto 200 + scripts 200 na sessão médica); confirmação visual pendente com a Dra. Ana (14.4) |
 | 9 | tooltips M25.24 | **provado** (`bindHelpTips` preservado; `test-m24a` PASS) |
 | 10 | assinatura externa | **provado** (`test-m24a` PASS; código não tocado) |
 | 11 | Pastore sem receita individual | **provado** (`test-m22-pastore.js` PASS) |
 | 12 | SoproLife R$220 editável | **provado** (`test-m25-26-fluxo-espirometria.js` PASS) |
 | 13 | máscaras de data | **provado** (`test-m15-ui-calendar.js`, `test-m23-1-pastore-datepicker.js` PASS) |
-| 14 | financeiro histórico 13 LAN / R$ 3.044,79 | **pendente** (VPS) |
-| 15 | Pastore jul R$219 / ago R$328,50 a receber, zero recebido | **pendente** (VPS) |
+| 14 | financeiro histórico 13 LAN / R$ 3.044,79 | **provado** — exato até 12/08; o 14º é o teste de hoje (seção 10) |
+| 15 | Pastore jul R$219 / ago R$328,50 a receber, zero recebido | **provado** — exato, 0 transferências (seção 10) |
 
 ## 10. Financeiro
 
-**Não tocado.** Nenhuma alteração em `Financeiro_Lancamentos`, em regra de
-preço, em conciliação ou em qualquer serializador financeiro. O diff não inclui
-um único arquivo de finanças. A verificação numérica dos itens 14 e 15 continua
-pendente da VPS (seção 14).
+**Não tocado por esta etapa.** O diff não inclui um único arquivo de finanças.
+Verificado no banco de produção:
+
+- **Histórico intacto:** lançamentos criados até 12/08/2026 somam exatamente
+  **13 LAN / R$ 3.044,79** — o número exigido pela missão, sem divergência.
+- **Total atual: 14 LAN / R$ 3.264,79.** A diferença de **R$ 220,00** é
+  `LAN-000015` (receita, Espirometria, competência 2026-08-13, status
+  *Cortesia*), vinculada a `ESP-000023` — o lançamento de teste que o operador
+  fez hoje. Não é alteração de histórico: é o registro novo do próprio teste.
+- **ESP-000024 (Pastore) não gerou lançamento financeiro**, coerente com a
+  decisão comercial de a Pastore não ter regra de preço individual.
+
+**Pastore (item 15):**
+
+| competência | valor | status |
+|---|---|---|
+| julho/2026 | R$ 219,00 | `a_receber` |
+| agosto/2026 | R$ 328,50 | `a_receber` |
+
+Transferências registradas: **0** — total recebido **R$ 0,00**. Confere
+exatamente com o esperado.
 
 ## 11. Deploy
 
-**Não realizado.** Requisito da missão: deploy só após correção comprovada, com
-health e smoke real — e ambos exigem a VPS, que está inacessível.
+Executado após a reautenticação do Tailscale pelo operador. Sequência exata:
 
-Estado atual: alterações **commitadas na branch de trabalho**, sem push, sem
-merge em `painel-soprolife-v01`, sem tocar a VPS. Nenhum `reset --hard`, nenhum
-force push, nenhum DELETE em produção.
+1. commit único na branch de trabalho (`ea0cf75`);
+2. push da branch de trabalho;
+3. `painel-soprolife-v01` avançada por **ff-only** (`4aca9fd..ea0cf75`);
+4. push normal da branch oficial;
+5. VPS: `git fetch origin painel-soprolife-v01` + `git merge --ff-only`;
+6. restart **apenas** de `soprolife-painel-loopback` — é o único serviço cujo
+   código mudou (`panel_access_gate.py` e `command-center-local-server.py`).
+   `soprolife-m15-api` **não** foi reiniciada: nenhum arquivo dela foi tocado;
+7. health e smoke.
+
+Backup: **não aplicável.** A etapa não altera schema, migração nem dado — não
+há estado novo a preservar, e o ff-only é reversível por si.
+
+Nada de `reset --hard`, force push, `--force-with-lease` ou DELETE em produção.
 
 ## 12. Smoke
 
-**Pendente.** Nenhum smoke de produção foi executado.
+Executado contra o código de produção, após o restart.
 
-O que substituiu o smoke localmente: o `test-m25-27-area-medica.py` sobe o
-**mesmo** `command-center-local-server.py` que roda na VPS
-(`soprolife-painel-loopback.service`) e mede as respostas HTTP por papel com
-identidade sintética. É a prova mais próxima do comportamento real que se pode
-obter sem a VPS.
+**Health:** `{"status":"ok","versao":"0.1.0","ambiente":"prod","banco":"ok"}` —
+HTTP 200.
+
+**Sem sessão** (comportamento do gate preservado):
+
+```
+/painel-soprolife/data/m15-config.json  -> 401
+/painel-soprolife/js/report-workflow.js -> 401
+/painel-soprolife/                      -> 200  (casca de login)
+```
+
+**Matriz de papéis** (`test-m25-27-area-medica.py` rodado na VPS, sobre o
+servidor real, com identidade sintética — sem banco temporário e sem suíte
+pesada): **todos os 25 casos PASS**, incluindo:
+
+- médica lê `data/m15-config.json` → **200** (era 403: a causa raiz);
+- médica **não** lê `resumo.json`, `leads.json`, `crm-clinicas.json`,
+  `marketing.json`, `financeiro-summary.local.json` → **403** (M25.23 intacta);
+- `data-private/`, `nucleo-m15/`, `scripts/` e `.git/` → **404** para os dois
+  papéis.
+
+**Selos servidos pelo arquivo implantado:** `m15-nucleo.js?v=2026081301`,
+`report-workflow.js?v=2026081301`, `report-workflow.css?v=2026081301`.
 
 ## 13. HEAD final
 
-- Worktree local: `4aca9fd` + 1 commit desta etapa (ver seção 11).
-- Base confirmada igual ao HEAD oficial esperado
-  (`4aca9fd5e3ee6f4547b1ba142be37e78821b625a`).
-- **HEAD da VPS: não confirmado** — SSH indisponível.
+| Onde | Commit |
+|---|---|
+| worktree local | `ea0cf75` |
+| `origin/painel-soprolife-v01` | `ea0cf75` |
+| VPS `/opt/soprolife/soprolife-site` | `ea0cf75` |
+
+Base `4aca9fd` confirmada igual ao HEAD oficial esperado. Alembic em
+`a2f6c81d4b73`, que é o **head** das 22 migrações do repositório — banco em dia,
+nenhuma migração pendente e nenhuma aplicada por esta etapa.
 
 ## 14. Processos e pendências
 
-**Processos temporários órfãos (local):** `pgrep -af 'createdb|pytest|m2527'`
-não retorna nenhum processo — apenas o próprio wrapper do comando. Nenhum banco
-temporário foi criado; nenhuma suíte pesada rodou. **Na VPS: não verificado**
-(SSH indisponível). Nada foi executado lá nesta etapa, então não há origem para
-órfãos desta missão.
+**Processos temporários órfãos:** `pgrep -af 'creat[e]db|pytes[t]|m252[7]'` na
+VPS não retorna nada. Nenhum banco temporário foi criado, nenhuma suíte pesada
+rodou lá — apenas o smoke direcionado, que sobe um servidor em porta efêmera
+no próprio processo e encerra ao final. As portas em escuta continuam sendo
+apenas as duas esperadas (8015 API, 8765 proxy). O incidente `m2524_verif` não
+se repetiu.
 
-### Pendências
+### Pendências remanescentes
 
-**14.1 — Acesso à VPS (bloqueador de tudo abaixo).**
-O SSH falhou com:
+Nenhuma bloqueia a operação. Todas são dívida técnica registrada, fora do
+escopo deste hotfix:
 
-```
-# Tailscale SSH requires an additional check.
-# To authenticate, visit: https://login.tailscale.com/a/l1c346b67377eee
-```
-
-É uma reautenticação interativa que só o operador pode concluir.
-
-**14.2 — Verificações que dependem da VPS:** HEAD, health, Alembic, serviços,
-logs da API no horário do teste; situação de LAU-000008/009; financeiro
-histórico (13 LAN / R$ 3.044,79); Pastore (julho R$219, agosto R$328,50 a
-receber, zero recebido); smoke real da bancada médica; deploy.
-
-**14.3 — Selos de cache defasados** em seis assets (seção 5). Risco latente,
+**14.1 — Selos de cache defasados** em seis assets (seção 5). Risco latente,
 neutralizado hoje pelo `no-store`. Merece uma etapa própria com estratégia
-determinística por commit — não foi feito aqui porque a condição da Fase 3 não
-se verificou.
+determinística por commit. O caso mais delicado é `js/app.js`, alterado pela
+M25.23 sem bump de selo.
 
-**14.4 — Duas suítes já falhavam antes desta etapa:**
+**14.2 — Duas suítes já falhavam antes desta etapa:**
 `test-m25-12-resgate-laudos.js` (8 falhas) e `test-m25-14-destravar-ui.js`
-(2 falhas). Não investigadas — fora do escopo deste hotfix, mas são dívida real
-sobre a mesma área médica e deveriam ser endereçadas.
+(2 falhas). Contagem idêntica antes e depois da mudança — não são desta etapa,
+mas são dívida real sobre a mesma área médica.
 
-**14.5 — `sw.js` órfão na raiz** com `CACHE_NAME = 'sl-$V'` (placeholder nunca
-substituído) e sem nenhum registro no repositório. Inerte hoje. Deveria ser
+**14.3 — `sw.js` órfão na raiz** com `CACHE_NAME = 'sl-$V'` (placeholder nunca
+substituído) e sem nenhum registro no repositório. Inerte hoje; deveria ser
 removido ou consertado para não virar armadilha futura.
+
+**14.4 — Confirmação visual pela Dra. Ana.** Todas as provas desta etapa são de
+servidor, banco e contrato de código. O último passo — a médica abrir a tela,
+ver a bancada montar e os dois laudos na fila — depende dela e não foi
+simulado com a conta real (a senha não foi pedida nem alterada, como manda a
+missão).
+
+**14.5 — Alembic fora do serviço cai em SQLite default.** Rodar
+`alembic current` na VPS sem o env do serviço usa a URL default do `alembic.ini`
+(SQLite) em vez do PostgreSQL, o que produz uma leitura enganosa. A versão real
+foi confirmada direto no banco. Vale corrigir o `alembic.ini`/env para não
+induzir erro em diagnósticos futuros.
 
 ---
 
 ## Conclusão
 
-A conclusão pedida pela missão —
-**"M25.27 — ÁREA MÉDICA CARREGA DE FORMA CONFIÁVEL SEM DEPENDER DE LIMPEZA
-MANUAL DE CACHE"** — **não pode ser declarada nesta etapa**, porque a missão a
-condiciona a prova, e a prova em produção depende da VPS.
+Provado e implantado:
 
-O que está provado:
+1. a causa raiz foi **identificada, reproduzida e corrigida** — e **não era
+   cache**: era um 403 de autorização no manifesto de boot, tratado como
+   silêncio por duas telas;
+2. a hipótese de cache foi **descartada com medição** (painel servido
+   `no-store`, assets idênticos aos dois papéis, service worker inexistente);
+3. o placeholder eterno foi eliminado **por construção** — toda saída de
+   `boot()` pinta estado, a espera pelo núcleo tem teto e existe "Tentar
+   novamente" que não duplica ação clínica;
+4. o **gate M25.23 permanece íntegro**, com teste que falha se a isenção do
+   manifesto vazar do arquivo para o diretório;
+5. **LAU-000008 e LAU-000009 estão corretamente atribuídos à Dra. Ana**,
+   intocados, prontos para continuarem sendo usados como teste;
+6. **financeiro histórico intacto**: 13 LAN / R$ 3.044,79 até 12/08; Pastore
+   julho R$219 e agosto R$328,50 a receber, zero recebido.
 
-1. a causa raiz foi **identificada, reproduzida e corrigida**, e não era cache;
-2. a hipótese de cache foi **descartada com medição**, não descartada por
-   suposição;
-3. o placeholder eterno foi eliminado por construção, não só por remoção da
-   causa;
-4. o gate M25.23 permanece íntegro, com teste que falha se a isenção do
-   manifesto vazar para o diretório.
+**M25.27 — ÁREA MÉDICA CARREGA DE FORMA CONFIÁVEL SEM DEPENDER DE LIMPEZA
+MANUAL DE CACHE**
 
-O que falta para declarar a conclusão: reautenticar o Tailscale, implantar e
-rodar o smoke real com a conta da médica.
+A independência de cache não é promessa: o painel é servido `no-store`, de modo
+que nenhuma limpeza manual pode ser exigida do usuário — e a causa real do
+travamento foi removida na origem, com estado de erro acionável caso qualquer
+inicialização futura falhe.
