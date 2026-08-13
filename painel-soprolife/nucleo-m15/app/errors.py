@@ -9,6 +9,13 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .field_labels import (
+    caminho_normalizado,
+    mensagem_de_dominio,
+    motivo_do_tipo,
+    rotulo_do_campo,
+)
+
 # request_id aceito do cliente: curto, formato seguro; qualquer outra coisa
 # é substituída por um id gerado (evita log/coluna estourada e injeção).
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
@@ -170,11 +177,55 @@ def install_error_handling(app: FastAPI) -> None:
                 "pagamento_direto_pastore_proibido",
                 pastore_message,
             )
-        erros = [
-            {"campo": ".".join(str(p) for p in e["loc"]), "tipo": e["type"]}
-            for e in exc.errors()
-        ]
-        return _envelope(request, 422, "validacao", "Payload inválido.", {"campos": erros})
+        # M25.26 — o 422 passa a dizer O QUE corrigir.
+        #
+        # Antes desta missão a resposta era `mensagem: "Payload inválido."` com
+        # `campos` em caminho técnico (`body.espirometria.data_exame`). A tela
+        # lê só `erro.mensagem`, então o operador via a frase opaca e nada
+        # mais — foi exatamente o que travou o teste real da Dra. Ana.
+        #
+        # `campo`/`tipo` continuam iguais (contrato antigo preservado); o que
+        # entra é o rótulo do formulário, o motivo em português e a lista
+        # separada de faltantes, que é o que a Central usa para destacar campo
+        # a campo. Nenhum valor digitado entra na resposta.
+        campos = []
+        faltantes = []
+        regras = []
+        invalidos = []
+        for e in exc.errors():
+            caminho = caminho_normalizado(e["loc"])
+            rotulo = rotulo_do_campo(caminho)
+            dominio = mensagem_de_dominio(e)
+            motivo = dominio or motivo_do_tipo(e["type"])
+            campos.append({
+                "campo": ".".join(str(p) for p in e["loc"]),
+                "tipo": e["type"],
+                "caminho": caminho,
+                "rotulo": rotulo,
+                "motivo": motivo,
+            })
+            if dominio:
+                # Regra de negócio: o texto já é uma frase completa e explica
+                # a combinação recusada melhor que um rótulo isolado.
+                if dominio not in regras:
+                    regras.append(dominio)
+            elif e["type"] == "missing":
+                faltantes.append({"campo": caminho, "rotulo": rotulo})
+            else:
+                invalidos.append(f"{rotulo} ({motivo})")
+
+        partes = []
+        if faltantes:
+            rotulos = ", ".join(dict.fromkeys(f["rotulo"] for f in faltantes))
+            partes.append(f"Falta preencher: {rotulos}.")
+        if invalidos:
+            partes.append("Corrija: " + ", ".join(dict.fromkeys(invalidos)) + ".")
+        partes.extend(regras)
+        mensagem = " ".join(partes) or "Payload inválido."
+        return _envelope(
+            request, 422, "validacao", mensagem,
+            {"campos": campos, "campos_faltantes": faltantes},
+        )
 
     @app.exception_handler(IntegrityError)
     async def integrity_exc(request: Request, exc: IntegrityError):
