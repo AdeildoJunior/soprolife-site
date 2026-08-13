@@ -50,8 +50,18 @@ const dp = require(path.join(RAIZ, "js", "m15-datepicker.js"));
 // ── A) estrutura: campo único compartilhado + chamada corretiva ────────────
 console.log("A) \"Data do exame\" é um único campo compartilhado, com re-anexação corrigida");
 
+/* M25.26 — a lista de parâmetros deixou de ser fixa no padrão.
+ *
+ * A função ganhou `cfg` (catálogo de modalidade/local/valor vindo do
+ * servidor) e a regex, que exigia literalmente `(pastore, ehPastore)`,
+ * deixou de casar — derrubando de uma vez os seis casos abaixo, sem que a
+ * propriedade protegida pela M23.1 tivesse mudado.
+ *
+ * O que estes casos protegem é o CORPO da função: um único "Data do exame"
+ * compartilhado pelas duas variantes e a re-anexação do calendário após a
+ * troca. Nada disso depende de quantos argumentos a função recebe. */
 const funcMatch = centralSrc.match(
-  /function blocoEspirometriaConteudoHtml\(pastore, ehPastore\) \{([\s\S]*?)\n  \}\n\n  function blocoEspirometriaHtml/
+  /function blocoEspirometriaConteudoHtml\([^)]*\) \{([\s\S]*?)\n  \}\n\n  function blocoEspirometriaHtml/
 );
 caso("blocoEspirometriaConteudoHtml() foi localizada", !!funcMatch);
 const funcBody = funcMatch ? funcMatch[1] : "";
@@ -74,11 +84,11 @@ const aplicarModoMatch = centralSrc.match(
 caso("aplicarModo() foi localizada", !!aplicarModoMatch);
 const aplicarModoBody = aplicarModoMatch ? aplicarModoMatch[1] : "";
 caso("blocoEsp.innerHTML é reatribuído ao trocar entre SoproLife/Pastore",
-     /blocoEsp\.innerHTML = blocoEspirometriaConteudoHtml\(pastore, ehPastore\);/
+     /blocoEsp\.innerHTML = blocoEspirometriaConteudoHtml\([^)]*\);/
        .test(aplicarModoBody));
 caso("attachDates(blocoEsp) é chamado IMEDIATAMENTE depois da reatribuição " +
      "(correção M23.1 — sem isto o campo novo fica sem calendário)",
-     /blocoEsp\.innerHTML = blocoEspirometriaConteudoHtml\(pastore, ehPastore\);\s*\n\s*renderedPastore = ehPastore;\s*\n[\s\S]{0,400}?attachDates\(blocoEsp\);/
+     /blocoEsp\.innerHTML = blocoEspirometriaConteudoHtml\([^)]*\);\s*\n\s*renderedPastore = ehPastore;\s*\n[\s\S]{0,400}?attachDates\(blocoEsp\);/
        .test(aplicarModoBody));
 
 // ── B) funcional: DOM falso real do m15-datepicker.js ──────────────────────

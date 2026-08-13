@@ -37,14 +37,51 @@ check("modalidade Pastore é exatamente Clínica parceira e somente leitura",
   /pastoreReadonly\("Modalidade", "Clínica parceira"/.test(central));
 check("origem Pastore é somente leitura",
   /pastoreReadonly\("Origem",[\s\S]{0,100}?"Pastore"/.test(central));
-check("local genérico existe somente no ramo não-Pastore",
-  /if \(!ehPastore\)[\s\S]{0,900}?Local \/ unidade de atendimento/.test(central));
+/* M25.26 — estas três checagens eram por DISTÂNCIA de caractere
+   ("aparece em até 900 caracteres depois do if"). Uma linha de comentário a
+   mais no ramo não-Pastore as derrubava sem que nada de Pastore mudasse: um
+   alarme que dispara sozinho ensina a equipe a ignorá-lo.
+   Agora o arquivo é PARTIDO nos dois ramos e cada campo é procurado no ramo
+   onde deve estar E confirmado ausente no outro — o que é estritamente mais
+   forte, porque também pega o campo que VAZOU para o lado Pastore. */
+const espFn = central.slice(
+  central.indexOf("function blocoEspirometriaConteudoHtml"),
+  central.indexOf("function blocoEspirometriaHtml")
+);
+const corteRamo = espFn.indexOf("if (!ehPastore)");
+const ramoSoproLife = espFn.slice(corteRamo, espFn.indexOf("return commonStart + `", espFn.indexOf("let unitField")));
+const ramoPastore = espFn.slice(espFn.indexOf("let unitField"));
+
+check("ramos SoproLife e Pastore foram localizados no fonte",
+  corteRamo !== -1 && ramoSoproLife.length > 200 && ramoPastore.length > 200);
+check("local do atendimento existe somente no ramo não-Pastore",
+  /Local do atendimento/.test(ramoSoproLife) && !/esp_local/.test(ramoPastore));
 check("controles de pagamento existem somente no ramo não-Pastore",
-  /if \(!ehPastore\)[\s\S]{0,1500}?Valor da espirometria[\s\S]{0,400}?Status do pagamento[\s\S]{0,300}?Data de recebimento[\s\S]{0,300}?Forma de pagamento/.test(central));
+  /Valor da espirometria/.test(ramoSoproLife) &&
+  /Status do pagamento/.test(ramoSoproLife) &&
+  /Data de recebimento/.test(ramoSoproLife) &&
+  /Forma de pagamento/.test(ramoSoproLife) &&
+  !/esp_valor|esp_pgto_status|esp_pgto_data|esp_pgto_forma/.test(ramoPastore));
 check("Pastore sai de montarFinanceiro antes de ler controles financeiros",
   /function montarFinanceiro[\s\S]{0,180}?if \(tipo === TIPO_PASTORE\) return null/.test(central));
+
+const montarEsp = central.slice(
+  central.indexOf("function montarEspirometria"),
+  central.indexOf("function montarConsulta")
+);
+const pastoreRamo = montarEsp.slice(
+  montarEsp.indexOf("if (tipo === TIPO_PASTORE)"),
+  montarEsp.indexOf("} else {")
+);
 check("payload Pastore contém apenas vínculos técnicos de parceiro/unidade",
-  /if \(tipo === TIPO_PASTORE\)[\s\S]{0,350}?bloco\.partner_id = pastore\.partner\.id;[\s\S]{0,100}?bloco\.partner_unit_id = unidade;[\s\S]{0,80}?\} else \{[\s\S]{0,300}?local_atendimento/.test(central));
+  /bloco\.partner_id = pastore\.partner\.id;/.test(pastoreRamo) &&
+  /bloco\.partner_unit_id = unidade;/.test(pastoreRamo) &&
+  // nada de local/modalidade/origem digitados entra no payload Pastore:
+  // o servidor deriva esses três da unidade canônica.
+  !/local_atendimento|esp_modalidade|esp_origem/.test(pastoreRamo));
+check("modalidade/local/origem do operador ficam no ramo SoproLife",
+  /setIf\(bloco, "local_atendimento", local\)/.test(montarEsp) &&
+  /setIf\(bloco, "modalidade", modalidade\)/.test(montarEsp));
 
 console.log("\nB) Backend não monetário");
 check("schema rejeita qualquer financeiro Pastore",

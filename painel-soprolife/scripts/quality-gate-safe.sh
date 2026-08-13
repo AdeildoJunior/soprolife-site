@@ -56,6 +56,7 @@ run "node --check test-m22-pastore.js"       node --check painel-soprolife/scrip
 run "node --check test-m24a-report-workflow.js" node --check painel-soprolife/scripts/test-m24a-report-workflow.js
 run "node --check test-m25-18-download-e2e.js" node --check painel-soprolife/scripts/test-m25-18-download-e2e.js
 run "node --check test-m24a-browser-e2e.js"  node --check painel-soprolife/scripts/test-m24a-browser-e2e.js
+run "node --check test-m25-26-fluxo-espirometria.js" node --check painel-soprolife/scripts/test-m25-26-fluxo-espirometria.js
 
 secao "2/10 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
@@ -72,6 +73,8 @@ run "test-m20-atendimento (M20)"         node painel-soprolife/scripts/test-m20-
 run "test-m21-auth-crm-nav (M21)"        node painel-soprolife/scripts/test-m21-auth-crm-nav.js
 run "test-m22-pastore (M22)"              node painel-soprolife/scripts/test-m22-pastore.js
 run "test-m24a-report-workflow (M24A)"     node painel-soprolife/scripts/test-m24a-report-workflow.js
+run "test-m23-1-pastore-datepicker (M23.1)" node painel-soprolife/scripts/test-m23-1-pastore-datepicker.js
+run "test-m25-26-fluxo-espirometria (M25.26)" node painel-soprolife/scripts/test-m25-26-fluxo-espirometria.js
 
 secao "3/10 Sintaxe Python"
 run "py_compile generate-saude-operacional" python3 -m py_compile painel-soprolife/scripts/generate-saude-operacional.py

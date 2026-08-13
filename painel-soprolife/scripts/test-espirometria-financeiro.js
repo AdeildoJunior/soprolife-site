@@ -358,8 +358,32 @@ caso("central-cadastros.js não contém URL do Apps Script",
      !/script\.google\.com/.test(centralJsSrc));
 caso("central-cadastros.js não usa fetch cru fora do cliente do núcleo (sem chamada direta a Sheets)",
      !/fetch\(["'`]https:\/\/script\.google\.com/.test(centralJsSrc));
+/* M25.26 — a checagem era por distância ("até 9000 caracteres depois de
+   LOADERS.atendimento"). O fluxo cresceu com paciente-primeiro, correção de
+   cadastro e coerência de modalidade, e a chave passou a ficar no caractere
+   9528: o teste acusou falha sem que a proteção anti duplo-clique tivesse
+   mudado uma vírgula. Agora o corpo da aba é recortado e a chave é exigida
+   DENTRO dele — o que continua provando o mesmo, sem quebrar a cada linha
+   nova. */
 caso("Novo atendimento usa idempotency_key (anti duplo-clique via API M15)",
-     /LOADERS\.atendimento[\s\S]{0,9000}?idempotency_key:\s*m15\(\)\.idemKey\(\)/.test(centralJsSrc));
+     (() => {
+       const ini = centralJsSrc.indexOf("LOADERS.atendimento");
+       const fim = centralJsSrc.indexOf("function montarEspirometria", ini);
+       if (ini === -1 || fim === -1) return false;
+       const corpo = centralJsSrc.slice(ini, fim);
+       return /idempotency_key:\s*m15\(\)\.idemKey\(\)/.test(corpo);
+     })());
+caso("os dois caminhos de criação de atendimento passam pela mesma chave",
+     (() => {
+       const ini = centralJsSrc.indexOf("LOADERS.atendimento");
+       const fim = centralJsSrc.indexOf("function montarEspirometria", ini);
+       const corpo = centralJsSrc.slice(ini, fim);
+       // paciente existente e paciente novo montam o payload a partir do
+       // MESMO objeto `blocos`, que é quem carrega a chave de idempotência.
+       return /const blocos = \{ tipo, idempotency_key/.test(corpo) &&
+         /Object\.assign\(\{ person_id: existente\.id \}, blocos\)/.test(corpo) &&
+         /Object\.assign\(\{ pessoa \}, blocos\)/.test(corpo);
+     })());
 caso("bloco de espirometria do Novo atendimento inclui campo broncodilatador",
      /function blocoEspirometriaConteudoHtml[\s\S]{0,4000}?broncodilatador/
        .test(centralJsSrc));

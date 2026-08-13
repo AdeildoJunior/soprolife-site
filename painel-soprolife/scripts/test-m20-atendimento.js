@@ -116,31 +116,56 @@ caso("os formulários antigos foram REMOVIDOS (sem implementação duplicada)",
 console.log();
 console.log("C) Nova pessoa tem verbo próprio; \"só a pessoa\" só existe dentro desse fluxo");
 
-caso("botão do seletor de pessoa diz \"+ Cadastrar nova pessoa\" (não mais \"+ Nova pessoa\")",
-     /\+ Cadastrar nova pessoa/.test(centralSrc) &&
-     !/>\+ Nova pessoa</.test(centralSrc));
-caso("\"cadastrar apenas a pessoa\" só é renderizado quando o chamador pede (opts.somentePessoaOpcao)",
-     /opts\.somentePessoaOpcao \? `[\s\S]{0,200}?Cadastrar apenas a pessoa, sem criar exame ou consulta/
-       .test(centralSrc) &&
-     /id="\$\{prefix\}SoPessoa"/.test(centralSrc));
-caso("o checkbox mora DENTRO da caixa de pessoa nova, não solto como ação flutuante",
+/* M25.26 reescreveu esta seção porque o CONTRATO mudou de propósito.
+ *
+ * A M20 exigia que "cadastrar apenas a pessoa" fosse um checkbox dentro da
+ * caixa de pessoa nova, e que os campos da pessoa só aparecessem depois de
+ * clicar "+ Cadastrar nova pessoa". O primeiro uso real mostrou o custo das
+ * duas decisões: o clique escondia os campos obrigatórios de todo
+ * atendimento, e o checkbox — grande, no meio do passo 1 — apagava os passos
+ * 2 e 3 e parecia etapa normal do Novo atendimento.
+ *
+ * O que estes casos passam a proteger é o contrato NOVO, e com a mesma
+ * severidade: o formulário do paciente nasce visível, e "só pessoa" é ação
+ * secundária, fora do <form>, que continua não criando exame/consulta. */
+/* Comentário explica história; código define comportamento. As checagens
+   abaixo olham só o código — senão a própria frase que documenta o defeito
+   antigo ("antes era preciso clicar em + Cadastrar nova pessoa") derrubaria
+   o teste que prova que o clique acabou. */
+const centralCodigo = centralSrc
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/^\s*\/\/.*$/gm, "");
+
+caso("campos do paciente novo nascem VISÍVEIS (sem clique intermediário)",
+     /id="\$\{prefix\}NovaBox">/.test(centralCodigo) &&
+     !/id="\$\{prefix\}Nova"/.test(centralCodigo) &&
+     !/>\s*\+ Cadastrar nova pessoa\s*</.test(centralCodigo));
+caso("a busca por paciente existente continua sendo o primeiro elemento",
+     centralSrc.indexOf('id="${prefix}Q"') <
+       centralSrc.indexOf('id="${prefix}NovaBox"'));
+caso("\"cadastrar pessoa sem atendimento\" é ação secundária FORA do formulário",
+     /id="cadAtSoPessoa"/.test(centralSrc) &&
+     /Cadastrar pessoa sem atendimento/.test(centralSrc) &&
+     centralSrc.indexOf('id="cadAtSoPessoa"') >
+       centralSrc.indexOf("</form>") &&
+     !/id="\$\{prefix\}SoPessoa"/.test(centralSrc));
+caso("a ação secundária declara em uma frase o que NÃO faz",
+     /Cria somente o cadastro da pessoa e seus contatos\. Nenhum exame ou\s+consulta será criado agora/
+       .test(centralSrc.replace(/\n\s*/g, "\n              ")));
+caso("a ação secundária cria a pessoa e NADA além dela",
      (() => {
-       const boxStart = centralSrc.indexOf('id="${prefix}NovaBox"');
-       const boxCheckbox = centralSrc.indexOf('id="${prefix}SoPessoa"');
-       const boxEnd = centralSrc.indexOf("</div>`}", boxStart);
-       return boxStart !== -1 && boxCheckbox > boxStart && boxCheckbox < boxEnd;
+       const ini = centralCodigo.indexOf("btnSoPessoa.addEventListener");
+       // O fim é a PRÓXIMA ocorrência depois do início: procurar do zero
+       // acharia a definição de wireSubmit, lá no topo do arquivo.
+       const bloco = centralCodigo.slice(ini, centralCodigo.indexOf("wireSubmit(form,", ini));
+       return /picker\.resolve\(\)/.test(bloco) &&
+         // não chama endpoint de atendimento nem monta bloco clínico/financeiro
+         !/\/atendimentos/.test(bloco) &&
+         !/montarEspirometria|montarConsulta|montarFinanceiro/.test(bloco) &&
+         !/payload\.(espirometria|consulta|financeiro)/.test(bloco);
      })());
-caso("só o fluxo de Novo atendimento pede a opção (Lead não a usa)",
-     /personPickerHtml\("cadAtP", \{ somentePessoaOpcao: true \}\)/.test(centralSrc) &&
-     /personPickerHtml\("cadLeadP"\)/.test(centralSrc));
-caso("a opção só conta como ativa quando a pessoa é NOVA (picker.somentePessoaAtivo)",
-     /picker\.somentePessoaAtivo = function \(\) \{[\s\S]{0,120}?return picker\.modoNova && !!\(soPessoaEl && soPessoaEl\.checked\)/
-       .test(centralSrc));
-caso("no modo \"somente pessoa\" nenhum atendimento/exame/consulta/lançamento é criado",
-     /if \(picker\.somentePessoaAtivo\(\)\) \{[\s\S]{0,300}?somentePessoa: true/.test(centralSrc));
-caso("modo \"somente pessoa\" esconde os passos 2 e 3 e troca o rótulo do botão",
-     /const soPessoa = picker\.somentePessoaAtivo\(\);[\s\S]{0,200}?passo2\.hidden = soPessoa;[\s\S]{0,80}?passo3\.hidden = soPessoa;[\s\S]{0,120}?"Salvar pessoa" : "Salvar atendimento"/
-       .test(centralSrc));
+caso("paciente novo + atendimento vão numa ÚNICA operação atômica",
+     /api\("\/atendimentos\/novo-paciente"/.test(centralSrc));
 caso("busca de pessoa existente nunca aciona a criação (resolve só retorna a selecionada)",
      /if \(picker\.selected\) return Promise\.resolve\(picker\.selected\);/.test(centralSrc));
 
@@ -174,9 +199,34 @@ caso("receita bruta da consulta é declarada como da SoproLife",
      /receita bruta da consulta é da SoproLife/i.test(centralSrc) &&
      /repasse ao\s+médico é uma obrigação financeira SEPARADA/i.test(
        centralSrc.replace(/\n\s*/g, " ")));
-caso("nenhum valor monetário é inferido pelo formulário",
-     /Nenhum valor é inferido/.test(centralSrc) &&
+/* M25.26 — "não inferir" continua valendo, mas mudou de lugar.
+ *
+ * A espirometria SoproLife agora NASCE com o valor de tabela preenchido e
+ * editável (R$ 220,00, vindo da configuração do servidor). Isso não é
+ * inferência: é uma sugestão visível que o operador confirma ou troca, e o
+ * campo em branco continua produzindo zero lançamentos.
+ *
+ * Inferência seria o servidor completar um valor ausente sozinho — e é
+ * exatamente isso que os casos abaixo continuam proibindo. */
+caso("valor da consulta em branco não cria lançamento",
      /Em branco, nenhum lançamento é criado/.test(centralSrc));
+caso("valor da espirometria em branco não cria lançamento",
+     /Apagando o campo, nenhum lançamento financeiro é criado — nada é inferido/
+       .test(centralSrc));
+caso("o valor de tabela vem do servidor, não é número mágico no JavaScript",
+     /cfgEsp\.valor_padrao/.test(centralCodigo) &&
+     // 220 só pode aparecer como PLACEHOLDER (dica visual). Qualquer outro
+     // uso seria o preço codificado na tela, que é o que a Fase E proíbe.
+     !/\b220\b/.test(centralCodigo.replace(/placeholder="220,00"/g, "")));
+caso("o campo de valor permanece editável (não é readonly nem disabled)",
+     /fld\("Valor da espirometria \(R\$\)", inp\("esp_valor", valorPadrao,\s*'inputmode="decimal" placeholder="220,00"'\)/
+       .test(centralSrc.replace(/\n\s*/g, " ")));
+caso("o servidor NÃO infere valor: financeiro só nasce de valor explícito",
+     /nenhum valor é inferido/i.test(
+       ler("nucleo-m15", "app", "routers", "attendances.py")) &&
+     // o valor de tabela é configuração de SUGESTÃO e está marcado como tal
+     /NÃO é usado para inferir valor nenhum no servidor/.test(
+       ler("nucleo-m15", "app", "config.py")));
 
 // ── E) CRM de pacientes segue vivo e sem cadastro duplicado ────────────────
 console.log();
