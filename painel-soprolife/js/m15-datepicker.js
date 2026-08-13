@@ -75,6 +75,45 @@
     return { ok: false };
   }
 
+  /* M25.26 — barra automática ao digitar, sem destruir data parcial.
+   *
+   * O operador digita "12082026" e espera ver "12/08/2026". O problema é que
+   * mascarar cegamente a cada 2 dígitos QUEBRA os campos de data parcial:
+   * "2026" (ano, contrato legítimo do domínio) viraria "20/26", e o campo
+   * ficaria preso — ao corrigir, a máscara reescreveria de novo.
+   *
+   * Três regras resolvem sem mentir:
+   *
+   * 1. Apagando (backspace/delete) NADA é reescrito. Sem isto a barra
+   *    reaparece no mesmo instante em que é apagada e o campo trava.
+   * 2. Barra digitada pelo humano manda. Quem escreve "08/2026" está dizendo
+   *    "mês e ano"; a máscara não tem o direito de discordar.
+   * 3. Só reformata a partir de dígitos puros, e em campo PARCIAL apenas com
+   *    5 ou mais dígitos — abaixo disso "2026" ainda é um ano válido e
+   *    reescrevê-lo inventaria uma precisão que o operador não pediu. Em
+   *    campo de data COMPLETA não existe leitura parcial legítima, então a
+   *    barra pode entrar já no 3º dígito.
+   *
+   * Função pura de propósito: é o que permite testar as bordas (colar,
+   * apagar, ano solto) sem navegador.
+   */
+  function mascararData(raw, mode, apagando) {
+    var texto = String(raw == null ? "" : raw);
+    if (apagando) return texto;
+    if (texto.indexOf("/") !== -1) return texto;
+    var soDigitos = texto.replace(/\D/g, "");
+    // Texto com letra ou símbolo passa intacto — "dezembro/2026" é uma
+    // entrada válida do domínio e não pode ser reescrita como número. A
+    // comparação é feita ANTES de limitar o tamanho: truncar primeiro faria
+    // toda digitação longa parecer "texto com símbolo" e escapar da máscara.
+    if (soDigitos.length !== texto.length) return texto;
+    var digitos = soDigitos.slice(0, 8);
+    var minimo = (mode === "partial") ? 5 : 3;
+    if (digitos.length < minimo) return digitos;
+    if (digitos.length <= 4) return digitos.slice(0, 2) + "/" + digitos.slice(2);
+    return digitos.slice(0, 2) + "/" + digitos.slice(2, 4) + "/" + digitos.slice(4);
+  }
+
   // Backend (ISO/parcial) → exibição brasileira. Valor irreconhecível volta cru.
   function isoToBr(iso) {
     var p = parseFlex(iso);
@@ -426,7 +465,25 @@
     picker.isOpen = function () { return !!picker.pop; };
     picker.syncFromDisplay = syncFromDisplay;
 
-    display.addEventListener("input", function () { syncFromDisplay(false); });
+    display.addEventListener("input", function (ev) {
+      // A máscara roda ANTES da leitura do valor: o que o operador vê e o que
+      // o campo oculto envia saem do mesmo texto, nunca de duas versões.
+      var apagando = !!(ev && ev.inputType &&
+        String(ev.inputType).indexOf("delete") === 0);
+      var mascarado = mascararData(display.value, picker.mode, apagando);
+      if (mascarado !== display.value) {
+        var noFim = display.selectionStart === display.value.length;
+        display.value = mascarado;
+        // Cursor no fim only quando já estava no fim — quem edita no meio do
+        // texto não é teleportado para o final a cada tecla.
+        if (noFim && display.setSelectionRange) {
+          try {
+            display.setSelectionRange(mascarado.length, mascarado.length);
+          } catch (e) { /* input sem suporte a seleção */ }
+        }
+      }
+      syncFromDisplay(false);
+    });
     display.addEventListener("change", function () { syncFromDisplay(true); });
     display.addEventListener("keydown", function (ev) {
       if (ev.key === "ArrowDown" && ev.altKey) {
@@ -464,6 +521,7 @@
 
   var api = {
     parseFlex: parseFlex,
+    mascararData: mascararData,
     isoToBr: isoToBr,
     brToIso: brToIso,
     daysInMonth: daysInMonth,
