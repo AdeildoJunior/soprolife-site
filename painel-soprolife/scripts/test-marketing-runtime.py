@@ -208,6 +208,64 @@ caso("conector não imprime segredo no diagnóstico",
                    proc.stdout + proc.stderr))
 
 
+# ── M25.28 — termo de busca do Search Console não pode travar o snapshot ────
+# De 05/08 a 13/08/2026 a tela de Marketing & SEO ficou congelada porque UMA
+# busca do Google — "precisa de pedido médico?", 1 impressão — casou com o
+# scan de termo clínico e abortou a gravação do summary a cada 10 minutos.
+# O Google entrega essas consultas já agregadas e anonimizadas: é palavra-
+# chave de SEO, não texto sobre um paciente. Estes casos usam as REGRAS
+# REAIS do conector, não uma cópia.
+print()
+print("── M25.28: termo de busca agregado ──")
+
+sys.path.insert(0, str(RAIZ / "scripts"))
+import importlib.util  # noqa: E402
+
+import pii_guard  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location("_conector_mkt", CONECTOR)
+_conector = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_conector)
+REGRAS_REAIS = _conector._PII_RULES
+
+
+def _snapshot(query):
+    return {"searchConsole": {"topQueries": [
+        {"query": query, "impressions": 1, "clicks": 0}]}}
+
+
+caso("a busca exata que derrubou a esteira agora passa",
+     pii_guard.validate_summary(
+         _snapshot("precisa de pedido médico?"), REGRAS_REAIS) == [],
+     str(pii_guard.validate_summary(
+         _snapshot("precisa de pedido médico?"), REGRAS_REAIS)))
+
+caso("outros termos clínicos de SEO passam",
+     all(pii_guard.validate_summary(_snapshot(q), REGRAS_REAIS) == []
+         for q in ("laudo de espirometria rj",
+                   "diagnóstico de asma",
+                   "resultado de exame espirometria")))
+
+caso("a dispensa NÃO vale para telefone dentro da busca",
+     pii_guard.validate_summary(
+         _snapshot("espirometria (21) 98888-7777"), REGRAS_REAIS) != [])
+
+caso("a dispensa NÃO vale para e-mail dentro da busca",
+     pii_guard.validate_summary(
+         _snapshot("laudo fulano@example.com"), REGRAS_REAIS) != [])
+
+caso("a dispensa NÃO vale para CPF dentro da busca",
+     pii_guard.validate_summary(
+         _snapshot("laudo 123.456.789-09"), REGRAS_REAIS) != [])
+
+caso("termo clínico em campo que NÃO é de busca continua barrado",
+     pii_guard.validate_summary(
+         {"campo_x": "paciente trouxe pedido medico"}, REGRAS_REAIS) != [])
+
+caso("'query' e 'page' estão declarados como busca agregada",
+     set(REGRAS_REAIS.get("campos_busca_agregada", [])) >= {"query", "page"})
+
+
 print()
 if FALHAS:
     print(f"RESULTADO: {FALHAS} falha(s).")

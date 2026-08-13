@@ -77,6 +77,17 @@ _PII_RULES = {
     "campos_institucionais": ["query", "page", "siteUrl", "warnings", "sources",
                               "sourceName", "errorMessageSafe"],
     "chaves_proibidas_extras": [],
+    # M25.28 — o que o Search Console devolve em "query" é o termo que
+    # ALGUÉM DIGITOU NO GOOGLE, já agregado e anonimizado pelo próprio Google
+    # (consultas raras nem são reportadas). Não é texto sobre um paciente: é
+    # palavra-chave de SEO, e vocabulário clínico é inerente ao negócio.
+    # Uma única busca — "precisa de pedido médico?", 1 impressão — abortou a
+    # gravação do snapshot por 8 dias (05/08 a 13/08/2026), congelando a tela
+    # inteira de Marketing & SEO. "page" é URL do site público da SoproLife,
+    # a mesma classe de dado. A dispensa vale SÓ para o scan de termo
+    # clínico: telefone, CPF, e-mail, token e nome de pessoa continuam
+    # barrando a gravação.
+    "campos_busca_agregada": ["query", "page"],
 }
 
 _CONFIG_PATH = Path("painel-soprolife/data-private/marketing-seo-config.local.json")
