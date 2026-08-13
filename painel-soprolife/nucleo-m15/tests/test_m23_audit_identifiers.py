@@ -365,3 +365,98 @@ def test_nenhum_snapshot_gerado_entra_no_git(auditoria_producao, tmp_path):
         proc = subprocess.run(["git", "check-ignore", "-q", "--no-index", alvo],
                               cwd=REPO_ROOT, capture_output=True)
         assert proc.returncode == 0, f"{alvo} NÃO está gitignored"
+
+
+# ------------------------------------------- M25.28: o vocabulário de laudos
+
+#: As seis ações que existiam de verdade na trilha de produção em
+#: 13/08/2026 e que, sozinhas, pararam a esteira inteira de snapshots.
+ACOES_DE_LAUDO = (
+    "laudo_conteudo_entregue",
+    "laudo_original_atribuido",
+    "laudo_nativo_previa_gerada",
+    "laudo_assinado_e_liberado",
+    "exame_reaberto_para_laudo",
+    "laudo_corretivo_aberto",
+)
+
+
+@pytest.fixture()
+def auditoria_com_laudos(db):
+    """Trilha com o vocabulário de laudos que a operação médica emite."""
+    base = datetime.now(timezone.utc)
+    for i, acao in enumerate(ACOES_DE_LAUDO):
+        db.add(AuditLog(acao=acao, entidade="report_documents",
+                        ts_utc=base - timedelta(minutes=i)))
+    db.add(AuditLog(acao="auth.token_emitido", entidade="users",
+                    ts_utc=base - timedelta(minutes=30)))
+    db.commit()
+    return db
+
+
+def test_acao_de_laudo_e_mesmo_o_vocabulario_que_derrubou_a_esteira():
+    """Âncora do incidente M25.28: o rótulo da AÇÃO carrega o token 'laudo'.
+    Sem esta premissa os testes abaixo não provam nada."""
+    from pii_guard import _FORBIDDEN_KEY_TOKENS, _key_tokens
+    assert _key_tokens("laudo_conteudo_entregue") & _FORBIDDEN_KEY_TOKENS, (
+        "o rótulo de referência parou de casar com a lista de chaves "
+        "proibidas; escolha outra âncora antes de confiar nesta suíte"
+    )
+
+
+def test_exportador_grava_todos_os_snapshots_com_acoes_de_laudo(
+    auditoria_com_laudos, tmp_path
+):
+    """A falha de 09/08 a 13/08/2026, reproduzida: com essas ações na
+    trilha, o exportador abortava a gravação de TODOS os snapshots — a
+    validação é tudo-ou-nada — e o painel inteiro congelava em silêncio."""
+    resultado = snapshots.export_snapshots(auditoria_com_laudos, tmp_path, write=True)
+
+    assert resultado["modo"] == "write"
+    for nome in snapshots.SNAPSHOT_FILES:
+        assert (tmp_path / nome).is_file(), f"{nome} não foi gravado"
+
+    payload = json.loads((tmp_path / "auditoria-summary.local.json").read_text("utf-8"))
+    assert validate_auditoria_payload(payload) == []
+    # As contagens continuam visíveis: a correção não escondeu a operação.
+    por_acao = payload["stats"]["por_acao"]
+    for acao in ACOES_DE_LAUDO:
+        assert por_acao.get(acao) == 1, f"contagem de '{acao}' sumiu do resumo"
+
+
+def test_contrato_ainda_rejeita_conteudo_de_laudo_em_texto_livre():
+    """A dispensa vale para o RÓTULO da ação, nunca para texto livre."""
+    payload = {
+        "source": {"safeToDisplay": True, "containsPersonalData": False},
+        "stats": {"por_acao": {"laudo_assinado_e_liberado": 3}},
+        "resumo_textual": "laudo do paciente entregue em maos",
+        "ultimos_eventos": [],
+    }
+    erros = validate_auditoria_payload(payload)
+    assert any("termo proibido 'laudo'" in e for e in erros), erros
+
+
+def test_rotulo_fora_do_formato_de_vocabulario_volta_a_ser_varrido():
+    """Um rótulo que não tem forma de slug não é vocabulário: ele continua
+    exposto à varredura de termos proibidos e é denunciado pela forma."""
+    payload = {
+        "source": {"safeToDisplay": True, "containsPersonalData": False},
+        "stats": {"por_acao": {"laudo da paciente Maria Silva": 1}},
+        "ultimos_eventos": [],
+    }
+    erros = validate_auditoria_payload(payload)
+    assert any("fora do formato de vocabulario" in e for e in erros), erros
+    assert any("termo proibido 'laudo'" in e for e in erros), erros
+
+
+def test_cpf_continua_barrado_mesmo_com_a_mascara_de_vocabulario():
+    """A máscara existe para o rótulo, não para documento: o CPF é
+    procurado no payload ORIGINAL."""
+    payload = {
+        "source": {"safeToDisplay": True, "containsPersonalData": False},
+        "stats": {"por_acao": {"lead.criado": 1}},
+        "ultimos_eventos": [],
+        "campo_solto": "123.456.789-09",
+    }
+    erros = validate_auditoria_payload(payload)
+    assert any("CPF" in e for e in erros), erros

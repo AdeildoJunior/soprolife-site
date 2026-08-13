@@ -28,6 +28,7 @@ operador, resultado — e o timestamp. Ver ALLOWED_EVENT_KEYS.
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 
@@ -83,6 +84,81 @@ REMOVED_EVENT_KEYS: dict[str, str] = {
 _CPF_RE = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
 _FONE_RE = re.compile(r"\(?\d{2}\)?\s?\d{4,5}-?\d{4}")
 
+#: Mapas de ``stats`` cujas CHAVES são rótulos de vocabulário fechado
+#: (nome da ação auditada, nome da tabela, papel do operador, resultado).
+VOCABULARY_STAT_MAPS: tuple[str, ...] = (
+    "por_acao", "por_entidade", "por_operador", "por_resultado",
+)
+
+#: Campos de cada evento que carregam esse mesmo vocabulário fechado.
+VOCABULARY_EVENT_FIELDS: tuple[str, ...] = (
+    "acao", "entidade_tipo", "operador", "resultado",
+)
+
+#: Forma exigida de um rótulo de vocabulário: minúsculas, dígitos, ``_`` e
+#: ``.`` — o formato que o código emite ("auth.token_emitido",
+#: "laudo_conteudo_entregue"). Um rótulo fora desta forma não é vocabulário
+#: e volta a ser varrido como texto livre.
+_SLUG_RE = re.compile(r"^[a-z0-9_.]{1,80}$")
+
+#: Texto que substitui um rótulo de vocabulário na varredura de termos
+#: proibidos. Neutro de propósito: não casa com nenhum FORBIDDEN_TERMS.
+_VOCAB_PLACEHOLDER = "vocabulario"
+
+
+def _mask_vocabulary(data: dict) -> tuple[dict, list[str]]:
+    """Devolve (payload mascarado, erros de forma) para a varredura textual.
+
+    ``FORBIDDEN_TERMS`` existe para impedir que CONTEÚDO vaze no resumo —
+    o texto de um laudo, uma observação, um telefone. Ele varre o payload
+    inteiro como uma única string, e por isso passou a acusar o próprio
+    NOME das operações auditadas assim que a operação de laudos entrou em
+    produção (09/08/2026): ``laudo_conteudo_entregue`` contém "laudo".
+    Resultado — nenhum snapshot do painel foi mais gerado, porque a
+    validação é tudo-ou-nada (M25.28).
+
+    Um rótulo de vocabulário não é conteúdo: é o nome da operação, emitido
+    pelo próprio código, com um inteiro por valor. Aqui ele é validado pela
+    FORMA (``_SLUG_RE``) e então mascarado antes da varredura textual. O
+    que não tiver forma de rótulo continua sendo varrido normalmente — a
+    dispensa não cria um esconderijo para texto livre.
+    """
+    erros: list[str] = []
+    mascarado = copy.deepcopy(data)
+
+    stats = mascarado.get("stats")
+    if isinstance(stats, dict):
+        for mapa in VOCABULARY_STAT_MAPS:
+            contagens = stats.get(mapa)
+            if not isinstance(contagens, dict):
+                continue
+            limpo = {}
+            for i, (rotulo, total) in enumerate(contagens.items()):
+                if _SLUG_RE.fullmatch(str(rotulo)):
+                    limpo[f"{_VOCAB_PLACEHOLDER}_{i}"] = total
+                else:
+                    # Fora da forma de rótulo: mantém o texto original, que
+                    # segue exposto à varredura de termos proibidos.
+                    erros.append(
+                        f"rotulo fora do formato de vocabulario em stats.{mapa}."
+                    )
+                    limpo[rotulo] = total
+            stats[mapa] = limpo
+
+    eventos = mascarado.get("ultimos_eventos")
+    if isinstance(eventos, list):
+        for evt in eventos:
+            if not isinstance(evt, dict):
+                continue
+            for campo in VOCABULARY_EVENT_FIELDS:
+                valor = evt.get(campo)
+                if valor is None:
+                    continue
+                if _SLUG_RE.fullmatch(str(valor)):
+                    evt[campo] = _VOCAB_PLACEHOLDER
+
+    return mascarado, erros
+
 
 def validate_auditoria_payload(data: dict) -> list[str]:
     """Valida um payload já carregado de ``auditoria-summary.local.json``.
@@ -100,11 +176,17 @@ def validate_auditoria_payload(data: dict) -> list[str]:
     if source.get("containsPersonalData") is not False:
         errors.append("auditoria-summary pode conter dado pessoal.")
 
-    text = json.dumps(data, ensure_ascii=False).lower()
+    # Rótulos de vocabulário fechado saem da varredura de texto livre — ver
+    # _mask_vocabulary. O CPF continua sendo procurado no payload ORIGINAL:
+    # nenhuma máscara pode esconder um documento.
+    mascarado, erros_forma = _mask_vocabulary(data)
+    errors.extend(erros_forma)
+
+    text = json.dumps(mascarado, ensure_ascii=False).lower()
     for termo in FORBIDDEN_TERMS:
         if termo in text:
             errors.append(f"termo proibido '{termo}' detectado em auditoria-summary.")
-    if _CPF_RE.search(text):
+    if _CPF_RE.search(json.dumps(data, ensure_ascii=False).lower()):
         errors.append("padrão de CPF detectado em auditoria-summary.")
 
     eventos = data.get("ultimos_eventos", [])
