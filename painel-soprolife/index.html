@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css?v=2026072402" />
+  <link rel="stylesheet" href="./css/style.css?v=2026081201" />
   <!-- CRM Pacientes e Acompanhamento (M19): workspace canônico único. -->
   <link rel="stylesheet" href="./css/crm-workspace.css?v=2026072402" />
   <!-- M24C — fila médica atribuída e fluxo clínico autenticado. -->
@@ -137,6 +137,17 @@
           <button id="refreshBtn" title="Recarrega esta página com os dados já sincronizados. Não busca dados novos nas fontes externas.">
             <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4v5h5"/><path d="M17 14v-5h-5"/><path d="M15.5 6.5A7 7 0 1 0 16 9"/></svg>
             Atualizar
+          </button>
+          <!-- M25.26 — sair deixou de morar só dentro do "Núcleo
+               administrativo". Quem opera precisa encerrar a sessão de onde
+               estiver, sem caçar a aba onde o botão estava escondido.
+               Fica oculto até existir sessão (quem decide é o núcleo, dono do
+               estado de autenticação) e usa o MESMO POST /auth/logout —
+               nenhum segundo contrato de autenticação foi criado. -->
+          <button id="topbarSair" class="topbar-sair" type="button" hidden
+            title="Encerrar a sessão neste navegador">
+            <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h4"/><path d="M12 13l4-4-4-4"/><path d="M16 9H7"/></svg>
+            <span class="topbar-sair-texto">Sair</span>
           </button>
           <div class="topbar-avatar" title="Painel interno SoproLife">SL</div>
         </div>
@@ -945,15 +956,15 @@
        A guarda de contexto seguro (m15-security.js) carrega ANTES do núcleo:
        login só em HTTPS ou loopback local; HTTP remoto fica bloqueado. -->
   <script src="./js/m15-security.js?v=2026072402" defer></script>
-  <script src="./js/m15-datepicker.js?v=2026072402" defer></script>
-  <script src="./js/m15-nucleo.js?v=2026072501" defer></script>
+  <script src="./js/m15-datepicker.js?v=2026081201" defer></script>
+  <script src="./js/m15-nucleo.js?v=2026081201" defer></script>
   <!-- M24C: feature independente e desabilitada por padrão; quando
        explicitamente habilitada, consome window.SoproM15 (sessão/CSRF) e
        usa Blob autenticado, nunca URL pública de documento. -->
   <script src="./js/report-workflow.js?v=2026081102" defer></script>
   <!-- Central de Cadastros (M16): fluxo canônico ÚNICO de entrada de dados.
        Depende do cliente compartilhado window.SoproM15 (script acima). -->
-  <script src="./js/central-cadastros.js?v=2026072501" defer></script>
+  <script src="./js/central-cadastros.js?v=2026081201" defer></script>
   <!-- M22: fechamento mensal da Pastore. O exame permanece não monetário;
        o módulo cria um único recibo agregado somente após confirmação. -->
   <link rel="stylesheet" href="./css/pastore-settlement.css?v=2026072501">

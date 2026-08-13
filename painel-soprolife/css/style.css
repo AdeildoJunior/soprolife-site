@@ -4179,9 +4179,55 @@ h1 { font-size: clamp(1.55rem, 3vw, 2rem); }
   box-shadow: 0 4px 14px rgba(11,31,54,.22);
 }
 
+/* ================================ M25.26 — "Sair" visível no cabeçalho ====
+   Discreto de propósito: encerrar a sessão é uma ação de saída, não uma
+   chamada para ação. Fica secundário ao lado de "Atualizar" (que é a ação
+   frequente) sem se disfarçar de link — continua sendo um <button> com
+   borda, foco visível e alvo de toque adequado. */
+.top-actions button.topbar-sair {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  color: var(--navy);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: .875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
+.top-actions button.topbar-sair:hover {
+  background: rgba(11,31,54,.06);
+  border-color: var(--navy);
+}
+
+.top-actions button.topbar-sair:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.top-actions button.topbar-sair[disabled] {
+  opacity: .6;
+  cursor: progress;
+}
+
 .topbar-avatar {
   background: linear-gradient(135deg, var(--teal), var(--teal-dark));
   box-shadow: 0 0 0 2.5px rgba(29,183,166,.30);
+}
+
+/* Mobile: a busca ocupa a linha e o cabeçalho não pode estourar a largura.
+   O rótulo "Sair" É PRESERVADO — um ícone de porta sozinho é adivinhação, e
+   a missão pede que sair seja FÁCIL de achar. O que encolhe é o espaçamento,
+   não a palavra. */
+@media (max-width: 560px) {
+  .top-actions button.topbar-sair {
+    padding: 10px 12px;
+    font-size: .82rem;
+  }
 }
 
 /* ── Hero executivo ─────────────────────────────────────────────────────── */

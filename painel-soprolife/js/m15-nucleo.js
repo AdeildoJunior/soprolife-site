@@ -114,7 +114,13 @@
     return {
       message: message,
       code: (envelope && envelope.codigo) ||
-        (raw && typeof raw.codigo === "string" ? raw.codigo : "http_" + status)
+        (raw && typeof raw.codigo === "string" ? raw.codigo : "http_" + status),
+      // M25.26 — o envelope inteiro segue disponível para quem precisa AGIR
+      // sobre o erro, e não só exibi-lo: a lista de campos faltantes do 422 e
+      // os candidatos a duplicado do 409 chegam por aqui. Sem isto, a tela
+      // teria de interpretar a frase humana para descobrir o que fazer — que
+      // é exatamente o acoplamento que a M25.26 veio remover.
+      detalhe: (raw && typeof raw === "object") ? raw : envelope
     };
   }
 
@@ -186,6 +192,7 @@
             var detail = readableApiError(body, resp.status);
             var err = new Error(detail.message);
             err.code = detail.code;
+            err.detalhe = detail.detalhe;
             err.status = resp.status;
             if (resp.status === 401 && (state.sessao || state.token)) {
               return encerrarSessao("Sua sessão expirou. Entre novamente.").then(
@@ -216,6 +223,7 @@
           var detail = readableApiError(body, resp.status);
           var err = new Error(detail.message);
           err.code = detail.code;
+          err.detalhe = detail.detalhe;
           err.status = resp.status;
           throw err;
         }
@@ -671,6 +679,37 @@
     sessionListeners.forEach(function (cb) {
       try { cb(); } catch (e) { /* ouvinte não pode quebrar o núcleo */ }
     });
+    sincronizarSairDoTopo();
+  }
+
+  /* M25.26 — o "Sair" do cabeçalho do Command Center.
+   *
+   * Mora aqui, e não numa tela, porque quem sabe se existe sessão é o núcleo.
+   * Um botão de logout desenhado por fora precisaria consultar estado de
+   * autenticação de outro módulo — que é exatamente como se cria um segundo
+   * contrato de sessão que um dia discorda do primeiro.
+   *
+   * Aparece para qualquer autenticado (sessão de navegador ou token da CLI) e
+   * some quando não há sessão, para não oferecer "sair" a quem está na tela
+   * de login.
+   */
+  function sincronizarSairDoTopo() {
+    var btn = document.getElementById("topbarSair");
+    if (!btn) return;  // páginas sem o cabeçalho do Command Center
+    btn.hidden = !(state.sessao || state.token);
+  }
+
+  function wireSairDoTopo() {
+    var btn = document.getElementById("topbarSair");
+    if (!btn || btn.getAttribute("data-m15-sair-wired")) return;
+    btn.setAttribute("data-m15-sair-wired", "1");
+    btn.addEventListener("click", function () {
+      btn.disabled = true;
+      encerrarSessao("Sessão encerrada.").then(function () {
+        btn.disabled = false;
+      });
+    });
+    sincronizarSairDoTopo();
   }
 
   function afterAuth() {
@@ -2397,6 +2436,7 @@
 
     renderAuthArea();
     renderTabs();
+    wireSairDoTopo();
     document.getElementById("m15Tabs").addEventListener("click", function (ev) {
       var btn = ev.target.closest("[data-m15-tab]");
       if (!btn) return;
@@ -2413,6 +2453,7 @@
       renderAuthArea();
       renderTabs();
       render();
+      sincronizarSairDoTopo();
       if (ok) notifySession();
     });
   }
