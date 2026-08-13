@@ -10,6 +10,7 @@ Regras de produção (M15_ENV=prod):
 import os
 import secrets
 import stat
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -45,6 +46,22 @@ class Settings(BaseSettings):
     api_port: int = 8015
     cors_origins: list[str] = ["http://127.0.0.1:8765", "http://localhost:8765"]
     display_timezone: str = "America/Sao_Paulo"
+
+    # -------------------------------------- preço de tabela SoproLife (M25.26)
+    # Valor com que o campo "Valor da espirometria" NASCE preenchido no fluxo
+    # de Espirometria SoproLife. É uma SUGESTÃO editável, nunca um valor
+    # imposto: o operador apaga ou troca antes de salvar, e o que vale é o que
+    # ficou no campo.
+    #
+    # Mora aqui, e não numa constante em JavaScript, porque preço muda por
+    # decisão comercial. Espalhado em arquivos de tela, um reajuste vira uma
+    # caçada por números soltos e sobra um 220 esquecido em algum lugar
+    # criando lançamento com o preço velho.
+    #
+    # NÃO é usado para inferir valor nenhum no servidor: o financeiro continua
+    # nascendo só de valor explícito no payload (regra do M20). Se o campo
+    # chegar vazio, nenhum lançamento é criado — a ausência permanece ausência.
+    espirometria_soprolife_valor_padrao: Decimal = Decimal("220.00")
 
     # ------------------------------------------- sessão de navegador (M21)
     # Cookie assinado, HttpOnly, SameSite=Strict, Path restrito ao prefixo

@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from .config import get_settings
 from .services.cpf import mascarar_cpf
+from .services.person_registration import cadastro_pendencias
 from .services.crm_display import (
     format_crm_full,
     format_crm_number,
@@ -91,12 +92,17 @@ def ser_person(p: m.Person, with_contacts: bool = True) -> dict:
         # completo só é montado dentro do laudo, a partir do modelo.
         "cpf_mascarado": mascarar_cpf(p.cpf),
         "tem_cpf": bool(p.cpf),
+        "sexo": p.sexo,
         "observacao": p.observacao,
         **_legacy(p),
         **_stamps(p),
     }
     if with_contacts:
         data["contatos"] = [ser_contact(c) for c in p.contacts if c.ativo]
+        # M25.26 — o cartão do paciente na Central mostra o que falta no
+        # cadastro no momento da escolha, e não semanas depois na emissão do
+        # laudo. Depende dos contatos, por isso só acompanha quem os carrega.
+        data["cadastro_pendencias"] = cadastro_pendencias(p)
     return data
 
 

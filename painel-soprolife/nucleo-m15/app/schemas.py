@@ -95,6 +95,14 @@ class ContactIn(StrictModel):
     principal: bool = False
 
 
+# M25.26 — `people.sexo` existe desde a M25.2 e é impresso no laudo, mas
+# nenhum schema o aceitava e nenhuma rota o gravava: era coluna morta, e o
+# laudo imprimia "não informado" para todo mundo, sem que houvesse qualquer
+# forma de corrigir isso pela interface. Conjunto fechado — o laudo é
+# documento médico, não campo de texto livre.
+Sexo = Literal["feminino", "masculino", "outro"]
+
+
 class PersonCreate(StrictModel):
     nome_completo: str = Field(min_length=2, max_length=300)
     # M25.18 — CFM 2.381/2024 pede CPF "quando houver". Opcional de verdade:
@@ -102,6 +110,7 @@ class PersonCreate(StrictModel):
     # em `services/cpf.py` (única porta de entrada do valor).
     cpf: str | None = Field(default=None, max_length=20)
     data_nascimento: date | None = None
+    sexo: Sexo | None = None
     observacao: str | None = Field(default=None, max_length=4000)
     contatos: list[ContactIn] = []
     consentimento_whatsapp: Literal["concedido", "revogado", "desconhecido"] | None = None
@@ -112,6 +121,7 @@ class PersonUpdate(StrictModel):
     # String vazia DESVINCULA o CPF; ausente significa "não mexa".
     cpf: str | None = Field(default=None, max_length=20)
     data_nascimento: date | None = None
+    sexo: Sexo | None = None
     status: Literal["ativo", "inativo"] | None = None
     nao_contatar: bool | None = None
     observacao: str | None = Field(default=None, max_length=4000)
@@ -616,15 +626,15 @@ class AtendimentoFinanceiro(StrictModel):
     consulta: AtendimentoFinanceiroConsulta | None = None
 
 
-class AtendimentoCreate(StrictModel):
-    """Fluxo único de novo atendimento (M20).
+class _AtendimentoBlocos(StrictModel):
+    """Tipo + blocos do atendimento, sem dizer de onde vem o paciente.
 
-    Um paciente já selecionado (person_id) + um tipo + os blocos que o tipo
-    exige. Nenhum valor monetário é inferido: o financeiro só existe quando
-    vem explícito no payload.
+    M25.26 — a coerência entre tipo e blocos é a MESMA para o paciente já
+    cadastrado e para o paciente criado junto. Ela mora aqui uma vez só: se
+    cada fluxo tivesse a sua cópia, um dia um deles aceitaria a combinação que
+    o outro recusa, e o Pastore é justamente onde isso custaria caro.
     """
 
-    person_id: str
     tipo: TipoAtendimento
     espirometria: AtendimentoEspirometria | None = None
     consulta: AtendimentoConsulta | None = None
@@ -668,6 +678,30 @@ class AtendimentoCreate(StrictModel):
             if fin.consulta is not None and not precisa_consulta:
                 raise ValueError("Financeiro de consulta sem consulta no tipo.")
         return self
+
+
+class AtendimentoCreate(_AtendimentoBlocos):
+    """Fluxo único de novo atendimento (M20) — paciente JÁ cadastrado."""
+
+    person_id: str
+
+
+class AtendimentoNovoPacienteCreate(_AtendimentoBlocos):
+    """M25.26 — paciente novo e atendimento numa ÚNICA operação atômica.
+
+    Antes desta missão a Central fazia `POST /pessoas` e, só depois de a
+    pessoa existir, `POST /atendimentos`. Se o segundo falhasse — validação do
+    exame, rede, F5 —, o paciente ficava criado sozinho, e o operador
+    tipicamente tentava de novo do zero e criava o mesmo paciente outra vez.
+
+    `confirmar_duplicado` é o registro explícito da decisão humana: sem ele,
+    encontrar candidato semelhante devolve 409 com a lista de candidatos, e
+    quem opera escolhe entre usar o existente ou criar assim mesmo. Fusão
+    automática continua não existindo em lugar nenhum do núcleo.
+    """
+
+    pessoa: PersonCreate
+    confirmar_duplicado: bool = False
 
 
 StatusFechamentoPastore = Literal[

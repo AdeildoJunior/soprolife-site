@@ -31,6 +31,7 @@ from ..schemas import (
 from ..security import ROLE_LEITURA, ROLE_OPERACIONAL, require_role
 from ..serializers import ser_consent, ser_person, ser_person_relationship
 from ..services.identity import find_person_candidates, register_candidates
+from ..services.person_registration import build_person
 from ..services.relationships import RelationshipError, create_relationship
 
 router = APIRouter(prefix="/pessoas", tags=["pessoas"])
@@ -161,28 +162,21 @@ def create_person(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
-    person = Person(
-        public_code=allocate_public_code(db, "people"),
+    # M25.26 — a construção mora em `services/person_registration` para ser a
+    # MESMA usada pelo fluxo atômico pessoa+atendimento. Duas cópias divergem:
+    # uma ganharia o campo novo e a outra criaria pessoa sem ele.
+    _cpf_ou_422(payload.cpf)  # recusa cedo, com mensagem de campo
+    person = build_person(
+        db,
         nome_completo=payload.nome_completo,
-        nome_normalizado=normalize_name(payload.nome_completo),
-        cpf=_cpf_ou_422(payload.cpf),
+        cpf=payload.cpf,
         data_nascimento=payload.data_nascimento,
+        sexo=payload.sexo,
         observacao=payload.observacao,
+        contatos=payload.contatos,
+        consentimento_whatsapp=payload.consentimento_whatsapp,
+        registrado_por=user.id,
     )
-    db.add(person)
-    db.flush()
-    for contato in payload.contatos:
-        _add_contact(db, person, contato)
-    if payload.consentimento_whatsapp:
-        db.add(
-            Consent(
-                person_id=person.id,
-                canal="whatsapp",
-                status=payload.consentimento_whatsapp,
-                origem="cadastro",
-                registrado_por=user.id,
-            )
-        )
     # candidatos de identidade (aviso, nunca fusão automática)
     phones = [
         normalize_phone(c.valor) for c in payload.contatos if c.tipo in ("whatsapp", "telefone")
@@ -240,6 +234,9 @@ def update_person(
     if payload.data_nascimento is not None:
         person.data_nascimento = payload.data_nascimento
         changed.append("data_nascimento")
+    if payload.sexo is not None:
+        person.sexo = payload.sexo
+        changed.append("sexo")
     if payload.status is not None:
         person.status = payload.status
         changed.append("status")

@@ -224,6 +224,66 @@ def derive_report_origin(
     )
 
 
+def validar_combinacao_no_cadastro(
+    modalidade: str | None, tem_unidade: bool
+) -> None:
+    """Recusa, JÁ no cadastro, a combinação que a emissão do laudo recusaria.
+
+    M25.26. As regras acima sempre existiram, mas só rodavam na hora de gerar
+    o laudo — semanas depois de alguém digitar. O efeito prático apareceu em
+    produção: existe um exame gravado como ``clinica_parceira`` sem unidade
+    nenhuma, combinação que ``derive_report_origin`` recusa. Ele foi aceito no
+    cadastro e só vira problema quando a médica tenta emitir.
+
+    Esta função é o MESMO julgamento, aplicado na entrada. Fica aqui, ao lado
+    da derivação, de propósito: se as duas listas morassem em arquivos
+    diferentes, um dia uma aceitaria o que a outra recusa e o defeito voltaria
+    com outro nome.
+
+    Ausência continua não sendo contradição: sem modalidade e sem unidade o
+    cadastro passa, como passam os 13 exames importados sem modalidade.
+    """
+
+    modalidade = (modalidade or "").strip().lower()
+
+    if not modalidade:
+        if tem_unidade:
+            raise OriginDerivationError(
+                "unidade_sem_modalidade",
+                "O atendimento tem unidade parceira, mas não diz a modalidade.",
+                "Informe a modalidade do atendimento — a unidade sozinha não "
+                "confirma que o exame foi feito nela.",
+            )
+        return
+
+    if modalidade not in MODALIDADE_PARA_ORIGEM:
+        raise OriginDerivationError(
+            "modalidade_desconhecida",
+            f"A modalidade '{modalidade}' não é reconhecida.",
+            "Escolha uma das modalidades oferecidas no formulário.",
+        )
+
+    if modalidade in MODALIDADES_COM_UNIDADE and not tem_unidade:
+        raise OriginDerivationError(
+            "exame_sem_unidade_parceira",
+            "Exame marcado como de clínica parceira precisa da unidade onde "
+            "foi realizado.",
+            "Se o exame foi feito numa unidade parceira, lance-o pelo tipo "
+            "'Espirometria Pastore', que já vincula a unidade. Se foi "
+            "atendimento da SoproLife, escolha a modalidade domiciliar ou "
+            "cowork.",
+        )
+
+    if modalidade not in MODALIDADES_COM_UNIDADE and tem_unidade:
+        raise OriginDerivationError(
+            "unidade_incompativel_com_modalidade",
+            "A unidade parceira informada não combina com a modalidade "
+            "escolhida.",
+            "Deixe modalidade e unidade coerentes: ou a modalidade passa a "
+            "ser clínica parceira, ou a unidade sai.",
+        )
+
+
 def derived_origin_payload(db: Session, exam: SpirometryExam) -> dict:
     """Versão para a API: nunca levanta, devolve o erro como dado.
 
