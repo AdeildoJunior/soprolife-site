@@ -23,6 +23,7 @@ from panel_access_gate import (  # noqa: E402
     PROTECTED_DATA,
     PROTECTED_PAGE,
     PUBLIC,
+    is_shared_session_data,
     InvalidPath,
     classify,
     is_panel_entry,
@@ -171,6 +172,34 @@ caso("data-private NÃO devolve HTML de login",
      not is_panel_entry("/painel-soprolife/data-private/leads.local.json"))
 caso("querystring não muda a porta de entrada",
      is_panel_entry("/painel-soprolife/index.html?v=2026"))
+
+print("── M25.27: o manifesto de boot é de toda sessão, não só da administrativa ──")
+# Continua exigindo sessão (`protected_data` ⇒ 401 sem cookie). O que muda é a
+# pergunta seguinte: com sessão, o PAPEL não decide este arquivo.
+espera("/painel-soprolife/data/m15-config.json", PROTECTED_DATA)
+caso("m15-config.json é dado compartilhado de sessão",
+     is_shared_session_data("/painel-soprolife/data/m15-config.json"))
+caso("querystring não tira o manifesto da allowlist",
+     is_shared_session_data("/painel-soprolife/data/m15-config.json?v=2026081301"))
+
+# A isenção é NOMINAL: um arquivo, jamais o diretório. Se qualquer um destes
+# passar a responder True, a M25.23 foi desfeita por generalização.
+for vazamento in (
+    "/painel-soprolife/data/",
+    "/painel-soprolife/data/resumo.json",
+    "/painel-soprolife/data/financeiro-summary.local.json",
+    "/painel-soprolife/data/leads.json",
+    "/painel-soprolife/data/crm-clinicas.json",
+    "/painel-soprolife/data/m15-config.json.bak",
+    "/painel-soprolife/data/sub/m15-config.json",
+):
+    caso(f"NÃO é compartilhado: {vazamento}",
+         not is_shared_session_data(vazamento))
+
+caso("travessia não entra na allowlist",
+     not is_shared_session_data("/painel-soprolife/data/../data/m15-config.json"))
+caso("data-private nunca é compartilhado",
+     not is_shared_session_data("/painel-soprolife/data-private/leads.local.json"))
 
 print()
 if FALHAS:

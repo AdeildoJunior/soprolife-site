@@ -100,6 +100,26 @@ PANEL_PAGE_FILES = (
     "painel-soprolife/index.html",
 )
 
+# Dado sob `data/` que QUALQUER sessão válida lê, independente do papel
+# (M25.27).
+#
+# `data/` é operacional por padrão — e continua sendo. Mas `m15-config.json`
+# não é dado operacional: é o manifesto de BOOT do painel (flag `enabled`,
+# `reports_enabled`, `api_base`). Quem o lê não descobre nada sobre a
+# operação; quem NÃO o lê não consegue montar tela nenhuma.
+#
+# Foi exatamente esse o defeito da M25.27: classificado como dado operacional,
+# ele respondia 403 para a sessão exclusivamente clínica. As duas telas que
+# dependem dele desistiam em silêncio — o núcleo nunca revelava o "Sair" e a
+# bancada médica ficava eternamente em "Carregando o fluxo seguro de laudos…".
+#
+# A isenção é NOMINAL e mínima por desenho: um arquivo, não um diretório. Um
+# `data/*.json` novo continua nascendo administrativo, como manda a regra de
+# ouro do módulo.
+PANEL_SHARED_SESSION_DATA = (
+    "painel-soprolife/data/m15-config.json",
+)
+
 
 class InvalidPath(ValueError):
     """Caminho malformado ou com tentativa de travessia."""
@@ -187,6 +207,22 @@ def classify(raw_target: str) -> str:
     #    /painel-soprolife/ — fail-closed. Um arquivo novo largado na pasta
     #    amanhã nasce protegido, não público.
     return PROTECTED_PAGE
+
+
+def is_shared_session_data(raw_target: str) -> bool:
+    """True para o dado de `data/` que toda sessão válida lê, sem olhar papel.
+
+    Não afrouxa a exigência de sessão: `classify` continua devolvendo
+    ``protected_data`` e quem não tem cookie continua levando 401. O que esta
+    função responde é a pergunta SEGUINTE — "já que há sessão, o papel importa
+    para ESTE arquivo?" — e ela só diz "não" para a allowlist nominal acima.
+    """
+    try:
+        path = normalize(raw_target)
+    except InvalidPath:
+        return False
+    rel = _relative(path)
+    return rel in (p.lower() for p in PANEL_SHARED_SESSION_DATA)
 
 
 def is_panel_entry(raw_target: str) -> bool:

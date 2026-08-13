@@ -11,6 +11,10 @@
   const SECTION_ID = "laudos-espirometria";
   const ROOT_ID = "reportWorkflowRoot";
   const CONFIG_URL = "data/m15-config.json";
+  // M25.27 — teto da espera pelo núcleo M15, em ciclos de 200 ms (~6 s). Não
+  // é polling de dado: é a janela em que um script `defer` legitimamente
+  // ainda não executou. Passou disso, é falha — e falha se mostra.
+  const CLIENT_MAX_WAITS = 30;
   // M25.18 — a faixa "PILOTO INTERNO — DOCUMENTO NÃO ASSINADO — NÃO LIBERAR
   // AO PACIENTE" saiu.
   //
@@ -284,6 +288,8 @@
     addendumText: "",
     documents: null,
     suggestedText: "",
+    // M25.27 — ciclos já gastos esperando `window.SoproM15` aparecer.
+    clientWaits: 0,
   };
 
   function root() {
@@ -4139,12 +4145,80 @@
     }
   }
 
+  /* M25.27 — estado terminal de falha, com ação.
+   *
+   * O placeholder "Carregando o fluxo seguro de laudos…" mora no HTML e só
+   * sai quando `render()` escreve por cima. Toda saída de `boot()` que não
+   * chegava em `render()` deixava a tela carregando para sempre — foi assim
+   * que o 403 do manifesto de boot virou uma tela eternamente parada, sem uma
+   * única palavra para quem estava na frente dela.
+   *
+   * Nada de detalhe técnico aqui: quem lê esta tela é a médica, não quem
+   * depura. O motivo vai para o console, sem PII e sem valor financeiro.
+   */
+  function renderBootFailure(motivoTecnico) {
+    const mount = root();
+    if (!mount) return;
+    try {
+      console.error("[laudos] inicialização interrompida:", motivoTecnico);
+    } catch (error) { /* console indisponível não pode esconder a tela */ }
+    mount.innerHTML = `
+      <div class="report-state" role="alert">
+        <p>Não foi possível carregar os laudos.</p>
+        <button type="button" class="m15-btn" data-report-retry>Tentar novamente</button>
+      </div>`;
+  }
+
+  /* Feature desligada não é falha: é decisão de configuração. Dizer isso é
+   * mais honesto do que oferecer "Tentar novamente" para algo que não vai
+   * mudar por insistência do usuário. */
+  function renderBootDisabled() {
+    const mount = root();
+    if (!mount) return;
+    mount.innerHTML = `
+      <div class="report-state" role="status">
+        <p>O fluxo de laudos não está habilitado nesta instalação.</p>
+      </div>`;
+  }
+
+  /* Um único ouvinte para o "Tentar novamente", ligado antes de qualquer
+   * decisão de boot — inclusive antes da primeira que pode falhar. */
+  let retryWired = false;
+  // Ouvintes de ação clínica: ligados uma única vez, mesmo com reentrada.
+  let listenersWired = false;
+  function wireRetry() {
+    if (retryWired) return;
+    const mount = root();
+    if (!mount) return;
+    retryWired = true;
+    mount.addEventListener("click", (event) => {
+      const botao = event.target.closest && event.target.closest("[data-report-retry]");
+      if (!botao) return;
+      botao.disabled = true;
+      mount.innerHTML = `
+        <div class="report-state" role="status">Carregando o fluxo seguro de laudos…</div>`;
+      boot();
+    });
+  }
+
   function bindClient() {
     const c = client();
     if (!c) {
+      // M25.27 — a espera pelo núcleo é LIMITADA. Este laço de 200 ms não
+      // tinha fim: se `window.SoproM15` nunca aparecesse (script que não
+      // carregou, exceção durante o núcleo), a bancada ficava carregando para
+      // sempre, sem erro e sem console. São ~6 s de tolerância para o defer
+      // do núcleo — depois disso, a tela assume a falha e oferece a ação.
+      state.clientWaits = (state.clientWaits || 0) + 1;
+      if (state.clientWaits > CLIENT_MAX_WAITS) {
+        state.clientWaits = 0;
+        renderBootFailure("núcleo M15 (window.SoproM15) indisponível");
+        return;
+      }
       window.setTimeout(bindClient, 200);
       return;
     }
+    state.clientWaits = 0;
     c.onSessionChange(() => {
       if (!authenticated()) {
         state.loadEpoch += 1;
@@ -4163,18 +4237,32 @@
   async function boot() {
     const mount = root();
     if (!mount) return;
-    let config = {};
+    wireRetry();
+
+    // M25.27 — ler o manifesto e NÃO conseguir é diferente de ler e descobrir
+    // que a feature está desligada. Antes, os dois casos caíam no mesmo
+    // `return` mudo: um 403 no manifesto era indistinguível de "piloto
+    // desabilitado", e a tela não dizia nem uma coisa nem outra.
+    let config = null;
     try {
       const response = await fetch(CONFIG_URL, { credentials: "same-origin" });
-      config = response.ok ? await response.json() : {};
+      if (!response.ok) {
+        renderBootFailure(`manifesto de boot HTTP ${response.status}`);
+        return;
+      }
+      config = await response.json();
     } catch (error) {
-      config = {};
+      renderBootFailure("manifesto de boot ilegível ou rede indisponível");
+      return;
     }
+
     if (
-      config.enabled !== true
+      !config
+      || config.enabled !== true
       || !reportsFeatureEnabled(config)
       || config.api_base !== "/painel-soprolife/api/m15"
     ) {
+      renderBootDisabled();
       return;
     }
     // O modo continua sendo lido e guardado: é o que distingue "piloto" de
@@ -4185,32 +4273,38 @@
     document.querySelectorAll("[data-report-entry]").forEach((entry) => {
       entry.hidden = false;
     });
-    mount.addEventListener("click", handleClick);
-    mount.addEventListener("change", handleChange);
-    mount.addEventListener("input", handleInput);
-    mount.addEventListener("submit", handleSubmit);
-    // M25.24 — hover, foco e Esc. O clique/toque é tratado dentro de
-    // `handleClick`, que já intercepta antes de qualquer ação clínica.
-    bindHelpTips(mount);
-    // Tocar FORA da área médica também fecha. No iPhone não há "sair com o
-    // ponteiro": sem isto, uma bolha aberta ficaria na tela até a próxima
-    // renderização.
-    document.addEventListener("click", (event) => {
-      if (event.target.closest && event.target.closest("[data-help-tip]")) return;
-      closeAllHelp();
-    });
-    const nav = document.querySelector(
-      `.nav-item[data-section="${SECTION_ID}"]`
-    );
-    if (nav) nav.addEventListener("click", loadAuthenticatedData);
-    document.addEventListener("click", (event) => {
-      const other = event.target.closest
-        && event.target.closest(".nav-item[data-section]");
-      if (other && other.getAttribute("data-section") !== SECTION_ID) {
-        releasePdfUrls();
-      }
-    });
-    window.addEventListener("beforeunload", releasePdfUrls);
+    // M25.27 — o "Tentar novamente" pode reentrar em `boot()`. Ligar os
+    // ouvintes de novo faria cada clique da médica valer dois: dois downloads,
+    // duas liberações. Uma vez é uma vez.
+    if (!listenersWired) {
+      listenersWired = true;
+      mount.addEventListener("click", handleClick);
+      mount.addEventListener("change", handleChange);
+      mount.addEventListener("input", handleInput);
+      mount.addEventListener("submit", handleSubmit);
+      // M25.24 — hover, foco e Esc. O clique/toque é tratado dentro de
+      // `handleClick`, que já intercepta antes de qualquer ação clínica.
+      bindHelpTips(mount);
+      // Tocar FORA da área médica também fecha. No iPhone não há "sair com o
+      // ponteiro": sem isto, uma bolha aberta ficaria na tela até a próxima
+      // renderização.
+      document.addEventListener("click", (event) => {
+        if (event.target.closest && event.target.closest("[data-help-tip]")) return;
+        closeAllHelp();
+      });
+      const nav = document.querySelector(
+        `.nav-item[data-section="${SECTION_ID}"]`
+      );
+      if (nav) nav.addEventListener("click", loadAuthenticatedData);
+      document.addEventListener("click", (event) => {
+        const other = event.target.closest
+          && event.target.closest(".nav-item[data-section]");
+        if (other && other.getAttribute("data-section") !== SECTION_ID) {
+          releasePdfUrls();
+        }
+      });
+      window.addEventListener("beforeunload", releasePdfUrls);
+    }
     bindClient();
   }
 

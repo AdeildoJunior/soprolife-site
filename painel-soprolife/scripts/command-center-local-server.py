@@ -363,7 +363,18 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         # a todo mundo que entrou (a médica precisa dela para a bancada), mas
         # os summaries operacionais são administrativos: uma sessão só clínica
         # não os lê nem digitando a URL do arquivo.
-        if kind == _gate.PROTECTED_DATA and not _is_administrative(identidade):
+        #
+        # M25.27 — exceção nominal para o manifesto de boot (`m15-config.json`).
+        # Ele mora em `data/` mas não é dado operacional: é o que diz às telas
+        # que elas podem se montar. Sem esta linha, a sessão exclusivamente
+        # clínica levava 403 aqui e a bancada médica ficava para sempre em
+        # "Carregando o fluxo seguro de laudos…". A allowlist é de um arquivo
+        # só; todo o resto de `data/` segue administrativo.
+        if (
+            kind == _gate.PROTECTED_DATA
+            and not _gate.is_shared_session_data(self.path)
+            and not _is_administrative(identidade)
+        ):
             self._deny(403, "Permissão insuficiente para este dado.", method)
             return False
 

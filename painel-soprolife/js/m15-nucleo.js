@@ -2417,6 +2417,45 @@
     link.href = "css/m15.css";
     document.head.appendChild(link);
 
+    // migração de segurança: limpa qualquer token persistido por versão antiga
+    try { localStorage.removeItem("soproM15Token"); } catch (e) { /* noop */ }
+
+    // M25.27 — a superfície ADMINISTRATIVA do núcleo (item de menu + seção)
+    // só se monta para quem tem papel administrativo.
+    //
+    // Até a M25.26 esta decisão não precisava existir aqui: a sessão
+    // exclusivamente clínica nem chegava a `activate`, porque o manifesto de
+    // boot respondia 403 para ela. Com o 403 corrigido, o núcleo passa a rodar
+    // também para a médica — e injetar a seção neste ponto a recolocaria na
+    // tela DEPOIS que o gate de boot já podou o DOM, desfazendo pela porta dos
+    // fundos exatamente o isolamento que a M25.23 fechou.
+    //
+    // O que vale para TODA sessão autenticada continua valendo: o CSS, a
+    // restauração de sessão e o "Sair" do cabeçalho. Sair é de quem está
+    // autenticado, não de quem é administrador.
+    var gateBoot = window.SoproBootGate;
+    if (!(gateBoot && gateBoot.somenteClinico)) montarSuperficieAdministrativa();
+
+    wireSairDoTopo();
+    render();
+
+    // M21 — restaura a sessão do cookie ANTES de qualquer interação: é isso
+    // que faz recarregar a página manter o mesmo usuário conectado.
+    restaurarSessao().then(function (ok) {
+      renderAuthArea();
+      renderTabs();
+      render();
+      sincronizarSairDoTopo();
+      if (ok) notifySession();
+    });
+  }
+
+  /* Monta o item de menu e a seção do Núcleo — só para papel administrativo.
+   *
+   * Separado de `activate` porque a decisão "esta sessão vê a superfície
+   * administrativa?" é de PAPEL, enquanto o resto de `activate` é de sessão.
+   */
+  function montarSuperficieAdministrativa() {
     var nav = document.querySelector(".sidebar .nav");
     if (!nav) return;
     // M17 — o Núcleo M15 não aparece mais como uma aplicação separada com
@@ -2431,13 +2470,11 @@
     if (!container) return;
     container.appendChild(buildSection());
 
-    // migração de segurança: limpa qualquer token persistido por versão antiga
-    try { localStorage.removeItem("soproM15Token"); } catch (e) { /* noop */ }
-
     renderAuthArea();
     renderTabs();
-    wireSairDoTopo();
-    document.getElementById("m15Tabs").addEventListener("click", function (ev) {
+    var tabs = document.getElementById("m15Tabs");
+    if (!tabs) return;
+    tabs.addEventListener("click", function (ev) {
       var btn = ev.target.closest("[data-m15-tab]");
       if (!btn) return;
       state.tab = btn.getAttribute("data-m15-tab");
@@ -2445,27 +2482,30 @@
       btn.classList.add("active");
       render();
     });
-    render();
-
-    // M21 — restaura a sessão do cookie ANTES de qualquer interação: é isso
-    // que faz recarregar a página manter o mesmo usuário conectado.
-    restaurarSessao().then(function (ok) {
-      renderAuthArea();
-      renderTabs();
-      render();
-      sincronizarSairDoTopo();
-      if (ok) notifySession();
-    });
   }
 
   function boot() {
-    fetch(CONFIG_URL).then(function (r) { return r.json(); }).catch(function () { return {}; })
-      .then(function (config) {
-        var enabled = (config && config.enabled === true) ||
-          localStorage.getItem("soproM15") === "on";
-        if (!enabled) return; // flag desligada: painel permanece intocado
-        activate(config);
-      });
+    // M25.27 — o papel real precisa ter voltado do servidor ANTES de decidir
+    // o que montar. `activate` consulta `SoproBootGate.somenteClinico`, que só
+    // tem valor confiável depois que `/auth/me` respondeu; sem esperar aqui, a
+    // corrida entre os dois fetches decidiria por sorteio se a médica veria o
+    // menu administrativo. Falha do gate não abre nada: o próprio gate já é
+    // fail-closed e marca a sessão como clínica.
+    var gateBoot = window.SoproBootGate;
+    var pronto = (gateBoot && gateBoot.pronto && typeof gateBoot.pronto.then === "function")
+      ? gateBoot.pronto
+      : Promise.resolve(null);
+
+    pronto.catch(function () { return null; }).then(function () {
+      return fetch(CONFIG_URL).then(function (r) { return r.json(); })
+        .catch(function () { return {}; })
+        .then(function (config) {
+          var enabled = (config && config.enabled === true) ||
+            localStorage.getItem("soproM15") === "on";
+          if (!enabled) return; // flag desligada: painel permanece intocado
+          activate(config);
+        });
+    });
   }
 
   // Deep-link "+ Novo …" → Central de Cadastros (delegado no documento:
