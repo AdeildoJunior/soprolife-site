@@ -90,6 +90,10 @@ _CONTENT_SCANS = [
     ("referencia a chave pix",  re.compile(r"(?i)chave\s*pix")),
 ]
 
+#: Rótulo do scan de termo clínico. Só ele pode ser dispensado, e apenas nos
+#: campos declarados em ``campos_busca_agregada`` — ver _norm_rules.
+_SCAN_TERMO_CLINICO = "termo clinico livre"
+
 # Detector de possível nome de pessoa: 2+ palavras Capitalizadas consecutivas
 # (cada uma com 3+ letras). Só se aplica fora de campos institucionais.
 _NAME_RE = re.compile(r"\b[A-ZÀ-Ý][a-zà-ÿ]{2,}(\s+(d[aeo]s?\s+)?[A-ZÀ-Ý][a-zà-ÿ]{2,})+\b")
@@ -125,6 +129,21 @@ def _norm_rules(rules) -> dict:
         "institucional": {str(f).lower() for f in rules.get("campos_institucionais", [])},
         "extra_keys":    {str(f).lower() for f in rules.get("chaves_proibidas_extras", [])},
         "excecao":       {str(f).lower() for f in rules.get("chaves_permitidas_excecao", [])},
+        # Mapas de CONTAGEM: dicionários cujas chaves são rótulos contados
+        # (vocabulário fechado do próprio código), não nomes de campo que
+        # carregam conteúdo. Em "stats.por_acao" a chave
+        # "laudo_conteudo_entregue" é o NOME DA OPERAÇÃO auditada e o valor é
+        # um inteiro — não existe ali texto clínico de paciente. Sem esta
+        # distinção o guarda lia o rótulo como se fosse um campo chamado
+        # "laudo" (M25.28). O rótulo continua passando pelos scans de
+        # conteúdo como se fosse um valor: um telefone travestido de chave
+        # segue barrado.
+        "contagem":      {str(f).lower() for f in rules.get("mapas_de_contagem", [])},
+        # Campos que carregam TERMO DE BUSCA AGREGADO devolvido pelo Google
+        # (Search Console). Dispensam APENAS o scan de termo clínico — ver
+        # _SCAN_TERMO_CLINICO. Telefone, CPF, e-mail, token e detector de
+        # nome continuam valendo.
+        "busca":         {str(f).lower() for f in rules.get("campos_busca_agregada", [])},
     }
 
 
@@ -134,19 +153,50 @@ def validate_summary(payload, rules=None, context="") -> list:
     r = _norm_rules(rules)
     violations = []
 
+    def _scan_text(text, path, key_lower):
+        """Aplica os scans de conteúdo a um texto solto (valor ou rótulo)."""
+        if _is_safe_value(text):
+            return
+
+        dispensa_clinico = key_lower in r["busca"]
+        for label, rx in _CONTENT_SCANS:
+            # Termo de busca agregado do Search Console é palavra-chave de
+            # SEO, não texto clínico sobre alguém: "precisa de pedido
+            # médico?" é exatamente o que a SoproLife quer ranquear. Só este
+            # scan é dispensado, e só nos campos declarados.
+            if dispensa_clinico and label == _SCAN_TERMO_CLINICO:
+                continue
+            if rx.search(text):
+                violations.append(f"{label} em '{path}'")
+
+        # Possível nome de pessoa em campo NÃO institucional.
+        if key_lower not in r["institucional"] and _NAME_RE.search(text):
+            violations.append(f"possivel nome de pessoa em campo nao institucional '{path}'")
+
     def _walk(node, path, key_name):
         key_lower = str(key_name).lower() if key_name is not None else ""
 
         if isinstance(node, dict):
+            # Num mapa de contagem as chaves são rótulos contados, não nomes
+            # de campo — são varridas como VALOR, nunca pela lista de chaves
+            # proibidas.
+            em_contagem = key_lower in r["contagem"]
             for k, v in node.items():
                 kl = str(k).lower()
+                aqui = f"{path}.{k}" if path else str(k)
+                if em_contagem:
+                    rotulo = str(k).strip()
+                    if rotulo:
+                        _scan_text(rotulo, aqui, "")
+                    _walk(v, aqui, k)
+                    continue
                 # Exceção declarada: a chave não bloqueia, mas o valor ainda
                 # passa por todos os scans de conteúdo ao descer.
                 if kl not in r["excecao"]:
                     if _key_tokens(k) & _FORBIDDEN_KEY_TOKENS or kl in r["extra_keys"]:
                         violations.append(f"chave proibida '{k}' em {path or 'raiz'}")
                         continue  # não desce: o conteúdo é proibido por definição
-                _walk(v, f"{path}.{k}" if path else str(k), k)
+                _walk(v, aqui, k)
             return
 
         if isinstance(node, list):
@@ -167,16 +217,7 @@ def validate_summary(payload, rules=None, context="") -> list:
                 violations.append(f"nome completo em campo de pessoa '{path}'")
             return  # campo de pessoa não passa pelos demais scans (1 palavra tolerada)
 
-        if _is_safe_value(text):
-            return
-
-        for label, rx in _CONTENT_SCANS:
-            if rx.search(text):
-                violations.append(f"{label} em '{path}'")
-
-        # Possível nome de pessoa em campo NÃO institucional.
-        if key_lower not in r["institucional"] and _NAME_RE.search(text):
-            violations.append(f"possivel nome de pessoa em campo nao institucional '{path}'")
+        _scan_text(text, path, key_lower)
 
     _walk(payload, "", None)
 
@@ -243,6 +284,17 @@ _FILE_RULESETS = {
             "entidade_tipo", "operador", "resultado", "timestamp",
         ],
         "chaves_permitidas_excecao": ["nota"],
+        # M25.28 — os mapas de "stats" contam eventos por rótulo. As chaves
+        # são o vocabulário de ações/tabelas/papéis do próprio código
+        # ("laudo_conteudo_entregue", "report_documents", "admin"), com um
+        # inteiro por valor. Quando a operação de laudos entrou em produção
+        # (09/08/2026) esses rótulos passaram a conter o token "laudo" e o
+        # guarda os leu como nome de campo proibido: TODOS os snapshots do
+        # painel pararam de ser gerados, não só a auditoria — a validação é
+        # tudo-ou-nada. Os rótulos seguem passando pelos scans de conteúdo.
+        "mapas_de_contagem": [
+            "por_acao", "por_entidade", "por_operador", "por_resultado",
+        ],
     },
     "custos-investimentos-summary": {
         "campos_pessoa": [],
@@ -340,6 +392,41 @@ def _self_test() -> int:
          _clone_with("obs_curta", "retorno (21) 98888-7777"),
          {**base_rules, "chaves_permitidas_excecao": ["obs_curta"]}, False),
         ("obs_curta sem excecao declarada falha",  _clone_with("obs_curta", "texto qualquer"),       base_rules, False),
+
+        # ── M25.28 — mapa de contagem: a chave é rótulo, não nome de campo ──
+        ("rotulo de acao com 'laudo' em mapa de contagem passa",
+         _clone_with("stats", {"por_acao": {"laudo_conteudo_entregue": 12,
+                                            "exame_reaberto_para_laudo": 2,
+                                            "auth.token_emitido": 400}}),
+         {**base_rules, "mapas_de_contagem": ["por_acao"]}, True),
+        ("mesmo rotulo SEM o mapa declarado falha",
+         _clone_with("stats", {"por_acao": {"laudo_conteudo_entregue": 12}}),
+         base_rules, False),
+        ("mapa de contagem NAO vira esconderijo (telefone no rotulo falha)",
+         _clone_with("stats", {"por_acao": {"retorno (21) 98888-7777": 1}}),
+         {**base_rules, "mapas_de_contagem": ["por_acao"]}, False),
+        ("mapa de contagem NAO vira esconderijo (CPF no rotulo falha)",
+         _clone_with("stats", {"por_acao": {"doc 123.456.789-09": 1}}),
+         {**base_rules, "mapas_de_contagem": ["por_acao"]}, False),
+        ("chave proibida fora de mapa de contagem continua falhando",
+         _clone_with("stats", {"detalhes": {"laudo": "texto do laudo"}}),
+         {**base_rules, "mapas_de_contagem": ["por_acao"]}, False),
+
+        # ── M25.28 — termo de busca agregado do Search Console ──
+        ("termo clinico em campo de busca agregada passa",
+         _clone_with("query", "precisa de pedido médico?"),
+         {**base_rules, "campos_busca_agregada": ["query"]}, True),
+        ("mesmo termo SEM o campo declarado falha",
+         _clone_with("query", "precisa de pedido médico?"), base_rules, False),
+        ("busca agregada dispensa SO o termo clinico (telefone falha)",
+         _clone_with("query", "espirometria (21) 98888-7777"),
+         {**base_rules, "campos_busca_agregada": ["query"]}, False),
+        ("busca agregada dispensa SO o termo clinico (e-mail falha)",
+         _clone_with("query", "laudo fulano@example.com"),
+         {**base_rules, "campos_busca_agregada": ["query"]}, False),
+        ("termo clinico em campo NAO declarado continua falhando",
+         _clone_with("campo_x", "resultado de exame do paciente"),
+         {**base_rules, "campos_busca_agregada": ["query"]}, False),
         ("slug longo de URL sem digito passa",
          _clone_with("campo_x", "/consulta-pneumologista-rio-de-janeiro/"), base_rules, True),
         ("ID longo com digitos falha",
