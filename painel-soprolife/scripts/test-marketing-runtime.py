@@ -266,6 +266,39 @@ caso("'query' e 'page' estão declarados como busca agregada",
      set(REGRAS_REAIS.get("campos_busca_agregada", [])) >= {"query", "page"})
 
 
+# ── M25.28 — float cru do Search Console parecia CPF ────────────────────────
+# Com o Marketing voltando a gravar, a auditoria de check-access.sh reprovou
+# o snapshot: "padrão de CPF detectado". Não era CPF — era o CTR sem
+# arredondamento (0.029896013864818025). O detector aceita QUALQUER sequência
+# de 11 dígitos, e um float de dupla precisão tem 18.
+print()
+print("── M25.28: precisão dos totais do Search Console ──")
+
+import json as _json  # noqa: E402
+
+_CPF_CHECK_ACCESS = re.compile(r"\d{3}\.?\d{3}\.?\d{3}-?\d{2}")
+
+CTR_CRU = 0.029896013864818025
+POSICAO_CRUA = 6.54159445407279
+
+caso("âncora: o float cru realmente casa com o detector de CPF",
+     bool(_CPF_CHECK_ACCESS.search(_json.dumps({"ctr": CTR_CRU}))),
+     "se parar de casar, escolha outra âncora antes de confiar neste teste")
+
+caso("totais arredondados não casam com o detector de CPF",
+     not _CPF_CHECK_ACCESS.search(_json.dumps({
+         "impressions": 2308, "clicks": 69,
+         "ctr": round(CTR_CRU, 4), "avgPosition": round(POSICAO_CRUA, 1)})))
+
+_fonte_conector = CONECTOR.read_text("utf-8")
+caso("o conector arredonda o CTR agregado, como já fazia nas linhas",
+     'round(float(r.get("ctr", 0)), 4)' in _fonte_conector
+     and 'float(r.get("ctr", 0)),\n' not in _fonte_conector)
+
+caso("o conector arredonda a posição média agregada",
+     'round(float(r.get("position", 0)), 1)' in _fonte_conector)
+
+
 print()
 if FALHAS:
     print(f"RESULTADO: {FALHAS} falha(s).")

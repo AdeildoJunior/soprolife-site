@@ -342,11 +342,20 @@ def _fetch_search_console(build, credentials, site_url, start_date, end_date, to
         rows = resp.get("rows", [])
         if rows:
             r = rows[0]
+            # M25.28 — MESMA precisão das linhas de detalhe (topQueries /
+            # topPages). Sem o arredondamento, o Search Console devolve o
+            # float cru: ctr = 0.029896013864818025. Dezoito dígitos
+            # seguidos casam com o detector de CPF do check-access.sh
+            # (\d{3}\.?\d{3}\.?\d{3}-?\d{2} aceita qualquer sequência de 11
+            # dígitos), e a auditoria de segurança reprovava o snapshot
+            # inteiro por um "CPF" que era ruído de ponto flutuante.
+            # Precisão além da 4ª casa não significa nada num CTR — a tela
+            # mostra percentual.
             result["totals"] = {
                 "impressions": int(r.get("impressions", 0)),
                 "clicks": int(r.get("clicks", 0)),
-                "ctr": float(r.get("ctr", 0)),
-                "avgPosition": float(r.get("position", 0)),
+                "ctr": round(float(r.get("ctr", 0)), 4),
+                "avgPosition": round(float(r.get("position", 0)), 1),
             }
         else:
             warnings.append("Search Console totais: resposta agregada sem linha.")
