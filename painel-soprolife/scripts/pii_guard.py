@@ -37,6 +37,15 @@ API:
         # nota). A chave deixa de bloquear, mas o VALOR continua passando por
         # todos os scans de conteúdo (telefone/CPF/nome/segredos).
         "chaves_permitidas_excecao": ["obs_curta", ...],
+        # Mapas cujas CHAVES são rótulos contados, não nomes de campo.
+        "mapas_de_contagem": ["por_acao", ...],
+        # Campos escalares que carregam rótulo de vocabulário fechado. Junto
+        # com as chaves de "mapas_de_contagem", são as posições em que um
+        # rótulo BEM-FORMADO (VOCABULARY_SLUG_RE) dispensa os dois scans de
+        # texto livre — termo clínico e token/ID longo. Todo o resto
+        # (telefone, CPF, e-mail, bearer, chave de API, URL de planilha)
+        # continua valendo. Ver M25.29C.
+        "campos_vocabulario": ["acao", "entidade_tipo", ...],
     }
 
 Arquivos mantidos à mão (sem gerador): validar com
@@ -94,6 +103,58 @@ _CONTENT_SCANS = [
 #: campos declarados em ``campos_busca_agregada`` — ver _norm_rules.
 _SCAN_TERMO_CLINICO = "termo clinico livre"
 
+#: Rótulo do scan de token/ID longo. Ver _SCANS_DISPENSAVEIS_EM_VOCABULARIO.
+_SCAN_TOKEN_LONGO = "possivel token/ID longo"
+
+# ---------------------------------------------------------------------------
+# Vocabulário institucional fechado (M25.29C).
+#
+# Alguns campos e mapas NÃO carregam texto livre: carregam o NOME de uma
+# operação, de uma tabela, de um papel ou de um resultado — emitido pelo
+# próprio código, não digitado por ninguém. "laudo_conteudo_entregue",
+# "report_documents", "admin", "ok".
+#
+# Esses rótulos foram desenhados para ser lidos por humano e por isso são
+# descritivos. Dois scans de TEXTO LIVRE acusam falso positivo neles:
+#
+#   - termo clínico: "laudo_conteudo_entregue" contém "laudo" (M25.28);
+#   - token/ID longo: "manutencao.remocao_laudos_teste_pastore_m2529b" tem um
+#     segmento de 35 caracteres com dígito (M25.29B) — e o evento é
+#     append-only, não dá para renomear.
+#
+# Em ambos os casos TODOS os snapshots pararam de ser gerados, porque a
+# validação é tudo-ou-nada.
+#
+# A dispensa NÃO é um esconderijo: ela só vale para valor que TEM FORMA de
+# rótulo (VOCABULARY_SLUG_RE) e só dispensa esses dois scans. Telefone, CPF,
+# RG, e-mail, bearer, chave de API, URL de planilha e chave pix continuam
+# valendo — um CPF só de dígitos tem forma de slug e segue barrado pelo scan
+# de CPF. O que não tiver forma de rótulo é violação explícita E continua
+# sendo varrido por tudo.
+# ---------------------------------------------------------------------------
+
+#: Forma canônica de um rótulo de vocabulário: minúsculas, dígitos, ``_`` e
+#: ``.``, até 80 caracteres — exatamente o que o código emite
+#: ("auth.token_emitido", "laudo_conteudo_entregue", "report_documents").
+#:
+#: FONTE ÚNICA do projeto: ``scripts/audit_summary_contract.py`` importa esta
+#: constante em vez de manter a sua. Duas definições divergentes desta forma
+#: seriam duas portas com fechaduras diferentes.
+VOCABULARY_SLUG_RE = re.compile(r"^[a-z0-9_.]{1,80}$")
+
+#: Os ÚNICOS scans dispensados em posição de vocabulário. Qualquer outro
+#: continua valendo. Manter esta lista curta é o que impede que a dispensa
+#: vire um buraco genérico.
+_SCANS_DISPENSAVEIS_EM_VOCABULARIO = frozenset({
+    _SCAN_TERMO_CLINICO,
+    _SCAN_TOKEN_LONGO,
+})
+
+
+def is_vocabulary_label(text) -> bool:
+    """True se ``text`` tem a forma de rótulo institucional fechado."""
+    return bool(VOCABULARY_SLUG_RE.fullmatch(str(text)))
+
 # Detector de possível nome de pessoa: 2+ palavras Capitalizadas consecutivas
 # (cada uma com 3+ letras). Só se aplica fora de campos institucionais.
 _NAME_RE = re.compile(r"\b[A-ZÀ-Ý][a-zà-ÿ]{2,}(\s+(d[aeo]s?\s+)?[A-ZÀ-Ý][a-zà-ÿ]{2,})+\b")
@@ -139,6 +200,11 @@ def _norm_rules(rules) -> dict:
         # conteúdo como se fosse um valor: um telefone travestido de chave
         # segue barrado.
         "contagem":      {str(f).lower() for f in rules.get("mapas_de_contagem", [])},
+        # Campos ESCALARES que carregam rótulo de vocabulário fechado
+        # (ultimos_eventos[].acao, .entidade_tipo, .operador, .resultado).
+        # As CHAVES de "mapas_de_contagem" também são posição de vocabulário
+        # — ver _walk. Ambos passam por _scan_text(vocabulario=True).
+        "vocabulario":   {str(f).lower() for f in rules.get("campos_vocabulario", [])},
         # Campos que carregam TERMO DE BUSCA AGREGADO devolvido pelo Google
         # (Search Console). Dispensam APENAS o scan de termo clínico — ver
         # _SCAN_TERMO_CLINICO. Telefone, CPF, e-mail, token e detector de
@@ -153,9 +219,31 @@ def validate_summary(payload, rules=None, context="") -> list:
     r = _norm_rules(rules)
     violations = []
 
-    def _scan_text(text, path, key_lower):
-        """Aplica os scans de conteúdo a um texto solto (valor ou rótulo)."""
-        if _is_safe_value(text):
+    def _scan_text(text, path, key_lower, vocabulario=False):
+        """Aplica os scans de conteúdo a um texto solto (valor ou rótulo).
+
+        ``vocabulario=True`` indica posição declarada de vocabulário fechado
+        (M25.29C): o valor é validado pela FORMA e, se tiver forma de rótulo,
+        os dois scans de texto livre que dão falso positivo nele são
+        dispensados. Fora da forma, é violação E segue varrido por tudo.
+        """
+        e_rotulo = False
+        if vocabulario:
+            # A FORMA é avaliada ANTES do atalho de valor seguro, de propósito.
+            # _SAFE_VALUE_RES trata "número" e "slug sem limite" como seguros
+            # por construção — o que faria um CPF de 11 dígitos ou um slug de
+            # 200 caracteres passarem direto, sem chegar aos scans. Numa
+            # posição de vocabulário isso não vale: aqui só passa o que TEM
+            # FORMA DE RÓTULO e ainda assim sobrevive aos scans de PII.
+            # Resultado: posição de vocabulário ficou mais ESTRITA que antes,
+            # nunca mais frouxa.
+            e_rotulo = is_vocabulary_label(text)
+            if not e_rotulo:
+                # Default-fechado: posição de vocabulário que recebeu algo sem
+                # forma de rótulo (frase com espaço, maiúsculas, acima do
+                # limite de 80) é suspeita por si só — e continua sendo varrida.
+                violations.append(f"rotulo fora do formato de vocabulario em '{path}'")
+        elif _is_safe_value(text):
             return
 
         dispensa_clinico = key_lower in r["busca"]
@@ -165,6 +253,10 @@ def validate_summary(payload, rules=None, context="") -> list:
             # médico?" é exatamente o que a SoproLife quer ranquear. Só este
             # scan é dispensado, e só nos campos declarados.
             if dispensa_clinico and label == _SCAN_TERMO_CLINICO:
+                continue
+            # Rótulo institucional bem-formado: dispensa APENAS os dois scans
+            # de texto livre. PII e segredo continuam barrando.
+            if e_rotulo and label in _SCANS_DISPENSAVEIS_EM_VOCABULARIO:
                 continue
             if rx.search(text):
                 violations.append(f"{label} em '{path}'")
@@ -187,7 +279,9 @@ def validate_summary(payload, rules=None, context="") -> list:
                 if em_contagem:
                     rotulo = str(k).strip()
                     if rotulo:
-                        _scan_text(rotulo, aqui, "")
+                        # A chave de um mapa de contagem É vocabulário fechado
+                        # por definição (M25.29C).
+                        _scan_text(rotulo, aqui, "", vocabulario=True)
                     _walk(v, aqui, k)
                     continue
                 # Exceção declarada: a chave não bloqueia, mas o valor ainda
@@ -217,7 +311,7 @@ def validate_summary(payload, rules=None, context="") -> list:
                 violations.append(f"nome completo em campo de pessoa '{path}'")
             return  # campo de pessoa não passa pelos demais scans (1 palavra tolerada)
 
-        _scan_text(text, path, key_lower)
+        _scan_text(text, path, key_lower, vocabulario=key_lower in r["vocabulario"])
 
     _walk(payload, "", None)
 
@@ -294,6 +388,19 @@ _FILE_RULESETS = {
         # tudo-ou-nada. Os rótulos seguem passando pelos scans de conteúdo.
         "mapas_de_contagem": [
             "por_acao", "por_entidade", "por_operador", "por_resultado",
+        ],
+        # M25.29C — os MESMOS quatro vocabulários aparecem também como campo
+        # escalar em cada evento de "ultimos_eventos". Os nomes espelham
+        # VOCABULARY_STAT_MAPS/VOCABULARY_EVENT_FIELDS de
+        # scripts/audit_summary_contract.py de propósito: é um contrato só,
+        # descrito nas duas pontas que validam o mesmo arquivo.
+        #
+        # Sem isto, "manutencao.remocao_laudos_teste_pastore_m2529b" (evento
+        # append-only da M25.29B, 35 caracteres após o ponto) era lido como
+        # possível token e derrubava os nove snapshots do PostgreSQL a cada
+        # ciclo do timer.
+        "campos_vocabulario": [
+            "acao", "entidade_tipo", "operador", "resultado",
         ],
     },
     "custos-investimentos-summary": {
@@ -431,7 +538,7 @@ def _self_test() -> int:
          _clone_with("campo_x", "/consulta-pneumologista-rio-de-janeiro/"), base_rules, True),
         ("ID longo com digitos falha",
          _clone_with("campo_x", "1AbC2dEf3GhI4jKl5MnO6pQr7StU8vWx9Yz0aBcDe"), base_rules, False),
-    ]
+    ] + _vocab_cases(base_rules, clean)
 
     failures = 0
     for label, payload, rules, expect_clean in cases:
@@ -449,6 +556,125 @@ def _self_test() -> int:
         return 1
     print(f"self-test: {len(cases)} casos OK.")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# M25.29C — vocabulário institucional fechado.
+#
+# O rótulo abaixo é o evento REAL, append-only, gravado pela manutenção
+# M25.29B. Seu segmento após o ponto tem exatamente 35 caracteres e contém
+# dígitos: é o caso que derrubou os nove snapshots do PostgreSQL a cada ciclo
+# do timer, por 24 ciclos, até esta correção.
+# ---------------------------------------------------------------------------
+
+_ACAO_M2529B = "manutencao.remocao_laudos_teste_pastore_m2529b"
+
+
+def _vocab_cases(base_rules, clean) -> list:
+    import copy
+
+    vocab_rules = {
+        **base_rules,
+        "mapas_de_contagem": ["por_acao", "por_entidade", "por_operador", "por_resultado"],
+        "campos_vocabulario": ["acao", "entidade_tipo", "operador", "resultado"],
+    }
+
+    def base():
+        """Base com vocabulário BEM-FORMADO, espelhando o snapshot real do M23.
+
+        Não reaproveita o ``clean`` dos outros casos porque lá ``operador`` é
+        "teste-operador" — hífen não é forma de rótulo. Sob este ruleset isso
+        é violação legítima, e é justamente o que os casos 13/14 provam.
+        """
+        p = copy.deepcopy(clean)
+        p["stats"] = {"total_eventos": 1, "erros": 0, "por_acao": {"update_lead_stage": 1}}
+        p["ultimos_eventos"] = [{
+            "timestamp": "06/07/2026 14:32:05",
+            "acao": "update_lead_stage",
+            "entidade_tipo": "leads",
+            "operador": "admin",
+            "resultado": "ok",
+        }]
+        return p
+
+    def com_rotulo(rotulo, valor=1):
+        """Payload com `rotulo` como CHAVE de stats.por_acao."""
+        p = base()
+        p["stats"] = {"total_eventos": 1, "erros": 0, "por_acao": {rotulo: valor}}
+        return p
+
+    def com_acao(valor):
+        """Payload com `valor` no campo escalar ultimos_eventos[0].acao."""
+        p = base()
+        p["ultimos_eventos"][0]["acao"] = valor
+        return p
+
+    def com_campo(chave, valor):
+        """Payload com `valor` num campo comum, FORA de posição de vocabulário."""
+        p = base()
+        p[chave] = valor
+        return p
+
+    def com_stats(stats):
+        p = base()
+        p["stats"] = stats
+        return p
+
+    return [
+        # ── positivos: rótulo institucional legítimo passa ──
+        ("M25.29C 1: acao curta normal passa",
+         com_rotulo("update_lead_stage"), vocab_rules, True),
+        ("M25.29C 2: laudo_conteudo_entregue passa como rotulo",
+         com_rotulo("laudo_conteudo_entregue"), vocab_rules, True),
+        ("M25.29C 3: acao real da M25.29B (35 chars pos-ponto) passa",
+         com_rotulo(_ACAO_M2529B), vocab_rules, True),
+        ("M25.29C 4: o mesmo rotulo em stats.por_acao passa",
+         com_rotulo(_ACAO_M2529B, 3), vocab_rules, True),
+        ("M25.29C 5: o mesmo rotulo em ultimos_eventos[].acao passa",
+         com_acao(_ACAO_M2529B), vocab_rules, True),
+        ("M25.29C: vocabulario real do M23 passa inteiro",
+         com_stats({
+             "total_eventos": 9, "erros": 0,
+             "por_acao": {_ACAO_M2529B: 1, "auth.token_emitido": 4,
+                          "laudo_conteudo_entregue": 2, "pessoa.criada": 2},
+             "por_entidade": {"report_documents": 3, "maintenance": 1},
+             "por_operador": {"admin": 5, "gestor": 4},
+             "por_resultado": {"ok": 8, "falha": 1},
+         }), vocab_rules, True),
+
+        # ── negativos: a dispensa NAO e esconderijo ──
+        ("M25.29C 6: telefone em posicao de vocabulario continua rejeitado",
+         com_rotulo("21998887777"), vocab_rules, False),
+        ("M25.29C 7: CPF so com digitos (tem forma de slug) continua rejeitado",
+         com_rotulo("12345678901"), vocab_rules, False),
+        ("M25.29C 8: e-mail em posicao de vocabulario continua rejeitado",
+         com_rotulo("fulano@example.com"), vocab_rules, False),
+        ("M25.29C 9: bearer em posicao de vocabulario continua rejeitado",
+         com_acao("bearer abc123def456"), vocab_rules, False),
+        ("M25.29C 10: chave AIza continua rejeitada",
+         com_acao("AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q"), vocab_rules, False),
+        ("M25.29C 11: token ya29 (tem forma de slug) continua rejeitado",
+         com_rotulo("ya29.a0af_e4b7c9d2f1a8b3c6d5e4f7a9b2c1d8e3f6"), vocab_rules, False),
+        ("M25.29C 12: docs.google (tem forma de slug) continua rejeitado",
+         com_rotulo("docs.google.com"), vocab_rules, False),
+        ("M25.29C 13: frase livre com espacos em vocabulario e rejeitada",
+         com_acao("paciente retornou com laudo em maos"), vocab_rules, False),
+        ("M25.29C 14: slug acima do limite de 80 e rejeitado",
+         com_rotulo("a1" + "_muito_longo" * 8), vocab_rules, False),
+        ("M25.29C 14b: rotulo com maiuscula nao e vocabulario",
+         com_acao("Manutencao.Remocao"), vocab_rules, False),
+
+        # ── a dispensa e local: nada muda fora da posicao declarada ──
+        ("M25.29C 15: campo NAO-vocabulario segue sob o scan de token longo",
+         com_campo("campo_x", _ACAO_M2529B), vocab_rules, False),
+        ("M25.29C 15b: sem declarar campos_vocabulario, a acao volta a falhar",
+         com_acao(_ACAO_M2529B), base_rules, False),
+        ("M25.29C 16: M25.28 — busca agregada legitima continua passando",
+         com_campo("query", "precisa de pedido médico?"),
+         {**vocab_rules, "campos_busca_agregada": ["query"]}, True),
+        ("M25.29C 17: 'laudo' como texto livre de paciente continua rejeitado",
+         com_campo("campo_x", "laudo do paciente entregue em maos"), vocab_rules, False),
+    ]
 
 
 def main() -> int:

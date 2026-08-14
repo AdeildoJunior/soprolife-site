@@ -31,6 +31,30 @@ from __future__ import annotations
 import copy
 import json
 import re
+from pathlib import Path
+
+
+def _load_pii_guard():
+    """Carrega a guarda de PII vizinha, em scripts/, pelo caminho.
+
+    Importação por CAMINHO e não por ``import pii_guard`` porque os dois
+    módulos são carregados assim por nucleo-m15/app/snapshots.py, fora do
+    pacote da API e sem scripts/ no sys.path.
+
+    A direção é só esta: pii_guard não importa nada local (é a folha), então
+    não há ciclo. Ausência é ERRO, nunca permissão.
+    """
+    import importlib.util
+
+    caminho = Path(__file__).resolve().parent / "pii_guard.py"
+    if not caminho.is_file():
+        raise RuntimeError(f"Guarda de PII não encontrada em {caminho}")
+    spec = importlib.util.spec_from_file_location("_audit_contract_pii_guard", caminho)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Guarda de PII ilegível em {caminho}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 #: Único conjunto de chaves permitido em cada evento de
 #: ``ultimos_eventos``. Nenhum consumidor deve manter uma cópia própria
@@ -99,7 +123,13 @@ VOCABULARY_EVENT_FIELDS: tuple[str, ...] = (
 #: ``.`` — o formato que o código emite ("auth.token_emitido",
 #: "laudo_conteudo_entregue"). Um rótulo fora desta forma não é vocabulário
 #: e volta a ser varrido como texto livre.
-_SLUG_RE = re.compile(r"^[a-z0-9_.]{1,80}$")
+#:
+#: M25.29C — a definição passou a viver em scripts/pii_guard.py e é IMPORTADA
+#: aqui. Os dois módulos validam o mesmo arquivo (auditoria-summary) nas duas
+#: pontas; manter duas cópias desta forma seria manter duas fechaduras
+#: diferentes na mesma porta, e a divergência entre as pontas já quebrou o
+#: primeiro deploy do M23.
+_SLUG_RE = _load_pii_guard().VOCABULARY_SLUG_RE
 
 #: Texto que substitui um rótulo de vocabulário na varredura de termos
 #: proibidos. Neutro de propósito: não casa com nenhum FORBIDDEN_TERMS.
