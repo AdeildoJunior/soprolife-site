@@ -285,7 +285,7 @@ enviado, depois da conclusão do laudo.
 ### Suíte completa
 
 ```
-1319 passed, 13 failed, 30 skipped   (suíte inteira, 29min)
+1320 passed, 13 failed, 30 skipped   (suíte inteira, 25min28s)
 ```
 
 **Nenhuma das 13 falhas foi causada por esta etapa** — todas reproduzem no
