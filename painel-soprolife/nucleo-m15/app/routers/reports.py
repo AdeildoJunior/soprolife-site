@@ -3643,7 +3643,9 @@ def _recusar_previa_para_assinatura(
             continue
         document, _exam, _person = entrada
         if _e_previa(db, document):
-            raise ReportDomainError(409, "laudo_ainda_em_previa", PREVIA_NAO_ASSINAVEL)
+            raise ReportDomainError(
+                409, "laudo_ainda_em_previa", PREVIA_NAO_ASSINAVEL
+            )
 
 
 def _linha_assinatura_externa(
