@@ -307,12 +307,15 @@ def test_ui_nao_tem_mais_faixa_de_piloto():
 
 
 def test_ui_fala_em_concluir_e_nao_em_assinar():
+    # M25.29D — os textos da confirmação mudaram (a etapa passou a ter UMA
+    # confirmação, com pergunta em vez de declaração). O que a M25.18 trava
+    # continua valendo e é o que se verifica aqui: a tela fala em CONCLUIR,
+    # e a linguagem de assinatura não volta como rótulo de botão.
     assert "Concluir laudo" in WORKFLOW_JS
-    assert "Confirmar conclusão do laudo" in WORKFLOW_JS
-    assert "Sim, concluir laudo" in WORKFLOW_JS
+    assert "Concluir este laudo?" in WORKFLOW_JS
+    assert "Concluir e preparar para assinatura" in WORKFLOW_JS
     assert (
-        "O conteúdo será congelado e o PDF ficará disponível para assinatura "
-        "digital qualificada externa." in WORKFLOW_JS
+        "o laudo será registrado como versão final e" in WORKFLOW_JS
     )
     # A linguagem antiga não pode voltar como rótulo de botão.
     assert "Assinar e liberar laudo" not in WORKFLOW_JS

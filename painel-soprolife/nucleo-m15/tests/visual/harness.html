@@ -142,15 +142,39 @@
     })),
   };
 
+  // M25.29D — o cenário "concluido" mostra a tela DEPOIS da conclusão: é
+  // onde mora o botão grande de baixar o PDF para assinar, e é o estado que
+  // nenhuma captura anterior cobria.
+  if (CENARIO === "concluido") {
+    DETALHE.status = "liberado";
+    DETALHE.locked = true;
+    DETALHE.current_version_id = "v3";
+    DETALHE.versoes = DETALHE.versoes.concat([{
+      id: "v3", kind: "laudo_liberado", version_number: 3,
+      interpretation_text_snapshot:
+        DETALHE.versoes[1].interpretation_text_snapshot,
+      observations_snapshot: DETALHE.versoes[1].observations_snapshot,
+      conclusion_code_snapshot: "DVO_MODERADO",
+      bronchodilator_code_snapshot: "RESPOSTA_SIGNIFICATIVA",
+      interpretation_text_sha256: "a".repeat(64),
+      validation_code_snapshot: "EXEMPLO-0000-0000",
+      sha256: "c".repeat(64),
+    }]);
+  }
+
+  const concluido = CENARIO === "concluido";
   const DOCUMENTOS = {
     patient: { full_name: DETALHE.patient.full_name },
     report_code: "LAU-000301",
     exam_code: "ESP-000401",
     validation_code: "EXEMPLO-0000-0000",
     tecnico_mir: { kind: "original", version_number: 1, version_id: "v1",
-      sha256: "0".repeat(64) },
-    laudo_soprolife: { kind: "laudo_previa", version_number: 2,
-      version_id: "v2", sha256: "b".repeat(64) },
+      sha256: "0".repeat(64), previa: false, assinavel: false },
+    laudo_soprolife: concluido
+      ? { kind: "laudo_liberado", version_number: 3, version_id: "v3",
+          sha256: "c".repeat(64), previa: false, assinavel: true }
+      : { kind: "laudo_previa", version_number: 2, version_id: "v2",
+          sha256: "b".repeat(64), previa: true, assinavel: false },
   };
 
   function rota(path) {
@@ -162,6 +186,17 @@
       // produzia "— undefined" antes da M25.21.
       const laudos = CENARIO === "vazio" ? [] : PENDENTES;
       return { total: laudos.length, laudos };
+    }
+    // M25.29D — a ação principal da bancada gera a prévia e abre a
+    // confirmação. Sem esta rota o harness não alcança o único diálogo do
+    // fluxo, que é justamente o que precisa ser medido no iPhone.
+    if (limpo.endsWith("/laudo/previa")) {
+      return {
+        ...DETALHE,
+        preview_version_id: "v2",
+        final_text: DETALHE.versoes[1].interpretation_text_snapshot,
+        final_text_sha256: "a".repeat(64),
+      };
     }
     if (limpo === "/laudos/doc-1/catalogo-conclusoes") return CATALOGO;
     if (limpo === "/laudos/doc-1/documentos") return DOCUMENTOS;

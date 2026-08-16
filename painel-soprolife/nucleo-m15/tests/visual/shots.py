@@ -79,6 +79,44 @@ MEDIR = r"""
     tem_undefined: /\bundefined\b/.test(texto),
     tem_nan: /\bNaN\b/.test(texto),
     tem_null_visivel: /\bnull\b/.test(texto),
+    // ------------------------------------------------------- M25.29D
+    // Os botões do fluxo de conclusão: existem, cabem, não se sobrepõem e
+    // não ficam escondidos fora da viewport.
+    ...(() => {
+      const medir = (sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return {
+          l: Math.round(r.left), t: Math.round(r.top),
+          w: Math.round(r.width), h: Math.round(r.height),
+        };
+      };
+      const principal = medir('.report-conclude-cta');
+      const secundario = medir('.report-preview-only');
+      const confirmar = medir('[data-report-release-confirm]');
+      const voltar = medir('[data-report-release-cancel]');
+      const baixar = medir('[data-report-download-final]');
+      const sobrepoe = (a, b) => Boolean(a && b)
+        && a.l < b.l + b.w && b.l < a.l + a.w
+        && a.t < b.t + b.h && b.t < a.t + a.h;
+      const dentro = (c) => !c || (
+        c.l >= 0 && c.l + c.w <= document.documentElement.clientWidth
+      );
+      return {
+        cta_conclusao: principal,
+        cta_previa: secundario,
+        botao_confirmar: confirmar,
+        botao_voltar: voltar,
+        botao_baixar_final: baixar,
+        botoes_sobrepostos: sobrepoe(principal, secundario)
+          || sobrepoe(confirmar, voltar),
+        botoes_dentro_da_viewport: [principal, secundario, confirmar,
+          voltar, baixar].every(dentro),
+        confirmacoes_na_tela:
+          document.querySelectorAll('.report-release-confirm').length,
+      };
+    })(),
   };
 })()
 """
@@ -145,13 +183,20 @@ async def main():
         await cdp.send("Page.enable", {}, sessao)
         await cdp.send("Runtime.enable", {}, sessao)
 
+        # M25.29D — os dois cenários novos são os estados que o incidente
+        # atravessou sem que ninguém os tivesse visto numa tela pequena: a
+        # confirmação única e o laudo já concluído, com o botão de baixar
+        # para assinar.
         cenarios = [
-            ("a-lista-medica", "?cenario=lista", None),
-            ("b-paciente-aberto", "?cenario=lista", "doc-1"),
-            ("c-central-vazia", "?cenario=vazio", None),
+            ("a-lista-medica", "?cenario=lista", None, []),
+            ("b-paciente-aberto", "?cenario=lista", "doc-1", []),
+            ("c-central-vazia", "?cenario=vazio", None, []),
+            ("d-confirmacao-unica", "?cenario=lista", "doc-1",
+             ["[data-report-release-open]"]),
+            ("e-laudo-concluido", "?cenario=concluido", "doc-1", []),
         ]
 
-        for nome_cenario, query, abrir in cenarios:
+        for nome_cenario, query, abrir, cliques in cenarios:
             for largura, altura_viewport in VIEWPORTS:
                 await cdp.send("Emulation.setDeviceMetricsOverride", {
                     "width": largura, "height": altura_viewport,
@@ -168,6 +213,14 @@ async def main():
                         ),
                     }, sessao)
                     await asyncio.sleep(2.0)
+                for seletor in cliques:
+                    await cdp.send("Runtime.evaluate", {
+                        "expression": (
+                            f"(document.querySelector('{seletor}')||{{}})"
+                            ".click?.()"
+                        ),
+                    }, sessao)
+                    await asyncio.sleep(1.6)
                 medida = await cdp.send("Runtime.evaluate", {
                     "expression": MEDIR, "returnByValue": True,
                 }, sessao)
