@@ -1102,6 +1102,117 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   margin-top: 12px;
 }
 
+/* M25.29D — os dois botões da única confirmação do fluxo tinham 33px de
+   altura, herdados do botão genérico. É alvo de mouse, não de polegar: a
+   médica decide aqui se o laudo vira definitivo, e no iPhone essa decisão
+   estava em duas faixas finas de 33px coladas uma na outra. */
+.report-release-buttons .m15-btn {
+  min-height: 48px;
+  padding: 12px 20px;
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------- M25.29D
+   Conclusão em um passo, e a prévia dizendo que é prévia.
+
+   Tudo aqui existe por causa de um incidente real: um PDF de prévia foi
+   assinado externamente. As regras visuais são três — a ação principal é
+   inequívoca, a alternativa não compete com ela, e a prévia se anuncia. */
+
+.report-native-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.report-conclude-cta {
+  flex: 1 1 260px;
+  min-height: 52px;
+  padding: 14px 20px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* Conferir a prévia é caminho secundário: mesma área de toque, peso visual
+   menor. Um segundo botão azul ao lado do principal recriaria exatamente a
+   dúvida ("qual dos dois termina o laudo?") que esta etapa remove. */
+.report-preview-only {
+  flex: 0 1 auto;
+  min-height: 52px;
+  padding: 14px 18px;
+}
+
+/* `.m15-btn` já nasce navy sólido, então "principal" e "secundário" saíam
+   com exatamente o mesmo peso — dois botões escuros lado a lado, que é a
+   forma visual da dúvida que esta etapa remove. Os secundários viram
+   contornados; nada disso toca o botão base de outros módulos. */
+.report-workflow-root .report-preview-only,
+.report-workflow-root .report-release-buttons [data-report-release-cancel] {
+  border: 2px solid var(--line, #cfd9e4);
+  background: #fff;
+  color: var(--navy, #0b1f36);
+  font-weight: 700;
+}
+
+.report-workflow-root .report-preview-only:hover:not(:disabled),
+.report-workflow-root
+  .report-release-buttons [data-report-release-cancel]:hover {
+  border-color: var(--navy, #0b1f36);
+  opacity: 1;
+}
+
+.report-preview-warning {
+  margin: 0;
+  color: #7c550f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.report-concluded {
+  margin-top: 14px;
+  padding: 16px;
+  border: 2px solid var(--teal, #12796f);
+  border-radius: var(--radius-xs);
+  background: #f1faf8;
+}
+
+.report-concluded-title {
+  margin: 0 0 4px;
+  color: var(--navy);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.report-concluded p {
+  margin: 0 0 10px;
+  color: var(--navy);
+  font-size: 14px;
+}
+
+.report-download-final {
+  width: 100%;
+  min-height: 56px;
+  padding: 16px 20px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.report-concluded .report-help {
+  margin: 10px 0 0;
+}
+
+/* A linha da prévia no painel de documentos. A cor não é decoração: é o
+   que separa, de relance, o arquivo assinável do que não é. */
+.report-doc-previa {
+  border-left: 4px solid #7c550f;
+  padding-left: 10px;
+}
+
+.report-doc-previa strong {
+  color: #7c550f;
+}
+
 .m15-btn-danger {
   border-color: #a3320f;
   background: #a3320f;
@@ -1245,6 +1356,29 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   .report-release-cta,
   .report-release-buttons .m15-btn {
     width: 100%;
+  }
+
+  /* M25.29D — no iPhone os dois botões da ação principal empilham em vez de
+     disputar a mesma linha. Lado a lado eles chegavam a ~150px cada, com o
+     texto quebrando no meio da frase. */
+  .report-native-actions {
+    flex-direction: column;
+  }
+
+  /* `flex: 1 1 260px` é largura enquanto a linha é horizontal; empilhado,
+     o mesmo 260px vira ALTURA — o botão principal saía com 260px de altura
+     no iPhone. Em coluna o dimensionamento volta a ser o do conteúdo. */
+  .report-conclude-cta,
+  .report-preview-only {
+    flex: none;
+    width: 100%;
+  }
+
+  /* A confirmação empilha com o botão que CONCLUI em cima: no celular ele é
+     o que precisa estar sob o polegar, e "Voltar e revisar" logo abaixo
+     continua a um toque. Nenhum dos dois sai da viewport. */
+  .report-release-buttons {
+    flex-direction: column-reverse;
   }
 
   .report-documents-list li {

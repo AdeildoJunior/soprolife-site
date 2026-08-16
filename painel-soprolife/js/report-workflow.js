@@ -1041,47 +1041,88 @@
           <textarea id="reportObservations" name="observations" maxlength="2000"
             rows="3">${esc(state.observations)}</textarea>
         </label>
-        <button class="m15-btn m15-btn-primary" type="submit"${
-          state.busy || !canPreview ? " disabled" : ""
-        }>Gerar prévia do laudo</button>
+        ${/* M25.29D — o fluxo tinha DOIS botões deliberados antes da
+              confirmação: "Gerar prévia do laudo" e, só então, "Concluir
+              laudo". Quem não conhece a máquina por dentro lê o primeiro
+              como o fim do trabalho — e o arquivo que sobra na tela depois
+              dele é uma prévia. O botão principal agora vai de uma vez até
+              a confirmação; conferir a prévia sem concluir continua
+              possível, mas como escolha secundária e nomeada. */""}
+        <div class="report-native-actions">
+          <button class="m15-btn m15-btn-primary report-conclude-cta" type="submit"${
+            state.busy || !canPreview ? " disabled" : ""
+          }>Concluir e preparar para assinatura</button>
+          <button type="button" class="m15-btn report-preview-only"
+            data-report-preview-only${
+              state.busy || !canPreview ? " disabled" : ""
+            }>Só conferir a prévia</button>
+        </div>
+        <p class="report-help">A prévia serve para conferir na tela. O PDF que
+          pode ser assinado só existe depois de concluir o laudo.</p>
       </form>`;
   }
 
+  // M25.29D — o laudo CONCLUÍDO, com o único passo que resta.
+  //
+  // Antes desta etapa a tela não dizia nada depois da conclusão: a médica
+  // ficava com o mesmo painel de documentos de sempre e tinha que descobrir
+  // sozinha, em outra seção, que o arquivo assinável estava lá. O botão do
+  // próximo passo passa a morar onde ela acabou de clicar.
+  function renderConcludedAction() {
+    const native = latestNativeVersion();
+    const assinavel = native && native.kind !== "laudo_previa";
+    return `
+      <div class="report-concluded" role="status">
+        <p class="report-concluded-title">✓ Laudo concluído</p>
+        <p>Agora baixe o PDF final para assinatura.</p>
+        ${assinavel ? `
+          <button type="button" class="m15-btn m15-btn-primary report-download-final"
+            data-report-download-final="${esc(native.id)}"${
+              state.busy ? " disabled" : ""
+            }>Baixar PDF para assinar</button>` : ""}
+        <p class="report-help">Assine o arquivo baixado com o seu certificado
+          digital, fora do sistema, e depois envie o PDF assinado em
+          “Assinatura externa”.</p>
+      </div>`;
+  }
+
   function renderReleaseAction(detail) {
+    if (detail.status === "liberado") return renderConcludedAction();
     if (detail.status !== "em_elaboracao" || !state.previewVersionId) return "";
     if (state.confirmRelease) {
       return `
         <div class="report-release-confirm" role="alertdialog"
           aria-labelledby="reportReleaseConfirmTitle" aria-modal="false">
-          ${/* M25.18 — a ação não assina nada. A assinatura qualificada
-                acontece fora da SoproLife, com o certificado da médica. O
-                que este passo faz é congelar o conteúdo e produzir o PDF
-                que ela vai levar para assinar. */""}
-          <h4 id="reportReleaseConfirmTitle" tabindex="-1">Confirmar conclusão do laudo</h4>
-          <p>Você vai <strong>concluir</strong> este laudo com a sua identificação profissional. O conteúdo será congelado e o PDF ficará disponível para assinatura digital qualificada externa.</p>
-          <ul>
-            <li>Confira a prévia exibida acima — é exatamente o PDF final.</li>
-            <li>Depois de concluído, correções só entram como <strong>adendo</strong> ou <strong>versão corretiva</strong>; a versão anterior é preservada.</li>
-            <li>A conclusão é registrada com seu usuário, data e hora.</li>
-            <li>A assinatura qualificada é aplicada por você, fora do sistema, no arquivo baixado.</li>
-          </ul>
+          ${/* M25.29D — a ÚNICA confirmação do fluxo. O texto anterior tinha
+                quatro marcadores explicando adendo, versão corretiva,
+                registro de auditoria e onde a assinatura qualificada
+                acontece: tudo verdade, nada acionável no instante em que se
+                decide entre continuar e voltar. Sobrou a pergunta, o que
+                conferir e o que acontece depois. */""}
+          <h4 id="reportReleaseConfirmTitle" tabindex="-1">Concluir este laudo?</h4>
+          <p>Confira as conclusões antes de continuar.</p>
+          <p>Depois de concluir, o laudo será registrado como versão final e
+            ficará pronto para baixar e assinar.</p>
           <div class="report-release-buttons">
-            <button type="button" class="m15-btn m15-btn-danger"
-              data-report-release-confirm${state.busy ? " disabled" : ""}>
-              Sim, concluir laudo
-            </button>
             <button type="button" class="m15-btn" data-report-release-cancel>
-              Cancelar
+              Voltar e revisar
+            </button>
+            <button type="button" class="m15-btn m15-btn-primary"
+              data-report-release-confirm${state.busy ? " disabled" : ""}>
+              Concluir laudo
             </button>
           </div>
         </div>`;
     }
     return `
       <div class="report-release-action">
-        <p>Confira a prévia. O conteúdo só é congelado após a sua confirmação consciente.</p>
+        ${/* Prévia gerada pelo caminho "só conferir": o que a tela precisa
+              dizer aqui é que este documento NÃO é assinável. */""}
+        <p class="report-preview-warning">Esta é uma <strong>prévia</strong> —
+          não assine este arquivo. Conclua o laudo para gerar o PDF final.</p>
         <button type="button" class="m15-btn m15-btn-primary report-release-cta"
           data-report-release-open${state.busy ? " disabled" : ""}>
-          Concluir laudo
+          Concluir e preparar para assinatura
         </button>
         ${renderQualifiedAction(detail)}
       </div>`;
@@ -1212,17 +1253,28 @@
       if (!item) {
         return `<li class="report-doc-missing"><strong>${esc(titulo)}</strong><span>Ainda não disponível.</span></li>`;
       }
+      // M25.29D — este painel foi o caminho do incidente: enquanto o laudo
+      // ainda era prévia, ele oferecia "Laudo médico SoproLife" com um botão
+      // "Baixar" indistinguível do da versão final. O que estava em jogo
+      // nunca apareceu na linha.
+      const previa = item.previa === true;
       return `
-        <li>
+        <li${previa ? ` class="report-doc-previa"` : ""}>
           <div>
-            <strong>${esc(titulo)}</strong>
-            <span>${esc(descricao)}</span>
+            <strong>${esc(previa ? `${titulo} (prévia)` : titulo)}</strong>
+            <span>${esc(
+              previa
+                ? "Prévia para conferência — não assine este arquivo."
+                : descricao
+            )}</span>
             <span class="report-doc-meta">${esc(kindLabel(item.kind))} · v${
               esc(item.version_number)
             } · ${esc(String(item.sha256).slice(0, 12))}…</span>
           </div>
           <button type="button" class="m15-btn m15-btn-sm"
-            data-report-download="${esc(item.version_id)}">Baixar</button>
+            data-report-download="${esc(item.version_id)}">${
+              previa ? "Baixar prévia" : "Baixar"
+            }</button>
         </li>`;
     };
     return `
@@ -2846,10 +2898,15 @@
     }
   }
 
-  async function previewNativeReport() {
+  // M25.29D — `concluir` decide se a geração da prévia é o fim do passo ou
+  // apenas a preparação da confirmação. O servidor continua exigindo uma
+  // prévia atual antes de concluir: o que mudou é que a médica não precisa
+  // mais saber disso para chegar ao documento final.
+  async function previewNativeReport(opcoes) {
+    const concluir = Boolean(opcoes && opcoes.concluir);
     readNativeForm();
     if (!state.conclusionCode) {
-      announce("Selecione uma conclusão antes de gerar a prévia.", "erro");
+      announce("Selecione uma conclusão antes de continuar.", "erro");
       return;
     }
     const payload = {
@@ -2863,7 +2920,12 @@
     };
     state.busy = true;
     state.confirmRelease = false;
-    announce("Gerando a prévia exata do laudo…", "");
+    announce(
+      concluir
+        ? "Preparando o laudo para conclusão…"
+        : "Gerando a prévia para conferência…",
+      ""
+    );
     render();
     try {
       const result = await client().api(
@@ -2873,8 +2935,18 @@
       state.finalText = result.final_text || "";
       state.previewVersionId = result.preview_version_id || "";
       state.previewTextSha256 = result.final_text_sha256 || "";
-      announce("Prévia gerada. Confira o documento antes de assinar.", "ok");
+      // `loadAuthenticatedData` termina chamando `loadDocument`, que zera
+      // `confirmRelease` — por isso a confirmação só é aberta DEPOIS dele.
       await loadAuthenticatedData();
+      if (concluir && state.previewVersionId) {
+        state.confirmRelease = true;
+        announce("Confira as conclusões e confirme.", "");
+      } else {
+        announce(
+          "Prévia gerada para conferência — este arquivo ainda não pode ser assinado.",
+          "ok"
+        );
+      }
     } catch (error) {
       announce(readableError(error), "erro");
     } finally {
@@ -2884,6 +2956,12 @@
       // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
       render();
+      // O foco vai para a pergunta. Num iPhone é o que traz a confirmação
+      // para dentro da viewport sem a médica ter que procurar por ela.
+      if (state.confirmRelease) {
+        const heading = document.getElementById("reportReleaseConfirmTitle");
+        if (heading) heading.focus();
+      }
     }
   }
 
@@ -4011,12 +4089,21 @@
       render();
       return;
     }
+    if (button.matches("[data-report-preview-only]")) {
+      previewNativeReport({ concluir: false });
+      return;
+    }
     if (button.matches("[data-report-release-open]")) {
-      readNativeForm();
-      state.confirmRelease = true;
-      render();
-      const heading = document.getElementById("reportReleaseConfirmTitle");
-      if (heading) heading.focus();
+      // M25.29D — regenera a prévia antes de perguntar, em vez de abrir a
+      // confirmação sobre a que estava na tela. Se a médica editou o texto
+      // depois de conferir, a prévia antiga já não corresponde ao que ela
+      // está confirmando — e o servidor recusaria com "conteúdo divergente",
+      // um erro que ela não tem como interpretar nem corrigir.
+      previewNativeReport({ concluir: true });
+      return;
+    }
+    if (button.matches("[data-report-download-final]")) {
+      downloadVersion(button.getAttribute("data-report-download-final"));
       return;
     }
     if (button.matches("[data-report-release-cancel]")) {
@@ -4129,7 +4216,9 @@
     } else if (event.target.id === "reportComposeForm") {
       compose(event.target);
     } else if (event.target.id === "reportNativeForm") {
-      previewNativeReport();
+      // O submit do formulário é a ação principal: gera a prévia e abre a
+      // confirmação única, sem um passo intermediário para a médica.
+      previewNativeReport({ concluir: true });
     } else if (event.target.id === "reportAddendumForm") {
       publishAddendum(event.target);
     } else if (event.target.id === "reportReassignForm") {
