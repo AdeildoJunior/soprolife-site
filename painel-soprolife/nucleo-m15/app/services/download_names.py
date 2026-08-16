@@ -51,6 +51,12 @@ SUFIXO_MIR = "Exame técnico"
 # ICP-Brasil foi verificada por este sistema — quem responde por isso é o
 # estado do documento, não o nome do download.
 SUFIXO_ASSINADO = "Assinado"
+# M25.29D — o nome do arquivo é a última coisa que a médica lê antes de
+# arrastar o PDF para o assinador, e era a que mentia mais alto: uma PRÉVIA
+# baixava como "<Nome> - Para assinatura.pdf". Sem acento e em caixa alta de
+# propósito — precisa ser inequívoco na lista de downloads do iPhone, onde o
+# nome aparece truncado e sem o resto da tela em volta.
+SUFIXO_PREVIA = "PREVIA - NAO ASSINAR"
 
 
 def sanitize_filename_base(nome: str | None) -> str:

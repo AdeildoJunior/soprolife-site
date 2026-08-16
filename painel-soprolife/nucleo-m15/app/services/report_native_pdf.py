@@ -112,6 +112,15 @@ RELEASE_STATEMENT = (
 )
 
 PREVIEW_WATERMARK = "PRÉVIA — DOCUMENTO NÃO CONCLUÍDO"
+# M25.29D — a tarja acima diz o ESTADO do documento; ela não diz o que a
+# médica deve FAZER com ele. Um PDF que já se chamava "prévia" foi assinado
+# externamente por quem leu "não concluído" como uma etiqueta de rascunho, e
+# não como uma proibição. A instrução agora é imperativa e vem junto.
+PREVIEW_DO_NOT_SIGN = (
+    "NÃO ASSINAR — conclua o laudo no Centro de Comando antes de baixar o "
+    "documento para assinatura."
+)
+PREVIEW_BANNER = f"{PREVIEW_WATERMARK}. {PREVIEW_DO_NOT_SIGN}"
 
 DEFAULT_LOGO_PATH = (
     Path(__file__).resolve().parents[3] / "assets" / "soprolife-logo.png"
@@ -1335,12 +1344,14 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
     composer = _Composer(content)
     composer.draw_title()
 
+    # M25.29D — o aviso de prévia deixou de ser alternativa ao de piloto.
+    # Eram `if/elif`: ligar de volta uma faixa de piloto apagaria a única
+    # marca de topo que diz para não assinar o documento. São avisos sobre
+    # coisas diferentes e ambos são verdade ao mesmo tempo.
     if content.pilot_warning:
         composer.draw_banner(content.pilot_warning)
-    elif not content.released:
-        composer.draw_banner(
-            f"{PREVIEW_WATERMARK} — conferência da médica antes da assinatura."
-        )
+    if not content.released:
+        composer.draw_banner(PREVIEW_BANNER)
 
     reference = (
         content.released_at_local or content.issued_at_local

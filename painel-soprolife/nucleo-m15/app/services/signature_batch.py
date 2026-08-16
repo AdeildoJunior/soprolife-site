@@ -49,6 +49,13 @@ META_REPORT_CODE = "/SoproLifeReportCode"
 META_VALIDATION_CODE = "/SoproLifeValidationCode"
 META_VERSION = "/SoproLifeVersion"
 META_SOURCE_HASH = "/SoproLifeSourceHash"
+# M25.29D — o ESTADO documental de onde o arquivo saiu. Sem ele, prévia e
+# laudo concluído eram distinguíveis apenas por leitura humana do papel: os
+# dois carregam o mesmo código LAU impresso, e foi por esse código que uma
+# prévia assinada por engano seria pareada como se fosse o documento final.
+META_DOCUMENT_STATE = "/SoproLifeDocumentState"
+ESTADO_PREVIA = "previa"
+ESTADO_CONCLUIDO = "concluido"
 
 # Marca legada da M25.8, gravada em /Keywords. Continua sendo LIDA para que
 # um laudo preparado por aquele fluxo ainda seja reconhecido na volta.
@@ -81,6 +88,7 @@ class ReportMarkers:
     validation_code: str | None = None
     version_number: int | None = None
     source_sha256: str | None = None
+    document_state: str | None = None
 
     @property
     def empty(self) -> bool:
@@ -116,6 +124,7 @@ def stamp_signing_metadata(
         META_REPORT_CODE: document_code,
         META_VERSION: str(version_number),
         META_SOURCE_HASH: source_hash,
+        META_DOCUMENT_STATE: ESTADO_CONCLUIDO,
         # Mantém a marca da M25.8 em /Keywords: um painel intermediário que
         # ainda leia só ela continua reconhecendo o documento.
         "/Keywords": (
@@ -170,6 +179,7 @@ def read_markers_from_metadata(pdf: bytes) -> ReportMarkers:
     report_code = texto(META_REPORT_CODE)
     validation_code = texto(META_VALIDATION_CODE)
     source_hash = texto(META_SOURCE_HASH)
+    document_state = (texto(META_DOCUMENT_STATE) or "").lower() or None
     versao_bruta = texto(META_VERSION)
     version_number = None
     if versao_bruta and versao_bruta.isdigit():
@@ -189,6 +199,7 @@ def read_markers_from_metadata(pdf: bytes) -> ReportMarkers:
         validation_code=validation_code,
         version_number=version_number,
         source_sha256=source_hash,
+        document_state=document_state,
     )
 
 
@@ -221,6 +232,94 @@ def read_codes_from_content(
     return ReportMarkers(
         report_code=report_code, validation_code=validation_code
     )
+
+
+# ------------------------------------------- M25.29D — prévia reconhecível
+
+
+def stamp_preview_metadata(
+    pdf: bytes, *, document_code: str, version_number: int
+) -> bytes:
+    """Carimba a prévia como prévia — o oposto do carimbo de conclusão.
+
+    Uma prévia impressa é reconhecível por quem lê o papel: tarja no topo,
+    "PRÉVIA" no lugar do código de verificação, nenhuma rubrica. Nada disso
+    é legível por código depois que um assinador externo empilha uma camada
+    de assinatura por cima. O carimbo dá ao servidor o mesmo discernimento
+    que a médica tem ao olhar a folha.
+
+    Uma falha aqui NÃO derruba a prévia: quem não pode falhar é o carimbo do
+    documento CONCLUÍDO, porque é dele que depende o pareamento na volta. A
+    prévia continua sendo barrada pelas outras camadas — estado do laudo,
+    tarja impressa e `source_version_id` — mesmo sem metadado nenhum.
+    """
+
+    try:
+        writer = PdfWriter(clone_from=PdfReader(io.BytesIO(pdf)))
+        writer.add_metadata({
+            "/Title": f"PRÉVIA — laudo {document_code} (não assinar)",
+            META_REPORT_CODE: document_code,
+            META_VERSION: str(version_number),
+            META_DOCUMENT_STATE: ESTADO_PREVIA,
+        })
+        buffer = io.BytesIO()
+        writer.write(buffer)
+    except Exception:
+        return pdf
+    return buffer.getvalue()
+
+
+# Frases da tarja de prévia, já sem acento e em caixa alta — é assim que
+# `_normalizar` entrega o texto extraído. Bastam duas: a que diz o estado e
+# a que diz a proibição. Procurar a frase inteira seria frágil, porque a
+# quebra de linha do PDF entra no meio dela.
+_MARCAS_DE_PREVIA = (
+    "DOCUMENTO NAO CONCLUIDO",
+    "NAO ASSINAR",
+)
+
+
+def _normalizar(texto: str) -> str:
+    """Sem acento, em caixa alta, com espaços colapsados.
+
+    A extração de texto de um PDF devolve as quebras de linha do LAYOUT, não
+    as da frase: "DOCUMENTO NÃO\nCONCLUÍDO" é o mesmo aviso. Colapsar o
+    espaço em branco é o que permite procurar a frase como ela foi escrita.
+    """
+
+    decomposto = unicodedata.normalize("NFKD", texto)
+    sem_acento = "".join(c for c in decomposto if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", sem_acento).upper()
+
+
+def looks_like_preview(pdf: bytes) -> bool:
+    """O PDF veio de uma PRÉVIA?
+
+    Duas leituras independentes, porque cada uma falha de um jeito
+    diferente: o metadado morre se o assinador reescrever o dicionário Info,
+    e a tarja morre se a extração de texto não render nada. Qualquer uma que
+    acuse basta — num documento que vai ser tratado como laudo final
+    assinado, o custo de recusar uma prévia por engano é infinitamente menor
+    que o de aceitar uma.
+    """
+
+    estado = read_markers_from_metadata(pdf).document_state
+    if estado == ESTADO_PREVIA:
+        return True
+    if estado == ESTADO_CONCLUIDO:
+        # O carimbo de conclusão é gravado pelo servidor e relido antes de o
+        # PDF existir como versão. Ele DECIDE, e a busca no texto nem chega a
+        # rodar: a conclusão clínica é escrita livremente pela médica, e uma
+        # frase dela com "não assinar" no meio não pode recusar o laudo final
+        # que ela mesma acabou de concluir.
+        return False
+    try:
+        leitor = PdfReader(io.BytesIO(pdf))
+        texto = "".join(pagina.extract_text() or "" for pagina in leitor.pages)
+    except Exception:
+        return False
+    normalizado = _normalizar(texto)
+    return any(marca in normalizado for marca in _MARCAS_DE_PREVIA)
 
 
 # --------------------------------------------------------- ZIP de saída
