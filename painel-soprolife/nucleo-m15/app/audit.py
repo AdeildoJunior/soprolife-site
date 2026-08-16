@@ -49,6 +49,11 @@ ALLOWED_KEYS = {
     # já estavam na allowlist; o que entra aqui é a competência do
     # fechamento Pastore e o total documentado, ambos institucionais.
     "competencia", "valor_documentado", "itens",
+    # M25.29D — quantos arquivos de um envio foram recusados por virem de uma
+    # PRÉVIA. É uma contagem inteira, no mesmo espírito de "rejeitadas": o
+    # que a auditoria precisa saber é que o incidente aconteceu e com que
+    # frequência, nunca qual arquivo era.
+    "recusadas_por_previa",
 }
 
 _MAX_STR = 120

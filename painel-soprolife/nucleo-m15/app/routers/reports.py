@@ -157,6 +157,7 @@ from ..services.report_compliance import relatorio_conformidade
 from ..status_display import exam_status_display
 from ..services.download_names import (
     SUFIXO_ASSINADO,
+    SUFIXO_PREVIA,
     SUFIXO_MIR,
     content_disposition,
     named_download_filename,
@@ -201,9 +202,11 @@ from ..services.signature_batch import (
     batch_zip_filename,
     build_batch_zip,
     extract_signed_pdfs,
+    looks_like_preview,
     normalize_for_compare,
     read_codes_from_content,
     read_markers_from_metadata,
+    stamp_preview_metadata,
     stamp_signing_metadata,
     summarize,
 )
@@ -2549,6 +2552,17 @@ def download_report_version(
             fallback_code=document.public_code,
             sufixo=SUFIXO_ASSINADO,
         )
+    # M25.29D — a prévia baixava com o MESMO nome do documento concluído
+    # ("<Nome> - Para assinatura.pdf"). Dois arquivos indistinguíveis na
+    # pasta de downloads, um deles não assinável: foi assim que uma prévia
+    # chegou ao assinador externo. O nome agora diz o que o arquivo é e o
+    # que não fazer com ele.
+    elif version.kind == KIND_LAUDO_PREVIA:
+        safe_name = named_download_filename(
+            patient_name=person.nome_completo if person is not None else None,
+            fallback_code=document.public_code,
+            sufixo=SUFIXO_PREVIA,
+        )
     else:
         safe_name = report_download_filename(
             patient_name=person.nome_completo if person is not None else None,
@@ -3581,6 +3595,57 @@ def _versao_para_assinatura(
     return versao
 
 
+# M25.29D — a frase que a médica lê quando pede para assinar cedo demais.
+# É a mesma no download e no retorno do assinado de propósito: o sistema tem
+# UMA explicação para este erro, e ela cabe numa linha.
+PREVIA_NAO_ASSINAVEL = (
+    "Este laudo ainda é uma prévia. Conclua o laudo antes de baixar para "
+    "assinatura."
+)
+# E a frase para o arquivo que já voltou assinado sobre a folha errada.
+ASSINADO_DE_PREVIA = (
+    "O arquivo assinado corresponde a uma PRÉVIA não concluída. Conclua o "
+    "laudo e assine o PDF final."
+)
+
+
+def _e_previa(db: Session, document: ReportDocument) -> bool:
+    """O documento ainda está no estado de prévia?
+
+    Duas condições, e basta uma: o laudo não foi concluído, ou a versão
+    corrente dele é uma prévia. Verificar as duas evita depender de um único
+    campo estar correto — `status` e `current_version_id` são gravados na
+    mesma transação, mas quem lê aqui decide sobre assinatura.
+    """
+
+    if document.status != STATUS_LAUDO_LIBERADO:
+        return True
+    versao = db.get(ReportDocumentVersion, document.current_version_id)
+    return versao is not None and versao.kind == KIND_LAUDO_PREVIA
+
+
+def _recusar_previa_para_assinatura(
+    db: Session, *, profile_id: str, pedidos: list[str]
+) -> None:
+    """Barra o download "para assinatura" de qualquer laudo não concluído.
+
+    Só olha laudos DESTA médica: um id de outra pessoa continua sendo
+    ignorado silenciosamente, como sempre foi, para que o endpoint não vire
+    um oráculo de existência de documento alheio.
+    """
+
+    if not pedidos:
+        return
+    universo = _documentos_da_medica(db, profile_id=profile_id)
+    for document_id in pedidos:
+        entrada = universo.get(document_id)
+        if entrada is None:
+            continue
+        document, _exam, _person = entrada
+        if _e_previa(db, document):
+            raise ReportDomainError(409, "laudo_ainda_em_previa", PREVIA_NAO_ASSINAVEL)
+
+
 def _linha_assinatura_externa(
     document: ReportDocument,
     exam: SpirometryExam,
@@ -3689,6 +3754,13 @@ def download_external_signature_batch(
             db, profile_id=profile.id
         )
     }
+    # M25.29D — a trava não pode viver só no botão. Quando um laudo PEDIDO é
+    # dela mas ainda não foi concluído, o pedido inteiro para aqui: antes ele
+    # era descartado em silêncio e, se sobrasse algum concluído na seleção, o
+    # download acontecia como se nada faltasse.
+    _recusar_previa_para_assinatura(
+        db, profile_id=profile.id, pedidos=payload.document_ids
+    )
     escolhidos = [
         elegiveis[document_id]
         for document_id in payload.document_ids
@@ -3934,8 +4006,34 @@ async def upload_external_signature_batch(
 
     recebidos: list[dict] = []
     vistos_no_envio: set[str] = set()
+    recusados_por_previa = 0
     for arquivo in extracao.files:
         document, metodo = _parear_documento(arquivo.data, universo=universo)
+
+        # M25.29D — a checagem vem ANTES de qualquer coisa que grave o
+        # arquivo, e vale mesmo quando o pareamento deu certo. Uma prévia
+        # carrega o mesmo código LAU impresso do documento final: se o laudo
+        # já tiver sido concluído depois, o pareamento por código acerta o
+        # documento e o sistema aceitaria a prévia assinada no lugar dele.
+        #
+        # Assinatura criptográfica válida não muda nada aqui. O que está
+        # errado não é a assinatura — é a folha que foi assinada.
+        if looks_like_preview(arquivo.data):
+            recusados_por_previa += 1
+            entrada = universo.get(document.id) if document is not None else None
+            veredictos.append(MatchVerdict(
+                filename=arquivo.filename,
+                outcome=RECUSADO,
+                report_code=document.public_code if document is not None else None,
+                patient_name=(
+                    entrada[2].nome_completo
+                    if entrada is not None and entrada[2] is not None
+                    else None
+                ),
+                message=ASSINADO_DE_PREVIA,
+            ))
+            continue
+
         if document is None or metodo is None:
             veredictos.append(MatchVerdict(
                 filename=arquivo.filename,
@@ -4079,6 +4177,10 @@ async def upload_external_signature_batch(
             "total": len(veredictos),
             "validas": len(recebidos),
             "rejeitadas": len(veredictos) - len(recebidos),
+            # M25.29D — separado das demais recusas de propósito: uma prévia
+            # assinada é um incidente de fluxo, não um arquivo corrompido, e
+            # precisa ser contável sem abrir arquivo nenhum.
+            "recusadas_por_previa": recusados_por_previa,
             "physician_profile_id": profile.id,
         },
     )
@@ -5468,7 +5570,15 @@ def compose_native_report_preview(
         addenda=load_addenda(db, document.id),
         pilot_warning=_pilot_warning(),
     )
-    data = _native_pdf_bytes(content)
+    # M25.29D — a prévia sai carimbada COMO prévia. Depois de assinada por
+    # fora, a tarja impressa continua no papel mas o arquivo vira mais uma
+    # camada de PDF: é este metadado que permite ao servidor recusá-la na
+    # volta sem depender de extração de texto.
+    data = stamp_preview_metadata(
+        _native_pdf_bytes(content),
+        document_code=document.public_code,
+        version_number=version_number,
+    )
 
     with report_publication_transaction(db) as publication:
         version = _publish_native_version(
@@ -5973,6 +6083,13 @@ def list_report_documents_for_delivery(
         return {
             "version_id": version.id,
             "kind": version.kind,
+            # M25.29D — a tela da médica não deve precisar conhecer os nomes
+            # internos de `kind` para saber se o arquivo pode ser assinado.
+            # O servidor, que é quem decide, responde a pergunta direto.
+            "previa": version.kind == KIND_LAUDO_PREVIA,
+            "assinavel": version.kind in (
+                KIND_LAUDO_LIBERADO, KIND_LAUDO_ADENDO
+            ),
             "version_number": version.version_number,
             "sha256": version.sha256,
             "size_bytes": version.size_bytes,
