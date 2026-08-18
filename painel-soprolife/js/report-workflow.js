@@ -2969,6 +2969,7 @@
   // ----------------------------------- M25.8 — lote de assinatura externa
 
   async function downloadSigningBatch() {
+    if (state.batchBusy) return;
     state.batchBusy = true;
     state.batchResults = null;
     announce("Preparando o pacote de assinatura…", "");
@@ -3030,6 +3031,12 @@
   // ------------------------ M25.20 — central de assinatura externa em lote
 
   async function downloadForSignature() {
+    // M25.29E — reentrância. O botão é desabilitado por `render()`, mas o
+    // `finally` o reabilita a cada erro com a seleção intacta: uma sequência
+    // de tentativas frustradas abria um lote de auditoria por clique. O
+    // histórico é legítimo e fica; o que não pode é um segundo clique entrar
+    // enquanto o primeiro ainda está no ar.
+    if (state.signatureBusy) return;
     if (!state.signatureSelection.length) return;
     const total = state.signatureSelection.length;
     state.signatureBusy = true;

@@ -475,3 +475,71 @@ def test_nenhum_dado_real_nos_testes():
     proibidos = ("LAU-" + "000013", "ESP-" + "000028", "Ana " + "Cristina")
     for proibido in proibidos:
         assert proibido not in fonte
+
+
+# =====================================================================
+# A auditoria read-only da fila real
+# =====================================================================
+
+
+def test_script_de_auditoria_da_fila_roda_e_nao_escreve(assinado, db, capsys):
+    """O script que vai rodar em produção precisa rodar AQUI primeiro.
+
+    Um script de auditoria que quebra na VPS custa uma ida e volta humana
+    com privilégio de root — e é exatamente o tipo de coisa que não se
+    descobre na hora.
+    """
+
+    import importlib.util
+
+    caminho = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "auditar_fila_assinados.py"
+    )
+    spec = importlib.util.spec_from_file_location("_auditar_fila", caminho)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+
+    saida_antes = db.execute(select(ExternalSignedDocument)).scalars().all()
+    estados_antes = [(item.id, item.status) for item in saida_antes]
+
+    problemas = modulo.auditar(db)
+    texto = capsys.readouterr().out
+
+    assert problemas == 0, texto
+    assert "recebido_validacao_pendente" in texto
+    assert "todos íntegros e legíveis pelo backend" in texto
+    assert "backend relê o PDF" in texto
+
+    # Nada mudou de estado, que é a única promessa que importa aqui.
+    depois = db.execute(select(ExternalSignedDocument)).scalars().all()
+    assert [(item.id, item.status) for item in depois] == estados_antes
+
+    # E nenhum nome de paciente vazou para a saída.
+    assert "Helena" not in texto
+
+
+# =====================================================================
+# Lotes repetidos
+# =====================================================================
+
+
+def test_downloads_em_lote_tem_trava_de_reentrancia():
+    """Cada clique frustrado abria um lote de auditoria novo.
+
+    A auditoria de produção mostrou lotes nascendo com menos de um segundo
+    de diferença e o mesmo número de documentos — o que nenhuma pessoa
+    consegue re-selecionar nesse tempo. O `finally` reabilitava o botão a
+    cada erro com a seleção preservada, e o clique seguinte virava outro
+    lote.
+
+    A trava não apaga nada: o histórico das tentativas reais continua onde
+    está. Ela só impede que um segundo clique entre enquanto o primeiro
+    ainda está no ar.
+    """
+
+    codigo = _js_sem_comentarios()
+    assert "if (state.signatureBusy) return;" in codigo
+    assert "if (state.batchBusy) return;" in codigo
+    assert "if (!documentId || state.deliveryBusy) return;" in codigo
