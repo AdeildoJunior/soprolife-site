@@ -22,7 +22,9 @@ clínico, permanece verdadeiro antes e depois da assinatura, e não afirma
 nada sobre ICP-Brasil.
 
 **O estado operacional não mudou.** "Aguardando assinatura qualificada",
-"Assinado recebido — validação pendente", "Pronto para entrega" e
+"Assinado recebido — aguardando conferência da SoproLife" (assim desde a
+M25.29E, que só trocou a linguagem para dizer de quem é a próxima ação),
+"Pronto para entrega" e
 "Entregue" continuam no Centro de Comando, que sabe a hora em que cada um
 deixa de valer. Um carimbo impresso não sabe — e é exatamente essa a
 diferença entre estado e documento.
@@ -251,7 +253,8 @@ def test_previa_nao_desenha_selo_nenhum():
 
 @pytest.mark.parametrize("rotulo", [
     "Aguardando assinatura qualificada",
-    "Assinado recebido — validação pendente",
+    # M25.29E — mesmo estado, frase que diz de quem é a pendência.
+    "Assinado recebido — aguardando conferência da SoproLife",
 ])
 def test_estado_operacional_continua_na_interface(rotulo):
     assert rotulo in WORKFLOW_JS

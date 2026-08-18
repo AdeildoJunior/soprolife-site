@@ -1443,8 +1443,15 @@ def test_fila_administrativa_tem_tela_e_nao_so_rota():
     assert "/laudos/assinatura-externa/fila" in WORKFLOW_JS
     assert "renderDeliveryQueue()" in WORKFLOW_JS
     # Os dois downloads do §17 e as duas ações do §16/§18.
-    assert "/exame-tecnico/conteudo" in WORKFLOW_JS
-    assert "/assinado/conteudo" in WORKFLOW_JS
+    #
+    # M25.29E — os downloads deixaram de ser `<a download href>` e passaram a
+    # usar `apiBlob`, que exige `application/pdf` e transforma erro em
+    # mensagem. O caminho agora é montado a partir do argumento, então o
+    # contrato passa a ser: existem os dois botões e existe a chamada.
+    assert "data-delivery-download-mir" in WORKFLOW_JS
+    assert "data-delivery-download-assinado" in WORKFLOW_JS
+    assert '"exame-tecnico"' in WORKFLOW_JS
+    assert "/conteudo`" in WORKFLOW_JS
     assert "data-delivery-validate" in WORKFLOW_JS
     assert "data-delivery-deliver" in WORKFLOW_JS
     assert ".report-delivery-row {" in WORKFLOW_CSS
