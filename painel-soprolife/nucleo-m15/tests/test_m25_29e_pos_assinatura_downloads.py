@@ -73,6 +73,7 @@ WORKFLOW_JS = (PANEL_ROOT / "js" / "report-workflow.js").read_text()
 WORKFLOW_CSS = (PANEL_ROOT / "css" / "report-workflow.css").read_text()
 SITE_ROOT = PANEL_ROOT.parent
 SW_JS = (SITE_ROOT / "sw.js").read_text()
+INDEX_HTML = (PANEL_ROOT / "index.html").read_text()
 
 
 # ------------------------------------------------------------ utilidades
@@ -543,3 +544,32 @@ def test_downloads_em_lote_tem_trava_de_reentrancia():
     assert "if (state.signatureBusy) return;" in codigo
     assert "if (state.batchBusy) return;" in codigo
     assert "if (!documentId || state.deliveryBusy) return;" in codigo
+
+
+# =====================================================================
+# Cache busting — o deploy tem que CHEGAR ao navegador
+# =====================================================================
+
+
+def test_assets_alterados_tem_cache_busting_atual():
+    """Publicar não é entregar.
+
+    O painel carrega os dois arquivos com `?v=` fixo. A M25.29D mudou o JS
+    e o CSS sem mexer nesse número — então um navegador que já tinha a
+    versão anterior em cache continuaria rodando o fluxo antigo, com o
+    servidor já atualizado. É o pior tipo de bug: o deploy "funcionou" e a
+    tela não mudou.
+
+    Se este teste falhar depois de alterar report-workflow.js ou .css, a
+    correção é subir o `?v=`, não relaxar o teste.
+    """
+
+    import re
+
+    versoes = set(
+        re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
+    )
+    assert versoes, "os assets precisam continuar versionados"
+    assert versoes == {"2026081801"}, (
+        "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
+    )
