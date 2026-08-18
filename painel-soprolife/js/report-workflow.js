@@ -255,6 +255,7 @@
     // Fila de entrega da administração e o estado filtrado na tela.
     deliveryQueue: null,
     deliveryFilter: "",
+    deliveryBusy: false,
     // M25.24 — `null` = "ainda não mexeu nesta sessão, use a preferência
     // guardada". true/false = escolha explícita da médica agora.
     howItWorksOpen: null,
@@ -516,7 +517,10 @@
       // M25.20 — o arquivo que voltou assinado por fora. O rótulo diz
       // "recebido", e não "validado": a cadeia ICP-Brasil não foi conferida
       // por este sistema.
-      laudo_assinado_externo_recebido: "Assinado recebido — validação pendente",
+      // M25.29E — e diz de QUEM é a próxima ação, para a médica não achar
+      // que a pendência é dela.
+      laudo_assinado_externo_recebido:
+        "Assinado recebido — aguardando conferência da SoproLife",
     }[value] || value || "Versão";
   }
 
@@ -2304,19 +2308,25 @@
             </span>` : ""}
         </div>
         <div class="report-delivery-actions">
-          <a class="m15-btn" download
-            href="${esc(apiHref(`/laudos/${item.document_id}/exame-tecnico/conteudo`))}">
+          ${/* M25.29E — download por `apiBlob`, nunca por <a download>.
+                Uma âncora crua salva QUALQUER resposta como arquivo: um 401
+                em JSON, o HTML de offline de um service worker, um asset
+                velho de cache. Foi assim que nasceu o "conteúdo 5.jsold"
+                relatado na operação. Por aqui, resposta que não for
+                application/pdf vira mensagem de erro na tela. */""}
+          <button type="button" class="m15-btn"
+            data-delivery-download-mir="${esc(item.document_id)}">
             Baixar exame técnico
-          </a>
+          </button>
           ${assinado ? `
-            <a class="m15-btn" download
-              href="${esc(apiHref(`/laudos/${item.document_id}/assinado/conteudo`))}">
+            <button type="button" class="m15-btn"
+              data-delivery-download-assinado="${esc(item.document_id)}">
               Baixar laudo assinado
-            </a>` : ""}
+            </button>` : ""}
           ${assinado && assinado.status === "recebido_validacao_pendente"
             ? `<button type="button" class="m15-btn m15-btn-primary"
                  data-delivery-validate="${esc(assinado.signed_document_id)}">
-                 Registrar validação da assinatura
+                 Registrar conferência do PDF assinado
                </button>` : ""}
           ${assinado && assinado.status === "validado_externamente"
             ? `<button type="button" class="m15-btn"
@@ -2325,15 +2335,6 @@
                </button>` : ""}
         </div>
       </div>`;
-  }
-
-  // Link de download autenticado pelo COOKIE de sessão — um `<a download>`
-  // não manda cabeçalho `Authorization`. É o mesmo caminho que a M25.18
-  // abriu para o visualizador de PDF, e por isso só é oferecido quando há
-  // sessão de verdade.
-  function apiHref(path) {
-    const c = client();
-    return c && c.hasSession() ? c.apiUrl(path) : "#";
   }
 
   function renderProfileAdmin() {
@@ -3129,9 +3130,14 @@
       );
       state.signatureReview = null;
       state.signatureSelection = [];
+      // M25.29E — o trabalho da médica ACABA aqui. A frase antiga
+      // ("a validação da assinatura segue pendente") descrevia o estado do
+      // sistema, não o dela, e foi lida como "ainda falta você certificar
+      // alguma coisa". A conferência seguinte é da administração.
       announce(
-        `${resposta.confirmados} laudo(s) assinado(s) recebido(s). A ` +
-        "validação da assinatura segue pendente.",
+        `${resposta.confirmados} PDF(s) assinado(s) recebido(s) com sucesso. ` +
+        "Seu trabalho terminou. Aguardando conferência administrativa da " +
+        "SoproLife.",
         "ok"
       );
       await loadAuthenticatedData();
@@ -3148,6 +3154,31 @@
   // conferiu a assinatura num validador externo — não uma verificação que a
   // SoproLife tenha feito. Um clique distraído não deve produzir isso.
   const VALIDACAO_FRASE = "Confirmo a conferência externa";
+
+  // M25.29E — os dois downloads da fila administrativa.
+  //
+  // `qual` é "exame-tecnico" (o MIR do equipamento) ou "assinado" (o laudo
+  // que a médica devolveu). São documentos SEPARADOS e continuam separados:
+  // um botão cada, um arquivo cada, nomes distintos vindos do servidor.
+  async function baixarDocumentoDaEntrega(documentId, qual) {
+    if (!documentId || state.deliveryBusy) return;
+    state.deliveryBusy = true;
+    announce("Baixando…", "");
+    render();
+    try {
+      const blob = await client().apiBlob(
+        `/laudos/${documentId}/${qual}/conteudo`
+      );
+      saveBlob(blob);
+      announce("Download concluído.", "ok");
+    } catch (error) {
+      // O erro FICA na tela. Não vira arquivo na pasta do usuário.
+      announce(readableError(error), "erro");
+    } finally {
+      state.deliveryBusy = false;
+      render();
+    }
+  }
 
   async function registerExternalValidation(signedId) {
     const digitado = window.prompt(
@@ -3970,6 +4001,20 @@
     if (button.matches("[data-delivery-filter]")) {
       state.deliveryFilter = button.getAttribute("data-delivery-filter");
       render();
+      return;
+    }
+    if (button.matches("[data-delivery-download-mir]")) {
+      baixarDocumentoDaEntrega(
+        button.getAttribute("data-delivery-download-mir"),
+        "exame-tecnico"
+      );
+      return;
+    }
+    if (button.matches("[data-delivery-download-assinado]")) {
+      baixarDocumentoDaEntrega(
+        button.getAttribute("data-delivery-download-assinado"),
+        "assinado"
+      );
       return;
     }
     if (button.matches("[data-delivery-validate]")) {

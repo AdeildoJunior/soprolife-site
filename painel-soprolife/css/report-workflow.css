@@ -2279,10 +2279,17 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
 
   .report-delivery-actions {
     width: 100%;
+    flex-direction: column;
   }
 
+  /* M25.29E — no iPhone estes botões passaram a ser a única forma de baixar
+     os documentos (antes eram links, que o dedo alcançava mal). 48px é o
+     alvo de toque adotado na M25.29D; `flex: none` impede que o `1 1 auto`
+     vire altura quando a linha empilha. */
   .report-delivery-actions .m15-btn {
-    flex: 1 1 auto;
+    flex: none;
+    width: 100%;
+    min-height: 48px;
   }
 }
 

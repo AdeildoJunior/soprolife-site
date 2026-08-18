@@ -4312,7 +4312,10 @@ FILA_ENTREGUE = "entregue"
 FILA_ROTULOS = {
     FILA_AGUARDANDO_LAUDO: "Aguardando laudo",
     FILA_AGUARDANDO_ASSINATURA: "Aguardando assinatura",
-    FILA_ASSINADO_RECEBIDO: "Assinado recebido — validação pendente",
+    # M25.29E — "conferência administrativa" em vez de "validação": este
+    # sistema NÃO verifica a cadeia ICP-Brasil, e o rótulo não pode sugerir
+    # que verificou. O valor persistido do estado não muda.
+    FILA_ASSINADO_RECEBIDO: "Assinado recebido — conferência administrativa pendente",
     FILA_PRONTO_PARA_ENTREGA: "Pronto para entrega",
     FILA_ENTREGUE: "Entregue",
 }
