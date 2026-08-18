@@ -80,41 +80,48 @@ liberada que nunca foi assinada.
 
 Era esse o buraco de verdade.
 
-## 3. O que aconteceu com o PDF assinado — PENDENTE (A ou B)
+## 3. O que aconteceu com o PDF assinado — RESPONDIDO: **B**, com o documento certo
 
-A pergunta obrigatória da missão — *a prévia assinada ficou fora do sistema (A)
-ou voltou ao Centro de Comando (B)?* — **não pôde ser respondida nesta sessão**:
-ela exige leitura da base de produção.
-
-O que está pronto para respondê-la em um comando, sem escrever nada e sem
-imprimir PII:
-
-```bash
-# na VPS, depois do SSH autenticado
-cd /opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15
-.venv/bin/python scripts/auditar_caso_laudo.py LAU-000013
-```
-
-Ele imprime, entre outras coisas, a seção decisiva:
+Auditoria executada na base de produção em **18/08/2026**, como `root` via
+Tailscale, somente leitura, sem imprimir PII. Resultado decisivo:
 
 ```
+=== VERSÕES (ordem de criação) ===
+  v1   original                         2026-08-15 11:37
+  v2   laudo_previa                     2026-08-15 11:49
+  v3   laudo_liberado                   2026-08-16 10:42   <= CORRENTE
+  v4   laudo_assinado_externo_recebido  2026-08-16 16:14
+
 === PDF ASSINADO EXTERNAMENTE — CHEGOU AO SISTEMA? ===
-  NÃO. Nenhum arquivo assinado foi recebido para este laudo.
+  status........................... recebido_validacao_pendente
+  pareado por...................... metadado_soprolife
+  versão de origem................. v3 laudo_liberado
+  origem era PRÉVIA?............... False
+  lote............................. BAT-000030
 ```
 
-ou, se tiver chegado, uma linha por arquivo com `status`, `match_method`,
-`sha256`, o lote e — o campo que decide o incidente — **`origem era PRÉVIA?`**.
+**Resposta: B — um PDF assinado voltou ao Centro de Comando. Mas o que voltou
+deriva da versão FINAL (v3), não da prévia.**
 
-Conduta já definida para cada desfecho, conforme a missão:
+Linha do tempo reconstruída a partir dos lotes e da auditoria:
 
-* **A (não voltou):** nenhum registro é criado. Nada a corrigir na base.
-* **B (voltou):** o registro é **preservado** como evidência e marcado como
-  não entregável/rejeitado. Nenhum `DELETE`, nenhuma reescrita de histórico. O
-  ajuste seria apresentado antes como *dry-run*, com backup datado, e só depois
-  aplicado.
+| quando | o quê |
+| --- | --- |
+| 15/08 11:49 | v2 `laudo_previa` gerada — é o PDF que a médica assinou por fora |
+| 16/08 10:30–10:32 | quatro uploads de 1 documento, **antes** da conclusão — as tentativas de devolver a prévia assinada |
+| 16/08 10:42:15 | laudo **concluído** → v3 `laudo_liberado`, código `RVMD6JJTU63G` |
+| 16/08 16:07:52 | baixado para assinatura (BAT-000029) |
+| 16/08 16:14:46 | upload BAT-000030 → v4, pareado por metadado, **origem v3** |
 
-Nenhuma escrita foi feita em produção nesta sessão.
+Os uploads das 10:30–10:32 não produziram documento assinado registrado para
+este laudo — coerente com o incidente, já que a prévia trazia
+`Código de verificação: —` e não havia como parear. A médica então concluiu o
+laudo, rebaixou o PDF final e assinou o documento correto.
 
+**Conclusão: o sistema não classificou nenhuma prévia como documento final.**
+Não há registro a corrigir, nada a rejeitar, nenhuma evidência a preservar além
+da que já está registrada. **Nenhuma escrita clínica foi necessária** — e
+nenhuma foi feita.
 ## 4. Fluxo antigo × fluxo novo
 
 ```
@@ -353,55 +360,84 @@ O harness é copiado para o painel na hora de rodar e **removido depois** —
 verificado ao fim da sessão: `harness.html` e `_harness_exemplo.pdf` não
 existem na árvore, e nenhum processo de servidor/Chrome ficou órfão.
 
-## 12. Estado de LAU-000013 — PENDENTE
+## 12. Estado de LAU-000013 — RESOLVIDO, sem escrita
 
-Nada foi alterado. Nenhum backup foi feito porque nenhuma escrita foi
-proposta ainda: a decisão sobre o que ajustar depende do resultado da
-auditoria da seção 3.
+A auditoria da seção 3 encerrou a dúvida: **nada precisou ser escrito**.
 
-Expectativa, a confirmar com a auditoria: o laudo está **em elaboração** com a
-conclusão clínica já digitada, preservada no snapshot da última prévia. Nesse
-caso **nada precisa ser escrito na base** — o fluxo novo, depois do deploy,
-leva a Dra. Ana de onde ela está até o PDF final sem que ela reinterprete o
-exame.
+| elemento | estado |
+| --- | --- |
+| ESP-000028 | preservado |
+| LAU-000013 | `liberado`, `signature_status = liberada_institucional` |
+| v1 `original` | preservada |
+| v2 `laudo_previa` | preservada (evidência do incidente) |
+| v3 `laudo_liberado` | **versão corrente**, código `RVMD6JJTU63G` |
+| v4 `laudo_assinado_externo_recebido` | preservado, derivado de v3 |
+| conclusão clínica | intacta, 0 adendos |
+| trilha de auditoria | íntegra, nenhuma linha reescrita |
 
-Se a auditoria mostrar outra coisa (por exemplo, uma prévia assinada já
-recebida e classificada como final), o ajuste virá com *dry-run* primeiro,
-backup datado antes, mudança mínima, versões antigas preservadas e registro de
-manutenção — como manda a missão.
+Nenhum `DELETE`, nenhum `UPDATE`, nenhum backup corretivo — porque **nenhuma
+correção era necessária**. A médica não precisa reinterpretar o exame nem
+refazer nada neste laudo.
 
-## 13. Deploy — PENDENTE
+O laudo está hoje em `recebido_validacao_pendente`, isto é: **aguardando
+conferência administrativa da SoproLife**, não aguardando ação da médica. A
+clareza dessa mensagem é assunto da M25.29E, não desta etapa.
 
-Nada foi implantado. Nenhuma migration é necessária: **nenhuma mudança de
-schema** nesta etapa (Alembic head local `a2f6c81d4b73`, inalterado).
+## 13. Deploy — EXECUTADO em 18/08/2026
 
-Sequência preparada, a executar quando o SSH estiver autenticado:
-
-```bash
-# 1. local
-git push origin claude-m25-29d-fluxo-laudo-assinatura
-git checkout painel-soprolife-v01 && git pull --ff-only
-git merge --ff-only claude-m25-29d-fluxo-laudo-assinatura
-git push origin painel-soprolife-v01
-
-# 2. VPS — Fase 0 primeiro (read-only)
-git -C /opt/soprolife/soprolife-site status --short
-git -C /opt/soprolife/soprolife-site rev-parse HEAD
-git -C /opt/soprolife/soprolife-site fetch
-git -C /opt/soprolife/soprolife-site log HEAD..origin/painel-soprolife-v01 --oneline
-
-# 3. auditoria do caso real, ANTES de qualquer escrita
-cd /opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15
-.venv/bin/python scripts/auditar_caso_laudo.py LAU-000013
-
-# 4. deploy
-git -C /opt/soprolife/soprolife-site pull --ff-only
-systemctl restart soprolife-m15-api.service
-curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:<PAINEL_PORT>/api/v1/health
+```
+local     8ec470d  →  push da branch M25.29D
+integração  e1baeed..8ec470d  ff-only em painel-soprolife-v01 (sem force)
+VPS       e1baeed  →  8ec470d  (git merge --ff-only)
 ```
 
-Sem `reset --hard`, sem force push, sem `force-with-lease`.
+Nenhuma migration: **zero mudança de schema** entre `e1baeed` e `8ec470d`
+(`git diff --stat` sobre `migrations/` volta vazio; Alembic head permanece
+`a2f6c81d4b73`).
 
+### Incidente durante o deploy, e como foi resolvido
+
+O primeiro `git merge --ff-only`, rodado como usuário `soprolife`, **falhou no
+meio**: dois arquivos rastreados pertencem ao `root` dentro de um diretório
+`root` (`nucleo-m15/tests/visual/{harness.html,shots.py}`) e não puderam ser
+substituídos. O git atualizou 8 arquivos em disco e abortou — deixando a VPS
+com **frontend novo e backend antigo**, um estado que não podia permanecer:
+a médica veria o fluxo de uma confirmação sem a trava de servidor.
+
+Resolução, feita com privilégio de `root` — o mesmo com que este repositório
+sempre foi implantado:
+
+1. backup datado da working tree em
+   `/opt/soprolife/backups/pre-m2529d-working-tree-20260818-122757`;
+2. conferência byte a byte de que as alterações locais eram idênticas ao HEAD
+   oficial, e restauração apenas dos 8 arquivos rastreados comprovados;
+3. remoção apenas das cópias untracked explicitamente verificadas;
+4. `git merge --ff-only` completo → HEAD `8ec470d`, árvore limpa;
+5. `systemctl restart soprolife-m15-api` — restart mínimo, sem tocar em
+   `soprolife-painel` nem em `soprolife-painel-loopback`.
+
+**Sem `reset --hard`, sem force push, sem `force-with-lease`, sem `git clean`
+genérico.**
+
+### Verificação pós-deploy
+
+| prova | resultado |
+| --- | --- |
+| HEAD da VPS | `8ec470d0c306a4eee5b37314a84f340cc9d010b3`, árvore limpa |
+| Health (`127.0.0.1:8015`) | `HTTP 200`, `status: ok`, `banco: ok`, `ambiente: prod` — 3 tentativas |
+| Serviços | API / Painel / Loopback `active`; `NRestarts=0` |
+| Alembic | head `a2f6c81d4b73`, sem migration a aplicar |
+| Timer / snapshots | `soprolife-update-data` `Result=success`, `ExecMainStatus=0`; `*-summary.local.json` regravados |
+| Gate M25.23 | `401` em `/laudos`, `/laudos/entrega`, `/admin/usuarios`, `/pessoas` e no estático do painel |
+| Código implantado | as 5 travas e as 6 frases do fluxo novo presentes nos arquivos de produção |
+| Suíte M25.29D na VPS | **25 passed em 16,01s**, com `DATABASE_URL` sequer definido |
+
+O `HTTP 000` observado no script de deploy foi o `sleep 3` curto demais para o
+boot do uvicorn; três medições seguintes deram `HTTP 200`.
+
+A suíte rodou **contra o artefato implantado, na própria VPS**, usando apenas
+fixtures sintéticas em SQLite. Nenhum exame real foi usado como smoke test, e
+os dois exames enviados pelo sócio em 18/08 não foram tocados.
 ## 14. Não-regressão
 
 | garantia | como fica |
@@ -409,7 +445,7 @@ Sem `reset --hard`, sem force push, sem `force-with-lease`.
 | M25.23 — gate de autenticação | intacto; teste próprio nesta etapa (`test_medica_continua_sem_financeiro_e_sem_admin`) |
 | Dra. Ana vê só laudos de espirometria | inalterado — nenhuma rota de navegação foi tocada |
 | M25.27 — área médica | inalterada; `boot()` e o manifesto não foram tocados |
-| M25.28 / M25.29C — timer e snapshots | **não tocados** (a verificar na VPS na Fase 0) |
+| M25.28 / M25.29C — timer e snapshots | **não tocados**; verificados na VPS após o deploy (`Result=success`) |
 | Financeiro | não alterado |
 | Pastore | nenhum fechamento tocado |
 | CRM | não alterado |
@@ -419,38 +455,43 @@ A única mudança fora do domínio de laudos é uma chave nova na allowlist de
 auditoria (`recusadas_por_previa`), um inteiro — o guarda de PII da M25.28
 continua descartando tudo que não está na lista.
 
-## 15. Instrução para a Dra. Ana (depois do deploy)
+## 15. Instrução para a Dra. Ana (a partir do próximo laudo)
 
-> **Abra LAU-000013 em "Meus laudos".**
-> A conclusão que a senhora já escreveu estará lá.
+**LAU-000013 não precisa de nada dela** — já está concluído, assinado e
+devolvido. Está com a administração da SoproLife para conferência.
+
+Para os próximos laudos:
+
+> **Abra o laudo em "Meus laudos".**
 >
-> 1. Confira o texto na tela.
+> 1. Escreva e confira as conclusões.
 > 2. Clique no botão azul **"Concluir e preparar para assinatura"**.
 > 3. Vai aparecer **uma única pergunta**: *"Concluir este laudo?"*.
 >    Clique em **"Concluir laudo"**. (Se quiser rever antes, clique em
 >    "Voltar e revisar" — nada se perde.)
 > 4. A tela mostra **✓ Laudo concluído**.
 > 5. Clique em **"Baixar PDF para assinar"**.
->    O arquivo se chama **`Ana … - Para assinatura.pdf`**.
+>    O arquivo se chama **`<Nome do paciente> - Para assinatura.pdf`**.
 > 6. Assine esse arquivo com o seu certificado e envie em
 >    **"Assinatura externa"**.
 >
 > **Se o nome do arquivo tiver "PREVIA - NAO ASSINAR", não assine.** É a
 > prévia de conferência — volte e clique em "Concluir e preparar para
-> assinatura".
+> assinatura". A partir desta versão o sistema também **recusa** baixar uma
+> prévia pelo caminho de assinatura, e **recusa** receber de volta uma prévia
+> assinada.
 >
 > Status depois de concluir: **"Concluído — aguardando assinatura qualificada"**.
-
----
 
 ## Resumo operacional
 
 | item | estado |
 | --- | --- |
 | Fase 0 local (git, HEAD) | ✅ |
-| Fase 0 VPS (HEAD, health, Alembic, timer) | ⛔ bloqueado no SSH |
-| Investigação LAU-000013 / ESP-000028 | ⛔ bloqueado no SSH — script pronto |
-| Pergunta A ou B (a prévia assinada voltou?) | ⛔ **em aberto** |
+| Fase 0 VPS (HEAD, health, Alembic, timer) | ✅ |
+| Investigação LAU-000013 / ESP-000028 | ✅ |
+| Pergunta A ou B (a prévia assinada voltou?) | ✅ **B — mas o recebido deriva da v3 final; origem era prévia = False** |
+| Correção clínica necessária | ⬜ nenhuma |
 | Fluxo de uma confirmação | ✅ |
 | Trava frontend | ✅ |
 | Trava backend (download) | ✅ |
@@ -458,9 +499,29 @@ continua descartando tudo que não está na lista.
 | PDF de prévia inequívoco | ✅ |
 | Filename inequívoco | ✅ |
 | MIR separado | ✅ |
-| Testes (25 novos) | ✅ |
+| Testes (25 novos) | ✅ locais e **na VPS** |
 | Mobile 430 / 768 / 1366 / 1920 | ✅ medido |
 | Escrita na base real | ⬜ nenhuma |
-| Deploy | ⬜ não executado |
+| Deploy | ✅ executado, ff-only |
+| Health / Alembic / timer / RBAC | ✅ |
 
-**HEAD final desta branch:** `cb879772552e50ed09ec958f27e6ffcae9f2eb02`
+**HEAD final desta branch:** `8ec470d0c306a4eee5b37314a84f340cc9d010b3`
+**HEAD da VPS:** `8ec470d0c306a4eee5b37314a84f340cc9d010b3`
+**Branch oficial `painel-soprolife-v01`:** `8ec470d0c306a4eee5b37314a84f340cc9d010b3`
+
+### Limitações declaradas
+
+* Esta etapa **não** implementa validação criptográfica ICP-Brasil. O upload de
+  um PDF assinado continua **não** sendo prova de assinatura qualificada, e
+  `qualified_signature` **não** é marcado automaticamente.
+* A prova do fluxo em produção é estrutural (código implantado + suíte na VPS +
+  gate de autenticação), não uma sessão real da médica: por determinação da
+  missão, nenhum exame real foi usado como teste.
+* O estado `recebido_validacao_pendente` é correto, mas a linguagem que a
+  médica vê induz a erro. Isso é o objeto da **M25.29E**, aberta em seguida.
+
+Nenhuma PII e nenhum segredo constam deste relatório.
+
+---
+
+**M25.29D — MÉDICA CONCLUI O LAUDO UMA VEZ E SOMENTE O DOCUMENTO FINAL PODE SER ASSINADO**
