@@ -2272,9 +2272,67 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   min-height: 40px;
 }
 
+/* M25.29G — a confirmação da conferência, na própria linha da fila.
+   Substitui um `prompt()` que pedia para digitar uma frase. Continua sendo
+   um ato deliberado: dois botões, e o texto diz o que está sendo afirmado. */
+.report-delivery-confirm {
+  flex-basis: 100%;
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line, #cfd9e4);
+  border-radius: var(--radius-sm, 10px);
+  background: var(--teal-pale, #eef6f8);
+}
+
+.report-delivery-confirm h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.report-delivery-confirm h4:focus {
+  outline: 2px solid var(--navy, #0b1f36);
+  outline-offset: 2px;
+}
+
+.report-delivery-confirm p {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.report-delivery-confirm-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-delivery-confirm-buttons .m15-btn {
+  min-height: 48px;
+  padding: 12px 20px;
+  font-weight: 700;
+}
+
+/* O "Cancelar" não pode competir visualmente com o que confirma. */
+.report-workflow-root .report-delivery-confirm-buttons
+  [data-delivery-validate-cancel] {
+  border: 2px solid var(--line, #cfd9e4);
+  background: #fff;
+  color: var(--navy, #0b1f36);
+}
+
 @media (max-width: 640px) {
   .report-delivery-row {
     flex-direction: column;
+  }
+
+  /* Confirmar em cima, sob o polegar; cancelar logo abaixo. */
+  .report-delivery-confirm-buttons {
+    flex-direction: column-reverse;
+  }
+
+  .report-delivery-confirm-buttons .m15-btn {
+    width: 100%;
+    flex: none;
   }
 
   .report-delivery-actions {

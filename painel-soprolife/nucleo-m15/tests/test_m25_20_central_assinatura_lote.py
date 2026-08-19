@@ -1466,12 +1466,26 @@ def test_tela_administrativa_declara_que_nao_validou_criptograficamente():
     )
 
 
-def test_registro_de_validacao_externa_exige_frase_digitada():
-    """Um clique distraído não pode virar testemunho de conferência."""
+def test_registro_de_validacao_externa_exige_ato_deliberado():
+    """Um clique distraído não pode virar testemunho de conferência.
+
+    M25.29G — a exigência continua; o mecanismo mudou. Era um `prompt()`
+    pedindo para DIGITAR a frase, que na prática virava copiar e colar.
+    Agora são dois passos na própria tela: um clique abre a confirmação,
+    outro a confirma — e o texto diz exatamente o que está sendo afirmado.
+
+    A frase permanece no contrato com a API, que continua exigindo-a; o que
+    mudou é quem a digita.
+    """
 
     assert "Confirmo a conferência externa" in WORKFLOW_JS
-    assert "window.prompt(" in WORKFLOW_JS
-    assert "NÃO valida a cadeia ICP-Brasil" in WORKFLOW_JS
+    # Dois passos, dois atributos distintos: abrir não registra.
+    assert "data-delivery-validate=" in WORKFLOW_JS
+    assert "data-delivery-validate-confirm=" in WORKFLOW_JS
+    assert "data-delivery-validate-cancel" in WORKFLOW_JS
+    assert "Confirmar conferência do PDF assinado?" in WORKFLOW_JS
+    # E a negativa honesta continua na tela, agora dentro da confirmação.
+    assert "não realiza validação criptográfica da cadeia" in WORKFLOW_JS
 
 
 def test_proxy_deixa_passar_os_nomes_novos():

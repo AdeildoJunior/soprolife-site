@@ -256,6 +256,7 @@
     deliveryQueue: null,
     deliveryFilter: "",
     deliveryBusy: false,
+    confirmConference: "",
     // M25.24 — `null` = "ainda não mexeu nesta sessão, use a preferência
     // guardada". true/false = escolha explícita da médica agora.
     howItWorksOpen: null,
@@ -2324,15 +2325,51 @@
               Baixar laudo assinado
             </button>` : ""}
           ${assinado && assinado.status === "recebido_validacao_pendente"
+            && state.confirmConference !== assinado.signed_document_id
             ? `<button type="button" class="m15-btn m15-btn-primary"
                  data-delivery-validate="${esc(assinado.signed_document_id)}">
                  Registrar conferência do PDF assinado
                </button>` : ""}
+          ${assinado && state.confirmConference === assinado.signed_document_id
+            ? renderConferenceConfirm(assinado) : ""}
           ${assinado && assinado.status === "validado_externamente"
             ? `<button type="button" class="m15-btn"
                  data-delivery-deliver="${esc(assinado.signed_document_id)}">
                  Marcar como entregue
                </button>` : ""}
+        </div>
+      </div>`;
+  }
+
+  // M25.29G — a conferência deixa de ser um `prompt()` com frase para
+  // digitar e passa a ser uma confirmação na própria tela, com dois botões.
+  //
+  // A frase digitada nasceu na M25.20 para impedir que um clique distraído
+  // registrasse um testemunho humano — a intenção continua válida, e por
+  // isso a confirmação segue sendo um ato deliberado, em dois passos, com o
+  // texto dizendo exatamente o que está sendo afirmado. O que sai é a
+  // digitação, que na prática virava copiar e colar.
+  function renderConferenceConfirm(assinado) {
+    return `
+      <div class="report-delivery-confirm" role="group"
+        aria-labelledby="deliveryConferenceTitle">
+        <h4 id="deliveryConferenceTitle" tabindex="-1">
+          Confirmar conferência do PDF assinado?
+        </h4>
+        <p>
+          Confirme apenas se você conferiu externamente o documento assinado.
+          A SoproLife não realiza validação criptográfica da cadeia
+          ICP-Brasil.
+        </p>
+        <div class="report-delivery-confirm-buttons">
+          <button type="button" class="m15-btn" data-delivery-validate-cancel>
+            Cancelar
+          </button>
+          <button type="button" class="m15-btn m15-btn-primary"
+            data-delivery-validate-confirm="${esc(assinado.signed_document_id)}"
+            ${state.busy ? "disabled" : ""}>
+            Confirmar conferência
+          </button>
         </div>
       </div>`;
   }
@@ -3188,13 +3225,7 @@
   }
 
   async function registerExternalValidation(signedId) {
-    const digitado = window.prompt(
-      "Você conferiu esta assinatura no Validar ITI (ou equivalente)?\n\n" +
-      "A SoproLife NÃO valida a cadeia ICP-Brasil — o que será registrado é " +
-      "a sua conferência externa, com seu usuário e a data/hora.\n\n" +
-      `Para confirmar, digite: ${VALIDACAO_FRASE}`
-    );
-    if (digitado === null) return;
+    if (!signedId || state.busy) return;
     state.busy = true;
     render();
     try {
@@ -3205,10 +3236,13 @@
           method: "POST",
           body: JSON.stringify({
             metodo: "validar_iti",
-            confirmacao: digitado,
+            // O backend continua exigindo a frase: ela é o contrato da
+            // M25.20 e não foi afrouxada. O que mudou é quem a digita.
+            confirmacao: VALIDACAO_FRASE,
           }),
         }
       );
+      state.confirmConference = "";
       announce(
         "Conferência externa registrada. O laudo está pronto para entrega.",
         "ok"
@@ -4025,8 +4059,20 @@
       return;
     }
     if (button.matches("[data-delivery-validate]")) {
+      state.confirmConference = button.getAttribute("data-delivery-validate");
+      render();
+      const titulo = document.getElementById("deliveryConferenceTitle");
+      if (titulo) titulo.focus();
+      return;
+    }
+    if (button.matches("[data-delivery-validate-cancel]")) {
+      state.confirmConference = "";
+      render();
+      return;
+    }
+    if (button.matches("[data-delivery-validate-confirm]")) {
       registerExternalValidation(
-        button.getAttribute("data-delivery-validate")
+        button.getAttribute("data-delivery-validate-confirm")
       );
       return;
     }
