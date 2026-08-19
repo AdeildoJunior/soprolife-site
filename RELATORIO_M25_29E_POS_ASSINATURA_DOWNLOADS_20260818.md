@@ -154,7 +154,7 @@ nomes distintos — com teste que compara os bytes dos dois.
 
 ---
 
-## 6. Testes — 23 novos
+## 6. Testes — 24 novos
 
 | # | prova |
 | --- | --- |
@@ -204,8 +204,8 @@ cd /opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15
 /opt/soprolife/venvs/m15/bin/python scripts/auditar_fila_assinados.py
 ```
 
-> Requer credencial de banco (`root`). **Ainda não executado em produção** —
-> ver limitações.
+> Requer credencial de banco (`root`). **Executado em 18/08/2026** — resultado
+> na seção 12.
 
 ---
 
@@ -284,16 +284,65 @@ e o fast-forward passou inteiro de primeira.
 | "Registrar conferência do PDF assinado" | presente |
 | Service worker | sem handler de `fetch`; `registration.unregister()` presente |
 
-### Pendente: restart da API
+### Restart da API — executado
 
-O `systemctl restart soprolife-m15-api` exige `root` e **ainda não foi
-executado**. Nesta etapa isso é benigno: a única mudança de backend é o
-rótulo da fila (`FILA_ROTULOS`). Travas, RBAC e downloads não mudaram no
-servidor, e todo o resto da correção é frontend, que já está no ar.
+`systemctl restart soprolife-m15-api` rodado como `root` em 18/08/2026 às
+22:35. A primeira sondagem de health deu `HTTP 000` (uvicorn ainda subindo) e
+a segunda, dois segundos depois, `HTTP 200`:
+
+```
+{"status":"ok","versao":"0.1.0","ambiente":"prod","banco":"ok",
+ "agora_local":"2026-08-18T22:35:13.299333-03:00"}
+```
+
+Serviços após o restart: API `active`, Painel `active`, Loopback `active`.
+Timer `active`, `Result=success`, `ExecMainStatus=0`.
 
 ---
 
-## 12. Limitações declaradas
+## 12. Auditoria read-only da fila real — executada
+
+Rodada em produção como `root`, sem escrever nada. **Cinco** documentos em
+`recebido_validacao_pendente`, todos íntegros:
+
+| laudo | exame | pareado por | tamanho | arquivo | `%PDF` | backend relê |
+| --- | --- | --- | --- | --- | --- | --- |
+| LAU-000010 | ESP-000029 | `metadado_soprolife` | 202.162 B | ✅ | ✅ | ✅ |
+| LAU-000011 | ESP-000026 | `metadado_soprolife` | 202.182 B | ✅ | ✅ | ✅ |
+| LAU-000012 | ESP-000027 | `metadado_soprolife` | 315.304 B | ✅ | ✅ | ✅ |
+| LAU-000013 | ESP-000028 | `metadado_soprolife` | 315.222 B | ✅ | ✅ | ✅ |
+| LAU-000014 | ESP-000025 | `codigo_laudo_no_conteudo` | 167.098 B | ✅ | ✅ | ✅ |
+
+Em todos: laudo `liberado`, `qualified_signature = False`, tamanho em disco
+idêntico ao registrado. Veredito do script: *todos íntegros e legíveis pelo
+backend*.
+
+**Nenhuma escrita foi feita.** Nada foi marcado como conferido, validado ou
+entregue. Os cinco continuam aguardando a conferência administrativa humana.
+
+### Um ponto que fica em aberto, de propósito
+
+LAU-000014 foi pareado por **`codigo_laudo_no_conteudo`** — o código LAU
+impresso na folha — e não por metadado carimbado. Esse é justamente o caminho
+que, antes da M25.29D, também casaria com uma prévia assinada, porque a prévia
+carrega o mesmo código impresso.
+
+Ele foi recebido em 16/08, **antes** da trava entrar no ar. A auditoria da
+fila não responde qual era a origem documental dele; quem responde é
+`scripts/auditar_caso_laudo.py LAU-000014`, no campo `origem era PRÉVIA?`.
+
+Recomendação: rodar esse comando para os quatro laudos além do LAU-000013
+**antes** de a administração registrar a conferência de cada um. É leitura
+pura e custa um comando por laudo. Nada indica problema — mas foi exatamente
+essa a hipótese que a M25.29D existiu para eliminar, e ela só está verificada
+para o LAU-000013.
+
+A partir da M25.29D implantada, o caso não pode mais se repetir: a prévia não
+sai pelo endpoint de assinatura e não é aceita de volta.
+
+---
+
+## 13. Limitações declaradas
 
 * A verificação de celular é **contrato de CSS** (bloco `@media` extraído por
   contagem de chaves), não medição em navegador como na M25.29D. A fila
@@ -301,8 +350,26 @@ servidor, e todo o resto da correção é frontend, que já está no ar.
 * O `sw.js` desativado remove o modo offline do site público. Como **nada o
   registrava**, não havia modo offline em uso — mas a decisão está aqui,
   explícita, e não escondida num commit.
-* A auditoria da fila real em produção depende de credencial `root` e ainda
-  não foi executada.
+* A origem documental dos quatro laudos assinados antes da M25.29D (todos
+  menos o LAU-000013) não foi verificada — ver a recomendação na seção 12.
 * Continua **sem** validação criptográfica ICP-Brasil.
 
 Nenhuma PII e nenhum segredo constam deste relatório.
+
+
+---
+
+## 14. Estado final
+
+```
+HEAD local ....... 8c5753a3d221f4de961e24dea3b38cdf9966c485
+HEAD oficial ..... 8c5753a3d221f4de961e24dea3b38cdf9966c485
+HEAD VPS ......... 8c5753a3d221f4de961e24dea3b38cdf9966c485
+árvore ........... limpa, nos três
+```
+
+Health `HTTP 200`, `banco: ok`, `ambiente: prod`. Alembic `a2f6c81d4b73`, sem
+migration. Timer `active`, `Result=success`. Gate M25.23 devolvendo `401` em
+todas as rotas sensíveis. Nenhuma escrita em laudo real, em nenhum momento.
+
+**M25.29E — PDF ASSINADO RECEBIDO COM FLUXO CLARO E DOWNLOADS ADMINISTRATIVOS CORRETOS**
