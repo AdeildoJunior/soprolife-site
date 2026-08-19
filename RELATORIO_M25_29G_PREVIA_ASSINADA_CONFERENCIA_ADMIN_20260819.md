@@ -1,261 +1,132 @@
-# M25.29G — Prévia assinada histórica e conferência administrativa simples
+# M25.29G — Fila de assinatura higienizada e conferência administrativa simples
 
-**Data de abertura:** 19/08/2026 · **Branch:** `claude-m25-29g-previa-assinada-conferencia`
-**Base:** `298a255` (M25.29F integrada)
+**Data:** 19/08/2026 · **Branch:** `claude-m25-29g-previa-assinada-conferencia`
+**HEAD final:** `0fd6e2fcd31d77e3c81e9260131e2f6b2d69d79d` (local = oficial = VPS)
+**Migration:** `b8d3e2f7a145` aplicada em produção
+**Backup:** `/opt/soprolife/backups/pre-m2529g-20260819-093444.dump` (401 entradas, validado)
 
-> ## ⏳ ESTADO: **EM ANDAMENTO — auditoria feita, aguardando decisão sobre o dry-run**
->
-> **Nenhuma escrita foi feita até agora.** Nem no banco, nem em arquivo de
-> laudo, nem em estado de documento. A parte de interface está pronta e
-> testada; a parte de dado depende de uma auditoria que exige credencial
-> `root` e ainda não foi executada.
+> ## ✅ CONCLUÍDA — código implantado, dados corrigidos, fila higienizada
 
 ---
 
-## 1. O achado real
+## 1. Os dois achados
 
-Assim que a M25.29F destravou os downloads, o PDF que a fila administrativa
-entrega como **"laudo assinado"** do LAU-000014 pôde finalmente ser aberto e
-inspecionado por uma pessoa.
-
-**Caso:** `LAU-000014` / `ESP-000025`
-
-O documento baixado contém, impresso no próprio papel:
+**Da fila.** Assim que a M25.29F destravou os downloads, o PDF que a fila
+administrativa entregava como "laudo assinado" do **LAU-000014** pôde ser
+aberto por uma pessoa. Ele continha, impresso no papel:
 
 ```
 PRÉVIA
 PRÉVIA — DOCUMENTO NÃO CONCLUÍDO
-PRÉVIA — DOCUMENTO NÃO CONCLUÍDO — conferência da médica antes da assinatura.
 Código de verificação: —
 versão 2
 ```
 
-E o arquivo **tem assinatura digital embutida**.
+com assinatura digital embutida. Era a **prévia assinada** por fora, antes de
+o laudo existir como documento final.
 
-### Conclusão
-
-**O documento assinado recebido do LAU-000014 é uma PRÉVIA assinada.**
-
-Isso confirma exatamente a hipótese que a M25.29E deixou registrada em
-aberto: o LAU-000014 foi pareado por **`codigo_laudo_no_conteudo`** — o
-código LAU **impresso na folha** — e não por metadado carimbado. Esse é o
-caminho de pareamento que, antes da trava da M25.29D, também casava com uma
-prévia, porque a prévia carrega o mesmo código impresso. O documento entrou
-em 16/08, **antes** da trava existir.
-
-O `Código de verificação: —` é a assinatura do problema: o código de
-verificação só nasce na conclusão. Um documento que não o tem nunca foi
-concluído.
-
-### Consequências imediatas
-
-* **NÃO pode ser conferido.**
-* **NÃO pode ser entregue.**
-* **NÃO pode ser apagado** — é evidência de um incidente real.
-* A conclusão clínica **não** será alterada.
+**Da tela.** Ao testar a fila, um `window.prompt()` exigia *digitar* a frase
+`Confirmo a conferência externa` — e não estava claro qual botão o disparava.
 
 ---
 
-## 2. Por que isso não pode se repetir
+## 2. A auditoria dos cinco laudos
 
-A partir da M25.29D, implantada e provada em 18/08:
+Executada como `root`, somente leitura, em 19/08. Os **hashes** decidiram a
+classificação sem depender de inferência:
 
-* a prévia não sai pelo endpoint de assinatura (`409` estruturado);
-* a prévia não é aceita de volta assinada, nem com assinatura válida por
-  cima — a recusa é operacional e auditada;
-* o arquivo de prévia baixa como `<Nome> - PREVIA - NAO ASSINAR.pdf`;
-* o PDF de prévia traz `NÃO ASSINAR` impresso.
+| laudo | sha da v3 (final) | sha da v4 (recebida) | tamanho | pareado por | categoria |
+| --- | --- | --- | --- | --- | --- |
+| LAU-000010 | `3138653edcd0…` | **`3138653edcd0…`** | 202162 = 202162 | metadado | **C** |
+| LAU-000011 | `00fa69409c3e…` | **`00fa69409c3e…`** | 202182 = 202182 | metadado | **C** |
+| LAU-000012 | `6931d59d5e50…` | `fc55601acc1d…` | 202234 → 315304 | metadado | **A** |
+| LAU-000013 | `cfc316d9532e…` | `28a62ebfbe90…` | 202164 → 315222 | metadado | **A** |
+| LAU-000014 | `5bc43fc2f0c2…` | `b291122ccd49…` | 202167 → **167098** | código impresso | **B** |
 
-O LAU-000014 é **histórico**: entrou pela janela que já foi fechada.
+* **A** — final assinado, válido para conferência operacional
+* **B** — prévia assinada
+* **C** — PDF final devolvido **sem assinatura**: hash idêntico ao original
+
+Nenhum caso ficou ambíguo.
+
+### O campo que mentia
+
+A auditoria imprimia `origem era PRÉVIA? = False` para o LAU-000014 — e o
+arquivo era uma prévia. O campo é **derivado do pareamento** e herdou o erro
+dele: como o pareamento foi pelo código LAU **impresso** (que a prévia também
+carrega) e o laudo já estava concluído, o sistema amarrou o blob à versão
+corrente e gravou uma origem falsa.
+
+O script de manutenção confirmou lendo o **conteúdo** do arquivo:
+
+```
+conteúdo parece prévia?................. True
+tem estrutura de assinatura?............ True
+menor que o final?...................... True
+```
+
+> **Lição:** para julgar a origem de um assinado, valem `match_method`, o
+> hash e o conteúdo — não o campo de origem.
+
+Os LAU-000010 e 011 se revelaram outro caso: `idêntico ao final? True` e
+`tem estrutura de assinatura? False`. A médica devolveu **o mesmo arquivo que
+baixou**, sem assinar.
 
 ---
 
-## 3. Fase 1 — auditoria read-only ✅ EXECUTADA (19/08/2026)
+## 3. O estado `recusado`
 
-Rodada como `root`, somente leitura.
+Um estado **genérico e reutilizável**, não um por modo de falha. O motivo
+detalhado vive na auditoria, onde cabe texto e onde não é preciso criar um
+status novo a cada erro documental descoberto.
 
-| pergunta | resposta |
+```python
+ASSINADO_RECUSADO = "recusado"
+```
+
+Motivos de catálogo fechado: `previa_assinada_antes_da_conclusao`,
+`documento_sem_assinatura_externa`,
+`documento_nao_corresponde_a_versao_final`.
+
+Um documento recusado **continua existindo** — blob, hash, versão histórica e
+trilha. O que ele perde é o direito de representar o laudo:
+
+| | |
 | --- | --- |
-| Existe versão final liberada? | **Sim** — v3 `laudo_liberado`, 202.167 B, código `RC7N7JCZJXHY`, 16/08 10:41:48 |
-| Versão corrente | **v3**, a final (`35ab4c1d…`) — correta |
-| Versão à qual o assinado está ligado | registro diz **v3**; os bytes dizem **v2** |
-| Conferência | **não** — `recebido_validacao_pendente` |
-| Entrega | **não** — `delivered_at` vazio |
-| Adendos | 0 |
-| Conclusão clínica | íntegra na v3 |
+| aparece como conferência pendente | ❌ |
+| pode ser baixado como laudo assinado | ❌ (404 controlado) |
+| pode ser conferido | ❌ (409 com mensagem própria) |
+| pode ser entregue | ❌ |
+| bloqueia nova assinatura | ❌ |
+| blob, hash, versão e trilha | ✅ preservados |
 
-### A contradição, e como os bytes a resolvem
+`_assinado_mais_recente()` passou a ignorá-lo — é ela que decide, **num lugar
+só**, o estado da fila, o que o download entrega e se um novo arquivo entra.
 
-A auditoria imprime `origem era PRÉVIA? = False`. A inspeção humana achou
-`PRÉVIA — DOCUMENTO NÃO CONCLUÍDO` dentro do arquivo. Os tamanhos desempatam:
+### Duas correções que só apareceram ao testar
 
-```
-v2 laudo_previa    123.382 B
-v3 laudo_liberado  202.167 B
-v4 recebido        167.098 B   ← MENOR que a final
-```
+1. **Um recusado prendia o laudo para sempre.** O filtro de elegibilidade
+   contava qualquer assinado não-em-conferência como "já recebido", então o
+   laudo sumia da lista da médica — e o único conserto seria apagar o
+   registro, exatamente o que não se pode fazer.
+2. **Reenviar o mesmo arquivo recusado respondia "já havia sido recebido"**,
+   o que soa como sucesso. Agora responde que o arquivo não serve e que o PDF
+   final precisa ser assinado de novo.
 
-Assinatura digital **acrescenta** bytes, nunca reduz. Um arquivo derivado da
-v3 não pode pesar 167.098 B. Já `123.382 + ~43,7 KB de assinatura` fecha
-exatamente nesse número.
+### Migration
 
-**A inspeção humana está certa; o campo do registro está errado.**
-
-O motivo: o pareamento foi por `codigo_laudo_no_conteudo` — o código LAU
-**impresso**, que a prévia também carrega. Como o laudo já estava concluído
-(10:41) quando o arquivo subiu (16:18), o sistema amarrou o blob à versão
-corrente e **gravou uma origem falsa**. `origem era PRÉVIA? = False` não é
-atestado de saúde: é a impressão digital do bug.
-
-Contraste com o LAU-000013, correto: pareado por `metadado_soprolife` — o
-carimbo que só o documento concluído carrega — e v4 = 315.222 B **maior** que
-v3 = 202.164 B.
-
-> **Lição registrada:** para julgar a origem de um assinado, `match_method` e
-> o tamanho relativo valem mais do que o campo de origem, que é derivado do
-> pareamento e herda o erro dele.
-
-### Ponto operacional em aberto
-
-A trilha mostra `laudo_assinado_entregue_para_download` em 16, 17 e 18/08: a
-administração baixou a prévia assinada várias vezes. `delivered_at` está
-vazio — o sistema **não** registrou entrega — mas é preciso confirmar com a
-operação se algum desses arquivos saiu para paciente ou clínica.
-
-### Os outros da fila
-
-| laudo | pareado por | recebido | leitura |
-| --- | --- | --- | --- |
-| LAU-000013 | `metadado_soprolife` | 315.222 B | ✅ cresceu sobre a final |
-| LAU-000012 | `metadado_soprolife` | 315.304 B | ✅ mesmo padrão |
-| LAU-000011 | `metadado_soprolife` | 202.182 B | ⚠️ tamanho de final **sem** assinatura |
-| LAU-000010 | `metadado_soprolife` | 202.162 B | ⚠️ idem |
-
-Os dois de ~202 KB precisam da mesma aritmética antes de qualquer
-conferência. Não se afirma nada sobre eles aqui.
+`b8d3e2f7a145`, pequena e reversível. O `downgrade` **falha de propósito** se
+ainda houver linha em `recusado`: reverter apagando a classificação de um
+documento inválido seria pior do que não reverter.
 
 ---
 
-## 3b. DRY-RUN da correção — NÃO EXECUTADO
+## 4. A confirmação administrativa
 
-Comando, somente leitura, sem PII:
-
-```bash
-cd /opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15
-/opt/soprolife/venvs/m15/bin/python scripts/auditar_caso_laudo.py LAU-000014
-```
-
-Precisa responder, antes de qualquer proposta de escrita:
-
-| pergunta | por quê |
-| --- | --- |
-| todas as versões e seus `kind` | localizar a prévia e a final |
-| existe `laudo_liberado`? | decide se há documento final correto para assinar |
-| qual é a versão corrente | estado operacional real do laudo |
-| `report_document_version_id` do assinado | a qual versão o blob está amarrado |
-| `match_method` e lote | confirmar o pareamento por código impresso |
-| status, conferência, entrega | saber se já saiu para alguém |
-| hashes e trilha de auditoria | preservar a evidência |
-
-> **Requer credencial `root`.** Executada por pessoa, não por mim.
-
----
-
-### Registros a alterar — exatamente um
-
-```
-tabela: external_signed_documents
-id....: bec06587…
-campo.: status
-de....: "recebido_validacao_pendente"
-para..: "recusado_previa"
-```
-
-Mais **uma linha nova** em `audit_logs` registrando o motivo. Nada além disso.
-
-### O que fica intocado
-
-`ESP-000025` · `LAU-000014` (status, `current_version_id`, código de
-verificação, `signature_status`) · **v1, v2, v3 e v4** · o blob de 167.098 B
-com a assinatura embutida · todos os hashes · os 35 lotes · a trilha inteira ·
-a conclusão clínica.
-
-Sem `DELETE`. Sem reescrita de histórico. A prévia assinada deixa de ser
-**entregável**; não deixa de **existir**.
-
-### Como o LAU-000014 volta a aguardar a assinatura correta
-
-Ele **já está** no estado certo — `liberado`, v3 corrente. O que o prende é o
-documento assinado recusado ocupando o lugar. Marcado como recusado e ignorado
-pelo código, a fila recalcula para **"aguardando assinatura"**: a médica
-reabre, clica em "Baixar PDF para assinar", recebe a v3, assina e devolve. O
-upload novo amarra por metadado (M25.29D). **Ela não reinterpreta nada.**
-
-### O `UPDATE` sozinho não basta
-
-`recusado_previa` não existe. Há quatro valores, impostos por `CHECK` no
-banco (`assinado_status_valido`). A correção exige junto:
-
-1. **migration** admitindo o novo valor na constraint;
-2. `_assinado_mais_recente()` ignorar recusados — usada em `reports.py:4087,
-   4399, 4644`. Sem isso o botão "Baixar laudo assinado" **continua
-   entregando a prévia**;
-3. `_estado_de_entrega()` devolver o laudo a "aguardando assinatura";
-4. conferência e entrega recusarem documento nesse estado;
-5. script que, **antes de escrever**, confirme com `looks_like_preview()` que
-   o blob é mesmo uma prévia — não se escreve com base só em aritmética de
-   tamanho.
-
-### O atalho que foi recusado
-
-Dava para reusar `em_conferencia`: já tira da fila e já faz o download
-administrativo recusar, sem migration. Mas ele significa *"aguardando a
-médica confirmar o envio"* e **apagaria o motivo** — que é justamente a
-evidência do incidente. Descartado.
-
----
-
-## 4. Sequência da correção (NÃO EXECUTADA — aguarda decisão)
-
-Condicionada a a auditoria confirmar que **existe versão final liberada** —
-e ela confirma:
-
-1. preservar o PDF assinado da prévia como evidência histórica — blob e
-   trilha intactos;
-2. marcá-lo explicitamente **não entregável / rejeitado**, com motivo
-   *"prévia assinada antes da conclusão"*;
-3. **nenhum `DELETE`**, nenhuma reescrita de histórico;
-4. removê-lo da fila de conferência administrativa pendente;
-5. devolver o LAU-000014 ao estado **aguardando assinatura externa da versão
-   final**;
-6. preservar integralmente a conclusão clínica já liberada;
-7. permitir baixar somente o PDF final correto para assinatura;
-8. a médica assina o final e devolve normalmente — **sem reinterpretar o
-   exame**;
-9. o novo upload amarra à versão final por metadado/hash, conforme M25.29D.
-
-**Se a auditoria mostrar que não existe versão final liberada**, o trabalho
-**para aqui** e volta como decisão humana: nesse caso o caminho passa pela
-médica concluir o laudo, e isso é chamada clínica.
-
-### Pergunta operacional em aberto
-
-Se o LAU-000014 já foi **entregue** a alguém, o documento entregue é a prévia
-assinada — e há um passo fora do sistema a resolver. A auditoria informa a
-data de entrega, se houver.
-
----
-
-## 5. Segundo achado — a confirmação administrativa ✅ CONCLUÍDO
-
-Ao testar a fila administrativa apareceu um `window.prompt()` exigindo
-**digitar** a frase `Confirmo a conferência externa`.
-
-### Qual clique disparava — provado
+### Qual clique disparava o popup — provado
 
 O dispatch usa `event.target.closest("button")` e três atributos `data-*`
-**distintos**, verificados com `matches()`, que exige o atributo exato e não
-o prefixo:
+**distintos**, verificados com `matches()`, que exige o atributo exato:
 
 | botão | atributo | ação |
 | --- | --- | --- |
@@ -263,11 +134,10 @@ o prefixo:
 | Baixar laudo assinado | `data-delivery-download-assinado` | download, **zero** popup |
 | Registrar conferência | `data-delivery-validate` | abre a confirmação |
 
-**Não há sobreposição de handler, nem captura de botão errado.** O popup vinha
-exclusivamente do botão de conferência — o correto. O problema era a
-exigência de digitação, não o disparo.
+**Não havia sobreposição de handler.** O popup vinha do botão correto; o
+problema era a digitação exigida.
 
-### O que passou a existir
+### O que existe agora
 
 ```
 Confirmar conferência do PDF assinado?
@@ -279,62 +149,124 @@ A SoproLife não realiza validação criptográfica da cadeia ICP-Brasil.
 ```
 
 A intenção da M25.20 — *um clique distraído não pode virar testemunho de uma
-pessoa identificada* — **continua**: são dois passos deliberados, na própria
-tela, com o texto dizendo o que está sendo afirmado. O que saiu foi a
-digitação, que na prática virava copiar e colar.
+pessoa identificada* — **continua**: dois passos deliberados, na própria tela.
+O que saiu foi a digitação, que virava copiar e colar.
 
-**O contrato do backend não foi afrouxado:** a API continua exigindo a frase,
-que passou a ser constante do cliente. Nenhuma rota, nenhum estado e nenhuma
-regra de autorização mudaram.
+**O contrato da API não foi afrouxado:** ela segue exigindo a frase, agora
+constante do cliente. `qualified_signature` permanece **falso**.
 
-### Detalhe que apareceu e vale saber
-
-A conferência exige **`ROLE_ADMIN`**. Um usuário `operacional` enxerga a fila
-mas recebe `403` ao tentar registrar — recusa clara, não sucesso silencioso.
-Está travado em teste.
-
-### Testes — 11 novos
-
-1. os três botões têm atributos distintos; `matches()` exige exato
-2. baixar exame técnico não abre confirmação
-3. baixar laudo assinado usa a mesma função, sem popup
-4. a conferência abre uma confirmação, com título e dois botões
-5. não existe frase digitada nem `prompt()` nessa ação
-6. o contrato do backend segue exigindo a frase
-7. cancelar não chama a API e não muda estado
-8. confirmar grava só a conferência
-9. conferir não entrega e não afirma assinatura qualificada
-10. conferência exige `ROLE_ADMIN`
-11. alvo de toque de 48px e empilhamento no celular
-
-Mais o contrato da M25.20 atualizado: ele exigia `window.prompt`, e agora
-exige o mecanismo de dois passos. A intenção do teste foi preservada e as
-asserções aumentaram de 3 para 6.
-
-**Resultado:** 11 verdes; 133 verdes na regressão relacionada (M25.20,
-M25.29D, M25.29E, M25.29F).
+A conferência exige **`ROLE_ADMIN`**: um usuário `operacional` vê a fila mas
+recebe `403` — recusa clara, não sucesso silencioso.
 
 ---
 
-## 6. Estado atual
+## 5. Correção dos dados — executada
 
-| item | estado |
+Rodada em produção após backup, em dry-run e depois `--apply`, com o script
+validando a evidência antes de cada escrita.
+
+| laudo | mudança | evidência que sustentou |
+| --- | --- | --- |
+| LAU-000014 | `recebido_validacao_pendente` → `recusado` | o conteúdo do PDF traz as marcas de prévia |
+| LAU-000010 | `recebido_validacao_pendente` → `recusado` | hash idêntico ao final — nada foi acrescentado |
+| LAU-000011 | `recebido_validacao_pendente` → `recusado` | hash idêntico ao final — nada foi acrescentado |
+
+Cada um gerou uma linha `assinado_externo_recusado` na trilha, em
+2026-08-19 09:36.
+
+### O que NÃO foi alterado
+
+* **Nenhuma conclusão clínica** foi tocada
+* **Nenhum exame, paciente ou MIR** foi alterado
+* **Nenhum `DELETE`** — nem de linha, nem de arquivo
+* **Blobs, hashes e histórico preservados** — as quatro versões de cada laudo
+  continuam onde estavam
+* Código de verificação, `current_version_id`, `signature_status` e os 35
+  lotes: intactos
+* Financeiro, Pastore e CRM: não tocados
+
+---
+
+## 6. Estado final dos cinco laudos
+
+| laudo | estado | ação necessária |
+| --- | --- | --- |
+| **LAU-000010** | recusado | precisa somente nova assinatura do PDF final |
+| **LAU-000011** | recusado | precisa somente nova assinatura do PDF final |
+| **LAU-000012** | íntegro | aguardando conferência administrativa |
+| **LAU-000013** | íntegro | aguardando conferência administrativa |
+| **LAU-000014** | recusado | prévia assinada; precisa somente nova assinatura do PDF final |
+
+**Nenhum dos três recusados precisa de novo laudo nem de nova conclusão
+clínica.** O laudo final existe e está íntegro nos três. A médica abre, clica
+em **"Baixar PDF para assinar"**, assina por fora e devolve.
+
+A fila de conferência caiu de **cinco** para **dois** documentos — e os dois
+que restam foram verificados: arquivo presente, tamanho igual ao registrado,
+`%PDF` no início, backend relê sem erro.
+
+---
+
+## 7. Testes — 23 novos
+
+Estado `recusado` existe e é genérico · não conta como assinado atual · não
+pode ser conferido nem entregue · não é baixável como assinado · devolve o
+laudo a "aguardando assinatura" · blob e histórico sobrevivem · libera nova
+assinatura · conclusão clínica permanece · script em dry-run · script em
+`--apply` · idempotência · script para diante de conferência já registrada ·
+reenviar o mesmo arquivo recusado não o torna válido · confirmação nova com
+dois botões · downloads sem popup · sem frase digitada · contrato do backend
+intacto · `qualified_signature` falso · nada entregue sozinho · RBAC da
+médica · `ROLE_ADMIN` na conferência · alvo de toque de 48px · sem dado real.
+
+Contratos anteriores atualizados por mudança legítima: **M25.20** (a frase
+digitada virou dois passos — asserções foram de 3 para 6) e
+**test_migrations** (head esperada acompanha a migration nova, e a prova real
+continua sendo existir **exatamente uma** head).
+
+**Regressão focada:** 191 verdes em M25.18, M25.20, M25.29D, M25.29E,
+M25.29F, M25.29G e migrations. Suíte completa não executada — a orientação
+foi hotfix focado com a operação esperando.
+
+---
+
+## 8. Deploy e produção
+
+```
+integração  298a255..0fd6e2f  ff-only em painel-soprolife-v01 (sem force)
+VPS         ff-only até 0fd6e2f, árvore limpa
+migration   a2f6c81d4b73 → b8d3e2f7a145
+restart     soprolife-m15-api + soprolife-painel + soprolife-painel-loopback
+```
+
+| prova | resultado |
 | --- | --- |
-| Achado do LAU-000014 | ✅ documentado |
-| Auditoria read-only | ⏳ **pendente — exige `root`** |
-| Dry-run da correção | ⏳ depende da auditoria |
-| Escrita no banco | ⬜ **nenhuma** |
-| Confirmação administrativa | ✅ concluída e testada |
-| Testes focados | ✅ 11 novos, 133 de regressão |
-| Deploy | ⬜ não executado |
+| Backup antes de escrever | ✅ 520K, 401 entradas, validado por `pg_restore --list` |
+| Alembic | ✅ `b8d3e2f7a145 (head)` |
+| Serviços | ✅ API, Painel e Loopback `active` |
+| Health | ✅ `HTTP 200`, `banco: ok`, `ambiente: prod` |
+| Timer / snapshots | ✅ `active`, `Result=success`, `ExecMainStatus=0` |
+| HEAD local = oficial = VPS | ✅ `0fd6e2fcd31d77e3c81e9260131e2f6b2d69d79d` |
+| Árvore | ✅ limpa nos três |
+| Cache busting | ✅ `?v=2026081901` — o navegador recebe a tela nova |
 
-**HEAD local:** `f375eed` · **HEAD oficial:** `298a255` · **HEAD VPS:** `298a255`
+---
 
-Suíte completa não executada: a orientação foi hotfix focado com a operação
-esperando.
+## 9. Limitações declaradas
+
+* O sistema **não** valida cadeia ICP-Brasil. A checagem de `/ByteRange`,
+  `/Sig` e `/SubFilter` feita pelo script distingue "tem estrutura de
+  assinatura" de "é o mesmo PDF que saiu daqui" — e **nada além disso**.
+* A verificação de celular é contrato de CSS, não medição em navegador.
+* O motivo da recusa vive na auditoria; a tela mostra apenas o estado.
+* **Ponto operacional fora do sistema:** a prévia assinada do LAU-000014 foi
+  baixada pela administração em 16, 17 e 18/08. `delivered_at` está vazio — o
+  sistema não registrou entrega — mas é preciso confirmar com a operação se
+  algum desses arquivos chegou a sair para paciente ou clínica. Isso o
+  sistema não alcança.
 
 Nenhuma PII e nenhum segredo constam deste relatório.
 
 ---
 
-*Documento vivo — atualizado a cada avanço da missão.*
+**M25.29G — FILA DE ASSINATURA HIGIENIZADA, DOCUMENTOS INVÁLIDOS PRESERVADOS E FLUXO CLÍNICO LIBERADO**
