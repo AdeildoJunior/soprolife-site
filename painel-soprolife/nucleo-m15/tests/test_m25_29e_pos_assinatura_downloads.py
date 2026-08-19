@@ -570,6 +570,6 @@ def test_assets_alterados_tem_cache_busting_atual():
         re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
     )
     assert versoes, "os assets precisam continuar versionados"
-    assert versoes == {"2026081801"}, (
+    assert versoes == {"2026081901"}, (
         "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
     )
