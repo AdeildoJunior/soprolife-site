@@ -40,6 +40,7 @@ from ..models import (
     ASSINADO_EM_CONFERENCIA,
     ASSINADO_ENTREGUE,
     ASSINADO_RECEBIDO_VALIDACAO_PENDENTE,
+    ASSINADO_RECUSADO,
     ASSINADO_VALIDADO_EXTERNAMENTE,
     BATCH_DIRECAO_DOWNLOAD,
     BATCH_DIRECAO_UPLOAD,
@@ -3550,8 +3551,14 @@ def _aguardando_assinatura_externa(db: Session, *, profile_id: str):
     certificado real.
     """
 
+    # M25.29G — um assinado RECUSADO não bloqueia nova assinatura. Ele é
+    # evidência histórica, não o documento vigente: sem esta exclusão o laudo
+    # ficaria fora da lista da médica para sempre, e o único caminho de
+    # conserto seria apagar o registro — exatamente o que não se pode fazer.
     ja_recebidos = select(ExternalSignedDocument.report_document_id).where(
-        ExternalSignedDocument.status != ASSINADO_EM_CONFERENCIA
+        ExternalSignedDocument.status.notin_(
+            (ASSINADO_EM_CONFERENCIA, ASSINADO_RECUSADO)
+        )
     )
     return db.execute(
         select(ReportDocument, SpirometryExam, Person)
@@ -3598,6 +3605,10 @@ def _versao_para_assinatura(
 # M25.29D — a frase que a médica lê quando pede para assinar cedo demais.
 # É a mesma no download e no retorno do assinado de propósito: o sistema tem
 # UMA explicação para este erro, e ela cabe numa linha.
+ASSINADO_RECUSADO_MENSAGEM = (
+    "Este arquivo foi recusado e não representa o laudo assinado. O laudo precisa ser assinado novamente a partir do PDF final."
+)
+
 PREVIA_NAO_ASSINAVEL = (
     "Este laudo ainda é uma prévia. Conclua o laudo antes de baixar para "
     "assinatura."
@@ -4071,12 +4082,21 @@ async def upload_external_signature_batch(
             )
         ).scalar_one_or_none()
         if existente is not None:
+            # M25.29G — reenviar o MESMO arquivo que já foi recusado não o
+            # torna válido. Dizer "já havia sido recebido" faria a médica
+            # achar que estava tudo certo; ela precisa saber que tem de
+            # assinar o PDF final de novo.
+            recusado = existente.status == ASSINADO_RECUSADO
             veredictos.append(MatchVerdict(
                 filename=arquivo.filename,
-                outcome=JA_RECEBIDO,
+                outcome=RECUSADO if recusado else JA_RECEBIDO,
                 report_code=document.public_code,
                 patient_name=nome_paciente,
-                message="Este arquivo assinado já havia sido recebido.",
+                message=(
+                    ASSINADO_RECUSADO_MENSAGEM
+                    if recusado
+                    else "Este arquivo assinado já havia sido recebido."
+                ),
             ))
             continue
 
@@ -4347,9 +4367,18 @@ def _estado_de_entrega(
 def _assinado_mais_recente(
     db: Session, document_id: str
 ) -> ExternalSignedDocument | None:
+    """O documento assinado que VALE hoje para este laudo.
+
+    M25.29G — recusado não conta. Ele continua no banco, com blob, hash,
+    versão e trilha; o que ele perde é o direito de representar o laudo. É
+    esta função que decide, num só lugar, o estado da fila, o que o download
+    administrativo entrega e se um novo arquivo assinado pode entrar.
+    """
+
     return db.execute(
         select(ExternalSignedDocument)
         .where(ExternalSignedDocument.report_document_id == document_id)
+        .where(ExternalSignedDocument.status != ASSINADO_RECUSADO)
         .order_by(ExternalSignedDocument.received_at.desc())
         .limit(1)
     ).scalar_one_or_none()
@@ -4487,6 +4516,15 @@ def register_external_validation(
             "conferencia_da_medica_pendente",
             "A médica ainda não confirmou o recebimento deste arquivo.",
         )
+    # M25.29G — recusado tem mensagem própria: dizer "já foi registrada"
+    # para um arquivo inválido seria falso, e mandaria a operação procurar
+    # um registro que não existe.
+    if assinado.status == ASSINADO_RECUSADO:
+        raise ReportDomainError(
+            409,
+            "documento_assinado_recusado",
+            ASSINADO_RECUSADO_MENSAGEM,
+        )
     if assinado.status != ASSINADO_RECEBIDO_VALIDACAO_PENDENTE:
         raise ReportDomainError(
             409,
@@ -4554,6 +4592,12 @@ def register_delivery(
             404,
             "documento_assinado_nao_encontrado",
             "Documento assinado não encontrado.",
+        )
+    if assinado.status == ASSINADO_RECUSADO:
+        raise ReportDomainError(
+            409,
+            "documento_assinado_recusado",
+            ASSINADO_RECUSADO_MENSAGEM,
         )
     if assinado.status != ASSINADO_VALIDADO_EXTERNAMENTE:
         raise ReportDomainError(

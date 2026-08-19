@@ -54,6 +54,9 @@ ALLOWED_KEYS = {
     # que a auditoria precisa saber é que o incidente aconteceu e com que
     # frequência, nunca qual arquivo era.
     "recusadas_por_previa",
+    # M25.29G — recusa de documento assinado inválido. Identificador técnico,
+    # motivo de catálogo fechado e dois booleanos derivados de hash/conteúdo.
+    "signed_document_id", "match_method", "identico_ao_final", "parece_previa",
 }
 
 _MAX_STR = 120

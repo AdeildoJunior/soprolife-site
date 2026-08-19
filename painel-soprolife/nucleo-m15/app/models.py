@@ -1909,11 +1909,21 @@ ASSINADO_EM_CONFERENCIA = "em_conferencia"
 ASSINADO_RECEBIDO_VALIDACAO_PENDENTE = "recebido_validacao_pendente"
 ASSINADO_VALIDADO_EXTERNAMENTE = "validado_externamente"
 ASSINADO_ENTREGUE = "entregue"
+# M25.29G — um arquivo recebido pode simplesmente NÃO servir: uma prévia
+# assinada, um PDF idêntico ao final (devolvido sem assinar), um documento
+# que não corresponde à versão final. O estado é UM só, genérico e
+# reutilizável; o MOTIVO detalhado vive na auditoria, onde cabe texto e onde
+# não é preciso criar um status novo a cada modo de falha descoberto.
+#
+# Recusado preserva tudo — blob, hash, versão histórica e trilha — e apenas
+# deixa de contar como o documento assinado operacional.
+ASSINADO_RECUSADO = "recusado"
 ASSINADO_STATUS_VALUES = (
     ASSINADO_EM_CONFERENCIA,
     ASSINADO_RECEBIDO_VALIDACAO_PENDENTE,
     ASSINADO_VALIDADO_EXTERNAMENTE,
     ASSINADO_ENTREGUE,
+    ASSINADO_RECUSADO,
 )
 
 
