@@ -3,7 +3,7 @@
 **Data de abertura:** 19/08/2026 · **Branch:** `claude-m25-29g-previa-assinada-conferencia`
 **Base:** `298a255` (M25.29F integrada)
 
-> ## ⏳ ESTADO: **EM ANDAMENTO — aguardando auditoria read-only de LAU-000014**
+> ## ⏳ ESTADO: **EM ANDAMENTO — auditoria feita, aguardando decisão sobre o dry-run**
 >
 > **Nenhuma escrita foi feita até agora.** Nem no banco, nem em arquivo de
 > laudo, nem em estado de documento. A parte de interface está pronta e
@@ -70,7 +70,73 @@ O LAU-000014 é **histórico**: entrou pela janela que já foi fechada.
 
 ---
 
-## 3. Fase 1 — auditoria read-only (PENDENTE)
+## 3. Fase 1 — auditoria read-only ✅ EXECUTADA (19/08/2026)
+
+Rodada como `root`, somente leitura.
+
+| pergunta | resposta |
+| --- | --- |
+| Existe versão final liberada? | **Sim** — v3 `laudo_liberado`, 202.167 B, código `RC7N7JCZJXHY`, 16/08 10:41:48 |
+| Versão corrente | **v3**, a final (`35ab4c1d…`) — correta |
+| Versão à qual o assinado está ligado | registro diz **v3**; os bytes dizem **v2** |
+| Conferência | **não** — `recebido_validacao_pendente` |
+| Entrega | **não** — `delivered_at` vazio |
+| Adendos | 0 |
+| Conclusão clínica | íntegra na v3 |
+
+### A contradição, e como os bytes a resolvem
+
+A auditoria imprime `origem era PRÉVIA? = False`. A inspeção humana achou
+`PRÉVIA — DOCUMENTO NÃO CONCLUÍDO` dentro do arquivo. Os tamanhos desempatam:
+
+```
+v2 laudo_previa    123.382 B
+v3 laudo_liberado  202.167 B
+v4 recebido        167.098 B   ← MENOR que a final
+```
+
+Assinatura digital **acrescenta** bytes, nunca reduz. Um arquivo derivado da
+v3 não pode pesar 167.098 B. Já `123.382 + ~43,7 KB de assinatura` fecha
+exatamente nesse número.
+
+**A inspeção humana está certa; o campo do registro está errado.**
+
+O motivo: o pareamento foi por `codigo_laudo_no_conteudo` — o código LAU
+**impresso**, que a prévia também carrega. Como o laudo já estava concluído
+(10:41) quando o arquivo subiu (16:18), o sistema amarrou o blob à versão
+corrente e **gravou uma origem falsa**. `origem era PRÉVIA? = False` não é
+atestado de saúde: é a impressão digital do bug.
+
+Contraste com o LAU-000013, correto: pareado por `metadado_soprolife` — o
+carimbo que só o documento concluído carrega — e v4 = 315.222 B **maior** que
+v3 = 202.164 B.
+
+> **Lição registrada:** para julgar a origem de um assinado, `match_method` e
+> o tamanho relativo valem mais do que o campo de origem, que é derivado do
+> pareamento e herda o erro dele.
+
+### Ponto operacional em aberto
+
+A trilha mostra `laudo_assinado_entregue_para_download` em 16, 17 e 18/08: a
+administração baixou a prévia assinada várias vezes. `delivered_at` está
+vazio — o sistema **não** registrou entrega — mas é preciso confirmar com a
+operação se algum desses arquivos saiu para paciente ou clínica.
+
+### Os outros da fila
+
+| laudo | pareado por | recebido | leitura |
+| --- | --- | --- | --- |
+| LAU-000013 | `metadado_soprolife` | 315.222 B | ✅ cresceu sobre a final |
+| LAU-000012 | `metadado_soprolife` | 315.304 B | ✅ mesmo padrão |
+| LAU-000011 | `metadado_soprolife` | 202.182 B | ⚠️ tamanho de final **sem** assinatura |
+| LAU-000010 | `metadado_soprolife` | 202.162 B | ⚠️ idem |
+
+Os dois de ~202 KB precisam da mesma aritmética antes de qualquer
+conferência. Não se afirma nada sobre eles aqui.
+
+---
+
+## 3b. DRY-RUN da correção — NÃO EXECUTADO
 
 Comando, somente leitura, sem PII:
 
@@ -95,9 +161,64 @@ Precisa responder, antes de qualquer proposta de escrita:
 
 ---
 
-## 4. Correção pretendida (NÃO EXECUTADA — dry-run primeiro)
+### Registros a alterar — exatamente um
 
-Condicionada a a auditoria confirmar que **existe versão final liberada**:
+```
+tabela: external_signed_documents
+id....: bec06587…
+campo.: status
+de....: "recebido_validacao_pendente"
+para..: "recusado_previa"
+```
+
+Mais **uma linha nova** em `audit_logs` registrando o motivo. Nada além disso.
+
+### O que fica intocado
+
+`ESP-000025` · `LAU-000014` (status, `current_version_id`, código de
+verificação, `signature_status`) · **v1, v2, v3 e v4** · o blob de 167.098 B
+com a assinatura embutida · todos os hashes · os 35 lotes · a trilha inteira ·
+a conclusão clínica.
+
+Sem `DELETE`. Sem reescrita de histórico. A prévia assinada deixa de ser
+**entregável**; não deixa de **existir**.
+
+### Como o LAU-000014 volta a aguardar a assinatura correta
+
+Ele **já está** no estado certo — `liberado`, v3 corrente. O que o prende é o
+documento assinado recusado ocupando o lugar. Marcado como recusado e ignorado
+pelo código, a fila recalcula para **"aguardando assinatura"**: a médica
+reabre, clica em "Baixar PDF para assinar", recebe a v3, assina e devolve. O
+upload novo amarra por metadado (M25.29D). **Ela não reinterpreta nada.**
+
+### O `UPDATE` sozinho não basta
+
+`recusado_previa` não existe. Há quatro valores, impostos por `CHECK` no
+banco (`assinado_status_valido`). A correção exige junto:
+
+1. **migration** admitindo o novo valor na constraint;
+2. `_assinado_mais_recente()` ignorar recusados — usada em `reports.py:4087,
+   4399, 4644`. Sem isso o botão "Baixar laudo assinado" **continua
+   entregando a prévia**;
+3. `_estado_de_entrega()` devolver o laudo a "aguardando assinatura";
+4. conferência e entrega recusarem documento nesse estado;
+5. script que, **antes de escrever**, confirme com `looks_like_preview()` que
+   o blob é mesmo uma prévia — não se escreve com base só em aritmética de
+   tamanho.
+
+### O atalho que foi recusado
+
+Dava para reusar `em_conferencia`: já tira da fila e já faz o download
+administrativo recusar, sem migration. Mas ele significa *"aguardando a
+médica confirmar o envio"* e **apagaria o motivo** — que é justamente a
+evidência do incidente. Descartado.
+
+---
+
+## 4. Sequência da correção (NÃO EXECUTADA — aguarda decisão)
+
+Condicionada a a auditoria confirmar que **existe versão final liberada** —
+e ela confirma:
 
 1. preservar o PDF assinado da prévia como evidência histórica — blob e
    trilha intactos;
