@@ -252,7 +252,48 @@ nota.
 
 ---
 
-## 11. Limitações declaradas
+## 11. Deploy — 18/08/2026
+
+```
+local        30493f7  →  push da branch M25.29E
+integração   f5d3052..30493f7  ff-only em painel-soprolife-v01 (sem force)
+VPS          f5d3052  →  30493f7  (git merge --ff-only, árvore limpa)
+```
+
+Nenhuma migration: Alembic head permanece `a2f6c81d4b73`.
+
+### Pré-voo que a M25.29D ensinou
+
+Antes do merge, conferi o dono de **todos** os diretórios que o commit
+alcança — o deploy anterior parou no meio porque `nucleo-m15/tests/visual/`
+pertence ao `root`. Os seis diretórios desta etapa são `soprolife:soprolife`,
+e o fast-forward passou inteiro de primeira.
+
+### Verificação pós-deploy
+
+| prova | resultado |
+| --- | --- |
+| HEAD da VPS | `30493f76adf9d5f5ec623973aa104bb4fb16d2f1`, árvore limpa |
+| Health | `HTTP 200`, `status: ok`, `banco: ok`, `ambiente: prod` |
+| Alembic | head `a2f6c81d4b73`, nada a aplicar |
+| Timer / snapshots | `Result=success`, `ExecMainStatus=0`, ciclo de 10min ativo |
+| Gate M25.23 | `401` em `/laudos`, `/laudos/entrega`, `/admin/usuarios`, `/pessoas` |
+| Cache busting | `report-workflow.js?v=2026081801` no ar |
+| Downloads por botão | 3 ocorrências; **zero** âncoras cruas restantes |
+| "Seu trabalho terminou" | presente |
+| "Registrar conferência do PDF assinado" | presente |
+| Service worker | sem handler de `fetch`; `registration.unregister()` presente |
+
+### Pendente: restart da API
+
+O `systemctl restart soprolife-m15-api` exige `root` e **ainda não foi
+executado**. Nesta etapa isso é benigno: a única mudança de backend é o
+rótulo da fila (`FILA_ROTULOS`). Travas, RBAC e downloads não mudaram no
+servidor, e todo o resto da correção é frontend, que já está no ar.
+
+---
+
+## 12. Limitações declaradas
 
 * A verificação de celular é **contrato de CSS** (bloco `@media` extraído por
   contagem de chaves), não medição em navegador como na M25.29D. A fila
