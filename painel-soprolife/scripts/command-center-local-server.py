@@ -133,13 +133,35 @@ _M15_MAX_REPORT_REQUEST_BODY = 26 * 1024 * 1024
 _M15_MAX_REPORT_RESPONSE_BODY = 26 * 1024 * 1024
 _M15_CONNECT_TIMEOUT = 3.0
 _M15_RESPONSE_TIMEOUT = 15.0
-_M15_REPORT_CONTENT_RE = re.compile(
-    r"^/laudos/"
+_UUID = (
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/versoes/"
-    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/conteudo$"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
+_M15_REPORT_CONTENT_RE = re.compile(
+    rf"^/laudos/{_UUID}/versoes/{_UUID}/conteudo$"
+)
+# M25.29F — as OUTRAS rotas que devolvem binário.
+#
+# O gate abaixo existe para o proxy não relatar qualquer tipo de conteúdo que
+# a API mande; a intenção é certa. O defeito era a lista: ela conhecia só o
+# download por versão. Um PDF legítimo vindo de `exame-tecnico/conteudo` ou
+# de `assinado/conteudo` não casava, caía no ramo do JSON e o proxy trocava a
+# resposta boa da API por 502 "Resposta inválida da API." — que foi o que a
+# operação viu na tela, e o que antes a âncora crua salvava em disco como
+# "conteúdo 5.jsold".
+_M15_REPORT_DOWNLOAD_RE = re.compile(
+    rf"^/laudos/{_UUID}/(?:exame-tecnico|assinado)/conteudo$"
+)
+# Os dois downloads em lote são POST e podem devolver um PDF (documento
+# único) ou um ZIP (vários). Cada clique frustrado neles abria um lote de
+# auditoria novo — o padrão de BAT repetidos visto na M25.29E tem esta mesma
+# raiz.
+_M15_LOTE_DOWNLOAD_PATHS = frozenset({
+    "/laudos/assinatura-externa/baixar",
+    "/laudos/lote/baixar",
+})
+_M15_TIPOS_PDF = frozenset({"application/pdf"})
+_M15_TIPOS_PDF_OU_ZIP = frozenset({"application/pdf", "application/zip"})
 # M25.18 — ESTA regra era a causa do arquivo baixado com nome aleatório.
 #
 # A M25.17 passou a mandar `Geoffrey Kirk Barnes - Assinado.pdf`, com espaços,
@@ -225,8 +247,25 @@ def _is_report_upload(method: str, suffix: str, content_type: str | None) -> boo
     )
 
 
+def _tipos_binarios_esperados(method: str, suffix: str) -> frozenset:
+    """Os tipos que ESTA rota pode legitimamente devolver — nada além disso.
+
+    Devolver vazio significa "esta rota só fala JSON", e é o que mantém o
+    proxy incapaz de relatar conteúdo arbitrário.
+    """
+
+    if method == "GET":
+        if _M15_REPORT_CONTENT_RE.fullmatch(suffix):
+            return _M15_TIPOS_PDF
+        if _M15_REPORT_DOWNLOAD_RE.fullmatch(suffix):
+            return _M15_TIPOS_PDF
+    elif method == "POST" and suffix in _M15_LOTE_DOWNLOAD_PATHS:
+        return _M15_TIPOS_PDF_OU_ZIP
+    return frozenset()
+
+
 def _is_report_content(method: str, suffix: str) -> bool:
-    return method == "GET" and bool(_M15_REPORT_CONTENT_RE.fullmatch(suffix))
+    return bool(_tipos_binarios_esperados(method, suffix))
 
 
 def _safe_content_disposition(value: str | None) -> str | None:
@@ -602,10 +641,13 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 status = 502
                 return
             content_type = response.getheader("Content-Type") or ""
+            tipos_binarios = _tipos_binarios_esperados(method, suffix)
             is_pdf = (
-                report_content
-                and 200 <= status < 300
-                and content_type.lower().startswith("application/pdf")
+                200 <= status < 300
+                and any(
+                    content_type.lower().startswith(tipo)
+                    for tipo in tipos_binarios
+                )
             )
             if not is_pdf:
                 if not content_type.lower().startswith("application/json"):
