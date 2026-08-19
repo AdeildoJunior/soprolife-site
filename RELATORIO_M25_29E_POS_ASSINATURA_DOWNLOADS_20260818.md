@@ -235,7 +235,24 @@ Gate M25.23 intacto: `401` sem sessão em `/laudos`, `/laudos/entrega`,
 
 ---
 
-## 10. Limitações declaradas
+## 10. Suíte
+
+```
+1386 passed, 13 failed, 30 skipped   (suíte inteira, 25min40s)
+1430 testes coletados  (1406 na M25.29D + 24 novos aqui)
+```
+
+As 13 falhas são pré-existentes e idênticas às do HEAD de partida: 12 do
+`test_live_multisheet_reader` (`googleapiclient` fora do `requirements.lock`)
+e o falso positivo da M25.17. **Zero regressão.**
+
+Na conferência deste número descobriu-se que a contagem registrada no
+relatório da M25.29D (1320 verdes) estava subnotificada — corrigida lá, com
+nota.
+
+---
+
+## 11. Limitações declaradas
 
 * A verificação de celular é **contrato de CSS** (bloco `@media` extraído por
   contagem de chaves), não medição em navegador como na M25.29D. A fila

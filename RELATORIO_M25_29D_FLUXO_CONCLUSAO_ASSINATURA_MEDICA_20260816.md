@@ -292,7 +292,13 @@ enviado, depois da conclusão do laudo.
 ### Suíte completa
 
 ```
-1320 passed, 13 failed, 30 skipped   (suíte inteira, 25min28s)
+1386 passed, 13 failed, 30 skipped   (suíte inteira, 25min40s)
+
+Número corrigido em 18/08/2026. A medição registrada aqui antes (1320
+verdes) estava subnotificada: a suíte coleta 1406 testes neste commit, e
+1320 + 13 + 30 não fecha com esse total. As 13 falhas são as mesmas de
+sempre — 12 do `test_live_multisheet_reader` (`googleapiclient` fora do
+`requirements.lock`) e o falso positivo da M25.17.
 ```
 
 **Nenhuma das 13 falhas foi causada por esta etapa** — todas reproduzem no
