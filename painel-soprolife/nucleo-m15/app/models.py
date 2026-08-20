@@ -1918,9 +1918,23 @@ ASSINADO_ENTREGUE = "entregue"
 # Recusado preserva tudo — blob, hash, versão histórica e trilha — e apenas
 # deixa de contar como o documento assinado operacional.
 ASSINADO_RECUSADO = "recusado"
+# M25.29H — o estado do fluxo NOVO. O arquivo assinado voltou, foi associado
+# ao laudo final por evidência objetiva e passou pelas guardas documentais da
+# SoproLife. É o equivalente operacional de "pronto para entrega".
+#
+# O nome diz o que aconteceu e para no que aconteceu: recebido, assinado.
+# Não diz validado, não diz conferido, não diz ICP-Brasil — a SoproLife
+# continua sem verificar criptograficamente a cadeia da assinatura, e
+# `qualified_signature` continua falso em toda a trilha.
+#
+# `recebido_validacao_pendente` deixa de nascer neste fluxo. Ele permanece
+# no domínio porque documentos históricos estão nele e a auditoria precisa
+# lê-los; nenhum documento novo passa por ali.
+ASSINADO_ACEITO = "recebido_assinado"
 ASSINADO_STATUS_VALUES = (
     ASSINADO_EM_CONFERENCIA,
     ASSINADO_RECEBIDO_VALIDACAO_PENDENTE,
+    ASSINADO_ACEITO,
     ASSINADO_VALIDADO_EXTERNAMENTE,
     ASSINADO_ENTREGUE,
     ASSINADO_RECUSADO,
@@ -2087,8 +2101,17 @@ class ExternalSignedDocument(Base):
             name="validacao_externa_coerente",
         ),
         # Não existe "validado externamente" sem quem validou.
+        #
+        # M25.29H — `entregue` saiu desta exigência. Ela fazia sentido quando
+        # o único caminho até a entrega passava por uma conferência humana:
+        # entregar sem validador seria entregar sem etapa. Com o aceite
+        # automático o caminho normal não tem validador NENHUM, por desenho,
+        # e manter `entregue` aqui impediria de entregar exatamente os
+        # documentos que o sistema aprovou sozinho. O que a constraint
+        # protege continua protegido: `validado_externamente` só existe com
+        # quem o afirmou.
         CheckConstraint(
-            "status NOT IN ('validado_externamente', 'entregue') OR "
+            "status <> 'validado_externamente' OR "
             "validated_by_user_id IS NOT NULL",
             name="status_validado_exige_validador",
         ),

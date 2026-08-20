@@ -57,6 +57,13 @@ ALLOWED_KEYS = {
     # M25.29G — recusa de documento assinado inválido. Identificador técnico,
     # motivo de catálogo fechado e dois booleanos derivados de hash/conteúdo.
     "signed_document_id", "match_method", "identico_ao_final", "parece_previa",
+    # M25.29H — a evidência que sustenta o aceite automático. São todos
+    # booleanos derivados dos bytes do arquivo, mais a contagem de recusas e
+    # o estado anterior numa reclassificação. Nenhum deles carrega conteúdo
+    # do documento: dizem SE uma propriedade vale, nunca qual é o valor.
+    "origem_e_a_versao_final", "tem_estrutura_assinatura", "contem_o_final",
+    "metadado_coerente", "codigo_validacao_coerente", "recusadas_por_guarda",
+    "status_anterior", "aceito",
 }
 
 _MAX_STR = 120

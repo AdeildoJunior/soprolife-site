@@ -39,6 +39,7 @@ from ..ids import new_uuid
 from ..models import (
     ASSINADO_EM_CONFERENCIA,
     ASSINADO_ENTREGUE,
+    ASSINADO_ACEITO,
     ASSINADO_RECEBIDO_VALIDACAO_PENDENTE,
     ASSINADO_RECUSADO,
     ASSINADO_VALIDADO_EXTERNAMENTE,
@@ -191,6 +192,9 @@ from ..services.signature_asset import (
     SignatureAssetError,
     signature_asset_storage_path,
     validate_signature_png,
+)
+from ..services.signature_acceptance import (
+    avaliar as avaliar_guardas_documentais,
 )
 from ..services.signature_batch import (
     JA_RECEBIDO,
@@ -4020,6 +4024,8 @@ async def upload_external_signature_batch(
     recebidos: list[dict] = []
     vistos_no_envio: set[str] = set()
     recusados_por_previa = 0
+    recusados_por_guarda = 0
+    agora_do_envio = datetime.now(timezone.utc)
     for arquivo in extracao.files:
         document, metodo = _parear_documento(arquivo.data, universo=universo)
 
@@ -4128,6 +4134,52 @@ async def upload_external_signature_batch(
                 message="A versão concluída deste laudo não está disponível.",
             ))
             continue
+
+        # M25.29H — as guardas documentais rodam AQUI, antes de o arquivo
+        # virar versão. É o que substitui a conferência administrativa: um
+        # arquivo que não passa não entra na fila, não espera ninguém e volta
+        # para a médica com a instrução do que refazer.
+        #
+        # A auditoria da M25.29H mostrou o preço de deixar isso para um
+        # humano: o LAU-000015 estava marcado como conferido sendo idêntico
+        # ao PDF final e sem estrutura de assinatura nenhuma.
+        guardas = avaliar_guardas_documentais(
+            arquivo.data,
+            final=_read_stored_version(origem).data,
+            document_code=document.public_code,
+            validation_code=document.validation_code,
+            final_version_number=origem.version_number,
+            origem_e_a_versao_final=(document.current_version_id == origem.id),
+        )
+        if not guardas.aceito:
+            recusados_por_guarda += 1
+            veredictos.append(MatchVerdict(
+                filename=arquivo.filename,
+                outcome=RECUSADO,
+                report_code=document.public_code,
+                patient_name=nome_paciente,
+                # O laudo FOI reconhecido; o que não serve é a folha. Dizer
+                # como ele foi reconhecido evita que a médica leia a recusa
+                # como "o sistema não achou o laudo" e reenvie o mesmo
+                # arquivo esperando outro resultado.
+                match_method=metodo,
+                message=guardas.mensagem or ASSINADO_RECUSADO_MENSAGEM,
+            ))
+            audit(
+                db,
+                "laudo_assinado_recusado_na_recepcao",
+                entidade="report_documents",
+                entidade_id=document.id,
+                user_id=physician_user.id,
+                request_id=_request_id(request),
+                detalhes={
+                    "motivo": guardas.motivo,
+                    "match_method": metodo,
+                    **guardas.para_auditoria(),
+                },
+            )
+            continue
+
         try:
             with report_publication_transaction(db) as publication:
                 versao = _store_new_version(
@@ -4151,8 +4203,11 @@ async def upload_external_signature_batch(
                     size_bytes=versao.size_bytes,
                     received_filename=arquivo.filename[:260],
                     match_method=metodo,
-                    status=ASSINADO_EM_CONFERENCIA,
-                    received_at=datetime.now(timezone.utc),
+                    # M25.29H — nasce ACEITO. Passou pelas guardas
+                    # documentais; não há segunda etapa humana a esperar.
+                    status=ASSINADO_ACEITO,
+                    received_at=agora_do_envio,
+                    confirmed_at=agora_do_envio,
                 )
                 db.add(assinado)
                 db.flush()
@@ -4168,6 +4223,26 @@ async def upload_external_signature_batch(
             continue
 
         vistos_no_envio.add(document.id)
+        # O aceite é um FATO auditável por documento, e não um efeito
+        # colateral do resumo do lote. A evidência que o sustenta vai junto:
+        # é ela que permite responder, meses depois, por que este arquivo
+        # passou sem ninguém conferir.
+        audit(
+            db,
+            "laudo_assinado_aceito_automaticamente",
+            entidade="report_documents",
+            entidade_id=document.id,
+            user_id=physician_user.id,
+            request_id=_request_id(request),
+            detalhes={
+                "signed_document_id": assinado.id,
+                "report_version_id": versao.id,
+                "sha256": versao.sha256,
+                "match_method": metodo,
+                "status": ASSINADO_ACEITO,
+                **guardas.para_auditoria(),
+            },
+        )
         veredictos.append(MatchVerdict(
             filename=arquivo.filename,
             outcome=PAREADO,
@@ -4189,7 +4264,7 @@ async def upload_external_signature_batch(
 
     audit(
         db,
-        "laudos_assinados_recebidos_para_conferencia",
+        "laudos_assinados_recebidos",
         entidade="report_documents",
         entidade_id=None,
         user_id=physician_user.id,
@@ -4203,6 +4278,10 @@ async def upload_external_signature_batch(
             # assinada é um incidente de fluxo, não um arquivo corrompido, e
             # precisa ser contável sem abrir arquivo nenhum.
             "recusadas_por_previa": recusados_por_previa,
+            # M25.29H — quantos arquivos foram barrados pelas guardas
+            # documentais. É o número que diz se o aceite automático está
+            # recusando de mais ou de menos, sem abrir arquivo nenhum.
+            "recusadas_por_guarda": recusados_por_guarda,
             "physician_profile_id": profile.id,
         },
     )
@@ -4212,6 +4291,13 @@ async def upload_external_signature_batch(
         "resumo": summarize(veredictos),
         "identificados": recebidos,
         "arquivos": [_ser_veredicto(v) for v in veredictos],
+        # M25.29H — o trabalho da médica acaba aqui. Não há lote a confirmar,
+        # não há conferência administrativa e não há ninguém a avisar.
+        "aceitos": len(recebidos),
+        "estado": ASSINADO_ACEITO,
+        "observacao": (
+            "PDF(s) assinado(s) recebido(s) e associado(s) ao laudo final."
+        ),
     }
 
 
@@ -4244,15 +4330,17 @@ def confirm_external_signature_batch(
     db: Session = Depends(get_db),
     physician_user: User = Depends(get_current_user),
 ):
-    """A médica confirma o lote conferido — uma vez.
+    """Compatibilidade: fecha lotes que ficaram abertos antes da M25.29H.
 
-    Só entra o que ELA viu identificado na tela de conferência, do lote dela.
-    A partir daqui o laudo aparece para a administração como "assinado
-    recebido — validação pendente"; ninguém precisa avisar por WhatsApp.
+    No fluxo novo nenhum documento nasce `em_conferencia` — o envio já
+    aplica as guardas documentais e aceita ou recusa na hora, e a médica
+    termina o trabalho no upload. Este endpoint continua existindo para os
+    lotes que já estavam abertos quando o aceite automático entrou, e
+    submete cada um deles exatamente às mesmas guardas.
 
-    O que este endpoint NÃO faz: declarar assinatura válida. Nenhuma cadeia
-    ICP-Brasil foi verificada criptograficamente por este sistema, e o
-    estado gravado diz exatamente isso.
+    O que este endpoint NÃO faz, aqui como em qualquer outro lugar:
+    declarar assinatura válida. Nenhuma cadeia ICP-Brasil foi verificada
+    criptograficamente por este sistema.
     """
 
     _require_reports_enabled()
@@ -4286,12 +4374,24 @@ def confirm_external_signature_batch(
         )
 
     agora = datetime.now(timezone.utc)
+    aceitos = 0
     for assinado in pendentes:
-        assinado.status = ASSINADO_RECEBIDO_VALIDACAO_PENDENTE
+        # M25.29H — mesmo aqui, o veredito é dos bytes. Um documento que
+        # ficou em conferência antes do aceite automático não ganha passe
+        # livre por ser antigo: ele passa pelas mesmas guardas que um
+        # arquivo enviado hoje.
+        guardas = _guardas_do_assinado(db, assinado)
+        aprovado = guardas is not None and guardas.aceito
+        assinado.status = ASSINADO_ACEITO if aprovado else ASSINADO_RECUSADO
         assinado.confirmed_at = agora
+        aceitos += 1 if aprovado else 0
         audit(
             db,
-            "laudo_assinado_externo_confirmado",
+            (
+                "laudo_assinado_aceito_automaticamente"
+                if aprovado
+                else "laudo_assinado_recusado_na_recepcao"
+            ),
             entidade="report_documents",
             entidade_id=assinado.report_document_id,
             user_id=physician_user.id,
@@ -4302,17 +4402,21 @@ def confirm_external_signature_batch(
                 "sha256": assinado.sha256,
                 "marcador": assinado.match_method,
                 "physician_profile_id": profile.id,
-                # Deliberadamente FALSO: receber não é validar.
-                "qualified_signature": False,
+                "status": assinado.status,
+                "motivo": None if aprovado else (
+                    guardas.motivo if guardas else "evidencia_indisponivel"
+                ),
+                **(guardas.para_auditoria() if guardas else
+                   {"qualified_signature": False}),
             },
         )
     db.commit()
     return {
         "confirmados": len(pendentes),
-        "status": ASSINADO_RECEBIDO_VALIDACAO_PENDENTE,
+        "aceitos": aceitos,
+        "status": ASSINADO_ACEITO,
         "observacao": (
-            "Arquivos assinados recebidos e armazenados. A validação da "
-            "assinatura digital ainda está pendente."
+            "PDF(s) assinado(s) recebido(s) e associado(s) ao laudo final."
         ),
     }
 
@@ -4332,16 +4436,21 @@ FILA_ENTREGUE = "entregue"
 FILA_ROTULOS = {
     FILA_AGUARDANDO_LAUDO: "Aguardando laudo",
     FILA_AGUARDANDO_ASSINATURA: "Aguardando assinatura",
-    # M25.29E — "conferência administrativa" em vez de "validação": este
-    # sistema NÃO verifica a cadeia ICP-Brasil, e o rótulo não pode sugerir
-    # que verificou. O valor persistido do estado não muda.
-    FILA_ASSINADO_RECEBIDO: "Assinado recebido — conferência administrativa pendente",
+    # M25.29H — a conferência administrativa deixou de existir. Este estado
+    # não nasce mais de nada: ele só abriga documentos históricos que
+    # pararam aqui antes do aceite automático. O rótulo diz que é exceção
+    # para que ninguém o confunda com uma etapa do fluxo — e a tela esconde
+    # o filtro quando não há nenhum, que é o caso normal.
+    FILA_ASSINADO_RECEBIDO: "Exceção técnica — documento sem aceite",
     FILA_PRONTO_PARA_ENTREGA: "Pronto para entrega",
     FILA_ENTREGUE: "Entregue",
 }
 
 _FILA_POR_ASSINADO = {
     ASSINADO_RECEBIDO_VALIDACAO_PENDENTE: FILA_ASSINADO_RECEBIDO,
+    # M25.29H — aceito pelas guardas documentais É pronto para entrega. Não
+    # existe estado intermediário entre receber e poder entregar.
+    ASSINADO_ACEITO: FILA_PRONTO_PARA_ENTREGA,
     ASSINADO_VALIDADO_EXTERNAMENTE: FILA_PRONTO_PARA_ENTREGA,
     ASSINADO_ENTREGUE: FILA_ENTREGUE,
 }
@@ -4479,6 +4588,38 @@ def _ser_assinado(assinado: ExternalSignedDocument) -> dict:
     }
 
 
+def _guardas_do_assinado(db: Session, assinado: ExternalSignedDocument):
+    """Reaplica as guardas documentais a um assinado JÁ gravado.
+
+    Serve a dois chamadores: a conferência externa histórica, que não pode
+    mais afirmar o que os bytes negam, e a manutenção que reclassifica
+    documentos antigos. Devolve `None` quando falta base de comparação —
+    sem o PDF final não há o que comparar, e inventar um veredito seria
+    pior do que não ter um.
+    """
+
+    documento = db.get(ReportDocument, assinado.report_document_id)
+    recebida = db.get(
+        ReportDocumentVersion, assinado.report_document_version_id
+    )
+    origem = db.get(ReportDocumentVersion, assinado.source_version_id)
+    if documento is None or recebida is None or origem is None:
+        return None
+    try:
+        bytes_recebidos = _read_stored_version(recebida).data
+        bytes_finais = _read_stored_version(origem).data
+    except ReportDomainError:
+        return None
+    return avaliar_guardas_documentais(
+        bytes_recebidos,
+        final=bytes_finais,
+        document_code=documento.public_code,
+        validation_code=documento.validation_code,
+        final_version_number=origem.version_number,
+        origem_e_a_versao_final=(documento.current_version_id == origem.id),
+    )
+
+
 @router.post("/assinatura-externa/{signed_document_id}/validacao-externa")
 def register_external_validation(
     signed_document_id: str,
@@ -4530,6 +4671,21 @@ def register_external_validation(
             409,
             "validacao_ja_registrada",
             "A conferência externa deste documento já foi registrada.",
+        )
+
+    # M25.29H — nenhum testemunho humano sobrepõe a evidência dos bytes.
+    #
+    # A auditoria encontrou um documento marcado como conferido que era
+    # byte a byte igual ao PDF final e não continha estrutura de assinatura
+    # nenhuma. Uma pessoa clicou; o arquivo nunca foi assinado. Daqui em
+    # diante as mesmas guardas do aceite automático rodam ANTES de aceitar a
+    # afirmação de quem quer que seja.
+    guardas = _guardas_do_assinado(db, assinado)
+    if guardas is not None and not guardas.aceito:
+        raise ReportDomainError(
+            409,
+            "documento_assinado_nao_passa_nas_guardas",
+            guardas.mensagem or ASSINADO_RECUSADO_MENSAGEM,
         )
 
     agora = datetime.now(timezone.utc)
@@ -4599,11 +4755,14 @@ def register_delivery(
             "documento_assinado_recusado",
             ASSINADO_RECUSADO_MENSAGEM,
         )
-    if assinado.status != ASSINADO_VALIDADO_EXTERNAMENTE:
+    # M25.29H — pronto para entrega é o estado novo do aceite automático; o
+    # antigo `validado_externamente` continua valendo para os documentos
+    # históricos que já passaram por conferência humana.
+    if assinado.status not in (ASSINADO_ACEITO, ASSINADO_VALIDADO_EXTERNAMENTE):
         raise ReportDomainError(
             409,
             "entrega_fora_de_ordem",
-            "Registre a conferência da assinatura antes de marcar a entrega.",
+            "Este laudo ainda não tem um PDF assinado pronto para entrega.",
         )
 
     assinado.status = ASSINADO_ENTREGUE
