@@ -182,7 +182,7 @@
     assinatura_pendente:
       "Fluxo antigo de anotação sobre o PDF do equipamento: o conteúdo foi "
       + "congelado e o sistema espera o arquivo assinado voltar. Sai daqui "
-      + "quando o PDF assinado é aceito na conferência.",
+      + "quando o PDF assinado volta e passa nas guardas documentais.",
     assinado:
       "O PDF assinado voltou e o sistema conferiu que é o mesmo documento, "
       + "que não foi reescrito e que a assinatura digital confere com o "
@@ -246,17 +246,17 @@
     //
     // `signaturePending` é a lista que o servidor diz estar aguardando
     // assinatura — nunca uma lista montada no navegador. `signatureSelection`
-    // são os ids marcados. `signatureReview` é a conferência devolvida pelo
-    // upload, que fica na tela até a médica confirmar ou descartar.
+    // são os ids marcados. `signatureResult` é o RECIBO do último envio: o
+    // que foi aceito e o que precisa ser refeito. Ele não representa
+    // pendência nenhuma — o envio já terminou quando ele aparece.
     signaturePending: [],
     signatureSelection: [],
-    signatureReview: null,
+    signatureResult: null,
     signatureBusy: false,
     // Fila de entrega da administração e o estado filtrado na tela.
     deliveryQueue: null,
     deliveryFilter: "",
     deliveryBusy: false,
-    confirmConference: "",
     // M25.24 — `null` = "ainda não mexeu nesta sessão, use a preferência
     // guardada". true/false = escolha explícita da médica agora.
     howItWorksOpen: null,
@@ -518,10 +518,9 @@
       // M25.20 — o arquivo que voltou assinado por fora. O rótulo diz
       // "recebido", e não "validado": a cadeia ICP-Brasil não foi conferida
       // por este sistema.
-      // M25.29E — e diz de QUEM é a próxima ação, para a médica não achar
-      // que a pendência é dela.
-      laudo_assinado_externo_recebido:
-        "Assinado recebido — aguardando conferência da SoproLife",
+      // M25.29H — não há mais etapa seguinte a esperar: o arquivo foi
+      // associado ao laudo final e o documento está pronto para entrega.
+      laudo_assinado_externo_recebido: "Assinado recebido",
     }[value] || value || "Versão";
   }
 
@@ -1633,7 +1632,7 @@
         </div>
 
         ${renderSignatureUpload()}
-        ${state.signatureReview ? renderSignatureReview() : ""}
+        ${state.signatureResult ? renderSignatureReceipt() : ""}
       </section>`;
   }
 
@@ -1675,8 +1674,8 @@
       </div>`;
   }
 
-  function renderSignatureReview() {
-    const revisao = state.signatureReview;
+  function renderSignatureReceipt() {
+    const revisao = state.signatureResult;
     const resumo = revisao.resumo || {};
     const linhas = (revisao.arquivos || []).map((item) => `
       <li class="report-signature-result${
@@ -1692,27 +1691,27 @@
           <em>${esc(item.mensagem || "")}</em>
         </span>
       </li>`).join("");
-    const identificados = resumo.identificados || 0;
+    const aceitos = revisao.aceitos || 0;
     return `
       <div class="report-signature-review" role="status" aria-live="polite">
         <h4>Arquivos recebidos — ${resumo.total || 0}</h4>
         <ul class="report-signature-results">${linhas}</ul>
         <p class="report-signature-summary">
-          <strong>${identificados}</strong> identificado(s),
+          <strong>${aceitos}</strong> aceito(s),
           <strong>${resumo.com_problema || 0}</strong> com problema.
         </p>
-        ${identificados ? `
-          <button type="button" class="m15-btn m15-btn-primary"
-            data-signature-confirm${state.signatureBusy ? " disabled" : ""}>
-            Confirmar ${identificados} identificado(s)
-          </button>` : ""}
+        ${aceitos ? `
+          <p class="report-help">
+            Seu trabalho nestes exames terminou. Os documentos foram
+            associados ao laudo final e seguem para entrega.
+          </p>` : ""}
         <button type="button" class="m15-btn" data-signature-discard>
-          ${identificados ? "Cancelar" : "Fechar"}
+          Fechar
         </button>
         ${resumo.com_problema ? `
           <p class="report-help">
             Os arquivos com problema não foram associados a nenhum laudo e
-            não serão gravados. Confira e envie novamente.
+            não foram gravados. Corrija e envie novamente.
           </p>` : ""}
       </div>`;
   }
@@ -2251,16 +2250,25 @@
 
   // ------------------------------ M25.20 — fila de entrega administrativa
   //
-  // Os cinco estados do percurso do documento até o paciente. Todos são
+  // Os estados do percurso do documento até o paciente. Todos são
   // DERIVADOS do que está gravado — nenhum é um campo que alguém marca à
-  // mão. A transição para "assinado recebido" acontece sozinha quando a
-  // médica confirma o lote devolvido: ninguém avisa a administração por
-  // WhatsApp de que os laudos voltaram.
+  // mão. Desde a M25.29H o documento assinado que volta e passa nas guardas
+  // documentais chega em "pronto para entrega" sozinho: ninguém avisa a
+  // administração por WhatsApp, e ninguém precisa confirmar nada antes.
 
   function renderDeliveryQueue() {
     const fila = state.deliveryQueue;
     if (!fila) return "";
-    const chips = (fila.estados || []).map((estado) => `
+    const chips = (fila.estados || [])
+      // M25.29H — "assinado recebido" virou balcão de exceção: nenhum
+      // documento novo entra nele. Um filtro permanente com zero em cima
+      // sugeriria uma etapa que não existe mais, então ele só aparece se
+      // algum documento realmente estiver ali.
+      .filter((estado) => (
+        estado.chave !== "assinado_recebido_validacao_pendente"
+        || estado.total > 0
+      ))
+      .map((estado) => `
       <button type="button" class="report-delivery-chip${
         state.deliveryFilter === estado.chave ? " is-active" : ""
       }" data-delivery-filter="${esc(estado.chave)}">
@@ -2291,6 +2299,11 @@
       </section>`;
   }
 
+  // Os dois estados em que o documento assinado JÁ pode ser entregue: o
+  // aceite automático da M25.29H e a conferência externa histórica, que
+  // continua valendo para os documentos que passaram por ela.
+  const PRONTOS_PARA_ENTREGA = ["recebido_assinado", "validado_externamente"];
+
   function renderDeliveryRow(item) {
     const assinado = item.assinado;
     return `
@@ -2302,10 +2315,13 @@
           <span class="report-delivery-state">${esc(item.estado_rotulo)}</span>
           ${assinado ? `
             <span class="report-delivery-note">
-              ${esc(assinado.pareado_por_rotulo || "")}
-              ${/* A negativa fica na tela, e não só na API: uma linha que
-                    diga só "assinado" convida a conclusão errada. */""}
-              — a SoproLife não verificou a assinatura criptograficamente.
+              ${/* Discreto e honesto, nesta ordem: primeiro o que o sistema
+                    FEZ (associou sozinho), depois o que ele não fez. Um
+                    alerta em destaque aqui assustaria sem informar — a
+                    ausência de validação criptográfica é permanente, não é
+                    um problema deste documento. */""}
+              Documento assinado recebido e associado automaticamente
+              — sem validação criptográfica da cadeia ICP-Brasil.
             </span>` : ""}
         </div>
         <div class="report-delivery-actions">
@@ -2324,15 +2340,16 @@
               data-delivery-download-assinado="${esc(item.document_id)}">
               Baixar laudo assinado
             </button>` : ""}
-          ${assinado && assinado.status === "recebido_validacao_pendente"
-            && state.confirmConference !== assinado.signed_document_id
-            ? `<button type="button" class="m15-btn m15-btn-primary"
-                 data-delivery-validate="${esc(assinado.signed_document_id)}">
-                 Registrar conferência do PDF assinado
-               </button>` : ""}
-          ${assinado && state.confirmConference === assinado.signed_document_id
-            ? renderConferenceConfirm(assinado) : ""}
-          ${assinado && assinado.status === "validado_externamente"
+          ${/* M25.29H — "Registrar conferência do PDF assinado" saiu daqui.
+                Ela não verificava cadeia ICP-Brasil nenhuma: era um
+                testemunho humano sobre um arquivo, e a auditoria achou o
+                preço disso — um documento marcado como conferido sendo
+                idêntico ao PDF final e sem nenhuma estrutura de assinatura
+                dentro. As guardas documentais do servidor fazem essa
+                checagem em milissegundos, no recebimento, e não erram por
+                distração. O que sobrou aqui é o que a administração de
+                fato faz: baixar e entregar. */""}
+          ${assinado && PRONTOS_PARA_ENTREGA.includes(assinado.status)
             ? `<button type="button" class="m15-btn"
                  data-delivery-deliver="${esc(assinado.signed_document_id)}">
                  Marcar como entregue
@@ -2341,38 +2358,10 @@
       </div>`;
   }
 
-  // M25.29G — a conferência deixa de ser um `prompt()` com frase para
-  // digitar e passa a ser uma confirmação na própria tela, com dois botões.
-  //
-  // A frase digitada nasceu na M25.20 para impedir que um clique distraído
-  // registrasse um testemunho humano — a intenção continua válida, e por
-  // isso a confirmação segue sendo um ato deliberado, em dois passos, com o
-  // texto dizendo exatamente o que está sendo afirmado. O que sai é a
-  // digitação, que na prática virava copiar e colar.
-  function renderConferenceConfirm(assinado) {
-    return `
-      <div class="report-delivery-confirm" role="group"
-        aria-labelledby="deliveryConferenceTitle">
-        <h4 id="deliveryConferenceTitle" tabindex="-1">
-          Confirmar conferência do PDF assinado?
-        </h4>
-        <p>
-          Confirme apenas se você conferiu externamente o documento assinado.
-          A SoproLife não realiza validação criptográfica da cadeia
-          ICP-Brasil.
-        </p>
-        <div class="report-delivery-confirm-buttons">
-          <button type="button" class="m15-btn" data-delivery-validate-cancel>
-            Cancelar
-          </button>
-          <button type="button" class="m15-btn m15-btn-primary"
-            data-delivery-validate-confirm="${esc(assinado.signed_document_id)}"
-            ${state.busy ? "disabled" : ""}>
-            Confirmar conferência
-          </button>
-        </div>
-      </div>`;
-  }
+  // M25.29G criou aqui uma confirmação em dois passos para substituir o
+  // `prompt()` com frase digitada. A M25.29H removeu a etapa inteira: o que
+  // ela confirmava era um testemunho humano que a evidência documental já
+  // resolve melhor, e mais cedo, no recebimento do arquivo.
 
   function renderProfileAdmin() {
     const selected = selectedAdminAccount();
@@ -3123,66 +3112,36 @@
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
 
-  async function uploadSignedForReview(arquivos) {
+  // M25.29H — enviar É concluir. O servidor aplica as guardas documentais
+  // no recebimento e aceita ou recusa cada arquivo na hora; não há lote a
+  // confirmar depois, nem conferência administrativa esperando do outro
+  // lado. O que a tela mostra ao final é um recibo, não uma pendência.
+  async function enviarLaudosAssinados(arquivos) {
     if (!arquivos || !arquivos.length) return;
     state.signatureBusy = true;
-    state.signatureReview = null;
-    announce(`Conferindo ${arquivos.length} arquivo(s)…`, "");
-    render();
-    try {
-      const corpo = new FormData();
-      for (const arquivo of arquivos) corpo.append("arquivos", arquivo);
-      state.signatureReview = await client().api(
-        "/laudos/assinatura-externa/enviar",
-        { method: "POST", body: corpo }
-      );
-      const resumo = state.signatureReview.resumo || {};
-      announce(
-        `${resumo.identificados || 0} identificado(s), ${
-          resumo.com_problema || 0
-        } com problema. Confira antes de confirmar.`,
-        resumo.com_problema ? "erro" : "ok"
-      );
-    } catch (error) {
-      announce(readableError(error), "erro");
-    } finally {
-      state.signatureBusy = false;
-      render();
-    }
-  }
-
-  async function confirmSignedBatch() {
-    const revisao = state.signatureReview;
-    if (!revisao || !revisao.identificados || !revisao.identificados.length) {
-      return;
-    }
-    state.signatureBusy = true;
-    announce("Confirmando o lote…", "");
+    state.signatureResult = null;
+    announce(`Enviando ${arquivos.length} arquivo(s)…`, "");
     render();
     try {
       const resposta = await client().api(
-        "/laudos/assinatura-externa/confirmar",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            batch_id: revisao.batch_id,
-            signed_document_ids: revisao.identificados.map(
-              (item) => item.signed_document_id
-            ),
-          }),
-        }
+        "/laudos/assinatura-externa/enviar",
+        { method: "POST", body: (() => {
+          const corpo = new FormData();
+          for (const arquivo of arquivos) corpo.append("arquivos", arquivo);
+          return corpo;
+        })() }
       );
-      state.signatureReview = null;
+      state.signatureResult = resposta;
       state.signatureSelection = [];
-      // M25.29E — o trabalho da médica ACABA aqui. A frase antiga
-      // ("a validação da assinatura segue pendente") descrevia o estado do
-      // sistema, não o dela, e foi lida como "ainda falta você certificar
-      // alguma coisa". A conferência seguinte é da administração.
+      const aceitos = resposta.aceitos || 0;
+      const comProblema = (resposta.resumo || {}).com_problema || 0;
       announce(
-        `${resposta.confirmados} PDF(s) assinado(s) recebido(s) com sucesso. ` +
-        "Seu trabalho terminou. Aguardando conferência administrativa da " +
-        "SoproLife.",
-        "ok"
+        aceitos
+          ? `${aceitos} PDF(s) assinado(s) recebido(s) com sucesso. ` +
+            "O documento foi associado ao laudo final. " +
+            "Seu trabalho neste exame terminou."
+          : "Nenhum arquivo pôde ser aceito. Veja abaixo o que corrigir.",
+        comProblema ? "erro" : "ok"
       );
       await loadAuthenticatedData();
     } catch (error) {
@@ -3192,12 +3151,6 @@
       render();
     }
   }
-
-  // A confirmação é DIGITADA, e não um "ok" de caixa de diálogo. O que está
-  // sendo registrado é o testemunho de uma pessoa identificada de que
-  // conferiu a assinatura num validador externo — não uma verificação que a
-  // SoproLife tenha feito. Um clique distraído não deve produzir isso.
-  const VALIDACAO_FRASE = "Confirmo a conferência externa";
 
   // M25.29E — os dois downloads da fila administrativa.
   //
@@ -3220,38 +3173,6 @@
       announce(readableError(error), "erro");
     } finally {
       state.deliveryBusy = false;
-      render();
-    }
-  }
-
-  async function registerExternalValidation(signedId) {
-    if (!signedId || state.busy) return;
-    state.busy = true;
-    render();
-    try {
-      await client().api(
-        `/laudos/assinatura-externa/${encodeURIComponent(signedId)}` +
-        "/validacao-externa",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            metodo: "validar_iti",
-            // O backend continua exigindo a frase: ela é o contrato da
-            // M25.20 e não foi afrouxada. O que mudou é quem a digita.
-            confirmacao: VALIDACAO_FRASE,
-          }),
-        }
-      );
-      state.confirmConference = "";
-      announce(
-        "Conferência externa registrada. O laudo está pronto para entrega.",
-        "ok"
-      );
-      await loadAuthenticatedData();
-    } catch (error) {
-      announce(readableError(error), "erro");
-    } finally {
-      state.busy = false;
       render();
     }
   }
@@ -3765,8 +3686,7 @@
 
   async function reopenExam(codigo) {
     // Reabrir devolve trabalho clínico à fila de uma médica. Não é um
-    // clique distraído: a frase digitada é a mesma exigência do registro de
-    // conferência externa da M25.20.
+    // clique distraído, e por isso continua exigindo um motivo escrito.
     const motivo = window.prompt(
       `Reabrir ${codigo} para laudo. Por que este exame volta para a fila?`
     );
@@ -4012,12 +3932,8 @@
       downloadForSignature();
       return;
     }
-    if (button.matches("[data-signature-confirm]")) {
-      confirmSignedBatch();
-      return;
-    }
     if (button.matches("[data-signature-discard]")) {
-      state.signatureReview = null;
+      state.signatureResult = null;
       render();
       return;
     }
@@ -4055,24 +3971,6 @@
       baixarDocumentoDaEntrega(
         button.getAttribute("data-delivery-download-assinado"),
         "assinado"
-      );
-      return;
-    }
-    if (button.matches("[data-delivery-validate]")) {
-      state.confirmConference = button.getAttribute("data-delivery-validate");
-      render();
-      const titulo = document.getElementById("deliveryConferenceTitle");
-      if (titulo) titulo.focus();
-      return;
-    }
-    if (button.matches("[data-delivery-validate-cancel]")) {
-      state.confirmConference = "";
-      render();
-      return;
-    }
-    if (button.matches("[data-delivery-validate-confirm]")) {
-      registerExternalValidation(
-        button.getAttribute("data-delivery-validate-confirm")
       );
       return;
     }
@@ -4238,7 +4136,7 @@
       // Zerar o input permite reenviar o MESMO arquivo depois de corrigir
       // algo; sem isso o segundo `change` nunca dispara.
       event.target.value = "";
-      uploadSignedForReview(arquivos);
+      enviarLaudosAssinados(arquivos);
       return;
     }
     if (event.target.id === "reportBatchUpload") {
