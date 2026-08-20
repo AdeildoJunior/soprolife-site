@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.db import build_engine  # noqa: E402
 from app.models import (  # noqa: E402
+    ASSINADO_ACEITO,
     ASSINADO_RECEBIDO_VALIDACAO_PENDENTE,
     ExternalSignedDocument,
     ReportDocument,
@@ -93,17 +94,18 @@ def _conferir_arquivo(settings, version: ReportDocumentVersion) -> dict:
 
 def auditar(db: Session) -> int:
     settings = get_settings()
+    # M25.29H — o aceite automático criou um estado novo, e é nele que os
+    # documentos vivos passaram a ficar. Auditar só o estado antigo faria o
+    # script dizer "fila vazia" justamente quando há documentos a conferir.
+    estados = (ASSINADO_ACEITO, ASSINADO_RECEBIDO_VALIDACAO_PENDENTE)
     pendentes = db.execute(
         select(ExternalSignedDocument)
-        .where(
-            ExternalSignedDocument.status
-            == ASSINADO_RECEBIDO_VALIDACAO_PENDENTE
-        )
+        .where(ExternalSignedDocument.status.in_(estados))
         .order_by(ExternalSignedDocument.received_at)
     ).scalars().all()
 
-    print(f"\n=== FILA: {ASSINADO_RECEBIDO_VALIDACAO_PENDENTE} ===")
-    print(f"  documentos nesse estado.......... {len(pendentes)}")
+    print(f"\n=== FILA: {' , '.join(estados)} ===")
+    print(f"  documentos nesses estados........ {len(pendentes)}")
 
     problemas = 0
     for assinado in pendentes:
@@ -121,6 +123,7 @@ def auditar(db: Session) -> int:
         _linha("laudo", documento.public_code if documento else "?")
         _linha("exame", exame.public_code if exame else "?")
         _linha("status do laudo", documento.status if documento else "?")
+        _linha("estado", assinado.status)
         _linha("recebido em", assinado.received_at)
         _linha("pareado por", assinado.match_method)
         _linha(

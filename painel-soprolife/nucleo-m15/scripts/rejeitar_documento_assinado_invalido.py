@@ -48,6 +48,7 @@ from app.audit import audit  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.db import build_engine  # noqa: E402
 from app.models import (  # noqa: E402
+    ASSINADO_ACEITO,
     ASSINADO_ENTREGUE,
     ASSINADO_RECEBIDO_VALIDACAO_PENDENTE,
     ASSINADO_RECUSADO,
@@ -215,7 +216,12 @@ def rejeitar(db: Session, *, lau: str, motivo: str, aplicar: bool) -> int:
             "  Leve o caso a uma decisão humana.\n"
         )
         return 3
-    if assinado.status != ASSINADO_RECEBIDO_VALIDACAO_PENDENTE:
+    # M25.29H — o aceite automático criou um estado novo, e um documento
+    # aceito continua podendo ser recusado por evidência posterior. O que
+    # este script recusa não mudou; mudou de onde ele parte.
+    if assinado.status not in (
+        ASSINADO_RECEBIDO_VALIDACAO_PENDENTE, ASSINADO_ACEITO
+    ):
         print(f"\n  PARE: estado inesperado ({assinado.status}).\n")
         return 3
 
