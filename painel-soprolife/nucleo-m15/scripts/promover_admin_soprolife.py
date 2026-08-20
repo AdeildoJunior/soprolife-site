@@ -69,11 +69,55 @@ def _encontrar(db: Session, identificador: str) -> User | None:
     ).scalar_one_or_none()
 
 
-def promover(db: Session, *, identificador: str, apply: bool) -> int:
-    usuario = _encontrar(db, identificador)
-    if usuario is None:
-        print(f"\n  Usuário não encontrado: {identificador}\n")
-        return 2
+class ContaAmbigua(LookupError):
+    """Mais de uma conta (ou nenhuma) responde ao critério pedido."""
+
+
+def _unica_conta_do_papel(db: Session, papel: str) -> User:
+    """A ÚNICA conta ativa cujo papel administrativo é exatamente `papel`.
+
+    Existe para o caso operacional em que se conhece a situação — "o sócio
+    é o único gestor" — mas não se tem o e-mail à mão. Se houver duas
+    contas assim, o script para: escolher uma delas seria adivinhar, e
+    adivinhar quem recebe poder administrativo é exatamente o que não se
+    pode fazer. Nome de pessoa continua fora do critério.
+    """
+
+    candidatos = []
+    for usuario in db.execute(select(User)).scalars().all():
+        if not usuario.ativo:
+            continue
+        administrativos = {
+            p.name for p in usuario.roles if p.name in ADMINISTRATIVE_ROLES
+        }
+        if administrativos == {papel}:
+            candidatos.append(usuario)
+    if len(candidatos) != 1:
+        raise ContaAmbigua(
+            f"{len(candidatos)} conta(s) ativa(s) com papel administrativo "
+            f"exatamente '{papel}'. Informe --usuario explicitamente."
+        )
+    return candidatos[0]
+
+
+def promover(
+    db: Session,
+    *,
+    identificador: str | None = None,
+    papel_atual: str | None = None,
+    apply: bool = False,
+) -> int:
+    if identificador:
+        usuario = _encontrar(db, identificador)
+        if usuario is None:
+            print(f"\n  Usuário não encontrado: {identificador}\n")
+            return 2
+    else:
+        try:
+            usuario = _unica_conta_do_papel(db, papel_atual or "")
+        except ContaAmbigua as erro:
+            print(f"\n  PARE: {erro}\n")
+            return 2
 
     papeis_antes = sorted(p.name for p in usuario.roles)
     administrativos = [p for p in papeis_antes if p in ADMINISTRATIVE_ROLES]
@@ -154,8 +198,14 @@ def main() -> int:
     )
     parser.add_argument(
         "--usuario",
-        required=True,
         help="user_id ou e-mail da conta a promover.",
+    )
+    parser.add_argument(
+        "--do-papel",
+        help=(
+            "Alternativa a --usuario: a ÚNICA conta ativa cujo papel "
+            "administrativo é exatamente este. Para se houver mais de uma."
+        ),
     )
     parser.add_argument(
         "--apply",
@@ -163,11 +213,18 @@ def main() -> int:
         help="Grava a mudança. Sem esta opção, nada é escrito.",
     )
     args = parser.parse_args()
+    if not args.usuario and not args.do_papel:
+        parser.error("informe --usuario ou --do-papel")
 
     settings = get_settings()
     engine = build_engine(settings.database_url)
     with Session(engine) as db:
-        return promover(db, identificador=args.usuario, apply=args.apply)
+        return promover(
+            db,
+            identificador=args.usuario,
+            papel_atual=args.do_papel,
+            apply=args.apply,
+        )
 
 
 if __name__ == "__main__":

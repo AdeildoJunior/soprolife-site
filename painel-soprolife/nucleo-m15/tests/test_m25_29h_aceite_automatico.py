@@ -494,9 +494,59 @@ def test_admin_ve_pronto_para_entrega_e_pode_entregar(client, auth, aceito, db):
 # =====================================================================
 
 
-def _promover(db, identificador: str, *, apply: bool):
+def _promover(db, identificador: str | None = None, *, apply: bool,
+              papel_atual: str | None = None):
     modulo = _carregar_script("promover_admin_soprolife.py")
-    return modulo.promover(db, identificador=identificador, apply=apply)
+    return modulo.promover(
+        db, identificador=identificador, papel_atual=papel_atual, apply=apply
+    )
+
+
+def test_promocao_por_papel_para_diante_de_ambiguidade(client, auth, users, db, capsys):
+    """Escolher quem recebe poder administrativo não pode ser um palpite.
+
+    O atalho `--do-papel` existe para o caso em que se conhece a situação
+    ("o sócio é o único gestor") sem ter o e-mail à mão. Se houver duas
+    contas no mesmo papel, ele para — e a conta principal, que é `admin`,
+    nunca é candidata a nada aqui.
+    """
+
+    from app.security import get_role
+
+    outro = User(
+        email="gestor2@teste.local",
+        nome="Teste gestor 2",
+        password_hash=users["gestor"].password_hash,
+    )
+    outro.roles.append(get_role(db, "gestor"))
+    db.add(outro)
+    db.commit()
+
+    assert _promover(db, papel_atual="gestor", apply=True) == 2
+    assert "PARE" in capsys.readouterr().out
+
+    db.expire_all()
+    for email in ("gestor@teste.local", "gestor2@teste.local"):
+        conta = db.execute(
+            select(User).where(User.email == email)
+        ).scalar_one()
+        assert sorted(p.name for p in conta.roles) == ["gestor"]
+
+
+def test_promocao_por_papel_encontra_a_conta_unica(client, auth, users, db, capsys):
+    assert _promover(db, papel_atual="gestor", apply=True) == 0
+    capsys.readouterr()
+
+    db.expire_all()
+    conta = db.execute(
+        select(User).where(User.email == "gestor@teste.local")
+    ).scalar_one()
+    assert sorted(p.name for p in conta.roles) == ["admin"]
+    # A conta principal não foi tocada.
+    principal = db.execute(
+        select(User).where(User.email == "admin@teste.local")
+    ).scalar_one()
+    assert sorted(p.name for p in principal.roles) == ["admin"]
 
 
 def _carregar_script(nome: str):
