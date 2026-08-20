@@ -162,18 +162,9 @@ def assinado(client, caso):
     assert enviado.status_code == 200, enviado.text
     revisao = enviado.json()
     assert revisao["resumo"]["identificados"] == 1
-
-    confirmado = client.post(
-        "/api/v1/laudos/assinatura-externa/confirmar",
-        json={
-            "batch_id": revisao["batch_id"],
-            "signed_document_ids": [
-                item["signed_document_id"] for item in revisao["identificados"]
-            ],
-        },
-        headers=caso["doctor_auth"],
-    )
-    assert confirmado.status_code == 200, confirmado.text
+    # M25.29H — não há segundo passo. O envio já aplicou as guardas e
+    # aceitou; a médica terminou o trabalho aqui.
+    assert revisao["aceitos"] == 1, revisao
     caso["signed_document_id"] = revisao["identificados"][0][
         "signed_document_id"
     ]
@@ -188,10 +179,15 @@ def assinado(client, caso):
 def test_recebido_e_estado_administrativo_nao_tarefa_da_medica(
     client, auth, assinado, db
 ):
-    """Item 1 — o estado existe, está correto, e NÃO foi removido."""
+    """Item 1 — o estado existe, está correto, e NÃO foi removido.
+
+    M25.29H — o que este teste protege continua valendo: depois do envio, a
+    próxima ação NÃO é da médica. O que mudou é que também não é de ninguém
+    da administração: o documento já chega pronto para entrega.
+    """
 
     registro = db.execute(select(ExternalSignedDocument)).scalars().one()
-    assert registro.status == "recebido_validacao_pendente"
+    assert registro.status == "recebido_assinado"
 
     fila = client.get(
         "/api/v1/laudos/assinatura-externa/fila",
@@ -203,24 +199,35 @@ def test_recebido_e_estado_administrativo_nao_tarefa_da_medica(
         if item["document_id"] == assinado["document_id"]
     ]
     assert alvo, "o laudo assinado precisa aparecer na fila administrativa"
-    assert alvo[0]["estado"] == "assinado_recebido_validacao_pendente"
+    assert alvo[0]["estado"] == "pronto_para_entrega"
 
 
 def test_medica_le_que_o_trabalho_dela_terminou(assinado):
-    """Item 2 — a frase que ela vê depois de confirmar o envio."""
+    """Item 2 — a frase que ela vê depois de enviar o arquivo assinado.
+
+    M25.29H — a frase encurtou junto com o fluxo. "Aguardando conferência
+    administrativa" saiu porque não há mais conferência administrativa a
+    aguardar; o trabalho dela termina no envio, e a frase diz isso.
+    """
 
     codigo = _js_sem_comentarios()
-    assert "Seu trabalho terminou." in codigo
-    assert "Aguardando conferência administrativa da " in codigo
-    # E a frase que a fazia procurar uma tarefa inexistente sumiu.
+    assert "Seu trabalho neste exame terminou." in codigo
+    assert "Aguardando conferência administrativa" not in codigo
+    # E a frase que a fazia procurar uma tarefa inexistente segue fora.
     assert "validação da assinatura segue pendente" not in codigo
 
 
 def test_rotulo_da_versao_diz_de_quem_e_a_pendencia():
-    """A médica não pode ler "validação pendente" e achar que é dela."""
+    """A médica não pode ler "validação pendente" e achar que é dela.
+
+    M25.29H — o rótulo perdeu a segunda metade porque a pendência inteira
+    deixou de existir. Continua sem dizer "validado".
+    """
 
     codigo = _js_sem_comentarios()
-    assert "Assinado recebido — aguardando conferência da SoproLife" in codigo
+    assert 'laudo_assinado_externo_recebido: "Assinado recebido"' in codigo
+    assert "aguardando conferência da SoproLife" not in codigo
+    assert "Assinado validado" not in codigo
 
 
 # =====================================================================
@@ -229,19 +236,35 @@ def test_rotulo_da_versao_diz_de_quem_e_a_pendencia():
 
 
 def test_botao_administrativo_fala_em_conferencia_nao_em_validacao():
-    """Item 5 — o sistema não verifica cadeia ICP-Brasil. O botão não mente."""
+    """Item 5 — o sistema não verifica cadeia ICP-Brasil, e não finge.
+
+    M25.29H — o botão inteiro saiu da tela: ele registrava um testemunho
+    humano que a evidência documental resolve melhor e mais cedo. O que este
+    teste protege é o essencial, que não mudou: nada na tela administrativa
+    afirma validação de assinatura.
+    """
 
     codigo = _js_sem_comentarios()
-    assert "Registrar conferência do PDF assinado" in codigo
+    assert "Registrar conferência do PDF assinado" not in codigo
     assert "Registrar validação da assinatura" not in codigo
+    assert "validado_externamente" not in codigo.replace(
+        'PRONTOS_PARA_ENTREGA = ["recebido_assinado", "validado_externamente"]',
+        "",
+    )
 
 
 def test_fila_administrativa_fala_em_conferencia():
+    """M25.29H — o estado virou balcão de exceção, e o rótulo diz isso.
+
+    O VALOR persistido continua o mesmo: documentos históricos vivem nele e
+    a auditoria precisa encontrá-los pelo nome de sempre.
+    """
+
     from app.routers.reports import FILA_ASSINADO_RECEBIDO, FILA_ROTULOS
 
     rotulo = FILA_ROTULOS[FILA_ASSINADO_RECEBIDO]
-    assert "conferência administrativa" in rotulo.lower()
-    # O VALOR persistido não mudou — só o rótulo.
+    assert "exceção" in rotulo.lower()
+    assert "validado" not in rotulo.lower()
     assert FILA_ASSINADO_RECEBIDO == "assinado_recebido_validacao_pendente"
 
 
@@ -405,7 +428,11 @@ def test_nada_e_marcado_como_entregue_automaticamente(assinado, db):
     """Item 16 — receber o assinado não entrega o documento ao paciente."""
 
     registro = db.execute(select(ExternalSignedDocument)).scalars().one()
-    assert registro.status == "recebido_validacao_pendente"
+    # M25.29H — "pronto para entrega" não é "entregue". O aceite automático
+    # dispensa a conferência, nunca a entrega: quem entrega é uma pessoa, e
+    # o registro disso continua sendo um ato explícito.
+    assert registro.status == "recebido_assinado"
+    assert registro.delivered_at is None
     assert getattr(registro, "entregue_em", None) is None
 
 
@@ -509,7 +536,7 @@ def test_script_de_auditoria_da_fila_roda_e_nao_escreve(assinado, db, capsys):
     texto = capsys.readouterr().out
 
     assert problemas == 0, texto
-    assert "recebido_validacao_pendente" in texto
+    assert "recebido_assinado" in texto
     assert "todos íntegros e legíveis pelo backend" in texto
     assert "backend relê o PDF" in texto
 
@@ -570,6 +597,6 @@ def test_assets_alterados_tem_cache_busting_atual():
         re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
     )
     assert versoes, "os assets precisam continuar versionados"
-    assert versoes == {"2026081901"}, (
+    assert versoes == {"2026082001"}, (
         "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
     )

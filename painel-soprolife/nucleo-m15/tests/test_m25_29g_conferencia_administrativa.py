@@ -30,6 +30,7 @@ Somente dados sintéticos.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import pathlib
 import re
@@ -60,6 +61,43 @@ caso = _M29E.caso
 assinado = _M29E.assinado
 _concluir = _M29E._concluir
 _assinar_por_fora = _M29E._assinar_por_fora
+
+
+# M25.29H — o aceite automático impede que um documento inválido vire linha
+# no banco. Isso é o conserto, e é ótimo; mas o script de recusa da M25.29G
+# existe justamente para as linhas que JÁ existem, criadas antes dele. Para
+# testá-lo é preciso reproduzir aquele mundo — e reproduzir é exatamente o
+# que este contexto faz, sem afrouxar nada no código de produção.
+@contextlib.contextmanager
+def _sem_guardas_documentais():
+    from app.routers import reports
+    from app.services.signature_acceptance import GuardasDocumentais
+
+    permissivo = GuardasDocumentais(
+        tem_versao_final=True,
+        origem_e_a_versao_final=True,
+        parece_previa=False,
+        identico_ao_final=False,
+        tem_estrutura_assinatura=True,
+        contem_o_final=True,
+        metadado_coerente=True,
+        codigo_validacao_coerente=True,
+    )
+    original = reports.avaliar_guardas_documentais
+    reports.avaliar_guardas_documentais = lambda *a, **k: permissivo
+    try:
+        yield
+    finally:
+        reports.avaliar_guardas_documentais = original
+
+
+def _voltar_ao_estado_antigo(db, *, status):
+    """Recoloca o assinado no estado em que a M25.29G o encontrava."""
+
+    registro = db.execute(select(ExternalSignedDocument)).scalars().one()
+    registro.status = status
+    db.commit()
+    return registro
 
 
 def _js_sem_comentarios() -> str:
@@ -96,17 +134,18 @@ def test_os_tres_botoes_tem_atributos_distintos():
     for atributo in (
         "data-delivery-download-mir",
         "data-delivery-download-assinado",
+    ):
+        assert atributo in codigo, atributo
+
+    # M25.29H — os três atributos da conferência saíram junto com a etapa.
+    # O risco que este teste nasceu para pegar (um `matches()` colidindo com
+    # o prefixo do outro) deixa de existir quando o prefixo não existe.
+    for saiu in (
         "data-delivery-validate",
         "data-delivery-validate-cancel",
         "data-delivery-validate-confirm",
     ):
-        assert atributo in codigo, atributo
-
-    # `data-delivery-validate` é prefixo dos outros dois: o dispatch usa
-    # `matches()`, que exige o atributo EXATO, e não `startsWith`.
-    assert 'button.matches("[data-delivery-validate]")' in codigo
-    assert 'button.matches("[data-delivery-validate-cancel]")' in codigo
-    assert 'button.matches("[data-delivery-validate-confirm]")' in codigo
+        assert saiu not in codigo, saiu
 
 
 def test_download_do_exame_tecnico_nao_abre_confirmacao():
@@ -137,58 +176,88 @@ def test_download_do_assinado_usa_a_mesma_funcao_de_baixar():
 
 
 def test_conferencia_abre_uma_confirmacao_na_tela():
-    """Item 5 — uma confirmação, com título e dois botões."""
+    """M25.29H — não abre mais nada: a confirmação inteira saiu da tela.
 
-    corpo = _bloco_da_funcao("renderConferenceConfirm")
-    assert "Confirmar conferência do PDF assinado?" in corpo
-    assert "Confirme apenas se você conferiu externamente" in corpo
-    assert "não realiza validação criptográfica da cadeia" in corpo
-    assert "Cancelar" in corpo
-    assert "Confirmar conferência" in corpo
+    A M25.29G trocou uma frase digitada por dois botões. A M25.29H removeu
+    os dois: o que eles confirmavam era um testemunho humano sobre um
+    arquivo, e a auditoria mostrou que esse testemunho podia estar errado —
+    um documento foi marcado como conferido sendo idêntico ao PDF final e
+    sem estrutura de assinatura nenhuma.
+    """
+
+    codigo = _js_sem_comentarios()
+    assert "renderConferenceConfirm" not in codigo
+    assert "Confirmar conferência do PDF assinado?" not in codigo
+    assert "Registrar conferência do PDF assinado" not in codigo
 
 
 def test_nao_existe_frase_digitada_na_conferencia():
-    """Item 8 — nada de `prompt()` com texto para copiar."""
+    """Item 8 — nada de `prompt()` e nada de frase para copiar.
 
-    corpo = _bloco_da_funcao("registerExternalValidation")
-    assert "window.prompt" not in corpo
-    assert "Para confirmar, digite" not in _js_sem_comentarios()
+    A M25.29G tirou a digitação; a M25.29H tirou também a função que a
+    consumia. O que continua proibido é o mesmo: a fila administrativa não
+    pede texto a ninguém.
+    """
+
+    codigo = _js_sem_comentarios()
+    assert "registerExternalValidation" not in codigo
+    assert "VALIDACAO_FRASE" not in codigo
+    assert "Para confirmar, digite" not in codigo
+    corpo = _bloco_da_funcao("renderDeliveryRow")
+    assert "prompt" not in corpo
 
 
 def test_o_contrato_do_backend_nao_foi_afrouxado():
-    """A API continua exigindo a frase — mudou quem a digita, não a regra."""
+    """A API legada continua exigindo a frase — ninguém a afrouxou.
 
-    corpo = _bloco_da_funcao("registerExternalValidation")
-    assert "confirmacao: VALIDACAO_FRASE" in corpo
-    assert 'VALIDACAO_FRASE = "Confirmo a conferência externa"' in WORKFLOW_JS
+    A rota de conferência externa não é mais alcançável pela tela, mas
+    continua existindo para os documentos históricos. Afrouxar o contrato
+    dela ao remover o botão seria trocar uma etapa por uma porta aberta.
+    """
+
+    from pydantic import ValidationError
+
+    from app.schemas import ExternalValidationRequest
+
+    with pytest.raises(ValidationError):
+        ExternalValidationRequest(metodo="validar_iti", confirmacao="ok")
+    aceito = ExternalValidationRequest(
+        metodo="validar_iti", confirmacao="Confirmo a conferência externa"
+    )
+    assert aceito.metodo == "validar_iti"
 
 
 def test_cancelar_nao_grava_nada(client, auth, assinado, db):
-    """Item 6 — cancelar é só fechar; o estado no banco não se mexe.
+    """M25.29H — não há o que cancelar, e a fila continua sem gravar nada.
 
-    O cancelamento vive inteiro no navegador: nenhuma chamada é feita. O
-    que se prova aqui é o outro lado — que sem a chamada, o documento
-    continua exatamente onde estava.
+    O teste original provava que fechar a confirmação não mexia no banco.
+    A garantia que sobrevive é mais forte: a tela administrativa inteira
+    não tem nenhuma ação que altere o estado do documento assinado, além
+    da entrega, que é explícita.
     """
 
     antes = db.execute(select(ExternalSignedDocument)).scalars().one()
     estado_antes = antes.status
 
-    codigo = _js_sem_comentarios()
-    # O cancelar apenas limpa o estado e redesenha — não há `client().api`
-    # entre o atributo e o `render()`.
-    trecho = codigo[
-        codigo.index('button.matches("[data-delivery-validate-cancel]")'):
-    ][:220]
-    assert 'state.confirmConference = ""' in trecho
-    assert "api(" not in trecho
+    corpo = _bloco_da_funcao("renderDeliveryRow")
+    assert "data-delivery-validate" not in corpo
+    # Só três ações na linha: dois downloads e a entrega.
+    assert corpo.count("data-delivery-download-mir") == 1
+    assert corpo.count("data-delivery-download-assinado") == 1
+    assert corpo.count("data-delivery-deliver") == 1
 
     depois = db.execute(select(ExternalSignedDocument)).scalars().one()
     assert depois.status == estado_antes
 
 
 def test_confirmar_grava_somente_a_conferencia(client, auth, assinado, db):
-    """Item 7 — confirma a conferência, e nada além dela."""
+    """M25.29H — não há mais o que confirmar, e a rota legada diz isso.
+
+    O documento já chegou pronto para entrega pelo aceite automático. Pedir
+    conferência sobre ele agora devolve 409: não é erro do administrador, é
+    uma etapa que não existe mais. O que continua garantido é o essencial —
+    receber não entrega, e nada afirma assinatura qualificada.
+    """
 
     signed_id = assinado["signed_document_id"]
     resposta = client.post(
@@ -197,16 +266,15 @@ def test_confirmar_grava_somente_a_conferencia(client, auth, assinado, db):
             "metodo": "validar_iti",
             "confirmacao": "Confirmo a conferência externa",
         },
-        # A conferência exige ROLE_ADMIN — `operacional` enxerga a fila mas
-        # não registra o testemunho. Provado no teste seguinte.
         headers=auth("admin"),
     )
-    assert resposta.status_code == 200, resposta.text
+    assert resposta.status_code == 409, resposta.text
 
     registro = db.execute(select(ExternalSignedDocument)).scalars().one()
-    assert registro.status == "validado_externamente"
-    # Conferir NÃO entrega, e NÃO afirma assinatura qualificada.
-    assert getattr(registro, "entregue_em", None) is None
+    assert registro.status == "recebido_assinado"
+    assert registro.validated_at is None
+    # Receber NÃO entrega, e NÃO afirma assinatura qualificada.
+    assert registro.delivered_at is None
     assert getattr(registro, "qualified_signature", False) is False
 
 
@@ -415,7 +483,9 @@ def test_recusado_libera_nova_assinatura_da_versao_final(
 
     # Assina de novo — bytes diferentes da primeira assinatura, como um
     # assinador real produz.
-    reassinado = baixado.content + b"\n% segunda revisao (sintetica)\n"
+    reassinado = _assinar_por_fora(baixado.content) + (
+        b"\n% segunda revisao (sintetica)\n"
+    )
     enviado = client.post(
         "/api/v1/laudos/assinatura-externa/enviar",
         files={
@@ -493,7 +563,7 @@ def test_script_exige_evidencia_para_o_motivo(client, auth, assinado, db, capsys
 
     db.expire_all()
     registro = db.execute(select(ExternalSignedDocument)).scalars().one()
-    assert registro.status == "recebido_validacao_pendente"
+    assert registro.status == "recebido_assinado"
 
 
 def test_script_aplica_e_e_idempotente(client, auth, caso, db, capsys):
@@ -507,31 +577,24 @@ def test_script_aplica_e_e_idempotente(client, auth, caso, db, capsys):
         json={"document_ids": [caso["document_id"]]},
         headers=caso["doctor_auth"],
     )
-    # Devolve o MESMO arquivo, sem assinar nada.
-    enviado = client.post(
-        "/api/v1/laudos/assinatura-externa/enviar",
-        files={
-            "arquivos": (
-                "TESTE APAGAR - devolvido.pdf",
-                baixado.content,
-                "application/pdf",
-            )
-        },
-        headers=caso["doctor_auth"],
-    )
+    # Devolve o MESMO arquivo, sem assinar nada. Hoje o envio recusaria isso
+    # na hora — a linha abaixo reproduz o fluxo anterior, que é o único que
+    # conseguia produzir a linha que este script conserta.
+    with _sem_guardas_documentais():
+        enviado = client.post(
+            "/api/v1/laudos/assinatura-externa/enviar",
+            files={
+                "arquivos": (
+                    "TESTE APAGAR - devolvido.pdf",
+                    baixado.content,
+                    "application/pdf",
+                )
+            },
+            headers=caso["doctor_auth"],
+        )
     revisao = enviado.json()
     assert revisao["resumo"]["identificados"] == 1, revisao
-    client.post(
-        "/api/v1/laudos/assinatura-externa/confirmar",
-        json={
-            "batch_id": revisao["batch_id"],
-            "signed_document_ids": [
-                item["signed_document_id"]
-                for item in revisao["identificados"]
-            ],
-        },
-        headers=caso["doctor_auth"],
-    )
+    _voltar_ao_estado_antigo(db, status="recebido_validacao_pendente")
 
     modulo = _script_de_recusa()
     lau = _lau_do_caso(client, auth, caso["document_id"])
@@ -568,6 +631,9 @@ def test_script_para_diante_de_conferencia_ja_registrada(
 ):
     """Recusar depois da conferência apagaria um testemunho humano."""
 
+    # Um documento conferido à mão só existe no fluxo anterior: hoje ele
+    # chegaria pronto para entrega sem passar por conferência nenhuma.
+    _voltar_ao_estado_antigo(db, status="recebido_validacao_pendente")
     signed_id = assinado["signed_document_id"]
     conferencia = client.post(
         f"/api/v1/laudos/assinatura-externa/{signed_id}/validacao-externa",

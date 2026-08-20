@@ -32,6 +32,7 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.models import (
+    ASSINADO_ACEITO,
     ASSINADO_EM_CONFERENCIA,
     ASSINADO_ENTREGUE,
     ASSINADO_RECEBIDO_VALIDACAO_PENDENTE,
@@ -102,7 +103,20 @@ def _assinar_por_fora(pdf: bytes) -> bytes:
     metadados sobreviva, que é a premissa do pareamento.
     """
 
-    return pdf + b"\n% revisao incremental de assinatura (sintetica)\n"
+    # M25.29H — a revisão anexada carrega um dicionário de assinatura de
+    # verdade. Antes era só um comentário, e o teste passava por um caminho
+    # que a produção não tem: as guardas documentais exigem `/ByteRange` e
+    # `/Sig`, exatamente para separar um PDF assinado de um PDF devolvido
+    # sem assinar. Sem esta estrutura a fixture simulava algo que o sistema
+    # — corretamente — recusa.
+    return pdf + (
+        b"\n% revisao incremental de assinatura (sintetica)\n"
+        b"9999 0 obj\n"
+        b"<< /Type /Sig /Filter /Adobe.PPKLite"
+        b" /SubFilter /ETSI.CAdES.detached\n"
+        b"   /ByteRange [0 0 0 0] /Contents <00> >>\n"
+        b"endobj\n"
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -360,8 +374,15 @@ def test_pareamento_retroativo_pelo_codigo_lau_impresso(client, caso, db):
     )
     assert resposta.status_code == 200, resposta.text
     corpo = resposta.json()
-    assert corpo["resumo"]["identificados"] == 1
-    assert corpo["identificados"][0]["pareado_por"] == PAREAMENTO_CODIGO_LAUDO
+    # M25.29H — o que este teste prova é o PAREAMENTO: um laudo antigo, sem
+    # carimbo, ainda é reconhecido pelo código impresso. O arquivo em si é
+    # texto sintético sem assinatura, e por isso não passa nas guardas
+    # documentais — o veredito diz as duas coisas, e é assim que a médica
+    # descobre que o laudo foi achado mas a folha não serve.
+    veredito = corpo["arquivos"][0]
+    assert veredito["codigo_laudo"] == caso["report_code"]
+    assert veredito["pareado_por"] == PAREAMENTO_CODIGO_LAUDO
+    assert corpo["aceitos"] == 0
 
 
 def test_pareamento_retroativo_pelo_codigo_de_verificacao(client, caso):
@@ -376,8 +397,8 @@ def test_pareamento_retroativo_pelo_codigo_de_verificacao(client, caso):
     )
     assert resposta.status_code == 200, resposta.text
     corpo = resposta.json()
-    assert corpo["resumo"]["identificados"] == 1
-    assert corpo["identificados"][0]["pareado_por"] == PAREAMENTO_CODIGO_VALIDACAO
+    veredito = corpo["arquivos"][0]
+    assert veredito["pareado_por"] == PAREAMENTO_CODIGO_VALIDACAO
 
 
 def test_nome_de_arquivo_sozinho_nunca_identifica(client, caso):
@@ -438,10 +459,11 @@ def test_codigo_de_outro_laudo_nao_pareia_com_o_paciente_errado(
         headers=caso["doctor"]["auth"],
     )
     assert resposta.status_code == 200, resposta.text
-    identificados = resposta.json()["identificados"]
-    assert len(identificados) == 1
-    # Seguiu o CÓDIGO, não o nome do arquivo.
-    assert identificados[0]["report_code"] == outro["report_code"]
+    veredito = resposta.json()["arquivos"][0]
+    # Seguiu o CÓDIGO, não o nome do arquivo — que é o ponto deste teste, e
+    # continua valendo mesmo que o arquivo sintético não passe nas guardas.
+    assert veredito["codigo_laudo"] == outro["report_code"]
+    assert veredito["codigo_laudo"] != caso["report_code"]
 
 
 # =====================================================================
@@ -759,24 +781,27 @@ def test_diretorios_do_zip_sao_ignorados():
 
 
 def test_conferencia_nao_grava_antes_da_confirmacao(client, auth, caso, db):
-    """Depois do upload o documento existe, mas ainda EM CONFERÊNCIA.
+    """M25.29H — a administração só vê o que passou nas guardas.
 
-    E, principalmente, a administração ainda NÃO o vê como recebido: ela não
-    deve começar a trabalhar num arquivo que a médica pode descartar na tela
-    seguinte.
+    A garantia original era temporal: nada aparecia para a administração
+    antes de a médica confirmar, porque ela ainda podia descartar o arquivo.
+    A garantia agora é documental, e é mais forte — um arquivo que não passa
+    não vira linha nenhuma, não aparece em fila nenhuma e não espera
+    ninguém. O que a administração vê é sempre um documento aceito.
     """
 
-    assinado = _assinar_por_fora(_baixar_versao_concluida(client, caso))
+    final = _baixar_versao_concluida(client, caso)
+    # O PDF final devolvido sem assinar: exatamente o que a operação fez
+    # com os laudos 010, 011 e 015.
     resposta = client.post(
         "/api/v1/laudos/assinatura-externa/enviar",
-        files={"arquivos": ("a.pdf", assinado, "application/pdf")},
+        files={"arquivos": ("a.pdf", final, "application/pdf")},
         headers=caso["doctor"]["auth"],
     )
     assert resposta.status_code == 200, resposta.text
+    assert resposta.json()["aceitos"] == 0
 
-    registro = db.execute(select(ExternalSignedDocument)).scalars().one()
-    assert registro.status == ASSINADO_EM_CONFERENCIA
-    assert registro.confirmed_at is None
+    assert not db.execute(select(ExternalSignedDocument)).scalars().all()
 
     fila = client.get(
         "/api/v1/laudos/assinatura-externa/fila", headers=auth("operacional")
@@ -808,24 +833,11 @@ def test_confirmacao_unica_move_o_lote_inteiro(client, auth, db, caso):
     assert envio.status_code == 200, envio.text
     corpo = envio.json()
     assert corpo["resumo"]["identificados"] == 2
-
-    confirmacao = client.post(
-        "/api/v1/laudos/assinatura-externa/confirmar",
-        json={
-            "batch_id": corpo["batch_id"],
-            "signed_document_ids": [
-                item["signed_document_id"] for item in corpo["identificados"]
-            ],
-        },
-        headers=caso["doctor"]["auth"],
-    )
-    assert confirmacao.status_code == 200, confirmacao.text
-    assert confirmacao.json()["confirmados"] == 2
+    # M25.29H — o lote inteiro é resolvido no envio, arquivo por arquivo.
+    assert corpo["aceitos"] == 2
 
     registros = db.execute(select(ExternalSignedDocument)).scalars().all()
-    assert {r.status for r in registros} == {
-        ASSINADO_RECEBIDO_VALIDACAO_PENDENTE
-    }
+    assert {r.status for r in registros} == {ASSINADO_ACEITO}
 
 
 def test_reenvio_do_mesmo_arquivo_e_idempotente(client, caso, db):
@@ -901,19 +913,12 @@ def test_falha_de_gravacao_nao_leva_o_lote_junto(client, auth, db, caso):
     assert corpo["resumo"]["com_problema"] == 1
     assert corpo["identificados"][0]["report_code"] == segundo["report_code"]
 
-    # E o lote confirma normalmente — a FK não ficou órfã.
-    confirmacao = client.post(
-        "/api/v1/laudos/assinatura-externa/confirmar",
-        json={
-            "batch_id": corpo["batch_id"],
-            "signed_document_ids": [
-                corpo["identificados"][0]["signed_document_id"]
-            ],
-        },
-        headers=caso["doctor"]["auth"],
-    )
-    assert confirmacao.status_code == 200, confirmacao.text
-    assert confirmacao.json()["confirmados"] == 1
+    # E o arquivo bom foi ACEITO apontando para um lote que existe — a FK
+    # não ficou órfã, que é o que este teste sempre protegeu.
+    assert corpo["aceitos"] == 1, corpo
+    registro = db.execute(select(ExternalSignedDocument)).scalars().one()
+    assert registro.batch_id == corpo["batch_id"]
+    assert registro.status == ASSINADO_ACEITO
 
 
 def test_um_arquivo_ruim_nao_derruba_o_lote(client, auth, db, caso):
@@ -983,7 +988,7 @@ def test_medica_baixa_o_assinado_com_nome_de_assinado(client, caso, db):
     exatamente como se leva o documento errado para assinar de novo.
     """
 
-    _receber_e_confirmar(client, caso)
+    _receber_assinado(client, caso)
     versao = db.execute(
         select(ReportDocumentVersion).where(
             ReportDocumentVersion.report_document_id == caso["document_id"],
@@ -1067,8 +1072,9 @@ def test_ciclo_completo_com_campo_de_assinatura_real(client, auth, caso):
     corpo = envio.json()
     assert corpo["resumo"]["identificados"] == 1, corpo
     assert corpo["identificados"][0]["pareado_por"] == PAREAMENTO_METADADO
+    assert corpo["aceitos"] == 1, corpo
 
-    confirmacao = client.post(
+    confirmacao_legada = client.post(
         "/api/v1/laudos/assinatura-externa/confirmar",
         json={
             "batch_id": corpo["batch_id"],
@@ -1078,7 +1084,8 @@ def test_ciclo_completo_com_campo_de_assinatura_real(client, auth, caso):
         },
         headers=caso["doctor"]["auth"],
     )
-    assert confirmacao.status_code == 200, confirmacao.text
+    # M25.29H — não há mais lote pendente: o envio já resolveu tudo.
+    assert confirmacao_legada.status_code == 409, confirmacao_legada.text
 
     # E o arquivo gravado é RELIDO sem falhar — o perfil de gravação e o de
     # releitura precisam concordar, senão o PDF nasceria "corrompido" e o
@@ -1123,19 +1130,9 @@ def test_upload_nunca_declara_assinatura_qualificada(client, caso, db):
         headers=caso["doctor"]["auth"],
     )
     corpo = envio.json()
-    confirmacao = client.post(
-        "/api/v1/laudos/assinatura-externa/confirmar",
-        json={
-            "batch_id": corpo["batch_id"],
-            "signed_document_ids": [
-                corpo["identificados"][0]["signed_document_id"]
-            ],
-        },
-        headers=caso["doctor"]["auth"],
-    )
-    assert confirmacao.status_code == 200
+    assert corpo["aceitos"] == 1, corpo
 
-    texto = (envio.text + confirmacao.text).lower()
+    texto = envio.text.lower()
     assert "icp-brasil" not in texto
     assert "qualified_signature\": true" not in texto
 
@@ -1147,24 +1144,22 @@ def test_upload_nunca_declara_assinatura_qualificada(client, caso, db):
 
 
 def test_estado_do_recebido_declara_validacao_pendente(client, caso, db):
+    """M25.29H — o estado declara o que houve: recebido e assinado.
+
+    Continua sem declarar validação: ninguém conferiu cadeia ICP-Brasil, e
+    os campos de validação externa seguem vazios.
+    """
+
     assinado = _assinar_por_fora(_baixar_versao_concluida(client, caso))
     envio = client.post(
         "/api/v1/laudos/assinatura-externa/enviar",
         files={"arquivos": ("a.pdf", assinado, "application/pdf")},
         headers=caso["doctor"]["auth"],
     ).json()
-    client.post(
-        "/api/v1/laudos/assinatura-externa/confirmar",
-        json={
-            "batch_id": envio["batch_id"],
-            "signed_document_ids": [
-                envio["identificados"][0]["signed_document_id"]
-            ],
-        },
-        headers=caso["doctor"]["auth"],
-    )
+    assert envio["aceitos"] == 1, envio
+
     registro = db.execute(select(ExternalSignedDocument)).scalars().one()
-    assert registro.status == ASSINADO_RECEBIDO_VALIDACAO_PENDENTE
+    assert registro.status == ASSINADO_ACEITO
     assert registro.validated_at is None
     assert registro.validated_by_user_id is None
 
@@ -1174,21 +1169,35 @@ def test_estado_do_recebido_declara_validacao_pendente(client, caso, db):
 # =====================================================================
 
 
-def _receber_e_confirmar(client, caso_) -> str:
+def _receber_assinado(client, caso_) -> str:
+    """M25.29H — o envio é o fim. Não há segundo passo a dar aqui.
+
+    O helper mantém a mesma promessa de antes: ao voltar, o documento está
+    no estado em que a administração pode trabalhar com ele.
+    """
+
     assinado = _assinar_por_fora(_baixar_versao_concluida(client, caso_))
     envio = client.post(
         "/api/v1/laudos/assinatura-externa/enviar",
         files={"arquivos": ("a.pdf", assinado, "application/pdf")},
         headers=caso_["doctor"]["auth"],
     ).json()
-    signed_id = envio["identificados"][0]["signed_document_id"]
-    resposta = client.post(
-        "/api/v1/laudos/assinatura-externa/confirmar",
-        json={"batch_id": envio["batch_id"], "signed_document_ids": [signed_id]},
-        headers=caso_["doctor"]["auth"],
-    )
-    assert resposta.status_code == 200, resposta.text
-    return signed_id
+    assert envio["aceitos"] == 1, envio
+    return envio["identificados"][0]["signed_document_id"]
+
+
+def _voltar_ao_fluxo_antigo(db, signed_id: str) -> None:
+    """Recoloca o assinado no estado anterior à M25.29H.
+
+    A conferência externa continua existindo para os documentos históricos
+    que pararam naquele estado. Testá-la exige reproduzi-lo — reproduzir,
+    não afrouxar: o código de produção não tem mais como criar um.
+    """
+
+    registro = db.get(ExternalSignedDocument, signed_id)
+    registro.status = ASSINADO_RECEBIDO_VALIDACAO_PENDENTE
+    db.commit()
+    db.rollback()
 
 
 def test_fila_administrativa_transiciona_sozinha(client, auth, caso):
@@ -1204,7 +1213,7 @@ def test_fila_administrativa_transiciona_sozinha(client, auth, caso):
     )
     assert linha["estado"] == "aguardando_assinatura"
 
-    _receber_e_confirmar(client, caso)
+    _receber_assinado(client, caso)
 
     depois = client.get(
         "/api/v1/laudos/assinatura-externa/fila", headers=auth("operacional")
@@ -1213,12 +1222,15 @@ def test_fila_administrativa_transiciona_sozinha(client, auth, caso):
         item for item in depois["itens"]
         if item["document_id"] == caso["document_id"]
     )
-    assert linha["estado"] == "assinado_recebido_validacao_pendente"
+    # M25.29H — a transição continua sozinha, e vai mais longe: o documento
+    # chega direto em "pronto para entrega", sem etapa administrativa.
+    assert linha["estado"] == "pronto_para_entrega"
     assert linha["assinado"]["assinatura_verificada_criptograficamente"] is False
 
 
-def test_validacao_externa_exige_confirmacao_consciente(client, auth, caso):
-    signed_id = _receber_e_confirmar(client, caso)
+def test_validacao_externa_exige_confirmacao_consciente(client, auth, caso, db):
+    signed_id = _receber_assinado(client, caso)
+    _voltar_ao_fluxo_antigo(db, signed_id)
     recusado = client.post(
         f"/api/v1/laudos/assinatura-externa/{signed_id}/validacao-externa",
         json={"metodo": "validar_iti", "confirmacao": "ok"},
@@ -1228,7 +1240,8 @@ def test_validacao_externa_exige_confirmacao_consciente(client, auth, caso):
 
 
 def test_validacao_externa_registra_quem_e_como(client, auth, caso, db):
-    signed_id = _receber_e_confirmar(client, caso)
+    signed_id = _receber_assinado(client, caso)
+    _voltar_ao_fluxo_antigo(db, signed_id)
     resposta = client.post(
         f"/api/v1/laudos/assinatura-externa/{signed_id}/validacao-externa",
         json={
@@ -1266,12 +1279,23 @@ def test_validacao_externa_nao_aceita_documento_em_conferencia(
         json={"metodo": "validar_iti", "confirmacao": VALIDACAO_CONFIRMACAO},
         headers=auth("admin"),
     )
+    # M25.29H — o documento não está "em conferência" nem pendente: ele já
+    # foi aceito. A rota legada recusa por já ter sido resolvido, e o
+    # essencial se mantém — ninguém registra conferência sobre ele.
     assert resposta.status_code == 409
-    assert resposta.json()["erro"]["codigo"] == "conferencia_da_medica_pendente"
+    assert resposta.json()["erro"]["codigo"] == "validacao_ja_registrada"
 
 
-def test_entrega_so_depois_da_conferencia(client, auth, caso):
-    signed_id = _receber_e_confirmar(client, caso)
+def test_entrega_so_depois_da_conferencia(client, auth, caso, db):
+    """No fluxo ANTIGO, entregar exigia a conferência antes. Continua.
+
+    M25.29H — no fluxo novo o aceite automático já deixa pronto para
+    entrega; o que este teste guarda é o documento histórico, que não pode
+    ser entregue enquanto ninguém resolveu o estado dele.
+    """
+
+    signed_id = _receber_assinado(client, caso)
+    _voltar_ao_fluxo_antigo(db, signed_id)
     cedo = client.post(
         f"/api/v1/laudos/assinatura-externa/{signed_id}/entrega",
         headers=auth("operacional"),
@@ -1292,7 +1316,7 @@ def test_entrega_so_depois_da_conferencia(client, auth, caso):
 
 
 def test_admin_baixa_o_assinado_com_nome_humano(client, auth, caso):
-    _receber_e_confirmar(client, caso)
+    _receber_assinado(client, caso)
     resposta = client.get(
         f"/api/v1/laudos/{caso['document_id']}/assinado/conteudo",
         headers=auth("operacional"),
@@ -1334,7 +1358,7 @@ def test_download_administrativo_do_assinado_404_antes_de_receber(
 def test_auditoria_nao_registra_nome_de_paciente_nem_de_arquivo(
     client, caso, db
 ):
-    _receber_e_confirmar(client, caso)
+    _receber_assinado(client, caso)
     registros = db.execute(select(AuditLog)).scalars().all()
     texto = " ".join(str(r.detalhes or {}) for r in registros)
     assert "Antonio" not in texto
@@ -1356,7 +1380,7 @@ def test_rota_publica_de_validacao_nao_expoe_dado_novo(client, auth, caso):
     assert antes.status_code == 200, antes.text
     campos_antes = set(antes.json())
 
-    _receber_e_confirmar(client, caso)
+    _receber_assinado(client, caso)
 
     depois = client.get(
         f"/api/v1/laudos/validacao/{codigo}", headers=auth("leitura")
@@ -1452,40 +1476,50 @@ def test_fila_administrativa_tem_tela_e_nao_so_rota():
     assert "data-delivery-download-assinado" in WORKFLOW_JS
     assert '"exame-tecnico"' in WORKFLOW_JS
     assert "/conteudo`" in WORKFLOW_JS
-    assert "data-delivery-validate" in WORKFLOW_JS
+    # M25.29H — a ação de conferência saiu da tela. Restam os dois
+    # downloads e a entrega, que é o que a administração de fato faz.
+    assert "data-delivery-validate" not in WORKFLOW_JS
     assert "data-delivery-deliver" in WORKFLOW_JS
     assert ".report-delivery-row {" in WORKFLOW_CSS
 
 
 def test_tela_administrativa_declara_que_nao_validou_criptograficamente():
-    """A negativa do §14 fica VISÍVEL, não só no JSON da API."""
+    """A negativa do §14 fica VISÍVEL, não só no JSON da API.
+
+    M25.29H — a frase mudou junto com o fluxo: primeiro o que o sistema fez
+    (associou sozinho), depois o que ele não fez. A negativa continua lá, e
+    continua sem virar alerta.
+    """
 
     assert (
-        "a SoproLife não verificou a assinatura criptograficamente"
+        "Documento assinado recebido e associado automaticamente"
         in WORKFLOW_JS
     )
+    assert "sem validação criptográfica da cadeia ICP-Brasil" in WORKFLOW_JS
 
 
 def test_registro_de_validacao_externa_exige_ato_deliberado():
-    """Um clique distraído não pode virar testemunho de conferência.
+    """M25.29H — o registro saiu da tela, e o contrato da API ficou.
 
-    M25.29G — a exigência continua; o mecanismo mudou. Era um `prompt()`
-    pedindo para DIGITAR a frase, que na prática virava copiar e colar.
-    Agora são dois passos na própria tela: um clique abre a confirmação,
-    outro a confirma — e o texto diz exatamente o que está sendo afirmado.
+    A M25.20 exigia uma frase digitada; a M25.29G trocou por dois cliques
+    deliberados; a M25.29H removeu a etapa, porque o que ela produzia era um
+    testemunho humano que a evidência documental já resolve — e que, na
+    auditoria, chegou a estar errado.
 
-    A frase permanece no contrato com a API, que continua exigindo-a; o que
-    mudou é quem a digita.
+    O que NÃO se afrouxou: a rota continua exigindo a frase para os
+    documentos históricos. Remover o botão não podia virar porta aberta.
     """
 
-    assert "Confirmo a conferência externa" in WORKFLOW_JS
-    # Dois passos, dois atributos distintos: abrir não registra.
-    assert "data-delivery-validate=" in WORKFLOW_JS
-    assert "data-delivery-validate-confirm=" in WORKFLOW_JS
-    assert "data-delivery-validate-cancel" in WORKFLOW_JS
-    assert "Confirmar conferência do PDF assinado?" in WORKFLOW_JS
-    # E a negativa honesta continua na tela, agora dentro da confirmação.
-    assert "não realiza validação criptográfica da cadeia" in WORKFLOW_JS
+    assert "Confirmo a conferência externa" not in WORKFLOW_JS
+    assert "data-delivery-validate" not in WORKFLOW_JS
+    assert "Confirmar conferência do PDF assinado?" not in WORKFLOW_JS
+
+    from pydantic import ValidationError
+
+    from app.schemas import ExternalValidationRequest
+
+    with pytest.raises(ValidationError):
+        ExternalValidationRequest(metodo="validar_iti", confirmacao="ok")
 
 
 def test_proxy_deixa_passar_os_nomes_novos():
@@ -1529,12 +1563,19 @@ def test_central_e_alimentada_pelo_servidor_e_nao_pelo_navegador():
     assert "/laudos/assinatura-externa/pendentes" in WORKFLOW_JS
     assert "/laudos/assinatura-externa/baixar" in WORKFLOW_JS
     assert "/laudos/assinatura-externa/enviar" in WORKFLOW_JS
-    assert "/laudos/assinatura-externa/confirmar" in WORKFLOW_JS
+    # M25.29H — `confirmar` saiu da tela junto com o segundo passo.
+    assert "/laudos/assinatura-externa/confirmar" not in WORKFLOW_JS
 
 
 def test_confirmacao_e_um_passo_separado_da_conferencia():
-    """Nada é gravado no upload: a médica confirma depois de ver a lista."""
+    """M25.29H — não há segundo passo: o envio resolve, e a lista é recibo.
 
-    assert "data-signature-confirm" in WORKFLOW_JS
-    assert "Confirmar ${identificados} identificado(s)" in WORKFLOW_JS
+    A lista por arquivo continua existindo, e é ela que diz à médica o que
+    foi aceito e o que precisa ser refeito. O que sai é o botão que pedia
+    para confirmar o que já estava decidido.
+    """
+
+    assert "data-signature-confirm" not in WORKFLOW_JS
+    assert "Confirmar ${identificados} identificado(s)" not in WORKFLOW_JS
     assert "data-signature-discard" in WORKFLOW_JS
+    assert "function renderSignatureReceipt(" in WORKFLOW_JS

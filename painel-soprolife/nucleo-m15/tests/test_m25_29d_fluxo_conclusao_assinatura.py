@@ -85,7 +85,20 @@ def _assinar_por_fora(pdf: bytes) -> bytes:
     continua legível depois de assinado.
     """
 
-    return pdf + b"\n% revisao incremental de assinatura (sintetica)\n"
+    # M25.29H — a revisão anexada carrega um dicionário de assinatura de
+    # verdade. Antes era só um comentário, e o teste passava por um caminho
+    # que a produção não tem: as guardas documentais exigem `/ByteRange` e
+    # `/Sig`, exatamente para separar um PDF assinado de um PDF devolvido
+    # sem assinar. Sem esta estrutura a fixture simulava algo que o sistema
+    # — corretamente — recusa.
+    return pdf + (
+        b"\n% revisao incremental de assinatura (sintetica)\n"
+        b"9999 0 obj\n"
+        b"<< /Type /Sig /Filter /Adobe.PPKLite"
+        b" /SubFilter /ETSI.CAdES.detached\n"
+        b"   /ByteRange [0 0 0 0] /Contents <00> >>\n"
+        b"endobj\n"
+    )
 
 
 def _texto_do_pdf(pdf: bytes) -> str:
@@ -581,7 +594,7 @@ def test_recusa_por_previa_e_contada_na_auditoria(client, caso, db):
 
     registro = db.execute(
         select(AuditLog).where(
-            AuditLog.acao == "laudos_assinados_recebidos_para_conferencia"
+            AuditLog.acao == "laudos_assinados_recebidos"
         )
     ).scalars().all()[-1]
     assert registro.detalhes["recusadas_por_previa"] == 1
