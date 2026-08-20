@@ -607,17 +607,20 @@ def test_fila_de_entrega_recebe_o_objeto_inteiro_com_os_estados():
     "renderSignatureCenter",
     "renderSignatureItem",
     "renderSignatureUpload",
-    "renderSignatureReview",
+    # M25.29H — `renderSignatureReview` virou `renderSignatureReceipt`: a
+    # lista por arquivo continua, como recibo do que foi aceito e do que
+    # precisa ser refeito. O que saiu foi o segundo passo — a rota
+    # `/confirmar` e o botão que a chamava —, porque o envio já resolve.
+    "renderSignatureReceipt",
     "renderDeliveryQueue",
     "/laudos/assinatura-externa/pendentes",
     "/laudos/assinatura-externa/baixar",
     "/laudos/assinatura-externa/enviar",
-    "/laudos/assinatura-externa/confirmar",
     "/laudos/assinatura-externa/fila",
     "data-signature-all",
     "data-signature-download",
     "data-signature-upload",
-    "data-signature-confirm",
+    "data-signature-discard",
     "data-signature-discard",
     "data-delivery-filter",
 ])
