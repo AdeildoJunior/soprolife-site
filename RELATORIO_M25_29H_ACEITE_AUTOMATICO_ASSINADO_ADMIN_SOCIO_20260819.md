@@ -1,14 +1,16 @@
 # M25.29H — Aceite automático do PDF assinado, paridade administrativa do sócio e integridade do download
 
-> Relatório vivo, atualizado durante a missão.
-> Início: 2026-08-19. Última atualização: 2026-08-20 (implementação concluída, deploy pendente).
+> Missão encerrada. Início: 2026-08-19. Conclusão: 2026-08-20.
+> **Implantada em produção.**
 
-## Ponto de partida
+## Identificação
 
 | item | valor |
 |---|---|
 | branch oficial | `painel-soprolife-v01` |
 | HEAD de partida | `ec0a9d8` (M25.29G encerrada) |
+| **HEAD final — local = oficial = VPS** | **`e012e24b5d3de2ec53c5cb9edfedb240e76504e6`** |
+| migration aplicada | **`c4a97b1e6d20`** |
 | worktree | `/home/adeildo/soprolife-worktrees/claude-m25-29h-aceite-automatico-assinado` |
 | branch da missão | `claude-m25-29h-aceite-automatico-assinado` |
 
@@ -34,6 +36,9 @@ milissegundos, com dois testes objetivos: hash idêntico ao final, e ausência d
 `/ByteRange` e `/Sig`.
 
 ### Situação completa da fila na auditoria
+
+> Esta tabela é o retrato **de 2026-08-19, antes de qualquer escrita**. O estado
+> final, já aplicado em produção, está na seção 8.
 
 | laudo | estado auditado | evidência | passa no aceite novo |
 |---|---|---|---|
@@ -199,7 +204,7 @@ significou algo. Foi um erro real, pego pelos testes antes de chegar à operaç�
 
 ## 6. Testes focados
 
-Arquivo novo: `tests/test_m25_29h_aceite_automatico.py` — **24 testes**.
+Arquivo novo: `tests/test_m25_29h_aceite_automatico.py` — **26 testes, todos verdes**.
 
 | item | teste |
 |---|---|
@@ -224,9 +229,17 @@ Arquivo novo: `tests/test_m25_29h_aceite_automatico.py` — **24 testes**.
 | 17 | conta principal continua admin |
 | 18 | médica continua sem funções administrativas |
 | 19 | reconciliação: dry-run, promoção, idempotência, entregue intocado |
+| 15b | promoção por papel para diante de ambiguidade, e não toca na conta principal |
 
 Suítes anteriores atualizadas — sem afrouxar proteção, invertendo o que
-descrevia a etapa removida: M25.20, M25.29D, M25.29E, M25.29G.
+descrevia a etapa removida: M25.20, M25.21, M25.29D, M25.29E, M25.29G.
+
+Escopo executado: **17 arquivos de teste impactados, 427 testes, todos verdes**
+(`test_m24a`, `test_m24b`, `test_m24d` ×2, `test_m25_15`, `test_m25_18`,
+`test_m25_19`, `test_m25_20`, `test_m25_21` ×2, `test_m25_24`, `test_m25_29d`,
+`test_m25_29e`, `test_m25_29f`, `test_m25_29g`, `test_m25_29h`,
+`test_migrations`). Suíte completa não foi executada, por instrução — a operação
+está usando o sistema.
 
 Uma correção de fixture com consequência real: `_assinar_por_fora` anexava apenas
 um comentário, sem `/ByteRange` nem `/Sig`. Os testes passavam por um caminho que
@@ -261,12 +274,97 @@ promessa do script.
 
 ---
 
-## 8. Pendente
+## 8. Deploy em produção — executado
 
-- [ ] dry-run consolidado em produção, antes de qualquer escrita
-- [ ] backup
-- [ ] deploy ff-only e migration `c4a97b1e6d20`
-- [ ] correção do LAU-000015
-- [ ] promoção de LAU-000012 e LAU-000013
-- [ ] promoção administrativa do Luiz
-- [ ] restart mínimo, health, gate, smoke, RBAC
+| verificação | resultado |
+|---|---|
+| HEAD VPS = oficial = local | `e012e24b5d3de2ec53c5cb9edfedb240e76504e6` |
+| migration | `c4a97b1e6d20` aplicada |
+| backup | preservado e válido, anterior a qualquer escrita |
+| serviços | `soprolife-m15-api`, `soprolife-painel`, `soprolife-painel-loopback` ativos |
+| health | HTTP 200 |
+| timer | `success` |
+| árvore Git da VPS | limpa |
+| cache busting | `?v=2026082001` no JS e no CSS |
+| reconciliação final | idempotente: 6 intocados, 0 novas alterações |
+
+### Estado final da fila
+
+| laudo | estado final | o que falta |
+|---|---|---|
+| LAU-000010 | `recusado` | nova assinatura do PDF final |
+| LAU-000011 | `recusado` | nova assinatura do PDF final |
+| **LAU-000012** | **`recebido_assinado`** | **nada — pronto para entrega** |
+| **LAU-000013** | **`recebido_assinado`** | **nada — pronto para entrega** |
+| LAU-000014 | `recusado` | nova assinatura do PDF final |
+| **LAU-000015** | **`recusado`** | nova assinatura do PDF final |
+
+O LAU-000015 saiu de `validado_externamente` — onde estava por engano humano —
+para `recusado`, com motivo `documento_sem_assinatura_externa`. O registro da
+conferência anterior **não foi apagado**: quem a fez e quando continuam gravados,
+e um evento próprio, `conferencia_externa_invalidada_por_evidencia`, diz que ela
+foi invalidada e por qual evidência documental.
+
+### Contas
+
+| conta | papel final | autoria clínica |
+|---|---|---|
+| `contato@soprolife.com.br` | `admin` | não |
+| Luiz Antonio Faustino Lopes de Oliveira | **`admin`** | **não — sem papel `medico`, sem `physician_profile`** |
+| Ana | `medico` | sim |
+
+A mensagem "Fila médica não aparece nesta conta" continua correta para o Luiz, e
+é o comportamento desejado.
+
+### O que NÃO foi alterado
+
+Nenhuma conclusão clínica. Nenhum paciente, exame, MIR ou versão de laudo.
+Nenhum blob, hash ou histórico. Nenhuma linha de auditoria apagada ou reescrita.
+Nada em Financeiro, Pastore ou CRM. Nenhum lote antigo. Nenhuma senha resetada,
+nenhum e-mail alterado, nenhuma sessão revogada. **Nenhum `DELETE`, em nenhuma
+tabela.** Sem `reset --hard`, sem force push, sem `force-with-lease`.
+
+---
+
+## 9. As seis provas pedidas
+
+1. **Ana** — assina → devolve → **acabou para ela**. O envio aplica as guardas e
+   aceita na hora; não há lote a confirmar nem ninguém a avisar.
+2. **Administração** — **não existe mais conferência manual obrigatória**. O
+   botão, a confirmação e a função que a registrava foram removidos da tela.
+3. **Documento** — associação automática **forte**, por evidência documental
+   objetiva, e **NÃO validação criptográfica ICP-Brasil**. `qualified_signature`
+   continua falso em toda a trilha, na API e na interface.
+4. **Luiz** — tem a **mesma autonomia administrativa da conta principal**: papel
+   `admin`, que engloba `gestor`, `operacional` e `leitura` pela hierarquia.
+5. **Separação** — **Luiz NÃO recebeu papel médico.** `admin` não implica
+   `medico` em `app/security.py`, o script nunca concede papel clínico e nunca
+   cria perfil profissional. A fronteira é estrutural, não uma promessa.
+6. **Download** — provado por **hash**: dois pacientes sintéticos assinam
+   documentos distintos, e o download de cada laudo devolve exatamente o SHA-256
+   do arquivo recebido daquele laudo — nunca o do outro, nunca o
+   `source_version_id` (o PDF final sem assinatura). Em produção, a auditoria
+   read-only confirmou isolamento preservado, sem nenhuma versão ligada a outro
+   `report_document`.
+
+---
+
+## 10. Limitações declaradas
+
+- A SoproLife **continua sem validar criptograficamente** a cadeia ICP-Brasil:
+  não confere certificado, revogação, integridade do digest nem identidade do
+  assinante. Tudo o que o aceite afirma é documental. Um validador criptográfico
+  real, integrado, continua sendo trabalho futuro — e só ele permitiria
+  `qualified_signature = true`.
+- `tem_estrutura_de_assinatura` detecta a estrutura (`/ByteRange` e `/Sig`), não
+  a validade dela. Um PDF com estrutura de assinatura forjada e que descendesse
+  do final passaria — cenário que exige acesso ao PDF final da paciente e
+  intenção deliberada, e que só um validador criptográfico distingue.
+- Três laudos — 010, 011 e 014 — mais o 015 dependem de a médica assinar o PDF
+  final de novo. Nenhum deles precisa de laudo novo ou de conclusão clínica nova.
+- A suíte completa não foi executada nesta missão, por instrução. O escopo
+  verificado foram os 17 arquivos impactados.
+
+---
+
+**M25.29H — PRODUÇÃO IMPLANTADA E FLUXO DE ASSINATURA AUTOMÁTICA OPERACIONAL**
