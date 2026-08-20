@@ -9,7 +9,8 @@
 |---|---|
 | branch oficial | `painel-soprolife-v01` |
 | HEAD de partida | `ec0a9d8` (M25.29G encerrada) |
-| **HEAD final — local = oficial = VPS** | **`e012e24b5d3de2ec53c5cb9edfedb240e76504e6`** |
+| **HEAD do CÓDIGO — local = oficial = VPS** | **`e012e24b5d3de2ec53c5cb9edfedb240e76504e6`** |
+| commits posteriores da branch | acrescentam **somente este relatório**; nenhum efeito em produção |
 | migration aplicada | **`c4a97b1e6d20`** |
 | worktree | `/home/adeildo/soprolife-worktrees/claude-m25-29h-aceite-automatico-assinado` |
 | branch da missão | `claude-m25-29h-aceite-automatico-assinado` |
@@ -278,7 +279,7 @@ promessa do script.
 
 | verificação | resultado |
 |---|---|
-| HEAD VPS = oficial = local | `e012e24b5d3de2ec53c5cb9edfedb240e76504e6` |
+| HEAD VPS = oficial = local (código) | `e012e24b5d3de2ec53c5cb9edfedb240e76504e6` |
 | migration | `c4a97b1e6d20` aplicada |
 | backup | preservado e válido, anterior a qualquer escrita |
 | serviços | `soprolife-m15-api`, `soprolife-painel`, `soprolife-painel-loopback` ativos |
@@ -364,6 +365,14 @@ tabela.** Sem `reset --hard`, sem force push, sem `force-with-lease`.
   final de novo. Nenhum deles precisa de laudo novo ou de conclusão clínica nova.
 - A suíte completa não foi executada nesta missão, por instrução. O escopo
   verificado foram os 17 arquivos impactados.
+- **Resíduo de permissão no checkout da VPS.** Durante a missão, uma execução com
+  root deixou `.git/index` e `.git/ORIG_HEAD` pertencendo a `root`. O `.git/` é do
+  usuário `soprolife`, então a árvore continua íntegra e o código implantado está
+  correto — mas o próximo `git merge --ff-only` falha ao gravar `ORIG_HEAD`. É o
+  mesmo resíduo que quebrou um deploy no meio na M25.29D, e desta vez ele apareceu
+  DEPOIS do código já estar implantado e verificado. Conserto: devolver os dois
+  arquivos ao usuário `soprolife`. Enquanto isso, o único commit que não alcança a
+  VPS é o deste relatório.
 
 ---
 
