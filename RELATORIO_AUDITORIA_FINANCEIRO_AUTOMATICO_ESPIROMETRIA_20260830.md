@@ -498,6 +498,42 @@ rubrica não versionado). Verificado com `git stash` na mesma máquina.
 
 ---
 
+## 13.1 Deploy em produção — executado em 30/08/2026
+
+| verificação | resultado |
+|---|---|
+| commit local = GitHub = VPS | `22f5908` |
+| branch | `painel-soprolife-v01` (fast-forward de `67ddcd3`) |
+| backup pré-migração | `/opt/soprolife/backups/m15/manual/soprolife_m15-pre-m26-20260830T053131Z.dump` (`0600`, 401 objetos) |
+| migração | `c4a97b1e6d20` → `a3f6b0d94c17 (head)` |
+| serviços | `soprolife-m15-api`, `soprolife-painel`, `soprolife-painel-loopback` **ativos** |
+| health | API `200`, painel `200` |
+| journal pós-restart | sem `error`, `traceback` ou `exception` |
+| árvore Git da VPS | limpa |
+| cache busting | `?v=2026083001` em `style.css`, `pastore-settlement.css/js` e `financeiro-conciliacao.js` |
+
+Leitura em produção, depois do deploy:
+
+```
+aguardando_fechamento: 14
+grupo: Pastore Ipanema 2026-08 · 14 exames -> "Criar fechamento complementar 2"
+fechamento: Fechamento 2026-08 | seq 1 | a_receber | 328.50 | itens 3
+fechamento: Fechamento 2026-07 | seq 1 | a_receber | 219.00 | itens 2
+regra_valor: Não inferido; exige confirmação do gestor.
+conciliacao: alvo 3044.79 vinculado 3494.79 pendente 0.00
+             alem_do_alvo 450.00 alvo_conciliado True
+```
+
+O botão que devolvia 409 agora diz o que vai fazer. O pendente de −R$ 450,00
+virou R$ 450,00 de receita além do alvo histórico. E os dois fechamentos de
+11/08 continuam byte a byte como estavam.
+
+**Rollback disponível:** enquanto não existir fechamento complementar,
+`alembic downgrade c4a97b1e6d20` volta atrás sem perda — ensaiado sobre cópia
+real do banco (seção 12.2). O dump pré-migração cobre o resto.
+
+---
+
 ## 14. Próximo passo
 
 Responda as 4 perguntas da seção 10. Com o valor decidido, o resto é um clique:
