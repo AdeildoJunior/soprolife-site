@@ -108,7 +108,9 @@
         <div>
           <p class="eyebrow">Financeiro da parceria</p>
           <h3 id="pastoreSettlementTitle">Fechamento mensal Pastore</h3>
-          <p>Competência pelo mês do exame. Nenhum preço ou repasse é inferido.</p>
+          <p>Competência pelo mês do exame. Nenhum preço ou repasse é inferido.
+             Exame realizado depois de o mês já ter fechado entra num fechamento
+             complementar — o valor já conferido nunca é reescrito.</p>
         </div>
         <button type="button" data-pastore-refresh>Atualizar</button>
       </header>
@@ -120,10 +122,17 @@
           ${groups.length ? groups.map((g) => `<div class="pastore-eligible-group">
             <div><strong>${esc(g.unidade)}</strong>
               <span>Competência ${esc(g.competencia)} · ${esc(g.quantidade)} exame(s)</span>
+              ${g.acao_prevista === "complementar" ? `<small class="pastore-eligible-note">
+                A competência já tem ${esc(g.fechamentos_existentes)} fechamento(s) com valor
+                conferido. Estes exames entram num fechamento complementar, com valor próprio.
+              </small>` : ""}
+              ${g.acao_prevista === "incorporar" ? `<small class="pastore-eligible-note">
+                Entram no fechamento já aberto desta competência, que ainda não tem valor confirmado.
+              </small>` : ""}
             </div>
             ${canManage ? `<button type="button" data-pastore-create
               data-unit="${esc(g.partner_unit_id)}" data-month="${esc(g.competencia)}">
-              Criar fechamento
+              ${esc(g.acao_rotulo || "Criar fechamento")}
             </button>` : ""}
           </div>`).join("") : empty("Nenhum exame concluído aguardando fechamento.")}
         </article>
@@ -132,7 +141,8 @@
           ${settlements.length ? settlements.map((row) => `<div class="pastore-settlement-row">
             <div class="pastore-settlement-row-head">
               <div><strong>${esc(row.unidade && row.unidade.nome)}</strong>
-                <span>${esc(row.competencia)} · ${esc(row.itens.total)} exame(s)</span></div>
+                <span>${esc(row.competencia)}${row.complementar
+                  ? " · complementar " + esc(row.sequencia) : ""} · ${esc(row.itens.total)} exame(s)</span></div>
               <span class="pastore-status pastore-status-${esc(row.status)}">${esc(row.status_label)}</span>
             </div>
             <dl>
@@ -192,7 +202,13 @@
     postJson("/pastore/fechamentos", {
       partner_unit_id: create.dataset.unit,
       competencia: create.dataset.month,
-    }).then(() => load()).catch((err) => {
+    }).then((data) => {
+      const n = (data && data.exames_adicionados) || 0;
+      setStatus(data && data.acao === "incorporado"
+        ? `${n} exame(s) incluídos no fechamento aberto. Falta confirmar o valor mensal.`
+        : `Fechamento criado com ${n} exame(s). Falta confirmar o valor mensal.`);
+      return load();
+    }).catch((err) => {
       create.disabled = false;
       setStatus((err && err.message) || String(err), true);
     });

@@ -584,13 +584,25 @@ def conciliacao_extra_pastore(
             pendentes.append(item)
 
     total_vinculado = total_vinculado.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP)
-    total_pendente = (TOTAL_ALVO_EXTRA_PASTORE - total_vinculado).quantize(
+    # M26 — o alvo é histórico e FECHADO; a lista de exames não é.
+    #
+    # `_exames_extra_pastore` traz todo exame próprio, inclusive os que
+    # aconteceram depois da conciliação de 25/07/2026. Subtrair um do outro
+    # cru fazia o painel exibir "pendente de −R$ 450,00" assim que a operação
+    # voltou a faturar — número que não existe: dívida histórica não fica
+    # negativa, ela acaba. O que passou do alvo não é pendência resolvida a
+    # menos, é receita nova, e aparece com esse nome.
+    saldo = (TOTAL_ALVO_EXTRA_PASTORE - total_vinculado).quantize(
         MONEY_QUANT, rounding=ROUND_HALF_UP
     )
+    total_pendente = max(saldo, Decimal("0.00"))
+    total_alem_do_alvo = max(-saldo, Decimal("0.00"))
     return {
         "total_alvo": _num_str(TOTAL_ALVO_EXTRA_PASTORE),
         "total_vinculado": _num_str(total_vinculado),
         "total_pendente": _num_str(total_pendente),
+        "total_alem_do_alvo": _num_str(total_alem_do_alvo),
+        "alvo_conciliado": total_pendente == 0,
         "total_exames": len(exames),
         "exames_conciliados": len(conciliados),
         "exames_pendentes": len(pendentes),
@@ -650,8 +662,14 @@ def conciliar_lote_extra_pastore(
         select(FinancialEntry).where(FinancialEntry.spirometry_exam_id.in_(exam_ids))
     ).scalars().all():
         total_vinculado_atual += row.valor
-    pendente_atual = (TOTAL_ALVO_EXTRA_PASTORE - total_vinculado_atual).quantize(
-        MONEY_QUANT, rounding=ROUND_HALF_UP
+    # Mesmo recorte da leitura (M26): o alvo histórico não fica negativo, e um
+    # pendente negativo aqui deixaria a conferência de soma incoerente com o
+    # que o painel mostra.
+    pendente_atual = max(
+        (TOTAL_ALVO_EXTRA_PASTORE - total_vinculado_atual).quantize(
+            MONEY_QUANT, rounding=ROUND_HALF_UP
+        ),
+        Decimal("0.00"),
     )
 
     if payload.total_esperado.quantize(MONEY_QUANT, rounding=ROUND_HALF_UP) != pendente_atual:

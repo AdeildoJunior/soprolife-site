@@ -246,13 +246,17 @@ def test_elegibilidade_agrupa_por_parceiro_unidade_competencia(
         "unidade": "Pastore Ipanema",
         "competencia": "2026-07",
         "quantidade": 2,
+        # M26 — a competência ainda não fechou nenhuma vez.
+        "fechamentos_existentes": 0,
+        "acao_prevista": "criar",
+        "acao_rotulo": "Criar fechamento",
     }]
     assert {e["estado_fechamento"] for e in body["elegiveis"]} == {
         "Aguardando fechamento mensal"
     }
 
 
-def test_fechamento_inclui_itens_sem_inferir_valor_e_impede_duplicata(
+def test_fechamento_inclui_itens_sem_inferir_valor_e_recusa_repeticao_vazia(
     client, auth, db, person, pastore
 ):
     partner, unit = pastore
@@ -276,15 +280,23 @@ def test_fechamento_inclui_itens_sem_inferir_valor_e_impede_duplicata(
     assert {item.spirometry_exam_id for item in items} == set(exams)
     assert db.execute(select(FinancialEntry)).scalars().all() == []
 
-    duplicate = client.post(
+    assert body["sequencia"] == 1
+    assert body["complementar"] is False
+    assert body["acao"] == "criado"
+    assert body["exames_adicionados"] == 2
+
+    # M26 — repetir o clique sem exame novo não cria fechamento vazio nem
+    # duplica o existente: não há o que fechar, e o servidor diz isso.
+    repetido = client.post(
         f"{API}/pastore/fechamentos",
         json={"partner_unit_id": unit.id, "competencia": "2026-07"},
         headers=auth("gestor"),
     )
-    assert duplicate.status_code == 409
-    assert duplicate.json()["erro"]["mensagem"]["codigo"] == (
-        "fechamento_mensal_duplicado"
+    assert repetido.status_code == 422
+    assert repetido.json()["erro"]["mensagem"]["codigo"] == (
+        "fechamento_sem_exames_elegiveis"
     )
+    assert len(db.execute(select(PartnerSettlement)).scalars().all()) == 1
 
 
 def test_mesmo_exame_nao_pode_entrar_em_dois_fechamentos(

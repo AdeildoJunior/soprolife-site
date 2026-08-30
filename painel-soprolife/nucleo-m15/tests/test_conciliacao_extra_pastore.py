@@ -161,3 +161,72 @@ def test_lote_rejeita_leitura_role(client, auth, person):
         headers=auth("leitura"),
     )
     assert resp.status_code == 403
+
+
+# ------------------------------------------------------------------ M26
+#
+# O alvo histórico é fechado; a lista de exames próprios não é. Quando a
+# operação voltou a faturar (ESP-000038 e ESP-000039, ago/2026), o painel
+# passou a exibir "pendente de −R$ 450,00" — dívida histórica não fica
+# negativa, ela acaba.
+
+
+def _lancar(client, auth, exam_id, valor):
+    resp = client.post(
+        "/api/v1/lancamentos",
+        json={
+            "tipo": "receita", "categoria": "Espirometria", "valor": valor,
+            "status": "Recebido", "data_recebimento": "2026-07-10",
+            "forma_pagamento": "Pix", "spirometry_exam_id": exam_id,
+        },
+        headers=auth("gestor"),
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_receita_acima_do_alvo_nao_vira_pendente_negativo(client, auth, person):
+    exam = _criar_exame(client, auth, person["id"])
+    _lancar(client, auth, exam["id"], "3500.00")
+
+    conc = client.get(
+        "/api/v1/financeiro/conciliacao/extra-pastore", headers=auth("leitura")
+    ).json()
+    assert conc["total_vinculado"] == "3500.00"
+    assert conc["total_pendente"] == "0.00"
+    assert conc["total_alem_do_alvo"] == "455.21"
+    assert conc["alvo_conciliado"] is True
+
+
+def test_alem_do_alvo_e_zero_enquanto_falta_conciliar(client, auth, person):
+    exam = _criar_exame(client, auth, person["id"])
+    _lancar(client, auth, exam["id"], "1000.00")
+
+    conc = client.get(
+        "/api/v1/financeiro/conciliacao/extra-pastore", headers=auth("leitura")
+    ).json()
+    assert conc["total_pendente"] == "2044.79"
+    assert conc["total_alem_do_alvo"] == "0.00"
+    assert conc["alvo_conciliado"] is False
+
+
+def test_lote_recusa_envio_quando_o_alvo_ja_foi_ultrapassado(client, auth, person):
+    conciliado = _criar_exame(client, auth, person["id"])
+    _lancar(client, auth, conciliado["id"], "3500.00")
+    pendente = _criar_exame(client, auth, person["id"], data_exame="11/07/2026")
+
+    resp = client.post(
+        "/api/v1/financeiro/conciliacao/extra-pastore/lote",
+        json={
+            "itens": [{"spirometry_exam_id": pendente["id"], "valor": "100.00"}],
+            "total_esperado": "100.00",
+        },
+        headers=auth("gestor"),
+    )
+    # O servidor responde com o pendente REAL — 0,00, não −455,21. O alvo
+    # histórico acabou; conciliar contra ele deixou de fazer sentido, e a
+    # mensagem devolve o número que o painel exibe.
+    assert resp.status_code == 409
+    erro = resp.json()["erro"]["mensagem"]
+    assert erro["codigo"] == "total_esperado_desatualizado"
+    assert erro["pendente_atual"] == "0.00"

@@ -104,8 +104,14 @@
           <div class="kpi-card"><span class="kpi-label">Valor ainda a conciliar</span><strong class="kpi-value">${fmtMoney(d.total_pendente)}</strong></div>
           <div class="kpi-card"><span class="kpi-label">Exames conciliados</span><strong class="kpi-value">${d.exames_conciliados} de ${d.total_exames}</strong></div>
           <div class="kpi-card"><span class="kpi-label">Exames pendentes</span><strong class="kpi-value">${d.exames_pendentes}</strong></div>
-          <div class="kpi-card"><span class="kpi-label">Divergências</span><strong class="kpi-value">${Number(d.total_pendente) < 0 ? "1" : "0"}</strong></div>
+          ${Number(d.total_alem_do_alvo || 0) > 0 ? `
+          <div class="kpi-card"><span class="kpi-label">Receita além do alvo histórico</span><strong class="kpi-value">${fmtMoney(d.total_alem_do_alvo)}</strong></div>` : ""}
+          <div class="kpi-card"><span class="kpi-label">Divergências</span><strong class="kpi-value">${d.exames_pendentes > 0 && Number(d.total_pendente) === 0 ? "1" : "0"}</strong></div>
         </div>
+        ${Number(d.total_alem_do_alvo || 0) > 0 ? `
+        <p class="conciliacao-nota">O alvo histórico de ${fmtMoney(d.total_alvo)} está integralmente
+        conciliado. A diferença acima é receita de exames posteriores a esse fechamento — ela não
+        pertence ao alvo e não indica erro.</p>` : ""}
 
         ${d.exames_pendentes > 0 ? `
         <div class="conciliacao-actions">

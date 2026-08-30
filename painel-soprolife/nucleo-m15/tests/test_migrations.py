@@ -154,11 +154,11 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
 def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     cfg = _alembic_config(f"sqlite:///{tmp_path}/heads.db")
-    # A migração M25.29H (c4a97b1e6d20, estado `recebido_assinado` do aceite
-    # automático) é a head atual — o valor esperado aqui é atualizado
+    # A migração M26 (a3f6b0d94c17, sequência do fechamento Pastore dentro da
+    # mesma competência) é a head atual — o valor esperado aqui é atualizado
     # a cada nova migration; o que a asserção realmente prova é continuar
     # existindo EXATAMENTE uma head (sem ponto de ramificação acidental).
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["c4a97b1e6d20"]
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["a3f6b0d94c17"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(
@@ -501,3 +501,90 @@ def test_migracao_preserva_banco_moldado_sem_duplicatas_e_cria_indices(
     engine.dispose()
     assert "uq_financial_entries_receita_espirometria" in indexes
     assert "uq_financial_entries_receita_consulta" in indexes
+
+
+def _semear_fechamento(connection, *, sequencia, unidade="unit-m26", valor=None):
+    settlement_id = str(uuid.uuid4())
+    agora = datetime.now(timezone.utc).isoformat()
+    connection.execute(
+        text(
+            "INSERT INTO partner_settlements "
+            "(id, partner_id, partner_unit_id, competencia, status, sequencia,"
+            " valor_total, created_at, updated_at) VALUES "
+            "(:id, 'partner-m26', :unidade, '2026-08-01', 'incluido', :seq,"
+            " :valor, :agora, :agora)"
+        ),
+        {
+            "id": settlement_id, "unidade": unidade, "seq": sequencia,
+            "valor": valor, "agora": agora,
+        },
+    )
+    return settlement_id
+
+
+def test_m26_backfill_da_sequencia_e_chave_por_competencia(tmp_path, monkeypatch):
+    """Fechamento já gravado vira sequência 1; um segundo passa a caber."""
+
+    monkeypatch.delenv("M15_DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path}/m26-sequencia.db"
+    cfg = _alembic_config(url)
+    command.upgrade(cfg, "c4a97b1e6d20")
+    engine = create_engine(url)
+    agora = datetime.now(timezone.utc).isoformat()
+    antigo = str(uuid.uuid4())
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO partner_settlements "
+                "(id, partner_id, partner_unit_id, competencia, status,"
+                " valor_total, created_at, updated_at) VALUES "
+                "(:id, 'partner-m26', 'unit-m26', '2026-08-01', 'a_receber',"
+                " 328.50, :agora, :agora)"
+            ),
+            {"id": antigo, "agora": agora},
+        )
+
+    command.upgrade(cfg, "head")
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT sequencia, valor_total FROM partner_settlements "
+                 "WHERE id = :id"),
+            {"id": antigo},
+        ).one() == (1, 328.50)
+
+    # O complementar da mesma competência agora cabe...
+    with engine.begin() as connection:
+        _semear_fechamento(connection, sequencia=2)
+    # ...e repetir a MESMA sequência continua proibido.
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            _semear_fechamento(connection, sequencia=2)
+    with pytest.raises(IntegrityError):
+        with engine.begin() as connection:
+            _semear_fechamento(connection, sequencia=0)
+    engine.dispose()
+
+
+def test_m26_downgrade_recusa_apagar_fechamento_complementar(tmp_path, monkeypatch):
+    monkeypatch.delenv("M15_DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path}/m26-downgrade.db"
+    cfg = _alembic_config(url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        _semear_fechamento(connection, sequencia=1)
+        _semear_fechamento(connection, sequencia=2)
+
+    with pytest.raises(RuntimeError, match="mais de um fechamento"):
+        command.downgrade(cfg, "c4a97b1e6d20")
+
+    # Sem complementar, o caminho de volta continua aberto.
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM partner_settlements WHERE sequencia = 2")
+        )
+    command.downgrade(cfg, "c4a97b1e6d20")
+    assert "sequencia" not in {
+        col["name"] for col in inspect(engine).get_columns("partner_settlements")
+    }
+    engine.dispose()

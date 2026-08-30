@@ -75,6 +75,17 @@
 .pastore-eligible-group span,
 .pastore-settlement-row-head span { display: block; color: var(--muted, #64798b); font-size: 12px; }
 
+/* M26 — o aviso de fechamento complementar. Precisa caber embaixo do grupo
+   sem empurrar o botão, e ser legível como nota, não como erro. */
+.pastore-eligible-note {
+  display: block;
+  max-width: 46ch;
+  margin-top: 4px;
+  color: var(--muted, #64798b);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .pastore-status { padding: 5px 8px; border-radius: 999px; background: #e8f5f3; font-weight: 700; }
 .pastore-status-recebido { background: #dff4e5; color: #17622f !important; }
 .pastore-status-cancelado { background: #fbe7e7; color: #992c2c !important; }

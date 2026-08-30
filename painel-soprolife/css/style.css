@@ -7896,6 +7896,14 @@ table th, table td { padding: 10px 12px; font-size: 12.5px; }
   gap: var(--m17-grid-gap);
   margin: 12px 0;
 }
+/* M26 — nota do excedente sobre o alvo histórico: explicação, não alerta. */
+.conciliacao-nota {
+  margin: 0 0 12px;
+  max-width: 78ch;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .conciliacao-actions { margin: 12px 0; }
 .conciliacao-lote {
   background: var(--soft);

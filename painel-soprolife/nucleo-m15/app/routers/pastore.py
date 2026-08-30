@@ -3,6 +3,12 @@
 O exame não é um recebimento. O único lançamento financeiro possível neste
 domínio é o recibo agregado do fechamento, criado depois que gestor confirma
 valor, data e forma do pagamento efetivamente recebido.
+
+M26 — um mês pode fechar mais de uma vez. Exames realizados DEPOIS de o mês já
+ter sido fechado deixaram de ficar órfãos: se o fechamento daquela competência
+ainda está aberto (`incluido`, sem valor conferido), os exames novos entram
+nele; se ele já tem valor, sai um fechamento COMPLEMENTAR, com sequência,
+valor e recibo próprios. Nenhum preço continua sendo inferido em lugar nenhum.
 """
 
 from datetime import date
@@ -125,6 +131,15 @@ def _serialize_settlement(
             settlement.competencia.strftime("%Y-%m")
             if settlement.competencia else None
         ),
+        "sequencia": settlement.sequencia,
+        "complementar": settlement.sequencia > 1,
+        "titulo": (
+            f"Fechamento {settlement.competencia:%Y-%m}"
+            if settlement.competencia else "Fechamento"
+        ) + (
+            f" — complementar {settlement.sequencia}"
+            if settlement.sequencia > 1 else ""
+        ),
         "periodo_inicio": (
             settlement.periodo_inicio.isoformat() if settlement.periodo_inicio else None
         ),
@@ -155,6 +170,14 @@ def _serialize_settlement(
 def _eligible_exams(
     db: Session, partner: Partner, unit: PartnerUnit, competencia: date
 ) -> list[SpirometryExam]:
+    """Exames concluídos do mês que ainda não pertencem a fechamento algum.
+
+    M26 — o filtro por vínculo é feito AQUI, não depois. Antes, a seleção
+    trazia o mês inteiro e o endpoint rejeitava o conjunto todo assim que
+    encontrava um exame já vinculado; bastava um fechamento parcial para que
+    nenhum exame posterior daquele mês pudesse ser fechado nunca mais.
+    """
+
     candidates = db.execute(
         select(SpirometryExam)
         .where(
@@ -162,10 +185,46 @@ def _eligible_exams(
             SpirometryExam.partner_unit_id == unit.id,
             SpirometryExam.data_exame >= competencia,
             SpirometryExam.data_exame <= month_end(competencia),
+            SpirometryExam.id.not_in(
+                select(PartnerSettlementItem.spirometry_exam_id)
+            ),
         )
         .order_by(SpirometryExam.data_exame, SpirometryExam.public_code)
     ).scalars().all()
     return [exam for exam in candidates if is_completed_pastore_exam(exam)]
+
+
+def _settlements_da_competencia(
+    db: Session, partner: Partner, unit: PartnerUnit, competencia: date
+) -> list[PartnerSettlement]:
+    return db.execute(
+        select(PartnerSettlement)
+        .where(
+            PartnerSettlement.partner_id == partner.id,
+            PartnerSettlement.partner_unit_id == unit.id,
+            PartnerSettlement.competencia == competencia,
+        )
+        .order_by(PartnerSettlement.sequencia)
+    ).scalars().all()
+
+
+def _fechamento_aberto(
+    settlements: list[PartnerSettlement],
+) -> PartnerSettlement | None:
+    """O fechamento da competência que ainda pode receber exames.
+
+    "Aberto" exige as DUAS coisas: estado `incluido` e nenhum valor conferido.
+    Um fechamento que já declara valor cobre um conjunto conhecido de exames —
+    aquele número foi conferido contra o extrato do parceiro. Acrescentar
+    exames a ele transformaria um valor verificado em afirmação falsa sobre um
+    conjunto maior. Nesse caso o certo é um complementar.
+    """
+
+    abertos = [
+        row for row in settlements
+        if row.status == "incluido" and row.valor_total is None
+    ]
+    return abertos[-1] if abertos else None
 
 
 @router.get("/pastore/configuracao-atendimento")
@@ -235,6 +294,32 @@ def list_monthly_settlements(
                 "quantidade": 0,
             })
             group["quantidade"] += 1
+    # M26 — o painel precisa dizer ANTES do clique o que vai acontecer. Um mês
+    # que já fechou e já tem valor conferido não reabre: os exames que
+    # sobraram viram um complementar, e o operador merece saber disso na tela
+    # em vez de descobrir pelo resultado.
+    for group in groups.values():
+        unit_id, competencia = group["partner_unit_id"], group["competencia"]
+        da_competencia = [
+            row for row in settlements
+            if row.partner_unit_id == unit_id
+            and row.competencia is not None
+            and row.competencia.strftime("%Y-%m") == competencia
+        ]
+        aberto = _fechamento_aberto(da_competencia)
+        group["fechamentos_existentes"] = len(da_competencia)
+        if not da_competencia:
+            group["acao_prevista"] = "criar"
+            group["acao_rotulo"] = "Criar fechamento"
+        elif aberto is not None:
+            group["acao_prevista"] = "incorporar"
+            group["acao_rotulo"] = "Incluir no fechamento aberto"
+        else:
+            group["acao_prevista"] = "complementar"
+            group["acao_rotulo"] = (
+                f"Criar fechamento complementar {len(da_competencia) + 1}"
+            )
+
     serialized = [_serialize_settlement(db, row, partner) for row in settlements]
     indicators = {
         "aguardando_fechamento": len(awaiting),
@@ -273,48 +358,40 @@ def create_monthly_settlement(
     partner = canonical_pastore(db)
     unit = pastore_unit(db, payload.partner_unit_id, partner)
     competencia = competency_month(payload.competencia)
-    duplicate = db.execute(
-        select(PartnerSettlement).where(
-            PartnerSettlement.partner_id == partner.id,
-            PartnerSettlement.partner_unit_id == unit.id,
-            PartnerSettlement.competencia == competencia,
-        )
-    ).scalar_one_or_none()
-    if duplicate is not None:
-        raise _erro(
-            "fechamento_mensal_duplicado",
-            "Já existe fechamento para esta unidade e competência.",
-            409,
-        )
     exams = _eligible_exams(db, partner, unit, competencia)
     if not exams:
         raise _erro(
             "fechamento_sem_exames_elegiveis",
             "Não há exames Pastore concluídos elegíveis nesta unidade e competência.",
         )
-    exam_ids = [exam.id for exam in exams]
-    already_linked = set(db.execute(
-        select(PartnerSettlementItem.spirometry_exam_id).where(
-            PartnerSettlementItem.spirometry_exam_id.in_(exam_ids)
+    existentes = _settlements_da_competencia(db, partner, unit, competencia)
+    aberto = _fechamento_aberto(existentes)
+
+    if aberto is not None:
+        # Incorporação: o mês ainda não declarou valor nenhum, então os exames
+        # que faltavam pertencem ao fechamento que já está montado. Criar um
+        # segundo aqui fragmentaria o mês sem motivo.
+        settlement = aberto
+        acao = "incorporado"
+        if payload.observacao:
+            settlement.observacao = payload.observacao
+    else:
+        settlement = PartnerSettlement(
+            partner_id=partner.id,
+            partner_unit_id=unit.id,
+            competencia=competencia,
+            periodo_inicio=competencia,
+            periodo_fim=month_end(competencia),
+            valor_total=None,
+            status="incluido",
+            observacao=payload.observacao,
+            sequencia=(
+                max(row.sequencia for row in existentes) + 1 if existentes else 1
+            ),
         )
-    ).scalars().all())
-    if already_linked:
-        raise _erro(
-            "exame_em_outro_fechamento",
-            "Um ou mais exames já pertencem a outro fechamento.",
-            409,
-        )
-    settlement = PartnerSettlement(
-        partner_id=partner.id,
-        partner_unit_id=unit.id,
-        competencia=competencia,
-        periodo_inicio=competencia,
-        periodo_fim=month_end(competencia),
-        valor_total=None,
-        status="incluido",
-        observacao=payload.observacao,
-    )
-    db.add(settlement)
+        db.add(settlement)
+        acao = "criado"
+
     try:
         db.flush()
         db.add_all([
@@ -333,12 +410,22 @@ def create_monthly_settlement(
             409,
         ) from None
     audit(
-        db, "pastore.fechamento_criado", "partner_settlements", settlement.id,
+        db,
+        "pastore.fechamento_criado" if acao == "criado"
+        else "pastore.fechamento_itens_incorporados",
+        "partner_settlements", settlement.id,
         user.id, request.state.request_id,
-        {"status": settlement.status, "total": len(exams)},
+        {
+            "status": settlement.status,
+            "total": len(exams),
+            "sequencia": settlement.sequencia,
+        },
     )
     db.commit()
-    return _serialize_settlement(db, settlement, partner, unit)
+    data = _serialize_settlement(db, settlement, partner, unit)
+    data["acao"] = acao
+    data["exames_adicionados"] = len(exams)
+    return data
 
 
 @router.patch("/pastore/fechamentos/{settlement_id}")

@@ -64,6 +64,11 @@ ALLOWED_KEYS = {
     "origem_e_a_versao_final", "tem_estrutura_assinatura", "contem_o_final",
     "metadado_coerente", "codigo_validacao_coerente", "recusadas_por_guarda",
     "status_anterior", "aceito",
+    # M26 — ordem do fechamento dentro da competência. É um inteiro pequeno
+    # de controle: sem ele a trilha não distingue o fechamento original do
+    # complementar, que é exatamente a pergunta que se faz ao auditar por que
+    # um mês fechou duas vezes.
+    "sequencia",
 }
 
 _MAX_STR = 120

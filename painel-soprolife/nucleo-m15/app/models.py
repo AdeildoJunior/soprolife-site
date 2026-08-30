@@ -693,14 +693,32 @@ class PartnerSettlement(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), default="aberto", nullable=False)
     data_envio: Mapped[date | None] = mapped_column(Date)
     observacao: Mapped[str | None] = mapped_column(Text)
+    # M26 — ORDEM DO FECHAMENTO DENTRO DA MESMA COMPETÊNCIA.
+    #
+    # Até aqui a chave era (parceiro, unidade, competência), o que assumia
+    # que um mês fecha uma vez só. A operação real desmentiu isso: o
+    # fechamento de 2026-08 foi criado no dia 11, com os 3 exames que
+    # existiam; os outros 14 do mesmo mês chegaram entre 15 e 29/08 e ficaram
+    # sem destino — o mês já estava "ocupado" e não havia rota para anexar
+    # exame a fechamento existente.
+    #
+    # A saída NÃO é reabrir um fechamento já valorado. O de agosto declara
+    # R$ 328,50 para exatamente 3 exames, valor conferido contra o extrato do
+    # parceiro; enfiar mais 14 exames ali dentro tornaria esse número mentira.
+    # O que nasce é um fechamento COMPLEMENTAR — mesma competência, sequência
+    # seguinte, valor próprio, recibo próprio. Cada número continua dizendo a
+    # verdade sobre o conjunto de exames que ele cobre.
+    sequencia: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     __table_args__ = (
         CheckConstraint(
             "valor_total IS NULL OR valor_total >= 0", name="valor_total_nao_negativo"
         ),
+        CheckConstraint("sequencia >= 1", name="sequencia_minima"),
         UniqueConstraint(
             "partner_id",
             "partner_unit_id",
             "competencia",
+            "sequencia",
             name="uq_partner_settlement_competencia_unidade",
         ),
     )
