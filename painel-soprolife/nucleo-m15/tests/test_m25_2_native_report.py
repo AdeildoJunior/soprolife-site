@@ -415,8 +415,11 @@ def test_previa_contem_os_dados_obrigatorios_do_laudo(client, case, db, person):
     assert "TESTE APAGAR Profissional M25" in texto
     assert "CRM-RJ" in texto
     assert "RQE" in texto
-    # O laudo declara que o PDF técnico da MIR é documento separado.
-    assert "MIR" in texto and "SEPARADO" in texto
+    # O laudo declara que o PDF técnico é documento separado. M26.1 — a
+    # frase deixou de nomear o fabricante: há exames feitos no KOKO, e a
+    # afirmação nunca dependeu de qual aparelho gerou o traçado.
+    assert "PDF técnico do equipamento" in texto and "SEPARADO" in texto
+    assert "MIR" not in texto.upper()
     # Prévia é inequivocamente prévia.
     assert "PRÉVIA" in texto
 
@@ -1237,13 +1240,14 @@ def test_selo_institucional_so_aparece_em_laudo_liberado(client, case, db):
     assert preview.status_code == 200, preview.text
     previa = db.get(ReportDocumentVersion, preview.json()["preview_version_id"])
     texto_previa = _pdf_text(_stored_bytes(db, previa))
-    # M25.18 — o selo passou a dizer "CONCLUÍDO / PELA MÉDICA"; numa prévia
-    # ele continua não existindo, que é o que este teste protege.
+    # M26.1 — o selo passou a dizer "ASSINATURA / DIGITAL" sobre a marca do
+    # provedor; numa prévia ele continua não existindo, que é o que este
+    # teste protege.
     #
-    # A asserção mira "PELA MÉDICA", e não "CONCLUÍDO": a marca d'água da
-    # prévia é "PRÉVIA — DOCUMENTO NÃO CONCLUÍDO", então a segunda palavra
-    # aparece legitimamente na página sem que exista selo nenhum.
-    assert "PELA MÉDICA" not in texto_previa.upper()
+    # A asserção mira as DUAS LINHAS JUNTAS, e não "ASSINATURA" sozinha: a
+    # palavra aparece legitimamente na página (no rótulo da rubrica e na
+    # frase que nega a assinatura qualificada) sem que exista selo nenhum.
+    assert "ASSINATURA\nDIGITAL" not in texto_previa.upper()
     # Encerra a transação de leitura antes de voltar à API: no SQLite uma
     # transação ORM aberta faz o commit da liberação falhar com
     # "database is locked".
@@ -1257,11 +1261,11 @@ def test_selo_institucional_so_aparece_em_laudo_liberado(client, case, db):
     texto = _pdf_text(_stored_bytes(db, liberada))
     # O selo imprime o estado em duas linhas dentro do anel.
     assert "SOPROLIFE" in texto
-    # M25.18 — "ASSINADO ELETRONICAMENTE / LIBERAÇÃO INSTITUCIONAL" saiu: num
-    # carimbo redondo "assinado" é lido como assinatura, e este PDF ainda vai
-    # ser assinado fora do sistema. O selo declara o que de fato aconteceu.
-    assert "CONCLUÍDO" in texto.upper()
-    assert "PELA MÉDICA" in texto.upper()
+    # M26.1 — o selo nomeia o ato que o documento recebe. As duas linhas
+    # juntas só existem dentro do anel; "CONCLUÍDO PELA MÉDICA", que estava
+    # ali antes, virou exclusividade do rodapé.
+    assert "ASSINATURA\nDIGITAL" in texto.upper()
+    assert texto.upper().count("PELA MÉDICA") == 1
     # E nunca sugere assinatura qualificada.
     assert "assinado digitalmente" not in texto.lower()
 
@@ -1368,9 +1372,10 @@ def test_selo_declara_o_tipo_real_e_nunca_antecipa_icp_brasil(
     texto = _pdf_text(_stored_bytes(db, version))
     alto = texto.upper()
 
-    # O selo do tipo declara o que de fato houve (M25.18): o laudo foi
-    # CONCLUÍDO pela médica.
-    assert "CONCLUÍDO" in alto and "PELA MÉDICA" in alto
+    # O selo do tipo declara o ato que o documento recebe (M26.1):
+    # assinatura digital. "PELA MÉDICA" sobrou uma vez só, no rodapé.
+    assert "ASSINATURA\nDIGITAL" in alto
+    assert alto.count("PELA MÉDICA") == 1
     # M25.21 — "AGUARDANDO ASSINATURA" saiu do selo. A médica assina ESTE
     # arquivo por fora e devolve o mesmo PDF; o carimbo continuaria impresso
     # no documento já assinado. O estado "aguardando" vive no Centro de

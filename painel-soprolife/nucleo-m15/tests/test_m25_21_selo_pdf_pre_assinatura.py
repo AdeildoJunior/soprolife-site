@@ -21,6 +21,13 @@ negativa mais forte que existe sobre ele.
 clínico, permanece verdadeiro antes e depois da assinatura, e não afirma
 nada sobre ICP-Brasil.
 
+M26.1 trocou esse texto por "ASSINATURA / DIGITAL" sobre a marca do
+provedor, e a restrição desta milestone é o que decide a frase: ela nomeia
+a NATUREZA do documento, não um estado que expira, então continua
+verdadeira depois que a assinatura entra na camada PDF. O que este arquivo
+guarda segue sendo o mesmo — nenhum carimbo pode afirmar estado nem
+ICP-Brasil sem prova gravada.
+
 **O estado operacional não mudou.** "Aguardando assinatura qualificada",
 "Assinado recebido" (assim desde a
 M25.29E, que só trocou a linguagem para dizer de quem é a próxima ação),
@@ -116,20 +123,23 @@ def pdf_pre_assinatura() -> str:
 # ===================================================================
 
 
-def test_selo_pre_assinatura_diz_concluido_pela_medica(pdf_pre_assinatura):
-    """Conta ocorrências, não presença.
+def test_selo_pre_assinatura_diz_assinatura_digital(pdf_pre_assinatura):
+    """Mira o par de linhas, não uma palavra solta.
 
-    "pela médica responsável" já aparece no rodapé (`RELEASE_STATEMENT`), e
-    "Concluído em" é o rótulo da data. Procurar só presença encontraria essas
-    e passaria mesmo com o selo apagado. A DUPLA ocorrência de "PELA MÉDICA"
-    é o que só existe quando o carimbo está desenhado — é ela a asserção.
+    "assinatura digital" já aparece duas vezes no rodapé
+    (`RELEASE_STATEMENT`: onde conferir a assinatura, e a negativa sobre
+    ICP-Brasil). Procurar a palavra encontraria essas e passaria mesmo com o
+    selo apagado. As duas linhas GRUDADAS — "ASSINATURA" seguida de
+    "DIGITAL" — só saem assim de dentro do anel: é isso a asserção.
     """
 
     alto = pdf_pre_assinatura.upper()
-    assert alto.count("PELA MÉDICA") == 2, (
-        "esperado o rodapé + o selo; conte de novo se o selo mudou"
+    assert "ASSINATURA\nDIGITAL" in alto, (
+        "as duas linhas do selo; refaça a conta se o carimbo mudou"
     )
-    assert "CONCLUÍDO" in alto
+    # M26.1 — e o texto que o selo tinha antes saiu de dentro do anel. A
+    # ocorrência que resta é a do rodapé, que é texto do documento.
+    assert alto.count("PELA MÉDICA") == 1
 
 
 def test_selo_pre_assinatura_nao_diz_aguardando_assinatura(pdf_pre_assinatura):
@@ -146,18 +156,19 @@ def test_selo_pre_assinatura_nao_diz_aguardando_assinatura(pdf_pre_assinatura):
     assert "AGUARDANDO ASSINATURA" not in alto
 
 
-def test_o_selo_pre_assinatura_tem_duas_linhas_e_nao_quatro():
+def test_o_selo_pre_assinatura_nao_volta_a_carimbar_estado():
     """Estrutural, e não só textual: o ramo não-qualificado não pode voltar a
-    ter as duas linhas de baixo nem a régua que as separava."""
+    ter as linhas de estado nem a régua que as separava."""
 
     inicio = PDF_SOURCE.index("def draw_signature_type_seal")
     fim = PDF_SOURCE.index("def draw_institutional_seal")
     corpo = PDF_SOURCE[inicio:fim]
     ramo_nao_qualificado = corpo[corpo.index("        else:"):]
-    assert "CONCLUÍDO" in ramo_nao_qualificado
-    assert "PELA MÉDICA" in ramo_nao_qualificado
+    # M26.1 — o carimbo nomeia o ato, não o estado.
+    assert '"ASSINATURA"' in ramo_nao_qualificado
+    assert '"DIGITAL"' in ramo_nao_qualificado
     assert "AGUARDANDO" not in ramo_nao_qualificado
-    # A régua divisória separava duas afirmações; com uma só, ela sai.
+    # A régua divisória separava duas afirmações de estado; ela não volta.
     assert "c.line(" not in ramo_nao_qualificado
 
 
@@ -239,9 +250,10 @@ def test_o_padrao_continua_sendo_institucional_fail_closed():
 
 
 def test_previa_nao_desenha_selo_nenhum():
-    """Documento não concluído não recebe carimbo de conclusão."""
+    """Documento não concluído não recebe carimbo nenhum."""
 
     alto = _texto(build_native_report_pdf(_conteudo(released=False))).upper()
+    assert "ASSINATURA\nDIGITAL" not in alto
     assert "PELA MÉDICA" not in alto
     assert "AGUARDANDO" not in alto
 

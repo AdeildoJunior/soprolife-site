@@ -1,9 +1,9 @@
 """M25.2 — geração nativa do PDF de laudo médico da SoproLife.
 
 Este é um documento PRÓPRIO, criado do zero. Ele NÃO é composto sobre o PDF
-técnico da MIR e não contém nenhuma página, imagem ou miniatura do exame: o
-PDF do equipamento permanece intacto, armazenado separadamente e baixável
-por conta própria.
+técnico do equipamento e não contém nenhuma página, imagem ou miniatura do
+exame: o PDF do aparelho permanece intacto, armazenado separadamente e
+baixável por conta própria.
 
 Regras de layout que este módulo garante:
 
@@ -48,6 +48,12 @@ CARD_BG = HexColor("#F3F7FA")
 WARN_BG = HexColor("#FFF6E8")
 WARN_INK = HexColor("#8A5A10")
 
+# M26.1 — verde do selo de assinatura digital. O anel já era TEAL; o texto
+# era NAVY, e azul-marinho dentro de um anel verde lia como duas marcas
+# empilhadas. Este é o mesmo verde da marca, escurecido só o bastante para
+# manter contraste em corpo 6pt impresso e na tela do celular.
+SEAL_GREEN_DEEP = HexColor("#0E6E66")
+
 FONT = "Helvetica"
 FONT_BOLD = "Helvetica-Bold"
 FONT_ITALIC = "Helvetica-Oblique"
@@ -81,10 +87,15 @@ DOCUMENT_TITLE = "Laudo de Espirometria"
 # M25.4 — nota enxuta. A versão anterior gastava três linhas em caixa
 # própria para dizer o que cabe em uma: o essencial é que o traçado está em
 # OUTRO documento, intacto.
-MIR_SEPARATE_NOTICE = (
-    "Traçado e medidas originais constam do PDF técnico do equipamento "
-    "(MIR) — documento SEPARADO deste laudo, inalterado, com download "
-    "próprio."
+#
+# M26.1 — a nota nomeava o fabricante ("(MIR)"). A frota deixou de ser de um
+# fabricante só: há exames feitos no KOKO. O nome do aparelho nunca foi o que
+# a frase precisa afirmar — ela existe para dizer que o traçado está em OUTRO
+# arquivo, intacto e com download próprio. O modelo do equipamento, quando
+# importa, consta do próprio PDF técnico, que é o documento que sabe qual é.
+EQUIPMENT_SEPARATE_NOTICE = (
+    "Traçado e medidas originais constam do PDF técnico do equipamento — "
+    "documento SEPARADO deste laudo, inalterado, com download próprio."
 )
 
 # Declaração honesta da natureza da liberação. NÃO afirma ICP-Brasil.
@@ -124,6 +135,13 @@ PREVIEW_BANNER = f"{PREVIEW_WATERMARK}. {PREVIEW_DO_NOT_SIGN}"
 
 DEFAULT_LOGO_PATH = (
     Path(__file__).resolve().parents[3] / "assets" / "soprolife-logo.png"
+)
+# M26.1 — marca do provedor de assinatura digital, desenhada DENTRO do selo
+# esquerdo. O arquivo é opcional por construção: ausente ou ilegível, o selo
+# se recompõe centralizado só com o texto e o laudo sai igual. Nenhuma parte
+# do fluxo clínico pode depender de um PNG estar no lugar.
+DIGITAL_SIGNATURE_LOGO_PATH = (
+    Path(__file__).resolve().parents[3] / "assets" / "vidas-logo.png"
 )
 # O PNG versionado tem 828px de largura (~325 KB). Reamostrar uma única vez
 # para a resolução realmente usada mantém a nitidez e evita carregar
@@ -909,7 +927,7 @@ class _Composer:
         self.ensure(height)
         # A faixa segue o fluxo do texto e NÃO é ancorada no pé da página.
         # Ancorar foi tentado e piorou: num laudo curto abria um vão morto
-        # entre a nota do MIR e a assinatura, e o vão no meio chama mais
+        # entre a nota do equipamento e a assinatura, e o vão no meio chama
         # atenção que a mesma sobra no fim da folha.
         c = self.canvas
         top = self.y
@@ -1049,6 +1067,60 @@ class _Composer:
         c.setFillColor(color)
         c.drawCentredString(center_x, center_y + dy, safe)
 
+    def _draw_seal_logo(
+        self,
+        reader: "ImageReader",
+        *,
+        center_x: float,
+        center_y: float,
+        top_dy: float,
+        bottom_dy: float,
+        inner: float,
+    ) -> None:
+        """Inscreve uma marca na faixa [bottom_dy, top_dy] do anel.
+
+        A largura útil não é a do selo: é a CORDA do círculo na altura mais
+        larga que a faixa ocupa — a borda mais próxima do centro. Medir por
+        aí, e não pelo diâmetro, é o que impede a marca de encostar no anel
+        quando a faixa é baixa. A proporção do PNG é preservada; a marca
+        cede na dimensão que estourar primeiro, então um arquivo mais largo
+        ou mais alto que o previsto continua cabendo.
+        """
+
+        band_height = top_dy - bottom_dy
+        if band_height <= 0:
+            return
+        # Extremo = a borda da faixa mais LONGE do centro; é ela que toca o
+        # anel primeiro e define a corda disponível.
+        extreme = max(abs(top_dy), abs(bottom_dy))
+        half_chord = max(inner**2 - extreme**2, 1.0) ** 0.5
+        # A folga é maior que a do texto (5.0). Uma marca é um bloco cheio:
+        # encostada no anel ela lê como se estivesse cortada, mesmo cabendo
+        # por cálculo. Com 9.0 sobram ~5pt de branco de cada lado.
+        max_width = max(half_chord * 2 - 9.0, 1.0)
+        try:
+            source_width, source_height = reader.getSize()
+        except Exception:
+            return
+        if source_width <= 0 or source_height <= 0:
+            return
+        ratio = source_height / source_width
+        width = max_width
+        height = width * ratio
+        if height > band_height:
+            height = band_height
+            width = height / ratio
+        self.canvas.drawImage(
+            reader,
+            center_x - width / 2,
+            center_y + bottom_dy + (band_height - height) / 2,
+            width=width,
+            height=height,
+            mask="auto",
+            preserveAspectRatio=True,
+            anchor="c",
+        )
+
     def draw_signature_type_seal(
         self, *, center_x: float, center_y: float, radius: float = SEAL_RADIUS
     ) -> None:
@@ -1142,20 +1214,66 @@ class _Composer:
                 inner=inner, size=4.8, color=NAVY,
             )
         else:
-            # Duas linhas só: elas se centralizam no anel em vez de ficarem
-            # empurradas para o topo, deixando meio selo vazio. A régua
-            # divisória sai junto — ela separava duas afirmações, e agora há
-            # uma só.
-            self._draw_seal_text(
-                "CONCLUÍDO",
-                center_x=center_x, center_y=center_y, dy=4.6,
-                inner=inner, size=6.6, color=NAVY,
-            )
-            self._draw_seal_text(
-                "PELA MÉDICA",
-                center_x=center_x, center_y=center_y, dy=-5.4,
-                inner=inner, size=5.6, color=NAVY,
-            )
+            # M26.1 — o selo passou a nomear o ATO que o documento recebe
+            # (assinatura digital) e a marca do provedor que a aplica, em
+            # vez de repetir a conclusão clínica, que já está escrita duas
+            # vezes logo abaixo: no rótulo da data ("Concluído em") e na
+            # declaração do rodapé.
+            #
+            # A composição é a de um selo de certificação: dizeres em cima,
+            # marca embaixo, tudo contido pelo anel. A geometria vem do
+            # anel — `_draw_seal_text` mede a corda real de cada altura e
+            # `_draw_seal_logo` inscreve a marca na corda da faixa dela —,
+            # então nada escapa do círculo qualquer que seja o texto ou a
+            # proporção do PNG.
+            #
+            # A restrição da M25.21 continua valendo e é o que decide o
+            # texto: um carimbo impresso não pode afirmar estado que expira.
+            # "ASSINATURA DIGITAL" descreve a natureza do documento — o
+            # laudo é concluído no sistema e assinado digitalmente pela
+            # médica —, e permanece verdadeiro depois que a assinatura
+            # entra. Nada aqui afirma ICP-Brasil: essa afirmação continua
+            # exclusiva do ramo qualificado, que só é escolhido com prova
+            # criptográfica gravada, e a negativa explícita continua no
+            # rodapé (`RELEASE_STATEMENT`).
+            logo = _load_logo_reader(DIGITAL_SIGNATURE_LOGO_PATH)
+            if logo is None:
+                # Sem a marca, as duas linhas se centralizam no anel em vez
+                # de ficarem empurradas para o topo sobre um vão vazio.
+                self._draw_seal_text(
+                    "ASSINATURA",
+                    center_x=center_x, center_y=center_y, dy=4.6,
+                    inner=inner, size=6.6, color=SEAL_GREEN_DEEP,
+                )
+                self._draw_seal_text(
+                    "DIGITAL",
+                    center_x=center_x, center_y=center_y, dy=-5.4,
+                    inner=inner, size=6.6, color=SEAL_GREEN_DEEP,
+                )
+            else:
+                # As alturas somam um bloco opticamente centrado no anel:
+                # o topo das maiúsculas de "ASSINATURA" fica a ~13.8 do
+                # centro e a base da marca a ~-14.3. Foram medidas no PDF
+                # renderizado, não estimadas — texto encostado no anel foi
+                # o defeito que a M25.5 já teve de corrigir uma vez.
+                self._draw_seal_text(
+                    "ASSINATURA",
+                    center_x=center_x, center_y=center_y, dy=8.8,
+                    inner=inner, size=6.4, color=SEAL_GREEN_DEEP,
+                )
+                self._draw_seal_text(
+                    "DIGITAL",
+                    center_x=center_x, center_y=center_y, dy=0.8,
+                    inner=inner, size=6.4, color=SEAL_GREEN_DEEP,
+                )
+                self._draw_seal_logo(
+                    logo,
+                    center_x=center_x,
+                    top_dy=-4.8,
+                    bottom_dy=-16.3,
+                    center_y=center_y,
+                    inner=inner,
+                )
         c.restoreState()
 
     def draw_institutional_seal(
@@ -1254,7 +1372,7 @@ class _Composer:
             anchor="sw",
         )
 
-    # ------------------------------------------------ QR + nota MIR
+    # ----------------------------------------- QR + nota do equipamento
 
     def _draw_qr(self, value: str, *, x: float, y: float, size: float) -> None:
         try:
@@ -1274,7 +1392,7 @@ class _Composer:
             # bloco. Falha de renderização nunca impede a emissão do laudo.
             return
 
-    def draw_mir_notice(self) -> None:
+    def draw_equipment_notice(self) -> None:
         """Nota discreta, sem caixa própria (M25.4).
 
         A informação continua obrigatória — o laudo precisa dizer que o
@@ -1284,7 +1402,7 @@ class _Composer:
         """
 
         lines = wrap_text(
-            MIR_SEPARATE_NOTICE,
+            EQUIPMENT_SEPARATE_NOTICE,
             font=FONT_ITALIC,
             size=7.2,
             max_width=CONTENT_WIDTH - 12,
@@ -1318,7 +1436,7 @@ def _post_bd_label(has_post_bd: bool | None) -> str:
 def build_native_report_pdf(content: NativeReportContent) -> bytes:
     """Gera os bytes do laudo próprio da SoproLife.
 
-    Nunca embute o PDF técnico da MIR e nunca desenha imagem do exame.
+    Nunca embute o PDF técnico do equipamento nem desenha imagem do exame.
     """
 
     if not content.document_code or content.version_number < 1:
@@ -1410,7 +1528,7 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
         composer.draw_paragraph(addendum.body_text, size=9.2, leading=13.2)
 
     composer.space(2)
-    composer.draw_mir_notice()
+    composer.draw_equipment_notice()
     # A faixa de identificação e assinatura fecha o documento: é o último
     # bloco e nunca compartilha espaço com nenhum outro elemento.
     composer.draw_physician_signature_block()

@@ -399,8 +399,11 @@ def test_pdf_novo_declara_conclusao_e_nao_assinatura():
 
     texto = _texto_pdf(build_native_report_pdf(_conteudo()))
     alto = texto.upper()
-    # Selo semanticamente inequívoco.
-    assert "CONCLUÍDO" in alto and "PELA MÉDICA" in alto
+    # Selo semanticamente inequívoco. M26.1 — ele nomeia o ato (assinatura
+    # digital) em vez de repetir a conclusão, que já está no rodapé; as duas
+    # linhas juntas são o que só existe dentro do anel.
+    assert "ASSINATURA\nDIGITAL" in alto
+    assert alto.count("PELA MÉDICA") == 1
     # M25.21 — e SÓ isso. "AGUARDANDO ASSINATURA" saiu do carimbo: ele
     # sobreviveria à assinatura qualificada aplicada sobre este mesmo
     # arquivo. Ver `test_m25_21_selo_pdf_pre_assinatura.py`.
