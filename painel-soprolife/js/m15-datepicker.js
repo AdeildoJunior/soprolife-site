@@ -97,19 +97,46 @@
    * Função pura de propósito: é o que permite testar as bordas (colar,
    * apagar, ano solto) sem navegador.
    */
+  /* M26.4 — em campo de data COMPLETA a SEGUNDA barra também é da máscara.
+   *
+   * Até aqui, assim que a primeira barra entrava, `texto` já continha "/" e a
+   * regra 2 devolvia tudo intacto: "12122012" parava em "12/122012" e o
+   * operador tinha de digitar a segunda barra à mão. Em campo COMPLETO
+   * (DD/MM/AAAA) não existe leitura parcial legítima, então o texto que a
+   * PRÓPRIA máscara pode ter escrito — segmentos de exatamente 2 dígitos
+   * antes de cada barra — pode ser remascarado sem ambiguidade. "1/2/2012",
+   * digitado à mão, não tem essa forma e continua intocado (regra 2). Barras
+   * repetidas colapsam em uma só, para o caso de o operador digitar "/" logo
+   * depois da barra que a máscara acabou de inserir.
+   *
+   * Campo PARCIAL não muda em nada: ali "2026" ainda é um ano legítimo.
+   */
   function mascararData(raw, mode, apagando) {
     var texto = String(raw == null ? "" : raw);
     if (apagando) return texto;
-    if (texto.indexOf("/") !== -1) return texto;
-    var soDigitos = texto.replace(/\D/g, "");
+    var completo = (mode !== "partial");
+    var semDuplicadas = completo ? texto.replace(/\/{2,}/g, "/") : texto;
+    var remascarar = completo && (/^\d{2}\/\d*$/.test(semDuplicadas) ||
+      /^\d{2}\/\d{2}\/\d*$/.test(semDuplicadas));
+    if (!remascarar && texto.indexOf("/") !== -1) return texto;
+    var base = remascarar ? semDuplicadas.replace(/\//g, "") : texto;
+    var soDigitos = base.replace(/\D/g, "");
     // Texto com letra ou símbolo passa intacto — "dezembro/2026" é uma
     // entrada válida do domínio e não pode ser reescrita como número. A
     // comparação é feita ANTES de limitar o tamanho: truncar primeiro faria
     // toda digitação longa parecer "texto com símbolo" e escapar da máscara.
-    if (soDigitos.length !== texto.length) return texto;
+    if (soDigitos.length !== base.length) return texto;
     var digitos = soDigitos.slice(0, 8);
-    var minimo = (mode === "partial") ? 5 : 3;
+    var minimo = completo ? 2 : 5;
     if (digitos.length < minimo) return digitos;
+    if (completo) {
+      // A barra fecha o bloco assim que ele está cheio: 12 → "12/",
+      // 1212 → "12/12/". Digitando só números sai DD/MM/AAAA.
+      if (digitos.length === 2) return digitos + "/";
+      if (digitos.length === 3) return digitos.slice(0, 2) + "/" + digitos.slice(2);
+      if (digitos.length === 4) return digitos.slice(0, 2) + "/" + digitos.slice(2) + "/";
+      return digitos.slice(0, 2) + "/" + digitos.slice(2, 4) + "/" + digitos.slice(4);
+    }
     if (digitos.length <= 4) return digitos.slice(0, 2) + "/" + digitos.slice(2);
     return digitos.slice(0, 2) + "/" + digitos.slice(2, 4) + "/" + digitos.slice(4);
   }

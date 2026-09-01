@@ -52,9 +52,21 @@ caso("digitar 12082026 num campo de data completa vira 12/08/2026",
      m("12082026", "full") === "12/08/2026");
 caso("colar 12082026 num campo parcial vira 12/08/2026",
      m("12082026", "partial") === "12/08/2026");
+/* M26.4 — em campo COMPLETO as DUAS barras entram sozinhas: cada bloco fecha
+   assim que enche (12 → "12/", 1208 → "12/08/"), de modo que digitar apenas
+   números produz DD/MM/AAAA sem o operador tocar em "/". */
 caso("a barra aparece progressivamente enquanto digita",
-     m("1", "full") === "1" && m("12", "full") === "12" &&
-     m("120", "full") === "12/0" && m("1208", "full") === "12/08");
+     m("1", "full") === "1" && m("12", "full") === "12/" &&
+     m("12/0", "full") === "12/0" && m("1208", "full") === "12/08/");
+caso("a SEGUNDA barra também entra sozinha (12122012 → 12/12/2012)",
+     m("12/122012", "full") === "12/12/2012" &&
+     m("12/12/2012", "full") === "12/12/2012");
+caso("digitar só números fecha a data completa",
+     "12122012".split("").reduce((acc, d) => m(acc + d, "full"), "") === "12/12/2012" &&
+     "01012000".split("").reduce((acc, d) => m(acc + d, "full"), "") === "01/01/2000");
+caso("barra digitada à mão não duplica nem quebra o formato livre",
+     m("12//", "full") === "12/" && m("12/12//", "full") === "12/12/" &&
+     m("1/2/2012", "full") === "1/2/2012");
 
 /* O ponto delicado da fase F: "2026" é ANO válido no campo de data do exame.
    Uma máscara ingênua o transformaria em "20/26" e o operador ficaria preso —
