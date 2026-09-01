@@ -247,3 +247,153 @@ desde a M25.21** (falso positivo do filtro por nome sobre screenshots
 sintéticos), conferida como já falhando na base limpa.
 
 Quality gate: **PASSOU**, todos os checks.
+
+---
+
+## 5. Execução em produção — 01/09/2026, 00h58 (-03)
+
+| Etapa | Resultado |
+|---|---|
+| Commit | `798bdf5` + `e07554b` (cache busting) |
+| Push | `origin/claude-m26-3-financeiro-pastore-redesign` |
+| Integração | `git merge --ff-only` em `painel-soprolife-v01`: `9288f3c..e07554b` |
+| **Backup antes da escrita** | `/opt/soprolife/backups/m26-3-pre-20260901-005729.dump` (386 KB, `pg_dump -Fc`), sha256 `e2a70525…c0ac2a09` |
+| Deploy | `git merge --ff-only` na VPS → `e07554b`, árvore limpa |
+| **Migração** | `a3f6b0d94c17` → **`b1f4c72d9e08`** (head) |
+| Dry-run | conferência ✓, plano exatamente 219,00 / 328,50 / 1.533,00 |
+| `--apply` | regra cadastrada em `PAR-000001`; **LAN-000018, LAN-000019, LAN-000020** |
+| 2ª execução | *"nada a fazer. Já estava regularizado."* |
+| Restart | `systemctl restart soprolife-m15-api` → `active`, zero erro no journal |
+| Health | `GET /api/v1/health` → **200** |
+| Snapshots | `soprolife-update-data.service` → `success` |
+| Cache busting | `style.css?v=2026090101`, `app.js?v=2026090101`, servidos com 200 |
+| Smoke autenticado | API e página renderizada com dado real conferidas abaixo |
+
+### 5.1 A conferência aconteceu de verdade
+
+O dry-run em produção imprimiu, antes de qualquer escrita:
+
+```
+2026-07 #1   2 exame(s)  a_receber  valor=  R$ 219,00  recibo=—
+2026-08 #1   3 exame(s)  a_receber  valor=  R$ 328,50  recibo=—
+2026-08 #2  14 exame(s)  incluido   valor=          —  recibo=—
+receita SoproLife direta : R$ 3.494,79
+✓ contagem de exames, valores derivados, receita própria e total conferem
+```
+
+O valor gravado foi o **derivado da regra** (14 × 109,50), não um número
+digitado. Que ele coincida com o que o gestor confirmou é o que a conferência
+provou — não o que ela assumiu.
+
+---
+
+## 6. Prova final
+
+### 6.1 Pastore
+
+| Competência | Exames | Valor | Estado | Recibo |
+|---|---|---|---|---|
+| 2026-07 #1 | 2 | **R$ 219,00** | recebido | LAN-000018 |
+| 2026-08 #1 | 3 | **R$ 328,50** | recebido | LAN-000019 |
+| 2026-08 #2 (complementar) | 14 | **R$ 1.533,00** | recebido | LAN-000020 |
+
+Todos com `data_recebimento = 31/08/2026` (data da **confirmação do gestor**),
+`forma_pagamento = "Outro"` e a observação registrando que a data bancária
+original não é conhecida.
+
+### 6.2 Os totais
+
+| | |
+|---|---|
+| SoproLife direta | **R$ 3.494,79** |
+| Pastore | **R$ 2.080,50** |
+| **TOTAL** | **R$ 5.575,29** |
+| **A receber** | **R$ 0,00** |
+| **Duplicidades criadas** | **ZERO** |
+
+Conferido por `SELECT` depois do deploy:
+
+```
+recibos por fechamento >1 : 0
+exames em 2 fechamentos   : 0
+receitas dup. por exame   : 0
+public_code duplicado     : 0
+```
+
+**LAN-000017 / ESP-000039 intacta:** `230.00 | Recebido | Espirometria |
+comp 2026-08-28 | receb 2026-08-29 | Pix`. As 15 receitas próprias somam os
+mesmos R$ 3.494,79 de antes — nenhuma foi tocada.
+
+**Repasse intocado:** `PAR-000001` segue `modelo_repasse=indefinido`,
+`percentual_repasse=NULL`, `valor_repasse_fixo=NULL`. O recebimento entrou nos
+campos novos: `modelo_recebimento=valor_por_exame`,
+`valor_recebido_por_exame=109.50`, `vigencia_inicio=2026-07-01`.
+
+### 6.3 A API confirma a regra sozinha
+
+`GET /pastore/fechamentos` em produção, autenticado:
+
+```
+regra_valor      : R$ 109.50 por exame (vigente desde 01/07/2026)
+regra_cadastrada : True | valor_por_exame: 109.50
+aguardando       : 0        grupos_elegiveis: []
+a_receber        : 0        recebido: 3
+valor_em_aberto  : 0.00     valor_recebido: 2080.50
+
+Fechamento 2026-08 — complementar 2   recebido  total=1533.00  previsto=1533.00  itens=14  LAN-000020
+Fechamento 2026-08                    recebido  total= 328.50  previsto= 328.50  itens= 3  LAN-000019
+Fechamento 2026-07                    recebido  total= 219.00  previsto= 219.00  itens= 2  LAN-000018
+```
+
+`previsto == total` nos três: a regra deriva, sozinha, exatamente os valores
+que o gestor confirmou.
+
+### 6.4 A página Financeiro, com dado real de produção
+
+Renderizada no commit `e07554b` — o mesmo da VPS — com o
+`financeiro-summary.local.json` baixado de produção:
+
+| Cobrança do pedido | Resultado |
+|---|---|
+| não está poluída | **4** cards no topo, nenhum permanentemente zerado |
+| não mostra gráficos vazios | **0 canvas** na seção; barras em CSS que só existem com dado |
+| mostra lançamentos recentes | **10 linhas**, com data, descrição, origem, valor e status |
+| mostra SoproLife × Pastore | R$ 3.494,79 (62,7%) × R$ 2.080,50 (37,3%) |
+| mostra receita por competência | Jul/2026 R$ 878,00 · Ago/2026 R$ 2.311,50, mais a nota dos R$ 2.385,79 sem data |
+| funciona no celular | 420 px sem rolagem horizontal (`scrollWidth == clientWidth`); a tabela vira cartão de duas colunas e nenhum campo se perde |
+| desktop | 1440 px e 1000 px sem rolagem horizontal |
+
+Os totais na tela: **Receita recebida R$ 5.575,29 · A receber R$ 0,00 ·
+34 exames · R$ 163,98 de receita média por exame**.
+
+### 6.5 Estado final
+
+| | |
+|---|---|
+| HEAD oficial (`origin/painel-soprolife-v01`) | `e07554b9f8c52e8281305e3129e75adf9d08a494` |
+| HEAD da VPS | `e07554b9f8c52e8281305e3129e75adf9d08a494` |
+| Migração | `b1f4c72d9e08` (head), aplicada |
+| Backup | `/opt/soprolife/backups/m26-3-pre-20260901-005729.dump` |
+| `soprolife-m15-api` | `active` |
+| `/api/v1/health` | **200** |
+| Árvore (VPS e local) | limpa |
+| Testes | 1513 passed, 30 skipped, 1 deselecionado (falha pré-existente M25.21) |
+| Quality gate | PASSOU |
+
+---
+
+## 7. O que continua na sua mão
+
+Nada bloqueia a operação. Dois pontos para você saber que existem:
+
+1. **A regra vale desde 01/07/2026.** Exame Pastore com data anterior a julho
+   não recebe previsto — o sistema não afirma preço para um período em que não
+   havia regra. Se a Pastore mudar o valor, o caminho é cadastrar uma **nova**
+   vigência, não editar a atual: assim os meses já fechados continuam
+   explicáveis pelo valor que valia neles.
+
+2. **Os R$ 2.385,79 sem competência.** São os 10 lançamentos do lote de
+   conciliação histórica M18, que nasceram sem data nenhuma. Entram em "Receita
+   recebida" e na divisão por origem, mas ficam fora do gráfico mensal, com a
+   nota dizendo isso. Se você souber a que meses eles pertencem, dá para
+   datá-los depois — é `PATCH` em lançamento, sem mudar valor.
