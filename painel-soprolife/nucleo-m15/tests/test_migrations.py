@@ -154,11 +154,11 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
 def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     cfg = _alembic_config(f"sqlite:///{tmp_path}/heads.db")
-    # A migração M26 (a3f6b0d94c17, sequência do fechamento Pastore dentro da
-    # mesma competência) é a head atual — o valor esperado aqui é atualizado
-    # a cada nova migration; o que a asserção realmente prova é continuar
-    # existindo EXATAMENTE uma head (sem ponto de ramificação acidental).
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["a3f6b0d94c17"]
+    # A migração M26.3 (b1f4c72d9e08, campos de RECEBIMENTO por exame na
+    # parceria) é a head atual — o valor esperado aqui é atualizado a cada
+    # nova migration; o que a asserção realmente prova é continuar existindo
+    # EXATAMENTE uma head (sem ponto de ramificação acidental).
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["b1f4c72d9e08"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(
@@ -587,4 +587,57 @@ def test_m26_downgrade_recusa_apagar_fechamento_complementar(tmp_path, monkeypat
     assert "sequencia" not in {
         col["name"] for col in inspect(engine).get_columns("partner_settlements")
     }
+    engine.dispose()
+
+
+def test_m26_3_recebimento_por_exame_sobe_e_desce(tmp_path, monkeypatch):
+    """A migração da regra Pastore é aditiva e reversível.
+
+    Aditiva: nenhuma parceria já gravada muda de comportamento — todas descem
+    da migração com `modelo_recebimento = 'indefinido'`, que é exatamente o
+    "não há regra" que valia antes. Reversível: o downgrade devolve a tabela
+    ao estado anterior sem tocar em linha nenhuma.
+    """
+    monkeypatch.delenv("M15_DATABASE_URL", raising=False)
+    url = f"sqlite:///{tmp_path}/m26-3.db"
+    cfg = _alembic_config(url)
+
+    command.upgrade(cfg, "a3f6b0d94c17")
+    engine = create_engine(url)
+    antes = {c["name"] for c in inspect(engine).get_columns("partnerships")}
+    assert "modelo_recebimento" not in antes
+
+    # Uma parceria gravada ANTES da migração, como a PAR-000001 de produção.
+    with engine.begin() as conexao:
+        conexao.execute(text(
+            "INSERT INTO partnerships (id, public_code, partner_id, status,"
+            " modelo_repasse, responsavel_followup, data_inicio_dia_assumido,"
+            " created_at, updated_at)"
+            " VALUES ('p-m263', 'PAR-M263Z', 'parceiro-x', 'em_negociacao',"
+            " 'indefinido', 'soprolife', 0, :agora, :agora)"
+        ), {"agora": datetime.now(timezone.utc)})
+    engine.dispose()
+
+    command.upgrade(cfg, "b1f4c72d9e08")
+    engine = create_engine(url)
+    depois = {c["name"] for c in inspect(engine).get_columns("partnerships")}
+    assert {"modelo_recebimento", "valor_recebido_por_exame", "vigencia_inicio"} <= depois
+    with engine.connect() as conexao:
+        linha = conexao.execute(text(
+            "SELECT modelo_recebimento, valor_recebido_por_exame, vigencia_inicio"
+            " FROM partnerships WHERE id = 'p-m263'"
+        )).one()
+    assert linha == ("indefinido", None, None)
+    engine.dispose()
+
+    command.downgrade(cfg, "a3f6b0d94c17")
+    engine = create_engine(url)
+    revertido = {c["name"] for c in inspect(engine).get_columns("partnerships")}
+    assert "modelo_recebimento" not in revertido
+    assert "valor_recebido_por_exame" not in revertido
+    assert "vigencia_inicio" not in revertido
+    with engine.connect() as conexao:
+        assert conexao.execute(text(
+            "SELECT COUNT(*) FROM partnerships WHERE id = 'p-m263'"
+        )).scalar() == 1
     engine.dispose()

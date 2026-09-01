@@ -130,6 +130,35 @@ def _exame_pastore(client, auth, person, partner, unit, data, status="Realizado"
     return resp.json()["espirometria"]
 
 
+def _exame_pastore_orfao(db, person, partner, unit, data, sufixo):
+    """Exame Pastore que nasce FORA da API — como o importador histórico.
+
+    A M26.3 fez o cadastro vincular o exame ao fechamento na hora, então a
+    API não produz mais órfão nenhum. O script de reconciliação continua
+    existindo para o que veio de fora: importação, correção manual em banco,
+    exame criado enquanto a unidade estava desativada. É esse caso que os
+    testes do script precisam montar agora — e é ele que prova que a rede de
+    segurança continua funcionando.
+    """
+
+    from datetime import date as _date
+
+    ano, mes, dia = (int(x) for x in data.split("-"))
+    exam = SpirometryExam(
+        public_code=f"ESP-M262{sufixo}",
+        person_id=person["id"],
+        modalidade="clinica_parceira",
+        local_atendimento=unit.nome,
+        partner_id=partner.id,
+        partner_unit_id=unit.id,
+        status="Realizado",
+        data_exame=_date(ano, mes, dia),
+    )
+    db.add(exam)
+    db.commit()
+    return exam
+
+
 # ------------------------------------------------- 1..2  SoproLife direto
 
 
@@ -195,15 +224,16 @@ def test_3_pastore_recusa_receita_no_exame_e_so_cria_no_recebimento(
     assert _codigo(recusa) == "pagamento_direto_pastore_proibido"
 
     # 3b. exame limpo → fechamento nasce SEM valor, e sem lançamento.
-    _exame_pastore(client, auth, person, partner, unit, "2026-08-29")
-    criado = client.post(
-        f"{API}/pastore/fechamentos",
-        json={"partner_unit_id": unit.id, "competencia": "2026-08"},
-        headers=auth("gestor"),
+    #     M26.3: ele nasce sozinho, no mesmo POST do atendimento.
+    criado = _exame_pastore(client, auth, person, partner, unit, "2026-08-29")
+    assert criado is not None
+    listagem = client.get(f"{API}/pastore/fechamentos", headers=auth("gestor")).json()
+    fechamento = next(
+        f for f in listagem["fechamentos"] if f["competencia"] == "2026-08"
     )
-    assert criado.status_code == 201, criado.text
-    fechamento = criado.json()
     assert fechamento["valor_total"] is None
+    # Sem regra cadastrada nesta parceria de teste, também não há previsto.
+    assert fechamento["valor_previsto"] is None
     assert fechamento["recebimento"] is None
     assert not db.execute(
         select(FinancialEntry).where(FinancialEntry.partner_settlement_id.isnot(None))
@@ -243,8 +273,15 @@ def test_4_nenhum_preco_vem_de_partner_unit(client, auth, person, pastore, db):
     assert listagem.json()["regra_valor"] == "Não inferido; exige confirmação do gestor."
 
 
-def test_5_nenhum_preco_vem_de_partnership(db):
-    """Partnership só tem campos de REPASSE — dinheiro que sai, não que entra."""
+def test_5_repasse_e_recebimento_nunca_se_misturam(db):
+    """Dinheiro que SAI e dinheiro que ENTRA moram em campos separados.
+
+    Até a M26.3 este teste travava o fato de não existir preço de recebimento
+    nenhum. A regra passou a existir — e o invariante que importa continua
+    sendo o mesmo: `valor_repasse_fixo` e `percentual_repasse` descrevem
+    dinheiro repassado AO parceiro e são somados em custo. Nenhum caminho de
+    receita pode voltar a lê-los.
+    """
 
     from app.models import Partnership
 
@@ -252,21 +289,33 @@ def test_5_nenhum_preco_vem_de_partnership(db):
         c.name for c in Partnership.__table__.columns
         if "valor" in c.name or "percentual" in c.name
     }
-    assert monetarias == {"percentual_repasse", "valor_repasse_fixo"}
-    # Nenhum caminho FINANCEIRO consome esses campos para decidir receita.
-    # (`routers/partners.py` os lê e escreve — é o CRUD do cadastro, e é o
-    # único lugar onde eles têm efeito.)
+    assert monetarias == {
+        "percentual_repasse", "valor_repasse_fixo", "valor_recebido_por_exame",
+    }
+
     servidor = pathlib.Path(__file__).resolve().parents[1] / "app"
     financeiros = [
         servidor / "routers" / "finance.py",
         servidor / "routers" / "pastore.py",
         servidor / "routers" / "attendances.py",
         servidor / "services" / "pastore.py",
+        servidor / "services" / "partner_pricing.py",
+        servidor / "snapshots.py",
     ]
     for caminho in financeiros:
         texto = caminho.read_text(encoding="utf-8")
-        assert "valor_repasse_fixo" not in texto
-        assert "percentual_repasse" not in texto
+        # Menção em comentário é permitida (e desejável, para explicar por
+        # que não se usa); o que não pode é ler o atributo.
+        assert ".valor_repasse_fixo" not in texto, caminho.name
+        assert ".percentual_repasse" not in texto, caminho.name
+
+    # E o preço de recebimento tem UM leitor só. Concentrar a leitura é o que
+    # deixa o override por unidade caber depois sem tocar em mais nada.
+    leitores = [
+        c for c in servidor.rglob("*.py")
+        if ".valor_recebido_por_exame" in c.read_text(encoding="utf-8")
+    ]
+    assert [c.name for c in leitores] == ["partner_pricing.py"]
 
 
 # ------------------------------------------------------- 6..7  regras do exame
@@ -351,8 +400,10 @@ def test_10_backfill_executado_duas_vezes_nao_cria_nada_na_segunda(
     client, auth, person, pastore, db, reconciliador, users
 ):
     partner, unit = pastore
-    for data in ("2026-08-15", "2026-08-18", "2026-08-22"):
-        _exame_pastore(client, auth, person, partner, unit, data)
+    # Órfãos de fora da API — o que sobrou de importação histórica. Pelo
+    # cadastro normal eles já nasceriam vinculados (M26.3).
+    for i, data in enumerate(("2026-08-15", "2026-08-18", "2026-08-22")):
+        _exame_pastore_orfao(db, person, partner, unit, data, f"A{i}")
 
     dados = reconciliador.coletar(db)
     resultado = reconciliador.classificar(db, dados)
@@ -428,7 +479,7 @@ def test_12_backfill_deixa_trilha_de_auditoria(
     client, auth, person, pastore, db, reconciliador, users
 ):
     partner, unit = pastore
-    _exame_pastore(client, auth, person, partner, unit, "2026-08-15")
+    _exame_pastore_orfao(db, person, partner, unit, "2026-08-15", "B0")
     dados = reconciliador.coletar(db)
     resultado = reconciliador.classificar(db, dados)
     reconciliador.aplicar(db, dados, resultado, users["gestor"])

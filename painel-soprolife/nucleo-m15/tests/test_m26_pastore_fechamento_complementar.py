@@ -9,6 +9,12 @@ ocupada pela chave única, e nenhuma rota anexava exame a fechamento existente.
 
 Nada aqui infere preço. O complementar nasce sem valor, exatamente como o
 fechamento comum.
+
+M26.3 — o mecanismo do complementar continua idêntico; o que mudou foi o
+GATILHO. O exame passou a entrar no fechamento no instante do cadastro, sem
+depender de alguém clicar, então os testes exercitam o caminho automático e
+cobram os mesmos resultados. O POST manual continua existindo como rota de
+recuperação e é testado nessa condição.
 """
 
 from datetime import date
@@ -46,7 +52,7 @@ def pastore(db):
     return partner, unit
 
 
-def _exame(client, auth, person, partner, unit, exam_date):
+def _exame_resposta(client, auth, person, partner, unit, exam_date):
     resp = client.post(
         f"{API}/atendimentos",
         json={
@@ -62,15 +68,35 @@ def _exame(client, auth, person, partner, unit, exam_date):
         headers=auth("operacional"),
     )
     assert resp.status_code == 201, resp.text
-    return resp.json()["espirometria"]["id"]
+    return resp.json()
+
+
+def _exame(client, auth, person, partner, unit, exam_date):
+    return _exame_resposta(
+        client, auth, person, partner, unit, exam_date
+    )["espirometria"]["id"]
 
 
 def _fechar(client, auth, unit, competencia="2026-08"):
+    """A rota de recuperação. Depois da M26.3 ela só acha exame órfão vindo de
+    fora da API (importação, correção em banco, unidade desativada)."""
     return client.post(
         f"{API}/pastore/fechamentos",
         json={"partner_unit_id": unit.id, "competencia": competencia},
         headers=auth("gestor"),
     )
+
+
+def _estado(client, auth):
+    return client.get(f"{API}/pastore/fechamentos", headers=auth("leitura")).json()
+
+
+def _do_mes(client, auth, competencia="2026-08", sequencia=1):
+    """O fechamento que o cadastro do exame criou sozinho."""
+    for row in _estado(client, auth)["fechamentos"]:
+        if row["competencia"] == competencia and row["sequencia"] == sequencia:
+            return row
+    raise AssertionError(f"sem fechamento {competencia} #{sequencia}")
 
 
 def _valorar(client, auth, settlement_id, valor):
@@ -87,7 +113,9 @@ def _cenario_producao(client, auth, person, pastore):
     partner, unit = pastore
     for data in ("2026-08-01", "2026-08-04", "2026-08-04"):
         _exame(client, auth, person, partner, unit, data)
-    primeiro = _fechar(client, auth, unit).json()
+    # Os 3 já estão num fechamento; ninguém precisou abrir nada (M26.3).
+    primeiro = _do_mes(client, auth)
+    assert primeiro["itens"]["total"] == 3
     assert _valorar(client, auth, primeiro["id"], "328.50").status_code == 200
     posteriores = [
         _exame(client, auth, person, partner, unit, data)
@@ -100,25 +128,33 @@ def _cenario_producao(client, auth, person, pastore):
     return partner, unit, primeiro, posteriores
 
 
-def test_exames_posteriores_ao_fechamento_ficam_elegiveis_e_avisam_complementar(
+def test_exames_posteriores_ao_fechamento_entram_direto_no_complementar(
     client, auth, person, pastore
 ):
-    _partner, unit, _primeiro, posteriores = _cenario_producao(
+    """O cenário de produção deixou de produzir fila.
+
+    Antes da M26.3 os 14 exames posteriores ficavam em "Aguardando fechamento
+    mensal" esperando um clique. Agora o primeiro deles abre o complementar e
+    os outros 13 entram nele — a fila nasce e morre dentro do mesmo POST.
+    """
+
+    _partner, _unit, _primeiro, posteriores = _cenario_producao(
         client, auth, person, pastore
     )
-    body = client.get(f"{API}/pastore/fechamentos", headers=auth("leitura")).json()
+    body = _estado(client, auth)
 
-    assert body["indicadores"]["aguardando_fechamento"] == 14
-    assert {e["id"] for e in body["elegiveis"]} == set(posteriores)
-    assert body["grupos_elegiveis"] == [{
-        "partner_unit_id": unit.id,
-        "unidade": "Pastore Ipanema",
-        "competencia": "2026-08",
-        "quantidade": 14,
-        "fechamentos_existentes": 1,
-        "acao_prevista": "complementar",
-        "acao_rotulo": "Criar fechamento complementar 2",
-    }]
+    assert body["indicadores"]["aguardando_fechamento"] == 0
+    assert body["elegiveis"] == []
+    assert body["grupos_elegiveis"] == []
+    assert len(posteriores) == 14
+
+    complementar = _do_mes(client, auth, "2026-08", 2)
+    assert complementar["itens"]["total"] == 14
+    assert complementar["complementar"] is True
+    assert complementar["sequencia"] == 2
+    # Os 17 exames do mês estão todos vinculados, e em dois fechamentos
+    # distintos — a identidade exame a exame é conferida no teste seguinte.
+    assert body["indicadores"]["exames_em_fechamento"] == 17
 
 
 def test_complementar_fecha_os_14_sem_tocar_no_valor_ja_conferido(
@@ -128,14 +164,10 @@ def test_complementar_fecha_os_14_sem_tocar_no_valor_ja_conferido(
         client, auth, person, pastore
     )
 
-    resp = _fechar(client, auth, unit)
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert body["acao"] == "criado"
+    body = _do_mes(client, auth, "2026-08", 2)
     assert body["sequencia"] == 2
     assert body["complementar"] is True
     assert body["titulo"] == "Fechamento 2026-08 — complementar 2"
-    assert body["exames_adicionados"] == 14
     assert body["itens"]["total"] == 14
     assert body["status"] == "incluido"
     # O complementar não inventa preço nenhum.
@@ -165,9 +197,10 @@ def test_complementar_fecha_os_14_sem_tocar_no_valor_ja_conferido(
     # E nenhum lançamento financeiro nasceu — recibo só na confirmação.
     assert db.execute(select(FinancialEntry)).scalars().all() == []
 
-    depois = client.get(f"{API}/pastore/fechamentos", headers=auth("leitura")).json()
+    depois = _estado(client, auth)
     assert depois["indicadores"]["aguardando_fechamento"] == 0
     assert depois["grupos_elegiveis"] == []
+    # Esta parceria de teste não tem regra cadastrada: nada é inferido.
     assert depois["regra_valor"] == "Não inferido; exige confirmação do gestor."
 
 
@@ -176,18 +209,15 @@ def test_fechamento_ainda_aberto_recebe_os_exames_em_vez_de_fragmentar_o_mes(
 ):
     partner, unit = pastore
     _exame(client, auth, person, partner, unit, "2026-08-01")
-    primeiro = _fechar(client, auth, unit).json()
+    primeiro = _do_mes(client, auth)
     assert primeiro["sequencia"] == 1
     assert primeiro["valor_total"] is None
 
-    _exame(client, auth, person, partner, unit, "2026-08-15")
-    resp = _fechar(client, auth, unit)
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert body["acao"] == "incorporado"
+    corpo = _exame_resposta(client, auth, person, partner, unit, "2026-08-15")
+    assert corpo["fechamento_parceria"]["acao"] == "incorporado"
+    body = _do_mes(client, auth)
     assert body["id"] == primeiro["id"]
     assert body["sequencia"] == 1
-    assert body["exames_adicionados"] == 1
     assert body["itens"]["total"] == 2
     assert len(db.execute(select(PartnerSettlement)).scalars().all()) == 1
 
@@ -204,16 +234,16 @@ def test_fechamento_com_valor_digitado_nao_recebe_exame_novo_mesmo_incluido(
 
     partner, unit = pastore
     _exame(client, auth, person, partner, unit, "2026-08-01")
-    primeiro = _fechar(client, auth, unit).json()
+    primeiro = _do_mes(client, auth)
     assert client.patch(
         f"{API}/pastore/fechamentos/{primeiro['id']}",
         json={"valor_total": "109.50"},
         headers=auth("gestor"),
     ).status_code == 200
 
-    _exame(client, auth, person, partner, unit, "2026-08-15")
-    body = _fechar(client, auth, unit).json()
-    assert body["acao"] == "criado"
+    corpo = _exame_resposta(client, auth, person, partner, unit, "2026-08-15")
+    assert corpo["fechamento_parceria"]["acao"] == "criado"
+    body = _do_mes(client, auth, "2026-08", 2)
     assert body["sequencia"] == 2
     assert db.get(PartnerSettlement, primeiro["id"]).valor_total == Decimal("109.50")
 
@@ -224,7 +254,7 @@ def test_complementar_tem_valor_e_recibo_proprios(
     _partner, unit, primeiro, _posteriores = _cenario_producao(
         client, auth, person, pastore
     )
-    segundo = _fechar(client, auth, unit).json()
+    segundo = _do_mes(client, auth, "2026-08", 2)
 
     assert _valorar(client, auth, segundo["id"], "1533.00").status_code == 200
     recebido = client.post(
@@ -260,7 +290,7 @@ def test_um_exame_nunca_entra_em_dois_fechamentos_da_mesma_competencia(
     _partner, unit, primeiro, _posteriores = _cenario_producao(
         client, auth, person, pastore
     )
-    segundo = _fechar(client, auth, unit).json()
+    segundo = _do_mes(client, auth, "2026-08", 2)
 
     vinculos = db.execute(select(PartnerSettlementItem)).scalars().all()
     assert len(vinculos) == 17
@@ -274,14 +304,18 @@ def test_criacao_de_complementar_fica_na_trilha_com_a_sequencia(
     _partner, unit, _primeiro, _posteriores = _cenario_producao(
         client, auth, person, pastore
     )
-    _fechar(client, auth, unit)
 
     acoes = db.execute(
         select(AuditLog).where(AuditLog.acao.like("pastore.%")).order_by(AuditLog.id)
     ).scalars().all()
     criados = [a for a in acoes if a.acao == "pastore.fechamento_criado"]
     assert [a.detalhes["sequencia"] for a in criados] == [1, 2]
-    assert criados[-1].detalhes["total"] == 14
+    # O complementar nasce com o 1º dos 14; os outros 13 são incorporações.
+    assert criados[-1].detalhes["sequencia"] == 2
+    incorporados = [
+        a for a in acoes if a.acao == "pastore.fechamento_itens_incorporados"
+    ]
+    assert sum(a.detalhes["total"] for a in incorporados if a.detalhes["sequencia"] == 2) == 13
 
 
 def test_incorporacao_tem_acao_propria_na_trilha(
@@ -289,9 +323,7 @@ def test_incorporacao_tem_acao_propria_na_trilha(
 ):
     partner, unit = pastore
     _exame(client, auth, person, partner, unit, "2026-08-01")
-    _fechar(client, auth, unit)
     _exame(client, auth, person, partner, unit, "2026-08-15")
-    _fechar(client, auth, unit)
 
     incorporacoes = db.execute(
         select(AuditLog).where(
@@ -308,7 +340,7 @@ def test_exame_nao_concluido_continua_fora_do_complementar(
 ):
     partner, unit = pastore
     _exame(client, auth, person, partner, unit, "2026-08-01")
-    primeiro = _fechar(client, auth, unit).json()
+    primeiro = _do_mes(client, auth)
     _valorar(client, auth, primeiro["id"], "109.50")
 
     client.post(
@@ -326,8 +358,7 @@ def test_exame_nao_concluido_continua_fora_do_complementar(
         headers=auth("operacional"),
     )
     assert _fechar(client, auth, unit).status_code == 422
-    body = client.get(f"{API}/pastore/fechamentos", headers=auth("leitura")).json()
-    assert body["indicadores"]["aguardando_fechamento"] == 0
+    assert _estado(client, auth)["indicadores"]["aguardando_fechamento"] == 0
 
 
 def test_competencias_diferentes_seguem_independentes(
@@ -335,10 +366,10 @@ def test_competencias_diferentes_seguem_independentes(
 ):
     partner, unit = pastore
     _exame(client, auth, person, partner, unit, "2026-07-14")
-    julho = _fechar(client, auth, unit, "2026-07").json()
+    julho = _do_mes(client, auth, "2026-07")
     _valorar(client, auth, julho["id"], "109.50")
     _exame(client, auth, person, partner, unit, "2026-08-01")
-    agosto = _fechar(client, auth, unit, "2026-08").json()
+    agosto = _do_mes(client, auth, "2026-08")
 
     assert julho["sequencia"] == 1
     assert agosto["sequencia"] == 1

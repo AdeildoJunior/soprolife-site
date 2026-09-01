@@ -1302,14 +1302,6 @@ td { font-size: .94rem; }
   margin-top: 6px;
 }
 
-.finance-grid canvas {
-  min-height: 260px;
-}
-
-#financeEntradasChart {
-  min-height: 220px;
-}
-
 .finance-real-note {
   margin: .5rem 0 1.25rem;
   padding: .75rem 1rem;
@@ -7949,4 +7941,356 @@ table th, table td { padding: 10px 12px; font-size: 12.5px; }
   justify-content: flex-end;
   gap: 8px;
   margin-top: 14px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   M26.3 — Financeiro operacional
+   ───────────────────────────────────────────────────────────────────────────
+   A tela anterior gastava metade da página em dois canvas vazios e uma tabela
+   vazia. Aqui não há canvas nenhum: as duas visualizações são barras em CSS,
+   que ocupam a altura do conteúdo real e simplesmente não existem quando não
+   há dado — nunca um eixo de R$ 0,00 a R$ 1,00 desenhado no vazio.
+
+   Escopo deliberadamente novo (prefixo `fin-`) para não disputar cascata com
+   as camadas M13.5C/M13.6 que já reescrevem `.finance-*`.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.fin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+  align-items: start;
+}
+
+.fin-panel {
+  min-width: 0;
+}
+
+.fin-empty {
+  margin: 0;
+  padding: 22px 4px;
+  text-align: center;
+  color: var(--muted);
+  font-size: .86rem;
+}
+
+.fin-nota {
+  margin: 14px 0 0;
+  font-size: .74rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* ── Receita por origem ───────────────────────────────────────────────────── */
+
+.fin-origem {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 2px;
+}
+
+.fin-origem-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+}
+
+.fin-origem-nome {
+  font-weight: 700;
+  font-size: .88rem;
+  color: var(--navy);
+}
+
+.fin-origem-valor {
+  font-weight: 800;
+  font-size: 1.02rem;
+  letter-spacing: -.02em;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fin-bar {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--line-light);
+  overflow: hidden;
+}
+
+.fin-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width .5s var(--ease, ease);
+}
+
+.fin-origem-pct {
+  display: block;
+  margin-top: 6px;
+  font-size: .74rem;
+  color: var(--muted);
+}
+
+/* ── Receita por competência ──────────────────────────────────────────────── */
+
+.fin-meses {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+/* Largura com teto: com dois meses no histórico, barras elásticas viram dois
+   painéis de cor no lugar de um gráfico. */
+.fin-mes {
+  flex: 0 1 88px;
+  min-width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.fin-mes-valor {
+  font-size: .69rem;
+  font-weight: 700;
+  color: var(--navy-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fin-mes-bar {
+  width: 100%;
+  height: 118px;
+  display: flex;
+  align-items: flex-end;
+  /* Sem trilho: as barras já se ancoram na linha de base do contêiner, e um
+     retângulo cinza atrás de uma barra curta lia-se como caixa vazia — o tipo
+     de moldura sem dado que esta etapa foi feita para tirar da tela. */
+  background: transparent;
+  border-radius: 8px 8px 4px 4px;
+  overflow: hidden;
+}
+
+.fin-mes-bar > span {
+  display: block;
+  width: 100%;
+  background: linear-gradient(180deg, var(--teal) 0%, var(--teal-dark) 100%);
+  border-radius: 8px 8px 0 0;
+  transition: height .5s var(--ease, ease);
+}
+
+.fin-mes-label {
+  font-size: .72rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── Lançamentos recentes ─────────────────────────────────────────────────── */
+
+.fin-table-wrap {
+  overflow-x: auto;
+}
+
+/* A regra global impõe `min-width: 860px` a toda `table`, o que serve às
+   tabelas largas do painel e obrigaria estas cinco colunas magras a rolar de
+   lado em telas médias sem necessidade. */
+.fin-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 620px;
+}
+
+.fin-table .fin-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fin-td-data {
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.fin-td-desc strong {
+  display: block;
+  font-weight: 650;
+}
+
+.fin-code {
+  display: block;
+  margin-top: 2px;
+  font-size: .68rem;
+  letter-spacing: .03em;
+  color: var(--muted-light);
+}
+
+.fin-origem-tag {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--teal-pale);
+  border: 1px solid rgba(23, 181, 165, .22);
+  color: var(--teal-dark);
+  font-size: .72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.fin-saida {
+  color: var(--danger);
+}
+
+/* ── Resumo operacional: informação secundária, tamanho secundário ────────── */
+
+.fin-resumo {
+  margin-top: var(--gap);
+  padding: 16px 18px 14px;
+  background: var(--line-light);
+  border-radius: var(--radius-md);
+}
+
+.fin-resumo h3 {
+  margin: 0 0 12px;
+  font-size: .74rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fin-resumo-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 20px;
+  margin: 0;
+}
+
+.fin-resumo-item dt {
+  font-size: .74rem;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.fin-resumo-item dd {
+  margin: 0;
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.fin-fonte {
+  margin: 14px 0 0;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+  font-size: .71rem;
+  line-height: 1.5;
+  color: var(--muted-light);
+}
+
+/* ── Celular ──────────────────────────────────────────────────────────────── */
+
+@media (max-width: 860px) {
+  .fin-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .fin-mes-bar {
+    height: 90px;
+  }
+  .fin-mes {
+    min-width: 46px;
+  }
+  .fin-mes-valor {
+    font-size: .62rem;
+  }
+  .fin-resumo-list {
+    grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
+  }
+
+  /* Cinco colunas não cabem em 420px. Espremê-las empurra Valor e Status
+     para trás de uma rolagem lateral que ninguém descobre — no celular o
+     dinheiro simplesmente sumia da tela. Cada lançamento vira um cartão de
+     duas colunas: identificação à esquerda, dinheiro à direita.
+     A coluna de código público some: é rastreabilidade, não leitura de campo. */
+  .fin-table-wrap {
+    overflow-x: visible;
+  }
+
+  /* Duas heranças globais precisam sair do caminho para o cartão existir:
+     `table { min-width: 860px }` (a rolagem lateral) e
+     `.table-wrap tbody tr { height: 42px }` (a altura fixa que esmagaria as
+     três linhas do grid umas sobre as outras). */
+  .fin-table {
+    min-width: 0;
+  }
+
+  .fin-table-wrap tbody tr {
+    height: auto;
+  }
+
+  .fin-table,
+  .fin-table tbody,
+  .fin-table tr,
+  .fin-table td {
+    display: block;
+  }
+
+  .fin-table thead {
+    display: none;
+  }
+
+  .fin-table .fin-code {
+    display: none;
+  }
+
+  .fin-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 12px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line-light);
+  }
+
+  .fin-table tr:last-child {
+    border-bottom: 0;
+  }
+
+  .fin-table td {
+    padding: 0;
+    border: 0;
+  }
+
+  .fin-td-desc     { grid-column: 1; grid-row: 1; }
+  .fin-table .fin-num { grid-column: 2; grid-row: 1; }
+  .fin-table td:nth-child(3) { grid-column: 1; grid-row: 2; }
+  .fin-table td:nth-child(5) { grid-column: 2; grid-row: 2; justify-self: end; }
+  .fin-td-data     { grid-column: 1 / -1; grid-row: 3; font-size: .72rem; }
+
+  .fin-td-desc strong {
+    font-size: .86rem;
+    line-height: 1.3;
+  }
+
+  .fin-table td:nth-child(3),
+  .fin-table td:nth-child(5) {
+    margin-top: 4px;
+  }
+
+  /* O estado vazio volta a ser uma célula normal, ocupando a linha toda. */
+  .fin-table .table-empty-cell {
+    grid-column: 1 / -1;
+  }
 }

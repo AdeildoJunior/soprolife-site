@@ -37,6 +37,7 @@ from ..services.followup import (
 )
 from ..services.idempotency import idempotent_create
 from ..services.integrity import ensure_unit_of_partner
+from ..services.pastore import ensure_settlement_for_exam
 
 router = APIRouter(tags=["operacao"])
 
@@ -257,10 +258,50 @@ def create_exam(
     fup_info = _sync_exam_followup(db, person, exam)
     audit(db, "espirometria.criada", "spirometry_exams", exam.id, user.id,
           request.state.request_id, {"public_code": exam.public_code, "status": exam.status})
+    fechamento = _vincular_fechamento(db, exam, user, request)
     db.commit()
     data = ser_exam(exam)
     data["followup"] = fup_info
+    data["fechamento_parceria"] = fechamento
     return data
+
+
+def _vincular_fechamento(
+    db: Session, exam: SpirometryExam, user: User, request: Request
+) -> dict | None:
+    """M26.3 — exame de parceria elegível nunca fica órfão de fechamento.
+
+    Vale para as DUAS portas por onde um exame nasce ou muda: esta rota
+    (CLI, importação, correção de status) e `POST /atendimentos`. A M26.2
+    registrou esta como "uma porta por onde um exame pode nascer sem receita
+    sem que nada avise" — deixou de ser.
+
+    Vincular não é receber: o fechamento nasce sem valor recebido.
+    """
+
+    attachment = ensure_settlement_for_exam(db, exam)
+    if attachment is None:
+        return None
+    audit(
+        db,
+        "pastore.fechamento_criado" if attachment.acao == "criado"
+        else "pastore.fechamento_itens_incorporados",
+        "partner_settlements", attachment.settlement.id,
+        user.id, request.state.request_id,
+        {
+            "status": attachment.settlement.status,
+            "total": len(attachment.exams),
+            "sequencia": attachment.sequencia,
+            "motivo": "vinculo_automatico_espirometria",
+        },
+    )
+    return {
+        "id": attachment.settlement.id,
+        "competencia": attachment.settlement.competencia.strftime("%Y-%m"),
+        "sequencia": attachment.sequencia,
+        "acao": attachment.acao,
+        "exames_vinculados": len(attachment.exams),
+    }
 
 
 def _sync_exam_followup(db: Session, person: Person, exam: SpirometryExam) -> dict:
@@ -370,9 +411,15 @@ def update_exam(
     fup_info = _sync_exam_followup(db, person, exam)
     audit(db, "espirometria.atualizada", "spirometry_exams", exam.id, user.id,
           request.state.request_id, {"campos": changed, "followup": fup_info["motivo"]})
+    # Um exame agendado só vira elegível quando alguém marca "Realizado" — e
+    # é aqui que isso acontece. Sem este ponto, todo exame de parceria que
+    # nasce agendado voltaria a depender de clique manual para entrar no
+    # fechamento, que é exatamente a falha que a M26.3 fecha.
+    fechamento = _vincular_fechamento(db, exam, user, request)
     db.commit()
     data = ser_exam(exam)
     data["followup"] = fup_info
+    data["fechamento_parceria"] = fechamento
     return data
 
 

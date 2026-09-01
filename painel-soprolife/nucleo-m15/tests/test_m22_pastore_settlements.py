@@ -66,6 +66,24 @@ def _attendance(client, auth, person, partner, unit, *, exam_date="2026-07-14",
     )
 
 
+def _fechamento(client, auth, competencia="2026-07", sequencia=1):
+    """O fechamento que o cadastro do exame criou sozinho (M26.3).
+
+    Antes desta etapa todo teste daqui abria o fechamento com um POST. O
+    fechamento agora nasce junto com o exame — o POST manual virou rota de
+    recuperação, não caminho normal. As garantias testadas continuam as
+    mesmas; só a forma de chegar ao fechamento mudou.
+    """
+
+    body = client.get(f"{API}/pastore/fechamentos", headers=auth("leitura")).json()
+    for row in body["fechamentos"]:
+        if row["competencia"] == competencia and row["sequencia"] == sequencia:
+            return row
+    raise AssertionError(
+        f"nenhum fechamento {competencia} #{sequencia} em {body['fechamentos']}"
+    )
+
+
 def test_configuracao_resolve_parceiro_e_unidade_unica(client, auth, pastore):
     partner, unit = pastore
     resp = client.get(
@@ -239,21 +257,24 @@ def test_elegibilidade_agrupa_por_parceiro_unidade_competencia(
     body = client.get(
         f"{API}/pastore/fechamentos", headers=auth("leitura")
     ).json()
-    assert body["indicadores"]["aguardando_fechamento"] == 2
+    # M26.3 — nenhum exame concluído fica "aguardando fechamento". Os dois de
+    # julho entraram sozinhos num fechamento no instante do cadastro; era
+    # justamente essa fila que deixava dinheiro invisível no Financeiro.
+    assert body["indicadores"]["aguardando_fechamento"] == 0
+    assert body["grupos_elegiveis"] == []
+    assert body["elegiveis"] == []
     assert body["regra_valor"] == "Não inferido; exige confirmação do gestor."
-    assert body["grupos_elegiveis"] == [{
-        "partner_unit_id": unit.id,
-        "unidade": "Pastore Ipanema",
-        "competencia": "2026-07",
-        "quantidade": 2,
-        # M26 — a competência ainda não fechou nenhuma vez.
-        "fechamentos_existentes": 0,
-        "acao_prevista": "criar",
-        "acao_rotulo": "Criar fechamento",
-    }]
-    assert {e["estado_fechamento"] for e in body["elegiveis"]} == {
-        "Aguardando fechamento mensal"
-    }
+    assert body["regra_cadastrada"] is False
+
+    fechamento = _fechamento(client, auth)
+    assert fechamento["itens"]["total"] == 2
+    # Vincular não é receber, e sem regra cadastrada não há previsto nenhum.
+    assert fechamento["valor_total"] is None
+    assert fechamento["valor_previsto"] is None
+    assert fechamento["valor_em_aberto"] is None
+    assert fechamento["status"] == "incluido"
+    # O exame "Aguardando" de agosto não é concluído: não abre competência.
+    assert [f["competencia"] for f in body["fechamentos"]] == ["2026-07"]
 
 
 def test_fechamento_inclui_itens_sem_inferir_valor_e_recusa_repeticao_vazia(
@@ -265,13 +286,8 @@ def test_fechamento_inclui_itens_sem_inferir_valor_e_recusa_repeticao_vazia(
         .json()["espirometria"]["id"]
         for exam_date in ("2026-07-14", "2026-07-18")
     ]
-    created = client.post(
-        f"{API}/pastore/fechamentos",
-        json={"partner_unit_id": unit.id, "competencia": "2026-07"},
-        headers=auth("gestor"),
-    )
-    assert created.status_code == 201, created.text
-    body = created.json()
+    # M26.3 — o fechamento já existe, criado pelo próprio cadastro do exame.
+    body = _fechamento(client, auth)
     assert body["status"] == "incluido"
     assert body["status_label"] == "Incluído no fechamento"
     assert body["valor_total"] is None
@@ -282,11 +298,9 @@ def test_fechamento_inclui_itens_sem_inferir_valor_e_recusa_repeticao_vazia(
 
     assert body["sequencia"] == 1
     assert body["complementar"] is False
-    assert body["acao"] == "criado"
-    assert body["exames_adicionados"] == 2
 
-    # M26 — repetir o clique sem exame novo não cria fechamento vazio nem
-    # duplica o existente: não há o que fechar, e o servidor diz isso.
+    # O POST manual continua sendo a rota de recuperação. Sem exame órfão ele
+    # não cria fechamento vazio nem duplica o existente.
     repetido = client.post(
         f"{API}/pastore/fechamentos",
         json={"partner_unit_id": unit.id, "competencia": "2026-07"},
@@ -306,19 +320,22 @@ def test_mesmo_exame_nao_pode_entrar_em_dois_fechamentos(
     exam_id = _attendance(
         client, auth, person, partner, unit
     ).json()["espirometria"]["id"]
-    first = PartnerSettlement(
-        partner_id=partner.id, partner_unit_id=unit.id,
-        competencia=date(2026, 7, 1), status="incluido",
-    )
-    second = PartnerSettlement(
+    # O exame já está no fechamento que o cadastro criou (M26.3). A garantia
+    # testada é a mesma de sempre: tentar pô-lo num segundo fechamento bate no
+    # índice único, mesmo forçando por dentro do banco.
+    assert db.execute(
+        select(PartnerSettlementItem).where(
+            PartnerSettlementItem.spirometry_exam_id == exam_id
+        )
+    ).scalar_one() is not None
+
+    outro = PartnerSettlement(
         partner_id=partner.id, partner_unit_id=unit.id,
         competencia=date(2026, 8, 1), status="incluido",
     )
-    db.add_all([first, second])
+    db.add(outro)
     db.flush()
-    db.add(PartnerSettlementItem(settlement_id=first.id, spirometry_exam_id=exam_id))
-    db.flush()
-    db.add(PartnerSettlementItem(settlement_id=second.id, spirometry_exam_id=exam_id))
+    db.add(PartnerSettlementItem(settlement_id=outro.id, spirometry_exam_id=exam_id))
     with pytest.raises(IntegrityError):
         db.flush()
     db.rollback()
@@ -332,11 +349,7 @@ def test_a_receber_exige_valor_e_recebimento_cria_um_recibo_agregado(
         assert _attendance(
             client, auth, person, partner, unit, exam_date=exam_date
         ).status_code == 201
-    settlement = client.post(
-        f"{API}/pastore/fechamentos",
-        json={"partner_unit_id": unit.id, "competencia": "2026-07"},
-        headers=auth("gestor"),
-    ).json()
+    settlement = _fechamento(client, auth)
 
     invalid = client.patch(
         f"{API}/pastore/fechamentos/{settlement['id']}",
@@ -437,11 +450,7 @@ def test_recebimento_exige_gestor_valor_data_forma_e_valor_coerente(
         headers=auth("operacional"),
     )
     assert forbidden.status_code == 403
-    settlement = client.post(
-        f"{API}/pastore/fechamentos",
-        json={"partner_unit_id": unit.id, "competencia": "2026-07"},
-        headers=auth("gestor"),
-    ).json()
+    settlement = _fechamento(client, auth)
     assert client.patch(
         f"{API}/pastore/fechamentos/{settlement['id']}",
         json={"status": "a_receber", "valor_total": "500.00"},

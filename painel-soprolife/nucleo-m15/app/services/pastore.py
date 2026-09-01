@@ -241,3 +241,72 @@ def attach_eligible_exams(
     return SettlementAttachment(
         settlement=settlement, exams=exams, acao=acao, sequencia=settlement.sequencia
     )
+
+
+# ------------------------------------------------- fechamento automático M26.3
+#
+# O buraco que a M26.2 mediu: 14 exames feitos entre 15 e 29/08 ficaram fora do
+# Financeiro porque a criação do fechamento era um clique, e ninguém clicou. A
+# correção não é automatizar dinheiro — é automatizar o VÍNCULO. O exame entra
+# no fechamento da sua competência assim que existe; quanto a Pastore pagou
+# continua sendo o gestor quem confirma contra o extrato.
+
+
+OBSERVACAO_AUTOMATICA = (
+    "Fechamento aberto automaticamente ao registrar exame elegível da "
+    "competência. Valor previsto é derivado da regra vigente da parceria; "
+    "o valor recebido continua exigindo confirmação do gestor."
+)
+
+
+def settlement_of_exam(db: Session, exam: SpirometryExam) -> PartnerSettlement | None:
+    item = db.execute(
+        select(PartnerSettlementItem).where(
+            PartnerSettlementItem.spirometry_exam_id == exam.id
+        )
+    ).scalar_one_or_none()
+    return db.get(PartnerSettlement, item.settlement_id) if item else None
+
+
+def ensure_settlement_for_exam(
+    db: Session, exam: SpirometryExam
+) -> SettlementAttachment | None:
+    """Garante que um exame de parceria elegível pertença a um fechamento.
+
+    Devolve `None` — sem escrever nada — quando não há o que fazer: exame sem
+    parceiro/unidade, exame ainda não concluído, ou exame que já pertence a um
+    fechamento. Esse `None` é o que torna a função segura de chamar em todo
+    caminho de escrita de exame, quantas vezes for.
+
+    Idempotência em três camadas: a checagem de vínculo aqui, o `NOT IN` de
+    `eligible_exams`, e a unicidade de `PartnerSettlementItem.spirometry_exam_id`
+    como backstop de corrida. Um exame nunca entra em dois fechamentos.
+
+    Não decide preço e não cria lançamento. O chamador audita e commita.
+    """
+
+    if exam.partner_id is None or exam.partner_unit_id is None:
+        return None
+    if not is_completed_pastore_exam(exam):
+        return None
+    if settlement_of_exam(db, exam) is not None:
+        return None
+
+    partner = db.get(Partner, exam.partner_id)
+    unit = db.get(PartnerUnit, exam.partner_unit_id)
+    if partner is None or unit is None or partner.arquivado:
+        return None
+    # Unidade desativada não deve abrir competência nova sozinha: o exame fica
+    # visível como pendente e um humano decide onde ele entra.
+    if not unit.ativo:
+        return None
+
+    competencia = exam.data_exame.replace(day=1)
+    try:
+        attachment = attach_eligible_exams(db, partner, unit, competencia)
+    except ValueError:
+        # Corrida: outro caminho vinculou o exame entre a checagem e agora.
+        return None
+    if attachment.acao == "criado" and attachment.settlement.observacao is None:
+        attachment.settlement.observacao = OBSERVACAO_AUTOMATICA
+    return attachment

@@ -665,55 +665,51 @@
         </div>
 
         <div id="financeStats" class="finance-stats"></div>
-        <div id="financeNote" class="finance-real-note" hidden></div>
 
-        <div class="grid-two finance-grid">
-          <article class="panel">
+        <div class="fin-grid">
+          <article class="panel fin-panel">
             <div class="panel-header">
-              <h3>Receita por serviço</h3>
-              <span>Receita recebida — fonte Financeiro_Lancamentos</span>
+              <h3>Receita por origem</h3>
+              <span>Quem pagou, sobre a receita já recebida</span>
             </div>
-            <canvas id="serviceRevenueChart"></canvas>
+            <div id="financeOrigemBody" class="fin-origem"></div>
           </article>
 
-          <article class="panel">
+          <article class="panel fin-panel">
             <div class="panel-header">
-              <h3>Receita por local de atendimento</h3>
-              <span>Domiciliar, clínica, empresa/PCMSO e parceiros</span>
+              <h3>Receita por competência</h3>
+              <span>Recebido, mês a mês</span>
             </div>
-            <canvas id="originRevenueChart"></canvas>
+            <div id="financeCompetenciaBody" class="fin-competencia"></div>
           </article>
         </div>
 
-        <article class="panel" id="financeEntradasPanel" hidden>
-          <div class="panel-header">
-            <h3>Entradas por lançamento</h3>
-            <span>Receita realizada no período</span>
-          </div>
-          <canvas id="financeEntradasChart"></canvas>
-        </article>
-
-        <article class="panel">
+        <article class="panel fin-panel">
           <div class="panel-header">
             <h3>Lançamentos recentes</h3>
-            <span>Controle inicial, ainda sem contabilidade completa</span>
+            <span id="financeTableSub">Últimos movimentos registrados</span>
           </div>
-          <div class="table-wrap">
-            <table>
+          <div class="table-wrap fin-table-wrap">
+            <table class="fin-table">
               <thead>
                 <tr>
-                  <th>Descrição</th>
-                  <th>Serviço</th>
-                  <th>Origem</th>
-                  <th>Valor</th>
-                  <th>Status</th>
                   <th>Data</th>
+                  <th>Descrição</th>
+                  <th>Origem</th>
+                  <th class="fin-num">Valor</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody id="financeTable"></tbody>
             </table>
           </div>
         </article>
+
+        <section class="fin-resumo" aria-labelledby="financeResumoTitle">
+          <h3 id="financeResumoTitle">Resumo operacional</h3>
+          <dl id="financeResumoBody" class="fin-resumo-list"></dl>
+          <p id="financeNote" class="fin-fonte" hidden></p>
+        </section>
 
         <div id="pastoreFinanceIndicatorRoot"></div>
         <div id="conciliacaoExtraPastoreRoot"></div>

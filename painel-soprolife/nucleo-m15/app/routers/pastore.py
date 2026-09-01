@@ -39,6 +39,7 @@ from ..schemas import (
 from ..security import ROLE_GESTOR, ROLE_LEITURA, require_role
 from ..serializers import money, ser_partner, ser_partner_unit
 from ..services.idempotency import idempotent_create, payload_fingerprint
+from ..services.partner_pricing import resolve_valor_por_exame
 from ..services.pastore import (
     active_pastore_units,
     attach_eligible_exams,
@@ -116,6 +117,15 @@ def _serialize_settlement(
         exam = db.get(SpirometryExam, item.spirometry_exam_id)
         exam_codes.append(exam.public_code if exam else None)
     receipt = _receipt(db, settlement.id)
+    # M26.3 — o previsto é DERIVADO, nunca gravado. Uma coluna guardaria o
+    # número do dia em que alguém a escreveu e envelheceria em silêncio a cada
+    # exame novo; derivar do par (quantidade de itens × regra vigente) faz o
+    # recálculo acontecer sozinho, sem job e sem clique.
+    #
+    # `valor_total` continua significando só uma coisa: o valor CONFERIDO
+    # contra o extrato do parceiro. Previsto e conferido nunca se sobrescrevem.
+    regra = resolve_valor_por_exame(db, partner, unit, settlement.competencia)
+    previsto = regra.previsto(len(item_rows))
     return {
         "id": settlement.id,
         "partner": {
@@ -148,6 +158,17 @@ def _serialize_settlement(
             settlement.periodo_fim.isoformat() if settlement.periodo_fim else None
         ),
         "valor_total": money(settlement.valor_total),
+        "valor_previsto": money(previsto) if previsto is not None else None,
+        "valor_por_exame": money(regra.valor_por_exame) if regra.cadastrada else None,
+        "regra_recebimento": regra.descricao,
+        # O que a Pastore deve por este fechamento agora: o conferido quando
+        # existe, o previsto enquanto não existe. É este número que o painel
+        # soma em "A receber" — e ele some assim que o recibo nasce.
+        "valor_em_aberto": (
+            None if settlement.status in {"recebido", "cancelado"}
+            else money(settlement.valor_total if settlement.valor_total is not None else previsto)
+            if (settlement.valor_total is not None or previsto is not None) else None
+        ),
         "status": settlement.status,
         "status_label": STATUS_LABELS.get(settlement.status, settlement.status),
         "data_envio": settlement.data_envio.isoformat() if settlement.data_envio else None,
@@ -258,6 +279,16 @@ def list_monthly_settlements(
         }[group["acao_prevista"]]
 
     serialized = [_serialize_settlement(db, row, partner) for row in settlements]
+    # M26.3 — "a receber" deixou de significar só o que já foi conferido. O
+    # exame realizado gera dívida do parceiro no instante em que acontece, e
+    # o painel precisa mostrar esse dinheiro antes do extrato chegar. O que
+    # NÃO muda: nada disso entra em "recebido" sem confirmação do gestor.
+    em_aberto = sum(
+        (Decimal(row["valor_em_aberto"]) for row in serialized
+         if row["valor_em_aberto"] is not None),
+        Decimal("0"),
+    )
+    regra_atual = resolve_valor_por_exame(db, partner, units[0] if units else None)
     indicators = {
         "aguardando_fechamento": len(awaiting),
         "fechamento_em_aberto": sum(
@@ -273,6 +304,10 @@ def list_monthly_settlements(
             (row.valor_total or Decimal("0"))
             for row in settlements if row.status == "recebido"
         )),
+        # Conferido quando existe, previsto enquanto não existe — o total que
+        # a Pastore deve hoje, sem recibo nenhum.
+        "valor_em_aberto": money(em_aberto),
+        "exames_em_fechamento": sum(row["itens"]["total"] for row in serialized),
     }
     return {
         "partner": ser_partner(partner),
@@ -281,7 +316,11 @@ def list_monthly_settlements(
         "elegiveis": awaiting,
         "grupos_elegiveis": list(groups.values()),
         "fechamentos": serialized,
-        "regra_valor": "Não inferido; exige confirmação do gestor.",
+        "regra_valor": regra_atual.descricao,
+        "regra_cadastrada": regra_atual.cadastrada,
+        "valor_por_exame": (
+            money(regra_atual.valor_por_exame) if regra_atual.cadastrada else None
+        ),
     }
 
 

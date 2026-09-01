@@ -58,7 +58,11 @@ from ..services.cpf import CPFInvalidoError
 from ..services.identity import find_person_candidates
 from ..services.idempotency import idempotent_create
 from ..services.person_registration import build_person, cadastro_pendencias
-from ..services.pastore import canonical_pastore, pastore_unit
+from ..services.pastore import (
+    canonical_pastore,
+    ensure_settlement_for_exam,
+    pastore_unit,
+)
 from ..services.report_origin import (
     OriginDerivationError,
     validar_combinacao_no_cadastro,
@@ -371,6 +375,19 @@ def _create_attendance(
     lancamentos = _criar_financeiro(db, payload, exam, consultation)
     resultado["lancamentos"] = lancamentos
 
+    # M26.3 — o exame de parceria entra no fechamento da sua competência na
+    # MESMA transação em que nasce. Antes isso dependia de alguém lembrar de
+    # clicar "criar fechamento", e foi exatamente o que não aconteceu entre
+    # 15 e 29/08: 14 exames reais ficaram invisíveis para o Financeiro.
+    #
+    # Vincular não é receber. O fechamento nasce sem valor recebido; o que ele
+    # ganha é um previsto derivado da regra vigente da parceria. Quem afirma
+    # que o dinheiro entrou continua sendo o gestor, contra o extrato.
+    if exam is not None:
+        resultado["fechamento_parceria"] = _vincular_fechamento(
+            db, exam, user, request
+        )
+
     # Follow-ups sincronizados na MESMA transação.
     if exam is not None:
         resultado["espirometria"]["followup"] = _followup_exame(db, person, exam, payload)
@@ -392,6 +409,40 @@ def _create_attendance(
 
 
 # ------------------------------------------------------------------ blocos
+
+def _vincular_fechamento(
+    db: Session, exam: SpirometryExam, user: User, request: Request
+) -> dict | None:
+    """Anexa o exame recém-criado ao fechamento da competência, se couber.
+
+    Devolve `None` quando não há parceria envolvida — o caso comum do
+    atendimento SoproLife direto, que não tem fechamento nenhum.
+    """
+
+    attachment = ensure_settlement_for_exam(db, exam)
+    if attachment is None:
+        return None
+    audit(
+        db,
+        "pastore.fechamento_criado" if attachment.acao == "criado"
+        else "pastore.fechamento_itens_incorporados",
+        "partner_settlements", attachment.settlement.id,
+        user.id, request.state.request_id,
+        {
+            "status": attachment.settlement.status,
+            "total": len(attachment.exams),
+            "sequencia": attachment.sequencia,
+            "motivo": "vinculo_automatico_ao_cadastrar_exame",
+        },
+    )
+    return {
+        "id": attachment.settlement.id,
+        "competencia": attachment.settlement.competencia.strftime("%Y-%m"),
+        "sequencia": attachment.sequencia,
+        "acao": attachment.acao,
+        "exames_vinculados": len(attachment.exams),
+    }
+
 
 def _criar_exame(db: Session, person: Person, payload: AtendimentoCreate) -> SpirometryExam:
     bloco = payload.espirometria

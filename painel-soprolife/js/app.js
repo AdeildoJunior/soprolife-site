@@ -4195,12 +4195,127 @@ function renderDocumentosEquipamentos() {
 }
 
 
+// ── Financeiro (M26.3) ──────────────────────────────────────────────────────
+//
+// A tela anterior mostrava cinco indicadores — dois deles permanentemente
+// zerados —, dois gráficos grandes vazios e uma tabela vazia. Vazios porque o
+// resumo tinha mudado de forma na M23 (passou a nascer do PostgreSQL) e a
+// renderização continuava pedindo `por_servico`, `por_local` e
+// `lancamentos_agregados`, chaves que o novo gerador não produz. Nada estava
+// "quebrado" no banco: a tela pedia um contrato que não existia mais.
+//
+// Regras desta versão:
+//   • no máximo QUATRO indicadores no topo, todos com utilidade operacional;
+//   • recebido e a receber são grandezas separadas e nunca se somam;
+//   • nada de métrica por LANÇAMENTO — um recibo Pastore cobre dezenas de
+//     exames, então a média é por EXAME;
+//   • bloco sem dado não vira eixo de R$ 0,00 a R$ 1,00: vira uma frase.
+
+const FIN_ORIGEM_CORES = ["var(--teal)", "var(--indigo, #6366f1)", "var(--warn)", "var(--sky, #38a3f5)"];
+
+function finVazio(mensagem) {
+  return `<p class="fin-empty">${escapeHtml(mensagem)}</p>`;
+}
+
+function renderFinanceOrigem(container, origens) {
+  if (!container) return;
+  const linhas = (origens || []).filter((o) => Number(o.valor) > 0);
+  if (linhas.length === 0) {
+    container.innerHTML = finVazio("Nenhuma receita recebida registrada até aqui.");
+    return;
+  }
+  const maior = Math.max(...linhas.map((o) => Number(o.valor) || 0));
+  container.innerHTML = linhas.map((o, i) => {
+    const valor = Number(o.valor) || 0;
+    const largura = maior > 0 ? Math.max((valor / maior) * 100, 2) : 0;
+    const pct = o.percentual != null ? `${String(o.percentual).replace(".", ",")}%` : "—";
+    const cor = FIN_ORIGEM_CORES[i % FIN_ORIGEM_CORES.length];
+    return `
+      <div class="fin-origem-row">
+        <div class="fin-origem-top">
+          <span class="fin-origem-nome">${escapeHtml(o.origem)}</span>
+          <span class="fin-origem-valor">${fmtBRL(valor)}</span>
+        </div>
+        <div class="fin-bar" role="img" aria-label="${escapeHtml(o.origem)}: ${pct} do total recebido">
+          <span style="width:${largura.toFixed(1)}%;background:${cor}"></span>
+        </div>
+        <span class="fin-origem-pct">${pct} do total recebido</span>
+      </div>`;
+  }).join("");
+}
+
+function renderFinanceCompetencia(container, meses, semCompetencia) {
+  if (!container) return;
+  const linhas = (meses || []).filter((m) => Number(m.valor) > 0);
+  if (linhas.length === 0) {
+    container.innerHTML = finVazio("Sem dados suficientes para este período.");
+    return;
+  }
+  const maior = Math.max(...linhas.map((m) => Number(m.valor) || 0));
+  const barras = linhas.map((m) => {
+    const valor = Number(m.valor) || 0;
+    const altura = maior > 0 ? Math.max((valor / maior) * 100, 3) : 0;
+    return `
+      <div class="fin-mes" title="${escapeHtml(m.label)}: ${fmtBRL(valor)}">
+        <span class="fin-mes-valor">${fmtBRL(valor)}</span>
+        <div class="fin-mes-bar"><span style="height:${altura.toFixed(1)}%"></span></div>
+        <span class="fin-mes-label">${escapeHtml(m.label)}</span>
+      </div>`;
+  }).join("");
+  // Receita real sem data nenhuma existe (lote de conciliação histórica).
+  // Dizer isso é o que faz a soma das barras bater com "Receita recebida".
+  const nota = Number(semCompetencia) > 0
+    ? `<p class="fin-nota">${fmtBRL(semCompetencia)} de receita histórica sem data de competência registrada — fora do gráfico.</p>`
+    : "";
+  container.innerHTML = `<div class="fin-meses">${barras}</div>${nota}`;
+}
+
+// O snapshot não carrega texto livre (a descrição do lançamento é digitável
+// pelo operador e nunca sai do banco marcada como segura). A frase é composta
+// aqui, a partir de vocabulário fechado + código público.
+function finDescricao(item) {
+  const categoria = item.categoria || "Lançamento";
+  if (item.competencia) {
+    const [ano, mes] = String(item.competencia).split("-");
+    return `${categoria} · ${mes}/${ano}${item.referencia ? ` · ${item.referencia}` : ""}`;
+  }
+  return item.referencia ? `${categoria} · ${item.referencia}` : categoria;
+}
+
+function renderFinanceTable(table, lancamentos) {
+  if (!table) return;
+  const linhas = lancamentos || [];
+  if (linhas.length === 0) {
+    table.innerHTML = `
+      <tr><td colspan="5" class="table-empty-cell">
+        <div class="empty-state">Nenhum lançamento registrado ainda.</div>
+      </td></tr>`;
+    return;
+  }
+  table.innerHTML = linhas.map((item) => {
+    const despesa = item.tipo && item.tipo !== "receita";
+    return `
+    <tr>
+      <td class="fin-td-data">${escapeHtml(item.data || "—")}</td>
+      <td class="fin-td-desc">
+        <strong>${escapeHtml(finDescricao(item))}</strong>
+        ${item.public_code ? `<span class="fin-code">${escapeHtml(item.public_code)}</span>` : ""}
+      </td>
+      <td><span class="fin-origem-tag">${escapeHtml(item.origem || "—")}</span></td>
+      <td class="fin-num"><strong${despesa ? ' class="fin-saida"' : ""}>${fmtBRL(item.valor)}</strong></td>
+      <td><span class="badge ${slug(item.status || "")}">${escapeHtml(item.status || "—")}</span></td>
+    </tr>`;
+  }).join("");
+}
+
 function renderFinance() {
   const statsContainer = document.querySelector("#financeStats");
   const financeNote = document.querySelector("#financeNote");
   const table = document.querySelector("#financeTable");
-  const serviceCanvas = document.querySelector("#serviceRevenueChart");
-  const originCanvas = document.querySelector("#originRevenueChart");
+  const origemBody = document.querySelector("#financeOrigemBody");
+  const competenciaBody = document.querySelector("#financeCompetenciaBody");
+  const resumoBody = document.querySelector("#financeResumoBody");
+  const tableSub = document.querySelector("#financeTableSub");
 
   if (!statsContainer || !table) return;
 
@@ -4210,220 +4325,119 @@ function renderFinance() {
     summary?.source?.containsPersonalData === false
   );
 
-  if (hasRealData) {
-    // Fonte financeira única (M14.2): todos os valores vêm da aba
-    // "Financeiro_Lancamentos" via read-financeiro-lancamentos-adc.py.
-    // O CRM Espirometria é operacional — nunca origem de valor monetário.
-    const totais = (summary.totais && typeof summary.totais === "object") ? summary.totais : null;
-    const periodo = (summary.periodo && typeof summary.periodo === "object") ? summary.periodo : null;
-
-    const safeLabel = document.querySelector("#financeiro .safe-label");
-    if (safeLabel) {
-      const faixa = periodo?.de && periodo?.ate
-        ? ` · ${formatDateBr(periodo.de)} → ${formatDateBr(periodo.ate)}`
-        : "";
-      safeLabel.textContent = `Dados reais — Financeiro_Lancamentos${faixa}`;
-    }
-
-    const nExames = Number(summary.espirometrias_pagas) || 0;
-    const baseExame = Number(summary.valor_base_exame) || 0;
-    const saldo = summary.saldo_operacional;
-
-    const cards = [
-      { key: "receitaEspirometrias", label: "Receita recebida",  value: fmtBRL(summary.receita_exames),    hint: `${nExames} exame(s) pago(s) — Financeiro_Lancamentos` },
-      { key: "financeTicketMedio",   label: "Ticket médio real", value: summary.ticket_medio_real != null ? fmtBRL(summary.ticket_medio_real) : "—", hint: baseExame > 0 ? `valor de tabela ${fmtBRL(baseExame)}` : "por exame pago" },
-    ];
-    if (totais) {
-      cards.push(
-        { key: "financeReceitaPendente",    label: "Receita pendente",      value: fmtBRL(totais.receita_pendente),     hint: "a receber (Pendente/Parcial)" },
-        { key: "financeDescontos",          label: "Descontos concedidos",  value: fmtBRL(totais.descontos_concedidos), hint: `${totais.cortesias || 0} cortesia(s) · ${totais.cancelados || 0} cancelado(s)` }
-      );
-    }
-    cards.push({ key: "financeEntradasRecentes", label: "Entradas no mês", value: fmtBRL(summary.total_entradas_mes_atual), hint: `${summary.total_lancamentos} lançamento(s) válidos no total` });
-    // Saldo bancário não vem da fonte oficial — só aparece se um valor
-    // numérico real existir (nunca R$ 0,00 inventado, nunca "—" gratuito).
-    if (typeof saldo === "number" && Number.isFinite(saldo)) {
-      cards.push({ key: "financeSaldoConta", label: "Saldo em conta", value: fmtBRL(saldo), hint: "registro manual — fora da fonte oficial" });
-    }
-
-    statsContainer.innerHTML = cards.map((item) => statCardHtml("finance-stat-card", item)).join("");
-
-    if (financeNote) {
-      const linhas = [
-        "Fonte oficial dos valores: aba <strong>Financeiro_Lancamentos</strong> — um lançamento por exame, atualizado por id_atendimento.",
-        "O CRM Espirometria guarda apenas o histórico operacional do exame; nenhum valor monetário é derivado dele.",
-      ];
-      if (totais) {
-        if (Number(totais.linhas_invalidas) > 0) {
-          linhas.push(`${totais.linhas_invalidas} lançamento(s) com valor/status inválido ficaram fora das somas — revisar no Financeiro.`);
-        }
-        if (Number(totais.linhas_inconsistentes) > 0) {
-          linhas.push(`${totais.linhas_inconsistentes} lançamento(s) com valor recebido diferente do esperado para o status — revisar no Financeiro.`);
-        }
-        if (Number(totais.duplicados_ignorados) > 0) {
-          linhas.push(`${totais.duplicados_ignorados} linha(s) duplicadas por id_atendimento foram deduplicadas (a mais recente vale).`);
-        }
-      } else {
-        linhas.push("Resumo em formato antigo — regenere com: painel-soprolife/scripts/read-financeiro-lancamentos-adc.py --write");
-      }
-      financeNote.innerHTML = linhas.join("<br>");
-      financeNote.removeAttribute("hidden");
-    }
-
-    table.innerHTML = (summary.lancamentos_agregados || []).map((item) => `
-      <tr>
-        <td><strong>${escapeHtml(item.descricao)}</strong></td>
-        <td>${escapeHtml(item.servico)}</td>
-        <td>${escapeHtml(item.local || "—")}</td>
-        <td><strong>${fmtBRL(item.valor)}</strong></td>
-        <td><span class="badge ${slug(item.status)}">${escapeHtml(item.status)}</span></td>
-        <td>${escapeHtml(item.data)}</td>
-      </tr>
-    `).join("");
-
-    // Atualiza títulos dos painéis de gráficos para refletir os dados reais
-    const porServico = summary.por_servico || [];
-    // Novo schema traz receita por local de atendimento; o resumo antigo
-    // tinha "por_origem" — aceita os dois sem quebrar.
-    const porLocal = (summary.por_local || summary.por_origem || []).map((i) => ({
-      label: i.local || i.origem || "—",
-      valor: i.valor,
-    }));
-
-    if (serviceCanvas) {
-      const servicePanel = serviceCanvas.closest(".panel")?.querySelector(".panel-header");
-      if (servicePanel) {
-        const h3 = servicePanel.querySelector("h3");
-        const span = servicePanel.querySelector("span");
-        if (h3) h3.textContent = "Receita por serviço";
-        if (span) span.textContent = "Receita recebida — fonte Financeiro_Lancamentos";
-      }
-      createChart("serviceRevenue", "#serviceRevenueChart", {
-        type: "bar",
-        data: {
-          labels: porServico.map((i) => i.servico),
-          datasets: [{
-            label: "Receita (R$)",
-            data: porServico.map((i) => i.valor),
-            backgroundColor: CHART_COLORS.slice(0, porServico.length),
-            borderRadius: 14,
-            borderSkipped: false,
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: (ctx) => ` ${fmtBRL(ctx.raw)}` } }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: "rgba(109,123,138,.07)" },
-              ticks: { callback: (v) => fmtBRL(v), font: { size: 11 } },
-              border: { display: false }
-            },
-            x: { grid: { display: false }, border: { display: false } }
-          }
-        }
-      });
-    }
-
-    if (originCanvas && porLocal.length > 0) {
-      const originPanel = originCanvas.closest(".panel")?.querySelector(".panel-header");
-      if (originPanel) {
-        const h3 = originPanel.querySelector("h3");
-        const span = originPanel.querySelector("span");
-        if (h3) h3.textContent = "Receita por local de atendimento";
-        if (span) span.textContent = "Domiciliar, clínica, empresa/PCMSO e parceiros";
-      }
-      createChart("originRevenue", "#originRevenueChart", {
-        type: "doughnut",
-        data: {
-          labels: porLocal.map((i) => i.label),
-          datasets: [{
-            data: porLocal.map((i) => i.valor),
-            backgroundColor: CHART_COLORS,
-            borderWidth: 3,
-            borderColor: "#f3f7fb",
-            hoverOffset: 8,
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: "68%",
-          plugins: {
-            legend: { position: "bottom", labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, padding: 12 } },
-            tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${fmtBRL(ctx.raw)}` } }
-          }
-        }
-      });
-    }
-
-    // Gráfico de entradas recentes destacadas
-    const entradasCanvas = document.querySelector("#financeEntradasChart");
-    const entradasPanel = document.querySelector("#financeEntradasPanel");
-    if (entradasCanvas && entradasPanel && (summary.lancamentos_agregados || []).length > 0) {
-      const entradasHeader = entradasPanel.querySelector(".panel-header span");
-      if (entradasHeader) entradasHeader.textContent = "Lançamentos recentes visíveis no extrato — não representam o total da operação";
-      entradasPanel.removeAttribute("hidden");
-      createChart("financeEntradas", "#financeEntradasChart", {
-        type: "bar",
-        data: {
-          labels: summary.lancamentos_agregados.map((i) => i.descricao),
-          datasets: [{
-            label: "Valor (R$)",
-            data: summary.lancamentos_agregados.map((i) => i.valor),
-            backgroundColor: CHART_COLORS.slice(0, summary.lancamentos_agregados.length),
-            borderRadius: 12,
-            borderSkipped: false,
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: (ctx) => ` ${fmtBRL(ctx.raw)}` } }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: "rgba(109,123,138,.07)" },
-              ticks: { callback: (v) => fmtBRL(v), font: { size: 11 } },
-              border: { display: false }
-            },
-            x: { grid: { display: false }, ticks: { font: { size: 11 } }, border: { display: false } }
-          }
-        }
-      });
-    }
-
-  } else {
-    // Resumo financeiro local não disponível — exibe estado vazio/pendente
+  if (!hasRealData) {
     statsContainer.innerHTML = statCardHtml("finance-stat-card finance-stat-pending", {
       key: "financeResumoPendente",
       label: "Resumo financeiro",
       value: "—",
       hint: "Resumo financeiro local não encontrado"
     });
-
+    renderFinanceOrigem(origemBody, []);
+    renderFinanceCompetencia(competenciaBody, [], 0);
+    renderFinanceTable(table, []);
+    if (resumoBody) resumoBody.innerHTML = "";
     if (financeNote) {
-      financeNote.textContent = "Resumo financeiro local não encontrado. Gere com: painel-soprolife/scripts/read-financeiro-lancamentos-adc.py --write (fonte: aba Financeiro_Lancamentos).";
+      financeNote.textContent = "Resumo financeiro local não encontrado. Gere com: nucleo-m15 snapshots.";
       financeNote.removeAttribute("hidden");
     }
+    return;
+  }
 
-    table.innerHTML = `
-      <tr>
-        <td colspan="6" class="table-empty-cell">
-          <div class="empty-state">Dados ainda não carregados neste ambiente de preview.</div>
-        </td>
-      </tr>
-    `;
+  const totais = (summary.totais && typeof summary.totais === "object") ? summary.totais : {};
+  const recebida = Number(totais.receita_recebida) || 0;
+  const aReceber = Number(totais.a_receber_total) || 0;
+  const aReceberParceria = Number(totais.a_receber_parceria) || 0;
+  const pendenteProprio = Number(totais.receita_pendente) || 0;
+  const exames = Number(summary.exames_reconhecidos) || 0;
+  const media = summary.receita_media_por_exame;
+  const compLabel = summary.competencia_atual_label || "mês atual";
+  const recebidos = (summary.lancamentos_recentes || []).length;
+
+  const safeLabel = document.querySelector("#financeiro .safe-label");
+  if (safeLabel) safeLabel.textContent = "Valores reais — banco operacional";
+
+  // Exatamente quatro. Nada que fique permanentemente em zero entra aqui:
+  // um card de "Descontos R$ 0,00" ocupa a mesma atenção que um número que
+  // importa e não informa nada.
+  const cards = [
+    {
+      key: "financeRecebida",
+      label: "Receita recebida",
+      value: fmtBRL(recebida),
+      hint: `${Number(totais.lancamentos_recebidos ?? totais.lancamentos_validos) || 0} lançamento(s) confirmado(s)`,
+    },
+    {
+      key: "financeAReceber",
+      label: "A receber",
+      value: fmtBRL(aReceber),
+      hint: aReceber > 0
+        ? [
+            pendenteProprio > 0 ? `${fmtBRL(pendenteProprio)} direto` : null,
+            aReceberParceria > 0 ? `${fmtBRL(aReceberParceria)} de parceiros` : null,
+          ].filter(Boolean).join(" · ")
+        : "nada em aberto",
+    },
+    {
+      key: "financeCompetencia",
+      label: "Receita da competência atual",
+      value: fmtBRL(summary.total_entradas_mes_atual),
+      hint: `recebido com competência em ${compLabel}`,
+    },
+    {
+      key: "financeExames",
+      label: "Exames pagos",
+      value: String(exames),
+      // Média por EXAME, não por lançamento: um recibo de fechamento cobre
+      // dezenas de exames e dividir por lançamento inflaria o número sozinho.
+      hint: media != null ? `${fmtBRL(media)} de receita média por exame` : "sustentam a receita recebida",
+    },
+  ];
+  statsContainer.innerHTML = cards.map((item) => statCardHtml("finance-stat-card", item)).join("");
+
+  renderFinanceOrigem(origemBody, summary.por_origem);
+  renderFinanceCompetencia(competenciaBody, summary.por_competencia, summary.receita_sem_competencia);
+  renderFinanceTable(table, summary.lancamentos_recentes);
+  if (tableSub) {
+    tableSub.textContent = recebidos > 0
+      ? `Últimos ${recebidos} movimentos registrados`
+      : "Últimos movimentos registrados";
+  }
+
+  if (resumoBody) {
+    const itens = [
+      ["Exames SoproLife pagos", String(Number(summary.exames_pagos) || 0)],
+      ["Exames de parceria recebidos", String(Number(summary.exames_parceria_recebidos) || 0)],
+      ["Exames em fechamento aberto", String(Number(summary.exames_em_fechamento_aberto) || 0)],
+      ["Recebimentos de parceria", fmtBRL(
+        (summary.por_origem || [])
+          .filter((o) => o.origem !== "SoproLife")
+          .reduce((soma, o) => soma + (Number(o.valor) || 0), 0)
+      )],
+      ["Última atualização", formatDateTime(summary.source?.generatedAt)],
+    ];
+    // Descontos e cortesias só aparecem quando existirem de verdade.
+    const cancelados = Number(totais.cancelados) || 0;
+    if (cancelados > 0) itens.splice(4, 0, ["Lançamentos cancelados", String(cancelados)]);
+    resumoBody.innerHTML = itens.map(([rotulo, valor]) => `
+      <div class="fin-resumo-item">
+        <dt>${escapeHtml(rotulo)}</dt>
+        <dd>${escapeHtml(valor)}</dd>
+      </div>`).join("");
+  }
+
+  if (financeNote) {
+    // Nota discreta de rodapé, não banner. A procedência importa numa
+    // auditoria; ela não pode disputar espaço com o número na tela.
+    const partes = ["Valores do banco operacional (lançamentos financeiros e fechamentos de parceria)."];
+    const semRegra = summary.parcerias_sem_regra || [];
+    if (semRegra.length > 0) {
+      partes.push(`Sem regra de recebimento cadastrada: ${semRegra.join(", ")} — o previsto dessas parcerias não é calculado.`);
+    }
+    financeNote.textContent = partes.join(" ");
+    financeNote.removeAttribute("hidden");
   }
 }
+
 
 // Lê o rateio de sócios diretamente dos campos estruturados do resumo
 // (ci.rateio_socios / ci.rateio_itens). Nunca infere pagamento a partir do

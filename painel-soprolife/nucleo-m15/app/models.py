@@ -578,9 +578,21 @@ class Partnership(Base, TimestampMixin):
     data_inicio_original: Mapped[str | None] = mapped_column(String(40))
     data_inicio_precisao: Mapped[str | None] = mapped_column(String(15))
     data_inicio_dia_assumido: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Dinheiro que SAI da SoproLife para o parceiro. Direção oposta ao
+    # recebimento — nunca reaproveitar estes três campos para preço recebido.
     modelo_repasse: Mapped[str] = mapped_column(String(20), default="indefinido", nullable=False)
     percentual_repasse: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     valor_repasse_fixo: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    # M26.3 — dinheiro que ENTRA na SoproLife por exame feito na parceria.
+    # Campos próprios justamente para não contaminar relatório de custo com
+    # receita (`repasse_pastore` é somado em `custo_total`, docs/parceria-
+    # pastore-planilha.md:130). O único lugar que os lê é
+    # services/partner_pricing.py — ver o porquê lá.
+    modelo_recebimento: Mapped[str] = mapped_column(
+        String(20), default="indefinido", nullable=False
+    )  # indefinido|valor_por_exame
+    valor_recebido_por_exame: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    vigencia_inicio: Mapped[date | None] = mapped_column(Date)
     responsavel_soprolife: Mapped[str | None] = mapped_column(String(120))
     responsavel_followup: Mapped[str] = mapped_column(
         String(20), default="soprolife", nullable=False
@@ -594,6 +606,19 @@ class Partnership(Base, TimestampMixin):
         CheckConstraint(
             "valor_repasse_fixo IS NULL OR valor_repasse_fixo >= 0",
             name="valor_fixo_nao_negativo",
+        ),
+        CheckConstraint(
+            "valor_recebido_por_exame IS NULL OR valor_recebido_por_exame >= 0",
+            name="valor_recebido_nao_negativo",
+        ),
+        # Uma regra de recebimento só é regra se disser QUANTO e A PARTIR DE
+        # QUANDO. Sem as duas coisas o sistema não pode prever valor nenhum,
+        # e é melhor o banco recusar do que o painel exibir um número que
+        # ninguém consegue justificar contra o extrato.
+        CheckConstraint(
+            "modelo_recebimento <> 'valor_por_exame' OR ("
+            " valor_recebido_por_exame IS NOT NULL AND vigencia_inicio IS NOT NULL)",
+            name="recebimento_por_exame_completo",
         ),
     )
 

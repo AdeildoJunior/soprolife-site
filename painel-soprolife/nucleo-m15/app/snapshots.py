@@ -42,12 +42,15 @@ from .models import (
     Partner,
     PartnerContact,
     PartnerSettlement,
+    PartnerSettlementItem,
     PartnerUnit,
     PartnerUnitConfig,
     Role,
     SpirometryExam,
     UserRole,
 )
+from .services.followup import today_local
+from .services.partner_pricing import resolve_valor_por_exame
 
 GENERATOR = "nucleo-m15/app/snapshots.py"
 SOURCE_TYPE = "postgresql_nucleo_m15"
@@ -186,19 +189,67 @@ def build_crm_clinicas(db: Session) -> dict:
     }
 
 
+MESES_PT = (
+    "jan", "fev", "mar", "abr", "mai", "jun",
+    "jul", "ago", "set", "out", "nov", "dez",
+)
+
+ORIGEM_PROPRIA = "SoproLife"
+
+
+def _competencia_label(chave: str) -> str:
+    ano, mes = chave.split("-")
+    return f"{MESES_PT[int(mes) - 1].capitalize()}/{ano}"
+
+
 def build_financeiro_summary(db: Session) -> dict:
-    """Financeiro derivado exclusivamente de FinancialEntry (fonte única)."""
+    """Financeiro derivado exclusivamente de FinancialEntry + fechamentos.
+
+    Duas grandezas que o painel antigo confundia e a M26.3 separa:
+
+    * **recebido** — só o que tem lançamento com status `Recebido`. Dinheiro
+      que alguém conferiu que entrou.
+    * **a receber** — lançamento pendente MAIS o que os fechamentos de
+      parceria já devem (valor conferido quando existe, previsto pela regra
+      vigente enquanto não existe). Exame realizado vira dívida do parceiro no
+      instante em que acontece; ele só migra para "recebido" quando o recibo
+      do fechamento nasce.
+
+    Nada é inventado: parceria sem regra cadastrada contribui `None`, não zero.
+    """
     entradas = db.scalars(select(FinancialEntry)).all()
+    settlements = db.scalars(select(PartnerSettlement)).all()
+
+    # Fechamento → parceiro, para rotular a origem da receita sem PII.
+    partners = {p.id: p for p in db.scalars(select(Partner)).all()}
+    settlement_por_id = {s.id: s for s in settlements}
+
+    def _origem(entry: FinancialEntry) -> str:
+        if entry.partner_settlement_id:
+            s = settlement_por_id.get(entry.partner_settlement_id)
+            parceiro = partners.get(s.partner_id) if s else None
+            if parceiro:
+                return parceiro.nome
+        return ORIGEM_PROPRIA
 
     receita_recebida = Decimal("0")
     receita_pendente = Decimal("0")
     por_status: dict[str, dict] = defaultdict(lambda: {"quantidade": 0, "valor": Decimal("0")})
-    por_mes: dict[str, Decimal] = defaultdict(Decimal)
+    por_competencia: dict[str, Decimal] = defaultdict(Decimal)
     por_categoria: dict[str, Decimal] = defaultdict(Decimal)
+    por_origem: dict[str, Decimal] = defaultdict(Decimal)
     cancelados = 0
     exames_pagos = 0
+    lancamentos_recebidos = 0
+    receita_sem_competencia = Decimal("0")
+    lancamentos_sem_competencia = 0
 
-    hoje = datetime.now(timezone.utc).date()
+    # A competência é do fuso da operação, não do UTC. Entre 21h e meia-noite
+    # em Brasília o UTC já virou o dia (e, no fim do mês, o MÊS) seguinte: o
+    # card "Receita da competência atual" mostraria o mês que vem zerado, que é
+    # exatamente o tipo de número inútil que esta etapa foi feita para remover.
+    hoje = today_local()
+    competencia_atual = hoje.strftime("%Y-%m")
     total_mes_atual = Decimal("0")
 
     for e in entradas:
@@ -209,6 +260,8 @@ def build_financeiro_summary(db: Session) -> dict:
         if e.tipo == "receita":
             if status == "Recebido":
                 receita_recebida += e.valor
+                lancamentos_recebidos += 1
+                por_origem[_origem(e)] += e.valor
                 if e.spirometry_exam_id:
                     exames_pagos += 1
             elif status in ("Pendente", "Parcial"):
@@ -216,47 +269,193 @@ def build_financeiro_summary(db: Session) -> dict:
         if status == "Cancelado":
             cancelados += 1
 
-        ref = e.data_recebimento or e.data_competencia
-        if ref:
-            por_mes[ref.strftime("%Y-%m")] += e.valor
-            if ref.year == hoje.year and ref.month == hoje.month:
-                total_mes_atual += e.valor
+        # A régua do gráfico mensal é a COMPETÊNCIA, não a data do crédito: um
+        # recibo Pastore de julho pago em agosto pertence a julho, que é o mês
+        # em que aqueles exames foram feitos. Usar a data de recebimento
+        # empilharia toda a regularização histórica num mês só e apagaria a
+        # produção real dos meses anteriores.
+        #
+        # Só a receita efetivamente recebida entra: um mês não "faturou" o que
+        # ainda não entrou.
+        ref = e.data_competencia or e.data_recebimento
+        if e.tipo == "receita" and status == "Recebido":
+            if ref:
+                chave = ref.strftime("%Y-%m")
+                por_competencia[chave] += e.valor
+                if chave == competencia_atual:
+                    total_mes_atual += e.valor
+            else:
+                # Receita real sem data nenhuma existe (lote de conciliação
+                # histórica M18). Somar no gráfico seria inventar um mês;
+                # ignorar em silêncio faria a soma das barras não bater com
+                # "Receita recebida" e ninguém entenderia por quê. Fica
+                # explícito, para o painel poder dizer.
+                receita_sem_competencia += e.valor
+                lancamentos_sem_competencia += 1
         if e.categoria:
             por_categoria[e.categoria] += e.valor
 
-    ticket_medio = (
-        round(float(receita_recebida) / exames_pagos, 2) if exames_pagos else None
+    # --- parceria: o que já é devido e ainda não foi recebido ---------------
+    a_receber_parceria = Decimal("0")
+    exames_em_fechamento_aberto = 0
+    parcerias_sem_regra: list[str] = []
+    for s in settlements:
+        if s.status in ("recebido", "cancelado"):
+            continue
+        parceiro = partners.get(s.partner_id)
+        if parceiro is None:
+            continue
+        itens = db.scalar(
+            select(func.count()).select_from(PartnerSettlementItem)
+            .where(PartnerSettlementItem.settlement_id == s.id)
+        ) or 0
+        unidade = db.get(PartnerUnit, s.partner_unit_id) if s.partner_unit_id else None
+        regra = resolve_valor_por_exame(db, parceiro, unidade, s.competencia)
+        devido = s.valor_total if s.valor_total is not None else regra.previsto(itens)
+        if devido is None:
+            # Sem regra e sem valor conferido não há o que somar. Zero seria
+            # uma afirmação; ausência é a verdade.
+            if parceiro.nome not in parcerias_sem_regra:
+                parcerias_sem_regra.append(parceiro.nome)
+            continue
+        a_receber_parceria += Decimal(devido)
+        exames_em_fechamento_aberto += itens
+
+    # Exames de parceria que já viraram receita recebida (via recibo do
+    # fechamento). Contam para a média por exame — sem eles a média dividiria
+    # receita de 34 exames pelo número de exames próprios e mentiria.
+    exames_parceria_recebidos = 0
+    for s in settlements:
+        if s.status != "recebido":
+            continue
+        exames_parceria_recebidos += db.scalar(
+            select(func.count()).select_from(PartnerSettlementItem)
+            .where(PartnerSettlementItem.settlement_id == s.id)
+        ) or 0
+
+    exames_reconhecidos = exames_pagos + exames_parceria_recebidos
+    # M26.3 — a métrica antiga dividia receita por LANÇAMENTO. Um recibo
+    # Pastore é um lançamento só que cobre 14 exames, então aquele número
+    # crescia sozinho a cada fechamento e não descrevia nada. A média por
+    # EXAME descreve.
+    receita_media_por_exame = (
+        round(float(receita_recebida) / exames_reconhecidos, 2)
+        if exames_reconhecidos else None
     )
+
+    # --- últimos movimentos -------------------------------------------------
+    recentes = sorted(
+        entradas,
+        key=lambda e: (e.data_recebimento or e.data_competencia or date.min, e.public_code),
+        reverse=True,
+    )[:10]
+    def _referencia(e: FinancialEntry) -> str | None:
+        """O código público do que o lançamento paga — nunca texto livre."""
+        if e.spirometry_exam_id:
+            exame = db.get(SpirometryExam, e.spirometry_exam_id)
+            return exame.public_code if exame else None
+        if e.consultation_id:
+            consulta = db.get(Consultation, e.consultation_id)
+            return consulta.public_code if consulta else None
+        if e.partner_settlement_id:
+            s = settlement_por_id.get(e.partner_settlement_id)
+            unidade = db.get(PartnerUnit, s.partner_unit_id) if s and s.partner_unit_id else None
+            return unidade.public_code if unidade else None
+        return None
+
+    # `FinancialEntry.descricao` é texto livre que o operador pode digitar.
+    # O validador de escrita recusa PII ali, mas um snapshot marcado como
+    # seguro não deve depender de um detector para continuar seguro: o que
+    # sai daqui é vocabulário fechado (categoria), código público
+    # (referência) e competência. O painel compõe a frase na tela.
+    lancamentos_recentes = [
+        {
+            "public_code": e.public_code,
+            "data": _br_date(e.data_recebimento or e.data_competencia),
+            "data_iso": (e.data_recebimento or e.data_competencia).isoformat()
+            if (e.data_recebimento or e.data_competencia) else None,
+            "categoria": e.categoria,
+            "referencia": _referencia(e),
+            "competencia": (
+                e.data_competencia.strftime("%Y-%m")
+                if e.partner_settlement_id and e.data_competencia else None
+            ),
+            "origem": _origem(e),
+            "valor": _brl(e.valor),
+            "tipo": e.tipo,
+            "status": e.status,
+        }
+        for e in recentes
+    ]
+
+    total_origens = sum(por_origem.values())
+    origens = [
+        {
+            "origem": nome,
+            "valor": _brl(valor),
+            "percentual": (
+                round(float(valor) / float(total_origens) * 100, 1)
+                if total_origens else None
+            ),
+        }
+        for nome, valor in sorted(por_origem.items(), key=lambda kv: -kv[1])
+    ]
+
+    a_receber_total = receita_pendente + a_receber_parceria
 
     return {
         "source": _source(
             "financeiro_summary",
-            "Fonte financeira única: tabela financial_entries do PostgreSQL. "
-            "Nenhum valor é derivado de planilha, média ou estimativa.",
+            "Fonte financeira única: tabela financial_entries do PostgreSQL, "
+            "mais o que os fechamentos de parceria já devem. Nenhum valor é "
+            "derivado de planilha, média ou estimativa.",
         ),
-        "periodo": hoje.strftime("%Y-%m"),
+        "periodo": competencia_atual,
+        "competencia_atual": competencia_atual,
+        "competencia_atual_label": _competencia_label(competencia_atual),
         "totais": {
             "receita_recebida": _brl(receita_recebida),
             "receita_pendente": _brl(receita_pendente),
+            "a_receber_parceria": _brl(a_receber_parceria),
+            "a_receber_total": _brl(a_receber_total),
             "cancelados": cancelados,
+            # Quantos lançamentos SUSTENTAM a receita recebida — não quantos
+            # existem. O card diz "confirmado(s)"; contar pendente e cancelado
+            # ali faria o rótulo mentir.
+            "lancamentos_recebidos": lancamentos_recebidos,
             "lancamentos_validos": len(entradas),
         },
         "exames_pagos": exames_pagos,
-        "ticket_medio_real": ticket_medio,
+        "exames_parceria_recebidos": exames_parceria_recebidos,
+        "exames_reconhecidos": exames_reconhecidos,
+        "exames_em_fechamento_aberto": exames_em_fechamento_aberto,
+        "receita_media_por_exame": receita_media_por_exame,
+        # Métrica antiga aposentada: dividia receita por lançamento e um
+        # recibo de fechamento cobre dezenas de exames. Explicitamente None
+        # para que nenhum consumidor herde o número errado em silêncio.
+        "ticket_medio_real": None,
         # Não há tabela de preço canônica no banco: não inventar.
         "valor_base_exame": None,
+        "parcerias_sem_regra": parcerias_sem_regra,
         "por_status": [
             {"status": s, "quantidade": v["quantidade"], "valor": _brl(v["valor"])}
             for s, v in sorted(por_status.items())
         ],
-        "por_mes": [{"mes": m, "valor": _brl(v)} for m, v in sorted(por_mes.items())],
+        "por_competencia": [
+            {"competencia": m, "label": _competencia_label(m), "valor": _brl(v)}
+            for m, v in sorted(por_competencia.items())
+        ],
+        "por_origem": origens,
+        "receita_sem_competencia": _brl(receita_sem_competencia),
+        "lancamentos_sem_competencia": lancamentos_sem_competencia,
         "por_categoria": [
             {"categoria": c, "valor": _brl(v)}
             for c, v in sorted(por_categoria.items(), key=lambda kv: -kv[1])
         ],
-        # Chaves de compatibilidade consumidas por app.js, operational-brain.js
-        # e generate-ultimos-lancamentos.py — mesmos nomes de antes, valores
-        # agora vindos do banco.
+        "lancamentos_recentes": lancamentos_recentes,
+        # Chaves de compatibilidade consumidas por operational-brain.js e
+        # generate-ultimos-lancamentos.py — mesmos nomes de antes.
+        "por_mes": [{"mes": m, "valor": _brl(v)} for m, v in sorted(por_competencia.items())],
         "receita_exames": _brl(receita_recebida),
         "espirometrias_pagas": exames_pagos,
         "total_lancamentos": len(entradas),
