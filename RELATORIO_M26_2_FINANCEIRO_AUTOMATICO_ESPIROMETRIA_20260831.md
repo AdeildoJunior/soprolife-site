@@ -339,3 +339,377 @@ AÇÕES POSSÍVEIS SEM DECIDIR PREÇO (vínculo, valor fica NULL):
 
 2ª aplicação: `nada a fazer. Já estava reconciliado.` — D continua 3, receita
 continua R$ 3.380,00. **Zero duplicidades criadas.**
+
+---
+
+## 2. Auditoria read-only de produção — 31/08/2026, 23h (-03)
+
+VPS `soprolife-painel-01`, `/opt/soprolife/soprolife-site` @ `fc2a7ac`
+(mesmo commit da base local), Alembic head `a3f6b0d94c17`,
+`soprolife-m15-api` ativo, `/api/v1/health` → 200.
+
+Só `SELECT`. Nenhum nome de paciente lido nem exibido.
+
+### 2.1 Os 34 exames, exame a exame
+
+| ESP | data | origem | unidade | BD | status | LAN | valor | competência | estado financeiro | fechamento |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ESP-000001 | 2026-06-01 | SoproLife direto | — | ? | Exame realizado | LAN-000004 | 238,58 | — | com receita | — |
+| ESP-000002 | 2026-06-01 | SoproLife direto | — | ? | Exame realizado | LAN-000005 | 238,58 | — | com receita | — |
+| ESP-000003 | 2026-06-01 | SoproLife direto | — | ? | Exame realizado | LAN-000006 | 238,58 | — | com receita | — |
+| ESP-000004 | 2026-06-01 | SoproLife direto | — | ? | Exame realizado | LAN-000007 | 238,58 | — | com receita | — |
+| ESP-000005 | 2026-06-01 | SoproLife direto | — | ? | Exame realizado | LAN-000008 | 238,58 | — | com receita | — |
+| ESP-000006 | 2026-06-01 | SoproLife direto | — | ? | Exame realizado | LAN-000009 | 238,58 | — | com receita | — |
+| ESP-000007 | 2026-06-01 | SoproLife direto | — | ? | Exame realizado | LAN-000010 | 238,58 | — | com receita | — |
+| ESP-000008 | 2026-06-01 | SoproLife direto | — | ? | Exame realizado | LAN-000011 | 238,58 | — | com receita | — |
+| ESP-000009 | 2026-06-01 | SoproLife direto | — | ? | Exame realizado | LAN-000012 | 238,58 | — | com receita | — |
+| ESP-000010 | 2026-07-01 | SoproLife direto | — | ? | Exame realizado | LAN-000013 | 238,57 | — | com receita | — |
+| ESP-000011 | 2026-07-02 | SoproLife direto | — | ? | Exame realizado | LAN-000002 | 219,00 | 2026-07 | com receita | — |
+| ESP-000012 | 2026-07-10 | SoproLife direto | — | ? | Realizado | LAN-000001 | 220,00 | 2026-07 | com receita | — |
+| **ESP-000013** | 2026-07-14 | **Pastore** | UNI-000002 | com BD | Liberado | — | — | — | por desenho | **2026-07#1 a_receber** |
+| **ESP-000014** | 2026-07-18 | **Pastore** | UNI-000002 | com BD | Liberado | — | — | — | por desenho | **2026-07#1 a_receber** |
+| ESP-000015 | 2026-07-15 | SoproLife direto | — | ? | Realizado | LAN-000003 | 220,00 | 2026-07 | com receita | — |
+| **ESP-000017** | 2026-08-04 | **Pastore** | UNI-000002 | com BD | Realizado | — | — | — | por desenho | **2026-08#1 a_receber** |
+| **ESP-000018** | 2026-08-04 | **Pastore** | UNI-000002 | com BD | Realizado | — | — | — | por desenho | **2026-08#1 a_receber** |
+| **ESP-000019** | 2026-08-01 | **Pastore** | UNI-000002 | com BD | Realizado | — | — | — | por desenho | **2026-08#1 a_receber** |
+| ESP-000025 | 2026-08-15 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000026 | 2026-08-15 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000027 | 2026-08-15 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000028 | 2026-08-15 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000029 | 2026-08-15 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000030 | 2026-08-18 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000031 | 2026-08-22 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000032 | 2026-08-22 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000033 | 2026-08-22 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000034 | 2026-08-25 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000035 | 2026-08-25 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000036 | 2026-08-25 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000037 | 2026-08-25 | Pastore | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+| ESP-000038 | 2026-08-26 | SoproLife direto | — | com BD | Realizado | LAN-000016 | 220,00 | 2026-08 | com receita | — |
+| **ESP-000039** | 2026-08-28 | **SoproLife direto** | — | com BD | Realizado | **LAN-000017** | **230,00** | 2026-08 | **com receita** | — |
+| **ESP-000040** | 2026-08-29 | **Pastore** | UNI-000002 | com BD | Realizado | — | — | — | **órfão** | **nenhum** |
+
+Chave de idempotência: `NULL` em todos os 34 — nenhum atendimento foi criado
+com `idempotency_key`. A proteção contra receita dupla que **está** valendo é
+o índice parcial único `uq_financial_entries_receita_espirometria`, não a
+chave.
+
+### 2.2 Classificação pedida
+
+| Grupo | Qtd | Detalhe |
+|---|---|---|
+| **A) exames com financeiro correto** | **15** | todos SoproLife direto; total R$ 3.494,79 |
+| **B) exames sem financeiro** | **0** (não-Pastore) | nenhum exame próprio órfão de receita |
+| **C) Pastore aguardando fechamento** | **14** | ESP-000025..037 + ESP-000040 |
+| **D) fechamentos já concluídos** | **0 recebidos** | 2 existem, ambos `a_receber` sem recibo |
+| **E) possíveis duplicidades** | **0** | nenhum exame com mais de uma receita |
+| **F) LAN sem ESP correspondente** | **0** | nenhuma receita de espirometria solta |
+| **G) divergências de valor** | **0** | nenhum recibo diverge; nenhuma competência diverge |
+
+Fora do escopo, registrado: **CON-000001** (teleconsulta 01/06/2026,
+"Consulta realizada") não tem lançamento nenhum — nem receita bruta nem
+repasse médico. É a única consulta do sistema.
+
+Observação benigna: **LAN-000014 e LAN-000015 não existem.** Não é lançamento
+apagado — é número de sequência consumido por uma alocação que não chegou a
+commitar. `allocate_public_code` não devolve número ao contador. Nenhum
+impacto financeiro; registrado para não virar susto numa auditoria futura.
+
+### 2.3 Os dois fechamentos existentes
+
+| Competência | Seq | Unidade | Status | Valor | Itens | Recibo | Observação |
+|---|---|---|---|---|---|---|---|
+| 2026-07 | 1 | UNI-000002 | `a_receber` | R$ 219,00 | 2 | **nenhum** | "Extrato Pastore fornecido pelo gestor em 11/08/2026. Valor documentado…" |
+| 2026-08 | 1 | UNI-000002 | `a_receber` | R$ 328,50 | 3 | **nenhum** | idem |
+
+### 2.4 Linha do tempo
+
+| Quando | O quê |
+|---|---|
+| 23/07 23:48 | `lancamento.criado` LAN-000003 |
+| 25/07 00:43 | lote M18 de conciliação histórica — LAN-000004 a LAN-000013, marcador `m18_conciliacao_lote` |
+| **11/08 23:33** | `pastore.fechamento_criado` 2026-07, 2 exames |
+| **11/08 23:34** | `pastore.fechamento_criado` 2026-08, **3 exames** — e os dois `fechamento_atualizado` para `a_receber` com valor |
+| 15/08 – 25/08 | mutirão Pastore: 13 exames realizados, **nenhum evento `pastore.*`** |
+| 26/08 | ESP-000038 → LAN-000016 (R$ 220,00) |
+| **28/08** | **ESP-000039 → LAN-000017 (R$ 230,00)** — último lançamento automático |
+| 29/08 | ESP-000040 (Pastore) realizado — órfão |
+| 29/08 19:40 | `lancamento.atualizado` LAN-000017 → `Recebido` (ajuste manual do operador) |
+| **desde 11/08 23:34** | **nenhum evento `pastore.*` na trilha** |
+
+**Quando o Financeiro "parou":** ele não parou. O último lançamento automático
+normal é **LAN-000017, de 28/08**, e ele funcionou. O que parou foi a operação
+Pastore, em **11/08 às 23:34** — desde então nenhum fechamento foi criado,
+atualizado ou recebido, e os 14 exames feitos depois disso não tinham para
+onde ir.
+
+### 2.5 Valor ainda não refletido no Financeiro
+
+| Origem | Exames | Valor | Situação |
+|---|---|---|---|
+| Fechamento 2026-07 `a_receber` | 2 | **R$ 219,00** | valor confirmado, recibo nunca registrado |
+| Fechamento 2026-08 `a_receber` | 3 | **R$ 328,50** | idem |
+| 14 exames Pastore órfãos | 14 | **sem valor** | não há regra cadastrada — ver seção 4 |
+| CON-000001 | — | desconhecido | fora do escopo |
+| **Total com valor conhecido** | **5** | **R$ 547,50** | |
+
+Os R$ 547,50 estão fora do Financeiro por decisão de desenho, não por defeito:
+o recibo só nasce quando alguém confirma que o dinheiro entrou, e as duas
+observações dizem literalmente *"Sem data e sem valor de recibo no extrato —
+não há recebimento comprovado."*
+
+Para os 14 órfãos, **este relatório não afirma valor nenhum.** Se valesse a
+taxa histórica de R$ 109,50/exame seriam R$ 1.533,00, mas essa taxa nunca foi
+cadastrada como regra — ver seção 4.
+
+Financeiro hoje: **15 lançamentos, R$ 3.494,79**, 100% receita de espirometria
+própria.
+
+---
+
+## 3. Os 14 exames Pastore aguardando fechamento
+
+| ESP | data | unidade | BD | fechamento | LAN | valor conhecido | motivo pendente |
+|---|---|---|---|---|---|---|---|
+| ESP-000025 | 2026-08-15 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | competência sem fechamento aberto |
+| ESP-000026 | 2026-08-15 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000027 | 2026-08-15 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000028 | 2026-08-15 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000029 | 2026-08-15 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000030 | 2026-08-18 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000031 | 2026-08-22 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000032 | 2026-08-22 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000033 | 2026-08-22 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000034 | 2026-08-25 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000035 | 2026-08-25 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000036 | 2026-08-25 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| ESP-000037 | 2026-08-25 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem |
+| **ESP-000040** | 2026-08-29 | UNI-000002 | com BD | nenhum | nenhum | **nenhum** | idem — **Terezinha** |
+
+Todos: mesma unidade, mesma competência, todos `Realizado`, todos com
+broncodilatador, todos elegíveis por `is_completed_pastore_exam`.
+
+### 3.1 Qual das hipóteses é a verdadeira
+
+| Hipótese | Veredito |
+|---|---|
+| preço não configurado | **verdadeiro, mas não é a causa do travamento** — nenhum fechamento precisa de preço para nascer |
+| preço configurado mas fechamento não executado | falso — não há preço configurado |
+| fechamento exige confirmação manual | **verdadeiro** — o fechamento é um clique do gestor, e ninguém clicou desde 11/08 |
+| bug que impede o fechamento | **era verdadeiro até a M26** — competência ocupada devolvia 409 e não havia rota alternativa. **Corrigido e em produção** desde 30/08 (`22f5908`, coluna `sequencia`, head `a3f6b0d94c17`) |
+| fechamento concluído sem gerar LAN | falso — nenhum fechamento foi concluído; os 2 existentes estão em `a_receber` |
+| arquitetura intencional | **verdadeiro para o LAN**: exame Pastore nunca vira receita individual, por desenho |
+
+**A causa hoje é a soma de duas coisas:** o defeito estrutural já está
+corrigido em produção, mas **ninguém exerceu a correção** — o botão
+"Criar fechamento complementar 2" existe e funciona desde 30/08 e nunca foi
+clicado. É exatamente isso que esta etapa executa, sem tocar em valor.
+
+---
+
+## 4. Regra comercial — a ambiguidade é real e continua
+
+Verificado registro a registro em produção, hoje:
+
+| Objeto | Valor |
+|---|---|
+| Parceria `PAR-000001` (Pastore) | `status = em_negociacao` |
+| `modelo_repasse` | `indefinido` |
+| `percentual_repasse` | `NULL` |
+| `valor_repasse_fixo` | `NULL` |
+| `data_inicio` | `NULL` |
+| `partner_transfers` | **0 linhas** |
+| `GET /pastore/fechamentos` → `regra_valor` | "Não inferido; exige confirmação do gestor." |
+
+**R$ 109,50/exame é fato histórico de dois extratos, nunca regra cadastrada:**
+
+* 2026-07: 219,00 = 2 × 109,50
+* 2026-08: 328,50 = 3 × 109,50
+
+E os dois fechamentos que usaram essa taxa **continuam sem recebimento
+comprovado** — nem eles confirmaram a taxa na prática.
+
+### 4.1 Portanto: PARO AQUI, e só aqui
+
+Conforme combinado, **nenhum valor foi digitado, gravado ou inferido para os
+14 exames.** A tabela para você decidir:
+
+| Competência | Unidade | Exames | Se R$ 109,50/exame | Decisão necessária |
+|---|---|---|---|---|
+| 2026-08 (complementar 2) | UNI-000002 | **14** | R$ 1.533,00 | **valor mensal a confirmar** |
+
+Quatro perguntas que só você responde:
+
+1. **R$ 109,50 por exame continua valendo para agosto/2026?**
+2. **Muda alguma coisa por serem 14 num mês só** (escala, desconto)?
+3. **O broncodilatador altera o valor?** Os 14 são "com BD" — mas os 5 já
+   fechados também eram, então o extrato histórico não separa. O código não
+   distingue em lugar nenhum.
+4. Os 14 entram como **complementar de agosto** (recomendado — a competência é
+   a do exame) ou você prefere jogá-los para setembro?
+
+E duas pendências antigas que continuam abertas:
+
+5. Os fechamentos 2026-07 (R$ 219,00) e 2026-08#1 (R$ 328,50) **já podem ser
+   marcados como recebidos?** Se o dinheiro entrou, o recibo os põe no
+   Financeiro imediatamente (+R$ 547,50). Se não entrou, ficam como estão.
+
+---
+
+## 8. Execução — o que foi feito em produção
+
+| Etapa | Resultado |
+|---|---|
+| Suíte completa local | **1506 passed, 30 skipped** em 8m39s |
+| Falha conhecida deselecionada | `test_rubrica_real_nao_esta_versionada` — pré-existente desde a M25.21, falso positivo do filtro por nome sobre screenshots sintéticos |
+| Quality gate | **PASSOU**, todos os checks |
+| Commit | `0c86893` |
+| Integração | `git merge --ff-only` em `painel-soprolife-v01`, `fc2a7ac..0c86893` |
+| **Backup antes da escrita** | `/opt/soprolife/backups/m26-2-pre-20260831-230457.dump` (377 KB, `pg_dump -Fc`) |
+| Deploy | `git merge --ff-only origin/painel-soprolife-v01` na VPS → `0c86893` |
+| **Migração** | **nenhuma** — Alembic já em `a3f6b0d94c17` (head), a M26.2 não tem DDL |
+| Restart | `systemctl restart soprolife-m15-api` → `active` |
+| Health | `GET /api/v1/health` → **200**, zero warnings no journal |
+| Dry-run em produção | idêntico à auditoria SQL: A=15, B=0, C=14, D=2, E=0, F=0, G=0 |
+| `--apply` | fechamento **2026-08 complementar 2** criado, 14 exames, `valor_total = NULL` |
+| 2ª execução do `--apply` | *"nada a fazer. Já estava reconciliado."* |
+
+### 8.1 Estado do painel depois (chamada real ao endpoint)
+
+```
+indicadores: {"aguardando_fechamento": 0, "fechamento_em_aberto": 1,
+              "a_receber": 2, "recebido": 0,
+              "valor_a_receber_confirmado": "547.50", "valor_recebido": "0.00"}
+grupos_elegiveis: []
+regra_valor: Não inferido; exige confirmação do gestor.
+
+  Fechamento 2026-08 — complementar 2   status=incluido   valor=None    itens=14  recibo=None
+  Fechamento 2026-08                    status=a_receber  valor=328.50  itens= 3  recibo=None
+  Fechamento 2026-07                    status=a_receber  valor=219.00  itens= 2  recibo=None
+```
+
+**"Aguardando fechamento mensal" caiu de 14 para 0.**
+
+---
+
+## 9. Prova final
+
+### 9.1 Exame a exame — antes e depois
+
+| ESP | origem | unidade | regra | valor | LAN antes | ação | LAN depois |
+|---|---|---|---|---|---|---|---|
+| ESP-000001..010 | SoproLife direto | — | valor digitado | 238,58 / 238,57 | LAN-000004..013 | **nenhuma** | LAN-000004..013 |
+| ESP-000011 | SoproLife direto | — | valor digitado | 219,00 | LAN-000002 | **nenhuma** | LAN-000002 |
+| ESP-000012 | SoproLife direto | — | valor digitado | 220,00 | LAN-000001 | **nenhuma** | LAN-000001 |
+| ESP-000015 | SoproLife direto | — | valor digitado | 220,00 | LAN-000003 | **nenhuma** | LAN-000003 |
+| ESP-000038 | SoproLife direto | — | valor digitado | 220,00 | LAN-000016 | **nenhuma** | LAN-000016 |
+| **ESP-000039** | **SoproLife direto** | — | valor digitado | **230,00** | **LAN-000017** | **nenhuma** | **LAN-000017** |
+| ESP-000013, 000014 | Pastore | UNI-000002 | recibo no fechamento | — | nenhum | **nenhuma** | nenhum (fech. 2026-07#1) |
+| ESP-000017, 018, 019 | Pastore | UNI-000002 | recibo no fechamento | — | nenhum | **nenhuma** | nenhum (fech. 2026-08#1) |
+| ESP-000025..037 (13) | Pastore | UNI-000002 | recibo no fechamento | **a definir** | nenhum | **vinculado ao fech. 2026-08#2** | nenhum — por desenho |
+| **ESP-000040** | **Pastore** | UNI-000002 | recibo no fechamento | **a definir** | nenhum | **vinculado ao fech. 2026-08#2** | nenhum — por desenho |
+
+### 9.2 Resumo numérico
+
+| Métrica | Valor |
+|---|---|
+| Total de exames auditados | **34** |
+| Total correto antes | **15** com receita + **5** Pastore já em fechamento = **20** |
+| Total faltante antes | **14** (exames Pastore órfãos de fechamento) |
+| Valor faltante | **R$ 0,00 lançável** — não há preço cadastrado. Se valesse a taxa histórica de R$ 109,50 seriam R$ 1.533,00, **mas o sistema não afirma isso** |
+| Pastore aguardando fechamento (antes) | **14** |
+| Pastore aguardando fechamento (depois) | **0** |
+| Lançamentos financeiros criados | **0** |
+| Valor acrescentado ao Financeiro | **R$ 0,00** |
+| Duplicidades encontradas | **0** |
+| **Duplicidades criadas** | **ZERO** |
+| Total financeiro antes | 15 lançamentos, **R$ 3.494,79** |
+| **Total financeiro depois** | 15 lançamentos, **R$ 3.494,79** — inalterado |
+| Fechamentos antes / depois | 2 / **3** |
+| Itens de fechamento antes / depois | 5 / **19** |
+
+### 9.3 As três respostas
+
+> **"NO FLUXO SOPROLIFE DIRETO, O EVENTO `POST /atendimentos` (o cadastro do
+> atendimento com o bloco financeiro preenchido) CRIA O LANÇAMENTO
+> FINANCEIRO."**
+>
+> Na mesma transação do exame, via `_criar_financeiro`
+> (`app/routers/attendances.py:505`). O valor é o **digitado** pelo operador —
+> o servidor não consulta tabela de preço nenhuma.
+
+> **"NO FLUXO PASTORE, O EVENTO `POST /pastore/fechamentos/{id}/receber` (a
+> confirmação do recebimento pelo gestor) CRIA O LANÇAMENTO FINANCEIRO."**
+>
+> É o único ponto do código que cria receita no domínio Pastore, e ele exige
+> três coisas digitadas: valor confirmado, data de recebimento e forma de
+> pagamento. O exame Pastore **nunca** gera recebível individual — tentar
+> mandar bloco financeiro num atendimento Pastore é erro 422
+> (`pagamento_direto_pastore_proibido`).
+
+> **"OS VALORES ESTAVAM PARADOS PORQUE O FECHAMENTO DE AGOSTO FOI CRIADO EM
+> 11/08 COM OS 3 EXAMES QUE EXISTIAM E JÁ RECEBEU VALOR CONFERIDO; OS 14
+> EXAMES FEITOS DEPOIS (15–29/08) FICARAM SEM ROTA PARA ENTRAR EM FECHAMENTO
+> NENHUM — E, DEPOIS QUE A M26 CORRIGIU ISSO EM 30/08, NINGUÉM CHEGOU A USAR A
+> CORREÇÃO."**
+>
+> Duas coisas separadas, que é o que confundia:
+> **(a)** o travamento estrutural — corrigido na M26, exercido agora;
+> **(b)** o preço — **nunca existiu regra cadastrada**, e continua não
+> existindo. A parceria `PAR-000001` segue `em_negociacao` /
+> `modelo_repasse = indefinido`.
+>
+> O Financeiro **não estava parado**: o último lançamento automático normal é
+> LAN-000017, de 28/08, e funcionou perfeitamente.
+
+### 9.4 Estado final provado
+
+**ESP-000039 / LAN-000017** — intacta, conferida por `SELECT` depois do deploy:
+
+```
+LAN-000017 | 230.00 | Recebido | Espirometria | comp 2026-08-28 | receb 2026-08-29 | Pix | ESP-000039
+```
+
+**ESP-000040 (Terezinha)**:
+
+```
+ESP-000040 | 2026-08-29 | Realizado | fechamento 2026-08#2 | incluido | valor_total NULL
+```
+
+**Todos os Pastore pendentes**: os 14 estão agora no fechamento
+**2026-08 complementar 2**, `status = incluido`, `valor_total = NULL`,
+sem recibo. Órfãos restantes: **0**.
+
+Trilha da escrita (única linha nova em `audit_logs`):
+
+```
+2026-08-31 23:10 | pastore.fechamento_criado |
+  {"status":"incluido","total":14,"sequencia":2,
+   "motivo":"reconciliacao_financeiro_espirometria_m26_2"}
+```
+
+---
+
+## 10. O que continua na sua mão
+
+Esta etapa **parou antes de qualquer escrita de valor**, como combinado. O que
+falta é decisão comercial, não técnica:
+
+1. **Valor do fechamento 2026-08 complementar 2 (14 exames).** Hoje ele está
+   `incluido` com `valor_total = NULL`. Assim que você decidir, é um
+   `PATCH` no painel — o botão já está lá.
+2. **Os fechamentos 2026-07 (R$ 219,00) e 2026-08#1 (R$ 328,50)** seguem
+   `a_receber` sem recibo. Se o dinheiro entrou, registrar o recebimento põe
+   **+R$ 547,50** no Financeiro imediatamente.
+3. **Cadastrar a regra comercial**, se ela existir: campos sugeridos na
+   seção 5 (`partnerships.modelo_recebimento`,
+   `valor_recebido_por_exame`, `vigencia_inicio`). Não foram criados aqui —
+   sem valor decidido seriam mobília vazia; com valor decidido seria inventar
+   preço.
+4. **CON-000001** (teleconsulta de 01/06/2026, "Consulta realizada") não tem
+   lançamento nenhum. Fora do escopo desta etapa; fica no radar.
+
+O que **não** precisa mais da sua mão: nenhum exame Pastore volta a ficar
+órfão. O caminho existe, está testado, está em produção, e o script de
+reconciliação detecta e fecha a lacuna sempre que ela reaparecer — sem tocar
+em dinheiro.
