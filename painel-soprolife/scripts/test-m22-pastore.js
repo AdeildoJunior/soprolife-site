@@ -19,6 +19,12 @@ const css = read("css", "pastore-settlement.css");
 const schemas = read("nucleo-m15", "app", "schemas.py");
 const attendances = read("nucleo-m15", "app", "routers", "attendances.py");
 const router = read("nucleo-m15", "app", "routers", "pastore.py");
+// M26.2 — a regra de fechamento saiu do router para o serviço, para que o
+// endpoint e o script de reconciliação compartilhem UMA verdade. O guard rail
+// segue o código: o que ele precisa provar é que o fechamento nasce sem valor,
+// não em qual arquivo a linha mora.
+const pastoreService = read("nucleo-m15", "app", "services", "pastore.py");
+const settlementCode = router + "\n" + pastoreService;
 const models = read("nucleo-m15", "app", "models.py");
 const migration = read(
   "nucleo-m15", "migrations", "versions",
@@ -104,7 +110,9 @@ check("exame é único entre fechamentos",
 check("recibo de fechamento é único",
   /partner_settlement_id:[\s\S]{0,180}?unique=True/.test(models));
 check("valor inicial nunca é inferido",
-  /valor_total=None/.test(router));
+  /valor_total=None/.test(settlementCode) &&
+  // o router não pode voltar a montar fechamento por fora do serviço
+  !/PartnerSettlement\(\s*$/m.test(router));
 check("recebimento exige gestor e cria receita agregada",
   /receive_monthly_settlement/.test(router) &&
   /require_role\(ROLE_GESTOR\)/.test(router) &&

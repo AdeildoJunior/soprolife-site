@@ -41,11 +41,12 @@ from ..serializers import money, ser_partner, ser_partner_unit
 from ..services.idempotency import idempotent_create, payload_fingerprint
 from ..services.pastore import (
     active_pastore_units,
+    attach_eligible_exams,
     canonical_pastore,
     competency_month,
     is_completed_pastore_exam,
-    month_end,
     pastore_unit,
+    planned_action,
 )
 
 router = APIRouter(tags=["pastore"])
@@ -167,66 +168,6 @@ def _serialize_settlement(
     }
 
 
-def _eligible_exams(
-    db: Session, partner: Partner, unit: PartnerUnit, competencia: date
-) -> list[SpirometryExam]:
-    """Exames concluídos do mês que ainda não pertencem a fechamento algum.
-
-    M26 — o filtro por vínculo é feito AQUI, não depois. Antes, a seleção
-    trazia o mês inteiro e o endpoint rejeitava o conjunto todo assim que
-    encontrava um exame já vinculado; bastava um fechamento parcial para que
-    nenhum exame posterior daquele mês pudesse ser fechado nunca mais.
-    """
-
-    candidates = db.execute(
-        select(SpirometryExam)
-        .where(
-            SpirometryExam.partner_id == partner.id,
-            SpirometryExam.partner_unit_id == unit.id,
-            SpirometryExam.data_exame >= competencia,
-            SpirometryExam.data_exame <= month_end(competencia),
-            SpirometryExam.id.not_in(
-                select(PartnerSettlementItem.spirometry_exam_id)
-            ),
-        )
-        .order_by(SpirometryExam.data_exame, SpirometryExam.public_code)
-    ).scalars().all()
-    return [exam for exam in candidates if is_completed_pastore_exam(exam)]
-
-
-def _settlements_da_competencia(
-    db: Session, partner: Partner, unit: PartnerUnit, competencia: date
-) -> list[PartnerSettlement]:
-    return db.execute(
-        select(PartnerSettlement)
-        .where(
-            PartnerSettlement.partner_id == partner.id,
-            PartnerSettlement.partner_unit_id == unit.id,
-            PartnerSettlement.competencia == competencia,
-        )
-        .order_by(PartnerSettlement.sequencia)
-    ).scalars().all()
-
-
-def _fechamento_aberto(
-    settlements: list[PartnerSettlement],
-) -> PartnerSettlement | None:
-    """O fechamento da competência que ainda pode receber exames.
-
-    "Aberto" exige as DUAS coisas: estado `incluido` e nenhum valor conferido.
-    Um fechamento que já declara valor cobre um conjunto conhecido de exames —
-    aquele número foi conferido contra o extrato do parceiro. Acrescentar
-    exames a ele transformaria um valor verificado em afirmação falsa sobre um
-    conjunto maior. Nesse caso o certo é um complementar.
-    """
-
-    abertos = [
-        row for row in settlements
-        if row.status == "incluido" and row.valor_total is None
-    ]
-    return abertos[-1] if abertos else None
-
-
 @router.get("/pastore/configuracao-atendimento")
 def attendance_configuration(
     db: Session = Depends(get_db),
@@ -306,19 +247,15 @@ def list_monthly_settlements(
             and row.competencia is not None
             and row.competencia.strftime("%Y-%m") == competencia
         ]
-        aberto = _fechamento_aberto(da_competencia)
         group["fechamentos_existentes"] = len(da_competencia)
-        if not da_competencia:
-            group["acao_prevista"] = "criar"
-            group["acao_rotulo"] = "Criar fechamento"
-        elif aberto is not None:
-            group["acao_prevista"] = "incorporar"
-            group["acao_rotulo"] = "Incluir no fechamento aberto"
-        else:
-            group["acao_prevista"] = "complementar"
-            group["acao_rotulo"] = (
+        group["acao_prevista"] = planned_action(da_competencia)
+        group["acao_rotulo"] = {
+            "criar": "Criar fechamento",
+            "incorporar": "Incluir no fechamento aberto",
+            "complementar": (
                 f"Criar fechamento complementar {len(da_competencia) + 1}"
-            )
+            ),
+        }[group["acao_prevista"]]
 
     serialized = [_serialize_settlement(db, row, partner) for row in settlements]
     indicators = {
@@ -358,50 +295,15 @@ def create_monthly_settlement(
     partner = canonical_pastore(db)
     unit = pastore_unit(db, payload.partner_unit_id, partner)
     competencia = competency_month(payload.competencia)
-    exams = _eligible_exams(db, partner, unit, competencia)
-    if not exams:
+    try:
+        attachment = attach_eligible_exams(
+            db, partner, unit, competencia, payload.observacao
+        )
+    except ValueError:
         raise _erro(
             "fechamento_sem_exames_elegiveis",
             "Não há exames Pastore concluídos elegíveis nesta unidade e competência.",
-        )
-    existentes = _settlements_da_competencia(db, partner, unit, competencia)
-    aberto = _fechamento_aberto(existentes)
-
-    if aberto is not None:
-        # Incorporação: o mês ainda não declarou valor nenhum, então os exames
-        # que faltavam pertencem ao fechamento que já está montado. Criar um
-        # segundo aqui fragmentaria o mês sem motivo.
-        settlement = aberto
-        acao = "incorporado"
-        if payload.observacao:
-            settlement.observacao = payload.observacao
-    else:
-        settlement = PartnerSettlement(
-            partner_id=partner.id,
-            partner_unit_id=unit.id,
-            competencia=competencia,
-            periodo_inicio=competencia,
-            periodo_fim=month_end(competencia),
-            valor_total=None,
-            status="incluido",
-            observacao=payload.observacao,
-            sequencia=(
-                max(row.sequencia for row in existentes) + 1 if existentes else 1
-            ),
-        )
-        db.add(settlement)
-        acao = "criado"
-
-    try:
-        db.flush()
-        db.add_all([
-            PartnerSettlementItem(
-                settlement_id=settlement.id,
-                spirometry_exam_id=exam.id,
-            )
-            for exam in exams
-        ])
-        db.flush()
+        ) from None
     except IntegrityError:
         db.rollback()
         raise _erro(
@@ -409,6 +311,7 @@ def create_monthly_settlement(
             "O fechamento ou um de seus exames foi incluído concorrentemente.",
             409,
         ) from None
+    settlement, exams, acao = attachment.settlement, attachment.exams, attachment.acao
     audit(
         db,
         "pastore.fechamento_criado" if acao == "criado"
