@@ -93,6 +93,14 @@ etapa_segredos() {
   if [[ -f "$ENV_PORTAL" ]]; then
     echo "EnvironmentFile do portal já existe — preservado."
   else
+    # A raiz dos PDFs vem do EnvironmentFile INTERNO, e não de um caminho
+    # escrito à mão aqui: os dois processos leem os mesmos arquivos, e
+    # divergir nisso daria um 503 silencioso no download do paciente.
+    local storage
+    storage="$(grep -m1 '^M15_REPORTS_STORAGE_DIR=' "$ENV_INTERNO" | cut -d= -f2-)"
+    [[ -n "$storage" ]] || fail "M15_REPORTS_STORAGE_DIR ausente em $ENV_INTERNO"
+    grep -q "^ReadOnlyPaths=$storage\$" "$UNIT_FONTE" || \
+      fail "a unit do portal não libera exatamente $storage em ReadOnlyPaths"
     local db_url senha_portal
     senha_portal="$(segredo)"
     db_url="postgresql+psycopg://soprolife_portal:${senha_portal}@127.0.0.1:5432/${DB_NAME}"
@@ -110,7 +118,7 @@ M15_PORTAL_PUBLIC_BASE_URL=$DOMINIO_PUBLICO
 M15_PORTAL_CORS_ORIGINS=["https://soprolife.com.br"]
 M15_PORTAL_SESSION_TTL_MINUTES=30
 M15_PORTAL_ACCESS_TTL_DAYS=90
-M15_REPORTS_STORAGE_DIR=/opt/soprolife/private/m15-reports
+M15_REPORTS_STORAGE_DIR=$storage
 EOF
     chown root:root "$ENV_PORTAL"
     chmod 0600 "$ENV_PORTAL"
