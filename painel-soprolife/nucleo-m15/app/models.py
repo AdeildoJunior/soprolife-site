@@ -2452,6 +2452,12 @@ RESULTADO_COOLDOWN_MINUTOS = 15
 RESULTADO_VALIDADE_DIAS = 90
 
 
+# As chaves estrangeiras destas duas tabelas levam nome EXPLÍCITO e curto.
+# A convenção do projeto (`fk_<tabela>_<coluna>_<tabela_referida>`) produziria
+# `fk_patient_result_accesses_report_document_version_id_report_document_versions`
+# — 78 caracteres, acima do limite de 63 identificadores do PostgreSQL. O
+# SQLite aceita e o Postgres recusa na criação da tabela, então o defeito só
+# apareceria no deploy. `pra`/`prs` são as iniciais das duas tabelas.
 class PatientResultAccess(Base):
     """O acesso de UM paciente a UM resultado — a ponte entre laudo e portal.
 
@@ -2470,16 +2476,19 @@ class PatientResultAccess(Base):
         String(UUID_LEN), primary_key=True, default=new_uuid
     )
     person_id: Mapped[str] = mapped_column(
-        String(UUID_LEN), ForeignKey("people.id"), nullable=False, index=True
+        String(UUID_LEN), ForeignKey("people.id", name="fk_pra_person"),
+        nullable=False,
+        index=True,
     )
     spirometry_exam_id: Mapped[str] = mapped_column(
-        String(UUID_LEN), ForeignKey("spirometry_exams.id"), nullable=False
+        String(UUID_LEN), ForeignKey("spirometry_exams.id", name="fk_pra_exam"),
+        nullable=False,
     )
     # Um laudo, um acesso. A unicidade é o que impede dois links vivos para o
     # mesmo documento — dois links seriam duas revogações a lembrar.
     report_document_id: Mapped[str] = mapped_column(
         String(UUID_LEN),
-        ForeignKey("report_documents.id"),
+        ForeignKey("report_documents.id", name="fk_pra_document"),
         nullable=False,
         unique=True,
     )
@@ -2488,12 +2497,12 @@ class PatientResultAccess(Base):
     # que substitua o anterior REAPONTA estas duas colunas.
     signed_document_id: Mapped[str] = mapped_column(
         String(UUID_LEN),
-        ForeignKey("external_signed_documents.id"),
+        ForeignKey("external_signed_documents.id", name="fk_pra_signed"),
         nullable=False,
     )
     report_document_version_id: Mapped[str] = mapped_column(
         String(UUID_LEN),
-        ForeignKey("report_document_versions.id"),
+        ForeignKey("report_document_versions.id", name="fk_pra_version"),
         nullable=False,
     )
     token_sha256: Mapped[str] = mapped_column(
@@ -2528,13 +2537,13 @@ class PatientResultAccess(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_motivo: Mapped[str | None] = mapped_column(String(120))
     revoked_by_user_id: Mapped[str | None] = mapped_column(
-        String(UUID_LEN), ForeignKey("users.id")
+        String(UUID_LEN), ForeignKey("users.id", name="fk_pra_revoked_by")
     )
     # Nulo quando o acesso nasceu do gatilho automático — que é o caminho
     # normal. Preenchido quando um administrador gerou o acesso à mão para
     # um laudo histórico.
     created_by_user_id: Mapped[str | None] = mapped_column(
-        String(UUID_LEN), ForeignKey("users.id")
+        String(UUID_LEN), ForeignKey("users.id", name="fk_pra_created_by")
     )
     failed_attempts: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False
@@ -2575,7 +2584,7 @@ class PatientResultSession(Base):
     )
     access_id: Mapped[str] = mapped_column(
         String(UUID_LEN),
-        ForeignKey("patient_result_accesses.id"),
+        ForeignKey("patient_result_accesses.id", name="fk_prs_access"),
         nullable=False,
         index=True,
     )

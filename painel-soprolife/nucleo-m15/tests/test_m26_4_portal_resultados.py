@@ -1288,3 +1288,38 @@ def test_prova_final_da_medica_ao_paciente(client, auth, db, portal, capsys):
         print("\n  PROVA FINAL M26.4")
         for passo in passos:
             print(f"    ✓ {passo}")
+
+
+def test_todo_identificador_cabe_no_postgres():
+    """O SQLite aceita nome de constraint de qualquer tamanho. O Postgres não.
+
+    A M26.4 quase entregou uma migração que rodava perfeita na suíte e
+    explodia no deploy: a convenção do projeto
+    (`fk_<tabela>_<coluna>_<tabela_referida>`) gerava
+    `fk_patient_result_accesses_report_document_version_id_report_document_versions`
+    — 78 caracteres, contra o limite de 63 do PostgreSQL.
+
+    Este teste compila o `CREATE TABLE` de TODAS as tabelas com o dialeto do
+    PostgreSQL, que é exatamente onde o erro aparece. Ele vale para o mapa
+    inteiro, e não só para as tabelas desta etapa: a próxima tabela com nome
+    longo falha aqui, na suíte, e não no meio de uma janela de implantação.
+    """
+
+    from sqlalchemy.dialects import postgresql
+    from sqlalchemy.schema import CreateIndex, CreateTable
+
+    from app.db import Base
+
+    dialeto = postgresql.dialect()
+    problemas: list[tuple[str, str]] = []
+    for tabela in Base.metadata.sorted_tables:
+        try:
+            str(CreateTable(tabela).compile(dialect=dialeto))
+        except Exception as erro:  # noqa: BLE001 - o teste É sobre a exceção
+            problemas.append((tabela.name, str(erro)))
+        for indice in tabela.indexes:
+            try:
+                str(CreateIndex(indice).compile(dialect=dialeto))
+            except Exception as erro:  # noqa: BLE001
+                problemas.append((f"{tabela.name}/{indice.name}", str(erro)))
+    assert not problemas, problemas

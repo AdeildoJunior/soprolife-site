@@ -16,6 +16,12 @@ muda, o link antigo morre, e a linha (com toda a trilha) permanece.
 segredo, prazo e revogação. Não guarda IP, user-agent nem identificador de
 aparelho: o portal não precisa deles, e o que não é guardado não vaza.
 
+As chaves estrangeiras levam nome curto e explícito (`fk_pra_*`, `fk_prs_*`).
+A convenção do projeto geraria
+`fk_patient_result_accesses_report_document_version_id_report_document_versions`
+— 78 caracteres, acima do limite de 63 do PostgreSQL. O SQLite aceita e o
+Postgres recusa na criação da tabela: um defeito que só aparece no deploy.
+
 Aditiva e reversível: nenhuma tabela existente é tocada.
 
 Revision ID: c3a9e15f7d84
@@ -79,47 +85,37 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["person_id"],
             ["people.id"],
-            name="fk_patient_result_accesses_person_id_people",
+            name="fk_pra_person",
         ),
         sa.ForeignKeyConstraint(
             ["spirometry_exam_id"],
             ["spirometry_exams.id"],
-            name=(
-                "fk_patient_result_accesses_spirometry_exam_id_spirometry_exams"
-            ),
+            name="fk_pra_exam",
         ),
         sa.ForeignKeyConstraint(
             ["report_document_id"],
             ["report_documents.id"],
-            name=(
-                "fk_patient_result_accesses_report_document_id_report_documents"
-            ),
+            name="fk_pra_document",
         ),
         sa.ForeignKeyConstraint(
             ["signed_document_id"],
             ["external_signed_documents.id"],
-            name=(
-                "fk_patient_result_accesses_signed_document_id_"
-                "external_signed_documents"
-            ),
+            name="fk_pra_signed",
         ),
         sa.ForeignKeyConstraint(
             ["report_document_version_id"],
             ["report_document_versions.id"],
-            name=(
-                "fk_patient_result_accesses_report_document_version_id_"
-                "report_document_versions"
-            ),
+            name="fk_pra_version",
         ),
         sa.ForeignKeyConstraint(
             ["revoked_by_user_id"],
             ["users.id"],
-            name="fk_patient_result_accesses_revoked_by_user_id_users",
+            name="fk_pra_revoked_by",
         ),
         sa.ForeignKeyConstraint(
             ["created_by_user_id"],
             ["users.id"],
-            name="fk_patient_result_accesses_created_by_user_id_users",
+            name="fk_pra_created_by",
         ),
         sa.UniqueConstraint(
             "report_document_id",
@@ -174,9 +170,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["access_id"],
             ["patient_result_accesses.id"],
-            name=(
-                "fk_patient_result_sessions_access_id_patient_result_accesses"
-            ),
+            name="fk_prs_access",
         ),
     )
     op.create_index(
