@@ -36,6 +36,7 @@ A linha vertical é a fronteira, e ela é feita de coisas verificáveis:
 | porta | `127.0.0.1:8015` | `127.0.0.1:8016` |
 | exposição | só Tailscale | nginx → internet |
 | rotas | `/api/v1/**` (153) | `/p/v1/**` (6) |
+| fora do prefixo | — | 404 idêntico, com cabeçalhos |
 | papel de banco | `soprolife_m15` (dono) | `soprolife_portal` (GRANT por coluna) |
 | cookie | `soprolife_m15_sessao` | `soprolife_resultado` |
 | segredo do cookie | `M15_AUTH_SECRET` | `M15_PORTAL_SESSION_SECRET` |
@@ -229,11 +230,14 @@ sudo ./scripts/deploy-portal-resultados.sh todas   # tudo, menos TLS
 sudo ./scripts/deploy-portal-resultados.sh tls
 ```
 
-O registro DNS necessário (painel do Registro.br):
+O registro DNS necessário (painel do Registro.br — o domínio é administrado
+lá, e não há API disponível):
 
 ```
-Nome:  resultados-api      Tipo: A      Dado: <IPv4 público da VPS>     TTL: 3600
+Nome:  resultados-api      Tipo: A      Dado: 187.127.39.5      TTL: 3600
 ```
+
+`187.127.39.5` é o IPv4 público da VPS (Hostinger, `srv1791147.hstgr.cloud`).
 
 ## 12. Onde olhar quando algo der errado
 
