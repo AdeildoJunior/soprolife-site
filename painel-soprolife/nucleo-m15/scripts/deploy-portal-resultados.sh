@@ -199,6 +199,17 @@ etapa_servico() {
     sleep 2
   done
   echo "health do portal: $(curl -fsS http://127.0.0.1:8016/p/v1/health)"
+
+  # A API interna também precisa de espera. Ela carrega um mapa bem maior e
+  # leva alguns segundos a mais para atender; medir uma vez, logo depois do
+  # restart, produz um "falhou" que na verdade é "ainda não subiu".
+  for tentativa in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -fsS --max-time 3 http://127.0.0.1:8015/api/v1/health >/dev/null; then
+      break
+    fi
+    [[ $tentativa -lt 10 ]] || fail "API interna não respondeu no health"
+    sleep 3
+  done
   echo "health da API interna: $(curl -fsS http://127.0.0.1:8015/api/v1/health)"
 
   # O portal NÃO pode estar escutando fora de loopback.
@@ -213,9 +224,28 @@ etapa_nginx() {
   titulo "vhost público"
   command -v nginx >/dev/null || fail "nginx não instalado"
   install -d -m 0755 /var/www/html
-  install -m 0644 "$VHOST_FONTE" "/etc/nginx/sites-available/$VHOST_NOME"
-  ln -sfn "/etc/nginx/sites-available/$VHOST_NOME" \
-          "/etc/nginx/sites-enabled/$VHOST_NOME"
+  local instalado="/etc/nginx/sites-available/$VHOST_NOME"
+  if [[ -f "$instalado" ]] && grep -q '^\s*ssl_certificate' "$instalado"; then
+    # Depois do certbot, quem mantém este arquivo é ele — inclusive na
+    # renovação. Reinstalar a versão pré-TLS do repositório por cima
+    # apagaria os caminhos do certificado e derrubaria o HTTPS.
+    echo "vhost já tem certificado; arquivo preservado (mantido pelo certbot)."
+  else
+    install -m 0644 "$VHOST_FONTE" "$instalado"
+  fi
+  ln -sfn "$instalado" "/etc/nginx/sites-enabled/$VHOST_NOME"
+
+  # O site padrão do nginx responderia a qualquer Host na porta 80. Não há
+  # nada para ele servir nesta máquina.
+  rm -f /etc/nginx/sites-enabled/default
+
+  # Abre 80/443 no ufw — e SOMENTE elas. As portas internas (8015, 8016,
+  # 8765, 5432) continuam sem regra: escutam em loopback ou na tailscale0.
+  if command -v ufw >/dev/null && ufw status | grep -q "^Status: active"; then
+    ufw allow 80/tcp >/dev/null
+    ufw allow 443/tcp >/dev/null
+    echo "ufw: 80/tcp e 443/tcp liberadas."
+  fi
   nginx -t
   systemctl reload nginx
   echo "vhost habilitado. Portas públicas em escuta:"
