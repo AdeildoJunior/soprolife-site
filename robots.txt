@@ -1,4 +1,9 @@
 User-agent: *
 Allow: /
+# M26.4 — a área de resultados do paciente nunca é rastreada nem indexada.
+# O robots.txt é a camada educada; a garantia real são os cabeçalhos
+# X-Robots-Tag da API pública e a meta robots da própria página, que valem
+# mesmo para um rastreador que ignore este arquivo.
+Disallow: /resultados/
 
 Sitemap: https://soprolife.com.br/sitemap.xml
