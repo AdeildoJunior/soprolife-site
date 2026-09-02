@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SoproLife — Resultados de exames</title>
+
+<!-- M26.4 — resultado de exame não se indexa, não se arquiva e não se
+     resume em buscador. O cabeçalho HTTP equivalente (X-Robots-Tag) sai da
+     API pública, onde os PDFs não teriam como carregar uma meta tag. -->
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content="Área de consulta de resultados da SoproLife.">
+
+<!-- Sem Google Analytics, sem pixel da Meta, sem tag manager, sem fonte
+     externa, sem CDN. Esta página é lida por pacientes esperando um exame;
+     não há métrica de marketing que justifique um terceiro observando isso.
+     A CSP abaixo torna a promessa verificável pelo navegador, e não só pela
+     leitura do arquivo. `connect-src` lista exatamente uma origem. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  connect-src https://resultados-api.soprolife.com.br;
+  img-src 'self' data:;
+  style-src 'unsafe-inline';
+  script-src 'unsafe-inline';
+  base-uri 'none';
+  form-action 'none';
+  frame-ancestors 'none'">
+
+<link rel="icon" href="/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+<style>
+  :root {
+    --navy: #0b2a3d;
+    --navy-claro: #12405c;
+    --teal: #0f8a8a;
+    --teal-escuro: #0b6d6d;
+    --tinta: #16232b;
+    --suave: #5b6b76;
+    --linha: #dde5ea;
+    --fundo: #f4f7f9;
+    --branco: #ffffff;
+    --erro: #a4302a;
+    --erro-fundo: #fdf1f0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--fundo);
+    color: var(--tinta);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--navy);
+    color: #eaf3f7;
+    padding: 22px 20px;
+    text-align: center;
+  }
+  header .marca {
+    font-size: 20px; font-weight: 700; letter-spacing: .02em;
+  }
+  header .marca span { color: #7fd3d3; }
+  header p { margin: 4px 0 0; font-size: 14px; color: #b9d2de; }
+
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 22px 18px 40px;
+  }
+  .cartao {
+    background: var(--branco);
+    border: 1px solid var(--linha);
+    border-radius: 14px;
+    padding: 22px 20px;
+    box-shadow: 0 1px 2px rgba(11, 42, 61, .05), 0 8px 24px rgba(11, 42, 61, .05);
+  }
+  h1 { font-size: 21px; margin: 0 0 6px; color: var(--navy); }
+  .apoio { margin: 0 0 20px; color: var(--suave); font-size: 15px; }
+
+  label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 7px; }
+  input[type="text"] {
+    width: 100%;
+    font-size: 18px;
+    padding: 14px 14px;
+    border: 1px solid #c3d0d8;
+    border-radius: 10px;
+    background: #fbfdfe;
+    color: var(--tinta);
+    letter-spacing: .04em;
+  }
+  input[type="text"]:focus {
+    outline: 3px solid rgba(15, 138, 138, .28);
+    border-color: var(--teal);
+  }
+  .dica { margin: 8px 0 0; font-size: 13px; color: var(--suave); }
+
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 0;
+    border-radius: 10px;
+  }
+  .principal {
+    width: 100%;
+    margin-top: 18px;
+    background: var(--teal);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 700;
+    padding: 16px;
+    min-height: 54px;
+  }
+  .principal:hover { background: var(--teal-escuro); }
+  .principal[disabled] { background: #9db6bb; cursor: progress; }
+
+  .baixar {
+    display: block;
+    width: 100%;
+    text-align: center;
+    text-decoration: none;
+    background: var(--navy);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 700;
+    padding: 18px 16px;
+    border-radius: 12px;
+    margin-top: 12px;
+    min-height: 58px;
+  }
+  .baixar.secundario { background: var(--navy-claro); }
+  .baixar:hover { filter: brightness(1.08); }
+  .baixar small { display: block; font-weight: 500; font-size: 13px; opacity: .82; margin-top: 3px; }
+
+  .aviso {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--erro-fundo);
+    border: 1px solid #f0cfcc;
+    color: var(--erro);
+    font-size: 15px;
+  }
+  .identificacao { border-top: 1px solid var(--linha); margin-top: 4px; padding-top: 16px; }
+  .identificacao .nome { font-size: 19px; font-weight: 700; color: var(--navy); }
+  .linha-dado { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; padding: 5px 0; }
+  .linha-dado dt { color: var(--suave); margin: 0; }
+  .linha-dado dd { margin: 0; font-weight: 600; }
+  .selo {
+    display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 700;
+    color: #0b6d6d; background: #e5f4f4; border: 1px solid #b9e0e0;
+    padding: 5px 11px; border-radius: 999px;
+  }
+  .orientacao {
+    margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--linha);
+    font-size: 14px; color: var(--suave);
+  }
+  footer {
+    text-align: center; padding: 20px 18px 28px;
+    font-size: 13px; color: var(--suave);
+  }
+  .oculto { display: none !important; }
+  @media (max-width: 380px) {
+    main { padding: 16px 12px 32px; }
+    .cartao { padding: 18px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="marca">Sopro<span>Life</span></div>
+  <p>Resultados de exames</p>
+</header>
+
+<main>
+  <!-- ANTES da autenticação a página não sabe de ninguém: não há nome, nem
+       iniciais, nem data, nem contagem de documentos. A resposta do servidor
+       para token inexistente e para data errada é a mesma, então também não
+       há nada a deduzir daqui. -->
+  <section id="etapaEntrada" class="cartao">
+    <h1>Consulte seu resultado</h1>
+    <p class="apoio">Para sua segurança, confirme sua data de nascimento.</p>
+
+    <form id="formEntrada" novalidate>
+      <label for="nascimento">Data de nascimento</label>
+      <input id="nascimento" name="nascimento" type="text"
+             inputmode="numeric" autocomplete="bday"
+             placeholder="DD/MM/AAAA" maxlength="10"
+             aria-describedby="dicaNascimento">
+      <p class="dica" id="dicaNascimento">Exemplo: 09/04/1978</p>
+      <button class="principal" type="submit" id="botaoEntrar">
+        Acessar resultado
+      </button>
+    </form>
+
+    <div id="avisoEntrada" class="aviso oculto" role="alert"></div>
+  </section>
+
+  <section id="etapaResultado" class="cartao oculto" aria-live="polite">
+    <div class="identificacao">
+      <div class="nome" id="pacienteNome"></div>
+      <dl>
+        <div class="linha-dado"><dt>Tipo</dt><dd id="exameTipo">Espirometria</dd></div>
+        <div class="linha-dado"><dt>Data do exame</dt><dd id="exameData">—</dd></div>
+      </dl>
+      <span class="selo">Resultado disponível</span>
+    </div>
+
+    <a class="baixar" id="linkLaudo" href="#" rel="noreferrer">
+      BAIXAR LAUDO ASSINADO
+      <small>Documento assinado pela médica responsável</small>
+    </a>
+    <a class="baixar secundario" id="linkTecnico" href="#" rel="noreferrer">
+      BAIXAR EXAME TÉCNICO
+      <small>Traçado e medidas do equipamento</small>
+    </a>
+
+    <p class="orientacao">
+      Em caso de dúvida sobre o resultado, converse com seu médico.
+    </p>
+  </section>
+
+  <section id="etapaMensagem" class="cartao oculto" role="alert">
+    <h1 id="mensagemTitulo">Acesso indisponível</h1>
+    <p class="apoio" id="mensagemTexto"></p>
+  </section>
+</main>
+
+<footer>
+  SoproLife Diagnósticos e Soluções em Saúde
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // A API pública mínima. É a ÚNICA origem que esta página contata, e a CSP
+  // no <head> repete a mesma lista — se alguém acrescentar um endereço aqui
+  // sem acrescentar lá, o navegador bloqueia. É de propósito.
+  var API = "https://resultados-api.soprolife.com.br/p/v1";
+
+  var elEntrada = document.getElementById("etapaEntrada");
+  var elResultado = document.getElementById("etapaResultado");
+  var elMensagem = document.getElementById("etapaMensagem");
+  var elAviso = document.getElementById("avisoEntrada");
+  var campo = document.getElementById("nascimento");
+  var botao = document.getElementById("botaoEntrar");
+
+  // O token vive no FRAGMENTO. O navegador nunca o envia ao servidor: não
+  // entra em log de acesso, não vai no cabeçalho Referer e não atravessa
+  // proxy. Ele sai daqui uma única vez, no corpo de um POST sobre HTTPS.
+  function tokenDoLink() {
+    var bruto = String(window.location.hash || "").replace(/^#/, "");
+    if (!bruto) return "";
+    var partes = bruto.split("&");
+    for (var i = 0; i < partes.length; i++) {
+      var par = partes[i].split("=");
+      if (par[0] === "t" && par[1]) return decodeURIComponent(par[1]);
+    }
+    return "";
+  }
+
+  function mostrar(secao) {
+    [elEntrada, elResultado, elMensagem].forEach(function (el) {
+      el.classList.toggle("oculto", el !== secao);
+    });
+  }
+
+  function mensagemFinal(titulo, texto) {
+    document.getElementById("mensagemTitulo").textContent = titulo;
+    document.getElementById("mensagemTexto").textContent = texto;
+    mostrar(elMensagem);
+  }
+
+  function avisar(texto) {
+    elAviso.textContent = texto;
+    elAviso.classList.remove("oculto");
+  }
+
+  // Máscara de data. Bloco fecha assim que enche: 09 → "09/",
+  // 0904 → "09/04/", 09041978 → "09/04/1978". Quem digita a barra à mão não
+  // é atrapalhado — barras repetidas colapsam em uma só.
+  function mascarar(texto) {
+    var digitos = String(texto).replace(/\D/g, "").slice(0, 8);
+    if (digitos.length <= 2) return digitos;
+    if (digitos.length <= 4) return digitos.slice(0, 2) + "/" + digitos.slice(2);
+    return digitos.slice(0, 2) + "/" + digitos.slice(2, 4) + "/" + digitos.slice(4);
+  }
+
+  campo.addEventListener("input", function () {
+    var antes = campo.value;
+    var depois = mascarar(antes);
+    if (antes !== depois) campo.value = depois;
+  });
+
+  function paraIso(valor) {
+    var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(valor).trim());
+    if (!m) return "";
+    var dia = Number(m[1]), mes = Number(m[2]), ano = Number(m[3]);
+    if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return "";
+    if (ano < 1900 || ano > 2100) return "";
+    var d = new Date(Date.UTC(ano, mes - 1, dia));
+    if (d.getUTCDate() !== dia || d.getUTCMonth() !== mes - 1) return "";
+    return m[3] + "-" + m[2] + "-" + m[1];
+  }
+
+  function dataBr(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+    return m ? (m[3] + "/" + m[2] + "/" + m[1]) : "—";
+  }
+
+  function erroDaResposta(corpo, status) {
+    if (corpo && corpo.erro && corpo.erro.mensagem) return corpo.erro.mensagem;
+    if (status === 429) {
+      return "Muitas tentativas seguidas. Aguarde alguns minutos e tente novamente.";
+    }
+    return "Não foi possível abrir este resultado agora. Tente novamente em alguns minutos.";
+  }
+
+  function renderizar(dados) {
+    document.getElementById("pacienteNome").textContent =
+      (dados.paciente && dados.paciente.nome) || "";
+    document.getElementById("exameTipo").textContent =
+      (dados.exame && dados.exame.tipo) || "Espirometria";
+    document.getElementById("exameData").textContent =
+      dataBr(dados.exame && dados.exame.data);
+
+    var mapa = {};
+    (dados.documentos || []).forEach(function (d) { mapa[d.chave] = d; });
+
+    // Download por navegação de topo, e nunca por blob: o nome do arquivo
+    // vem do Content-Disposition do servidor. Baixar via blob devolveria um
+    // nome aleatório — foi o defeito que a M25.18 pagou para descobrir.
+    configurarLink("linkLaudo", API + "/documentos/laudo-assinado",
+                   mapa["laudo-assinado"]);
+    configurarLink("linkTecnico", API + "/documentos/exame-tecnico",
+                   mapa["exame-tecnico"]);
+    mostrar(elResultado);
+  }
+
+  function configurarLink(id, href, doc) {
+    var el = document.getElementById(id);
+    if (doc && doc.disponivel) {
+      el.href = href;
+      el.classList.remove("oculto");
+    } else {
+      el.classList.add("oculto");
+    }
+  }
+
+  document.getElementById("formEntrada").addEventListener("submit", function (evento) {
+    evento.preventDefault();
+    elAviso.classList.add("oculto");
+
+    var token = tokenDoLink();
+    if (!token) {
+      avisar("Este endereço está incompleto. Abra novamente o link que você recebeu.");
+      return;
+    }
+    var nascimento = paraIso(campo.value);
+    if (!nascimento) {
+      avisar("Informe a data de nascimento no formato DD/MM/AAAA.");
+      return;
+    }
+
+    botao.disabled = true;
+    botao.textContent = "Verificando…";
+
+    fetch(API + "/acesso", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: token, nascimento: nascimento })
+    }).then(function (resposta) {
+      return resposta.json().catch(function () { return null; })
+        .then(function (corpo) { return { ok: resposta.ok, status: resposta.status, corpo: corpo }; });
+    }).then(function (r) {
+      botao.disabled = false;
+      botao.textContent = "Acessar resultado";
+      if (r.ok) { renderizar(r.corpo); return; }
+      if (r.status === 410) {
+        mensagemFinal("Acesso expirado", erroDaResposta(r.corpo, r.status));
+        return;
+      }
+      avisar(erroDaResposta(r.corpo, r.status));
+    }).catch(function () {
+      botao.disabled = false;
+      botao.textContent = "Acessar resultado";
+      avisar("Não foi possível conectar agora. Verifique sua internet e tente novamente.");
+    });
+  });
+
+  // Recarregar a página não obriga a digitar a data de novo enquanto a
+  // sessão curta estiver viva. Se não estiver, cai no formulário — sem
+  // mensagem de erro, porque não houve erro nenhum.
+  (function retomarSessao() {
+    if (!tokenDoLink()) {
+      mensagemFinal(
+        "Link incompleto",
+        "Abra o resultado pelo link completo que você recebeu da SoproLife."
+      );
+      return;
+    }
+    fetch(API + "/documentos", { credentials: "include" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (dados) { if (dados) renderizar(dados); })
+      .catch(function () { /* silêncio: o formulário já está na tela */ });
+  })();
+})();
+</script>
+</body>
+</html>

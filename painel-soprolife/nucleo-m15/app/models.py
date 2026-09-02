@@ -2416,3 +2416,174 @@ class QualifiedSignatureRequest(Base, TimestampMixin):
             postgresql_where=text("status = 'assinado_liberado'"),
         ),
     )
+
+
+# ------------------------------------------- M26.4 — portal de resultados
+#
+# Estado de ENTREGA, deliberadamente separado do estado CLÍNICO.
+#
+# `ExternalSignedDocument.status` responde "o documento assinado voltou e
+# passou nas guardas?". Ele não deve responder também "o paciente já abriu?",
+# porque as duas perguntas mudam por motivos diferentes e em ritmos
+# diferentes: revogar um link não desfaz uma assinatura, e receber um PDF
+# novo não apaga o fato de o paciente ter aberto o anterior. Misturá-las
+# criaria o clássico estado que ninguém consegue explicar seis meses depois.
+
+RESULTADO_DISPONIVEL = "disponivel"
+RESULTADO_ENVIADO = "enviado"
+RESULTADO_ACESSADO = "acessado"
+RESULTADO_REVOGADO = "revogado"
+RESULTADO_STATUS_VALUES = (
+    RESULTADO_DISPONIVEL,
+    RESULTADO_ENVIADO,
+    RESULTADO_ACESSADO,
+    RESULTADO_REVOGADO,
+)
+
+# Quantas tentativas de data de nascimento cabem antes do resfriamento, e por
+# quanto tempo o acesso fica em cooldown. Ficam aqui, e não só no serviço,
+# porque a coluna `locked_until` é o que faz o bloqueio sobreviver a um
+# restart do processo público.
+RESULTADO_MAX_TENTATIVAS = 5
+RESULTADO_COOLDOWN_MINUTOS = 15
+# Prazo do acesso externo. Resultado de exame é consultado depois — 90 dias é
+# o meio-termo entre "o paciente perdeu o laudo na véspera da consulta" e
+# "um link de documento médico vivo para sempre". Renovável pelo admin.
+RESULTADO_VALIDADE_DIAS = 90
+
+
+class PatientResultAccess(Base):
+    """O acesso de UM paciente a UM resultado — a ponte entre laudo e portal.
+
+    O segredo do link NÃO mora aqui. A coluna guarda apenas
+    `sha256(token)`: o processo público compara hashes e nunca tem como
+    reconstruir um link a partir do banco. O painel privado consegue
+    re-exibir o mesmo link porque o token é DERIVADO
+    (`HMAC(chave_privada, id || geração)`) — a chave vive só no
+    EnvironmentFile do serviço interno, nunca no do serviço público.
+    Regenerar é incrementar `generation`: o hash muda, e o link antigo morre
+    no mesmo instante, sem apagar linha nenhuma.
+    """
+
+    __tablename__ = "patient_result_accesses"
+    id: Mapped[str] = mapped_column(
+        String(UUID_LEN), primary_key=True, default=new_uuid
+    )
+    person_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("people.id"), nullable=False, index=True
+    )
+    spirometry_exam_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("spirometry_exams.id"), nullable=False
+    )
+    # Um laudo, um acesso. A unicidade é o que impede dois links vivos para o
+    # mesmo documento — dois links seriam duas revogações a lembrar.
+    report_document_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("report_documents.id"),
+        nullable=False,
+        unique=True,
+    )
+    # A VERSÃO ASSINADA VIGENTE. É daqui que o download sai, e não de
+    # `current_version_id` nem de `source_version_id`. Um PDF assinado novo
+    # que substitua o anterior REAPONTA estas duas colunas.
+    signed_document_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("external_signed_documents.id"),
+        nullable=False,
+    )
+    report_document_version_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("report_document_versions.id"),
+        nullable=False,
+    )
+    token_sha256: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    generation: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default=RESULTADO_DISPONIVEL, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    # Timestamps OBJETIVOS. Nenhum deles afirma que alguém LEU o laudo:
+    # dizem que foi disponibilizado, que o operador abriu o envio, que a
+    # página foi autenticada e que um PDF saiu.
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    first_access_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    last_access_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    last_download_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    download_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_motivo: Mapped[str | None] = mapped_column(String(120))
+    revoked_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    # Nulo quando o acesso nasceu do gatilho automático — que é o caminho
+    # normal. Preenchido quando um administrador gerou o acesso à mão para
+    # um laudo histórico.
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    failed_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {RESULTADO_STATUS_VALUES!r}",
+            name="resultado_status_valido",
+        ),
+        CheckConstraint("generation >= 1", name="resultado_generation_positiva"),
+        CheckConstraint("failed_attempts >= 0", name="resultado_tentativas"),
+        CheckConstraint("download_count >= 0", name="resultado_downloads"),
+        # Revogado é tudo-ou-nada: quando e por quê andam juntos. Meia
+        # evidência de revogação não explica nada meses depois.
+        CheckConstraint(
+            "(status <> 'revogado' AND revoked_at IS NULL) OR "
+            "(status = 'revogado' AND revoked_at IS NOT NULL "
+            "AND revoked_motivo IS NOT NULL)",
+            name="resultado_revogacao_coerente",
+        ),
+    )
+
+
+class PatientResultSession(Base):
+    """Sessão curta do paciente, criada só depois dos DOIS fatores.
+
+    Guarda o hash do segredo, nunca o segredo. Não guarda IP, user-agent nem
+    nada que identifique o aparelho: o portal não precisa disso para
+    funcionar, e o que não é guardado não vaza.
+    """
+
+    __tablename__ = "patient_result_sessions"
+    id: Mapped[str] = mapped_column(
+        String(UUID_LEN), primary_key=True, default=new_uuid
+    )
+    access_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("patient_result_accesses.id"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -255,6 +255,11 @@
     signatureBusy: false,
     // Fila de entrega da administração e o estado filtrado na tela.
     deliveryQueue: null,
+    // M26.4 — o link/QR/mensagem de UM laudo, carregados sob demanda.
+    // Nunca vêm na listagem da fila: um token por linha ficaria na memória
+    // do navegador de todo mundo que abre a tela, e a tela abre sozinha.
+    resultAccess: null,
+    resultBusy: false,
     deliveryFilter: "",
     deliveryBusy: false,
     // M25.24 — `null` = "ainda não mexeu nesta sessão, use a preferência
@@ -2313,6 +2318,7 @@
           <span>${contextLine(item)}</span>
           ${codeTrail(item)}
           <span class="report-delivery-state">${esc(item.estado_rotulo)}</span>
+          ${renderResultAccess(item)}
           ${assinado ? `
             <span class="report-delivery-note">
               ${/* Discreto e honesto, nesta ordem: primeiro o que o sistema
@@ -2354,6 +2360,7 @@
                  data-delivery-deliver="${esc(assinado.signed_document_id)}">
                  Marcar como entregue
                </button>` : ""}
+          ${renderResultAccessActions(item)}
         </div>
       </div>`;
   }
@@ -2362,6 +2369,174 @@
   // `prompt()` com frase digitada. A M25.29H removeu a etapa inteira: o que
   // ela confirmava era um testemunho humano que a evidência documental já
   // resolve melhor, e mais cedo, no recebimento do arquivo.
+
+  // ------------------------------ M26.4 — resultado online do paciente
+  //
+  // A linha da fila mostra só o ESTADO: "Resultado online: Disponível",
+  // depois "Enviado: …" e "Acessado: …". O link, o QR e a mensagem exigem um
+  // clique explícito naquele laudo — e esse clique é auditado no servidor.
+  //
+  // "Acessado" diz que a página foi aberta com os dois fatores. Nunca diz
+  // que o paciente LEU o laudo: o sistema não tem como saber isso, e afirmar
+  // o que não se sabe num prontuário é o começo de uma discussão que ninguém
+  // ganha.
+
+  function dataHora(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString("pt-BR", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  }
+
+  function renderResultAccess(item) {
+    const r = item.resultado;
+    if (!r) return "";
+    if (!r.existe) {
+      return `<span class="report-result-line report-result-ausente">
+        Resultado online: não gerado
+      </span>`;
+    }
+    const partes = [`Resultado online: ${esc(r.status_rotulo)}`];
+    if (r.enviado_em) partes.push(`Enviado: ${esc(dataHora(r.enviado_em))}`);
+    if (r.primeiro_acesso_em) {
+      partes.push(`Acessado: ${esc(dataHora(r.primeiro_acesso_em))}`);
+    }
+    if (r.expirado && r.status !== "revogado") partes.push("Link expirado");
+    return `<span class="report-result-line">${partes.join(" · ")}</span>
+      ${renderResultAccessPanel(item)}`;
+  }
+
+  function svgSeguro(bruto) {
+    // O SVG vem do nosso próprio gerador (app/services/qrcode_svg.py) e é
+    // composto só de retângulos. A checagem existe para que a garantia não
+    // dependa de lembrar disso: qualquer coisa que não comece em <svg ou que
+    // traga script simplesmente não entra no DOM.
+    const texto = String(bruto || "");
+    if (!texto.startsWith("<svg ")) return "";
+    if (/<script|javascript:|on[a-z]+=/i.test(texto)) return "";
+    return texto;
+  }
+
+  function renderResultAccessPanel(item) {
+    const aberto = state.resultAccess
+      && state.resultAccess.documentId === item.document_id;
+    if (!aberto) return "";
+    const dados = state.resultAccess.dados;
+    if (!dados) {
+      return `<div class="report-result-panel"><p class="report-help">Carregando…</p></div>`;
+    }
+    const zap = dados.whatsapp || {};
+    return `
+      <div class="report-result-panel">
+        <div class="report-result-qr">${svgSeguro(dados.qr_svg)}</div>
+        <p class="report-help report-result-url">${esc(dados.link || "")}</p>
+        <p class="report-help">
+          ${/* O QR aponta para a PÁGINA, nunca para o PDF: quem fotografa o
+                código ainda precisa da data de nascimento. */""}
+          O QR abre a página de resultados e continua exigindo a data de
+          nascimento do paciente.
+        </p>
+        <div class="report-result-actions">
+          ${zap.disponivel
+            ? `<button type="button" class="m15-btn m15-btn-primary"
+                 data-result-whatsapp="${esc(item.document_id)}">
+                 Enviar pelo WhatsApp
+               </button>`
+            : `<span class="report-result-sem-telefone">Telefone não cadastrado</span>`}
+          <button type="button" class="m15-btn"
+            data-result-copy="${esc(item.document_id)}">Copiar link</button>
+          <button type="button" class="m15-btn"
+            data-result-regenerate="${esc(item.document_id)}">Gerar novo acesso</button>
+          <button type="button" class="m15-btn"
+            data-result-revoke="${esc(item.document_id)}">Revogar acesso</button>
+          <button type="button" class="m15-btn"
+            data-result-close="1">Fechar</button>
+        </div>
+      </div>`;
+  }
+
+  function renderResultAccessActions(item) {
+    const r = item.resultado;
+    if (!r) return "";
+    const pronto = item.assinado
+      && PRONTOS_PARA_ENTREGA.concat(["entregue"]).includes(item.assinado.status);
+    if (!r.existe) {
+      // Automação vale daqui para frente. Para o que já estava assinado
+      // quando o portal subiu, alguém clica — um laudo por vez, com o nome
+      // do paciente na tela. Nada de disparo em massa.
+      return pronto
+        ? `<button type="button" class="m15-btn"
+             data-result-create="${esc(item.document_id)}">
+             Gerar acesso ao resultado
+           </button>`
+        : "";
+    }
+    const aberto = state.resultAccess
+      && state.resultAccess.documentId === item.document_id;
+    return `<button type="button" class="m15-btn"
+      data-result-open="${esc(item.document_id)}">
+      ${aberto ? "Ocultar link e QR" : "Link, QR e WhatsApp"}
+    </button>`;
+  }
+
+  async function carregarAcessoResultado(documentId, { criar = false, regenerar = false } = {}) {
+    state.resultBusy = true;
+    state.resultAccess = { documentId, dados: null };
+    render();
+    try {
+      const rota = `/laudos/${encodeURIComponent(documentId)}/acesso-resultado`;
+      const dados = (criar || regenerar)
+        ? await client().api(rota, {
+            method: "POST",
+            body: JSON.stringify({ regenerar }),
+          })
+        : await client().api(rota);
+      state.resultAccess = { documentId, dados };
+      if (regenerar) announce("Novo acesso gerado. O link anterior deixou de funcionar.", "ok");
+      if (criar) announce("Acesso ao resultado gerado.", "ok");
+      if (criar || regenerar) await loadAuthenticatedData();
+    } catch (error) {
+      state.resultAccess = null;
+      announce(readableError(error), "erro");
+    } finally {
+      state.resultBusy = false;
+      render();
+    }
+  }
+
+  async function marcarEnvio(documentId, canal) {
+    try {
+      await client().api(
+        `/laudos/${encodeURIComponent(documentId)}/acesso-resultado/enviado`,
+        { method: "POST", body: JSON.stringify({ canal }) }
+      );
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    }
+  }
+
+  async function revogarAcessoResultado(documentId) {
+    const motivo = window.prompt(
+      "Motivo da revogação (fica na trilha de auditoria):",
+      "Solicitação do paciente"
+    );
+    if (!motivo || motivo.trim().length < 3) return;
+    try {
+      await client().api(
+        `/laudos/${encodeURIComponent(documentId)}/acesso-resultado/revogar`,
+        { method: "POST", body: JSON.stringify({ motivo: motivo.trim() }) }
+      );
+      state.resultAccess = null;
+      announce("Acesso revogado. O link antigo não abre mais.", "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    }
+  }
 
   function renderProfileAdmin() {
     const selected = selectedAdminAccount();
@@ -3976,6 +4151,61 @@
     }
     if (button.matches("[data-delivery-deliver]")) {
       registerDelivery(button.getAttribute("data-delivery-deliver"));
+      return;
+    }
+    // ---------------------------------------------------------- M26.4
+    if (button.matches("[data-result-open]")) {
+      const alvo = button.getAttribute("data-result-open");
+      if (state.resultAccess && state.resultAccess.documentId === alvo) {
+        state.resultAccess = null;
+        render();
+      } else {
+        carregarAcessoResultado(alvo);
+      }
+      return;
+    }
+    if (button.matches("[data-result-close]")) {
+      state.resultAccess = null;
+      render();
+      return;
+    }
+    if (button.matches("[data-result-create]")) {
+      carregarAcessoResultado(button.getAttribute("data-result-create"), { criar: true });
+      return;
+    }
+    if (button.matches("[data-result-regenerate]")) {
+      carregarAcessoResultado(
+        button.getAttribute("data-result-regenerate"), { regenerar: true }
+      );
+      return;
+    }
+    if (button.matches("[data-result-revoke]")) {
+      revogarAcessoResultado(button.getAttribute("data-result-revoke"));
+      return;
+    }
+    if (button.matches("[data-result-copy]")) {
+      const alvo = button.getAttribute("data-result-copy");
+      const dados = state.resultAccess && state.resultAccess.dados;
+      if (dados && dados.link && navigator.clipboard) {
+        navigator.clipboard.writeText(dados.link).then(
+          () => { announce("Link copiado.", "ok"); marcarEnvio(alvo, "link_copiado"); },
+          () => announce("Não foi possível copiar. Selecione o link na tela.", "erro")
+        );
+      }
+      return;
+    }
+    if (button.matches("[data-result-whatsapp]")) {
+      const alvo = button.getAttribute("data-result-whatsapp");
+      const dados = state.resultAccess && state.resultAccess.dados;
+      const zap = dados && dados.whatsapp;
+      if (zap && zap.disponivel && zap.url) {
+        // Abre o WhatsApp com a mensagem PRONTA. Quem aperta ENVIAR é a
+        // pessoa: não existe integração oficial da Meta neste projeto, e
+        // improvisar automação de WhatsApp Web seria trocar uma entrega
+        // auditável por uma que a Meta derruba.
+        window.open(zap.url, "_blank", "noopener,noreferrer");
+        marcarEnvio(alvo, "whatsapp_manual");
+      }
       return;
     }
     if (button.matches("[data-report-batch-all]")) {

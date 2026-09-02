@@ -2699,3 +2699,84 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
     align-items: stretch;
   }
 }
+
+/* ------------------------------------ M26.4 — resultado online do paciente
+   Uma linha discreta na fila, e um painel que só abre quando alguém pede o
+   link. A tela de entrega já é densa: acrescentar QR Code permanente em cada
+   linha tornaria a fila ilegível justamente para quem trabalha nela o dia
+   todo. */
+
+.report-result-line {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ok, #1c7a4a);
+}
+
+.report-result-ausente {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.report-result-panel {
+  flex-basis: 100%;
+  margin: 10px 0 0;
+  padding: 14px;
+  border: 1px solid var(--line, #cfd9e4);
+  border-radius: var(--radius-sm, 10px);
+  background: var(--teal-pale, #eef6f8);
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+/* O QR nasce em SVG vetorial; o tamanho aqui é o de leitura confortável na
+   tela e na impressão de uma folha de orientação. */
+.report-result-qr svg {
+  width: 176px;
+  height: 176px;
+  display: block;
+  background: #fff;
+  border: 1px solid var(--line, #cfd9e4);
+  border-radius: 8px;
+}
+
+/* `overflow-wrap: anywhere`, e não `word-break: break-all`. O link é uma
+   sequência longa sem espaços e PRECISA quebrar em qualquer ponto; mas
+   `break-all` é proibido no painel inteiro (M25.21) porque verticaliza nome
+   de paciente, e uma regra dessas escapa fácil de um seletor para outro. */
+.report-result-url {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  color: var(--navy, #0b1f36);
+}
+
+.report-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.report-result-actions .m15-btn {
+  min-height: 40px;
+}
+
+.report-result-sem-telefone {
+  align-self: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--warn, #8a5b00);
+}
+
+@media (max-width: 640px) {
+  .report-result-panel {
+    justify-items: stretch;
+  }
+
+  .report-result-qr svg {
+    width: 148px;
+    height: 148px;
+    margin: 0 auto;
+  }
+}

@@ -1,0 +1,63 @@
+[Unit]
+Description=SoproLife — Portal de Resultados do Paciente (superficie publica minima)
+Documentation=file:/opt/soprolife/soprolife-site/painel-soprolife/docs/m26-4-portal-resultados-paciente.md
+Wants=network-online.target
+After=network-online.target postgresql.service
+Requires=postgresql.service
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=soprolife
+Group=soprolife
+WorkingDirectory=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15
+
+# EnvironmentFile PRÓPRIO, e este é o ponto central do desenho:
+#   - tem  M15_PORTAL_SESSION_SECRET  (assina o cookie do paciente);
+#   - NÃO tem M15_PORTAL_TOKEN_KEY (a chave que DERIVA os links);
+#   - NÃO tem M15_AUTH_SECRET (a credencial do Command Center).
+# O processo que está na internet não consegue emitir link de resultado nem
+# forjar sessão administrativa, porque não possui os segredos para isso.
+EnvironmentFile=/opt/soprolife/secrets/m26-4-portal.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=M15_PORTAL_API_HOST=127.0.0.1
+Environment=M15_PORTAL_API_PORT=8016
+ExecStart=/opt/soprolife/venvs/m15/bin/python -m app.portal_serve
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=45s
+TimeoutStopSec=30s
+KillSignal=SIGINT
+UMask=0077
+
+# Mesmo endurecimento da API interna, com uma diferença: o armazenamento
+# privado dos PDFs entra como SOMENTE LEITURA. O portal entrega arquivos;
+# ele não tem por que criar, alterar ou apagar nenhum.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/opt/soprolife/soprolife-site
+ReadOnlyPaths=/opt/soprolife/private/m15-reports
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

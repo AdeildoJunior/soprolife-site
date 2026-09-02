@@ -23,6 +23,7 @@ from .routers import (
     operations,
     partners,
     pastore,
+    patient_results,
     people,
     reports,
 )
@@ -60,6 +61,10 @@ def create_app() -> FastAPI:
     app.include_router(finance.router, prefix=prefix)
     app.include_router(imports_audit.router, prefix=prefix)
     app.include_router(admin_users.router, prefix=prefix)
+    # M26.4 — registrado ANTES de `reports` de propósito. Os dois usam o
+    # prefixo /laudos; deixar o específico primeiro remove qualquer dúvida
+    # sobre quem casa `/laudos/{id}/acesso-resultado`.
+    app.include_router(patient_results.router, prefix=prefix)
     app.include_router(reports.router, prefix=prefix)
     return app
 

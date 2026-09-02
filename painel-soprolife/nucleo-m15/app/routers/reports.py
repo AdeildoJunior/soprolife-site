@@ -13,6 +13,7 @@ TESTE torna a ausência de validade inequívoca.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from datetime import datetime, timezone
 
@@ -223,6 +224,8 @@ from ..services.signature_provider import (
     get_signature_provider,
     institutional_release_evidence,
 )
+
+logger = logging.getLogger(__name__)
 
 KIND_ORIGINAL = "original"
 KIND_RASCUNHO = "rascunho"
@@ -4243,6 +4246,15 @@ async def upload_external_signature_batch(
                 **guardas.para_auditoria(),
             },
         )
+        # M26.4 — o acesso do paciente nasce AQUI, e em nenhum outro lugar
+        # do caminho feliz. A médica não tem uma ação a mais: ela já
+        # terminou. O que a função faz é criar (ou reapontar) o link seguro
+        # e amarrá-lo a ESTE `ExternalSignedDocument` — nunca à prévia, nem
+        # ao PDF final sem assinatura, nem a um documento recusado, porque
+        # nenhum deles chega até esta linha.
+        _abrir_resultado_para_o_paciente(
+            db, assinado, request=request, user_id=physician_user.id
+        )
         veredictos.append(MatchVerdict(
             filename=arquivo.filename,
             outcome=PAREADO,
@@ -4385,6 +4397,14 @@ def confirm_external_signature_batch(
         assinado.status = ASSINADO_ACEITO if aprovado else ASSINADO_RECUSADO
         assinado.confirmed_at = agora
         aceitos += 1 if aprovado else 0
+        # M26.4 — o mesmo gatilho, no outro caminho que produz
+        # `recebido_assinado`. Um lote legado confirmado hoje entrega ao
+        # paciente exatamente como um envio de hoje; um recusado não entrega
+        # nada, porque a função só age sobre status entregável.
+        if aprovado:
+            _abrir_resultado_para_o_paciente(
+                db, assinado, request=request, user_id=physician_user.id
+            )
         audit(
             db,
             (
@@ -4532,6 +4552,8 @@ def list_delivery_queue(
         .limit(300)
     ).all()
 
+    from .patient_results import resumo_do_acesso
+
     itens = []
     for document, exam, person, assignment in linhas:
         assinado = _assinado_mais_recente(db, document.id)
@@ -4552,6 +4574,10 @@ def list_delivery_queue(
                 assignment.physician_profile_id if assignment else None
             ),
             "assinado": _ser_assinado(assinado) if assinado else None,
+            # M26.4 — estado da ENTREGA ao paciente, compacto. Só datas e
+            # rótulo: link, QR e mensagem exigem uma chamada explícita ao
+            # laudo, e essa chamada é auditada.
+            "resultado": resumo_do_acesso(_acesso_do_documento(db, document.id)),
         })
 
     contagem = {chave: 0 for chave in FILA_ROTULOS}
@@ -4586,6 +4612,49 @@ def _ser_assinado(assinado: ExternalSignedDocument) -> dict:
         "validacao_referencia": assinado.validation_reference,
         "entregue_em": iso(assinado.delivered_at),
     }
+
+
+def _acesso_do_documento(db: Session, document_id: str):
+    from ..models import PatientResultAccess
+
+    return db.execute(
+        select(PatientResultAccess).where(
+            PatientResultAccess.report_document_id == document_id
+        )
+    ).scalar_one_or_none()
+
+
+def _abrir_resultado_para_o_paciente(
+    db: Session,
+    assinado: ExternalSignedDocument,
+    *,
+    request: Request,
+    user_id: str,
+) -> None:
+    """Gatilho da M26.4 — cria/atualiza o acesso do paciente ao resultado.
+
+    Efeito colateral do fluxo clínico, e por isso ISOLADO: uma falha aqui
+    não pode derrubar o recebimento de um PDF assinado que já passou nas
+    guardas e já foi gravado. Trocar um problema de ENTREGA por um problema
+    CLÍNICO seria o pior negócio possível — a médica veria "falha no envio"
+    para um arquivo que o sistema aceitou.
+
+    O que se perde no caso raro de exceção: o acesso não nasce agora. O
+    administrador continua podendo gerar com um clique, e a fila mostra
+    "Resultado online: não gerado". Nada fica inconsistente.
+    """
+
+    from ..services import patient_results as prs
+
+    try:
+        prs.ensure_access(
+            db,
+            assinado,
+            user_id=user_id,
+            request_id=_request_id(request),
+        )
+    except Exception:  # noqa: BLE001 - contenção deliberada; ver docstring
+        logger.exception("resultado_acesso_falhou_no_gatilho")
 
 
 def _guardas_do_assinado(db: Session, assinado: ExternalSignedDocument):

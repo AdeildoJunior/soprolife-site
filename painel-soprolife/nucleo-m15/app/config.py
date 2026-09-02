@@ -33,6 +33,29 @@ SESSION_MAX_MINUTES = 720          # sem "manter conectado" (morre com o navegad
 SESSION_PERSISTENT_MAX_DAYS = 7    # com "manter conectado" — teto absoluto
 
 
+def _validar_origens(origins: list[str], nome: str) -> list[str]:
+    """Origens de CORS sempre explícitas — '*' é proibido em qualquer lista."""
+
+    if not origins:
+        raise ValueError(f"{nome} não pode ser vazio.")
+    for origin in origins:
+        if origin == "*" or not origin.startswith(("http://", "https://")):
+            raise ValueError(
+                f"{nome} exige origens http(s) explícitas; '*' é proibido."
+            )
+        parsed = urlsplit(origin)
+        if (
+            not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path not in ("", "/")
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(f"{nome} contém origem inválida.")
+    return origins
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="M15_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
@@ -122,6 +145,41 @@ class Settings(BaseSettings):
     reports_validation_base_url: str | None = None
     # Tamanho máximo do PNG de assinatura manuscrita (bytes).
     reports_signature_max_bytes: int = 2 * 1024 * 1024
+
+    # ------------------------------------- M26.4 — portal de resultados
+    #
+    # Superfície PÚBLICA mínima, isolada do Command Center. Desligada por
+    # padrão: um deploy de código nunca abre o portal por efeito colateral.
+    #
+    # Dois segredos DIFERENTES, e é de propósito que sejam dois:
+    #   `portal_token_key`    deriva o link do paciente. Vive apenas no
+    #                         EnvironmentFile do serviço INTERNO. O processo
+    #                         público compara hashes e nunca precisa dela —
+    #                         então nunca a recebe.
+    #   `portal_session_secret` assina o cookie de sessão do paciente. Vive
+    #                         apenas no EnvironmentFile do serviço PÚBLICO,
+    #                         e é distinto de `auth_secret`: um cookie
+    #                         administrativo não pode virar atalho no portal
+    #                         nem o contrário.
+    portal_enabled: bool = False
+    # Endereço amigável que o paciente vê e reconhece. O token vai no
+    # FRAGMENTO (`#t=`), que o navegador nunca envia ao servidor — nem no
+    # Referer, nem em log de acesso, nem em proxy.
+    portal_public_base_url: str | None = None
+    portal_api_host: str = "127.0.0.1"
+    portal_api_port: int = 8016
+    portal_token_key: str | None = None
+    portal_session_secret: str | None = None
+    portal_cookie_name: str = "soprolife_resultado"
+    # Origens do navegador autorizadas a falar com a API pública. Explícitas,
+    # como em `cors_origins`; '*' é recusado pelo mesmo validador.
+    portal_cors_origins: list[str] = ["https://soprolife.com.br"]
+    # Sessão curta: o paciente baixa e sai. Faixa validada 5..120.
+    portal_session_ttl_minutes: int = 30
+    # Validade do link externo. Resultado médico é consultado depois; 90 dias
+    # é o meio-termo documentado na M26.4. Faixa validada 7..365.
+    portal_access_ttl_days: int = 90
+    portal_cookie_secure: bool = False
 
     # ------------------------------------------ M25.7 — VIDaaS/IntegraICP
     #
@@ -249,24 +307,49 @@ class Settings(BaseSettings):
     @field_validator("cors_origins")
     @classmethod
     def _cors_explicito(cls, origins: list[str]) -> list[str]:
-        if not origins:
-            raise ValueError("M15_CORS_ORIGINS não pode ser vazio.")
-        for origin in origins:
-            if origin == "*" or not origin.startswith(("http://", "https://")):
-                raise ValueError(
-                    "M15_CORS_ORIGINS exige origens http(s) explícitas; '*' é proibido."
-                )
-            parsed = urlsplit(origin)
-            if (
-                not parsed.hostname
-                or parsed.username
-                or parsed.password
-                or parsed.path not in ("", "/")
-                or parsed.query
-                or parsed.fragment
-            ):
-                raise ValueError("M15_CORS_ORIGINS contém origem inválida.")
-        return origins
+        return _validar_origens(origins, "M15_CORS_ORIGINS")
+
+    @field_validator("portal_cors_origins")
+    @classmethod
+    def _portal_cors_explicito(cls, origins: list[str]) -> list[str]:
+        return _validar_origens(origins, "M15_PORTAL_CORS_ORIGINS")
+
+    @field_validator("portal_session_ttl_minutes")
+    @classmethod
+    def _portal_sessao_curta(cls, v: int) -> int:
+        if not 5 <= v <= 120:
+            raise ValueError(
+                "M15_PORTAL_SESSION_TTL_MINUTES deve ficar entre 5 e 120."
+            )
+        return v
+
+    @field_validator("portal_access_ttl_days")
+    @classmethod
+    def _portal_validade_do_link(cls, v: int) -> int:
+        if not 7 <= v <= 365:
+            raise ValueError(
+                "M15_PORTAL_ACCESS_TTL_DAYS deve ficar entre 7 e 365."
+            )
+        return v
+
+    @field_validator("portal_public_base_url")
+    @classmethod
+    def _portal_base_publica(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        parsed = urlsplit(v)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError(
+                "M15_PORTAL_PUBLIC_BASE_URL deve ser uma URL https simples."
+            )
+        return v.rstrip("/")
 
     @model_validator(mode="after")
     def _regras_de_prod(self) -> "Settings":
@@ -296,6 +379,25 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "M15_REPORTS_TEST_ALLOW_PROVISIONAL_TEMPLATES é proibido em prod."
                 )
+            # M26.4 — o portal é público; em prod ele nunca sobe sem HTTPS
+            # nem com o processo escutando fora de loopback. Quem termina em
+            # HTTPS é o nginx do subdomínio técnico, não este processo.
+            if self.portal_api_host not in LOOPBACK_HOSTS:
+                raise ValueError(
+                    "Em prod, M15_PORTAL_API_HOST deve ser loopback; o portal "
+                    "é publicado pelo proxy, nunca por bind direto."
+                )
+            if self.portal_enabled:
+                if not self.portal_public_base_url:
+                    raise ValueError(
+                        "Portal habilitado exige M15_PORTAL_PUBLIC_BASE_URL."
+                    )
+                for origin in self.portal_cors_origins:
+                    if urlsplit(origin).scheme != "https":
+                        raise ValueError(
+                            "Em prod, M15_PORTAL_CORS_ORIGINS exige HTTPS."
+                        )
+            object.__setattr__(self, "portal_cookie_secure", True)
         return self
 
     def resolved_auth_secret(self) -> str:
@@ -305,6 +407,37 @@ class Settings(BaseSettings):
         if not hasattr(self, "_ephemeral_secret"):
             object.__setattr__(self, "_ephemeral_secret", secrets.token_hex(32))
         return self._ephemeral_secret
+
+    def resolved_portal_token_key(self) -> str:
+        """Chave que DERIVA o link do paciente — só o serviço interno a tem.
+
+        Fail-closed e sem fallback efêmero: um segredo de processo faria
+        todos os links morrerem a cada restart, e um paciente com o link no
+        WhatsApp veria "acesso inválido" sem que nada tivesse sido revogado.
+        """
+
+        return _segredo_forte(
+            self.portal_token_key, "M15_PORTAL_TOKEN_KEY"
+        )
+
+    def resolved_portal_session_secret(self) -> str:
+        """Assina o cookie do paciente. Distinto de `auth_secret`, sempre.
+
+        Reaproveitar o segredo administrativo faria um cookie de painel ser
+        aceito pelo portal — e o oposto — só por terem a mesma assinatura.
+        A separação aqui é o que torna a fronteira verificável.
+        """
+
+        segredo = _segredo_forte(
+            self.portal_session_secret, "M15_PORTAL_SESSION_SECRET"
+        )
+        if self.auth_secret and segredo == self.auth_secret:
+            raise ValueError(
+                "M15_PORTAL_SESSION_SECRET não pode ser igual a "
+                "M15_AUTH_SECRET: o portal público e o painel privado "
+                "precisam de assinaturas distintas."
+            )
+        return segredo
 
     def resolved_reports_storage_dir(self) -> Path:
         """Raiz de armazenamento de laudos PDF — fail-closed.
@@ -346,6 +479,18 @@ class Settings(BaseSettings):
         _assert_outside_git_worktree(resolved_after_creation, repo_root)
         _assert_private_directory(resolved_after_creation)
         return resolved_after_creation
+
+
+def _segredo_forte(valor: str | None, nome: str) -> str:
+    """Mesma régua do M15_AUTH_SECRET: >=32 caracteres, >=10 distintos."""
+
+    segredo = valor or ""
+    if len(segredo) < MIN_SECRET_LEN or len(set(segredo)) < MIN_SECRET_DISTINCT:
+        raise ValueError(
+            f"{nome} precisa de >=32 caracteres e >=10 símbolos distintos. "
+            "Gere com: python3 -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    return segredo
 
 
 def _find_git_repo_root() -> Path | None:
