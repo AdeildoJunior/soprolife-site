@@ -14,7 +14,7 @@ ação externa — o registro DNS no Registro.br — descrita na seção 12.
 | HEAD da VPS | `b39def0` |
 | Migração | `c3a9e15f7d84` (head) |
 | Backup pré-migração | `/opt/soprolife/backups/m26-4/m26-4-pre-20260902T025536Z.dump` (603 KB) |
-| Testes | 46 novos; suíte completa verde (3 falhas pré-existentes documentadas) |
+| Testes | 46 novos; suíte completa **1602 passed, 30 skipped, 1 failed** (a falha é pré-existente — ver §10) |
 
 ---
 
@@ -452,11 +452,26 @@ com clique explícito, sessão guarda hash e não segredo, fila não expõe o
 link, fronteira pública com 404 idêntico em 10 caminhos, ordem dos
 middlewares, identificadores no PostgreSQL, e a prova final de ponta a ponta.
 
-**Falhas pré-existentes** (confirmadas no checkout base, sem relação com
-esta etapa): `test_rubrica_real_nao_esta_versionada` (falso positivo do
-filtro por nome de arquivo, documentado na M26.1) e, no
-`quality-gate-safe.sh`, `test-m21-auth-crm-nav` → "scripts de Marketing usam
-cache-buster da reconciliação".
+Resultado final da suíte: **1602 passed, 30 skipped, 1 failed** em 9min28s.
+
+A única falha é **pré-existente e sem relação com esta etapa**:
+`test_m25_17_operacao_limpa.py::test_rubrica_real_nao_esta_versionada` —
+falso positivo do filtro por nome de arquivo (screenshots sintéticos do selo
+commitados na M25.21), já documentado na M26.1. Confirmada rodando no
+checkout base, intocado.
+
+O `quality-gate-safe.sh` também acusa uma falha pré-existente, igualmente
+confirmada no checkout base: `test-m21-auth-crm-nav` → "scripts de Marketing
+usam cache-buster da reconciliação".
+
+Duas falhas que ESTA etapa causou foram corrigidas antes da entrega, e
+valeram a pena por serem guardas reais do projeto: `.report-result-url`
+usava `word-break: break-all`, proibido no painel inteiro desde a M25.21
+porque verticaliza nome de paciente (trocado por `overflow-wrap: anywhere`,
+que resolve a URL longa sem reintroduzir a regra); e o teste de cache
+busting da M25.29E, que exige `?v=` novo sempre que
+`report-workflow.{js,css}` mudam — atualizado para `2026090102`, que é
+exatamente o que ele existe para forçar.
 
 ---
 
