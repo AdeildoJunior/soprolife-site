@@ -59,7 +59,11 @@ from .security import (
     origem_da_requisicao,
 )
 
-router = APIRouter(prefix="/p/v1", tags=["portal-resultados"])
+# O prefixo é único e literal. `main.py` o usa para recusar, na camada mais
+# externa, qualquer caminho que não comece por ele.
+PREFIXO_PUBLICO = "/p/v1/"
+
+router = APIRouter(prefix=PREFIXO_PUBLICO.rstrip("/"), tags=["portal-resultados"])
 
 # As três únicas mensagens que o portal produz para uma falha. Curtas,
 # genéricas e acionáveis — a pessoa do outro lado é um paciente no celular,

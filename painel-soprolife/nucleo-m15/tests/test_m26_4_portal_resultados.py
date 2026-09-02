@@ -1323,3 +1323,56 @@ def test_todo_identificador_cabe_no_postgres():
             except Exception as erro:  # noqa: BLE001
                 problemas.append((f"{tabela.name}/{indice.name}", str(erro)))
     assert not problemas, problemas
+
+
+def test_fora_do_prefixo_publico_e_sempre_o_mesmo_404_com_cabecalhos(portal):
+    """Descoberto em produção: `/api/v1/laudos` respondia DIFERENTE.
+
+    O `install_error_handling`, compartilhado com o Command Center, responde
+    cedo — antes das rotas — a qualquer caminho começado em `/api/v1/laudos`.
+    No portal isso devolvia `503 relatorios_desabilitados`, e sem nenhum dos
+    cabeçalhos de segurança, porque a camada que os aplica era a mais INTERNA
+    e nunca chegava a rodar.
+
+    Duas coisas erradas numa só resposta: um caminho que responde diferente
+    dos outros conta a quem varre que esta máquina tem a ver com um sistema
+    de laudos, e um cabeçalho de segurança que depende do caminho feliz não é
+    garantia.
+    """
+
+    corpos = set()
+    for caminho in (
+        "/api/v1/laudos", "/api/v1/laudos/qualquer", "/api/v1/pessoas",
+        "/api/v1/financeiro", "/docs", "/openapi.json", "/", "/qualquer-coisa",
+        "/p/v1", "/p/v1x/health",
+    ):
+        resposta = portal.get(caminho)
+        assert resposta.status_code == 404, caminho
+        corpos.add(resposta.text)
+        cabecalhos = resposta.headers
+        assert "no-store" in cabecalhos["cache-control"], caminho
+        assert "noindex" in cabecalhos["x-robots-tag"], caminho
+        assert cabecalhos["x-frame-options"] == "DENY", caminho
+        assert "default-src 'none'" in cabecalhos["content-security-policy"]
+        for vazamento in ("laudo", "relatorio", "desabilitado", "soprolife_m15"):
+            assert vazamento not in resposta.text.lower(), (caminho, vazamento)
+    # Todos exatamente iguais: não há caminho que se comporte de forma
+    # distinta e sirva de sonda.
+    assert len(corpos) == 1
+
+
+def test_a_camada_de_cabecalhos_e_a_mais_externa():
+    """Congela a ORDEM, que é o que a correção acima realmente mudou.
+
+    No Starlette o middleware adicionado por ÚLTIMO é o mais EXTERNO. Se
+    alguém acrescentar um `add_middleware` depois da fronteira pública, ela
+    deixa de envolver tudo — e o defeito volta calado.
+    """
+
+    from app.portal.main import create_portal_app
+
+    nomes = [m.cls.__name__ for m in create_portal_app().user_middleware]
+    # A lista já vem na ordem de fora para dentro.
+    assert nomes[0] == "BaseHTTPMiddleware"  # fronteira_publica
+    assert "CORSMiddleware" in nomes
+    assert nomes.index("CORSMiddleware") == len(nomes) - 1

@@ -285,6 +285,8 @@ etapa_verificar() {
     http://127.0.0.1:8016/p/v1/documentos/laudo-assinado
   echo -n "rota administrativa no portal (espera 404): "
   curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8016/api/v1/laudos
+  echo -n "e sem falar em laudo (espera vazio): "
+  curl -s http://127.0.0.1:8016/api/v1/laudos | grep -io 'laudo\|relatorio' || echo "(vazio)"
   echo -n "docs no portal (espera 404): "
   curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8016/docs
   echo "cabeçalhos do portal:"
