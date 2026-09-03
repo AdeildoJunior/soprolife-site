@@ -3,8 +3,16 @@
 **Executado em 01–02/09/2026.** Worktree novo, a partir de
 `origin/painel-soprolife-v01` (`5e1345c`).
 
-**Estado:** implementado, testado, integrado e implantado. Falta **uma**
+**Estado:** implementado, testado, integrado e implantado. Faltava **uma**
 ação externa — o registro DNS no Registro.br — descrita na seção 12.
+
+> **Nota da M26.5 (02/09/2026).** Essa ação foi feita. O registro A
+> `resultados-api.soprolife.com.br → 187.127.39.5` existe, o certificado
+> Let's Encrypt foi emitido em 02/09/2026 17:02 UTC e o portal responde em
+> HTTPS. As instruções da seção 12 estão cumpridas e ficam aqui como
+> registro histórico. A M26.5 mediu, a partir daí, cinco defeitos da borda
+> que só o estado "no ar" revelava — ver
+> `RELATORIO_M26_5_HARDENING_PORTAL_RESULTADOS_20260902.md`.
 
 | | |
 |---|---|
@@ -489,7 +497,7 @@ para frente.
 
 ---
 
-## 12. A ÚNICA ação que falta
+## 12. A ÚNICA ação que faltava — CUMPRIDA em 02/09/2026
 
 O domínio é administrado no **Registro.br**, painel externo sem API
 disponível nesta sessão.
@@ -530,7 +538,7 @@ o vhost, o ufw e a página pública já estão no lugar.
 | item | estado |
 |---|---|
 | `soprolife.com.br/resultados` | **no ar** (HTTP 200, `noindex`) |
-| API pública `/p/v1` | **no ar** por IP; HTTPS pendente de DNS |
+| API pública `/p/v1` | **no ar** por IP; HTTPS pendente de DNS *(cumprido em 02/09 — ver nota no topo)* |
 | Command Center | **privado**, Tailscale, portas internas fechadas |
 | Migração `c3a9e15f7d84` | aplicada |
 | Backup pré-migração | preservado |

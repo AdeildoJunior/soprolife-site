@@ -3,6 +3,13 @@
 Como o paciente da SoproLife recebe o próprio laudo, e por que a operação
 não ganhou um passo a mais para isso acontecer.
 
+> **Atualizado na M26.5 (02/09/2026).** Duas coisas que este documento
+> descrevia como pendentes já aconteceram: o registro DNS
+> `resultados-api.soprolife.com.br → 187.127.39.5` foi criado no
+> Registro.br e o certificado Let's Encrypt foi emitido em 02/09/2026
+> 17:02 UTC. O portal está em **HTTPS**. As seções 11 a 13 refletem o
+> estado atual e o que a M26.5 mudou na borda.
+
 ---
 
 ## 1. O desenho em uma tela
@@ -41,6 +48,7 @@ A linha vertical é a fronteira, e ela é feita de coisas verificáveis:
 | cookie | `soprolife_m15_sessao` | `soprolife_resultado` |
 | segredo do cookie | `M15_AUTH_SECRET` | `M15_PORTAL_SESSION_SECRET` |
 | deriva links? | sim (`M15_PORTAL_TOKEN_KEY`) | **não tem a chave** |
+| servidor padrão do nginx | — | **não** — há `default_server` próprio (M26.5) |
 
 ## 2. O gatilho
 
@@ -222,24 +230,99 @@ coisa não bloqueia a outra.
 
 ## 11. Instalação
 
+O script tem oito etapas, e cada uma roda sozinha:
+
+| etapa | o que faz |
+|---|---|
+| `segredos` | gera os dois segredos e escreve os dois EnvironmentFiles |
+| `banco` | backup, `alembic upgrade head` e o papel restrito `soprolife_portal` |
+| `servico` | instala a unit, sobe o portal e espera o health dos dois processos |
+| `ip-publico` | imprime o IPv4 público desta VPS — o dado do registro A |
+| `nginx` | **reconstrói** o vhost a partir da fonte versionada e recarrega |
+| `tls` | confere o DNS, emite o certificado e reconstrói o vhost |
+| `verificar` | smoke em loopback, sem paciente real |
+| `borda` | smoke pela internet: cabeçalhos, 404 do catch-all, versão do nginx |
+| `tailscale` | confere que a 443 do tailnet continua do `tailscaled` |
+
 ```bash
 # na VPS, como root
 cd /opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15
 sudo ./scripts/deploy-portal-resultados.sh todas   # tudo, menos TLS
-# ... criar o DNS ...
-sudo ./scripts/deploy-portal-resultados.sh tls
+sudo ./scripts/deploy-portal-resultados.sh tls     # depois que o DNS resolver
 ```
 
-O registro DNS necessário (painel do Registro.br — o domínio é administrado
-lá, e não há API disponível):
+**O registro DNS** (painel do Registro.br — o domínio é administrado lá, e
+não há API disponível) já existe desde 02/09/2026:
 
 ```
 Nome:  resultados-api      Tipo: A      Dado: 187.127.39.5      TTL: 3600
 ```
 
-`187.127.39.5` é o IPv4 público da VPS (Hostinger, `srv1791147.hstgr.cloud`).
+O endereço **não** se descobre com `hostname -I | head -n 1` nem com
+`tailscale ip -4`: os dois entregam `100.87.98.100`, que é o endereço CGNAT
+do tailnet — não roteia da internet e, pior, publicaria num registro DNS
+permanente o endereço com que o Command Center é administrado. Quem responde
+é:
 
-## 12. Onde olhar quando algo der errado
+```bash
+sudo ./scripts/deploy-portal-resultados.sh ip-publico
+```
+
+A etapa `tls` também recusa emitir certificado se o nome resolver para um
+endereço que não seja público.
+
+## 12. O que a M26.5 mudou na borda
+
+Cinco correções, todas medidas em produção antes de existirem:
+
+1. **`pool_pre_ping`.** O portal passa a madrugada ocioso; o PostgreSQL
+   fecha sessão parada e o firewall esquece o fluxo. Sem o pre-ping, a
+   primeira requisição depois do silêncio — que é justamente a do paciente
+   abrindo o link — recebia erro de conexão. Agora o pool testa a conexão
+   antes de entregá-la e reconecta sozinho.
+2. **O vhost voltou a ser reconstruível.** Depois do `certbot --nginx` o
+   arquivo instalado divergia da fonte e o deploy se recusava a tocar nele,
+   para não apagar os caminhos do certificado. Isso congelava o vhost:
+   mudar uma regra virava trabalho manual na VPS.
+   `scripts/nginx_portal_vhost.py` monta o arquivo a partir da fonte
+   versionada **relendo** os caminhos do certificado de onde já estiverem,
+   e a troca só se efetiva depois de o `nginx -t` aprovar — reprovou, o
+   arquivo anterior volta e o nginx nem chega a ser recarregado.
+3. **O portal deixou de ser o servidor padrão.** Sendo o único bloco a
+   escutar 443, ele era eleito `default_server` pelo nginx e respondia a
+   qualquer SNI apontado para o IP. Agora há um `default_server` explícito
+   com `ssl_reject_handshake on` na 443 e `return 444` na 80.
+
+   **E a 443 nunca sai em curinga.** Nesta VPS o `tailscaled` escuta a 443
+   do endereço do tailnet, servindo o painel privado por `tailscale serve`:
+
+   ```
+   187.127.39.5:443           nginx
+   [2a02:4780:6e:665::1]:443  nginx
+   100.87.98.100:443          tailscaled   ← o painel privado
+   ```
+
+   Um `listen 443 ssl` faria o nginx tentar `0.0.0.0:443` e disputar a porta
+   com o `tailscaled` — ou o nginx não sobe, ou o painel sai do ar. Por isso
+   os endereços da escuta são **relidos do vhost instalado** (são dado de
+   máquina, não de repositório) e o renderizador **recusa** emitir curinga.
+   A etapa `nginx` termina conferindo que a 443 do tailnet continua do
+   `tailscaled` e que nenhum vhost abriu curinga.
+4. **Cabeçalhos no 404 do catch-all.** Medido em produção, o 404 saía com
+   `Strict-Transport-Security` e mais nada — sem CSP, sem `X-Robots-Tag`,
+   sem `Cache-Control`. A causa é uma regra do nginx: `add_header` dentro
+   de um `location` **substitui** o conjunto do `server` em vez de somar.
+   Os cabeçalhos passaram para o nível do `server`, nenhum `location`
+   declara os seus, e as rotas proxiadas descartam a cópia da aplicação com
+   `proxy_hide_header` — sai exatamente uma de cada. Um teste compara a
+   lista do nginx com `app/portal/security.py::CABECALHOS_SEGUROS` e falha
+   se as duas divergirem.
+5. **A versão do nginx parou de vazar.** O bloco de redirecionamento gerado
+   pelo certbot não tem `server_tokens off`, e `curl -I http://<ip>/`
+   devolvia `Server: nginx/1.24.0 (Ubuntu)`. O bloco emitido pelo
+   renderizador tem.
+
+## 13. Onde olhar quando algo der errado
 
 | sintoma | primeiro lugar |
 |---|---|
@@ -248,3 +331,7 @@ Nome:  resultados-api      Tipo: A      Dado: 187.127.39.5      TTL: 3600
 | a fila diz "Resultado online: não gerado" | `journalctl -u soprolife-m15-api \| grep resultado_acesso_falhou_no_gatilho` |
 | o portal não responde | `systemctl status soprolife-portal-resultados` e `curl 127.0.0.1:8016/p/v1/health` |
 | o QR não abre no celular | o QR aponta para a PÁGINA; confira se o DNS/TLS do subdomínio está de pé |
+| erro de conexão com o banco só na primeira requisição do dia | era o sintoma do pool sem pre-ping; confira `app/db.py::build_engine` |
+| o vhost não bate com o Git | `deploy-portal-resultados.sh nginx` reconstrói; o arquivo anterior fica em `.bak-<STAMP>` |
+| um nome de terceiro responde neste IP | `nginx -T \| grep default_server` — o catch-all da M26.5 sumiu? |
+| o painel por `tailscale serve` parou depois de mexer no nginx | `ss -tlnp \| grep 100.87.98.100:443` — algum vhost abriu curinga na 443 |
