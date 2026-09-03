@@ -129,9 +129,16 @@ def test_o_teste_de_stale_nao_e_vacuo(tmp_path):
 # ================================================================== vhost
 
 
+# A forma REAL do vhost instalado na VPS. Os `listen` da 443 têm endereço
+# explícito, e o comentário de quem os escreveu diz por quê: o `tailscaled`
+# ocupa a 443 do endereço do tailnet, servindo o painel privado por
+# `tailscale serve`. Um `listen 443 ssl` curinga colidiria com ele.
+IPV4_PUBLICO = "187.127.39.5"
+IPV6_PUBLICO = "[2a02:4780:6e:665::1]"
 CERTBOT_INSTALADO = f"""\
 server {{
-    listen 443 ssl; # managed by Certbot
+    listen {IPV6_PUBLICO}:443 ssl; # M26.4: endereco publico explicito (tailscaled ocupa :443 no tailnet)
+    listen {IPV4_PUBLICO}:443 ssl; # M26.4: endereco publico explicito (tailscaled ocupa :443 no tailnet)
     server_name {VHOST_NOME};
     ssl_certificate /etc/letsencrypt/live/{VHOST_NOME}/fullchain.pem; # managed by Certbot
     ssl_certificate_key /etc/letsencrypt/live/{VHOST_NOME}/privkey.pem; # managed by Certbot
@@ -219,11 +226,64 @@ def test_o_portal_nunca_e_o_servidor_padrao(render_com_tls):
 def test_existe_catch_all_explicito_nas_duas_portas(render_com_tls):
     nu = vhost._sem_comentarios(render_com_tls)
     assert "listen 80 default_server;" in nu
-    assert "listen 443 ssl default_server;" in nu
+    # O catch-all de 443 também é por endereço — pelo mesmo motivo do portal.
+    assert f"listen {IPV4_PUBLICO}:443 ssl default_server;" in nu
+    assert f"listen {IPV6_PUBLICO}:443 ssl default_server;" in nu
     # 443 desconhecido não ganha nem resposta: o handshake é recusado.
     assert "ssl_reject_handshake on;" in nu
     # 80 desconhecido não ganha corpo nem versão de software.
     assert "return 444;" in nu
+
+
+def test_a_443_nunca_sai_como_curinga(render_com_tls):
+    """O `tailscale serve` publica o painel privado na 443 do tailnet.
+
+    `listen 443 ssl` faz o nginx tentar 0.0.0.0:443 e disputar essa porta
+    com o `tailscaled`. O resultado seria o nginx não subir — ou o painel
+    privado sair do ar. Nenhum dos dois é aceitável num deploy de rotina.
+    """
+
+    for linha in re.findall(
+        r"^\s*listen\s+([^;]+);", vhost._sem_comentarios(render_com_tls), re.MULTILINE
+    ):
+        alvo = linha.split()[0]
+        if ":443" in alvo or alvo == "443":
+            assert alvo not in vhost.CURINGAS_443, f"`listen {alvo}` é curinga na 443"
+            assert alvo in (f"{IPV4_PUBLICO}:443", f"{IPV6_PUBLICO}:443")
+
+
+def test_os_enderecos_de_escuta_sao_relidos_do_instalado():
+    """São dado de máquina, não de repositório: dependem do IP que a VPS tem."""
+
+    assert vhost.enderecos_443(CERTBOT_INSTALADO) == (
+        f"{IPV6_PUBLICO}:443",
+        f"{IPV4_PUBLICO}:443",
+    )
+
+
+@pytest.mark.parametrize("curinga", ["443", "[::]:443", "0.0.0.0:443"])
+def test_curinga_no_instalado_e_recusado(curinga):
+    instalado = CERTBOT_INSTALADO.replace(f"{IPV4_PUBLICO}:443", curinga, 1)
+    with pytest.raises(vhost.ErroDeRender) as erro:
+        vhost.enderecos_443(instalado)
+    assert "tailscale" in str(erro.value).lower()
+
+
+def test_tls_sem_endereco_nao_rende_nada(fonte):
+    """Falha fechada: melhor não gerar vhost que gerar um que toma a 443."""
+
+    sem_endereco = vhost.MaterialTLS("/c.pem", "/k.pem", None, None, ())
+    with pytest.raises(vhost.ErroDeRender) as erro:
+        vhost.renderizar(fonte, VHOST_NOME, sem_endereco)
+    assert "--listen-443" in str(erro.value)
+
+
+def test_validar_reprova_curinga_de_443(render_com_tls):
+    estragado = render_com_tls.replace(f"    listen {IPV4_PUBLICO}:443 ssl;\n",
+                                       "    listen 443 ssl;\n")
+    assert estragado != render_com_tls
+    problemas = vhost.validar(estragado, VHOST_NOME)
+    assert any("curinga" in p for p in problemas)
 
 
 def test_o_redirecionamento_nao_anuncia_a_versao_do_nginx(render_com_tls):
@@ -269,7 +329,10 @@ def test_validar_reprova_portal_sem_cabecalhos(render_com_tls):
 
 
 def test_validar_reprova_portal_como_default_server(render_com_tls):
-    estragado = render_com_tls.replace("    listen 443 ssl;\n", "    listen 443 ssl default_server;\n")
+    estragado = render_com_tls.replace(
+        f"    listen {IPV4_PUBLICO}:443 ssl;\n",
+        f"    listen {IPV4_PUBLICO}:443 ssl default_server;\n",
+    )
     problemas = vhost.validar(estragado, VHOST_NOME)
     assert any("default_server" in p for p in problemas)
 
@@ -277,7 +340,7 @@ def test_validar_reprova_portal_como_default_server(render_com_tls):
 def test_validar_reprova_443_sem_certificado():
     estragado = (
         "server {\n"
-        "    listen 443 ssl;\n"
+        f"    listen {IPV4_PUBLICO}:443 ssl;\n"
         f"    server_name {VHOST_NOME};\n"
         "    location /p/v1/ { proxy_pass http://127.0.0.1:8016; }\n"
         "    location / {\n        return 404;\n    }\n"
@@ -469,10 +532,35 @@ def test_o_deploy_e_sintaticamente_valido():
     assert subprocess.run(["bash", "-n", str(DEPLOY)]).returncode == 0
 
 
+def _funcao_shell(deploy: str, nome: str) -> str:
+    corpo = deploy[deploy.index(f"{nome}() {{") :]
+    return corpo[: corpo.index("\n}\n")]
+
+
 def test_o_deploy_nao_deriva_ip_de_hostname_nem_do_tailscale(deploy):
+    """O IP que vai ao DNS sai do seletor, nunca da máquina "à mão"."""
+
     assert "hostname -I" not in deploy
-    assert "tailscale ip" not in deploy
     assert "rede_publica.py" in deploy
+    # `tailscale ip` tem exatamente um uso legítimo: descobrir o endereço que
+    # o nginx NÃO pode tomar. Fora da guarda, é derivação de IP público.
+    fora_da_guarda = deploy.replace(_funcao_shell(deploy, "etapa_tailscale_intacto"), "")
+    assert "tailscale ip" not in fora_da_guarda
+
+
+def test_a_etapa_nginx_confere_o_tailscale_depois_de_recarregar(deploy):
+    """`tailscale serve` estava explicitamente fora de escopo — e continua.
+
+    A afirmação "não mexi" vale mais medida do que declarada: a etapa termina
+    conferindo que a 443 do tailnet ainda é do tailscaled e que nenhum vhost
+    abriu curinga nessa porta.
+    """
+
+    etapa = _funcao_shell(deploy, "etapa_nginx")
+    assert etapa.index("systemctl reload nginx") < etapa.index("etapa_tailscale_intacto")
+    guarda = _funcao_shell(deploy, "etapa_tailscale_intacto")
+    assert "tailscaled" in guarda
+    assert "curinga" in guarda
 
 
 def test_o_deploy_verifica_o_dns_antes_do_certbot(deploy):

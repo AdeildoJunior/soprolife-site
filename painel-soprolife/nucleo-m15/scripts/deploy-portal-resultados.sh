@@ -229,6 +229,42 @@ etapa_servico() {
   echo "OK: 8016 apenas em 127.0.0.1."
 }
 
+# ------------------------------------------------------- tailscale intacto
+#
+# O `tailscale serve` publica o painel privado em HTTPS no endereço do
+# tailnet, e para isso o `tailscaled` ESCUTA a porta 443 desse endereço.
+# O nginx convive com ele porque escuta a 443 em endereços explícitos (os
+# públicos), nunca em curinga. Um `listen 443 ssl` sozinho faria o nginx
+# disputar 0.0.0.0:443: ou ele não sobe, ou o painel privado sai do ar.
+#
+# Esta função não muda nada. Ela só afirma, depois de cada mexida no nginx,
+# que quem manda na 443 do tailnet continua sendo o tailscaled.
+etapa_tailscale_intacto() {
+  titulo "tailscale serve intacto"
+  command -v tailscale >/dev/null || { echo "(tailscale não instalado — nada a conferir)"; return 0; }
+  local ip_tailnet
+  # `tailscale ip -4` aqui NÃO escolhe endereço público: escolhe justamente
+  # o endereço que o nginx não pode tomar.
+  ip_tailnet="$(tailscale ip -4 2>/dev/null | head -n 1 || true)"
+  [[ -n "$ip_tailnet" ]] || { echo "(sem IP de tailnet — nada a conferir)"; return 0; }
+
+  local dono
+  dono="$(ss -tlnpH | awk -v alvo="$ip_tailnet:443" '$4 == alvo {print $0}')"
+  if [[ -z "$dono" ]]; then
+    echo "AVISO: ninguém escuta $ip_tailnet:443 — o painel por tailscale serve pode estar fora." >&2
+  else
+    grep -q "tailscaled" <<<"$dono" || \
+      fail "FATAL: $ip_tailnet:443 deixou de ser do tailscaled — o painel privado foi tomado"
+    echo "OK: $ip_tailnet:443 continua do tailscaled."
+  fi
+
+  # E o nginx não pode ter aberto curinga na 443 em lugar nenhum.
+  if nginx -T 2>/dev/null | grep -E '^\s*listen\s+(443|\*:443|0\.0\.0\.0:443|\[::\]:443)\s' >/dev/null; then
+    fail "FATAL: algum vhost escuta a 443 em curinga — isso disputa a porta com o tailscaled"
+  fi
+  echo "OK: nenhum vhost escuta a 443 em curinga."
+}
+
 # -------------------------------------------------------------- ip público
 #
 # O endereço que vai para o registro A. NÃO é `hostname -I | head -n 1` nem
@@ -337,6 +373,8 @@ etapa_nginx() {
     echo "Estado pré-TLS: ainda não há certificado. Rode a etapa \`tls\`."
   fi
   echo "OK: 80 tem default_server explícito."
+
+  etapa_tailscale_intacto
 }
 
 # --------------------------------------------------------------------- tls
@@ -473,6 +511,7 @@ case "$ETAPA" in
   tls)        etapa_tls ;;
   verificar)  etapa_verificar ;;
   borda)      etapa_borda ;;
+  tailscale)  etapa_tailscale_intacto ;;
   todas)
     etapa_segredos
     etapa_banco

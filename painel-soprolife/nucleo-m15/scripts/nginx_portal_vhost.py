@@ -68,12 +68,23 @@ class ErroDeRender(Exception):
     """Falha fechada: melhor não gerar vhost nenhum do que gerar um errado."""
 
 
+# Um `listen` de 443 SEM endereço (`443`, `[::]:443`, `0.0.0.0:443`) faz o
+# nginx tentar 0.0.0.0:443 — e nesta VPS a porta 443 do endereço do tailnet
+# pertence ao `tailscaled`, que serve o painel por `tailscale serve`. Um
+# curinga aqui colide com ele: ou o nginx não sobe, ou o painel privado sai
+# do ar. Por isso o render EXIGE endereço explícito na 443, e recusa emitir
+# qualquer coisa que não seja isso.
+CURINGAS_443 = ("443", "*:443", "0.0.0.0:443", "[::]:443", "[::0]:443")
+
+
 @dataclasses.dataclass(frozen=True)
 class MaterialTLS:
     certificado: str
     chave: str
     opcoes: str | None = None
     dhparam: str | None = None
+    # ex.: ("187.127.39.5:443", "[2a02:4780:6e:665::1]:443")
+    enderecos: tuple[str, ...] = ()
 
 
 # --------------------------------------------------------------- leitura
@@ -161,6 +172,30 @@ def _valor(texto: str, diretiva: str) -> str | None:
     return achado.group(1).strip() if achado else None
 
 
+def enderecos_443(texto: str) -> tuple[str, ...]:
+    """Os endereços em que este vhost escuta 443, na ordem em que aparecem.
+
+    São dado de MÁQUINA, não de repositório: dependem do IP público que a
+    VPS tem hoje. Por isso são relidos do que está instalado em vez de
+    ficarem escritos na fonte versionada.
+    """
+
+    achados: list[str] = []
+    for linha in re.findall(r"^\s*listen\s+([^;]+);", _sem_comentarios(texto), re.MULTILINE):
+        alvo = linha.split()[0]
+        if ":443" not in alvo and alvo != "443":
+            continue
+        if alvo in CURINGAS_443:
+            raise ErroDeRender(
+                f"o vhost instalado escuta `listen {alvo}` (curinga) na 443. "
+                "Nesta VPS a 443 do endereço do tailnet é do tailscaled; "
+                "reemitir um curinga derrubaria o `tailscale serve`."
+            )
+        if alvo not in achados:
+            achados.append(alvo)
+    return tuple(achados)
+
+
 def tls_do_instalado(texto: str) -> MaterialTLS | None:
     """Recupera o material TLS de um vhost já instalado (posto lá pelo certbot)."""
 
@@ -174,7 +209,9 @@ def tls_do_instalado(texto: str) -> MaterialTLS | None:
     )
     if achado:
         opcoes = achado.group(1)
-    return MaterialTLS(certificado, chave, opcoes, _valor(texto, "ssl_dhparam"))
+    return MaterialTLS(
+        certificado, chave, opcoes, _valor(texto, "ssl_dhparam"), enderecos_443(texto)
+    )
 
 
 def tls_do_letsencrypt(raiz: Path, nome: str) -> MaterialTLS | None:
@@ -192,6 +229,7 @@ def tls_do_letsencrypt(raiz: Path, nome: str) -> MaterialTLS | None:
         str(chave),
         str(opcoes) if opcoes.exists() else None,
         str(dhparam) if dhparam.exists() else None,
+        (),  # quem sabe os endereços é o vhost instalado, ou o `--listen-443`
     )
 
 
@@ -217,17 +255,23 @@ server {
     return 444;
 }"""
 
-_CATCH_ALL_443 = """\
-server {
-    # `ssl_reject_handshake` recusa o SNI desconhecido sem precisar de
-    # certificado nenhum — nada deste servidor é apresentado a quem não
-    # pediu pelo nome certo.
-    listen 443 ssl default_server;
-    listen [::]:443 ssl default_server;
-    server_name _;
-    ssl_reject_handshake on;
-    access_log off;
-}"""
+def _catch_all_443(enderecos: tuple[str, ...]) -> str:
+    escutas = "\n".join(f"    listen {alvo} ssl default_server;" for alvo in enderecos)
+    return (
+        "server {\n"
+        "    # `ssl_reject_handshake` recusa o SNI desconhecido sem precisar de\n"
+        "    # certificado nenhum — nada deste servidor é apresentado a quem não\n"
+        "    # pediu pelo nome certo.\n"
+        "    #\n"
+        "    # Os endereços são explícitos porque a 443 do endereço do tailnet\n"
+        "    # pertence ao tailscaled (`tailscale serve` publica o painel ali).\n"
+        "    # Um curinga aqui tiraria o painel privado do ar.\n"
+        f"{escutas}\n"
+        "    server_name _;\n"
+        "    ssl_reject_handshake on;\n"
+        "    access_log off;\n"
+        "}"
+    )
 
 
 def _bloco_tls(tls: MaterialTLS) -> str:
@@ -275,9 +319,16 @@ def renderizar(fonte: str, nome: str, tls: MaterialTLS | None) -> str:
         ]
         return "\n".join(partes)
 
+    if not tls.enderecos:
+        raise ErroDeRender(
+            "há material TLS mas nenhum endereço explícito de escuta na 443. "
+            "Informe com --listen-443 (ex.: --listen-443 187.127.39.5:443): "
+            "emitir `listen 443 ssl` colidiria com o tailscaled."
+        )
+
     partes += [
         "",
-        _CATCH_ALL_443,
+        _catch_all_443(tls.enderecos),
         "",
         "# Porta 80 do portal: só o desafio do Let's Encrypt e o",
         "# redirecionamento. Diferente do bloco que o `certbot --nginx`",
@@ -300,10 +351,10 @@ def renderizar(fonte: str, nome: str, tls: MaterialTLS | None) -> str:
         "    }",
         "}",
         "",
-        "# O portal.",
+        "# O portal. Escuta nos endereços PÚBLICOS, um a um: a 443 do endereço",
+        "# do tailnet é do tailscaled, e um curinga a tomaria dele.",
         "server {",
-        "    listen 443 ssl;",
-        "    listen [::]:443 ssl;",
+        *[f"    listen {alvo} ssl;" for alvo in tls.enderecos],
         f"    server_name {nome};",
         _bloco_tls(tls),
         "",
@@ -371,6 +422,13 @@ def validar(render: str, nome: str) -> list[str]:
             problemas.append("bloco `server` sem `server_name` explícito")
         if tem_443 and not rejeita and not _valor(bloco, "ssl_certificate"):
             problemas.append("bloco escuta 443 sem `ssl_certificate` e sem `ssl_reject_handshake`")
+        for linha in listens:
+            alvo = linha.split()[0]
+            if (":443" in alvo or alvo == "443") and alvo in CURINGAS_443:
+                problemas.append(
+                    f"`listen {alvo}` é curinga na 443 — colide com o tailscaled, "
+                    "que serve o painel privado nessa porta no endereço do tailnet"
+                )
         if eh_portal:
             if eh_default:
                 problemas.append(
@@ -406,6 +464,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--instalado", type=Path)
     parser.add_argument("--nome", default=NOME_PADRAO)
     parser.add_argument("--letsencrypt-raiz", type=Path, default=Path("/etc/letsencrypt"))
+    parser.add_argument(
+        "--listen-443",
+        action="append",
+        default=[],
+        metavar="ENDERECO:443",
+        help=(
+            "endereço explícito de escuta na 443 (repetível). Só é preciso "
+            "quando não há vhost instalado de onde reler; nunca use curinga."
+        ),
+    )
     args = parser.parse_args(argv)
 
     fonte = args.fonte.read_text(encoding="utf-8")
@@ -421,6 +489,9 @@ def main(argv: list[str] | None = None) -> int:
         if tls:
             origem_tls = f"{args.letsencrypt_raiz}/live/{args.nome}"
 
+    if tls is not None and args.listen_443:
+        tls = dataclasses.replace(tls, enderecos=tuple(args.listen_443))
+
     try:
         render = renderizar(fonte, args.nome, tls)
     except ErroDeRender as erro:
@@ -435,7 +506,8 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     args.saida.write_text(render, encoding="utf-8")
-    print(f"render escrito em {args.saida}; material TLS: {origem_tls}")
+    escutas = ", ".join(tls.enderecos) if tls else "—"
+    print(f"render escrito em {args.saida}; material TLS: {origem_tls}; escuta 443: {escutas}")
     return 0
 
 
