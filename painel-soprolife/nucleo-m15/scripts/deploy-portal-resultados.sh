@@ -17,9 +17,15 @@
 #   segredos  gera os segredos e escreve os dois EnvironmentFiles
 #   banco     backup + migration + papel de banco restrito do portal
 #   servico   instala/atualiza a unit, sobe e confere o health em loopback
-#   nginx     instala o vhost HTTP e recarrega o nginx
+#   ip-publico imprime o IPv4 público desta VPS (o que vai no registro A)
+#   nginx     RECONSTRÓI o vhost a partir da fonte versionada e recarrega
 #   tls       certbot --nginx (exige o DNS já resolvendo)
-#   verificar smoke local, sem paciente real
+#   verificar smoke local + smoke na borda, sem paciente real
+#
+# M26.5 — a etapa `nginx` deixou de ser "instala se ainda não houver TLS".
+# Ela agora monta o vhost com nginx_portal_vhost.py, que relê os caminhos do
+# certificado de onde já estiverem: o vhost voltou a ser reproduzível a
+# partir do Git, sem que reconstruí-lo derrube o HTTPS.
 #
 # Uso:
 #   sudo ./deploy-portal-resultados.sh todas      # tudo menos tls
@@ -40,6 +46,8 @@ readonly UNIT_DESTINO="/etc/systemd/system/soprolife-portal-resultados.service"
 readonly VHOST_NOME="resultados-api.soprolife.com.br"
 readonly VHOST_FONTE="$PAINEL/nginx/$VHOST_NOME.conf"
 readonly SQL_PAPEL="$M15_DIR/scripts/sql/m26-4-portal-db-role.sql"
+readonly RENDER_VHOST="$M15_DIR/scripts/nginx_portal_vhost.py"
+readonly REDE_PUBLICA="$M15_DIR/scripts/rede_publica.py"
 readonly DOMINIO_PUBLICO="https://soprolife.com.br/resultados"
 readonly DB_NAME="soprolife_m15"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -55,6 +63,8 @@ titulo() { echo; echo "===== $* ====="; }
 [[ -f "$UNIT_FONTE" ]] || fail "unit ausente: $UNIT_FONTE"
 [[ -f "$VHOST_FONTE" ]] || fail "vhost ausente: $VHOST_FONTE"
 [[ -f "$SQL_PAPEL" ]] || fail "SQL do papel ausente: $SQL_PAPEL"
+[[ -f "$RENDER_VHOST" ]] || fail "renderizador do vhost ausente: $RENDER_VHOST"
+[[ -f "$REDE_PUBLICA" ]] || fail "seletor de IP público ausente: $REDE_PUBLICA"
 
 segredo() { python3 -c "import secrets; print(secrets.token_hex(32))"; }
 
@@ -219,25 +229,81 @@ etapa_servico() {
   echo "OK: 8016 apenas em 127.0.0.1."
 }
 
+# -------------------------------------------------------------- ip público
+#
+# O endereço que vai para o registro A. NÃO é `hostname -I | head -n 1` nem
+# `tailscale ip -4`: os dois entregariam 100.87.98.100, que é CGNAT do
+# tailnet — não roteia da internet e ainda publicaria, num registro DNS
+# permanente, o endereço interno de administração do Command Center.
+etapa_ip_publico() {
+  titulo "IPv4 público desta VPS"
+  local ip
+  ip="$("$VENV" "$REDE_PUBLICA")" || \
+    fail "não foi possível determinar um único IPv4 público (veja acima)"
+  echo "$ip"
+}
+
 # ------------------------------------------------------------------- nginx
 etapa_nginx() {
-  titulo "vhost público"
+  titulo "vhost público (reconstruído a partir da fonte versionada)"
   command -v nginx >/dev/null || fail "nginx não instalado"
   install -d -m 0755 /var/www/html
   local instalado="/etc/nginx/sites-available/$VHOST_NOME"
-  if [[ -f "$instalado" ]] && grep -q '^\s*ssl_certificate' "$instalado"; then
-    # Depois do certbot, quem mantém este arquivo é ele — inclusive na
-    # renovação. Reinstalar a versão pré-TLS do repositório por cima
-    # apagaria os caminhos do certificado e derrubaria o HTTPS.
-    echo "vhost já tem certificado; arquivo preservado (mantido pelo certbot)."
-  else
-    install -m 0644 "$VHOST_FONTE" "$instalado"
+  local habilitado="/etc/nginx/sites-enabled/$VHOST_NOME"
+  local candidato="/etc/nginx/.$VHOST_NOME.candidato-$STAMP"
+
+  # O render lê os caminhos do certificado do arquivo que já está instalado
+  # (é lá que o certbot os escreveu). Sem esse passo, reinstalar a fonte por
+  # cima apagaria o TLS — que foi exatamente por que a M26.4 teve de
+  # congelar o arquivo e deixar de poder mudá-lo.
+  local args=(--fonte "$VHOST_FONTE" --saida "$candidato" --nome "$VHOST_NOME")
+  if [[ -f "$instalado" ]]; then
+    args+=(--instalado "$instalado")
   fi
-  ln -sfn "$instalado" "/etc/nginx/sites-enabled/$VHOST_NOME"
+  "$VENV" "$RENDER_VHOST" "${args[@]}" || {
+    rm -f "$candidato"
+    fail "não consegui montar o vhost — nada foi tocado"
+  }
+
+  # Troca com rede: o arquivo só fica se o `nginx -t` aprovar a configuração
+  # INTEIRA com ele no lugar. Reprovou, o anterior volta e o nginx não chega
+  # a ser recarregado.
+  local backup=""
+  if [[ -f "$instalado" ]]; then
+    backup="$instalado.bak-$STAMP"
+    cp -a "$instalado" "$backup"
+  fi
+  install -m 0644 "$candidato" "$instalado"
+  rm -f "$candidato"
+  ln -sfn "$instalado" "$habilitado"
 
   # O site padrão do nginx responderia a qualquer Host na porta 80. Não há
-  # nada para ele servir nesta máquina.
-  rm -f /etc/nginx/sites-enabled/default
+  # nada para ele servir nesta máquina, e agora existe um default_server
+  # nosso, explícito, no lugar dele.
+  # Guardado FORA de sites-enabled (o nginx lê sites-enabled/*), para poder
+  # voltar exatamente como estava se o teste de configuração reprovar.
+  local default_guardado=""
+  if [[ -e /etc/nginx/sites-enabled/default ]]; then
+    default_guardado="/etc/nginx/default.sites-enabled.bak-$STAMP"
+    mv /etc/nginx/sites-enabled/default "$default_guardado"
+  fi
+
+  if ! nginx -t; then
+    if [[ -n "$backup" ]]; then
+      cp -a "$backup" "$instalado"
+    else
+      rm -f "$instalado" "$habilitado"
+    fi
+    if [[ -n "$default_guardado" ]]; then
+      mv "$default_guardado" /etc/nginx/sites-enabled/default
+    fi
+    nginx -t >/dev/null 2>&1 || \
+      echo "AVISO: a configuração anterior também não passa em nginx -t" >&2
+    fail "nginx -t reprovou o vhost reconstruído — configuração anterior restaurada"
+  fi
+  if [[ -n "$backup" ]]; then
+    echo "backup do vhost anterior: $backup"
+  fi
 
   # Abre 80/443 no ufw — e SOMENTE elas. As portas internas (8015, 8016,
   # 8765, 5432) continuam sem regra: escutam em loopback ou na tailscale0.
@@ -246,15 +312,31 @@ etapa_nginx() {
     ufw allow 443/tcp >/dev/null
     echo "ufw: 80/tcp e 443/tcp liberadas."
   fi
-  nginx -t
   systemctl reload nginx
   echo "vhost habilitado. Portas públicas em escuta:"
   ss -tlnp | grep -E ':(80|443)\b' || true
+
   # Nenhum vhost pode publicar as portas internas.
   if grep -rn "8015\|8765" /etc/nginx/sites-enabled/ 2>/dev/null; then
     fail "FATAL: algum vhost referencia porta interna do Command Center"
   fi
   echo "OK: nenhum vhost publica 8015 nem 8765."
+
+  # E o bloco do portal não pode ser o servidor padrão de porta nenhuma: se
+  # for, ele atende qualquer Host e qualquer SNI apontado para este IP.
+  local efetiva
+  efetiva="$(nginx -T 2>/dev/null)"
+  if ! grep -q 'listen 80 default_server' <<<"$efetiva"; then
+    fail "FATAL: não há default_server explícito na porta 80"
+  fi
+  if grep -q 'ssl_certificate ' <<<"$efetiva"; then
+    grep -q 'ssl_reject_handshake on' <<<"$efetiva" || \
+      fail "FATAL: há TLS sem default_server de 443 recusando SNI desconhecido"
+    echo "OK: 443 tem default_server com ssl_reject_handshake."
+  else
+    echo "Estado pré-TLS: ainda não há certificado. Rode a etapa \`tls\`."
+  fi
+  echo "OK: 80 tem default_server explícito."
 }
 
 # --------------------------------------------------------------------- tls
@@ -263,9 +345,34 @@ etapa_tls() {
   command -v certbot >/dev/null || fail "certbot não instalado (apt install certbot python3-certbot-nginx)"
   getent hosts "$VHOST_NOME" >/dev/null || \
     fail "$VHOST_NOME ainda não resolve — crie o registro DNS antes"
+
+  # O registro A precisa apontar para um endereço PÚBLICO. Se alguém tiver
+  # cadastrado o IP do tailnet (o que é fácil: é o endereço com que a VPS é
+  # administrada), o desafio HTTP-01 falharia de qualquer jeito — mas antes
+  # disso o registro já teria publicado, para qualquer um que consulte o
+  # DNS, o endereço interno de administração do Command Center. Melhor
+  # recusar aqui, antes de o certbot sequer tentar.
+  # `ahostsv4` já devolve só IPv4, então não há o que filtrar aqui — e um
+  # `[[ ... ]] && continue` de cauda derrubaria o script no caso normal, que
+  # é justamente quando o teste é falso (`set -e`).
+  local resolvido enderecos
+  enderecos="$(getent ahostsv4 "$VHOST_NOME" | awk '{print $1}' | sort -u)"
+  [[ -n "$enderecos" ]] || fail "$VHOST_NOME não resolve para nenhum IPv4"
+  while read -r resolvido; do
+    "$VENV" "$REDE_PUBLICA" --verificar "$resolvido" >/dev/null || \
+      fail "$VHOST_NOME resolve para $resolvido, que não é um IPv4 público — corrija o registro A antes"
+  done <<<"$enderecos"
+  echo "OK: $VHOST_NOME resolve apenas para endereço público ($(tr '\n' ' ' <<<"$enderecos"))."
+
   certbot --nginx -d "$VHOST_NOME" --non-interactive --agree-tos \
     -m contato@soprolife.com.br --redirect
-  nginx -t && systemctl reload nginx
+
+  # O certbot reescreve o vhost à maneira dele — sem `server_tokens off` no
+  # bloco de redirecionamento e sem default_server nenhum. Reconstruir logo
+  # em seguida devolve o arquivo à forma versionada, agora COM os caminhos
+  # do certificado que ele acabou de escrever.
+  etapa_nginx
+
   curl -fsS "https://$VHOST_NOME/p/v1/health"
   echo
   echo "OK: HTTPS respondendo."
@@ -293,34 +400,103 @@ etapa_verificar() {
   curl -sI http://127.0.0.1:8016/p/v1/health | \
     grep -iE 'cache-control|x-robots-tag|x-frame|referrer|content-security'
   systemctl is-active soprolife-portal-resultados.service soprolife-m15-api.service
+  etapa_borda
+}
+
+# ------------------------------------------------------------------- borda
+#
+# O que sai pela INTERNET, e não pelo loopback. A M26.4 mediu os cabeçalhos
+# só em 127.0.0.1:8016 — e por isso não viu que o 404 do catch-all, que o
+# nginx responde sozinho e que nunca chega à aplicação, saía com HSTS e mais
+# nada.
+# Os nove de app/portal/security.py::CABECALHOS_SEGUROS, mais o HSTS, que
+# só a borda tem como emitir.
+CABECALHOS_ESPERADOS=(
+  "cache-control" "pragma" "x-content-type-options" "x-frame-options"
+  "referrer-policy" "x-robots-tag" "content-security-policy"
+  "permissions-policy" "cross-origin-resource-policy"
+  "strict-transport-security"
+)
+
+etapa_borda() {
+  titulo "smoke na borda (nginx), sem paciente real"
+  local base cabecalhos
+  if curl -fsS --max-time 8 "https://$VHOST_NOME/p/v1/health" >/dev/null 2>&1; then
+    base="https://$VHOST_NOME"
+  else
+    echo "(sem TLS ainda — medindo pela porta 80, com Host explícito)"
+    base="http://127.0.0.1"
+  fi
+
+  echo -n "health pela borda: "
+  curl -fsS --max-time 8 -H "Host: $VHOST_NOME" "$base/p/v1/health"; echo
+
+  local caminho
+  for caminho in /qualquercoisa /api/v1/laudos /docs; do
+    echo -n "404 do catch-all em $caminho: "
+    curl -s -o /dev/null -w '%{http_code}\n' --max-time 8 \
+      -H "Host: $VHOST_NOME" "$base$caminho"
+    cabecalhos="$(curl -sI --max-time 8 -H "Host: $VHOST_NOME" "$base$caminho" | tr 'A-Z' 'a-z')"
+    local esperado
+    for esperado in "${CABECALHOS_ESPERADOS[@]}"; do
+      grep -q "^$esperado:" <<<"$cabecalhos" || \
+        fail "FATAL: o 404 de $caminho saiu sem o cabeçalho $esperado"
+    done
+  done
+  echo "OK: o 404 do catch-all leva os ${#CABECALHOS_ESPERADOS[@]} cabeçalhos de segurança."
+
+  # Exatamente UMA cópia de cada: o `proxy_hide_header` das rotas proxiadas
+  # descarta a cópia da aplicação, e quem emite na borda é o bloco `server`.
+  cabecalhos="$(curl -sI --max-time 8 -H "Host: $VHOST_NOME" "$base/p/v1/health" | tr 'A-Z' 'a-z')"
+  local repetido
+  for repetido in "${CABECALHOS_ESPERADOS[@]}"; do
+    local quantas
+    quantas="$(grep -c "^$repetido:" <<<"$cabecalhos" || true)"
+    [[ "$quantas" == "1" ]] || \
+      fail "FATAL: $repetido apareceu $quantas vezes na resposta do portal"
+  done
+  echo "OK: nenhum cabeçalho de segurança duplicado nas rotas proxiadas."
+
+  # E a versão do nginx não é assunto de quem varre.
+  if curl -sI --max-time 8 -H "Host: $VHOST_NOME" "$base/qualquercoisa" | grep -qiE '^server:.*nginx/'; then
+    fail "FATAL: a borda está anunciando a versão do nginx"
+  fi
+  echo "OK: a borda não anuncia a versão do nginx."
 }
 
 case "$ETAPA" in
-  segredos)  etapa_segredos ;;
-  banco)     etapa_banco ;;
-  servico)   etapa_servico ;;
-  nginx)     etapa_nginx ;;
-  tls)       etapa_tls ;;
-  verificar) etapa_verificar ;;
+  segredos)   etapa_segredos ;;
+  banco)      etapa_banco ;;
+  servico)    etapa_servico ;;
+  ip-publico) etapa_ip_publico ;;
+  nginx)      etapa_nginx ;;
+  tls)        etapa_tls ;;
+  verificar)  etapa_verificar ;;
+  borda)      etapa_borda ;;
   todas)
     etapa_segredos
     etapa_banco
     etapa_servico
     etapa_nginx
     etapa_verificar
-    titulo "falta apenas"
-    cat <<'FIM'
-1. DNS (painel do Registro.br), registro EXATO:
-
-     Nome:  resultados-api
-     Tipo:  A
-     Dado:  <IPv4 público desta VPS>
-     TTL:   3600
-
-2. Depois que `getent hosts resultados-api.soprolife.com.br` resolver:
-
-     sudo ./deploy-portal-resultados.sh tls
-FIM
+    if curl -fsS --max-time 8 "https://$VHOST_NOME/p/v1/health" >/dev/null 2>&1; then
+      titulo "nada falta"
+      echo "DNS e TLS já estão de pé: https://$VHOST_NOME/p/v1/health responde."
+    else
+      titulo "falta apenas"
+      echo "1. DNS (painel do Registro.br), registro EXATO:"
+      echo
+      echo "     Nome:  resultados-api"
+      echo "     Tipo:  A"
+      # Impresso, e não deixado como <placeholder>: um operador que preenche
+      # o registro A com `hostname -I | head -n 1` publica o IP do tailnet.
+      echo "     Dado:  $("$VENV" "$REDE_PUBLICA" || echo '<indeterminado — rode a etapa ip-publico>')"
+      echo "     TTL:   3600"
+      echo
+      echo "2. Depois que \`getent hosts $VHOST_NOME\` resolver:"
+      echo
+      echo "     sudo ./deploy-portal-resultados.sh tls"
+    fi
     ;;
   *) fail "etapa desconhecida: $ETAPA" ;;
 esac
