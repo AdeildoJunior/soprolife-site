@@ -410,7 +410,142 @@ cache-buster da reconciliação").
 
 ## 8. Deploy
 
-<!-- PREENCHIDO NA EXECUÇÃO -->
+Executado em **03/09/2026, 04:03–04:05 UTC**.
+
+| | |
+|---|---|
+| Integração | `--ff-only`, `0ea720d` → `c5e674e` |
+| HEAD da VPS | `c5e674e` |
+| Migração | nenhuma nesta etapa (`c3a9e15f7d84` continua head) |
+| Backup do vhost | `/etc/nginx/sites-available/resultados-api.soprolife.com.br.bak-20260903T040344Z` |
+| nginx | `reload` (não restart) |
+| Serviços reiniciados | `soprolife-portal-resultados`, `soprolife-m15-api` — e só eles |
+| Serviços intocados | `nginx` (só reload), `postgresql`, `soprolife-painel-loopback`, `soprolife-painel`, `tailscaled` |
+
+### 8.1 Ensaio antes de instalar
+
+Três verificações na própria VPS, com o vhost real como entrada e **sem
+instalar nada**:
+
+```
+$ render a partir de origin/claude-m26-5-hardening-portal
+escuta 443: [2a02:4780:6e:665::1]:443, 187.127.39.5:443   ← os dois endereços preservados
+
+$ nginx -t -c <candidato isolado>
+nginx: configuration file … syntax is ok
+nginx: configuration file … test is successful
+
+$ grep -c "8015\|8765" <candidato>
+0
+```
+
+### 8.2 A etapa `nginx`
+
+```
+render escrito …; material TLS: vhost instalado; escuta 443: [2a02:…]:443, 187.127.39.5:443
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+backup do vhost anterior: …bak-20260903T040344Z
+OK: nenhum vhost publica 8015 nem 8765.
+OK: 443 tem default_server com ssl_reject_handshake.
+OK: 80 tem default_server explícito.
+
+===== tailscale serve intacto =====
+OK: 100.87.98.100:443 continua do tailscaled.
+OK: nenhum vhost escuta a 443 em curinga.
+```
+
+E o mapa de portas depois do reload é o mesmo de antes, com o mesmo dono
+para cada endereço:
+
+```
+187.127.39.5:443           nginx
+[2a02:4780:6e:665::1]:443  nginx
+100.87.98.100:443          tailscaled     ← o painel privado, intocado
+[fd7a:115c:a1e0::…]:443    tailscaled
+0.0.0.0:80 / [::]:80       nginx
+```
+
+### 8.3 Restart mínimo e health
+
+```
+portal:  {"status":"ok","servico":"portal-resultados"}
+api m15: {"status":"ok","ambiente":"prod","banco":"ok"}
+soprolife-m15-api · soprolife-portal-resultados · soprolife-painel-loopback ·
+soprolife-painel · nginx · postgresql   → todos active
+```
+
+### 8.4 O antes e o depois, medidos da internet
+
+Os mesmos comandos, na mesma máquina, antes e depois:
+
+| medida | antes | depois |
+|---|---|---|
+| cabeçalhos no 404 de `/qualquercoisa` | 1 de 10 | **10 de 10** |
+| cabeçalhos no 404 de `/api/v1/laudos` | 1 de 10 | **10 de 10** |
+| cabeçalhos no 404 de `/docs` | 1 de 10 | **10 de 10** |
+| `Server:` na porta 80 | `nginx/1.24.0 (Ubuntu)` | **`nginx`** |
+| `Host:` desconhecido na 80 | 404 com versão | **conexão fechada (444)** |
+| SNI desconhecido na 443 | 404 do vhost do portal | **`tlsv1 unrecognized name`** |
+| cópias de cada cabeçalho em `/p/v1/health` | 1 | **1** (sem duplicar) |
+
+```
+$ curl -sS -o /dev/null -w '%{http_code}' -H 'Host: nao-existe.example' http://187.127.39.5/
+curl: (52) Empty reply from server
+
+$ openssl s_client -connect 187.127.39.5:443 -servername nao-existe.example
+SSL alert number 112: tlsv1 unrecognized name
+```
+
+### 8.5 O que continua de pé
+
+```
+https://resultados-api.soprolife.com.br/p/v1/health   {"status":"ok",…}
+POST /p/v1/acesso com token inexistente               401
+https://soprolife-painel-01.…ts.net/painel-soprolife/ 200   (tailscale serve)
+http://100.87.98.100:8765/painel-soprolife/           200
+https://soprolife.com.br/resultados/                  200
+```
+
+Nenhum paciente real foi envolvido: o único POST enviado carrega um token
+inexistente e a data `1900-01-01`.
+
+### 8.6 A renovação automática continua funcionando
+
+Era a pergunta em aberto do §4.1: o vhost deixou de ser mantido pelo
+certbot, e a renovação usa `authenticator = nginx`, que precisa achar e
+editar o vhost temporariamente. Medido:
+
+```
+$ certbot renew --dry-run
+Congratulations, all simulated renewals succeeded:
+  /etc/letsencrypt/live/resultados-api.soprolife.com.br/fullchain.pem (success)
+no renewal failures
+```
+
+E o md5 do vhost é **o mesmo antes e depois** (`1163180e…`): o certbot fez a
+edição temporária e reverteu limpo. O `certbot.timer` continua armado para
+03/09 10:56.
+
+Uma observação sobre a espera: o `certbot renew` não interativo dorme um
+tempo aleatório antes de agir (241s nesta execução), para não sincronizar
+todo mundo no mesmo minuto contra o Let's Encrypt. A primeira tentativa
+morreu no timeout do `ssh` durante esse sono — o processo remoto sobreviveu
+e terminou sozinho, com o vhost intacto o tempo todo, o que foi conferido
+por md5 em cada passo.
+
+### 8.7 O vhost é reproduzível a partir do Git
+
+A prova do ponto fixo, medida na própria VPS depois do deploy:
+
+```
+$ nginx_portal_vhost.py --fonte <fonte no Git> \
+      --instalado /etc/nginx/sites-available/resultados-api.soprolife.com.br
+IDENTICO — reconstruir a partir do Git dá o arquivo que já está instalado
+```
+
+É o que a M26.4 tinha perdido: o arquivo que está de fato na internet voltou
+a sair do repositório, e rodar a etapa `nginx` num deploy de rotina não muda
+mais nada.
 
 ---
 
