@@ -84,12 +84,34 @@ def _ensure_sqlite_dir(url: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
 
 
+# Meia hora. Menor que o `idle_session_timeout` que um PostgreSQL costuma
+# receber e MUITO menor que a janela em que um firewall com estado (a VPS tem
+# ufw) esquece um fluxo TCP parado. Reciclar por idade é barato; descobrir a
+# conexão morta no meio da requisição de um paciente, não.
+POOL_RECYCLE_SEGUNDOS = 1800
+
+
 def build_engine(url: str | None = None):
     url = url or get_settings().database_url
     _ensure_sqlite_dir(url)
-    kwargs: dict = {"future": True}
+    kwargs: dict = {
+        "future": True,
+        # M26.5 — o pool devolve conexões que podem ter morrido enquanto
+        # estavam paradas: o PostgreSQL derrubou por timeout, o ufw esqueceu
+        # o fluxo, a máquina hibernou. Sem `pool_pre_ping` isso vira um
+        # OperationalError na PRIMEIRA requisição depois do silêncio — e a
+        # primeira requisição depois do silêncio é exatamente o caso do
+        # portal público, que passa a madrugada inteira ocioso até um
+        # paciente abrir o link. Com o pre-ping, o SQLAlchemy emite um
+        # "SELECT 1" barato antes de entregar a conexão e, se ela estiver
+        # morta, descarta o pool inteiro daquela geração e reconecta — de
+        # forma transparente para quem chamou.
+        "pool_pre_ping": True,
+    }
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        kwargs["pool_recycle"] = POOL_RECYCLE_SEGUNDOS
     engine = create_engine(url, **kwargs)
     if url.startswith("sqlite"):
         # Receita oficial SQLAlchemy p/ pysqlite: desliga o gerenciamento
