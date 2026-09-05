@@ -44,6 +44,60 @@ def aplicar_cabecalhos(response: Response) -> Response:
     return response
 
 
+def origem_autorizada(request: Request) -> str | None:
+    """A origem do pedido, SE ela estiver na lista explícita — senão, nada.
+
+    Comparação exata contra `M15_PORTAL_CORS_ORIGINS`. Não há prefixo, não há
+    sufixo, não há expressão regular: `https://soprolife.com.br.atacante.tld`
+    e `https://soprolife.com.br:8443` são origens diferentes e nenhuma das
+    duas passa. Refletir a origem recebida sem conferir é o erro clássico
+    aqui — vale exatamente tanto quanto `*`, e ainda funciona com credenciais.
+    """
+
+    origem = request.headers.get("origin")
+    if not origem:
+        return None
+    return origem if origem in get_settings().portal_cors_origins else None
+
+
+def aplicar_cors(request: Request, response: Response) -> Response:
+    """CORS em resposta que NÃO passou pelo `CORSMiddleware`.
+
+    M26.7. O `CORSMiddleware` é o middleware mais interno do portal: ele só
+    vê o que sai pelo caminho feliz das rotas. Uma resposta nascida acima
+    dele — o 404 da fronteira pública, o 500 de uma exceção não tratada —
+    saía sem `Access-Control-Allow-Origin`. Para o navegador isso não é um
+    erro HTTP: é uma falha de rede. O `fetch` rejeita, o `catch` do
+    frontend dispara, e o paciente lê "verifique sua internet" enquanto o
+    servidor respondeu 500 — foi exatamente o que aconteceu no teste real
+    da M26.6, e escondeu o defeito de permissão por trás de um diagnóstico
+    falso.
+
+    Idempotente: se o `CORSMiddleware` já resolveu, nada é sobrescrito.
+    """
+
+    vary = response.headers.get("Vary")
+    if not vary:
+        response.headers["Vary"] = "Origin"
+    elif "origin" not in vary.lower():
+        response.headers["Vary"] = f"{vary}, Origin"
+
+    origem = origem_autorizada(request)
+    if origem is None:
+        # Origem ausente ou não autorizada: a resposta sai SEM cabeçalho de
+        # CORS nenhum. O navegador de quem tentou é quem barra a leitura.
+        return response
+    response.headers.setdefault("Access-Control-Allow-Origin", origem)
+    response.headers.setdefault("Access-Control-Allow-Credentials", "true")
+    return response
+
+
+def resposta_publica(request: Request, response: Response) -> Response:
+    """Todo byte que sai do portal passa por aqui: segurança + CORS."""
+
+    return aplicar_cors(request, aplicar_cabecalhos(response))
+
+
 def _assinar(payload: str) -> str:
     import base64
 

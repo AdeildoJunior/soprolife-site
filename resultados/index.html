@@ -317,7 +317,22 @@
     return m ? (m[3] + "/" + m[2] + "/" + m[1]) : "—";
   }
 
+  // Uma falha de REDE e um erro do SERVIDOR não são a mesma coisa, e até a
+  // M26.7 esta tela dizia que eram. Quando a API respondia 500, o navegador
+  // rejeitava o `fetch` (o 500 saía sem cabeçalho de CORS) e o paciente lia
+  // "verifique sua internet" — culpa no lugar errado, e o defeito de
+  // servidor escondido atrás de um diagnóstico falso.
+  var MSG_REDE =
+    "Não foi possível conectar agora. Verifique sua internet e tente novamente.";
+  var MSG_SERVIDOR =
+    "Não foi possível acessar o resultado agora. Tente novamente em alguns instantes.";
+
   function erroDaResposta(corpo, status) {
+    // 5xx é problema nosso, não do paciente. A mensagem é fixa e daqui: o
+    // corpo de um erro de servidor pode ter sido escrito por um proxy no
+    // caminho, e nada que venha de lá deve chegar à tela de quem espera um
+    // exame.
+    if (status >= 500) return MSG_SERVIDOR;
     if (corpo && corpo.erro && corpo.erro.mensagem) return corpo.erro.mensagem;
     if (status === 429) {
       return "Muitas tentativas seguidas. Aguarde alguns minutos e tente novamente.";
@@ -385,16 +400,25 @@
     }).then(function (r) {
       botao.disabled = false;
       botao.textContent = "Acessar resultado";
-      if (r.ok) { renderizar(r.corpo); return; }
+      if (r.ok) { return r.corpo; }
       if (r.status === 410) {
         mensagemFinal("Acesso expirado", erroDaResposta(r.corpo, r.status));
-        return;
+        return null;
       }
       avisar(erroDaResposta(r.corpo, r.status));
+      return null;
     }).catch(function () {
+      // Só chega aqui quem NÃO teve resposta: DNS, TLS, cabo, avião. Um
+      // status HTTP, qualquer que seja, foi tratado acima.
       botao.disabled = false;
       botao.textContent = "Acessar resultado";
-      avisar("Não foi possível conectar agora. Verifique sua internet e tente novamente.");
+      avisar(MSG_REDE);
+      return null;
+    }).then(function (dados) {
+      // A montagem da tela fica FORA do `catch` de rede de propósito: um
+      // defeito ao desenhar o resultado não pode ser anunciado ao paciente
+      // como falta de internet.
+      if (dados) renderizar(dados);
     });
   });
 

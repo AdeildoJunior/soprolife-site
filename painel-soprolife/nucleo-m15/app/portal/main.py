@@ -9,7 +9,9 @@ na internet; aqui não existe router administrativo para incluir por engano.
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -17,7 +19,37 @@ from .. import __version__
 from ..config import get_settings
 from ..errors import install_error_handling
 from .routes import PREFIXO_PUBLICO, router
-from .security import aplicar_cabecalhos
+from .security import resposta_publica
+
+logger = logging.getLogger(__name__)
+
+# O que o paciente lê quando o servidor falha. Nenhum detalhe interno, nenhum
+# convite a "consultar os logs" — quem está do outro lado é uma pessoa
+# esperando o resultado de um exame, não um operador.
+MENSAGEM_ERRO_INTERNO = (
+    "Não foi possível acessar o resultado agora. Tente novamente em alguns "
+    "instantes."
+)
+
+
+def erro_interno(request: Request) -> JSONResponse:
+    """O 500 do portal: mesmo envelope dos outros erros, conteúdo genérico.
+
+    O `request_id` vai junto de propósito. Ele não diz nada a quem recebe e
+    diz tudo a quem investiga: é a chave que liga esta resposta à linha do
+    journal com o traceback completo.
+    """
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "erro": {
+                "codigo": "interno",
+                "mensagem": MENSAGEM_ERRO_INTERNO,
+                "request_id": getattr(request.state, "request_id", None),
+            }
+        },
+    )
 
 
 def create_portal_app() -> FastAPI:
@@ -82,10 +114,45 @@ def create_portal_app() -> FastAPI:
         """
 
         if not request.url.path.startswith(PREFIXO_PUBLICO):
-            return aplicar_cabecalhos(
-                JSONResponse({"erro": {"codigo": "nao_encontrado"}}, status_code=404)
+            return resposta_publica(
+                request,
+                JSONResponse({"erro": {"codigo": "nao_encontrado"}}, status_code=404),
             )
-        return aplicar_cabecalhos(await call_next(request))
+        try:
+            resposta = await call_next(request)
+        except Exception:
+            # M26.7 — a exceção PRECISA morrer aqui dentro.
+            #
+            # Deixá-la subir entrega o 500 ao `ServerErrorMiddleware`, que no
+            # Starlette é sempre a camada mais externa: acima do CORS, acima
+            # desta. A resposta dele sai sem `Access-Control-Allow-Origin` e
+            # sem cabeçalho de segurança nenhum — e o navegador do paciente
+            # classifica isso como falha de rede, não como erro do servidor.
+            #
+            # O traceback continua indo para o journal, e é ele que permitiu
+            # descobrir o defeito de permissão na M26.6. `logger.exception`
+            # aqui não é decoração: sem ele, engolir a exceção trocaria um
+            # diagnóstico ruim por nenhum diagnóstico.
+            logger.exception(
+                "erro interno no portal (request_id=%s, caminho=%s)",
+                getattr(request.state, "request_id", None),
+                request.url.path,
+            )
+            resposta = erro_interno(request)
+        return resposta_publica(request, resposta)
+
+    # Rede de segurança para o que escapar da fronteira — uma exceção na
+    # própria fronteira, por exemplo. Sobrepõe o handler genérico que o
+    # `install_error_handling` registra para o Command Center, cuja mensagem
+    # ("consulte os logs pelo request_id") é escrita para um operador.
+    async def erro_nao_tratado(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception(
+            "erro interno escapou da fronteira do portal (request_id=%s)",
+            getattr(request.state, "request_id", None),
+        )
+        return resposta_publica(request, erro_interno(request))
+
+    app.add_exception_handler(Exception, erro_nao_tratado)
 
     app.include_router(router)
     return app
