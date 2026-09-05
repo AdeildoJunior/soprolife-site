@@ -11,12 +11,14 @@
 --   * ler a data do exame;
 --   * ler as versões de PDF (para localizar e conferir o arquivo);
 --   * ler e atualizar as tabelas do próprio portal;
---   * INSERIR na trilha de auditoria.
+--   * INSERIR na trilha de auditoria — e ler de volta APENAS o `id` da
+--     linha que acabou de inserir, porque `RETURNING` exige isso.
 --
 -- O que ele NÃO PODE, nem por engano de código:
 --   * ler ou escrever em financial_entries, partners, users, leads,
 --     followups, crm, report_documents, external_signature_batches…;
---   * LER audit_logs (só insere);
+--   * ler o CONTEÚDO de audit_logs — `acao`, `entidade`, `detalhes`,
+--     `user_id`, `ts_utc` são ilegíveis; só o `id` é visível;
 --   * apagar nada, em lugar nenhum;
 --   * criar tabela, alterar esquema ou conceder permissão.
 --
@@ -67,9 +69,34 @@ GRANT UPDATE (status, sent_at, first_access_at, last_access_at,
 GRANT SELECT, INSERT ON patient_result_sessions TO soprolife_portal;
 GRANT UPDATE (revoked_at) ON patient_result_sessions TO soprolife_portal;
 
--- Auditoria: escreve, nunca lê. O portal registra o evento; quem investiga
--- lê pelo Command Center.
-GRANT INSERT ON audit_logs TO soprolife_portal;
+-- Auditoria: escreve, nunca lê o CONTEÚDO. O portal registra o evento; quem
+-- investiga lê pelo Command Center.
+--
+-- M26.7 — o `GRANT INSERT` sozinho não bastava, e o teste real do portal
+-- pagou para descobrir. O ORM emite
+--
+--     INSERT INTO audit_logs (...) VALUES (...) RETURNING audit_logs.id
+--
+-- e no PostgreSQL a cláusula `RETURNING` é uma LEITURA: exige `SELECT` na
+-- coluna retornada, mesmo que a linha lida seja a que você acabou de
+-- escrever. Sem ela, toda autenticação de paciente morria com
+-- `permission denied for table audit_logs`, o portal devolvia 500 e o
+-- paciente lia "verifique sua internet".
+--
+-- `SELECT (id)` é o mínimo que faz o `RETURNING` passar, e é inofensivo: o
+-- id é um contador. As colunas que contam a história — `acao`, `entidade`,
+-- `entidade_id`, `user_id`, `detalhes`, `ts_utc` — continuam ILEGÍVEIS para
+-- este papel. Um portal comprometido não consegue ler a trilha de auditoria
+-- do sistema, que é a garantia que a M26.4 quis dar e que segue de pé.
+--
+-- O INSERT é por COLUNA, e não da tabela inteira, pela mesma razão: são
+-- exatamente as sete colunas que `app/errors.py` e os serviços escrevem.
+-- `id` fica de fora de propósito — quem o gera é a sequência, e ninguém
+-- deve poder escolher o número da própria linha de auditoria.
+GRANT INSERT (ts_utc, request_id, user_id, acao, entidade, entidade_id,
+              detalhes)
+  ON audit_logs TO soprolife_portal;
+GRANT SELECT (id) ON audit_logs TO soprolife_portal;
 GRANT USAGE ON SEQUENCE audit_logs_id_seq TO soprolife_portal;
 
 -- Um objeto criado no futuro não ganha permissão retroativa.

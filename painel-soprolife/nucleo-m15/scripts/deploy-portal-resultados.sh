@@ -187,6 +187,30 @@ etapa_banco() {
     -tAc 'SELECT count(*) FROM patient_result_accesses' >/dev/null \
     || fail "o papel do portal não consegue ler a própria tabela"
   echo "OK: o papel do portal lê patient_result_accesses."
+
+  # M26.7 — as duas provas que faltavam, e cuja ausência deixou o portal
+  # subir quebrado: o papel escrevia na auditoria mas não conseguia concluir
+  # o `INSERT ... RETURNING id` que o ORM emite. O smoke da M26.4 nunca
+  # chegou perto: ele testava 401/404, caminhos que não auditam nada.
+  #
+  # A escrita de prova roda dentro de BEGIN/ROLLBACK. A trilha de auditoria
+  # é append-only por gatilho: uma linha de teste comitada aqui não teria
+  # como ser apagada depois.
+  if PGPASSWORD="$senha" psql -h 127.0.0.1 -U soprolife_portal -d "$DB_NAME" \
+      -tAc 'SELECT acao FROM audit_logs LIMIT 1' >/dev/null 2>&1; then
+    fail "FATAL: o papel do portal conseguiu ler o conteúdo de audit_logs"
+  fi
+  echo "OK: o papel do portal NÃO lê o conteúdo de audit_logs."
+  PGPASSWORD="$senha" psql -h 127.0.0.1 -U soprolife_portal -d "$DB_NAME" \
+    -v ON_ERROR_STOP=1 -tAc "BEGIN;
+      INSERT INTO audit_logs (ts_utc, request_id, user_id, acao, entidade,
+                              entidade_id, detalhes)
+      VALUES (now(), NULL, NULL, 'deploy_prova_returning', NULL, NULL,
+              '{}'::json)
+      RETURNING id;
+      ROLLBACK;" >/dev/null \
+    || fail "FATAL: o papel do portal não completa INSERT ... RETURNING id em audit_logs"
+  echo "OK: o papel do portal completa INSERT ... RETURNING id (e o ROLLBACK não deixa linha)."
 }
 
 # ----------------------------------------------------------------- serviço
