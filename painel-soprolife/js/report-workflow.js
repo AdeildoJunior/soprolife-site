@@ -537,30 +537,22 @@
       entregue: FAMILY_SUCCESS_MUTED,
     },
 
-    // ---- `external_signed_documents.status` — ASSINADO_STATUS_VALUES.
-    assinado: {
-      // O lote voltou mas a médica ainda não confirmou: nada foi aceito.
-      em_conferencia: FAMILY_INFO,
-      recebido_validacao_pendente: FAMILY_DANGER,
-      recebido_assinado: FAMILY_SUCCESS,
-      validado_externamente: FAMILY_SUCCESS,
-      entregue: FAMILY_SUCCESS_MUTED,
-      recusado: FAMILY_DANGER,
-    },
-
-    // ---- Assinatura qualificada VIDaaS — QUALIFIED_SIGNATURE_STATUSES.
-    qualificada: {
-      rascunho: FAMILY_SIGNATURE,
-      aguardando_autenticacao: FAMILY_SIGNATURE,
-      aguardando_autorizacao: FAMILY_SIGNATURE,
-      assinatura_recebida: FAMILY_SIGNATURE,
-      validando: FAMILY_SIGNATURE,
-      assinado_liberado: FAMILY_SUCCESS,
-      recusado: FAMILY_DANGER,
-      expirado: FAMILY_DANGER,
-      falha_recuperavel: FAMILY_DANGER,
-      falha_definitiva: FAMILY_DANGER,
-    },
+    // Só existem aqui os domínios que de fato PINTAM alguma coisa. Chegou a
+    // haver um mapa para `external_signed_documents.status` e outro para o
+    // ciclo VIDaaS; nenhum dos dois é renderizado com família — o estado do
+    // assinado chega à tela já derivado em `estado` pelo servidor
+    // (`_estado_de_entrega`), e o painel da assinatura qualificada é uma
+    // linha de texto, não um cartão.
+    //
+    // Eles saíram por dois motivos. Primeiro, mapa que ninguém consulta é
+    // código morto que envelhece calado. Segundo, e mais concreto: escrever
+    // `validado_externamente` aqui fazia o nome reaparecer no JS, e a M25.29E
+    // guarda exatamente isso — nada na tela administrativa pode afirmar
+    // validação de assinatura, porque o sistema não verifica cadeia
+    // ICP-Brasil. O guard estava certo.
+    //
+    // Quando algum desses estados for para a tela, o domínio volta — com a
+    // regra do verde valendo para ele desde o primeiro commit.
   };
 
   function statusFamily(domain, value) {

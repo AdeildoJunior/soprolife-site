@@ -52,7 +52,7 @@ from app.models import (
     QUALIFIED_SIGNATURE_STATUSES,
     STATUS_LAUDO_VALUES,
     User,
-)
+)  # noqa: F401  — os dois primeiros são lidos pelos testes de fronteira
 from app.routers.reports import FILA_ROTULOS
 from app.security import issue_token, user_effective_roles
 
@@ -288,11 +288,15 @@ requer_node = pytest.mark.skipif(NODE is None, reason="node indisponível")
 # =====================================================================
 
 
+# Os domínios que de fato PINTAM alguma coisa. `external_signed_documents` e
+# o ciclo VIDaaS não estão aqui de propósito: o estado do assinado chega à
+# tela já derivado em `estado` pelo servidor (`_estado_de_entrega`), e o
+# painel da assinatura qualificada é uma linha de texto, não um cartão.
+# `test_dominios_do_mapa_sao_exatamente_os_que_pintam_algo` guarda essa
+# fronteira nos dois sentidos.
 DOMINIOS_DO_BACKEND = {
     "laudo": tuple(STATUS_LAUDO_VALUES),
     "entrega": tuple(FILA_ROTULOS),
-    "assinado": tuple(ASSINADO_STATUS_VALUES),
-    "qualificada": tuple(QUALIFIED_SIGNATURE_STATUSES),
 }
 
 
@@ -333,13 +337,43 @@ def test_cada_dominio_tem_o_proprio_mapa():
     """`rascunho` existe no ciclo do laudo E no da assinatura qualificada.
 
     Num mapa único um dos dois herdaria a cor do outro em silêncio — que é a
-    forma exata do defeito que esta etapa corrige."""
+    forma exata do defeito que esta etapa corrige. Os domínios continuam
+    separados mesmo com só dois deles no mapa hoje."""
 
     bloco = _bloco_literal(WORKFLOW_JS, "const STATUS_FAMILIES = ")
     for dominio in DOMINIOS_DO_BACKEND:
         assert re.search(rf"^\s{{4}}{dominio}: \{{", bloco, re.M), dominio
     assert "rascunho" in STATUS_LAUDO_VALUES
     assert "rascunho" in QUALIFIED_SIGNATURE_STATUSES
+
+
+def test_dominios_do_mapa_sao_exatamente_os_que_pintam_algo():
+    """Mapa que ninguém consulta é código morto que envelhece calado — e aqui
+    ele custou mais que isso.
+
+    A primeira versão desta etapa trouxe também `external_signed_documents` e
+    o ciclo VIDaaS "para o futuro". Escrever `validado_externamente` no mapa
+    fez o nome reaparecer no JS, e a M25.29E guarda exatamente isso: nada na
+    tela administrativa pode afirmar validação de assinatura, porque o
+    sistema não verifica cadeia ICP-Brasil. O guard estava certo.
+
+    Quando um desses estados for para a tela, o domínio volta — e a regra do
+    verde vale para ele desde o primeiro commit."""
+
+    bloco = _bloco_literal(WORKFLOW_JS, "const STATUS_FAMILIES = ")
+    declarados = set(re.findall(r"^    ([a-z_]+): \{", bloco, re.M))
+    assert declarados == set(DOMINIOS_DO_BACKEND), declarados
+    # E o nome que a M25.29E proíbe continua fora do CÓDIGO, exceto na única
+    # linha em que ele é regra de negócio de verdade. Comentários explicando
+    # a proibição são justamente onde o nome PRECISA aparecer — a M25.29E
+    # também os remove antes de olhar.
+    codigo = re.sub(r"/\*.*?\*/", "", WORKFLOW_JS, flags=re.S)
+    codigo = re.sub(r"^\s*//.*$", "", codigo, flags=re.M)
+    codigo = codigo.replace(
+        'PRONTOS_PARA_ENTREGA = ["recebido_assinado", "validado_externamente"]',
+        "",
+    )
+    assert "validado_externamente" not in codigo
 
 
 # =====================================================================
@@ -355,16 +389,11 @@ VERDE_PERMITIDO = {
     # `report_documents.status`: o PDF assinado voltou e passou nas guardas
     # documentais do servidor.
     ("laudo", "assinado"),
-    # Fila de entrega: derivado de `recebido_assinado` ou
-    # `validado_externamente` (ver `_FILA_POR_ASSINADO`).
+    # Fila de entrega: derivada, no servidor, de um `external_signed_document`
+    # em `recebido_assinado` ou `validado_externamente` (`_FILA_POR_ASSINADO`)
+    # — ou seja, dos dois estados em que o arquivo assinado foi aceito.
     ("entrega", "pronto_para_entrega"),
     ("entrega", "entregue"),
-    # `external_signed_documents.status`.
-    ("assinado", "recebido_assinado"),
-    ("assinado", "validado_externamente"),
-    ("assinado", "entregue"),
-    # VIDaaS: assinatura qualificada ICP-Brasil concluída.
-    ("qualificada", "assinado_liberado"),
 }
 
 
@@ -416,9 +445,6 @@ def test_verde_e_exatamente_a_allowlist_de_estados_pos_assinatura():
         ("entrega", "assinado_recebido_validacao_pendente", "danger"),
         ("entrega", "pronto_para_entrega", "success"),
         ("entrega", "entregue", "success-muted"),
-        # Documento assinado recebido.
-        ("assinado", "em_conferencia", "info"),
-        ("assinado", "recusado", "danger"),
     ],
 )
 def test_familia_de_cada_estado_real(dominio, estado, esperada):
@@ -459,9 +485,6 @@ def test_nenhum_estado_anterior_a_assinatura_e_verde():
         ("laudo", "finalizado"),
         ("entrega", "aguardando_laudo"), ("entrega", "aguardando_assinatura"),
         ("entrega", "assinado_recebido_validacao_pendente"),
-        ("assinado", "em_conferencia"),
-        ("assinado", "recebido_validacao_pendente"),
-        ("assinado", "recusado"),
     ]
     familias = _familias(anteriores)
     verdes = [c for c, f in familias.items() if f in FAMILIAS_VERDES]
