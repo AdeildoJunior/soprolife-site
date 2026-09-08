@@ -237,7 +237,8 @@
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-xs);
-  background: #fff;
+  /* M26.8 — o fundo vem da família do estado; sem família, branco. */
+  background: var(--report-family-bg, #fff);
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -251,19 +252,27 @@
    sob o cursor ficava idêntico ao cartão aberto, e a fila parecia ter dois
    pacientes selecionados. O hover é um convite (borda teal, fundo levíssimo);
    a seleção é um fato (faixa navy à esquerda). */
+/* M26.8 — o hover não repinta mais o fundo: ele apagava a cor da família e
+   o cartão sob o cursor perdia a etapa. Continua sendo um convite, agora
+   pela borda e por uma sombra rasa. */
 .report-queue-item:hover,
 .report-operation-row:hover {
   border-color: var(--teal);
-  background: #fbfdff;
+  box-shadow: 0 1px 3px rgba(12, 31, 61, .1);
 }
 
+/* M26.8 — a marca da seleção era uma faixa navy À ESQUERDA mais um fundo
+   teal-pale. As duas coisas agora pertencem à família do estado (faixa e
+   fundo), então a seleção passou a ser o que sobrou — e continua
+   inconfundível: um anel teal em volta do cartão inteiro. A distinção da
+   M25.21 entre convite (hover) e fato (seleção) permanece: o hover não tem
+   anel, a seleção tem. */
 .report-queue-item.is-selected,
 .report-operation-row.is-selected {
   border-color: var(--teal);
   box-shadow:
-    inset 3px 0 0 var(--navy),
-    0 0 0 2px rgba(23, 181, 165, .16);
-  background: var(--teal-pale, #f2fbfa);
+    0 0 0 2px var(--teal),
+    0 2px 6px rgba(12, 31, 61, .14);
 }
 
 .report-queue-item span,
@@ -275,26 +284,48 @@
   overflow-wrap: break-word;
 }
 
+/* M26.8 — o selo deixou de ter uma regra de cor POR ESTADO (havia uma para
+   `assinatura_pendente`, outra para `assinado`, outra para `liberado`, e
+   nenhuma para o resto) e passou a ler os tokens da família, que
+   `.report-family-<familia>` define num lugar só. Sem família declarada o
+   selo é neutro — nunca verde. */
 .report-status-chip {
   display: inline-flex;
+  align-items: center;
+  gap: 5px;
   width: fit-content;
   max-width: 100%;
-  padding: 4px 8px;
+  padding: 4px 9px;
   border-radius: var(--radius-pill);
-  background: var(--sky-soft);
-  color: var(--navy) !important;
-  font-size: 11px !important;
+  background: var(--report-family-chip-bg, var(--sky-soft));
+  color: var(--report-family-ink, var(--navy)) !important;
+  /* 1px de borda é o que separa o selo do fundo do cartão, que é da mesma
+     família e quase da mesma cor. */
+  border: 1px solid var(--report-family-chip-line, transparent);
+  font-size: 10.5px !important;
   font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  line-height: 1.25;
 }
 
-.report-assinatura_pendente {
-  background: var(--warn-soft);
-  color: #7c550f !important;
+.report-status-chip-text {
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
-.report-assinado {
-  background: var(--ok-soft);
-  color: #0b7355 !important;
+/* Ícone da família: reforço, nunca a informação sozinha — o estado está
+   escrito por extenso ao lado. `currentColor` mantém o desenho na mesma
+   tinta do texto, então o contraste do ícone é o contraste do selo. */
+.report-family-icon {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* M25.3/M25.4 — contexto único: paciente + exame + local em três colunas.
@@ -903,10 +934,25 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   justify-content: flex-end;
 }
 
-.report-liberado,
-.report-liberado-flag {
-  background: var(--ok-soft);
-  color: #0b7355 !important;
+/* M26.8 — aqui estava o defeito que a Dra. Ana relatou: `.report-liberado`
+   pintava de VERDE o estado "Concluído — aguardando assinatura qualificada",
+   que é exatamente um documento AINDA NÃO ASSINADO, e o punha ao lado de
+   `assinado` na mesma fila. A cor de `liberado` agora sai de
+   `STATUS_FAMILIES.laudo` — família `signature`, roxo.
+
+   `.report-liberado-flag` marcava o ATIVO de assinatura manuscrita como
+   cadastrado; nada a ver com estado de documento. Virou `.report-asset-ok`,
+   abaixo, fora da paleta de status. */
+.report-asset-ok {
+  background: var(--teal-pale, #f0faf9);
+  color: #0b6f64 !important;
+  border-color: rgba(14, 157, 142, .32);
+}
+
+.report-asset-missing {
+  background: var(--line-light);
+  color: #4a5b70 !important;
+  border-color: var(--line);
 }
 
 .report-adendo-flag {
@@ -933,9 +979,12 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   text-transform: uppercase;
 }
 
+/* M26.8 — "concluído" aqui quer dizer CONTEÚDO CONGELADO, não assinado.
+   Em verde, um laudo apenas travado ficava indistinguível de um laudo com
+   PDF assinado recebido. É informação de apoio: cinza. */
 .report-queue-flag.is-locked {
-  background: var(--ok-soft);
-  color: #0b7355 !important;
+  background: var(--line-light);
+  color: #4a5b70 !important;
 }
 
 /* -------------------------------------------- seleção de conclusão */
@@ -1980,6 +2029,16 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   max-height: 340px;
   overflow-y: auto;
   padding: 2px;
+  /* M26.8 — a grade comprimia as três linhas para caber nos 340px em vez de
+     rolar: cada cartão ficava com 106,7px (= (340 − 4 − 16) / 3) e o
+     conteúdo vazava por baixo da própria borda. Estava latente — só
+     apareceu quando o selo de estado entrou aqui e o conteúdo passou de
+     107px para 137px em 360px de largura.
+
+     `align-content: start` NÃO resolve (medido no Chrome 151: as linhas
+     continuam em 106,7px). `min-content` é o que amarra a linha ao conteúdo
+     do cartão; a rolagem, que é o comportamento desejado, continua igual. */
+  grid-auto-rows: min-content;
 }
 
 .report-signature-empty {
@@ -2228,21 +2287,14 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--line);
   border-radius: var(--radius-xs);
 }
 
-.report-delivery-row.report-delivery-aguardando_assinatura {
-  border-left-color: var(--warn);
-}
-
-.report-delivery-row.report-delivery-assinado_recebido_validacao_pendente {
-  border-left-color: var(--teal);
-}
-
-.report-delivery-row.report-delivery-pronto_para_entrega {
-  border-left-color: var(--ok);
-}
+/* M26.8 — as três faixas por estado saíram daqui. Eram parciais (só três
+   dos cinco estados tinham cor) e uma delas dizia a coisa errada: o
+   "documento sem aceite" era TEAL, a cor de destaque positivo da interface,
+   para um caso que é exceção técnica. Faixa, fundo e selo agora vêm todos
+   de `.report-status-card` + `.report-family-*`. */
 
 .report-delivery-body {
   display: grid;
@@ -2250,10 +2302,10 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   min-width: 0;
 }
 
+/* M26.8 — `.report-delivery-state` agora é um `.report-status-chip`: a
+   tipografia vem de lá. Sobra o respiro em relação à linha de cima. */
 .report-delivery-state {
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--navy);
+  margin-top: 2px;
 }
 
 /* A negativa sobre ICP-Brasil fica visível, não escondida numa tooltip. */
@@ -2778,5 +2830,197 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
     width: 148px;
     height: 148px;
     margin: 0 auto;
+  }
+}
+
+/* =====================================================================
+ * M26.8 — HIERARQUIA VISUAL DOS ESTADOS
+ *
+ * A Dra. Ana precisava ler cartão por cartão para saber o que faltava
+ * laudar, o que faltava assinar e o que já estava assinado: os cartões
+ * tinham o mesmo fundo branco, a mesma fonte e uma cor de selo só para dois
+ * dos oito estados. Pior, o selo verde estava no estado errado — `liberado`
+ * é "concluído, AGUARDANDO assinatura".
+ *
+ * O sistema tem UMA fonte de verdade, em `js/report-workflow.js`:
+ * `STATUS_FAMILIES` mapeia estado → família, por domínio. Aqui cada família
+ * define TRÊS tokens, e faixa lateral, fundo e selo derivam todos deles —
+ * é isso que impede faixa, fundo e texto de discordarem.
+ *
+ *   --report-family-band      faixa lateral (a cor mais definida)
+ *   --report-family-bg        fundo do cartão (pastel muito leve)
+ *   --report-family-chip-bg   fundo do selo
+ *   --report-family-chip-line borda do selo
+ *   --report-family-ink       tinta do selo (contraste ≥ 4,5:1 sobre o selo)
+ *
+ * VERDE É RESERVADO A DOCUMENTOS JÁ ASSINADOS OU ETAPAS POSTERIORES À
+ * ASSINATURA. Estado sem família mapeada cai em `neutral`, nunca em verde.
+ *
+ * Prioridade visual pretendida, do mais forte ao mais discreto:
+ *   1. warning   (âmbar)  — tenho que laudar
+ *   2. signature (roxo)   — falta assinatura
+ *   3. success   (verde)  — assinado / pronto para entrega
+ *   4. success-muted      — entregue, histórico
+ * `danger` é exceção e não compete com essa fila: aparece raramente.
+ */
+
+.report-family-warning {
+  --report-family-band: #d98a12;
+  --report-family-bg: #fff9ee;
+  --report-family-chip-bg: #fdefd6;
+  --report-family-chip-line: #f0d5a4;
+  --report-family-ink: #7a4d06;
+}
+
+.report-family-info {
+  --report-family-band: #2f7fc4;
+  --report-family-bg: #f3f8fd;
+  --report-family-chip-bg: #e2eefa;
+  --report-family-chip-line: #bfd8ef;
+  --report-family-ink: #12466f;
+}
+
+/* Roxo NÃO é verde, e é essa a única coisa que ele precisa dizer: o laudo
+   clínico está pronto, o documento assinado não existe ainda. */
+.report-family-signature {
+  --report-family-band: #7c5cc4;
+  --report-family-bg: #f8f5fd;
+  --report-family-chip-bg: #ece4fa;
+  --report-family-chip-line: #d3c5ef;
+  --report-family-ink: #4a2f86;
+}
+
+/* Verde = existe PDF assinado recebido e aceito pelas guardas documentais. */
+.report-family-success {
+  --report-family-band: #1fa87a;
+  --report-family-bg: #f0f9f5;
+  --report-family-chip-bg: #d9f2e7;
+  --report-family-chip-line: #a9dcc8;
+  --report-family-ink: #0a6448;
+}
+
+/* Entregue continua na família verde — é necessariamente assinado — mas
+   dessaturado: já saiu da bancada, é histórico. */
+.report-family-success-muted {
+  --report-family-band: #7fae9c;
+  --report-family-bg: #f5f8f7;
+  --report-family-chip-bg: #e6efeb;
+  --report-family-chip-line: #c9d9d2;
+  --report-family-ink: #2f5647;
+}
+
+.report-family-danger {
+  --report-family-band: #d3494a;
+  --report-family-bg: #fef4f4;
+  --report-family-chip-bg: #fbe0e0;
+  --report-family-chip-line: #f0c2c2;
+  --report-family-ink: #8f2222;
+}
+
+/* O destino de todo estado que ninguém mapeou. Cinza é "ninguém explicou
+   ainda"; verde seria uma afirmação sobre assinatura que ninguém fez. */
+.report-family-neutral {
+  --report-family-band: #a9b7c8;
+  --report-family-bg: #f8fafc;
+  --report-family-chip-bg: #eef2f7;
+  --report-family-chip-line: #dbe5ef;
+  --report-family-ink: #4a5b70;
+}
+
+/* ------------------------------------------------------- o cartão --- */
+
+/* A faixa é um `::before`, não um `border-left`: `border-color` é uma
+   propriedade de atalho, e o estado `.is-selected` (que pinta a borda de
+   teal) apagaria a faixa da família junto. Assim as duas informações —
+   "que etapa é esta" e "qual cartão está aberto" — coexistem. */
+.report-status-card {
+  position: relative;
+  padding-left: 16px;
+}
+
+.report-status-card::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: 5px;
+  border-radius: var(--radius-xs) 0 0 var(--radius-xs);
+  background: var(--report-family-band, var(--line));
+  pointer-events: none;
+}
+
+/* `.report-delivery-row` e `.report-signature-item` têm fundo próprio
+   (`var(--card)`); sem isto continuariam brancos e só a faixa mudaria. */
+.report-delivery-row.report-status-card,
+.report-signature-item.report-status-card {
+  background: var(--report-family-bg, var(--card));
+}
+
+/* Marcar uma linha para o lote não pode apagar a etapa: a seleção vira
+   anel, como na fila clínica. */
+.report-signature-item.report-status-card.is-picked {
+  border-color: var(--teal);
+  background: var(--report-family-bg, var(--card));
+  box-shadow: 0 0 0 2px var(--teal);
+}
+
+/* O contexto (local, data, exame) sobre fundo pastel. `--muted` (#6e80a0)
+   dá 3,8:1 sobre o âmbar mais claro — abaixo de WCAG AA para texto normal,
+   e o cartão tem 12px. Este tom fica ≥ 5:1 em todas as sete famílias. */
+.report-status-card span,
+.report-status-card .report-signature-context {
+  color: #54657f;
+}
+
+/* O selo tem tinta própria, da família — não herda o tom de apoio acima.
+   (A trilha de códigos herda, e nas linhas de entrega isso a escurece de
+   `--muted` para este tom: com a opacidade de .85 dela, continua acima de
+   4,5:1 sobre os fundos pastel.) */
+.report-status-card .report-status-chip {
+  color: var(--report-family-ink, var(--navy)) !important;
+}
+
+/* -------------------------------------------- chips de filtro (item 5) */
+
+/* A regra é "somente o filtro ativo pode ter destaque maior": os inativos
+   ganham só um ponto na cor da faixa, o ativo ganha o fundo da família.
+   "Todos" não tem classe de família e continua neutro. */
+.report-delivery-chip[class*="report-family-"]::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--report-family-band, var(--line));
+  vertical-align: middle;
+}
+
+.report-delivery-chip[class*="report-family-"].is-active {
+  border-color: var(--report-family-band, var(--teal));
+  background: var(--report-family-bg, var(--teal-pale));
+  color: var(--report-family-ink, var(--teal-dark));
+}
+
+/* ------------------------------------------------------------- mobile */
+
+@media (max-width: 640px) {
+  /* 2px de volta para o conteúdo. A faixa continua com 5px: estreitá-la no
+     celular tiraria justamente o sinal que a médica usa mais no telefone. */
+  .report-status-card {
+    padding-left: 14px;
+  }
+}
+
+/* Em alto contraste / sem cor, a faixa vira uma borda visível e o ícone
+   continua desenhado — o cartão nunca depende só do matiz. */
+@media (forced-colors: active) {
+  .report-status-card::before {
+    background: CanvasText;
+  }
+
+  .report-status-chip {
+    border-color: CanvasText;
   }
 }

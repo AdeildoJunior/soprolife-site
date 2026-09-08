@@ -469,6 +469,155 @@
     }[value] || value || "—";
   }
 
+  // ================================================ M26.8 — famílias visuais
+  //
+  // FONTE ÚNICA da cor de um estado. Antes disto cada tela decidia sozinha,
+  // com uma regra CSS por estado espalhada pelo arquivo — e foi assim que
+  // `liberado` ("Concluído — AGUARDANDO assinatura qualificada") nasceu
+  // VERDE, colado em `assinado`, na mesma fila. A médica lia cartão por
+  // cartão porque a cor não separava "falta assinar" de "está assinado".
+  //
+  // A regra que este mapa torna mecânica:
+  //
+  //   VERDE É RESERVADO A DOCUMENTOS JÁ ASSINADOS OU ETAPAS POSTERIORES À
+  //   ASSINATURA.
+  //
+  // Duas consequências de projeto:
+  //
+  // 1. Um estado que ninguém mapear NÃO cai em verde: cai em `neutral`.
+  //    Cinza é um estado novo que ninguém explicou ainda; verde seria uma
+  //    afirmação sobre assinatura que ninguém fez.
+  // 2. Cada DOMÍNIO tem o seu mapa. `rascunho` existe no ciclo do laudo e no
+  //    da assinatura qualificada com sentidos diferentes; num mapa único um
+  //    dos dois herdaria silenciosamente a cor do outro.
+  //
+  // A cor nunca é a única informação: todo cartão combina fundo, faixa
+  // lateral, ícone e o texto do estado por extenso (item 3 do pedido).
+
+  const FAMILY_WARNING = "warning";              // âmbar — falta laudar
+  const FAMILY_INFO = "info";                    // azul — em elaboração
+  const FAMILY_SIGNATURE = "signature";          // roxo — falta assinar
+  const FAMILY_SUCCESS = "success";              // verde — ASSINADO
+  const FAMILY_SUCCESS_MUTED = "success-muted";  // verde suave — entregue
+  const FAMILY_DANGER = "danger";                // vermelho — recusa/exceção
+  const FAMILY_NEUTRAL = "neutral";              // cinza — desconhecido
+
+  const STATUS_FAMILIES = {
+    // ---- `report_documents.status` — app/models.py, STATUS_LAUDO_VALUES.
+    laudo: {
+      atribuido: FAMILY_WARNING,
+      em_elaboracao: FAMILY_INFO,
+      // Fluxo antigo: conteúdo congelado esperando o PDF assinado voltar.
+      // Congelado não é assinado.
+      assinatura_pendente: FAMILY_SIGNATURE,
+      // Laudo clinicamente CONCLUÍDO, com código de validação. A assinatura
+      // qualificada é aplicada fora do painel e ainda não voltou. Este é o
+      // estado que era verde até a M26.8 — o erro que originou a missão.
+      liberado: FAMILY_SIGNATURE,
+      // O ÚNICO estado clínico em que existe PDF assinado recebido e
+      // aprovado pelas guardas documentais do servidor.
+      assinado: FAMILY_SUCCESS,
+      // Legados M24A: nenhum endpoint atual os cria, mas documentos antigos
+      // estão neles e a fila precisa saber pintá-los. Todos são ANTERIORES à
+      // assinatura — nenhum é verde. `finalizado` entra em
+      // SIGNATURE_STATUS_PENDENTE por construção (ver app/models.py).
+      rascunho: FAMILY_INFO,
+      em_revisao: FAMILY_INFO,
+      finalizado: FAMILY_SIGNATURE,
+    },
+
+    // ---- Fila de entrega — app/routers/reports.py, FILA_ROTULOS.
+    entrega: {
+      aguardando_laudo: FAMILY_WARNING,
+      aguardando_assinatura: FAMILY_SIGNATURE,
+      // "Exceção técnica — documento sem aceite": chegou um assinado que NÃO
+      // passou no aceite automático da M25.29H. É problema, não etapa.
+      assinado_recebido_validacao_pendente: FAMILY_DANGER,
+      pronto_para_entrega: FAMILY_SUCCESS,
+      entregue: FAMILY_SUCCESS_MUTED,
+    },
+
+    // ---- `external_signed_documents.status` — ASSINADO_STATUS_VALUES.
+    assinado: {
+      // O lote voltou mas a médica ainda não confirmou: nada foi aceito.
+      em_conferencia: FAMILY_INFO,
+      recebido_validacao_pendente: FAMILY_DANGER,
+      recebido_assinado: FAMILY_SUCCESS,
+      validado_externamente: FAMILY_SUCCESS,
+      entregue: FAMILY_SUCCESS_MUTED,
+      recusado: FAMILY_DANGER,
+    },
+
+    // ---- Assinatura qualificada VIDaaS — QUALIFIED_SIGNATURE_STATUSES.
+    qualificada: {
+      rascunho: FAMILY_SIGNATURE,
+      aguardando_autenticacao: FAMILY_SIGNATURE,
+      aguardando_autorizacao: FAMILY_SIGNATURE,
+      assinatura_recebida: FAMILY_SIGNATURE,
+      validando: FAMILY_SIGNATURE,
+      assinado_liberado: FAMILY_SUCCESS,
+      recusado: FAMILY_DANGER,
+      expirado: FAMILY_DANGER,
+      falha_recuperavel: FAMILY_DANGER,
+      falha_definitiva: FAMILY_DANGER,
+    },
+  };
+
+  function statusFamily(domain, value) {
+    const mapa = STATUS_FAMILIES[domain];
+    const familia = mapa && Object.prototype.hasOwnProperty.call(mapa, value)
+      ? mapa[value] : null;
+    return familia || FAMILY_NEUTRAL;
+  }
+
+  function familyClass(domain, value) {
+    return `report-family-${statusFamily(domain, value)}`;
+  }
+
+  // Ícones em SVG, não em glifo de fonte: num iPhone o mesmo caractere
+  // vira emoji colorido e a "cor semântica" do cartão passa a competir com
+  // a cor do desenho. São decorativos (`aria-hidden`) porque o estado já
+  // está escrito por extenso ao lado — o ícone reforça, não informa sozinho.
+  const FAMILY_ICON_PATHS = {
+    warning: '<path d="M7 2.4 12.6 11.6H1.4Z"/><path d="M7 6v2.4"/>'
+      + '<path d="M7 10.2h.01"/>',
+    // Lápis: o texto ainda pode mudar.
+    info: '<path d="M9.3 2.6 11.4 4.7 5.2 10.9 2.4 11.6 3.1 8.8Z"/>',
+    // Caneta sobre a linha de assinatura: falta assinar.
+    signature: '<path d="M3.6 9.2 4.2 7.1l4.6-4.6 1.5 1.5-4.6 4.6Z"/>'
+      + '<path d="M2.2 12.2h9.6"/>',
+    success: '<path d="M2.6 7.3 5.6 10.3 11.4 4.1"/>',
+    // Duas marcas: assinado E entregue.
+    "success-muted": '<path d="M1.4 7.4 3.9 9.9 8.4 4.8"/>'
+      + '<path d="M6.2 9.6 7.4 10.8 12.6 4.8"/>',
+    danger: '<circle cx="7" cy="7" r="5.2"/><path d="M5.1 5.1 8.9 8.9"/>'
+      + '<path d="M8.9 5.1 5.1 8.9"/>',
+    neutral: '<circle cx="7" cy="7" r="5.2"/><path d="M4.6 7h4.8"/>',
+  };
+
+  function familyIcon(family) {
+    const paths = FAMILY_ICON_PATHS[family] || FAMILY_ICON_PATHS.neutral;
+    return `<svg class="report-family-icon" viewBox="0 0 14 14"`
+      + ` aria-hidden="true" focusable="false">${paths}</svg>`;
+  }
+
+  // O selo de estado. Continua emitindo `report-<estado>` porque o E2E de
+  // navegador da M24A espera esse gancho (`.report-assinatura_pendente`).
+  function statusChip(domain, value, label, extra) {
+    const familia = statusFamily(domain, value);
+    return `<span class="report-status-chip report-${esc(value)} ${
+      familyClass(domain, value)
+    }${extra ? ` ${extra}` : ""}">${familyIcon(familia)}<span
+      class="report-status-chip-text">${esc(label)}</span></span>`;
+  }
+
+  // O cartão inteiro. `report-status-card` traz fundo pastel e faixa
+  // lateral; a família vem do MESMO mapa que pinta o selo, para que faixa,
+  // fundo e texto nunca discordem.
+  function statusCardClass(domain, value) {
+    return `report-status-card ${familyClass(domain, value)}`;
+  }
+
   // ------------------------------------------------ identidade (M25.15)
   //
   // A partir da M25.15 a referência humana das telas AUTENTICADAS de laudo é
@@ -831,7 +980,9 @@
     const unidadeAtual = unidades.find((u) => u.chave === state.unitFilter);
     const items = lista.length
       ? lista.map((item) => `
-          <button type="button" class="report-queue-item${
+          <button type="button" class="report-queue-item ${
+            statusCardClass("laudo", item.status)
+          }${
             item.document_id === state.selectedDocumentId ? " is-selected" : ""
           }" data-report-open="${esc(item.document_id)}"
             role="option" aria-selected="${
@@ -850,9 +1001,7 @@
                   o topo e os códigos descem para a última linha, sem sumir. */""}
             <strong class="report-item-name">${esc(patientName(item))}</strong>
             <span>${contextLine(item)}</span>
-            <span class="report-status-chip report-${esc(item.status)}">${
-              esc(statusLabel(item.status))
-            }</span>
+            ${statusChip("laudo", item.status, statusLabel(item.status))}
             ${codeTrail(item)}
             ${item.is_corrective
               ? `<span class="report-queue-flag">corrigido</span>` : ""}
@@ -1445,9 +1594,7 @@
             } · ${esc(detail.public_code)}</p>
           </div>
           <div class="report-status-badges">
-            <span class="report-status-chip report-${esc(detail.status)}">${
-              esc(statusLabel(detail.status))
-            }</span>
+            ${statusChip("laudo", detail.status, statusLabel(detail.status))}
             ${hasAddendum
               ? `<span class="report-status-chip report-adendo-flag">Com adendo</span>${
                   helpTip("adendo")
@@ -1641,13 +1788,32 @@
       </section>`;
   }
 
+  // M26.8 — todo laudo desta central está em `liberado`, e isso é decidido
+  // no SERVIDOR: `_aguardando_assinatura_externa` filtra por
+  // `ReportDocument.status == STATUS_LAUDO_LIBERADO`. A linha não carrega o
+  // estado no payload (`_linha_assinatura_externa`), então a constante é a
+  // forma honesta de dizer qual é — e a família sai do mesmo mapa da fila
+  // clínica, para que as duas telas falem a mesma língua visual.
+  const ESTADO_DA_CENTRAL = "liberado";
+
+  // O rótulo COMPLETO ("Concluído — aguardando assinatura qualificada") é o
+  // da fila clínica, onde o estado muda de cartão para cartão e precisa ser
+  // dito por inteiro. Aqui todos os cartões estão no MESMO estado — o
+  // título da seção já diz qual — e repetir a frase em cada linha custava
+  // 60px de altura por cartão num iPhone (107 → 167px, medido). O rótulo
+  // curto é o mesmo que a fila administrativa usa para este ponto do
+  // percurso: `FILA_ROTULOS[aguardando_assinatura]`.
+  const ROTULO_CURTO_DA_CENTRAL = "Aguardando assinatura";
+
   function renderSignatureItem(item) {
     const marcado = state.signatureSelection.includes(item.document_id);
     // `<label>` embrulhando o input: a área de toque passa a ser a linha
     // inteira, e não um quadradinho de 13px. É o que torna a seleção
     // possível num iPhone sem zoom.
     return `
-      <label class="report-signature-item${marcado ? " is-picked" : ""}">
+      <label class="report-signature-item ${
+        statusCardClass("laudo", ESTADO_DA_CENTRAL)
+      }${marcado ? " is-picked" : ""}">
         <input type="checkbox" data-signature-pick="${esc(item.document_id)}"
           ${marcado ? "checked" : ""}>
         <span class="report-signature-body">
@@ -1655,6 +1821,9 @@
             esc(patientName(item))
           }</strong>
           <span class="report-signature-context">${contextLine(item)}</span>
+          ${statusChip(
+            "laudo", ESTADO_DA_CENTRAL, ROTULO_CURTO_DA_CENTRAL
+          )}
           ${codeTrail(item)}
         </span>
       </label>`;
@@ -2068,12 +2237,14 @@
     const selected = selectedOperational();
     const rows = state.operational.length
       ? state.operational.map((item) => `
-          <button type="button" class="report-operation-row${
+          <button type="button" class="report-operation-row ${
+            statusCardClass("laudo", item.status)
+          }${
             item.document_id === state.selectedOperationalId ? " is-selected" : ""
           }" data-report-operational="${esc(item.document_id)}">
             <strong class="report-item-name">${esc(patientName(item))}</strong>
             <span>${contextLine(item)}</span>
-            <span>${esc(statusLabel(item.status))}</span>
+            ${statusChip("laudo", item.status, statusLabel(item.status))}
             ${codeTrail(item)}
           </button>`).join("")
       : `<div class="report-empty">Nenhum documento no fluxo.</div>`;
@@ -2274,7 +2445,9 @@
         || estado.total > 0
       ))
       .map((estado) => `
-      <button type="button" class="report-delivery-chip${
+      <button type="button" class="report-delivery-chip ${
+        familyClass("entrega", estado.chave)
+      }${
         state.deliveryFilter === estado.chave ? " is-active" : ""
       }" data-delivery-filter="${esc(estado.chave)}">
         ${esc(estado.rotulo)} <span>${estado.total}</span>
@@ -2312,12 +2485,16 @@
   function renderDeliveryRow(item) {
     const assinado = item.assinado;
     return `
-      <div class="report-delivery-row report-delivery-${esc(item.estado)}">
+      <div class="report-delivery-row ${
+        statusCardClass("entrega", item.estado)
+      } report-delivery-${esc(item.estado)}">
         <div class="report-delivery-body">
           <strong class="report-item-name">${esc(patientName(item))}</strong>
           <span>${contextLine(item)}</span>
           ${codeTrail(item)}
-          <span class="report-delivery-state">${esc(item.estado_rotulo)}</span>
+          ${statusChip(
+            "entrega", item.estado, item.estado_rotulo, "report-delivery-state"
+          )}
           ${renderResultAccess(item)}
           ${assinado ? `
             <span class="report-delivery-note">
@@ -2663,8 +2840,13 @@
         </p>
         ${carregado ? `
           <p class="report-signature-asset-state">
+            ${/* M26.8 — este selo dizia se a IMAGEM da assinatura
+                  manuscrita está cadastrada, mas emprestava as classes de
+                  ESTADO DE LAUDO (`report-liberado-flag`, verde, e
+                  `report-atribuido`). Um ativo cadastrado não é documento
+                  assinado; a cor tinha que sair da família de status. */""}
             <span class="report-status-chip ${
-              configurada ? "report-liberado-flag" : "report-atribuido"
+              configurada ? "report-asset-ok" : "report-asset-missing"
             }">${configurada ? "Cadastrada" : "Não cadastrada"}</span>
             ${configurada ? `<span class="report-help">SHA-256
               ${esc(String(asset.ativo.sha256).slice(0, 16))}… ·
