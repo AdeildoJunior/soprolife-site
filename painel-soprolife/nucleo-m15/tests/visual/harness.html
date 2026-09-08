@@ -47,15 +47,21 @@
       exam_date: "2026-08-06", location_name: "Coworking Exemplo" },
   ];
 
+  // M26.8 — a fila do harness passa a cobrir TODOS os estados reais de
+  // `report_documents.status`, mais um estado inventado (`estado_fantasma`)
+  // que só existe para provar que um status novo cai em cinza e nunca em
+  // verde. O nome mais longo fica no estado de rótulo mais longo, que é
+  // onde o selo quebra linha primeiro.
   const NOMES = [
     "Ana Exemplo Ribeiro Nascimento", "Bruno Exemplo Carvalho",
-    "Carla Exemplo de Andrade Fontenelle", "Daniel Exemplo Moreira",
-    "Elisa Exemplo Vasconcelos", "Fábio Exemplo Tavares",
-    "Gabriela Exemplo Sampaio Lins",
+    "Carla Exemplo de Andrade Fontenelle Vasconcelos de Albuquerque",
+    "Daniel Exemplo Moreira", "Elisa Exemplo Vasconcelos",
+    "Fábio Exemplo Tavares", "Gabriela Exemplo Sampaio Lins",
+    "Heitor Exemplo Aragão", "Isabel Exemplo Queiroz",
   ];
   const STATUS = [
-    "atribuido", "em_elaboracao", "assinatura_pendente", "liberado",
-    "atribuido", "atribuido", "em_elaboracao",
+    "atribuido", "em_elaboracao", "liberado", "assinatura_pendente",
+    "assinado", "rascunho", "em_revisao", "finalizado", "estado_fantasma",
   ];
 
   const FILA = NOMES.map((nome, i) => ({
@@ -64,7 +70,7 @@
     public_code: `LAU-00030${i + 1}`,
     exam_code: `ESP-00040${i + 1}`,
     report_code: `LAU-00030${i + 1}`,
-    exam_date: `2026-08-0${(i % 7) + 1}`,
+    exam_date: `2026-08-0${(i % 8) + 1}`,
     location_name: i % 2 ? "Clínica Exemplo Ipanema" : "Coworking Exemplo",
     status: STATUS[i],
     locked: STATUS[i] === "liberado",
