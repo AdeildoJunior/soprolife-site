@@ -758,6 +758,7 @@ def test_rubrica_real_nao_esta_versionada():
     """A imagem da médica é ativo privado — nunca entra no Git."""
 
     import pathlib
+    import re
     import subprocess
 
     raiz = pathlib.Path(__file__).resolve().parents[3]
@@ -771,16 +772,47 @@ def test_rubrica_real_nao_esta_versionada():
     # anterior procurava a palavra "rubrica" em qualquer caminho e passou a
     # acusar o próprio relatório da M25.17, cujo nome de arquivo a contém —
     # um falso positivo que escondia o que o teste realmente protege.
+    #
+    # M26.8B — a segunda versão trocou "qualquer caminho" por "nome de
+    # arquivo", mas manteve `assinatura` solto como marca, e voltou a acusar
+    # em falso: `docs/m25-21/selo-pre-assinatura.png` e
+    # `laudo-pre-assinatura-completo.png` são capturas de documentação onde
+    # "pré-assinatura" nomeia uma ETAPA do fluxo, não uma imagem de
+    # assinatura. O guard ficou vermelho por semanas — e guard vermelho por
+    # falso positivo não protege nada, porque todo mundo passa a ignorá-lo.
+    #
+    # Agora são duas checagens objetivas, e nenhuma depende de adjetivo:
+    #
+    # 1. o NOME diz que o arquivo é a imagem — "rubrica", "assinatura
+    #    manuscrita" (o termo que a própria interface usa), "signature",
+    #    "signed". "pré-assinatura" e "pós-assinatura" descrevem etapa e são
+    #    retirados antes da comparação;
+    # 2. o CAMINHO cai onde o ativo real mora. `signature_asset_storage_path`
+    #    grava em `<raiz privada>/assinaturas/<perfil>/<uuid>.png`: o nome do
+    #    arquivo é um UUID e não casaria com marca nenhuma. Sem esta segunda
+    #    checagem, justamente o vazamento mais provável — copiar a pasta
+    #    inteira para dentro do repo — passaria batido.
     imagens = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif"}
-    suspeitos = [
-        caminho
-        for caminho in saida
-        if pathlib.PurePath(caminho).suffix.lower() in imagens
-        and any(
-            marca in pathlib.PurePath(caminho).name.lower()
-            for marca in ("rubrica", "assinatura", "signature")
-        )
-    ]
+    marcas = ("rubrica", "assinatura manuscrita", "signature", "signed")
+    etapas = ("pre assinatura", "pos assinatura")
+
+    def parece_ativo_de_assinatura(caminho: str) -> bool:
+        alvo = pathlib.PurePath(caminho)
+        if alvo.suffix.lower() not in imagens:
+            return False
+        # A pasta em que o ativo real é gravado, em qualquer profundidade.
+        if "assinaturas" in [parte.lower() for parte in alvo.parent.parts]:
+            return True
+        # Normaliza para que "assinatura-manuscrita", "assinatura_manuscrita"
+        # e "AssinaturaManuscrita" leiam todos como a mesma coisa.
+        nome = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", alvo.stem).lower()
+        nome = nome.replace("é", "e").replace("ó", "o")
+        nome = re.sub(r"[-_.]+", " ", nome)
+        for etapa in etapas:
+            nome = nome.replace(etapa, " ")
+        return any(marca in nome for marca in marcas)
+
+    suspeitos = [caminho for caminho in saida if parece_ativo_de_assinatura(caminho)]
     assert suspeitos == [], suspeitos
 
 
