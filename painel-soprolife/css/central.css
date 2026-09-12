@@ -150,6 +150,12 @@
 }
 
 .cad-btn-mini { padding: 5px 12px !important; font-size: 12px !important; }
+.cad-editar-cadastro { margin-left: auto; }
+
+@media (max-width: 620px) {
+  .cad-editar-cadastro { margin-left: 0; order: 2; }
+  .cad-cartao-topo .cad-chip-pessoa { width: 100%; }
+}
 
 .cad-picker-nova {
   margin-top: 10px;

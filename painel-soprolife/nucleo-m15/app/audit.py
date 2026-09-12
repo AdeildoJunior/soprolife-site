@@ -1,4 +1,4 @@
-"""Trilha de auditoria append-only, sem PII nos detalhes.
+"""Trilha de auditoria append-only, com detalhes estritamente permitidos.
 
 - Sanitização RECURSIVA por allowlist: só chaves aprovadas sobrevivem, em
   qualquer nível; valores são escalares curtos ou listas pequenas deles.
@@ -69,6 +69,13 @@ ALLOWED_KEYS = {
     # complementar, que é exatamente a pergunta que se faz ao auditar por que
     # um mês fechou duas vezes.
     "sequencia",
+    # M26.9 — a edição administrativa de cadastro exige antes/depois real.
+    # São as duas únicas chaves de PII aceitas e só aparecem no evento
+    # `pessoa.cadastro_campo_alterado`, cuja leitura já é admin-only.
+    "valor_anterior", "valor_novo",
+    # Fechamento de repasse: IDs técnicos, quantidade e valores monetários.
+    "quantidade_laudos", "valor_unitario", "total_referencia",
+    "valor_pago", "data_pagamento",
 }
 
 _MAX_STR = 120
@@ -98,7 +105,10 @@ def sanitize_details(details: dict | None) -> dict | None:
     for key, value in details.items():
         if key not in ALLOWED_KEYS:
             continue
-        clean[key] = _sanitize_value(value)
+        if key in {"valor_anterior", "valor_novo"} and isinstance(value, str):
+            clean[key] = value[:300]
+        else:
+            clean[key] = _sanitize_value(value)
     return clean
 
 
@@ -111,6 +121,10 @@ def audit(
     request_id: str | None = None,
     detalhes: dict | None = None,
 ) -> None:
+    clean_details = sanitize_details(detalhes)
+    if clean_details and acao != "pessoa.cadastro_campo_alterado":
+        clean_details.pop("valor_anterior", None)
+        clean_details.pop("valor_novo", None)
     db.add(
         AuditLog(
             acao=acao,
@@ -118,7 +132,7 @@ def audit(
             entidade_id=entidade_id,
             user_id=user_id,
             request_id=request_id,
-            detalhes=sanitize_details(detalhes),
+            detalhes=clean_details,
         )
     )
 

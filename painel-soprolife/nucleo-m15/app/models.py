@@ -911,6 +911,62 @@ class PartnerTransfer(Base, TimestampMixin):
     )
 
 
+class PhysicianTransfer(Base, TimestampMixin):
+    """Fechamento mensal do trabalho médico, separado das receitas.
+
+    A quantidade e o valor de referência são snapshots do momento do
+    fechamento. A elegibilidade continua derivada dos laudos por
+    ``released_at``; esta tabela nunca altera laudo, exame ou PDF.
+    """
+
+    __tablename__ = "physician_transfers"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    physician_profile_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("physician_profiles.id"), nullable=False, index=True
+    )
+    competencia: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    eligible_report_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    unit_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    reference_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    paid_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=Decimal("0.00")
+    )
+    payment_date: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="Pendente")
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id"), nullable=False
+    )
+    payment_registered_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
+    payment_registered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    __table_args__ = (
+        UniqueConstraint(
+            "physician_profile_id",
+            "competencia",
+            name="uq_physician_transfer_profile_competencia",
+        ),
+        CheckConstraint("eligible_report_count > 0", name="quantidade_laudos_positiva"),
+        CheckConstraint("unit_amount > 0", name="valor_unitario_positivo"),
+        CheckConstraint("reference_total > 0", name="total_referencia_positivo"),
+        CheckConstraint(
+            "reference_total = eligible_report_count * unit_amount",
+            name="total_referencia_calculado",
+        ),
+        CheckConstraint("paid_amount >= 0", name="valor_pago_nao_negativo"),
+        CheckConstraint(
+            "(status = 'Pendente' AND paid_amount = 0 AND payment_date IS NULL "
+            "AND payment_registered_by_user_id IS NULL AND payment_registered_at IS NULL) "
+            "OR (status = 'Pago' AND paid_amount > 0 AND payment_date IS NOT NULL "
+            "AND payment_registered_by_user_id IS NOT NULL "
+            "AND payment_registered_at IS NOT NULL)",
+            name="estado_pagamento_coerente",
+        ),
+    )
+
+
 # ---------------------------------------------------------------- migração
 
 class ImportSnapshot(Base, TimestampMixin):

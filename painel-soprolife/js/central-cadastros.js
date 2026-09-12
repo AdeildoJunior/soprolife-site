@@ -580,13 +580,14 @@
                `<li>${esc(x.rotulo)}${x.bloqueia_laudo
                  ? ' <span class="cad-pend-bloqueia">pendência para o laudo</span>' : ""}
                  <span class="cad-pend-porque">${esc(x.por_que)}</span></li>`).join("")}</ul>
-             <button type="button" class="m15-btn m15-btn-sec cad-btn-mini"
-               id="${prefix}Corrigir">Corrigir cadastro</button>
            </div>`
         : `<p class="cad-cartao-ok">Cadastro completo.</p>`;
       return `<div class="cad-cartao-pessoa">
         <div class="cad-cartao-topo">
           <span class="cad-chip-pessoa"><strong>${esc(p.nome_completo)}</strong> ${esc(p.public_code)}</span>
+          ${m15().getUser() && m15().getUser().pode_editar_cadastro
+            ? `<button type="button" class="m15-btn cad-btn-mini cad-editar-cadastro"
+                id="${prefix}Editar">Editar cadastro</button>` : ""}
           <button type="button" class="m15-btn m15-btn-sec cad-btn-mini" id="${prefix}Trocar">Trocar paciente</button>
         </div>
         <div class="cad-cartao-dados">${linhas}</div>
@@ -609,51 +610,45 @@
         q.focus();
         notifyChange();
       });
-      const corrigir = selecionada.querySelector("#" + prefix + "Corrigir");
-      if (corrigir) {
-        corrigir.addEventListener("click", () => abrirCorrecao(p));
+      const editar = selecionada.querySelector("#" + prefix + "Editar");
+      if (editar) {
+        editar.addEventListener("click", () => abrirCorrecao(p));
       }
       state.dirty = true;
       if (opts.onSelect) opts.onSelect(p);
       notifyChange();
     }
 
-    /* "Corrigir cadastro" — Fase C.
-     *
-     * Edita SÓ os campos pendentes, dentro do cartão, sem trocar de tela e
-     * sem re-renderizar o formulário do atendimento. É o que garante a
-     * exigência da missão: nada do que já foi digitado no exame se perde.
-     * Ao salvar, o cartão é redesenhado com as pendências recalculadas pelo
-     * servidor — nunca por dedução do navegador.
-     */
+    /* Edição administrativa do cadastro. IDs, CPF, status, observações,
+     * exames, laudos e PDFs não aparecem no payload nem no formulário. */
     function abrirCorrecao(p) {
       const box = selecionada.querySelector("#" + prefix + "CorrigirBox");
       if (!box) return;
       if (!box.hidden) { box.hidden = true; box.innerHTML = ""; return; }
-      const pend = p.cadastro_pendencias || [];
-      const campos = pend.map((x) => {
-        if (x.campo === "cpf") {
-          return fld("CPF", inp(prefix + "_fixCpf", "", 'inputmode="numeric" placeholder="000.000.000-00"'), 4);
-        }
-        if (x.campo === "data_nascimento") {
-          return fld("Data de nascimento", dateInp(prefix + "_fixNasc", ""), 4);
-        }
-        if (x.campo === "sexo") {
-          return fld("Sexo", sel(prefix + "_fixSexo",
-            [["", "não informado"], ["feminino", "feminino"], ["masculino", "masculino"],
-             ["outro", "outro"]], ""), 4);
-        }
-        return fld("WhatsApp", inp(prefix + "_fixFone", "", 'type="tel" placeholder="(21) 99999-9999"'), 4);
-      }).join("");
+      const contatos = p.contatos || [];
+      const fone = contatos.find((c) => c.ativo !== false && (c.tipo === "whatsapp" || c.tipo === "telefone"));
+      const email = contatos.find((c) => c.ativo !== false && c.tipo === "email");
+      const campos = [
+        fld("Nome completo", inp(prefix + "_editNome", p.nome_completo,
+          'required minlength="2" autocomplete="name"'), { span: 6, req: true }),
+        fld("Telefone", inp(prefix + "_editFone", fone ? fone.valor : "",
+          'type="tel" autocomplete="tel" placeholder="(21) 99999-9999"'), 3),
+        fld("E-mail", inp(prefix + "_editEmail", email ? email.valor : "",
+          'type="email" autocomplete="email"'), 3),
+        fld("Data de nascimento", dateInp(prefix + "_editNasc", p.data_nascimento || ""), 3),
+        fld("Sexo", sel(prefix + "_editSexo",
+          [["", "não informado"], ["feminino", "feminino"], ["masculino", "masculino"],
+           ["outro", "outro"]], p.sexo || ""), 3),
+      ].join("");
       box.hidden = false;
-      box.innerHTML = `<p class="cad-microcopy">Preencha o que falta. O atendimento
-        que você já começou a digitar continua aqui.</p>
+      box.innerHTML = `<p class="cad-microcopy">Corrija somente os dados cadastrais.
+        Laudos, PDFs assinados, autoria médica, exames e IDs permanecem intactos.</p>
         <div class="m15-form cad-subgrid">${campos}</div>
         <div class="cad-actions">
-          <button type="button" class="m15-btn" id="${prefix}SalvarFix">Salvar cadastro</button>
+          <button type="button" class="m15-btn" id="${prefix}SalvarFix">Salvar alterações</button>
           <span class="cad-submit-status" id="${prefix}FixStatus" hidden></span>
         </div>`;
-      const fixFone = box.querySelector(`[name="${prefix}_fixFone"]`);
+      const fixFone = box.querySelector(`[name="${prefix}_editFone"]`);
       if (fixFone) phoneMask(fixFone);
       attachDates(box);
       wireAjuda(box);
@@ -669,35 +664,21 @@
         const el = box.querySelector(`[name="${prefix}_${nome}"]`);
         return el ? (el.value || "").trim() : "";
       };
-      const patch = {};
-      setIf(patch, "cpf", leia("fixCpf"));
-      setIf(patch, "data_nascimento", leia("fixNasc"));
-      setIf(patch, "sexo", leia("fixSexo"));
-      const fone = leia("fixFone");
-      if (!Object.keys(patch).length && !fone) {
-        toast("Preencha ao menos um campo para salvar.", "erro");
-        return;
-      }
+      const patch = {
+        nome_completo: leia("editNome"),
+        telefone: leia("editFone") || null,
+        email: leia("editEmail") || null,
+        data_nascimento: leia("editNasc") || null,
+        sexo: leia("editSexo") || null,
+      };
+      if (!patch.nome_completo) { toast("Informe o nome completo.", "erro"); return; }
       btn.disabled = true;
       status.hidden = false;
       status.className = "cad-submit-status";
       status.textContent = "Salvando…";
-      const passos = [];
-      if (Object.keys(patch).length) {
-        passos.push(api("/pessoas/" + encodeURIComponent(p.id), {
-          method: "PATCH", body: JSON.stringify(patch),
-        }));
-      }
-      if (fone) {
-        passos.push(api(`/pessoas/${encodeURIComponent(p.id)}/contatos`, {
-          method: "POST",
-          body: JSON.stringify({ tipo: "whatsapp", valor: fone, principal: true }),
-        }));
-      }
-      Promise.all(passos)
-        // Relê do servidor: as pendências que sobraram são as que ELE
-        // reconhece, não as que o navegador imagina ter resolvido.
-        .then(() => api("/pessoas/" + encodeURIComponent(p.id)))
+      api("/pessoas/" + encodeURIComponent(p.id) + "/cadastro", {
+        method: "PATCH", body: JSON.stringify(patch),
+      })
         .then((atualizada) => {
           showSelected(atualizada);
           toast("Cadastro atualizado.");
@@ -1577,7 +1558,7 @@
         const avisoPend = pend.length
           ? `<span class="cad-sucesso-pendencia">Falta no cadastro do paciente: ` +
             `${esc(pend.map((x) => x.rotulo).join(", "))}. ` +
-            `Busque o paciente acima e use “Corrigir cadastro”.</span>`
+            `Busque o paciente acima e use “Editar cadastro”.</span>`
           : "";
         successBanner(bodyEl,
           `<strong>${esc(partes.join(" + "))} criada(s)</strong> para ` +

@@ -5,6 +5,7 @@ parceiro/parceria/encaminhamento/acerto validada na transação; transições
 de status de repasse controladas; papel gestor obrigatório para mutações.
 """
 
+from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -34,6 +35,8 @@ from ..models import (
     PartnerTransfer,
     PartnerUnit,
     Person,
+    PhysicianProfile,
+    PhysicianTransfer,
     SpirometryExam,
     User,
 )
@@ -44,6 +47,8 @@ from ..schemas import (
     FinanceSearch,
     FinancialEntryCreate,
     FinancialEntryUpdate,
+    PhysicianTransferCreate,
+    PhysicianTransferPayment,
     TransferCreate,
 )
 from ..security import ROLE_GESTOR, ROLE_LEITURA, require_role
@@ -57,6 +62,12 @@ from ..services.integrity import (
     ensure_partnership_of_partner,
     ensure_referral_of_partner,
     ensure_settlement_of_partner,
+)
+from ..services.medical_transfers import (
+    calculate_reference_total,
+    eligible_report_count,
+    medical_transfer_dashboard,
+    parse_competence,
 )
 
 router = APIRouter(tags=["financeiro"])
@@ -523,6 +534,183 @@ def create_entry(
         )
         raise
     return ser_financial_entry(entry)
+
+
+# ---------------------------------------------------------- repasses médicos
+
+@router.get("/financeiro/repasses-medicos")
+def list_physician_transfers(
+    competencia: str | None = None,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    """Área administrativa separada de receitas, Pastore e pacientes."""
+
+    return medical_transfer_dashboard(db, parse_competence(competencia))
+
+
+@router.post("/financeiro/repasses-medicos", status_code=201)
+def create_physician_transfer(
+    payload: PhysicianTransferCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    competence = parse_competence(payload.competencia)
+    profile = db.get(PhysicianProfile, payload.physician_profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Médica não encontrada.")
+    existing = db.execute(
+        select(PhysicianTransfer).where(
+            PhysicianTransfer.physician_profile_id == profile.id,
+            PhysicianTransfer.competencia == competence,
+        )
+    ).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "codigo": "repasse_medico_duplicado",
+                "mensagem": "Já existe repasse registrado para esta médica e competência.",
+                "repasse_id": existing.id,
+            },
+        )
+
+    quantity = eligible_report_count(db, profile.id, competence)
+    if quantity == 0:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "codigo": "sem_laudos_elegiveis",
+                "mensagem": "Não há laudos concluídos nesta competência.",
+            },
+        )
+    if quantity != payload.expected_eligible_report_count:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "codigo": "quantidade_laudos_desatualizada",
+                "mensagem": "A quantidade de laudos mudou; atualize antes de registrar.",
+                "quantidade_atual": quantity,
+            },
+        )
+
+    unit_amount = _q(payload.unit_amount)
+    paid_amount = _q(payload.paid_amount) or Decimal("0.00")
+    is_paid = paid_amount > 0
+    now = datetime.now(timezone.utc)
+    transfer = PhysicianTransfer(
+        physician_profile_id=profile.id,
+        competencia=competence,
+        eligible_report_count=quantity,
+        unit_amount=unit_amount,
+        reference_total=calculate_reference_total(quantity, unit_amount),
+        paid_amount=paid_amount,
+        payment_date=payload.payment_date,
+        status="Pago" if is_paid else "Pendente",
+        created_by_user_id=user.id,
+        payment_registered_by_user_id=user.id if is_paid else None,
+        payment_registered_at=now if is_paid else None,
+    )
+    db.add(transfer)
+    try:
+        db.flush()
+        audit(
+            db,
+            "repasse_medico.registrado",
+            "physician_transfers",
+            transfer.id,
+            user.id,
+            request.state.request_id,
+            {
+                "physician_profile_id": profile.id,
+                "competencia": payload.competencia,
+                "quantidade_laudos": quantity,
+                "valor_unitario": str(unit_amount),
+                "total_referencia": str(transfer.reference_total),
+                "valor_pago": str(paid_amount),
+                "status": transfer.status,
+            },
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "codigo": "repasse_medico_duplicado",
+                "mensagem": "Já existe repasse registrado para esta médica e competência.",
+            },
+        ) from None
+    return medical_transfer_dashboard(db, competence)
+
+
+@router.patch("/financeiro/repasses-medicos/{transfer_id}/pagamento")
+def register_physician_transfer_payment(
+    transfer_id: str,
+    payload: PhysicianTransferPayment,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    transfer = db.execute(
+        select(PhysicianTransfer)
+        .where(PhysicianTransfer.id == transfer_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if transfer is None:
+        raise HTTPException(status_code=404, detail="Repasse médico não encontrado.")
+    if transfer.status == "Pago":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "codigo": "repasse_medico_ja_pago",
+                "mensagem": "Este repasse já está marcado como pago.",
+            },
+        )
+
+    current_count = eligible_report_count(
+        db, transfer.physician_profile_id, transfer.competencia
+    )
+    if current_count != transfer.eligible_report_count:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "codigo": "competencia_alterada_apos_fechamento",
+                "mensagem": (
+                    "A quantidade de laudos concluídos mudou depois do fechamento; "
+                    "não registre o pagamento até conferir a competência."
+                ),
+                "quantidade_fechada": transfer.eligible_report_count,
+                "quantidade_atual": current_count,
+            },
+        )
+
+    now = datetime.now(timezone.utc)
+    transfer.paid_amount = _q(payload.paid_amount)
+    transfer.payment_date = payload.payment_date
+    transfer.status = "Pago"
+    transfer.payment_registered_by_user_id = user.id
+    transfer.payment_registered_at = now
+    audit(
+        db,
+        "repasse_medico.pagamento_registrado",
+        "physician_transfers",
+        transfer.id,
+        user.id,
+        request.state.request_id,
+        {
+            "physician_profile_id": transfer.physician_profile_id,
+            "competencia": transfer.competencia.strftime("%Y-%m"),
+            "quantidade_laudos": transfer.eligible_report_count,
+            "valor_unitario": str(transfer.unit_amount),
+            "total_referencia": str(transfer.reference_total),
+            "valor_pago": str(transfer.paid_amount),
+            "data_pagamento": transfer.payment_date.isoformat(),
+        },
+    )
+    db.commit()
+    return medical_transfer_dashboard(db, transfer.competencia)
 
 
 # ---------------------------------------------------- conciliação extra-Pastore

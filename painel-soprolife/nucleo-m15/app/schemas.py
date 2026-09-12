@@ -127,6 +127,21 @@ class PersonUpdate(StrictModel):
     observacao: str | None = Field(default=None, max_length=4000)
 
 
+class PatientRegistrationUpdate(StrictModel):
+    """Campos administrativos seguros; IDs e conteúdo clínico não entram."""
+
+    nome_completo: str | None = Field(default=None, min_length=2, max_length=300)
+    telefone: str | None = Field(default=None, max_length=200)
+    email: str | None = Field(default=None, max_length=200, pattern=_EMAIL_RE)
+    data_nascimento: date | None = None
+    sexo: Sexo | None = None
+
+    @field_validator("email")
+    @classmethod
+    def _registration_email_lower(cls, v: str | None) -> str | None:
+        return v.lower() if v else v
+
+
 class ConsentIn(StrictModel):
     canal: Literal["whatsapp", "telefone", "email"]
     status: Literal["concedido", "revogado", "desconhecido"]
@@ -748,6 +763,28 @@ class TransferCreate(StrictModel):
     data_prevista: date | None = None
     data_pagamento: date | None = None
     idempotency_key: str | None = Field(default=None, min_length=4, max_length=64)
+
+
+class PhysicianTransferCreate(StrictModel):
+    physician_profile_id: str = Field(min_length=36, max_length=36)
+    competencia: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    expected_eligible_report_count: int = Field(ge=1)
+    unit_amount: Money
+    paid_amount: MoneyOrZero = Decimal("0.00")
+    payment_date: date | None = None
+
+    @model_validator(mode="after")
+    def _payment_pair(self):
+        if (self.paid_amount > 0) != (self.payment_date is not None):
+            raise ValueError(
+                "Valor pago e data do pagamento devem ser informados juntos."
+            )
+        return self
+
+
+class PhysicianTransferPayment(StrictModel):
+    paid_amount: Money
+    payment_date: date
 
 
 class FinanceSearch(StrictModel):

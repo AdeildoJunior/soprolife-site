@@ -441,6 +441,26 @@ def require_role(role_name: str):
     return dependency
 
 
+PATIENT_REGISTRATION_EDITOR_EMAILS = frozenset({"contato@soprolife.com.br"})
+
+
+def can_edit_patient_registration(user: User) -> bool:
+    """Admin (incluindo Luiz) ou a conta institucional explicitamente autorizada."""
+
+    return (
+        ROLE_ADMIN in user_effective_roles(user)
+        or user.email.strip().lower() in PATIENT_REGISTRATION_EDITOR_EMAILS
+    )
+
+
+def require_patient_registration_editor(
+    user: User = Depends(get_current_user),
+) -> User:
+    if not can_edit_patient_registration(user):
+        raise HTTPException(status_code=403, detail="Permissão insuficiente.")
+    return user
+
+
 def ensure_roles_exist(db: Session) -> None:
     existing = {r.name for r in db.execute(select(Role)).scalars()}
     for name in ALL_ROLES:

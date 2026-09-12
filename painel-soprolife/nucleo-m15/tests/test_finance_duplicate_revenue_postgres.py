@@ -1,9 +1,11 @@
 """M23.1 — migração e corrida de receita duplicada em PostgreSQL 16 real."""
 
 from decimal import Decimal
+from datetime import datetime, timezone
 import os
 import pathlib
 import threading
+import uuid
 
 import pytest
 from alembic import command
@@ -80,18 +82,36 @@ def test_postgres_migracao_aborta_conflito_e_depois_preserva_linha_valida(
     command.downgrade(cfg, OLD_HEAD)
     SessionLocal = sessionmaker(bind=pg_engine, expire_on_commit=False)
     session = SessionLocal()
-    person = Person(
-        public_code="PES-920001",
-        nome_completo="Pessoa Sintetica PG",
-        nome_normalizado="pessoa sintetica pg",
+    # A bancada está deliberadamente no schema M22. Use SQL compatível com
+    # ESSA revisão: o ORM corrente já conhece colunas M25 posteriores e não
+    # pode ser usado para fabricar uma linha num schema histórico.
+    now = datetime.now(timezone.utc)
+    person_id = str(uuid.uuid4())
+    exam_id = str(uuid.uuid4())
+    session.execute(
+        text(
+            "INSERT INTO people (id, public_code, nome_completo, "
+            "nome_normalizado, status, nao_contatar, created_at, updated_at) "
+            "VALUES (:id, :code, :name, :normalized, 'ativo', false, :now, :now)"
+        ),
+        {
+            "id": person_id,
+            "code": "PES-920001",
+            "name": "Pessoa Sintetica PG",
+            "normalized": "pessoa sintetica pg",
+            "now": now,
+        },
     )
-    session.add(person)
-    session.flush()
-    exam = SpirometryExam(public_code="ESP-920001", person_id=person.id)
-    session.add(exam)
-    session.flush()
-    first = _entry("LAN-920001", "Espirometria", exam_id=exam.id)
-    duplicate = _entry("LAN-920002", " espirometria ", exam_id=exam.id)
+    session.execute(
+        text(
+            "INSERT INTO spirometry_exams (id, public_code, person_id, "
+            "data_exame_dia_assumido, status, created_at, updated_at) "
+            "VALUES (:id, :code, :person_id, false, 'Aguardando', :now, :now)"
+        ),
+        {"id": exam_id, "code": "ESP-920001", "person_id": person_id, "now": now},
+    )
+    first = _entry("LAN-920001", "Espirometria", exam_id=exam_id)
+    duplicate = _entry("LAN-920002", " espirometria ", exam_id=exam_id)
     session.add_all([first, duplicate])
     session.commit()
     before = session.execute(

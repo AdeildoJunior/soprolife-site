@@ -37,6 +37,7 @@ from ..security import (
     session_duration,
     set_session_cookie,
     user_effective_roles,
+    can_edit_patient_registration,
     verify_password_or_dummy,
 )
 from ..config import get_settings
@@ -50,6 +51,7 @@ def _identidade(user: User) -> dict:
         "nome": user.nome,
         "papeis": sorted(r.name for r in user.roles),
         "papeis_efetivos": sorted(user_effective_roles(user)),
+        "pode_editar_cadastro": can_edit_patient_registration(user),
     }
 
 

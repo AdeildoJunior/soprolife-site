@@ -27,8 +27,14 @@ from ..schemas import (
     PersonRelationshipDeactivate,
     PersonSearch,
     PersonUpdate,
+    PatientRegistrationUpdate,
 )
-from ..security import ROLE_LEITURA, ROLE_OPERACIONAL, require_role
+from ..security import (
+    ROLE_LEITURA,
+    ROLE_OPERACIONAL,
+    require_patient_registration_editor,
+    require_role,
+)
 from ..serializers import ser_consent, ser_person, ser_person_relationship
 from ..services.identity import find_person_candidates, register_candidates
 from ..services.person_registration import build_person
@@ -60,6 +66,41 @@ def _add_contact(db: Session, person: Person, contato: ContactIn) -> PersonConta
     db.add(contact)
     db.flush()
     return contact
+
+
+def _registration_contact(person: Person, kinds: tuple[str, ...]) -> PersonContact | None:
+    active = [c for c in person.contacts if c.ativo and c.tipo in kinds]
+    active.sort(key=lambda c: (not c.principal, c.created_at, c.id))
+    return active[0] if active else None
+
+
+def _audit_registration_change(
+    db: Session,
+    request: Request,
+    person: Person,
+    user: User,
+    field: str,
+    before,
+    after,
+) -> None:
+    """Uma linha por campo: usuário/horário vêm das colunas do AuditLog."""
+
+    def serial(value):
+        return value.isoformat() if hasattr(value, "isoformat") else value
+
+    audit(
+        db,
+        "pessoa.cadastro_campo_alterado",
+        "people",
+        person.id,
+        user.id,
+        request.state.request_id,
+        {
+            "campo": field,
+            "valor_anterior": serial(before),
+            "valor_novo": serial(after),
+        },
+    )
 
 
 @router.get("")
@@ -210,6 +251,91 @@ def get_person(
         {"legacy_source": a.legacy_source, "legacy_id": a.legacy_id} for a in aliases
     ]
     return data
+
+
+@router.patch("/{person_id}/cadastro")
+def update_patient_registration(
+    person_id: str,
+    payload: PatientRegistrationUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_patient_registration_editor),
+):
+    """Corrige cadastro sem oferecer qualquer porta para laudo/exame/IDs.
+
+    Cada mudança ganha sua própria linha antes/depois. PDFs já persistidos
+    continuam byte a byte intactos; o gerador só consultará estes valores ao
+    compor uma versão futura.
+    """
+
+    person = _get_person(db, person_id)
+    supplied = payload.model_fields_set
+    changes: list[tuple[str, object, object]] = []
+
+    if "nome_completo" in supplied and payload.nome_completo is None:
+        raise HTTPException(status_code=422, detail="Nome completo não pode ser removido.")
+    if "nome_completo" in supplied and payload.nome_completo != person.nome_completo:
+        changes.append(("nome_completo", person.nome_completo, payload.nome_completo))
+        person.nome_completo = payload.nome_completo
+        person.nome_normalizado = normalize_name(payload.nome_completo)
+
+    if "data_nascimento" in supplied and payload.data_nascimento != person.data_nascimento:
+        changes.append(("data_nascimento", person.data_nascimento, payload.data_nascimento))
+        person.data_nascimento = payload.data_nascimento
+
+    if "sexo" in supplied and payload.sexo != person.sexo:
+        changes.append(("sexo", person.sexo, payload.sexo))
+        person.sexo = payload.sexo
+
+    contact_specs = (
+        ("telefone", ("whatsapp", "telefone"), payload.telefone, "whatsapp"),
+        ("email", ("email",), payload.email, "email"),
+    )
+    for field, kinds, new_value, default_kind in contact_specs:
+        if field not in supplied:
+            continue
+        current = _registration_contact(person, kinds)
+        before = current.valor if current else None
+        after = (new_value or "").strip() or None
+        if after == before:
+            continue
+        if field == "telefone" and after is not None:
+            normalized = normalize_phone(after)
+            if len(normalized) < 10:
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "codigo": "telefone_invalido",
+                        "mensagem": "Informe um telefone com DDD.",
+                    },
+                )
+        else:
+            normalized = after.lower() if after else ""
+        if current:
+            if after is None:
+                current.ativo = False
+                current.principal = False
+            else:
+                current.valor = after
+                current.valor_normalizado = normalized
+                current.principal = True
+        elif after is not None:
+            db.add(
+                PersonContact(
+                    person_id=person.id,
+                    tipo=default_kind,
+                    valor=after,
+                    valor_normalizado=normalized,
+                    principal=True,
+                    ativo=True,
+                )
+            )
+        changes.append((field, before, after))
+
+    for field, before, after in changes:
+        _audit_registration_change(db, request, person, user, field, before, after)
+    db.commit()
+    return ser_person(person)
 
 
 @router.patch("/{person_id}")
