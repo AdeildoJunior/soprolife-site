@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://127.0.0.1:8765", "http://localhost:8765"]
     display_timezone: str = "America/Sao_Paulo"
 
+    # Fiscal foundation: only the in-process mock has an implementation.
+    nfse_enabled: bool = False
+    nfse_environment: Literal["mock", "restricted", "production"] = "mock"
+    nfse_real_enabled: bool = False
+    nfse_credentials_path: Path | None = None
+
     # -------------------------------------- preço de tabela SoproLife (M25.26)
     # Valor com que o campo "Valor da espirometria" NASCE preenchido no fluxo
     # de Espirometria SoproLife. É uma SUGESTÃO editável, nunca um valor

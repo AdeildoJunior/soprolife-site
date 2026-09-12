@@ -76,6 +76,25 @@ def _protect_m24c_immutable_evidence(session, _flush_context, _instances):
                 raise ValueError("Atribuição só pode transicionar de ativa para encerrada.")
 
 
+@event.listens_for(Session, "before_flush")
+def _protect_fiscal_evidence(session, _flush_context, _instances):
+    from .models import FiscalPolicy, FiscalPreparation, FiscalAttempt, FiscalDocument
+    immutable = (FiscalPolicy, FiscalPreparation, FiscalAttempt)
+    for obj in session.deleted:
+        if isinstance(obj, (*immutable, FiscalDocument)):
+            raise ValueError("Evidência fiscal não pode ser removida.")
+    for obj in session.dirty:
+        if isinstance(obj, immutable) and session.is_modified(obj):
+            raise ValueError("Evidência fiscal imutável.")
+        if isinstance(obj, FiscalDocument):
+            state = inspect(obj)
+            if any(state.attrs[key].history.has_changes() for key in (
+                "spirometry_exam_id", "environment", "created_by",
+                "idempotency_key", "idempotency_fingerprint",
+            )):
+                raise ValueError("Identidade fiscal imutável.")
+
+
 def _ensure_sqlite_dir(url: str) -> None:
     if url.startswith("sqlite:///") and ":memory:" not in url:
         path = pathlib.Path(url.removeprefix("sqlite:///"))

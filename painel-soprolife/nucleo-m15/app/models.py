@@ -2652,3 +2652,100 @@ class PatientResultSession(Base):
         DateTime(timezone=True), nullable=False
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# ---------------------------------------------------------------- fiscal
+class FiscalPolicy(Base):
+    """Immutable configuration version. Validation never changes an old version."""
+    __tablename__ = "fiscal_policies"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    version: Mapped[str] = mapped_column(String(60), unique=True)
+    environment: Mapped[str] = mapped_column(String(20))
+    flow: Mapped[str] = mapped_column(String(20))
+    service: Mapped[str] = mapped_column(String(30))
+    effective_from: Mapped[date] = mapped_column(Date)
+    effective_to: Mapped[date] = mapped_column(Date)
+    validation_state: Mapped[str] = mapped_column(String(20))
+    configuration: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint("effective_to >= effective_from", name="fiscal_policy_validity"),
+        CheckConstraint("environment IN ('mock','restricted','production')", name="fiscal_policy_environment"),
+        CheckConstraint("validation_state IN ('draft','validated')", name="fiscal_policy_validation"),
+    )
+
+
+class FiscalDocument(Base, TimestampMixin):
+    """Queue projection only; immutable preparations retain monetary evidence."""
+    __tablename__ = "fiscal_documents"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    spirometry_exam_id: Mapped[str] = mapped_column(String(36), ForeignKey("spirometry_exams.id"))
+    environment: Mapped[str] = mapped_column(String(20))
+    state: Mapped[str] = mapped_column(String(30), default="blocked")
+    eligibility: Mapped[str] = mapped_column(String(20), default="blocked")
+    blocking_reasons: Mapped[list] = mapped_column(JSON, default=list)
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
+    idempotency_fingerprint: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (
+        UniqueConstraint("spirometry_exam_id", "environment", name="uq_fiscal_exam_environment"),
+        CheckConstraint("environment IN ('mock','restricted','production')", name="fiscal_document_environment"),
+        CheckConstraint("state IN ('blocked','pending','issuing','simulated','failed','uncertain','reconciling','cancelled')", name="fiscal_document_state"),
+    )
+
+
+class FiscalPreparation(Base):
+    """Append-only snapshot, explicitly derived from one financial source + policy."""
+    __tablename__ = "fiscal_preparations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_documents.id"), index=True)
+    financial_entry_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("financial_entries.id"))
+    policy_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("fiscal_policies.id"))
+    recipient_person_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("people.id"))
+    flow: Mapped[str] = mapped_column(String(20))
+    service_date: Mapped[date | None] = mapped_column(Date)
+    competence: Mapped[date | None] = mapped_column(Date)
+    amount_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    description: Mapped[str | None] = mapped_column(String(200))
+    blocking_reasons: Mapped[list] = mapped_column(JSON)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint("amount_snapshot IS NULL OR (financial_entry_id IS NOT NULL AND policy_id IS NOT NULL AND amount_snapshot > 0)", name="fiscal_snapshot_source"),
+    )
+
+
+class FiscalAttempt(Base):
+    """Append-only events: started row is committed BEFORE provider invocation.
+
+    Completion is a NEW row sharing operation_id, never an UPDATE of started.
+    A crash leaves durable evidence requiring reconciliation.
+    """
+    __tablename__ = "fiscal_attempts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_documents.id"), index=True)
+    preparation_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_preparations.id"))
+    operation_id: Mapped[str] = mapped_column(String(36))
+    reconciles_operation_id: Mapped[str | None] = mapped_column(String(36))
+    operation: Mapped[str] = mapped_column(String(20))
+    phase: Mapped[str] = mapped_column(String(20))
+    number: Mapped[int] = mapped_column(Integer)
+    provider: Mapped[str] = mapped_column(String(30))
+    environment: Mapped[str] = mapped_column(String(20))
+    outcome: Mapped[str] = mapped_column(String(30))
+    external_id: Mapped[str | None] = mapped_column(String(100))
+    error_code: Mapped[str | None] = mapped_column(String(40))
+    reconciliation_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
+    idempotency_fingerprint: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (
+        UniqueConstraint("operation_id", "phase", name="uq_fiscal_attempt_phase"),
+        UniqueConstraint("document_id", "number", "phase", name="uq_fiscal_attempt_number"),
+        CheckConstraint("operation IN ('issue','reconcile','cancel')", name="fiscal_attempt_operation"),
+        CheckConstraint("phase IN ('started','completed')", name="fiscal_attempt_phase"),
+    )
