@@ -1,89 +1,100 @@
+/* M26.10 — tokens M17, estilos limitados à seção de repasses. */
 .medical-transfers {
+  --medical-muted: #52647d;
   margin: var(--m17-section-gap, 16px) 0;
+  padding: 24px;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 10px);
+  background: var(--card, #fff);
+  box-shadow: var(--shadow-xs);
+  min-width: 0;
 }
-
 .medical-transfers-header,
-.medical-transfers-toolbar,
-.medical-transfers-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.medical-transfers-header h3,
-.medical-transfers-history h4 { margin: 0; }
-.medical-transfers-header p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
-
-.medical-transfers-toolbar { margin: 12px 0; }
-.medical-transfers-toolbar label,
-.medical-transfers-form label {
-  display: grid;
-  gap: 4px;
-  color: var(--muted);
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.medical-transfers input,
-.medical-transfers select {
-  min-height: 36px;
-  border: 1px solid var(--line, #d7e2ea);
+.medical-month-toolbar,
+.medical-month-actions,
+.medical-transfers-actions,
+.medical-month-navigation { display: flex; align-items: center; gap: 10px; }
+.medical-transfers-header,
+.medical-month-toolbar { justify-content: space-between; flex-wrap: wrap; }
+.medical-transfers-header h3 { margin: 0; font-size: 18px; color: var(--navy); }
+.medical-transfers-header p { margin: 5px 0 0; color: var(--medical-muted); font-size: 12px; }
+.medical-transfers button { cursor: pointer; font-family: inherit; }
+.medical-transfers .m15-btn,
+.medical-transfers .finance-novo-btn {
+  min-height: 40px;
+  padding: 9px 14px;
   border-radius: 8px;
-  background: #fff;
-  padding: 0 10px;
-  font: inherit;
-  color: var(--navy, #0b1f36);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
-
-.medical-transfers-kpis {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(130px, 1fr));
-  gap: 8px;
-  margin: 10px 0 12px;
-}
-
-.medical-transfers-kpi {
-  border: 1px solid var(--line, #d7e2ea);
-  border-radius: 9px;
-  padding: 9px 11px;
-  background: var(--soft, #f5f9fb);
-}
-.medical-transfers-kpi span { display: block; color: var(--muted); font-size: 10.5px; }
-.medical-transfers-kpi strong { display: block; margin-top: 2px; font-size: 18px; }
-.medical-transfers-note { margin: 6px 0; color: var(--muted); font-size: 11.5px; }
-
-.medical-transfers-table-wrap { overflow-x: auto; }
-.medical-transfers table { width: 100%; border-collapse: collapse; }
-.medical-transfers th { white-space: nowrap; text-align: left; }
-.medical-transfers td { border-top: 1px solid var(--line, #d7e2ea); }
-.medical-transfers .num { text-align: right; white-space: nowrap; }
-.medical-transfer-status { font-weight: 700; }
-.medical-transfer-status.is-paid { color: #0b7355; }
-.medical-transfer-status.is-pending { color: #9b6814; }
-
-.medical-transfers-form {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-  gap: 10px;
-  margin: 12px 0;
-  padding: 12px;
-  border: 1px solid var(--teal, #1db7a6);
-  border-radius: 10px;
-  background: rgba(29, 183, 166, .05);
-}
+.medical-transfers .finance-novo-btn,
+.medical-transfers .m15-btn:not(.m15-btn-sec) { background: var(--navy); color: white; border: 1px solid var(--navy); box-shadow: none; }
+.medical-transfers .m15-btn-sec { background: var(--card); color: var(--navy); border: 1px solid var(--line); box-shadow: none; }
+.medical-transfers button:hover { filter: brightness(.96); }
+.medical-transfers button:disabled { cursor: wait; opacity: .55; }
+.medical-transfers :focus-visible { outline: 2px solid var(--navy); outline-offset: 3px; }
+.medical-month-picker { margin: 24px 0 18px; }
+.medical-eyebrow { font-size: 12px; color: var(--medical-muted); }
+.medical-month-navigation { margin-top: 6px; }
+.medical-month-navigation h4 { margin: 0; width: 190px; text-align: center; font-size: 20px; font-weight: 650; color: var(--navy); border-radius: 4px; }
+.medical-icon-btn { width: 40px; height: 40px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--card); color: var(--navy); font-size: 26px; line-height: 1; }
+.medical-month-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.medical-month-chips button { min-height: 36px; padding: 7px 13px; border-radius: 20px; background: var(--card); border: 1px solid var(--line); color: var(--medical-muted); font-size: 12px; }
+.medical-month-chips button[aria-pressed="true"] { border-color: #0b7355; color: #0b7355; background: var(--teal-soft); font-weight: 700; }
+.medical-transfers-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 22px; }
+.medical-transfers-kpi { padding: 18px 20px; border-radius: 10px; background: var(--line-light); }
+.medical-transfers-kpi.is-paid { background: var(--teal-pale); }
+.medical-transfers-kpi > .medical-help-label { color: var(--medical-muted); font-size: 12px; }
+.medical-transfers-kpi strong { display: block; margin: 8px 0 5px; font-size: clamp(22px, 2.3vw, 28px); font-weight: 650; color: var(--navy); font-variant-numeric: tabular-nums; }
+.medical-transfers-kpi.is-paid strong { color: #0b7355; }
+.medical-transfers-kpi small,
+.medical-transfers-note { font-size: 11px; color: var(--medical-muted); }
+.medical-help-label { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.medical-transfers .medical-help { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--medical-muted); font-size: 11px; font-weight: 600; }
+/* Fora do scroll da tabela: ajuda não fica cortada, inclusive no celular. */
+.medical-tooltip { position: fixed; z-index: 10000; width: min(300px, calc(100vw - 24px)); box-sizing: border-box; padding: 12px 14px; border-radius: 10px; background: var(--navy, #0c1f3d); color: #fff; box-shadow: var(--shadow-md); font-size: 12px; line-height: 1.6; text-align: left; }
+.medical-tooltip[hidden] { display: none; }
+.medical-transfers-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.medical-transfers table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.medical-transfers th { white-space: nowrap; text-align: left; padding: 12px; background: var(--line-light); color: var(--medical-muted); font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: normal; }
+.medical-transfers td { padding: 14px 12px; border-top: 1px solid var(--line-light); vertical-align: middle; }
+.medical-transfers .medical-doctor { min-width: 135px; color: var(--navy); font-weight: 600; }
+.medical-transfers .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.medical-transfer-status { display: inline-block; border-radius: 20px; padding: 5px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.medical-transfer-status.is-paid { color: #0b7355; background: var(--ok-soft); }
+.medical-transfer-status.is-pending { color: #84560a; background: var(--warn-soft); }
+.medical-transfers .medical-empty { text-align: center; padding: 32px 16px; color: var(--medical-muted); }
+.medical-empty small { display: block; margin-top: 6px; font-size: 11px; }
+.medical-transfers-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0 0 20px; padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--teal-pale); }
+.medical-transfers-form label { display: grid; gap: 6px; color: var(--medical-muted); font-size: 12px; font-weight: 600; }
+.medical-transfers input,
+.medical-transfers select { width: 100%; min-width: 0; box-sizing: border-box; min-height: 42px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 8px 10px; font: inherit; color: var(--navy); }
 .medical-transfers-form h4,
-.medical-transfers-form .medical-transfers-actions,
-.medical-transfers-form .medical-transfers-form-status { grid-column: 1 / -1; margin: 0; }
-.medical-transfers-form-status { min-height: 18px; font-size: 12px; color: var(--muted); }
-.medical-transfers-form-status.is-error { color: #a52f2f; font-weight: 600; }
-.medical-transfers-history { margin-top: 12px; }
-.medical-transfers-history summary { cursor: pointer; font-weight: 700; }
-
+.medical-transfers-form .medical-transfers-actions { grid-column: 1 / -1; margin: 0; }
+.medical-transfers-actions { flex-wrap: wrap; }
+.medical-transfers-actions [data-medical-total] { margin-right: auto; color: var(--navy); font-size: 12px; }
+.medical-transfers-form-status { margin: 10px 0; font-size: 12px; color: var(--medical-muted); }
+.medical-transfers-form-status:empty { display: none; }
+.medical-transfers-form-status.is-error { color: #a52f2f; }
+.medical-transfers-history { margin-top: 20px; }
+.medical-transfers-history summary { padding: 8px 0; cursor: pointer; color: var(--medical-muted); font-size: 12px; font-weight: 600; }
+.medical-transfers-history[open] summary { margin-bottom: 8px; }
+.medical-history-month { border: 0; background: none; color: var(--navy); font: inherit; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; padding: 6px 0; }
+.medical-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 720px) {
-  .medical-transfers-kpis { grid-template-columns: 1fr; }
-  .medical-transfers-form { grid-template-columns: 1fr; }
-  .medical-transfers-form > * { grid-column: 1 !important; }
-  .medical-transfers-header { align-items: flex-start; }
+  .medical-transfers { padding: 16px; }
+  .medical-transfers-header { align-items: flex-start; gap: 14px; }
+  .medical-month-toolbar { gap: 12px; }
+  .medical-month-navigation h4 { font-size: 18px; width: 168px; }
+  .medical-transfers-kpi { padding: 14px; }
+  .medical-transfers-form { grid-template-columns: 1fr; padding: 16px; }
+  .medical-month-chips button { min-height: 40px; }
+}
+@media (max-width: 420px) {
+  .medical-transfers { padding: 12px; }
+  .medical-transfers-kpis { grid-template-columns: 1fr; gap: 8px; }
+  .medical-month-navigation { gap: 6px; }
+  .medical-month-navigation h4 { width: 158px; }
 }
