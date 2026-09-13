@@ -12,6 +12,9 @@ from ..pagination import PageParams, paginate
 from ..security import ROLE_ADMIN, ROLE_GESTOR, ROLE_LEITURA, require_role
 from ..services import nfse
 from ..services.idempotency import payload_fingerprint
+from ..services.nfse_national.preflight import run_offline_preflight
+from ..services.nfse_national.production_gates import compute_production_readiness
+from ..services.nfse_national.readiness import compute_provider_readiness
 
 
 def enabled():
@@ -52,11 +55,25 @@ def _restricted_readiness(settings) -> dict:
 
 
 @router.get('/status')
-def status(settings=Depends(enabled), user: User = Depends(require_role(ROLE_LEITURA))):
+def status(db: Session = Depends(get_db), settings=Depends(enabled),
+           user: User = Depends(require_role(ROLE_LEITURA))):
+    block = _restricted_readiness(settings)
+    # Extended, read-only readiness detail (schema fingerprint, certificate
+    # summary, policy/artifact-storage completeness, exhaustive blocker
+    # list). Kept as a nested key so the pre-existing `missing_configuration`
+    # contract above never changes shape for an older caller/test.
+    block['readiness'] = compute_provider_readiness(db, settings, environment='restricted').as_dict()
+    block['production_readiness'] = compute_production_readiness(db, settings).as_dict()
     return {'enabled': settings.nfse_enabled, 'environment': settings.nfse_environment,
             'provider': 'mock' if settings.nfse_environment == 'mock' else 'unavailable',
             'real_issuance_available': False, 'supported_flows': ['DIRECT', 'HOME'],
-            'restricted_provider_foundation': _restricted_readiness(settings)}
+            'restricted_provider_foundation': block}
+
+
+@router.get('/fila-resumo')
+def queue_summary(db: Session = Depends(get_db), settings=Depends(enabled),
+                  user: User = Depends(require_role(ROLE_LEITURA))):
+    return nfse.queue_summary(db, settings.nfse_environment)
 
 
 @router.get('/politicas')
@@ -123,6 +140,20 @@ def preparations(document_id: str, params: PageParams = Depends(), db: Session =
         return data
     return paginate(db, select(FiscalPreparation).where(FiscalPreparation.document_id == document_id)
                     .order_by(FiscalPreparation.created_at.desc()), params, serialize)
+
+
+@router.post('/documentos/{document_id}/preflight')
+def preflight(document_id: str, db: Session = Depends(get_db), settings=Depends(enabled),
+             user: User = Depends(require_role(ROLE_GESTOR))):
+    """OFFLINE only — never sends a network request. Walks the document
+    through the deterministic build/XSD/signature chain as far as it can go
+    and reports the exact stage/blocker. No real document has a national tax
+    configuration or recipient identity source wired up yet (see
+    ``nfse_national.readiness``), so this always stops at ``national_config``
+    for a real document today; it exists so the Command Center can show
+    operators WHY, staged for the day a real configuration source exists.
+    """
+    return run_offline_preflight(db, document_id, settings, user.id).as_dict()
 
 
 @router.get('/documentos/{document_id}/tentativas')

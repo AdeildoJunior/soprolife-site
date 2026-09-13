@@ -337,6 +337,68 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
     return doc
 
 
+# Priority-ordered: each blocked document is counted in exactly one category,
+# the first one below whose reason set intersects its blocking_reasons. Order
+# matters (e.g. a missing tax config takes priority over a generic "policy
+# missing" framing, since it points the operator at the more specific fix).
+BLOCK_CATEGORIES = [
+    # A partner flow with no fiscal/contractual model authorized (Pastore/
+    # SPLIT) is a business-model blocker, not a missing-policy-row blocker —
+    # even though `evaluate()` also reports `policy_missing` for it (no
+    # policy will ever exist for an unsupported flow). Checked first so the
+    # operator sees the real fix ("this flow needs its own model"), not
+    # "create a policy" for a flow that structurally cannot have one yet.
+    ('blocked_by_partner_model', {'commercial_flow_unsupported'}),
+    ('missing_required_tax_configuration', {'policy_incomplete', 'policy_invalid'}),
+    ('blocked_by_fiscal_policy', {'policy_missing', 'policy_outside_validity', 'policy_ambiguous'}),
+    ('blocked_by_financial_source', {'financial_entry_missing', 'financial_entry_ambiguous',
+                                     'financial_link_incoherent', 'financial_revenue_not_received_or_invalid'}),
+    ('requires_reprepare', {'preparation_stale'}),
+    ('pending_clinical_or_identity_data', {'service_not_performed', 'service_date_missing_or_imprecise',
+                                           'service_date_in_future', 'recipient_missing_or_archived',
+                                           'missing_stable_exam_link'}),
+]
+
+
+def _block_category(blocking_reasons):
+    reasons = set(blocking_reasons or [])
+    for label, causes in BLOCK_CATEGORIES:
+        if reasons & causes:
+            return label
+    return 'blocked_other'
+
+
+def queue_summary(db: Session, environment: str) -> dict:
+    """Aggregate counts for the batch UI: how many documents are eligible,
+    how many are blocked (broken down by WHY), and how many sit in every
+    other queue state. Never returns document identities or amounts — only
+    counts — so this stays cheap to poll and free of anything sensitive.
+    """
+    rows = db.execute(select(FiscalDocument.state, FiscalDocument.blocking_reasons)
+                      .where(FiscalDocument.environment == environment)).all()
+    counts = {
+        'eligible': 0, 'issuing': 0, 'simulated': 0, 'failed': 0, 'uncertain': 0,
+        'reconciling': 0, 'cancelled': 0,
+    }
+    blocked_breakdown = {label: 0 for label, _ in BLOCK_CATEGORIES}
+    blocked_breakdown['blocked_other'] = 0
+    blocked_total = 0
+    for state, blocking_reasons in rows:
+        if state == 'pending':
+            counts['eligible'] += 1
+        elif state == 'blocked':
+            blocked_total += 1
+            blocked_breakdown[_block_category(blocking_reasons)] += 1
+        elif state in counts:
+            counts[state] += 1
+    return {'environment': environment, 'total': len(rows), 'eligible': counts['eligible'],
+            'blocked_total': blocked_total, 'blocked_breakdown': blocked_breakdown,
+            'issuing': counts['issuing'], 'simulated': counts['simulated'],
+            'failed': counts['failed'], 'uncertain': counts['uncertain'],
+            'reconciling': counts['reconciling'], 'cancelled': counts['cancelled'],
+            'reconciliation_required': counts['uncertain'] + counts['reconciling']}
+
+
 def serialize_document(db, doc):
     prep = latest_preparation(db, doc.id)
     data = {k: getattr(doc, k) for k in ('id', 'spirometry_exam_id', 'environment',
