@@ -76,6 +76,47 @@ class Settings(BaseSettings):
     nfse_real_enabled: bool = False
     nfse_credentials_path: Path | None = None
 
+    # M27 — National NFS-e restricted (homologação) provider foundation.
+    #
+    # THE central safety switch this milestone exists to add: even with a
+    # restricted base URL, a certificate path and `nfse_real_enabled=true`
+    # all configured, no operational HTTP request leaves the process unless
+    # this is explicitly true. Production has no equivalent flag anywhere —
+    # `HttpxRestrictedTransport` only ever accepts environment='restricted',
+    # and `ProductionTransport` has no working implementation at all.
+    nfse_restricted_network_enabled: bool = False
+    # HTTPS base URL for Produção Restrita. Never a production hostname —
+    # this codebase has no code path that would send this URL a real request
+    # from a "production" environment value.
+    nfse_restricted_base_url: str | None = None
+    # PKCS#12 bundle path (never a real certificate committed to the repo).
+    # Password lives in `nfse_restricted_certificate_password` — a SEPARATE
+    # variable, so a leaked path alone never yields a usable credential.
+    nfse_restricted_certificate_path: Path | None = None
+    nfse_restricted_certificate_password: str | None = None
+    # Single supported restricted layout for this foundation (see
+    # app/services/nfse_national/config.py for the evidence trail). A future
+    # layout bump adds a new literal value here, never mutates this one.
+    nfse_restricted_layout_version: Literal["restricted-v1.01-20260727"] = "restricted-v1.01-20260727"
+    # Private root for DPS/NFS-e/event XML and DANFSe artifacts. Same
+    # fail-closed contract as `reports_storage_dir`: absent by default, must
+    # be absolute, outside the Git worktree, and end up 0700.
+    nfse_fiscal_artifacts_dir: Path | None = None
+
+    @field_validator("nfse_restricted_base_url")
+    @classmethod
+    def _restricted_base_url_https(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().rstrip("/")
+        if not normalized:
+            return None
+        if not normalized.startswith("https://"):
+            raise ValueError(
+                "M15_NFSE_RESTRICTED_BASE_URL precisa ser uma URL HTTPS."
+            )
+        return normalized
+
     # -------------------------------------- preço de tabela SoproLife (M25.26)
     # Valor com que o campo "Valor da espirometria" NASCE preenchido no fluxo
     # de Espirometria SoproLife. É uma SUGESTÃO editável, nunca um valor
@@ -485,6 +526,48 @@ class Settings(BaseSettings):
         _assert_outside_git_worktree(resolved_after_creation, repo_root)
         _assert_private_directory(resolved_after_creation)
         return resolved_after_creation
+
+    def resolved_fiscal_artifacts_storage_dir(self) -> Path:
+        """Raiz privada dos artefatos fiscais (DPS/NFS-e/eventos/DANFSe).
+
+        Mesmo contrato fail-closed de `resolved_reports_storage_dir()`: sem
+        valor configurado, nada é lido ou escrito. Caminho independente do
+        de laudos — os dois nunca compartilham diretório, para que uma
+        política de retenção ou um incidente em um não alcance o outro.
+        """
+        if not self.nfse_fiscal_artifacts_dir:
+            raise ValueError(
+                "M15_NFSE_FISCAL_ARTIFACTS_DIR não configurado — armazenamento "
+                "de artefatos fiscais recusado (fail-closed)."
+            )
+        raw = Path(self.nfse_fiscal_artifacts_dir)
+        if not raw.is_absolute():
+            raise ValueError(
+                "M15_NFSE_FISCAL_ARTIFACTS_DIR deve ser um caminho absoluto."
+            )
+        _assert_no_symlink_components(raw)
+        resolved_before_creation = raw.resolve(strict=False)
+        repo_root = _find_git_repo_root()
+        _assert_outside_git_worktree(resolved_before_creation, repo_root)
+        _create_private_directory_chain(resolved_before_creation)
+        _assert_no_symlink_components(resolved_before_creation)
+        resolved_after_creation = resolved_before_creation.resolve(strict=True)
+        _assert_outside_git_worktree(resolved_after_creation, repo_root)
+        _assert_private_directory(resolved_after_creation)
+        return resolved_after_creation
+
+    def resolved_nfse_restricted_certificate_password(self) -> str:
+        """Senha do PKCS#12 restrito. Fail-closed: sem valor, nada é aberto.
+
+        Nunca logada, nunca incluída em mensagem de exceção — quem precisa
+        dela é exclusivamente `services/nfse_national/signer.py`, uma única
+        vez por assinatura.
+        """
+        if not self.nfse_restricted_certificate_password:
+            raise ValueError(
+                "M15_NFSE_RESTRICTED_CERTIFICATE_PASSWORD não configurado."
+            )
+        return self.nfse_restricted_certificate_password
 
 
 def _segredo_forte(valor: str | None, nome: str) -> str:

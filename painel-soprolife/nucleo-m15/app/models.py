@@ -2749,3 +2749,31 @@ class FiscalAttempt(Base):
         CheckConstraint("operation IN ('issue','reconcile','cancel')", name="fiscal_attempt_operation"),
         CheckConstraint("phase IN ('started','completed')", name="fiscal_attempt_phase"),
     )
+
+
+class FiscalArtifact(Base):
+    """M27 — append-only index of private technical fiscal artifacts.
+
+    Points at a file under `Settings.resolved_fiscal_artifacts_storage_dir()`
+    (never inside the Git worktree, never public/static) via a path made only
+    of internal UUIDs (see `services/nfse_national/artifacts.py`). This row
+    is evidence metadata (kind, hash, size) — never the bytes themselves and
+    never PII; the sha256 lets a later read prove the file was not altered.
+    """
+    __tablename__ = "fiscal_artifacts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_documents.id"), index=True)
+    attempt_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("fiscal_attempts.id"))
+    kind: Mapped[str] = mapped_column(String(30))
+    storage_relative_path: Mapped[str] = mapped_column(String(300))
+    sha256: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('dps_unsigned_xml','dps_signed_xml','nfse_xml','event_xml','danfse_pdf')",
+            name="fiscal_artifact_kind",
+        ),
+        CheckConstraint("size_bytes >= 0", name="fiscal_artifact_size_non_negative"),
+    )

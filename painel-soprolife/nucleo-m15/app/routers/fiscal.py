@@ -30,11 +30,33 @@ def ser_policy(policy):
         'created_by', 'created_at')}
 
 
+def _restricted_readiness(settings) -> dict:
+    """Read-only diagnostic — never a control. There is no endpoint anywhere
+    that flips `nfse_restricted_network_enabled`; it is an environment
+    variable only, and this block never exposes a way to change it."""
+    missing = []
+    if not settings.nfse_restricted_base_url:
+        missing.append('restricted_base_url')
+    if not settings.nfse_restricted_certificate_path:
+        missing.append('restricted_certificate_path')
+    if not settings.nfse_restricted_certificate_password:
+        missing.append('restricted_certificate_password')
+    if not settings.nfse_restricted_network_enabled:
+        missing.append('restricted_network_gate_disabled')
+    return {
+        'layout_version': settings.nfse_restricted_layout_version,
+        'network_gate_enabled': settings.nfse_restricted_network_enabled,
+        'missing_configuration': missing,
+        'operational_network_possible': False,  # always: see RestrictedNfseProvider docstring
+    }
+
+
 @router.get('/status')
 def status(settings=Depends(enabled), user: User = Depends(require_role(ROLE_LEITURA))):
     return {'enabled': settings.nfse_enabled, 'environment': settings.nfse_environment,
             'provider': 'mock' if settings.nfse_environment == 'mock' else 'unavailable',
-            'real_issuance_available': False, 'supported_flows': ['DIRECT', 'HOME']}
+            'real_issuance_available': False, 'supported_flows': ['DIRECT', 'HOME'],
+            'restricted_provider_foundation': _restricted_readiness(settings)}
 
 
 @router.get('/politicas')

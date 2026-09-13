@@ -111,7 +111,10 @@ def test_alembic_graph_fiscal_after_m26_9(tmp_path, monkeypatch):
     cfg.set_main_option('script_location', str(ROOT / 'migrations'))
     cfg.set_main_option('sqlalchemy.url', f'sqlite:///{tmp_path}/graph.db')
     script = ScriptDirectory.from_config(cfg)
-    assert script.get_heads() == ['f6a1d9e28b40']
+    # M27 added one migration (9c310c422ce2, fiscal_artifacts) on top of the
+    # M26.10 head — this now confirms THAT chain, not a fork of it.
+    assert script.get_heads() == ['9c310c422ce2']
+    assert script.get_revision('9c310c422ce2').down_revision == 'f6a1d9e28b40'
     assert script.get_revision('f6a1d9e28b40').down_revision == 'd6a9f20c3e41'
     assert script.get_revision('d6a9f20c3e41').down_revision == 'c3a9e15f7d84'
     ids = [r.revision for r in script.walk_revisions()]

@@ -20,3 +20,13 @@ pypdf==6.14.2
 reportlab==5.0.0
 asn1crypto
 cryptography
+
+# M27 — fundação de NFS-e nacional restrita/homologação. lxml (BSD, libxml2)
+# constrói e serializa a DPS; xmlschema (MIT, puro Python sobre lxml/elementpath)
+# valida contra o XSD oficial vendorizado em
+# app/services/nfse_national/schemas/restricted/; signxml (BSD, sobre lxml +
+# cryptography) assina/verifica XMLDSig envelopado, reaproveitando a mesma
+# família RSA-SHA256 já usada em report_pades.py. Nenhuma das três chama rede.
+lxml==6.1.3
+xmlschema==4.3.2
+signxml==5.1.0
