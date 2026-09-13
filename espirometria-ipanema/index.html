@@ -376,7 +376,7 @@
 
         <div class="sl-mini-map" id="sl-ip-map-mini">
           <span class="sl-map-badge">Ipanema · Rua Teixeira de Melo, 54</span>
-          <div class="sl-mini-map__canvas" id="sl-ip-map-mini-canvas" aria-hidden="true"></div>
+          <div class="sl-mini-map__canvas" id="sl-ip-map-mini-canvas" aria-label="Mapa da unidade Pastore Ipanema"></div>
           <button class="sl-map-open-btn" type="button" id="sl-ip-open-map"
                   aria-label="Ampliar o mapa da unidade de Ipanema">Ampliar mapa</button>
         </div>
@@ -870,11 +870,21 @@
     return window.__slLeafletLoadingPromise.then(function(){ leafletReady = true; });
   }
 
+  function showMapFallback(){
+    if(miniNode.querySelector('.sl-map-fallback')) return;
+    var link = document.createElement('a');
+    link.className = 'sl-map-fallback';
+    link.href = 'https://www.openstreetmap.org/?mlat=' + UNIT.lat + '&mlon=' + UNIT.lng + '#map=16/' + UNIT.lat + '/' + UNIT.lng;
+    link.target = '_blank'; link.rel = 'noopener';
+    link.textContent = 'Não foi possível carregar o mapa. Ver no OpenStreetMap →';
+    miniNode.appendChild(link);
+  }
+
   function createTileLayer(target){
-    return window.L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    return window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap &copy; CARTO'
-    }).addTo(target);
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).on('tileerror', showMapFallback).addTo(target);
   }
 
   function markerIcon(){
@@ -896,7 +906,7 @@
   function initMiniMapIfNeeded(){
     if(miniReady || !leafletReady || !window.L) return;
     miniMap = window.L.map(miniCanvas, {
-      zoomControl: false, attributionControl: false, dragging: false,
+      zoomControl: false, attributionControl: true, dragging: false,
       scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false,
       keyboard: false, tap: false, touchZoom: false
     });
@@ -904,6 +914,9 @@
     miniMap.setView([UNIT.lat, UNIT.lng], 16);
     addUnit(miniMap);
     miniReady = true;
+    if (window.ResizeObserver) new ResizeObserver(function () {
+      miniMap.invalidateSize({ pan: false });
+    }).observe(miniMap.getContainer());
   }
 
   function initLargeMapIfNeeded(){
@@ -916,6 +929,9 @@
     largeMap.setView([UNIT.lat, UNIT.lng], 17);
     addUnit(largeMap).openPopup();
     largeReady = true;
+    if (window.ResizeObserver) new ResizeObserver(function () {
+      largeMap.invalidateSize({ pan: false });
+    }).observe(largeMap.getContainer());
   }
 
   function openModal(){
@@ -931,7 +947,7 @@
       initLargeMapIfNeeded();
       setTimeout(function(){ if(largeMap){ largeMap.invalidateSize(); } }, 90);
       closeBtn.focus();
-    });
+    }).catch(showMapFallback);
   }
 
   function closeModal(){
@@ -958,17 +974,19 @@
     var io = new IntersectionObserver(function(entries){
       entries.forEach(function(entry){
         if(entry.isIntersecting){
-          loadLeafletAssets().then(initMiniMapIfNeeded);
+          loadLeafletAssets().then(initMiniMapIfNeeded).catch(showMapFallback);
           io.disconnect();
         }
       });
     }, { rootMargin: '200px' });
     io.observe(miniNode);
   } else {
-    loadLeafletAssets().then(initMiniMapIfNeeded);
+    loadLeafletAssets().then(initMiniMapIfNeeded).catch(showMapFallback);
   }
 })();
 </script>
 
+<link rel="stylesheet" href="/assets/sl-modern.css?v=m26-11">
+<script src="/assets/sl-modern.js?v=m26-11" defer></script>
 </body>
 </html>

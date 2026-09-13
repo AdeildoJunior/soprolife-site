@@ -1,0 +1,750 @@
+{
+  "layouts": [
+    {
+      "width": 1440,
+      "route": "/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__text",
+        "sl-tcard",
+        "sl-tcard__head"
+      ]
+    },
+    {
+      "width": 1440,
+      "route": "/conheca/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": []
+    },
+    {
+      "width": 1440,
+      "route": "/servicos/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": []
+    },
+    {
+      "width": 1440,
+      "route": "/espirometria/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__text",
+        "sl-tcard",
+        "sl-tcard__head"
+      ]
+    },
+    {
+      "width": 1440,
+      "route": "/espirometria-rio-de-janeiro/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__text",
+        "sl-tcard",
+        "sl-tcard__head"
+      ]
+    },
+    {
+      "width": 1440,
+      "route": "/espirometria-domiciliar-rio-de-janeiro/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__text",
+        "sl-tcard",
+        "sl-tcard__head"
+      ]
+    },
+    {
+      "width": 1440,
+      "route": "/espirometria-ipanema/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": []
+    },
+    {
+      "width": 1440,
+      "route": "/consulta-pneumologista-rio-de-janeiro/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__text",
+        "sl-tcard",
+        "sl-tcard__head"
+      ]
+    },
+    {
+      "width": 1440,
+      "route": "/telemedicina/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": []
+    },
+    {
+      "width": 1440,
+      "route": "/links/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": []
+    },
+    {
+      "width": 1440,
+      "route": "/funil/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": []
+    },
+    {
+      "width": 1440,
+      "route": "/funil/espirometria/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": []
+    },
+    {
+      "width": 1440,
+      "route": "/funil/domiciliar/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": []
+    },
+    {
+      "width": 1440,
+      "route": "/funil/parcerias/",
+      "scroll": 1440,
+      "viewport": 1440,
+      "offenders": []
+    },
+    {
+      "width": 1024,
+      "route": "/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 1024,
+      "route": "/conheca/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": []
+    },
+    {
+      "width": 1024,
+      "route": "/servicos/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": []
+    },
+    {
+      "width": 1024,
+      "route": "/espirometria/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 1024,
+      "route": "/espirometria-rio-de-janeiro/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 1024,
+      "route": "/espirometria-domiciliar-rio-de-janeiro/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 1024,
+      "route": "/espirometria-ipanema/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": []
+    },
+    {
+      "width": 1024,
+      "route": "/consulta-pneumologista-rio-de-janeiro/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 1024,
+      "route": "/telemedicina/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": []
+    },
+    {
+      "width": 1024,
+      "route": "/links/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": []
+    },
+    {
+      "width": 1024,
+      "route": "/funil/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": []
+    },
+    {
+      "width": 1024,
+      "route": "/funil/espirometria/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": []
+    },
+    {
+      "width": 1024,
+      "route": "/funil/domiciliar/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": []
+    },
+    {
+      "width": 1024,
+      "route": "/funil/parcerias/",
+      "scroll": 1024,
+      "viewport": 1024,
+      "offenders": []
+    },
+    {
+      "width": 768,
+      "route": "/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 768,
+      "route": "/conheca/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": []
+    },
+    {
+      "width": 768,
+      "route": "/servicos/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": []
+    },
+    {
+      "width": 768,
+      "route": "/espirometria/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__avatar",
+        "sl-tcard__meta",
+        "sl-tcard__name"
+      ]
+    },
+    {
+      "width": 768,
+      "route": "/espirometria-rio-de-janeiro/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 768,
+      "route": "/espirometria-domiciliar-rio-de-janeiro/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 768,
+      "route": "/espirometria-ipanema/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": []
+    },
+    {
+      "width": 768,
+      "route": "/consulta-pneumologista-rio-de-janeiro/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 768,
+      "route": "/telemedicina/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": []
+    },
+    {
+      "width": 768,
+      "route": "/links/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": []
+    },
+    {
+      "width": 768,
+      "route": "/funil/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": []
+    },
+    {
+      "width": 768,
+      "route": "/funil/espirometria/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": []
+    },
+    {
+      "width": 768,
+      "route": "/funil/domiciliar/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": []
+    },
+    {
+      "width": 768,
+      "route": "/funil/parcerias/",
+      "scroll": 768,
+      "viewport": 768,
+      "offenders": []
+    },
+    {
+      "width": 430,
+      "route": "/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 430,
+      "route": "/conheca/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": []
+    },
+    {
+      "width": 430,
+      "route": "/servicos/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": []
+    },
+    {
+      "width": 430,
+      "route": "/espirometria/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__avatar",
+        "sl-tcard__meta",
+        "sl-tcard__name"
+      ]
+    },
+    {
+      "width": 430,
+      "route": "/espirometria-rio-de-janeiro/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 430,
+      "route": "/espirometria-domiciliar-rio-de-janeiro/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 430,
+      "route": "/espirometria-ipanema/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": []
+    },
+    {
+      "width": 430,
+      "route": "/consulta-pneumologista-rio-de-janeiro/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 430,
+      "route": "/telemedicina/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": []
+    },
+    {
+      "width": 430,
+      "route": "/links/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": []
+    },
+    {
+      "width": 430,
+      "route": "/funil/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": []
+    },
+    {
+      "width": 430,
+      "route": "/funil/espirometria/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": []
+    },
+    {
+      "width": 430,
+      "route": "/funil/domiciliar/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": []
+    },
+    {
+      "width": 430,
+      "route": "/funil/parcerias/",
+      "scroll": 430,
+      "viewport": 430,
+      "offenders": []
+    },
+    {
+      "width": 390,
+      "route": "/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 390,
+      "route": "/conheca/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": []
+    },
+    {
+      "width": 390,
+      "route": "/servicos/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": []
+    },
+    {
+      "width": 390,
+      "route": "/espirometria/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__avatar",
+        "sl-tcard__meta",
+        "sl-tcard__name"
+      ]
+    },
+    {
+      "width": 390,
+      "route": "/espirometria-rio-de-janeiro/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 390,
+      "route": "/espirometria-domiciliar-rio-de-janeiro/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 390,
+      "route": "/espirometria-ipanema/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": []
+    },
+    {
+      "width": 390,
+      "route": "/consulta-pneumologista-rio-de-janeiro/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": [
+        "sl-tpage",
+        "sl-tcard",
+        "sl-tcard__head",
+        "sl-tcard__meta",
+        "sl-tcard__name",
+        "sl-tcard__stars"
+      ]
+    },
+    {
+      "width": 390,
+      "route": "/telemedicina/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": []
+    },
+    {
+      "width": 390,
+      "route": "/links/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": []
+    },
+    {
+      "width": 390,
+      "route": "/funil/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": []
+    },
+    {
+      "width": 390,
+      "route": "/funil/espirometria/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": []
+    },
+    {
+      "width": 390,
+      "route": "/funil/domiciliar/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": []
+    },
+    {
+      "width": 390,
+      "route": "/funil/parcerias/",
+      "scroll": 390,
+      "viewport": 390,
+      "offenders": []
+    }
+  ],
+  "functional": [
+    {
+      "route": "/",
+      "result": "8 horários abertos, seleção, WhatsApp completo, tipo, unidades, domingo e agenda Pastore preservada"
+    },
+    {
+      "route": "/espirometria-rio-de-janeiro/",
+      "result": "8 horários abertos, seleção, WhatsApp completo, tipo, unidades, domingo e agenda Pastore preservada"
+    },
+    {
+      "route": "/espirometria-domiciliar-rio-de-janeiro/",
+      "result": "8 horários abertos, seleção, WhatsApp completo, tipo, unidades, domingo e agenda Pastore preservada"
+    },
+    {
+      "instant": "2026-09-13T01:30:00Z",
+      "expected": "2026-09-14",
+      "result": "pass"
+    },
+    {
+      "instant": "2026-09-30T15:00:00Z",
+      "expected": "2026-10-01",
+      "result": "pass"
+    },
+    {
+      "instant": "2026-12-31T15:00:00Z",
+      "expected": "2027-01-01",
+      "result": "pass"
+    },
+    {
+      "instant": "2026-09-18T15:00:00Z",
+      "expected": "2026-09-19",
+      "result": "pass"
+    },
+    {
+      "instant": "2026-09-19T15:00:00Z",
+      "expected": "2026-09-21",
+      "result": "pass"
+    },
+    {
+      "result": "Depoimentos: reduced-motion e navegação manual pass"
+    },
+    {
+      "result": "CDNs bloqueados: calendário nativo e 8 horários funcionam"
+    }
+  ],
+  "errors": [],
+  "maps": [
+    {
+      "route": "/",
+      "attribution": " Leaflet | © OpenStreetMap contributors",
+      "markers": 3,
+      "tiles": true
+    },
+    {
+      "route": "/espirometria-rio-de-janeiro/",
+      "attribution": " Leaflet | © OpenStreetMap contributors",
+      "markers": 3,
+      "tiles": true
+    },
+    {
+      "route": "/espirometria-ipanema/",
+      "attribution": " Leaflet | © OpenStreetMap contributors",
+      "markers": 1,
+      "tiles": true
+    },
+    {
+      "route": "/",
+      "width": 390,
+      "result": "mapa, modal, Escape e retorno de foco: pass"
+    },
+    {
+      "route": "/espirometria-rio-de-janeiro/",
+      "width": 390,
+      "result": "mapa, modal, Escape e retorno de foco: pass"
+    },
+    {
+      "route": "/espirometria-ipanema/",
+      "width": 390,
+      "result": "mapa, modal, Escape e retorno de foco: pass"
+    }
+  ]
+}

@@ -1,12 +1,12 @@
 /* ==========================================================================
    SOPRO:SL_UNITS_MAP_V1
-   Mini-mapa + modal ampliado das unidades (Leaflet + CARTO).
+   Mini-mapa + modal ampliado das unidades (Leaflet + OpenStreetMap).
 
    Consome as localidades de /assets/sl-booking.js — coordenadas e nomes têm
    uma fonte única. Reage ao evento "sl:booking:location" para destacar o
    ponto da localidade escolhida no formulário.
 
-   Preserva o comportamento original: lazy-load do Leaflet, tiles CARTO,
+   Preserva o comportamento original: lazy-load do Leaflet, tiles OpenStreetMap,
    zoom, teclado (Enter/Espaço para abrir), Esc e backdrop para fechar.
    ========================================================================== */
 (function (window, document) {
@@ -19,6 +19,10 @@
   var mapNode = document.getElementById('sl-units-map');
   if (!openBtn || !closeBtn || !modal || !mapNode || !miniNode) return;
 
+  // O botão Ampliar mapa é o controle de teclado; a atribuição é um link próprio.
+  miniNode.removeAttribute('role');
+  miniNode.removeAttribute('tabindex');
+  miniNode.setAttribute('aria-label', 'Mapa das unidades SoproLife');
   var CFG = window.SL_BOOKING;
   if (!CFG) return;
 
@@ -32,7 +36,7 @@
   var miniMap = null;
   var largeMap = null;
   var markers = { mini: {}, large: {} };
-  var activeId = null;
+  var activeId = CFG.current;
   var lastFocused = null;
 
   function loadLeafletAssets() {
@@ -57,11 +61,21 @@
     return window.__slLeafletLoadingPromise;
   }
 
+  function showMapFallback() {
+    if (miniNode.querySelector('.sl-map-fallback')) return;
+    var message = document.createElement('a');
+    message.className = 'sl-map-fallback';
+    message.href = 'https://www.openstreetmap.org/#map=11/-22.95/-43.27';
+    message.target = '_blank'; message.rel = 'noopener';
+    message.textContent = 'Não foi possível carregar o mapa. Ver no OpenStreetMap →';
+    miniNode.appendChild(message);
+  }
+
   function createTileLayer(target) {
     return window.L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      { maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' }
-    ).addTo(target);
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }
+    ).on('tileerror', showMapFallback).addTo(target);
   }
 
   function markerIcon(isActive) {
@@ -108,11 +122,13 @@
 
       var target = activeId ? store[activeId] : null;
       if (target) {
-        map.setView(target.getLatLng(), key === 'large' ? 15 : 14, { animate: true });
+        map.setView(target.getLatLng(), key === 'large' ? 15 : 14, { animate: !window.matchMedia('(prefers-reduced-motion: reduce)').matches });
         if (key === 'large') target.openPopup();
       } else {
         var bounds = units.map(function (u) { return [u.coords.lat, u.coords.lng]; });
-        if (bounds.length) map.fitBounds(bounds, { padding: key === 'large' ? [36, 36] : [16, 16] });
+        if (bounds.length) map.fitBounds(bounds, key === 'large'
+          ? { padding: [36, 36] }
+          : { paddingTopLeft: [24, 24], paddingBottomRight: [24, 100] });
       }
     });
 
@@ -126,7 +142,7 @@
     if (miniReady || !leafletReady || !window.L) return;
     miniMap = window.L.map(miniNode, {
       zoomControl: false,
-      attributionControl: false,
+      attributionControl: true,
       dragging: false,
       scrollWheelZoom: false,
       doubleClickZoom: false,
@@ -138,7 +154,11 @@
     createTileLayer(miniMap);
     fitUnits(miniMap, [16, 16], markers.mini);
     miniReady = true;
-    if (activeId) highlight(activeId);
+    if (window.ResizeObserver) new ResizeObserver(function () {
+      miniMap.invalidateSize({ pan: false });
+      highlight(activeId);
+    }).observe(miniMap.getContainer());
+    highlight(activeId);
   }
 
   function initLargeMapIfNeeded() {
@@ -151,7 +171,10 @@
     createTileLayer(largeMap);
     fitUnits(largeMap, [36, 36], markers.large);
     largeReady = true;
-    if (activeId) highlight(activeId);
+    if (window.ResizeObserver) new ResizeObserver(function () {
+      largeMap.invalidateSize({ pan: false });
+    }).observe(largeMap.getContainer());
+    highlight(activeId);
   }
 
   function openModal() {
@@ -163,7 +186,7 @@
       initMiniMapIfNeeded();
       initLargeMapIfNeeded();
       window.setTimeout(function () { if (largeMap) largeMap.invalidateSize(); }, 90);
-    });
+    }).catch(showMapFallback);
     window.setTimeout(function () { closeBtn.focus(); }, 40);
   }
 
@@ -178,7 +201,7 @@
     e.stopPropagation();
     openModal();
   });
-  miniNode.addEventListener('click', openModal);
+  miniNode.addEventListener('click', function (e) { if (!e.target.closest('a,button')) openModal(); });
   miniNode.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -231,14 +254,14 @@
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
         if (entry.isIntersecting) {
-          loadLeafletAssets().then(initMiniMapIfNeeded);
+          loadLeafletAssets().then(initMiniMapIfNeeded).catch(showMapFallback);
           io.disconnect();
         }
       });
     }, { rootMargin: '120px' });
     io.observe(miniNode);
   } else {
-    loadLeafletAssets().then(initMiniMapIfNeeded);
+    loadLeafletAssets().then(initMiniMapIfNeeded).catch(showMapFallback);
   }
 
 })(window, document);

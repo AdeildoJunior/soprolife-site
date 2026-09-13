@@ -66,15 +66,15 @@
    * ---------------------------------------------------------------------- */
 
   /* Agenda padrão da SoproLife. Preservada exatamente como estava no código
-     original do atendimento domiciliar: qualquer dia dentro da janela de 30
+     original do atendimento domiciliar: segunda a sábado dentro da janela de 30
      dias e estes oito horários. Barra e Zona Norte apontam para ESTE mesmo
      objeto — alterar aqui altera as três localidades de uma vez. */
   var SOPROLIFE_SCHEDULE = {
     id: 'soprolife-padrao',
-    /* null = todos os dias da semana dentro da janela de datas */
-    weekdays: null,
+    /* Domingo fechado; não há integração com reservas reais. */
+    weekdays: [1, 2, 3, 4, 5, 6],
     slots: ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00'],
-    daysLabel: '',
+    daysLabel: 'segundas-feiras a sábados',
     hoursLabel: '',
     note: 'Horários sujeitos a confirmação pelo WhatsApp.'
   };
@@ -165,15 +165,11 @@
   /* Data de hoje no fuso da operação, em ISO (YYYY-MM-DD). Sem depender do
      relógio/fuso do visitante — nada de data fixa no HTML. */
   function todayIsoSaoPaulo() {
-    try {
-      return new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Sao_Paulo',
-        year: 'numeric', month: '2-digit', day: '2-digit'
-      }).format(new Date());
-    } catch (e) {
-      var d = new Date();
-      return toIso(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
-    }
+    var parts = new Intl.DateTimeFormat('en', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    function part(type) { return parts.find(function (p) { return p.type === type; }).value; }
+    return part('year') + '-' + part('month') + '-' + part('day');
   }
 
   function pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -188,7 +184,7 @@
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso).trim());
     if (!m) return null;
     var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    return isNaN(d.getTime()) ? null : d;
+    return isNaN(d.getTime()) || toIso(d) !== iso ? null : d;
   }
 
   function addDaysIso(iso, days) {
@@ -263,6 +259,15 @@
   function isWeekdayAllowed(location, date) {
     if (!location || !location.schedule.weekdays) return true;
     return location.schedule.weekdays.indexOf(date.getDay()) !== -1;
+  }
+
+  // Primeira data aberta, inclusiva a partir de startIso, dentro da janela.
+  function nextOpenDate(location, startIso, maxIso) {
+    if (!location || !parseIso(startIso) || !parseIso(maxIso)) return '';
+    for (var iso = startIso; iso <= maxIso; iso = addDaysIso(iso, 1)) {
+      if (validateDate(location, iso, startIso, maxIso).ok) return iso;
+    }
+    return '';
   }
 
   /* ---------------------------------------------------------------------- *
@@ -343,6 +348,8 @@
     track: track,
     locationParams: locationParams,
     todayIso: todayIsoSaoPaulo,
+    nextOpenDate: nextOpenDate,
+    addDaysIso: addDaysIso,
     formatBr: formatBr,
     /* preenchido no init: id da localidade selecionada no formulário */
     current: null
@@ -494,11 +501,11 @@
     var dateHint = ensureHint(dateEl);
     var dateField = fieldOf(dateEl);
 
-    var minIso = todayIsoSaoPaulo();
-    var maxIso = addDaysIso(minIso, DATE_WINDOW_DAYS);
+    var minIso = addDaysIso(todayIsoSaoPaulo(), 1);
+    var maxIso = addDaysIso(todayIsoSaoPaulo(), DATE_WINDOW_DAYS);
     dateEl.setAttribute('min', minIso);
     dateEl.setAttribute('max', maxIso);
-    if (!dateEl.value) dateEl.value = minIso;
+    dateEl.value = nextOpenDate(currentLocation(), minIso, maxIso);
 
     slotsWrap.setAttribute('role', 'group');
     slotsWrap.setAttribute('aria-label', 'Horários disponíveis');
@@ -514,6 +521,21 @@
       slotsWrap.parentNode.appendChild(ipanemaPanel);
     }
 
+    var summary = el('p', 'sl-booking-summary', 'Selecione um horário para revisar seu pedido.');
+    summary.setAttribute('role', 'status');
+    var confirm = el('a', 'sl-booking-confirm', 'Continuar no WhatsApp →');
+    confirm.target = '_blank';
+    confirm.rel = 'noopener';
+    confirm.hidden = true;
+    slotsWrap.parentNode.appendChild(summary);
+    slotsWrap.parentNode.appendChild(confirm);
+    confirm.addEventListener('click', function (event) {
+      if (!validateDate(currentLocation(), dateEl.value, addDaysIso(todayIsoSaoPaulo(), 1), addDaysIso(todayIsoSaoPaulo(), DATE_WINDOW_DAYS)).ok) {
+        event.preventDefault(); renderSlots(); return;
+      }
+      if (currentLocation().partner) track('click_whatsapp_ipanema', locationParams(currentLocation()));
+    });
+    var adjustment = '';
     var lastTrackedLocation = null;
 
     function currentLocation() {
@@ -546,7 +568,24 @@
 
     function renderSlots() {
       var location = currentLocation();
+      // Revalida também se a aba ficou aberta durante a virada do dia.
+      minIso = addDaysIso(todayIsoSaoPaulo(), 1);
+      maxIso = addDaysIso(todayIsoSaoPaulo(), DATE_WINDOW_DAYS);
+      dateEl.min = minIso;
+      dateEl.max = maxIso;
+      var check = validateDate(location, dateEl.value, minIso, maxIso);
+      adjustment = '';
+      if (!check.ok) {
+        var start = check.reason === 'weekday' && dateEl.value > minIso ? dateEl.value : minIso;
+        var next = nextOpenDate(location, start, maxIso);
+        setDateValue(next);
+        adjustment = (check.reason === 'weekday' ? 'Esse dia não tem atendimento. ' : 'Data ajustada para a agenda aberta. ') +
+          (next ? 'Próxima data: ' + formatBr(next) + '.' : 'Fale conosco para combinar uma data.');
+      }
       var iso = dateEl.value;
+      confirm.hidden = true;
+      confirm.removeAttribute('href');
+      summary.textContent = 'Selecione um horário. Você poderá revisar o pedido antes de enviar pelo WhatsApp.';
       var result = validateDate(location, iso, minIso, maxIso);
 
       if (ipanemaPanel) ipanemaPanel.hidden = !location.partner;
@@ -558,7 +597,7 @@
       }
       /* Dica curta no campo; a explicação completa fica na faixa de horários,
          para não repetir o mesmo texto duas vezes na tela. */
-      if (dateHint) dateHint.textContent = result.hint || '';
+      if (dateHint) dateHint.textContent = adjustment || (result.ok ? 'Data escolhida: ' + formatBr(iso) : result.hint);
 
       if (!result.ok) {
         renderEmpty(result.message);
@@ -579,12 +618,20 @@
         btn.type = 'button';
         btn.setAttribute('data-time', time);
         btn.setAttribute('aria-label', time + ' — ' + location.shortName);
+        btn.setAttribute('aria-pressed', 'false');
+        btn.setAttribute('aria-label', time + ' — disponível para solicitar');
         btn.addEventListener('click', function () {
-          var text = whatsappText(location, serviceEl.value, dateEl.value, time);
-          if (location.partner) {
-            track('click_whatsapp_ipanema', locationParams(location));
+          if (!validateDate(location, dateEl.value, addDaysIso(todayIsoSaoPaulo(), 1), maxIso).ok) {
+            renderSlots();
+            return;
           }
-          openWhatsApp(text);
+          slotsWrap.querySelectorAll('button').forEach(function (slot) {
+            slot.setAttribute('aria-pressed', String(slot === btn));
+          });
+          summary.textContent = serviceEl.value + ' · ' + location.shortName + ' · ' +
+            formatBr(dateEl.value) + ' às ' + time + '. Confirmação pela equipe no WhatsApp.';
+          confirm.href = whatsappUrl(whatsappText(location, serviceEl.value, dateEl.value, time));
+          confirm.hidden = false;
         });
         frag.appendChild(btn);
       });
@@ -608,7 +655,7 @@
          limpa a seleção antes de reavaliar os horários. */
       var check = validateDate(location, dateEl.value, minIso, maxIso);
       if (!check.ok && check.reason === 'weekday') {
-        setDateValue('');
+        setDateValue(nextOpenDate(location, minIso, maxIso));
       }
 
       renderSlots();
@@ -668,6 +715,7 @@
       if (!window.flatpickr) {
         /* O CDN pode ainda não ter respondido. Sem flatpickr o campo continua
            utilizável: vira um input type=date nativo. */
+        dateEl.type = 'date';
         if (++attempts > 40) {
           dateEl.type = 'date';
           dateEl.removeAttribute('inputmode');
