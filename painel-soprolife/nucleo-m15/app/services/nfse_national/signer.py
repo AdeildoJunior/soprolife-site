@@ -64,6 +64,20 @@ def load_pkcs12_certificate(pkcs12_bytes: bytes, password: str) -> LoadedCertifi
     )
 
 
+def private_key_pem(loaded: LoadedCertificate) -> bytes:
+    """PEM-encode the loaded private key, unencrypted, for the transport's
+    own mTLS client-certificate use (``HttpxRestrictedTransport`` wants PEM
+    bytes, never a password). Same discipline as everywhere else in this
+    module: the caller must not retain or log the result any longer than
+    the single client construction that needs it.
+    """
+    return loaded.private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
 def generate_synthetic_test_certificate(*, common_name: str = "SoproLife M27 Synthetic Test") -> tuple[bytes, str]:
     """Build a throwaway self-signed cert/key, PKCS#12-encoded, for tests only.
 

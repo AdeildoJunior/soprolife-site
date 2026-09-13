@@ -28,19 +28,22 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from ...config import Settings
-from ...models import FiscalArtifact
+from ...models import FiscalArtifact, Person, SpirometryExam
 from ...services import nfse
 from ...services.idempotency import payload_fingerprint
 from . import artifacts as artifact_storage
+from . import fiscal_config
 from .config import NationalDpsConfiguration
 from .dps_builder import DpsBuildError, DpsInput, Recipient, build_dps_element, serialize_dps
 from .identifiers import DpsIdComponents, InvalidIdentifierError
-from .signer import LoadedCertificate, SignatureError, sign_dps, verify_dps_signature
+from .service_description import ServiceDescriptionUndetermined, spirometry_service_description
+from .signer import LoadedCertificate, SignatureError, load_pkcs12_certificate, sign_dps, verify_dps_signature
 from .xsd_validation import XsdValidationError, validate_dps_xml
 
 
@@ -92,6 +95,27 @@ def _blocked(document_id: str, stage: str, blockers: list[str]) -> PreflightResu
                            stage_reached=stage, blockers=sorted(set(blockers)))
 
 
+def _try_load_settings_certificate(settings: Settings) -> LoadedCertificate | None:
+    """Best-effort load from the configured external certificate path —
+    never raises: an absent/unreadable/wrong-password certificate is just
+    another reason to stay blocked at ``Stage.SIGNATURE``, exactly like the
+    caller explicitly passing ``certificate=None`` always has been. The
+    password itself never appears in any return value or exception here.
+    """
+    path = settings.nfse_restricted_certificate_path
+    password = settings.nfse_restricted_certificate_password
+    if not path or not password:
+        return None
+    try:
+        raw = Path(path).read_bytes()
+    except OSError:
+        return None
+    try:
+        return load_pkcs12_certificate(raw, password)
+    except SignatureError:
+        return None
+
+
 def run_offline_preflight(db: Session, document_id: str, settings: Settings, actor: str, *,
                           national_config: NationalDpsConfiguration | None = None,
                           recipient: Recipient | None = None,
@@ -116,15 +140,35 @@ def run_offline_preflight(db: Session, document_id: str, settings: Settings, act
                         current["blocking_reasons"] + ["preparation_stale"])
 
     # 3. National DPS configuration — the concrete restricted-layout contract.
-    # No admin entry point supplies this for a real document in this
-    # foundation; a caller (test, or a future admin flow) must pass it.
+    # M29: resolved from the real, versioned admin-managed table
+    # (fiscal_config.py) by the document's OWN competence date whenever the
+    # caller does not explicitly supply one (tests still can, to exercise a
+    # specific/synthetic contract in isolation without touching the DB).
+    if national_config is None:
+        national_config = fiscal_config.resolve_active_configuration(
+            db, environment=doc.environment, as_of=preparation.competence)
     if national_config is None:
         return _blocked(doc.id, Stage.NATIONAL_CONFIG,
                         ["national_dps_configuration_not_defined_for_any_real_document"])
     if recipient is None:
+        person = db.get(Person, preparation.recipient_person_id) if preparation.recipient_person_id else None
+        if person and person.cpf:
+            try:
+                recipient = Recipient(nome=person.nome_completo, cpf=person.cpf)
+            except DpsBuildError:
+                return _blocked(doc.id, Stage.NATIONAL_CONFIG, ["recipient_identity_invalid"])
+    if recipient is None:
         return _blocked(doc.id, Stage.NATIONAL_CONFIG, ["recipient_identity_not_supplied"])
 
-    # 4. Deterministic DPS build (unsigned).
+    # 4. Deterministic DPS build (unsigned). The service description is
+    # NEVER the mock-era free-text `preparation.description` — it comes only
+    # from the structured, exam-level `broncodilatador` attribute (M29,
+    # section B), failing closed rather than guessing the variant.
+    exam = db.get(SpirometryExam, doc.spirometry_exam_id)
+    try:
+        descricao_servico = spirometry_service_description(exam.broncodilatador if exam else None)
+    except ServiceDescriptionUndetermined:
+        return _blocked(doc.id, Stage.DPS_BUILD, ["service_description_undetermined"])
     try:
         dps_id = DpsIdComponents(
             codigo_municipio=national_config.issuer_municipio_ibge, tipo_inscricao_federal=2,
@@ -135,7 +179,7 @@ def run_offline_preflight(db: Session, document_id: str, settings: Settings, act
             config=national_config, dps_id=dps_id, dh_emi=datetime.now(timezone.utc),
             ver_aplic=ver_aplic, numero_dps_display=numero_dps_display,
             serie_dps_display=serie_dps_display, competencia=preparation.competence,
-            tomador=recipient, descricao_servico=preparation.description,
+            tomador=recipient, descricao_servico=descricao_servico,
             valor_servico=Decimal(str(preparation.amount_snapshot)),
         )
         unsigned_root = build_dps_element(data)
@@ -151,6 +195,8 @@ def run_offline_preflight(db: Session, document_id: str, settings: Settings, act
 
     staged: list[StagedArtifact] = []
     signed_xml = unsigned_xml
+    if certificate is None:
+        certificate = _try_load_settings_certificate(settings)
     if certificate is None:
         return PreflightResult(document_id=doc.id, status="blocked", stage_reached=Stage.SIGNATURE,
                                blockers=["certificate_not_supplied"],

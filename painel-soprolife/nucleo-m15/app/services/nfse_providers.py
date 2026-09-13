@@ -64,34 +64,59 @@ class MockNfseProvider:
         return ProviderResult(Outcome.CANCELLED, 'MOCK-' + request.document_id)
 
 
-class RealProviderUnavailable:
-    """Restricted/production scaffold: deliberately no transport implementation."""
-    name = 'unavailable'
+class RestrictedProviderPending:
+    """M29 — returned by ``get_provider()`` ONLY when every STRUCTURAL
+    (settings-only, no database) gate for the restricted environment is
+    satisfied. This is deliberately not a working provider: it carries no
+    transport, no certificate and no document context. The actual
+    ``RestrictedNfseProvider`` is built per-document by
+    ``app.services.nfse_national.dispatch.resolve_restricted_provider()``,
+    called from ``nfse.operate()`` right before dispatch — which re-checks
+    every gate again (including the per-document ones this class cannot see:
+    active national tax configuration, recipient identity, fiscal policy)
+    and never trusts this marker alone. If ``issue``/``query``/``cancel`` is
+    ever called directly on this object, that is itself a bug — it raises
+    rather than silently doing nothing.
 
-    def __init__(self, environment):
-        if environment not in {'restricted', 'production'}:
-            raise ValueError('unsupported_real_environment')
-        self.environment = environment
+    This module intentionally never imports ``RestrictedNfseProvider``,
+    ``HttpxRestrictedTransport`` or anything from ``nfse_national`` — the
+    provider boundary stays exactly as pure as before M29 (no HTTP client,
+    no certificate reader, no DPS payload); only ``nfse.operate()`` and
+    ``nfse_national.dispatch`` know how to turn this marker into a real call.
+    """
+    name = 'restricted'
+    environment = 'restricted'
 
-    def issue(self, request):
-        raise RuntimeError('real_provider_not_implemented')
+    def _unresolved(self):
+        raise RuntimeError(
+            'RestrictedProviderPending nunca deve ser invocado diretamente — '
+            'nfse.operate() precisa resolvê-lo via nfse_national.dispatch antes de usar.'
+        )
 
-    def query(self, request, operation):
-        return self.issue(request)
-
-    cancel = issue
+    issue = query = cancel = _unresolved
 
 
 def get_provider(settings: Settings) -> NfseProvider:
     if not settings.nfse_enabled:
         raise HTTPException(503, detail={'codigo': 'nfse_disabled'})
-    if settings.nfse_environment != 'mock':
-        if not settings.nfse_real_enabled:
-            reason = 'real_provider_disabled'
-        elif settings.nfse_credentials_path is None:
-            reason = 'external_credentials_required'
-        else:
-            # Even with all flags/path set, no file is read and no call is possible.
-            reason = 'real_provider_not_implemented'
-        raise HTTPException(503, detail={'codigo': reason})
-    return MockNfseProvider()
+    if settings.nfse_environment == 'mock':
+        return MockNfseProvider()
+    if settings.nfse_environment == 'production':
+        # No transport implementation exists for production anywhere in this
+        # codebase (structural absence, not a flag) — always unavailable.
+        raise HTTPException(503, detail={'codigo': 'production_provider_not_implemented'})
+    # environment == 'restricted': STRUCTURAL gates only (settings alone, no
+    # database access here) — every one of these must ALSO hold at the
+    # per-document resolution step; this is the first of two independent
+    # fail-closed checks, never a bypass of the second.
+    if not settings.nfse_real_enabled:
+        raise HTTPException(503, detail={'codigo': 'real_provider_disabled'})
+    if not settings.nfse_restricted_network_enabled:
+        raise HTTPException(503, detail={'codigo': 'restricted_network_gate_disabled'})
+    if not settings.nfse_restricted_base_url:
+        raise HTTPException(503, detail={'codigo': 'restricted_base_url_missing'})
+    if settings.nfse_restricted_certificate_path is None:
+        raise HTTPException(503, detail={'codigo': 'restricted_certificate_path_missing'})
+    if settings.nfse_restricted_certificate_password is None:
+        raise HTTPException(503, detail={'codigo': 'restricted_certificate_password_missing'})
+    return RestrictedProviderPending()

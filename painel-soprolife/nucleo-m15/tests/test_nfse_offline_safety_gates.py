@@ -122,9 +122,13 @@ def test_production_transport_has_no_implementation():
         ProductionTransport().send(TransportRequest(method='POST', path='/nfse'))
 
 
-# 7. FakeTransport cannot accidentally enable production: it has no gate
-# concept at all and is never reachable from get_provider()/nfse.operate(),
-# so a test double can never substitute for the real fail-closed check.
+# 7. FakeTransport cannot accidentally enable production, and the low-level
+# provider boundary module stays exactly as pure as before M29 wiring: no
+# HTTP client, no certificate reader, no DPS payload, and no import of the
+# concrete RestrictedNfseProvider class. (M29 wires the RESTRICTED provider
+# into nfse.operate() via a separate module — app.services.nfse_national.dispatch
+# — never into this one; see test_nfse_national_dispatch.py for the wiring's
+# own fail-closed proof, and the module docstring of `dispatch.py`.)
 def test_fake_transport_never_wired_into_live_dispatch(db, users):
     settings = Settings(nfse_enabled=True, nfse_environment='mock')
     provider = get_provider(settings)
@@ -133,12 +137,21 @@ def test_fake_transport_never_wired_into_live_dispatch(db, users):
     # The only way a FakeTransport-backed provider is ever constructed is by
     # a test explicitly building a RestrictedNfseProvider itself — never by
     # any application code path reachable from an HTTP request.
+    import ast
     import inspect
 
     import app.services.nfse_providers as providers_module
-    source = inspect.getsource(providers_module)
-    assert 'FakeTransport' not in source
-    assert 'RestrictedNfseProvider' not in source
+    tree = ast.parse(inspect.getsource(providers_module))
+    imported_names = {
+        alias.asname or alias.name
+        for node in ast.walk(tree) if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+    }
+    assert 'FakeTransport' not in imported_names
+    assert 'RestrictedNfseProvider' not in imported_names
+    assert 'HttpxRestrictedTransport' not in imported_names
+    assert not any('nfse_national' in (node.module or '')
+                   for node in ast.walk(tree) if isinstance(node, ast.ImportFrom))
 
 
 # 8. Uncertain result cannot blind retry — the mock dispatcher's own state

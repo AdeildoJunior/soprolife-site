@@ -1,4 +1,6 @@
 """Administrative fiscal API. Independent flag, existing authentication/CSRF/RBAC."""
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -12,6 +14,8 @@ from ..pagination import PageParams, paginate
 from ..security import ROLE_ADMIN, ROLE_GESTOR, ROLE_LEITURA, require_role
 from ..services import nfse
 from ..services.idempotency import payload_fingerprint
+from ..services.nfse_national import fiscal_config
+from ..services.nfse_national.config import NationalDpsConfigurationVersionCreate
 from ..services.nfse_national.preflight import run_offline_preflight
 from ..services.nfse_national.production_gates import compute_production_readiness
 from ..services.nfse_national.readiness import compute_provider_readiness
@@ -90,6 +94,54 @@ def new_policy(payload: PolicyCreate, request: Request, db: Session = Depends(ge
     except IntegrityError:
         db.rollback()
         nfse.fail('policy_version_conflict')
+
+
+# ---------------------------------------------------- M29 — national DPS tax configuration
+
+
+@router.get('/configuracao-nacional')
+def national_configurations(environment: str | None = None, db: Session = Depends(get_db),
+                            user: User = Depends(require_role(ROLE_LEITURA))):
+    """Every version, newest-effective-first — including drafts and
+    superseded ones (immutable history), never just "the active one"."""
+    return [fiscal_config.safe_summary(row)
+            for row in fiscal_config.list_versions(db, environment=environment)]
+
+
+@router.get('/configuracao-nacional/ativa')
+def active_national_configuration(environment: str = 'restricted',
+                                  db: Session = Depends(get_db),
+                                  user: User = Depends(require_role(ROLE_LEITURA))):
+    """The row that would be used for a document dated TODAY. A real
+    document at issuance time always resolves by its OWN competence date
+    instead (see fiscal_config.resolve_active_configuration) — this
+    endpoint is a read-only convenience for the admin screen, never itself
+    a source a DPS is built from."""
+    row = fiscal_config.resolve_active_version(db, environment=environment,
+                                               as_of=datetime.now(timezone.utc).date())
+    if row is None:
+        nfse.fail('national_dps_configuration_not_defined_for_any_real_document', 404)
+    return fiscal_config.safe_summary(row)
+
+
+@router.post('/configuracao-nacional', status_code=201)
+def new_national_configuration(payload: NationalDpsConfigurationVersionCreate, request: Request,
+                               db: Session = Depends(get_db),
+                               user: User = Depends(require_role(ROLE_ADMIN))):
+    """Creates a NEW effective version. Never mutates an existing one — a
+    same-version resubmission with a DIFFERENT payload is refused
+    (``national_dps_configuration_version_immutable``), matching the
+    ``FiscalPolicy`` versioning contract this table deliberately mirrors."""
+    try:
+        row = fiscal_config.create_version(
+            db, environment=payload.environment, effective_from=payload.effective_from,
+            validation_state=payload.validation_state, configuration=payload.configuration,
+            actor=user.id, request_id=request.state.request_id,
+        )
+    except IntegrityError:
+        db.rollback()
+        nfse.fail('national_dps_configuration_version_conflict')
+    return fiscal_config.safe_summary(row)
 
 
 @router.get('/documentos')

@@ -2676,6 +2676,38 @@ class FiscalPolicy(Base):
     )
 
 
+class NationalDpsConfigurationVersion(Base):
+    """M29 — versioned, immutable snapshot of the CONCRETE national NFS-e
+    restricted-layout tax configuration (``nfse_national.config.NationalDpsConfiguration``).
+
+    Distinct from ``FiscalPolicy`` (the abstract mock-era eligibility gate,
+    keyed by flow): this holds the exact official fields the real DPS builder
+    needs (issuer CNPJ, national/municipal service codes, NBS, Simples/ISS/
+    retention selections, the approximate-tax percentage). A change to any
+    of those — e.g. the accountant adjusting the current Simples percentage
+    — is always a NEW row with a later ``effective_from``, never a mutation
+    of one already used to build a signed document: the active row for any
+    past competence date is resolved by ``effective_from <= competence``,
+    picking the latest such validated row, so a historical document always
+    reproduces the configuration that was actually active when it was built.
+    Enforced append-only at the database level (see migration), matching
+    ``FiscalArtifact``.
+    """
+    __tablename__ = "national_dps_configurations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    version: Mapped[str] = mapped_column(String(60), unique=True)
+    environment: Mapped[str] = mapped_column(String(20), index=True)
+    effective_from: Mapped[date] = mapped_column(Date, index=True)
+    validation_state: Mapped[str] = mapped_column(String(20))
+    configuration: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint("environment IN ('restricted','production')", name="national_dps_config_environment"),
+        CheckConstraint("validation_state IN ('draft','validated')", name="national_dps_config_validation"),
+    )
+
+
 class FiscalDocument(Base, TimestampMixin):
     """Queue projection only; immutable preparations retain monetary evidence."""
     __tablename__ = "fiscal_documents"

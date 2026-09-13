@@ -11,6 +11,7 @@ must be supplied by the caller, and incompleteness fails closed via
 """
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import Literal
 
@@ -60,6 +61,13 @@ class NationalDpsConfiguration(NationalDpsInput):
     issuer_municipio_ibge: str  # cLocEmi (TSCodMunIBGE)
     issuer_inscricao_municipal: str | None = Field(None, max_length=15)
     issuer_op_simp_nac: OpSimpNac
+    # TCRegTrib/regApTribSN — optional per the schema (only mandatory when
+    # opSimpNac=3 AND the taxpayer has exceeded a Simples Nacional sublimit),
+    # but the SoproLife accountant's real portal configuration explicitly
+    # names one of these three regimes ("Regime de apuração dos tributos
+    # federais e municipal pelo Simples Nacional" = 1), so it is modeled
+    # explicitly rather than silently dropped. ``None`` when not applicable.
+    issuer_reg_ap_trib_sn: Literal[1, 2, 3] | None = None
     issuer_reg_esp_trib: RegEspTrib
 
     # TCCServ — service classification (LC 116/2003).
@@ -75,10 +83,24 @@ class NationalDpsConfiguration(NationalDpsInput):
     tp_ret_issqn: TpRetISSQN
     aliquota_percentual: Decimal | None = Field(None, ge=0, le=100, max_digits=6, decimal_places=2)
 
-    # TCTribTotal — this foundation only supports indTotTrib=0 ("não
-    # informado"), the schema's explicit "no estimate" choice (Decreto
-    # 8.264/2014 opt-out), never an invented total-tax estimate.
+    # TCTribTotal is an xs:choice of exactly one alternative: vTotTrib
+    # (monetary breakdown), pTotTrib (percentage breakdown), indTotTrib=0
+    # ("não informado" — Decreto 8.264/2014 opt-out) or pTotTribSN (the
+    # approximate total-tax percentage taken directly from the Simples
+    # Nacional bracket). This foundation models only the two evidenced,
+    # unambiguous alternatives: the M27 "no estimate" default (indTotTrib=0)
+    # and, additively, pTotTribSN — the exact field the official schema
+    # documents as "Valor percentual aproximado do total dos tributos da
+    # alíquota do Simples Nacional (%)", which is what the real SoproLife
+    # portal configuration means by "Informar alíquota do Simples Nacional".
+    # vTotTrib/pTotTrib (itemized breakdowns) remain unmodeled — no evidence
+    # this foundation needs them, and building them would be invention.
+    #
+    # When ``p_tot_trib_sn`` is set it takes precedence in the builder and
+    # ``ind_tot_trib`` is not emitted; when it is ``None`` behavior is
+    # byte-for-byte identical to the original M27 foundation.
     ind_tot_trib: Literal[0] = 0
+    p_tot_trib_sn: Decimal | None = Field(None, ge=0, le=100, max_digits=6, decimal_places=2)
 
     # Explicit policy decisions carried over from the M26 contract shape.
     amount_basis: Literal["financial_entry.valor"]
@@ -106,4 +128,18 @@ class NationalDpsConfiguration(NationalDpsInput):
         """
         return sorted(key for key, value in self.model_dump().items() if value is None
                        and key not in {"codigo_tributacao_municipal", "codigo_nbs",
-                                       "issuer_inscricao_municipal", "aliquota_percentual"})
+                                       "issuer_inscricao_municipal", "aliquota_percentual",
+                                       "issuer_reg_ap_trib_sn", "p_tot_trib_sn"})
+
+
+class NationalDpsConfigurationVersionCreate(NationalDpsInput):
+    """M29 — admin API payload for creating one new effective configuration
+    version (``POST /fiscal/configuracao-nacional``). Wraps the same
+    versioning envelope ``FiscalPolicy``/``PolicyCreate`` already use
+    (environment, effective date, draft/validated) around the concrete
+    ``NationalDpsConfiguration`` contract above — never a partial/loose dict.
+    """
+    environment: Literal["restricted", "production"]
+    effective_from: date
+    validation_state: Literal["draft", "validated"] = "draft"
+    configuration: NationalDpsConfiguration

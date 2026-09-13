@@ -123,6 +123,8 @@ def build_dps_element(data: DpsInput) -> etree._Element:
     _el(prest, "xNome", cfg.issuer_name)
     reg_trib = _el(prest, "regTrib")
     _el(reg_trib, "opSimpNac", cfg.issuer_op_simp_nac)
+    if cfg.issuer_reg_ap_trib_sn is not None:
+        _el(reg_trib, "regApTribSN", cfg.issuer_reg_ap_trib_sn)
     _el(reg_trib, "regEspTrib", cfg.issuer_reg_esp_trib)
 
     toma = _el(inf, "toma")
@@ -155,7 +157,10 @@ def build_dps_element(data: DpsInput) -> etree._Element:
     if cfg.aliquota_percentual is not None:
         _el(trib_mun, "pAliq", f"{cfg.aliquota_percentual.quantize(Decimal('0.01'))}")
     tot_trib = _el(trib, "totTrib")
-    _el(tot_trib, "indTotTrib", cfg.ind_tot_trib)
+    if cfg.p_tot_trib_sn is not None:
+        _el(tot_trib, "pTotTribSN", f"{cfg.p_tot_trib_sn.quantize(Decimal('0.01'))}")
+    else:
+        _el(tot_trib, "indTotTrib", cfg.ind_tot_trib)
 
     return root
 

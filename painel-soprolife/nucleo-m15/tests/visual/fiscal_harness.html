@@ -120,11 +120,29 @@
     reconciliation_required: 1,
   };
 
+  const NATIONAL_CONFIG_ACTIVE = CENARIO === "sem-config-nacional" ? null : {
+    id: "cfg-fic-1", version: "SOPROLIFE-REAL-v1", environment: "restricted",
+    effective_from: "2026-01-01", validation_state: "validated",
+    created_by: "user-fic", created_at: "2026-09-13T12:00:00Z",
+    configuration: {
+      version: "SOPROLIFE-REAL-v1", layout_version: "restricted-v1.01-20260727",
+      issuer_cnpj: "63544026000110", issuer_name: "SoproLife Diagnósticos e Soluções em Saúde LTDA",
+      issuer_municipio_ibge: "3304557", issuer_op_simp_nac: 3, issuer_reg_ap_trib_sn: 1,
+      issuer_reg_esp_trib: 0, codigo_tributacao_nacional: "040201",
+      codigo_tributacao_municipal: "001", codigo_nbs: "123019900",
+      municipio_prestacao_ibge: "3304557", trib_issqn: 1, tp_ret_issqn: 1,
+      p_tot_trib_sn: "6.00", validation_reference: "SOPROLIFE-M29-REAL-PROFILE",
+    },
+  };
+  const NATIONAL_CONFIG_LIST = NATIONAL_CONFIG_ACTIVE ? [NATIONAL_CONFIG_ACTIVE] : [];
+
   function rota(path, options) {
     const clean = path.split("?")[0];
     const query = path.split("?")[1] || "";
     if (clean === "/fiscal/status") return STATUS;
     if (clean === "/fiscal/fila-resumo") return SUMMARY;
+    if (clean === "/fiscal/configuracao-nacional") return NATIONAL_CONFIG_LIST;
+    if (clean === "/fiscal/configuracao-nacional/ativa") return NATIONAL_CONFIG_ACTIVE;
     if (clean === "/fiscal/documentos") {
       const m = /state=([^&]+)/.exec(query);
       const state = m ? decodeURIComponent(m[1]) : "pending";

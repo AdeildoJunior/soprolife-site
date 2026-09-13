@@ -142,3 +142,60 @@
   .fiscal-batch-bar { flex-direction: column; align-items: stretch; }
   .fiscal-actions { flex-direction: column; align-items: stretch; }
 }
+
+/* M29 — configuração fiscal nacional versionada */
+[data-fiscal-config-new],
+[data-fiscal-config-cancel],
+.fiscal-config-form button[type="submit"] {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--teal, #1db7a6);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+[data-fiscal-config-cancel] { background: transparent; color: var(--muted, #64798b); border: 1px solid var(--border, #d7e2ea); }
+.fiscal-config-form button[type="submit"]:disabled { opacity: .5; cursor: not-allowed; }
+
+.fiscal-config-form {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border, #d7e2ea);
+  border-radius: 12px;
+  background: var(--soft, #f5f9fb);
+}
+.fiscal-config-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 10px 0 14px;
+}
+.fiscal-config-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted, #64798b);
+}
+.fiscal-config-grid input,
+.fiscal-config-grid select {
+  min-height: 34px;
+  border-radius: 7px;
+  border: 1px solid var(--border, #d7e2ea);
+  padding: 4px 8px;
+  font: inherit;
+  font-weight: 400;
+  color: var(--ink, #10202f);
+}
+
+@media (max-width: 1000px) {
+  .fiscal-config-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .fiscal-config-grid { grid-template-columns: 1fr; }
+}

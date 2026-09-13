@@ -20,6 +20,7 @@ from ..ids import new_uuid
 from ..models import (FiscalPolicy, FiscalDocument, FiscalPreparation, FiscalAttempt,
                       FinancialEntry, SpirometryExam, Person, utcnow)
 from .idempotency import idempotent_create, payload_fingerprint
+from .nfse_national import dispatch as national_dispatch
 from .nfse_providers import get_provider, ProviderRequest, ProviderResult, Outcome
 
 
@@ -190,10 +191,10 @@ def prepare(db, exam_id, settings, actor, request_id=None):
     return doc
 
 
-def _request(doc, preparation, operation_id):
+def _request(doc, preparation, operation_id, *, description=None):
     return ProviderRequest(doc.id, operation_id, preparation.id,
                            str(preparation.amount_snapshot), preparation.competence.isoformat(),
-                           preparation.description)
+                           description or preparation.description)
 
 
 def _normalized(result, operation, document_id):
@@ -221,8 +222,15 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
             request_id=None, *, reprocess=False, provider=None):
     # Gate first, even when an operation key is replayed or provider is injected.
     selected = get_provider(settings)
+    injected = provider is not None
     provider = provider or selected
-    if provider.environment != 'mock' or provider.name != 'mock':
+    # Generalizes the M26 mock-only check to "provider must match the
+    # CONFIGURED environment, by both name and environment" — mock keeps
+    # its exact original behavior (environment='mock' can only ever equal
+    # settings.nfse_environment=='mock'); production has no expected name at
+    # all, so any injected/resolved provider there is refused unconditionally.
+    expected_name = {'mock': 'mock', 'restricted': 'restricted'}.get(settings.nfse_environment)
+    if provider.environment != settings.nfse_environment or provider.name != expected_name:
         fail('provider_environment_mismatch', 503)
     doc = get_document(db, document_id, lock=True)
     if doc.environment != settings.nfse_environment:
@@ -274,11 +282,23 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
     else:
         fail('unsupported_operation', 422)
     number = (db.scalar(select(func.max(FiscalAttempt.number)).where(FiscalAttempt.document_id == doc.id)) or 0) + 1
+    description_override = None
+    if not injected and settings.nfse_environment == 'restricted':
+        # M29 wiring: turn the structural-only RestrictedProviderPending
+        # marker into a fully-bound, per-document RestrictedNfseProvider.
+        # Re-checks every gate against the database and THIS document —
+        # never trusts get_provider()'s settings-only check alone. A test
+        # that injects its own `provider=` bypasses this entirely, exactly
+        # like the mock path always has.
+        provider = national_dispatch.resolve_restricted_provider(
+            db, settings, doc, preparation, actor, number=number)
+        description_override = national_dispatch.resolve_service_description(db, doc)
     operation_id = new_uuid()
     started_at = utcnow()
     common = dict(document_id=doc.id, preparation_id=preparation.id,
                   operation_id=operation_id, reconciles_operation_id=target.operation_id if target else None,
-                  operation=operation, number=number, provider='mock', environment='mock',
+                  operation=operation, number=number, provider=provider.name,
+                  environment=settings.nfse_environment,
                   actor_id=actor, started_at=started_at)
     def factory(key, fingerprint):
         event = FiscalAttempt(**common, phase='started', outcome='started',
@@ -292,9 +312,10 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
         return doc
     doc.state = 'reconciling' if operation == 'reconcile' else 'issuing'
     record(db, operation + '_started', 'fiscal_document', doc.id, actor, request_id,
-           provider='mock', status=doc.state, sequencia=number)
+           provider=provider.name, status=doc.state, sequencia=number)
     db.commit()  # Durable intent before crossing the provider boundary.
-    request = _request(doc, preparation, target.operation_id if target else operation_id)
+    request = _request(doc, preparation, target.operation_id if target else operation_id,
+                       description=description_override)
     try:
         result = (provider.query(request, target.operation) if target else
                   provider.issue(request) if operation == 'issue' else provider.cancel(request))
@@ -332,7 +353,7 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
                          idempotency_fingerprint=payload_fingerprint(identity)))
     doc.state = state
     record(db, operation + '_completed', 'fiscal_document', doc.id, actor, request_id,
-           provider='mock', resultado=result.outcome.value, status=state, sequencia=number)
+           provider=provider.name, resultado=result.outcome.value, status=state, sequencia=number)
     db.commit()
     return doc
 

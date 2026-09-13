@@ -23,6 +23,9 @@ MEDIR = r"""
   return {
     largura_janela: window.innerWidth,
     tem_readiness_panel: !!document.querySelector('.fiscal-readiness-panel'),
+    tem_config_nacional_panel: !!document.querySelector('.fiscal-national-config-panel'),
+    tem_config_form_aberto: !!document.querySelector('.fiscal-config-form'),
+    campos_config_form: document.querySelectorAll('.fiscal-config-grid input, .fiscal-config-grid select').length,
     tem_summary_cards: document.querySelectorAll('.fiscal-summary-card').length,
     linhas_fila: document.querySelectorAll('.fiscal-table tbody tr').length,
     checkboxes: document.querySelectorAll('[data-fiscal-select]').length,
@@ -83,6 +86,8 @@ async def main():
              ["[data-fiscal-select-eligible]", "[data-fiscal-emit]"]),
             ("d-filtro-bloqueadas", "?cenario=mista", []),
             ("e-vazio", "?cenario=vazio", []),
+            ("f-config-nacional-form", "?cenario=mista", ["[data-fiscal-config-new]"]),
+            ("g-sem-config-nacional", "?cenario=sem-config-nacional", []),
         ]
 
         for nome_cenario, query, cliques in cenarios:

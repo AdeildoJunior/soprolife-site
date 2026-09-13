@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from ...config import Settings
 from ...models import FiscalPolicy
+from . import fiscal_config
 from .signer import SignatureError, load_pkcs12_certificate
 from .xsd_validation import DPS_SCHEMA_PATH, NFSE_SCHEMA_PATH
 
@@ -55,6 +56,8 @@ class ProviderReadiness:
     fiscal_policy_summary: dict
     artifact_storage_ready: bool
     artifact_storage_detail: str
+    national_dps_configuration_ready: bool
+    national_dps_configuration_summary: dict | None
     last_validation_time: datetime
     blockers: list[str] = field(default_factory=list)
 
@@ -75,6 +78,8 @@ class ProviderReadiness:
             "fiscal_policy_summary": self.fiscal_policy_summary,
             "artifact_storage_ready": self.artifact_storage_ready,
             "artifact_storage_detail": self.artifact_storage_detail,
+            "national_dps_configuration_ready": self.national_dps_configuration_ready,
+            "national_dps_configuration_summary": self.national_dps_configuration_summary,
             "last_validation_time": self.last_validation_time.isoformat(),
             "blockers": self.blockers,
         }
@@ -220,13 +225,17 @@ def compute_provider_readiness(db: Session, settings: Settings, *,
     if not storage_ready:
         blockers.append("artifact_storage_not_ready")
 
-    # Always present, regardless of every other flag: no real tax
-    # configuration (NationalDpsConfiguration) exists for any real document
-    # yet — that is an explicit accounting/legal decision deferred past this
-    # foundation (see the M27 report, "Pré-requisitos restantes" #4). Naming
-    # it here keeps the blocker list exhaustive rather than silently stopping
-    # at "everything above looks fine".
-    blockers.append("national_dps_configuration_not_defined_for_any_real_document")
+    # M29: a real, versioned NationalDpsConfiguration table now exists
+    # (app/services/nfse_national/fiscal_config.py). Checked against TODAY's
+    # date so this readiness view always reflects "would a document dated
+    # today build". A historical document still resolves the configuration
+    # that was effective on ITS OWN competence date — never this snapshot.
+    today = datetime.now(timezone.utc).date()
+    active_row = fiscal_config.resolve_active_version(db, environment=environment, as_of=today)
+    national_config_ready = active_row is not None
+    national_config_summary = fiscal_config.safe_summary(active_row) if active_row else None
+    if not national_config_ready:
+        blockers.append("national_dps_configuration_not_defined_for_any_real_document")
 
     return ProviderReadiness(
         environment=environment,
@@ -244,6 +253,8 @@ def compute_provider_readiness(db: Session, settings: Settings, *,
         fiscal_policy_summary=policy_summary,
         artifact_storage_ready=storage_ready,
         artifact_storage_detail=storage_detail,
+        national_dps_configuration_ready=national_config_ready,
+        national_dps_configuration_summary=national_config_summary,
         last_validation_time=datetime.now(timezone.utc),
         blockers=blockers,
     )
