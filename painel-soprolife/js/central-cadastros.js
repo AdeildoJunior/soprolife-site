@@ -312,6 +312,7 @@
     "espirometria.origem": "esp_origem",
     "espirometria.responsavel": "esp_responsavel",
     "espirometria.status": "esp_status",
+    "espirometria.municipio_atendimento_ibge": "esp_municipio",
     "consulta.data_consulta": "con_data",
     "consulta.status": "con_status",
     "consulta.profissional": "con_profissional",
@@ -1147,6 +1148,13 @@
     return api("/atendimentos/configuracao").catch(() => ({}));
   }
 
+  // M32 — fonte única do backend (services/nfse_national/service_location.py
+  // via /espirometrias/municipios-atendimento). Nunca uma segunda lista de
+  // municípios aqui: se a fundação fiscal aceitar outro, ele aparece sozinho.
+  function resolveMunicipiosAtendimento() {
+    return api("/espirometrias/municipios-atendimento").catch(() => []);
+  }
+
   function resolvePastore() {
     // O backend aplica a resolução canônica fail-closed e devolve somente
     // unidades ativas da Pastore; o navegador não tenta adivinhar por nome.
@@ -1167,7 +1175,7 @@
     </div>`;
   }
 
-  function blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg) {
+  function blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg, municipios) {
     const commonStart = `
       <h4 class="cad-bloco-titulo">Espirometria</h4>
       ${ehPastore ? '<div class="cad-pastore-aviso" id="cadAtPastoreAviso"></div>' : ""}
@@ -1180,7 +1188,11 @@
             : STATUS_EXAME), "Realizado"), 3)}
         ${fld("Broncodilatador", sel("esp_bd",
           [["", "não informado"], ["false", "sem broncodilatador"],
-           ["true", "com broncodilatador"]], "false"), 3)}`;
+           ["true", "com broncodilatador"]], "false"), 3)}
+        ${fld("Município onde o exame foi realizado", sel("esp_municipio",
+          [["", "não informado"]].concat((municipios || []).map((m) => [m.codigo, m.rotulo])), ""),
+          { span: 4, ajuda: "Onde o exame foi FISICAMENTE realizado — necessário para a " +
+            "emissão fiscal da NFS-e. Deixe em branco se não souber; nada é assumido." })}`;
     const commonEnd = `
         ${fld("Técnico / responsável", inp("esp_responsavel", "Adeildo", 'list="cadResp"'), 4)}
         ${fld("Próximo acompanhamento", dateInp("esp_followup", ""),
@@ -1253,10 +1265,10 @@
       ` + commonEnd;
   }
 
-  function blocoEspirometriaHtml(pastore, ehPastore, cfg) {
+  function blocoEspirometriaHtml(pastore, ehPastore, cfg, municipios) {
     return `
       <div class="cad-bloco" id="cadAtBlocoEsp" hidden>
-        ${blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg)}
+        ${blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg, municipios)}
       </div>`;
   }
 
@@ -1303,8 +1315,8 @@
 
   LOADERS.atendimento = function (bodyEl) {
     const pre = state.prefill || {};
-    return Promise.all([resolvePastore(), resolveConfigAtendimento()])
-      .then(([pastore, cfg]) => {
+    return Promise.all([resolvePastore(), resolveConfigAtendimento(), resolveMunicipiosAtendimento()])
+      .then(([pastore, cfg, municipios]) => {
       const tipoInicial = TIPOS_ATENDIMENTO.some((t) => t[0] === pre.tipo)
         ? pre.tipo : "espirometria_soprolife";
       const somentePacienteInicial = !!pre.somente_paciente;
@@ -1337,7 +1349,7 @@
 
             <div class="m15-form-full cad-passo" id="cadAtPasso3">
               <h4 class="cad-passo-titulo"><span class="cad-passo-num">3</span> Dados do atendimento</h4>
-              ${blocoEspirometriaHtml(pastore, tipoInicial === TIPO_PASTORE, cfg)}
+              ${blocoEspirometriaHtml(pastore, tipoInicial === TIPO_PASTORE, cfg, municipios)}
               ${blocoConsultaHtml()}
             </div>
 
@@ -1422,7 +1434,7 @@
         blocoCon.hidden = !temCon;
         const ehPastore = tipo === TIPO_PASTORE;
         if (temEsp && renderedPastore !== ehPastore) {
-          blocoEsp.innerHTML = blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg);
+          blocoEsp.innerHTML = blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg, municipios);
           renderedPastore = ehPastore;
           // attachDates só roda uma vez no carregamento inicial da aba; sem
           // chamar de novo aqui, o "Data do exame" recém-injetado ao trocar
@@ -1582,6 +1594,8 @@
     setIf(bloco, "responsavel", val(form, "esp_responsavel"));
     setIf(bloco, "observacao", val(form, "esp_observacao"));
     setIf(bloco, "proximo_followup", val(form, "esp_followup"));
+    // M32 — em branco significa "não informado": nunca assumido como Rio.
+    setIf(bloco, "municipio_atendimento_ibge", val(form, "esp_municipio"));
     if (tipo === TIPO_PASTORE) {
       const unidade = pastore.unidades.length === 1
         ? pastore.unidades[0].id : val(form, "esp_unidade");

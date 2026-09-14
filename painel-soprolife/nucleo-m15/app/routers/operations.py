@@ -37,6 +37,7 @@ from ..services.followup import (
 )
 from ..services.idempotency import idempotent_create
 from ..services.integrity import ensure_unit_of_partner
+from ..services.nfse_national.service_location import SUPPORTED_SERVICE_MUNICIPALITIES
 from ..services.pastore import ensure_settlement_for_exam
 
 router = APIRouter(tags=["operacao"])
@@ -174,6 +175,21 @@ def update_lead(
 
 # ------------------------------------------------------------ espirometrias
 
+@router.get("/espirometrias/municipios-atendimento")
+def list_service_municipalities(
+    _user: User = Depends(require_role(ROLE_LEITURA)),
+):
+    """M32 — fonte única e somente-leitura dos municípios de atendimento hoje
+    aceitos pelo caminho fiscal restrito (M31). O frontend nunca mantém uma
+    cópia própria desta lista: se a M31 passar a suportar outro município,
+    ele aparece aqui sem exigir novo deploy de frontend. Só código + rótulo
+    humano — nenhum dado sensível."""
+    return [
+        {"codigo": codigo, "rotulo": rotulo}
+        for codigo, rotulo in SUPPORTED_SERVICE_MUNICIPALITIES.items()
+    ]
+
+
 @router.get("/espirometrias")
 def list_exams(
     status: str | None = None,
@@ -232,6 +248,7 @@ def create_exam(
             person_id=person.id,
             modalidade=payload.modalidade,
             local_atendimento=payload.local_atendimento,
+            municipio_atendimento_ibge=payload.municipio_atendimento_ibge or None,
             partner_id=payload.partner_id,
             partner_unit_id=payload.partner_unit_id,
             status=payload.status,
@@ -352,6 +369,12 @@ def update_exam(
     if payload.modalidade is not None:
         exam.modalidade = payload.modalidade
         changed.append("modalidade")
+    if payload.municipio_atendimento_ibge is not None:
+        # "" explícito desvincula (mesma convenção de partner_id/
+        # partner_unit_id abaixo); ausente (None) nunca chega aqui — o
+        # `PATCH` preserva o valor gravado.
+        exam.municipio_atendimento_ibge = payload.municipio_atendimento_ibge.strip() or None
+        changed.append("municipio_atendimento_ibge")
     if payload.partner_id is not None:
         novo = payload.partner_id.strip() or None
         if novo:
