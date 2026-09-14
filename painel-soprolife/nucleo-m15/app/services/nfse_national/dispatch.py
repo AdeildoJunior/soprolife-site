@@ -100,7 +100,7 @@ def _service_location(preparation: FiscalPreparation) -> str:
 
 
 def resolve_restricted_provider(db: Session, settings: Settings, doc: FiscalDocument,
-                                preparation: FiscalPreparation, actor: str, *, number: int,
+                                preparation: FiscalPreparation, actor: str, *, dps_number: int,
                                 transport: RestrictedTransport | None = None) -> RestrictedNfseProvider:
     """Builds a ``RestrictedNfseProvider`` bound to exactly this document, or
     fails closed with a specific blocker code. ``transport`` is a test-only
@@ -139,14 +139,14 @@ def resolve_restricted_provider(db: Session, settings: Settings, doc: FiscalDocu
         dps_id = DpsIdComponents(
             codigo_municipio=national_config.issuer_municipio_ibge, tipo_inscricao_federal=2,
             inscricao_federal=national_config.issuer_cnpj, serie_dps="00001",
-            numero_dps=str(number).rjust(15, "0"),
+            numero_dps=str(dps_number).rjust(15, "0"),
         )
     except InvalidIdentifierError:
         fail("national_dps_configuration_invalid")
 
     context = RestrictedIssueContext(
         config=national_config, dps_id=dps_id, recipient=recipient,
-        ver_aplic="soprolife-m29-0.1", numero_dps_display=str(number), serie_dps_display="1",
+        ver_aplic="soprolife-m29-0.1", numero_dps_display=str(dps_number), serie_dps_display="1",
         certificate=certificate, municipio_prestacao_ibge=municipio_prestacao_ibge,
     )
     live_transport = transport or HttpxRestrictedTransport(

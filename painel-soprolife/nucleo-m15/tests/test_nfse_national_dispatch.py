@@ -19,8 +19,10 @@ from app.models import FinancialEntry, Person, SpirometryExam
 from app.services import nfse
 from app.services.nfse_national import dispatch, fiscal_config
 from app.services.nfse_national.config import NationalDpsConfiguration
+from app.services.nfse_national.identifiers import DpsIdComponents, build_dps_id
 from app.services.nfse_national.signer import generate_synthetic_test_certificate
-from app.services.nfse_national.transport import FakeTransport, TransportResponse
+from app.services.nfse_national.transport import (FakeTransport, PATH_GET_DPS,
+                                                   PATH_ISSUE_NFSE, TransportResponse)
 import tests.test_nfse_foundation as _foundation
 from tests.test_nfse_foundation import events, policy_payload
 from tests.test_nfse_national_provider import VALID_ACCESS_KEY, _nfse_xml
@@ -105,6 +107,19 @@ def _validate_active_config(db, users, *, effective_from=date(2026, 1, 1)):
         db, environment="restricted", effective_from=effective_from, validation_state="validated",
         configuration=synthetic_national_config(), actor=users["admin"].id,
     )
+
+
+def _expected_dps_id(number: int) -> str:
+    """The exact TSIdDPS a real dispatch call must build for DPS number
+    ``number``, matching ``synthetic_national_config()``'s issuer fields —
+    used to assert the OUTBOUND path/body, never re-deriving it from
+    application code (that would just restate the bug it's checking for).
+    """
+    return build_dps_id(DpsIdComponents(
+        codigo_municipio="3304557", tipo_inscricao_federal=2,
+        inscricao_federal="11222333000181", serie_dps="00001",
+        numero_dps=str(number).rjust(15, "0"),
+    ))
 
 
 # --------------------------------------------------------------- structural gates
@@ -300,6 +315,93 @@ def test_full_wiring_without_bronchodilator_variant(
     assert len(fake.received) == 1
     sent_xml = fake.received[0].body
     assert b"Espirometria sem broncodilatador" in sent_xml
+
+
+# ------------------------------------------------------------ M33 — reconcile targets the original DPS
+
+
+def test_first_issue_attempt_builds_dps_for_its_own_attempt_number(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """A first issue attempt (attempt #1) has no target to reconcile — it
+    mints a brand-new DPS under its own attempt number, embedded in the
+    signed body sent to POST /nfse."""
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[TransportResponse(status_code=200, body=b"<nfse-ok/>")])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m33-issue-1", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "uncertain"
+    assert len(fake.received) == 1
+    assert fake.received[0].path == PATH_ISSUE_NFSE
+    assert _expected_dps_id(1).encode() in fake.received[0].body
+
+
+def test_reconcile_queries_original_issue_dps_not_reconcile_attempt_number(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """Root-cause regression (M33): attempt #1 (issue) goes uncertain, and
+    the reconciliation that follows is attempt #2 — but the outbound GET
+    /dps/{id} MUST still query the DPS built for attempt #1, never one
+    rebuilt from the reconciliation's own attempt number (#2).
+    """
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[
+        TransportResponse(status_code=200, body=b"<nfse-ok/>"),  # issue #1 -> malformed -> uncertain
+        TransportResponse(status_code=404, body=b""),            # reconcile #2 -> confirmed absent
+    ])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m33-reconcile-1", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "uncertain"
+
+    doc = nfse.operate(db, restricted_doc.id, "reconcile", "m33-reconcile-2", fully_configured_settings,
+                       users["gestor"].id)
+    assert len(fake.received) == 2
+    reconcile_request = fake.received[1]
+    assert reconcile_request.path == PATH_GET_DPS.format(dps_id=_expected_dps_id(1))
+    # Never the bug's shape (a DPS rebuilt from the reconcile's own number=2):
+    assert reconcile_request.path != PATH_GET_DPS.format(dps_id=_expected_dps_id(2))
+    # M30 regression: still the official TSIdDPS, never doc.id/operation_id.
+    assert doc.id not in reconcile_request.path
+
+    assert doc.state == "failed"  # NOT_FOUND on a reconciled 'issue' target converges to 'failed'
+    attempts = [a for a in events(db, doc) if a.phase == "started"]
+    assert [a.number for a in attempts] == [1, 2]  # audit sequence still append-only
+
+
+def test_repeated_reconciliation_keeps_targeting_original_issue_dps(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """A SECOND reconciliation (attempt #3, after attempt #2 also stayed
+    uncertain) must still query the DPS from the ORIGINAL issue (attempt
+    #1) — never attempt #2's or its own #3 number.
+    """
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[
+        TransportResponse(status_code=200, body=b"<nfse-ok/>"),  # issue #1 -> uncertain
+        TransportResponse(status_code=500, body=b""),            # reconcile #2 -> still uncertain
+        TransportResponse(status_code=404, body=b""),            # reconcile #3 -> confirmed absent
+    ])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m33-repeat-1", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "uncertain"
+
+    doc = nfse.operate(db, restricted_doc.id, "reconcile", "m33-repeat-2", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "uncertain"
+
+    doc = nfse.operate(db, restricted_doc.id, "reconcile", "m33-repeat-3", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "failed"
+
+    assert len(fake.received) == 3
+    expected_original = PATH_GET_DPS.format(dps_id=_expected_dps_id(1))
+    assert fake.received[1].path == expected_original  # attempt #2's query
+    assert fake.received[2].path == expected_original  # attempt #3's query — still the original DPS
+    attempts = [a for a in events(db, doc) if a.phase == "started"]
+    assert [a.number for a in attempts] == [1, 2, 3]  # audit sequence still append-only
 
 
 def test_injected_provider_bypasses_dispatch_entirely(db, users, restricted_doc,

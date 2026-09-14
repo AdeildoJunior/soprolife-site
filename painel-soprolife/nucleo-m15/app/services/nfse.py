@@ -305,8 +305,19 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
         # never trusts get_provider()'s settings-only check alone. A test
         # that injects its own `provider=` bypasses this entirely, exactly
         # like the mock path always has.
+        #
+        # M33 — the official DPS number (TSIdDPS numero_dps) is NOT the same
+        # thing as `number` (this attempt's own append-only audit sequence).
+        # An ISSUE mints a brand-new DPS under its own attempt number, but a
+        # RECONCILE re-queries the DPS the TARGET issue attempt already
+        # submitted — never a DPS rebuilt from the reconciliation's own
+        # sequence number. `target` is only set for `operation == 'reconcile'`
+        # and always resolves to the original issue/cancel attempt (never a
+        # previous reconcile — see the `target` query above), so repeated
+        # reconciliations keep converging on the same original DPS.
+        dps_number = target.number if target else number
         provider = national_dispatch.resolve_restricted_provider(
-            db, settings, doc, preparation, actor, number=number)
+            db, settings, doc, preparation, actor, dps_number=dps_number)
         description_override = national_dispatch.resolve_service_description(db, doc)
     operation_id = new_uuid()
     started_at = utcnow()
