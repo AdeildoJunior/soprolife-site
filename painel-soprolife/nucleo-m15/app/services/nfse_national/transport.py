@@ -16,6 +16,11 @@ Fail-closed contract, enforced in code rather than only by configuration:
 """
 from __future__ import annotations
 
+import contextlib
+import os
+import ssl
+import stat
+import tempfile
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
@@ -63,6 +68,51 @@ class ProductionTransport:
         raise NetworkGateClosedError("production_transport_not_implemented")
 
 
+def _write_private_file(path: str, data: bytes) -> None:
+    """Create ``path`` with content ``data``, permissions 0600, refusing to
+    follow/overwrite an existing file at that path."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(path)
+        raise
+
+
+def _build_client_ssl_context(certificate_pem: bytes, key_pem: bytes) -> ssl.SSLContext:
+    """Build a verified ``ssl.SSLContext`` with the client (mTLS) certificate
+    loaded from in-memory PEM bytes.
+
+    ``ssl.SSLContext.load_cert_chain`` (stdlib) only accepts file paths, not
+    PEM content, so the bytes are written to an ephemeral, tightly-permissioned
+    temporary directory (0700) as 0600 files, loaded, and removed immediately
+    afterwards — on both success and failure. Nothing here is ever persisted,
+    logged, or returned; only the resulting ``SSLContext`` object leaves this
+    function. Server certificate verification is preserved by construction:
+    ``ssl.create_default_context()`` defaults to ``CERT_REQUIRED`` with
+    hostname checking and the system CA trust store, same as httpx's own
+    default when no custom context is supplied.
+    """
+    context = ssl.create_default_context()
+    tmp_dir = tempfile.mkdtemp(prefix="soprolife-nfse-mtls-")
+    os.chmod(tmp_dir, stat.S_IRWXU)
+    cert_path = os.path.join(tmp_dir, "client-cert.pem")
+    key_path = os.path.join(tmp_dir, "client-key.pem")
+    try:
+        _write_private_file(cert_path, certificate_pem)
+        _write_private_file(key_path, key_pem)
+        context.load_cert_chain(certfile=cert_path, keyfile=key_path)
+    finally:
+        for path in (cert_path, key_path):
+            with contextlib.suppress(OSError):
+                os.remove(path)
+        with contextlib.suppress(OSError):
+            os.rmdir(tmp_dir)
+    return context
+
+
 class HttpxRestrictedTransport:
     """Real HTTP transport for Produção Restrita, gated on every call.
 
@@ -92,13 +142,18 @@ class HttpxRestrictedTransport:
 
     def send(self, request: TransportRequest) -> TransportResponse:
         self._assert_gate_open()
-        cert = None
+        # httpx's `cert=` boundary hands its value straight to
+        # ssl.SSLContext.load_cert_chain(), which requires file PATHS, not
+        # PEM content — passing PEM bytes there fails before any socket is
+        # ever touched (see test_nfse_national_transport.py). The verified
+        # SSLContext built by _build_client_ssl_context() is instead supplied
+        # through `verify=`, httpx's supported way to hand it a fully custom,
+        # already-verifying context (server verification stays on; this is
+        # not `verify=False`).
+        verify: bool | ssl.SSLContext = True
         if self._mtls_certificate_pem and self._mtls_key_pem:
-            # httpx accepts (cert_path, key_path) or in-memory via ssl context;
-            # a real deployment supplies file paths sourced from the same
-            # fail-closed secret boundary as the PKCS#12 password.
-            cert = (self._mtls_certificate_pem, self._mtls_key_pem)
-        with httpx.Client(base_url=self._base_url, timeout=self._timeout_seconds, cert=cert) as client:
+            verify = _build_client_ssl_context(self._mtls_certificate_pem, self._mtls_key_pem)
+        with httpx.Client(base_url=self._base_url, timeout=self._timeout_seconds, verify=verify) as client:
             response = client.request(request.method, request.path, content=request.body,
                                        headers=request.headers)
         return TransportResponse(status_code=response.status_code, body=response.content)
