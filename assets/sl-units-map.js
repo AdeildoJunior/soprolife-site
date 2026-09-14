@@ -58,6 +58,7 @@
     card.appendChild(el('span', 'sl-map-popup__eyebrow', unit.partner ? 'Unidade parceira' : 'SoproLife · Espirometria'));
     card.appendChild(el('strong', 'sl-map-popup__title', unit.shortName));
     card.appendChild(el('p', '', unitSummary(unit)));
+    if (unit.addressNote) card.appendChild(el('p', 'sl-map-address-note', unit.addressNote));
     var links = el('div', 'sl-map-popup__links');
     links.appendChild(action('Como chegar ↗', routeUrl(unit)));
     var wa = action('WhatsApp ↗', waUrl(unit));
@@ -165,7 +166,7 @@
         document.dispatchEvent(new CustomEvent('sl:booking:select-location', { detail: { id: 'domiciliar' } }));
       });
       home.appendChild(selectHome); info.appendChild(home);
-      info.appendChild(el('p', 'sl-map-address-note', 'O endereço da unidade Zona Norte é confirmado no agendamento.'));
+      info.appendChild(el('p', 'sl-map-address-note', 'Unidade Zona Norte · Shopping Nova América. Sala e ponto de encontro confirmados no agendamento.'));
     }
     status = el('p', 'sl-map-selection-status'); status.setAttribute('role', 'status');
     info.appendChild(status);

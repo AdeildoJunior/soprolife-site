@@ -37,6 +37,9 @@ const results = { layouts: [], interactions: [], errors: [], tiles: [] };
     const barra=await page.evaluate(()=>SL_BOOKING.byId('barra'));
     assert.deepEqual(barra.coords,{lat:-23.0029554,lng:-43.3176673});
     assert(barra.address.includes('Shopping Downtown') && barra.address.includes('sala 213'));
+    const zonaNorte=await page.evaluate(()=>SL_BOOKING.byId('zona-norte'));
+    assert.deepEqual(zonaNorte.coords,{lat:-22.8781638,lng:-43.2719105});
+    assert(zonaNorte.address.includes('Shopping Nova América') && zonaNorte.address.includes('Pastor Martin Luther King Jr., 126'));
    }
    const filter=await page.locator(mini+' .leaflet-tile-pane').evaluate(e=>getComputedStyle(e).filter);
    assert(filter.includes('saturate(0.65)'));
@@ -92,9 +95,16 @@ const results = { layouts: [], interactions: [], errors: [], tiles: [] };
    if(!ip && width===1440) {
     await page.locator('.sl-map-overview').click(); await loaded(large);
     // Outro pin altera a lista, não apenas o mesmo selecionado.
-    await page.locator(large+' .sl-calm-marker[title="Unidade Zona Norte"]').click();
+    await page.locator(large+' .sl-calm-marker[title="Unidade Zona Norte — Shopping Nova América"]').click();
     assert.equal(await page.locator('.sl-map-unit-select[data-map-location="zona-norte"]').getAttribute('aria-pressed'),'true');
-    assert.equal(await page.locator('#sl-booking-unit').inputValue(),'Unidade Zona Norte');
+    assert.equal(await page.locator('#sl-booking-unit').inputValue(),'Unidade Zona Norte — Shopping Nova América');
+    const zonaPopup=page.locator(large+' .sl-map-popup');
+    assert((await zonaPopup.textContent()).includes('Av. Pastor Martin Luther King Jr., 126'));
+    assert((await zonaPopup.textContent()).includes('Sala e ponto de encontro confirmados no agendamento.'));
+    const zonaRoute=new URL(await zonaPopup.locator('a').first().getAttribute('href'));
+    assert(zonaRoute.searchParams.get('destination').includes('Shopping Nova América'));
+    const zonaWhatsApp=new URL(await zonaPopup.locator('a').last().getAttribute('href'));
+    assert(zonaWhatsApp.searchParams.get('text').includes('Unidade Zona Norte — Shopping Nova América'));
     await page.screenshot({path:out+'/mapa-pin-selecionado-desktop.png'});
    }
    await page.keyboard.press('Escape');assert.equal(await page.locator('.sl-map-calm-modal.is-open').count(),0);

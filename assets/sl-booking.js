@@ -123,13 +123,17 @@
     },
     {
       id: 'zona-norte',
-      value: 'Unidade Zona Norte',
-      label: 'Unidade Zona Norte',
-      shortName: 'Unidade Zona Norte',
+      value: 'Unidade Zona Norte — Shopping Nova América',
+      label: 'Unidade Zona Norte — Shopping Nova América',
+      shortName: 'Unidade Zona Norte — Shopping Nova América',
       bookingMethod: 'soprolife_whatsapp',
       schedule: SOPROLIFE_SCHEDULE,
-      coords: { lat: -22.88608548571967, lng: -43.28447232933152 },
-      mapTag: 'Espaço parceiro / coworking',
+      // Centro do Shopping Nova América: https://www.openstreetmap.org/way/30105685
+      coords: { lat: -22.8781638, lng: -43.2719105 },
+      address: 'Shopping Nova América — Av. Pastor Martin Luther King Jr., 126 — Del Castilho, Rio de Janeiro - RJ — CEP 20765-000',
+      addressNote: 'Sala e ponto de encontro confirmados no agendamento.',
+      mapSummary: 'Unidade Zona Norte · Shopping Nova América',
+      mapTag: 'Shopping Nova América · sala confirmada no agendamento',
       partner: false
     },
     {
@@ -322,6 +326,7 @@
     if (service) lines.push('Tipo de espirometria: ' + service);
     lines.push('Localidade: ' + (location ? location.value : ''));
     if (location && location.address) lines.push('Endereço: ' + location.address);
+    if (location && location.addressNote) lines.push('Observação: ' + location.addressNote);
     if (iso) lines.push('Data: ' + formatBr(iso));
     if (time) lines.push('Horário: ' + time);
     return lines.join('\n');

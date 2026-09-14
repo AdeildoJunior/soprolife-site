@@ -53,16 +53,21 @@ const report = { layouts: [], functional: [], errors: [], maps: [] };
   await p.goto(base+route);
   await p.waitForSelector('.sl-slot-btn');
   assert.equal(await p.locator('#sl-booking-date').inputValue(), '2026-09-14');
-  for (const value of ['Atendimento domiciliar','Unidade Barra','Unidade Zona Norte']) {
+  for (const value of ['Atendimento domiciliar','Unidade Barra','Unidade Zona Norte — Shopping Nova América']) {
    await p.selectOption('#sl-booking-unit', value);
    assert.deepEqual(await p.locator('.sl-slot-btn').allTextContents(), ['08:00','09:00','10:00','11:00','13:00','14:00','15:00','16:00']);
    for (const slot of await p.locator('.sl-slot-btn').all()) assert(await slot.isEnabled());
    await p.locator('.sl-slot-btn').nth(3).click();
    assert.equal(await p.locator('.sl-slot-btn[aria-pressed="true"]').textContent(),'11:00');
+   assert((await p.locator('.sl-booking-summary').textContent()).includes(value));
    const url = new URL(await p.locator('.sl-booking-confirm').getAttribute('href'));
    assert.equal(url.searchParams.get('phone'),'5521998901775');
    const message=url.searchParams.get('text');
    for(const text of ['Espirometria simples',value,'14/09/2026','11:00']) assert(message.includes(text));
+   if(value.includes('Shopping Nova América')) {
+    assert(message.includes('Av. Pastor Martin Luther King Jr., 126'));
+    assert(message.includes('Sala e ponto de encontro confirmados no agendamento.'));
+   }
    // Troca de exame limpa o horário anterior e atualiza o resumo/WhatsApp.
    await p.selectOption('#sl-booking-service','Espirometria com broncodilatador');
    assert(await p.locator('.sl-booking-confirm').isHidden());
