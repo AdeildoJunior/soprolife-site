@@ -38,7 +38,7 @@
   }
   function routeUrl(unit) {
     return unit.partner ? CFG.PASTORE_ROUTE_URL :
-      'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(unit.coords.lat + ',' + unit.coords.lng);
+      'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(unit.address || (unit.coords.lat + ',' + unit.coords.lng));
   }
   function waUrl(unit) {
     var service = document.getElementById('sl-booking-service');
@@ -136,7 +136,7 @@
       button.appendChild(el('span', 'sl-map-unit-number', String(index + 1)));
       var copy = el('span', 'sl-map-unit-copy');
       copy.appendChild(el('strong', '', unit.shortName));
-      copy.appendChild(el('span', '', unit.partner ? 'Rua Teixeira de Melo, 54 · Ipanema' : 'Espaço parceiro · ' + (unit.id === 'barra' ? 'Barra da Tijuca' : 'Zona Norte')));
+      copy.appendChild(el('span', '', unit.mapSummary || (unit.partner ? 'Rua Teixeira de Melo, 54 · Ipanema' : 'Espaço parceiro · Zona Norte')));
       button.appendChild(copy);
       button.addEventListener('click', function () { highlight(unit.id, { booking: true, animate: true }); });
       rows[unit.id] = button;
@@ -165,7 +165,7 @@
         document.dispatchEvent(new CustomEvent('sl:booking:select-location', { detail: { id: 'domiciliar' } }));
       });
       home.appendChild(selectHome); info.appendChild(home);
-      info.appendChild(el('p', 'sl-map-address-note', 'O endereço das unidades Barra e Zona Norte é confirmado no agendamento.'));
+      info.appendChild(el('p', 'sl-map-address-note', 'O endereço da unidade Zona Norte é confirmado no agendamento.'));
     }
     status = el('p', 'sl-map-selection-status'); status.setAttribute('role', 'status');
     info.appendChild(status);

@@ -33,6 +33,11 @@ const results = { layouts: [], interactions: [], errors: [], tiles: [] };
    const refuse=page.getByRole('button',{name:'Recusar',exact:true});if(await refuse.isVisible())await refuse.click();
    await page.locator(mini).scrollIntoViewIfNeeded(); await loaded(mini); await within(mini);
    assert.equal(await page.locator(mini+' .sl-calm-marker').count(),ip?1:3);
+   if(!ip) {
+    const barra=await page.evaluate(()=>SL_BOOKING.byId('barra'));
+    assert.deepEqual(barra.coords,{lat:-23.0029554,lng:-43.3176673});
+    assert(barra.address.includes('Shopping Downtown') && barra.address.includes('sala 213'));
+   }
    const filter=await page.locator(mini+' .leaflet-tile-pane').evaluate(e=>getComputedStyle(e).filter);
    assert(filter.includes('saturate(0.65)'));
    assert.equal(await page.locator(mini+' .leaflet-marker-pane').evaluate(e=>getComputedStyle(e).filter),'none');
@@ -73,6 +78,17 @@ const results = { layouts: [], interactions: [], errors: [], tiles: [] };
    assert.equal(context.pages().length,1);
    const href=await page.locator(large+' .sl-map-popup a').last().getAttribute('href');
    assert(href.includes('api.whatsapp.com/send?phone=5521998901775'));
+   if(!ip) {
+    assert((await page.locator(large+' .sl-map-popup').textContent()).includes('prédio 20, sala 213'));
+    assert(new URL(href).searchParams.get('text').includes('Shopping Downtown'));
+    const routeLink=new URL(await page.locator(large+' .sl-map-popup a').first().getAttribute('href'));
+    assert(routeLink.searchParams.get('destination').includes('Shopping Downtown'));
+    if(width===1440 && route==='/espirometria-rio-de-janeiro/') {
+     for(let i=0;i<3;i++) {await page.locator(large+' .leaflet-control-zoom-in').click();await page.waitForTimeout(300);}
+     await loaded(large);
+     await page.screenshot({path:out+'/mapa-downtown-predio20.png'});
+    }
+   }
    if(!ip && width===1440) {
     await page.locator('.sl-map-overview').click(); await loaded(large);
     // Outro pin altera a lista, não apenas o mesmo selecionado.
@@ -102,5 +118,5 @@ const results = { layouts: [], interactions: [], errors: [], tiles: [] };
  assert(results.tiles.length>0 && results.tiles.every(x=>x.status===200));
  fs.writeFileSync('artifacts/m26-11/maps-calm-results.json',JSON.stringify(results,null,2));
  await browser.close();
- console.log('PASS: 15 layouts de mapas, interações bidirecionais, pins, tiles reais, attribution, resize e 5 screenshots.');
+ console.log('PASS: 15 layouts de mapas, interações bidirecionais, pins, Downtown, tiles reais, attribution, resize e 6 screenshots.');
 })().catch(e=>{fs.writeFileSync('artifacts/m26-11/maps-calm-results.json',JSON.stringify(results,null,2));console.error(e);process.exit(1);});

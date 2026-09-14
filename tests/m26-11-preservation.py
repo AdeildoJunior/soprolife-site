@@ -22,7 +22,15 @@ for p in ROOT.rglob('*.html'):
     rel=str(p.relative_to(ROOT))
     before=subprocess.run(['git','show',f'{BASE}:{rel}'],cwd=ROOT,capture_output=True,text=True)
     if before.returncode: continue
-    old,new=Page(before.stdout),Page(p.read_text())
+    # Exceção explícita solicitada pelo usuário: substituir a antiga localização
+    # BarraShopping pelo Downtown, inclusive no JSON-LD da home.
+    expected = before.stdout
+    if rel == 'index.html':
+        expected = expected.replace('"latitude": -22.999051, "longitude": -43.352295',
+                                    '"latitude": -23.0029554, "longitude": -43.3176673')
+        expected = expected.replace('"@type": "PostalAddress", "addressLocality": "Rio de Janeiro"',
+                                    '"@type": "PostalAddress", "streetAddress": "Shopping Downtown — Avenida das Américas, 500, prédio 20, sala 213 — Barra da Tijuca", "addressLocality": "Rio de Janeiro"', 1)
+    old,new=Page(expected),Page(p.read_text())
     assert old.metadata==new.metadata, f'Metadados alterados: {rel}'
     assert set(old.links)<=set(new.links), f'Links removidos: {rel}'
     checked.append(rel)

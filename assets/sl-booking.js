@@ -110,12 +110,15 @@
     {
       id: 'barra',
       value: 'Unidade Barra',
-      label: 'Unidade Barra',
+      label: 'Unidade Barra — Shopping Downtown',
       shortName: 'Unidade Barra',
       bookingMethod: 'soprolife_whatsapp',
       schedule: SOPROLIFE_SCHEDULE,
-      coords: { lat: -22.999051350996826, lng: -43.35229531126693 },
-      mapTag: 'Espaço parceiro / coworking',
+      // Centro do prédio 20: https://www.openstreetmap.org/relation/113791
+      coords: { lat: -23.0029554, lng: -43.3176673 },
+      address: 'Shopping Downtown — Avenida das Américas, 500, prédio 20, sala 213 — Barra da Tijuca, Rio de Janeiro/RJ',
+      mapSummary: 'Shopping Downtown · prédio 20, sala 213',
+      mapTag: 'Shopping Downtown · prédio 20, sala 213',
       partner: false
     },
     {
@@ -318,6 +321,7 @@
     lines = ['Olá, gostaria de agendar espirometria na Sopro Life.'];
     if (service) lines.push('Tipo de espirometria: ' + service);
     lines.push('Localidade: ' + (location ? location.value : ''));
+    if (location && location.address) lines.push('Endereço: ' + location.address);
     if (iso) lines.push('Data: ' + formatBr(iso));
     if (time) lines.push('Horário: ' + time);
     return lines.join('\n');

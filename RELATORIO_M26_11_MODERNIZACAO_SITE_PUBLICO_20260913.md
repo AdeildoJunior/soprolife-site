@@ -31,7 +31,7 @@ O provedor encontrado foi Leaflet com tiles CARTO Voyager. Os mapas realmente pr
 - Removidos largura fixa e deslocamento negativo do mapa da agenda; grid responsivo e altura definida no celular.
 - Tiles mantêm dimensões originais de 256 px, sem redimensionamentos de imagens gerais. A base recebe tratamento cromático próprio, descrito abaixo.
 - `ResizeObserver` atualiza o tamanho do Leaflet; o mapa compartilhado reenquadra os marcadores ao mudar de tamanho ou unidade.
-- Mantidas as coordenadas existentes de Barra, Zona Norte e Pastore Ipanema. Domiciliar não recebe endereço inventado.
+- Coordenadas de Zona Norte e Pastore Ipanema preservadas. A Unidade Barra foi transferida no site para Shopping Downtown, conforme solicitação posterior do usuário. Domiciliar não recebe endereço inventado.
 - Falhas de tiles/CDN mostram acesso alternativo ao OpenStreetMap. Links de rota existentes continuam disponíveis.
 
 Referências técnicas: [política de tiles OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/) e [Leaflet 1.9.4](https://leafletjs.com/reference.html). O navegador faz o carregamento normal dos tiles visíveis, com cache HTTP e Referer; não foi criado download offline ou armazenamento em service worker. Mapas continuam dependendo de conexão e disponibilidade do provedor externo.
@@ -56,6 +56,16 @@ Foi aplicado o fallback expressamente autorizado: OpenStreetMap com cores suaviz
 - Zoom pela roda do mouse habilitado no mapa ampliado, assim como arraste e gesto de pinça. O mapa pequeno preserva a rolagem normal da página.
 - `invalidateSize` e reenquadramento ao abrir/redimensionar; todos os pins físicos enquadrados na visão geral, com margem para não ficarem cobertos pelo botão de ampliação ou attribution.
 - Nenhuma chave, segredo, provedor CARTO ativo ou tentativa de esconder marca d’água foi introduzida.
+
+### Unidade Barra — Shopping Downtown
+
+Por solicitação do usuário, o marcador antigo da Unidade Barra foi substituído pelo do **Shopping Downtown — Avenida das Américas, 500, prédio 20, sala 213 — Barra da Tijuca, Rio de Janeiro/RJ**. Não foi criada uma segunda unidade nem mantido um pin no local antigo.
+
+O pin está no centro cartográfico do prédio 20: latitude `-23.0029554`, longitude `-43.3176673`, obtidas da [relação OpenStreetMap 113791, Bloco 20](https://www.openstreetmap.org/relation/113791). A sala 213 foi informada pelo usuário; o marcador identifica o prédio, não uma posição interna da sala. O endereço do empreendimento foi conferido no [site do Downtown](https://downtown.com.br/).
+
+Lista, popup, seletor de unidade, mensagem WhatsApp, destino de Como chegar e coordenadas/endereço do JSON-LD da home foram atualizados. O valor interno `Unidade Barra` e a agenda permanecem iguais. A checagem de preservação SEO admite somente essa alteração explícita de endereço/coordenadas na home.
+
+Captura de conferência do prédio: `artifacts/m26-11/screenshots/mapa-downtown-predio20.png`.
 
 ## Agenda e data
 
