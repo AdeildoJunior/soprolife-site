@@ -1,9 +1,9 @@
 /* M26.11 — Cartografia secundária; pins e controles sem filtro.
    OSM raster não permite remover POIs isoladamente. Este tratamento é o
-   fallback autorizado: dessaturação + contraste baixo somente nos tiles. */
+   fallback autorizado: cores suaves e contraste legível somente nos tiles. */
 :root { --sl-map-paper: #f7f9fa; --sl-map-ink: #0b2239; --sl-map-teal: #087f79; }
 html body .sl-map-calm.leaflet-container { background: var(--sl-map-paper) !important; font-family: var(--sl-font); }
-html body .sl-map-calm .leaflet-tile-pane { filter: saturate(.08) contrast(.58) brightness(1.22) !important; opacity: .42 !important; }
+html body .sl-map-calm .leaflet-tile-pane { filter: saturate(.65) contrast(.88) brightness(1.06) !important; opacity: 1 !important; }
 html body .sl-map-calm .leaflet-marker-pane,
 html body .sl-map-calm .leaflet-popup-pane,
 html body .sl-map-calm .leaflet-control-container { filter: none !important; opacity: 1 !important; }

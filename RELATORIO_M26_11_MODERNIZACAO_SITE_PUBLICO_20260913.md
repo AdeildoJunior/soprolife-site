@@ -45,7 +45,7 @@ Antes de escolher a base clara, foram verificadas as condições oficiais atuais
 - [CARTO Basemaps Terms, atualizados em 26/08/2026](https://carto.com/legal/basemap-terms/): o acesso gratuito exige chave emitida pela CARTO; requisições sem chave podem receber marca d’água. Positron não foi adotado sem autenticação.
 - [Stadia Maps — autenticação](https://docs.stadiamaps.com/authentication/): dispensa autenticação no desenvolvimento local, mas exige cadastro/autenticação de domínio em produção. Não foi introduzida dependência que funcionaria somente no localhost.
 
-Foi aplicado o fallback expressamente autorizado: OpenStreetMap com forte dessaturação, contraste reduzido e clareamento apenas na camada dos tiles. Pins, popups, controles e attribution permanecem sem filtro. Como a base é raster, POIs e símbolos não podem ser removidos individualmente: ficam visualmente secundários, sem prometer uma cartografia vetorial nova.
+Foi aplicado o fallback expressamente autorizado: OpenStreetMap com cores suavizadas e contraste legível apenas na camada dos tiles. Após a revisão visual do usuário, a saturação foi ajustada para 65%, contraste para 88%, brilho para 106% e opacidade para 100%, devolvendo cor à água, vegetação e vias. Pins, popups, controles e attribution permanecem sem filtro. Como a base é raster, POIs e símbolos não podem ser removidos individualmente: ficam visualmente secundários, sem prometer uma cartografia vetorial nova.
 
 - `assets/sl-maps-calm.css`: acabamento comum nas três páginas com mapa; formulário e mapa com áreas equivalentes.
 - `assets/sl-units-map.js`: implementação única também para Ipanema, com coordenadas centralizadas em `SL_BOOKING`. Removidos os handlers antigos que abriam WhatsApp ao clicar no card da unidade.
@@ -53,6 +53,7 @@ Foi aplicado o fallback expressamente autorizado: OpenStreetMap com forte dessat
 - Lista e pins sincronizados com a unidade do formulário. A lista apresenta uma linha compacta por unidade e ações secundárias apenas na selecionada. Informações e links da parceira permanecem em detalhes expansíveis.
 - Modal centralizado com 90% da largura e 86% da altura no desktop; faixa lateral de 280 px e mapa ocupando a maior parte da área útil. Em 1440 px, a área do mapa tem aproximadamente 1016 px de largura.
 - No celular, mapa acima da lista, rolagem interna da lista e modal dentro da viewport. Escape e Fechar devolvem o foco ao botão de abertura.
+- Zoom pela roda do mouse habilitado no mapa ampliado, assim como arraste e gesto de pinça. O mapa pequeno preserva a rolagem normal da página.
 - `invalidateSize` e reenquadramento ao abrir/redimensionar; todos os pins físicos enquadrados na visão geral, com margem para não ficarem cobertos pelo botão de ampliação ou attribution.
 - Nenhuma chave, segredo, provedor CARTO ativo ou tentativa de esconder marca d’água foi introduzida.
 
@@ -79,7 +80,7 @@ Não existe consulta a uma fonte real de reservas nessa agenda pública. Nenhuma
 - `tests/m26-11-preservation.py`: comparação com a base de 21 HTMLs; metadados, títulos, JSON-LD e links originais preservados. Sitemap, robots, resultados, redirects, service worker e CNAME idênticos à base.
 - `node --check` nos três scripts compartilhados alterados e `git diff --check`.
 - Resultado final: 70 combinações sem overflow horizontal, 10 registros funcionais, 6 registros de mapas e zero erros JavaScript. Evidência estruturada: `artifacts/m26-11/test-results.json`.
-- `tests/m26-11-maps-calm.cjs`: teste específico das três páginas com mapa nas cinco larguras; seleção lista → pin e pin → lista/formulário, popup, destinos das ações, attribution, tiles reais, enquadramento dos pins, ausência de overflow e resize com modal aberto de 1440 para 390 px. Evidência: `artifacts/m26-11/maps-calm-results.json`.
+- `tests/m26-11-maps-calm.cjs`: teste específico das três páginas com mapa nas cinco larguras; seleção lista → pin e pin → lista/formulário, popup, destinos das ações, attribution, tiles reais, enquadramento dos pins, zoom por roda do mouse no desktop, ausência de overflow e resize com modal aberto de 1440 para 390 px. Evidência: `artifacts/m26-11/maps-calm-results.json`.
 
 Os testes não enviam WhatsApp, não submetem dados pessoais e não chamam a API clínica. Links externos são inspecionados, sem confirmar agendamentos reais. Validação executada em Chromium; não representa certificação formal de acessibilidade nem teste em aparelhos físicos/Safari.
 

@@ -34,7 +34,7 @@ const results = { layouts: [], interactions: [], errors: [], tiles: [] };
    await page.locator(mini).scrollIntoViewIfNeeded(); await loaded(mini); await within(mini);
    assert.equal(await page.locator(mini+' .sl-calm-marker').count(),ip?1:3);
    const filter=await page.locator(mini+' .leaflet-tile-pane').evaluate(e=>getComputedStyle(e).filter);
-   assert(filter.includes('saturate(0.08)'));
+   assert(filter.includes('saturate(0.65)'));
    assert.equal(await page.locator(mini+' .leaflet-marker-pane').evaluate(e=>getComputedStyle(e).filter),'none');
    if(route==='/espirometria-rio-de-janeiro/' && [1440,390].includes(width)) {
     await page.locator('.sl-booking-card').screenshot({path:out+'/mapa-normal-'+(width===1440?'desktop':'390px')+'.png',style:'.sl-header,.sl-whatsapp-bar{visibility:hidden!important}'});
@@ -52,6 +52,15 @@ const results = { layouts: [], interactions: [], errors: [], tiles: [] };
    assert((await page.locator(large+' .leaflet-control-attribution').textContent()).includes('OpenStreetMap'));
    results.layouts.push({width,route,...layout});
    if(route==='/espirometria-rio-de-janeiro/' && [1440,390].includes(width))await page.screenshot({path:out+'/mapa-ampliado-'+(width===1440?'desktop':'390px')+'.png'});
+   if(width>800) {
+    const zoomBefore=await page.locator(large+' .leaflet-tile-loaded').first().evaluate(e=>Number(new URL(e.src).pathname.split('/')[1]));
+    const bounds=await page.locator(large).boundingBox();
+    await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);
+    await page.mouse.wheel(0,-400);
+    await page.waitForFunction(({selector,zoom})=>[...document.querySelectorAll(selector+' .leaflet-tile-loaded')].some(e=>Number(new URL(e.src).pathname.split('/')[1])>zoom),{selector:large,zoom:zoomBefore});
+    await page.locator('.sl-map-overview').click(); await loaded(large);
+    results.interactions.push({width,route,result:'zoom pela roda do mouse: pass'});
+   }
    // Lista -> pin -> formulário. Selecionar não abre outro site.
    const id=ip?'pastore-ipanema':'barra';
    await page.locator('.sl-map-unit-select[data-map-location="'+id+'"]').click();

@@ -195,7 +195,7 @@
     var node = key === 'mini' ? miniNode : mapNode;
     var map = window.L.map(node, {
       zoomControl: key === 'large', attributionControl: true,
-      scrollWheelZoom: false, dragging: key === 'large', touchZoom: key === 'large',
+      scrollWheelZoom: key === 'large', dragging: key === 'large', touchZoom: key === 'large',
       doubleClickZoom: key === 'large', boxZoom: key === 'large', keyboard: true
     });
     maps[key] = map;
