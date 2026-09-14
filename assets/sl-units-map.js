@@ -1,267 +1,276 @@
-/* ==========================================================================
-   SOPRO:SL_UNITS_MAP_V1
-   Mini-mapa + modal ampliado das unidades (Leaflet + OpenStreetMap).
-
-   Consome as localidades de /assets/sl-booking.js — coordenadas e nomes têm
-   uma fonte única. Reage ao evento "sl:booking:location" para destacar o
-   ponto da localidade escolhida no formulário.
-
-   Preserva o comportamento original: lazy-load do Leaflet, tiles OpenStreetMap,
-   zoom, teclado (Enter/Espaço para abrir), Esc e backdrop para fechar.
-   ========================================================================== */
+/* M26.11 — Mapas públicos SoproLife: base clara, pins e lista sincronizados.
+   OSM sem chave; CARTO exige autenticação desde agosto/2026 (ver relatório).
+   Mesma implementação na home, Espirometria RJ e Ipanema.
+   Nomes/coordenadas/agenda vêm exclusivamente de SL_BOOKING. */
 (function (window, document) {
   'use strict';
+  var CFG = window.SL_BOOKING;
+  var ipanemaOnly = !!document.getElementById('sl-ip-map');
+  var openBtn = document.getElementById(ipanemaOnly ? 'sl-ip-open-map' : 'sl-open-map-modal');
+  var closeBtn = document.getElementById(ipanemaOnly ? 'sl-ip-close-map' : 'sl-close-map-modal');
+  var modal = document.getElementById(ipanemaOnly ? 'sl-ip-map-modal' : 'sl-map-modal');
+  var miniNode = document.getElementById(ipanemaOnly ? 'sl-ip-map-mini-canvas' : 'sl-units-map-mini');
+  var mapNode = document.getElementById(ipanemaOnly ? 'sl-ip-map' : 'sl-units-map');
+  if (!CFG || !openBtn || !closeBtn || !modal || !miniNode || !mapNode) return;
 
-  var openBtn = document.getElementById('sl-open-map-modal');
-  var closeBtn = document.getElementById('sl-close-map-modal');
-  var modal = document.getElementById('sl-map-modal');
-  var miniNode = document.getElementById('sl-units-map-mini');
-  var mapNode = document.getElementById('sl-units-map');
-  if (!openBtn || !closeBtn || !modal || !mapNode || !miniNode) return;
-
-  // O botão Ampliar mapa é o controle de teclado; a atribuição é um link próprio.
+  var units = CFG.LOCATIONS.filter(function (unit) {
+    return unit.coords && (!ipanemaOnly || unit.id === 'pastore-ipanema');
+  });
+  var maps = {}, markers = { mini: {}, large: {} }, rows = {};
+  var activeId = ipanemaOnly ? 'pastore-ipanema' : null;
+  var lastFocused, previousOverflow, partnerDetails, status;
+  var info = modal.querySelector('.sl-map-modal__info');
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  document.body.appendChild(modal); // Escapa dos containers/stacking contexts legados.
+  modal.classList.add('sl-map-calm-modal');
+  miniNode.classList.add('sl-map-calm');
+  mapNode.classList.add('sl-map-calm');
   miniNode.removeAttribute('role');
   miniNode.removeAttribute('tabindex');
-  miniNode.setAttribute('aria-label', 'Mapa das unidades SoproLife');
-  var CFG = window.SL_BOOKING;
-  if (!CFG) return;
+  miniNode.removeAttribute('aria-hidden');
+  miniNode.setAttribute('aria-label', 'Localização das unidades SoproLife');
 
-  /* Só entram no mapa as localidades com endereço físico. O atendimento
-     domiciliar não tem ponto fixo — nada de endereço inventado. */
-  var units = CFG.LOCATIONS.filter(function (loc) { return !!loc.coords; });
-
-  var leafletReady = false;
-  var miniReady = false;
-  var largeReady = false;
-  var miniMap = null;
-  var largeMap = null;
-  var markers = { mini: {}, large: {} };
-  var activeId = CFG.current;
-  var lastFocused = null;
-
-  function loadLeafletAssets() {
-    if (window.L && window.L.map) { leafletReady = true; return Promise.resolve(); }
-    if (window.__slLeafletLoadingPromise) return window.__slLeafletLoadingPromise;
-
-    window.__slLeafletLoadingPromise = new Promise(function (resolve, reject) {
-      var css = document.createElement('link');
-      css.rel = 'stylesheet';
-      css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      css.crossOrigin = '';
-      document.head.appendChild(css);
-
-      var script = document.createElement('script');
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.crossOrigin = '';
-      script.onload = function () { leafletReady = true; resolve(); };
-      script.onerror = reject;
-      document.body.appendChild(script);
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text) node.textContent = text;
+    return node;
+  }
+  function routeUrl(unit) {
+    return unit.partner ? CFG.PASTORE_ROUTE_URL :
+      'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(unit.coords.lat + ',' + unit.coords.lng);
+  }
+  function waUrl(unit) {
+    var service = document.getElementById('sl-booking-service');
+    var date = document.getElementById('sl-booking-date');
+    var slot = document.querySelector('.sl-slot-btn[aria-pressed="true"]');
+    return CFG.whatsappUrl(CFG.whatsappText(unit, service ? service.value : 'Espirometria',
+      date ? date.value : '', slot ? slot.getAttribute('data-time') : ''));
+  }
+  function action(text, href) {
+    var a = el('a', '', text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a;
+  }
+  function unitSummary(unit) {
+    return unit.address || 'Espaço parceiro · endereço confirmado no agendamento';
+  }
+  function popup(unit) {
+    var card = el('div', 'sl-map-popup');
+    card.appendChild(el('span', 'sl-map-popup__eyebrow', unit.partner ? 'Unidade parceira' : 'SoproLife · Espirometria'));
+    card.appendChild(el('strong', 'sl-map-popup__title', unit.shortName));
+    card.appendChild(el('p', '', unitSummary(unit)));
+    var links = el('div', 'sl-map-popup__links');
+    links.appendChild(action('Como chegar ↗', routeUrl(unit)));
+    var wa = action('WhatsApp ↗', waUrl(unit));
+    wa.addEventListener('click', function () { wa.href = waUrl(unit); if (unit.partner) CFG.track('click_whatsapp_ipanema', CFG.locationParams(unit)); });
+    links.appendChild(wa); card.appendChild(links);
+    return card;
+  }
+  function markerIcon(selected, index) {
+    // Número visível liga o pin à lista; a seleção também tem um anel branco.
+    return window.L.divIcon({
+      className: 'sl-calm-marker' + (selected ? ' is-active' : ''),
+      html: '<span class="sl-calm-marker__pin"><span>' + (index + 1) + '</span></span>',
+      iconSize: [44, 48], iconAnchor: [22, 44], popupAnchor: [0, -38]
     });
-
+  }
+  function syncSidebar() {
+    Object.keys(rows).forEach(function (id) {
+      var selected = id === activeId;
+      rows[id].setAttribute('aria-pressed', String(selected));
+      rows[id].closest('.sl-map-unit-row').classList.toggle('is-selected', selected);
+    });
+    if (partnerDetails) {
+      partnerDetails.hidden = activeId !== 'pastore-ipanema';
+      if (partnerDetails.hidden) partnerDetails.open = false;
+    }
+    if (status) status.textContent = activeId ? CFG.byId(activeId).shortName + ' selecionada.' : 'Todas as unidades no mapa.';
+  }
+  function frame(key, animate) {
+    var map = maps[key]; if (!map) return;
+    var selected = activeId && markers[key][activeId];
+    if (selected) {
+      // Zoom de bairro; o popup só aparece por ação explícita no pin.
+      map.setView(selected.getLatLng(), ipanemaOnly ? 15 : 14, { animate: !!animate && !reduced.matches });
+    } else {
+      map.fitBounds(units.map(function (u) { return [u.coords.lat, u.coords.lng]; }), {
+        paddingTopLeft: [44, 50], paddingBottomRight: [44, key === 'mini' ? 104 : 50],
+        maxZoom: 13, animate: false
+      });
+    }
+  }
+  function highlight(id, options) {
+    options = options || {};
+    activeId = units.some(function (u) { return u.id === id; }) ? id : null;
+    ['mini', 'large'].forEach(function (key) {
+      if (!maps[key]) return;
+      units.forEach(function (unit, i) {
+        var marker = markers[key][unit.id];
+        marker.setIcon(markerIcon(unit.id === activeId, i));
+        marker.setZIndexOffset(unit.id === activeId ? 500 : 0);
+        marker.getElement().setAttribute('aria-label', unit.shortName + (unit.id === activeId ? ' — selecionada' : ' — ver unidade'));
+      });
+      maps[key].closePopup();
+      frame(key, options.animate);
+    });
+    syncSidebar();
+    if (options.booking && activeId) {
+      // A seleção é compartilhada com o formulário, sem disparar WhatsApp.
+      document.dispatchEvent(new CustomEvent('sl:booking:select-location', { detail: { id: activeId } }));
+    }
+  }
+  function buildSidebar() {
+    // Preserva os links/explicações da parceira, apresentados sob demanda.
+    var oldPartner = info.querySelector('.sl-map-partner-card');
+    var oldContent = ipanemaOnly ? Array.from(info.childNodes) : oldPartner ? Array.from(oldPartner.childNodes) : [];
+    var oldLinks = oldPartner ? Array.from(oldPartner.querySelectorAll('a')) : [];
+    info.replaceChildren();
+    info.appendChild(el('span', 'sl-map-sidebar-kicker', 'RIO DE JANEIRO'));
+    info.appendChild(el('h4', 'sl-map-sidebar-title', ipanemaOnly ? 'Unidade Ipanema' : 'Encontre sua unidade'));
+    info.appendChild(el('p', 'sl-map-sidebar-intro', 'Escolha uma unidade para ver no mapa.'));
+    var list = el('div', 'sl-map-unit-list');
+    units.forEach(function (unit, index) {
+      var row = el('div', 'sl-map-unit-row');
+      var button = el('button', 'sl-map-unit-select');
+      button.type = 'button'; button.dataset.mapLocation = unit.id;
+      button.setAttribute('aria-pressed', 'false');
+      button.appendChild(el('span', 'sl-map-unit-number', String(index + 1)));
+      var copy = el('span', 'sl-map-unit-copy');
+      copy.appendChild(el('strong', '', unit.shortName));
+      copy.appendChild(el('span', '', unit.partner ? 'Rua Teixeira de Melo, 54 · Ipanema' : 'Espaço parceiro · ' + (unit.id === 'barra' ? 'Barra da Tijuca' : 'Zona Norte')));
+      button.appendChild(copy);
+      button.addEventListener('click', function () { highlight(unit.id, { booking: true, animate: true }); });
+      rows[unit.id] = button;
+      row.appendChild(button);
+      var actions = el('div', 'sl-map-unit-actions');
+      actions.appendChild(action('Como chegar ↗', routeUrl(unit)));
+      var wa = action('WhatsApp ↗', waUrl(unit));
+      wa.addEventListener('click', function () { wa.href = waUrl(unit); if (unit.partner) CFG.track('click_whatsapp_ipanema', CFG.locationParams(unit)); });
+      actions.appendChild(wa); row.appendChild(actions); list.appendChild(row);
+    });
+    info.appendChild(list);
+    if (oldContent.length) {
+      partnerDetails = el('details', 'sl-map-partner-details');
+      partnerDetails.appendChild(el('summary', '', 'Sobre o atendimento em Ipanema'));
+      var content = el('div', 'sl-map-partner-details__content');
+      // Texto institucional original; links mantidos com seus destinos exatos.
+      oldContent.forEach(function (node) { content.appendChild(node); });
+      partnerDetails.appendChild(content); info.appendChild(partnerDetails);
+      oldLinks.forEach(function (link) { link.className = ''; });
+    }
+    if (!ipanemaOnly) {
+      var home = el('p', 'sl-map-home-note', 'Prefere fazer em casa? ');
+      var selectHome = el('button', '', 'Atendimento domiciliar'); selectHome.type = 'button';
+      selectHome.addEventListener('click', function () {
+        highlight(null);
+        document.dispatchEvent(new CustomEvent('sl:booking:select-location', { detail: { id: 'domiciliar' } }));
+      });
+      home.appendChild(selectHome); info.appendChild(home);
+      info.appendChild(el('p', 'sl-map-address-note', 'O endereço das unidades Barra e Zona Norte é confirmado no agendamento.'));
+    }
+    status = el('p', 'sl-map-selection-status'); status.setAttribute('role', 'status');
+    info.appendChild(status);
+    var overview = el('button', 'sl-map-overview', 'Ver todas as unidades'); overview.type = 'button';
+    overview.addEventListener('click', function () { highlight(ipanemaOnly ? 'pastore-ipanema' : null); });
+    modal.querySelector('.sl-map-modal__header').insertBefore(overview, closeBtn);
+    syncSidebar();
+  }
+  function loadLeaflet() {
+    if (window.L && window.L.map) return Promise.resolve();
+    if (window.__slLeafletLoadingPromise) return window.__slLeafletLoadingPromise;
+    window.__slLeafletLoadingPromise = new Promise(function (resolve, reject) {
+      var css = el('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(css);
+      var js = el('script'); js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      js.onload = resolve; js.onerror = reject; document.body.appendChild(js);
+    }).catch(function (error) { window.__slLeafletLoadingPromise = null; throw error; });
     return window.__slLeafletLoadingPromise;
   }
-
-  function showMapFallback() {
-    if (miniNode.querySelector('.sl-map-fallback')) return;
-    var message = document.createElement('a');
-    message.className = 'sl-map-fallback';
-    message.href = 'https://www.openstreetmap.org/#map=11/-22.95/-43.27';
-    message.target = '_blank'; message.rel = 'noopener';
-    message.textContent = 'Não foi possível carregar o mapa. Ver no OpenStreetMap →';
-    miniNode.appendChild(message);
+  function showFallback(node) {
+    if (node.querySelector('.sl-map-fallback')) return;
+    var message = action('Mapa indisponível. Ver no OpenStreetMap ↗', 'https://www.openstreetmap.org/#map=11/-22.95/-43.27');
+    message.className = 'sl-map-fallback'; node.appendChild(message);
   }
-
-  function createTileLayer(target) {
-    return window.L.tileLayer(
-      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }
-    ).on('tileerror', showMapFallback).addTo(target);
-  }
-
-  function markerIcon(isActive) {
-    return window.L.divIcon({
-      className: 'sl-map-pin-wrap' + (isActive ? ' is-active' : ''),
-      html: '<span class="sl-map-pin" aria-hidden="true"></span>',
-      iconSize: [20, 20],
-      iconAnchor: [10, 20],
-      popupAnchor: [0, -18]
+  function initMap(key) {
+    if (maps[key]) return;
+    var node = key === 'mini' ? miniNode : mapNode;
+    var map = window.L.map(node, {
+      zoomControl: key === 'large', attributionControl: true,
+      scrollWheelZoom: false, dragging: key === 'large', touchZoom: key === 'large',
+      doubleClickZoom: key === 'large', boxZoom: key === 'large', keyboard: true
     });
-  }
-
-  function fitUnits(target, padding, store) {
-    var bounds = [];
-    units.forEach(function (unit) {
+    maps[key] = map;
+    // O tratamento cromático vive SOMENTE no tile pane (sl-maps-calm.css).
+    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).on('tileerror', function () { showFallback(node); }).addTo(map);
+    units.forEach(function (unit, index) {
       var marker = window.L.marker([unit.coords.lat, unit.coords.lng], {
-        icon: markerIcon(unit.id === activeId),
-        title: unit.shortName,
-        alt: unit.shortName
-      }).addTo(target);
-      marker.bindPopup(unit.mapTag
-        ? ('<strong>' + unit.shortName + '</strong><br>' + unit.mapTag)
-        : unit.shortName);
-      store[unit.id] = marker;
-      bounds.push([unit.coords.lat, unit.coords.lng]);
-    });
-    if (bounds.length) target.fitBounds(bounds, { padding: padding });
-  }
-
-  /* Destaca (e centraliza) o ponto da localidade escolhida. Para o
-     atendimento domiciliar, volta ao enquadramento geral. */
-  function highlight(locationId) {
-    activeId = locationId || null;
-
-    [['mini', miniMap], ['large', largeMap]].forEach(function (pair) {
-      var key = pair[0];
-      var map = pair[1];
-      if (!map) return;
-
-      var store = markers[key];
-      Object.keys(store).forEach(function (id) {
-        store[id].setIcon(markerIcon(id === activeId));
+        icon: markerIcon(unit.id === activeId, index), title: unit.shortName, alt: unit.shortName,
+        riseOnHover: true, keyboard: true
+      }).addTo(map);
+      marker.bindPopup(function () { return popup(unit); }, { maxWidth: 250, minWidth: 180, autoPanPadding: [20, 24] });
+      marker.on('click', function () {
+        highlight(unit.id, { booking: true });
+        // Reabre após sincronizar o formulário e mantém a seleção visível.
+        marker.openPopup();
+        if (rows[unit.id]) rows[unit.id].scrollIntoView({ block: 'nearest', inline: 'nearest' });
       });
-
-      var target = activeId ? store[activeId] : null;
-      if (target) {
-        map.setView(target.getLatLng(), key === 'large' ? 15 : 14, { animate: !window.matchMedia('(prefers-reduced-motion: reduce)').matches });
-        if (key === 'large') target.openPopup();
-      } else {
-        var bounds = units.map(function (u) { return [u.coords.lat, u.coords.lng]; });
-        if (bounds.length) map.fitBounds(bounds, key === 'large'
-          ? { padding: [36, 36] }
-          : { paddingTopLeft: [24, 24], paddingBottomRight: [24, 100] });
-      }
+      markers[key][unit.id] = marker;
     });
-
-    document.querySelectorAll('[data-map-unit],[data-map-location]').forEach(function (card) {
-      var id = card.getAttribute('data-map-location');
-      card.classList.toggle('is-selected', !!id && id === locationId);
+    frame(key, false);
+    units.forEach(function (unit) {
+      markers[key][unit.id].getElement().setAttribute('aria-label', unit.shortName + (unit.id === activeId ? ' — selecionada' : ' — ver unidade'));
     });
-  }
-
-  function initMiniMapIfNeeded() {
-    if (miniReady || !leafletReady || !window.L) return;
-    miniMap = window.L.map(miniNode, {
-      zoomControl: false,
-      attributionControl: true,
-      dragging: false,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
-      boxZoom: false,
-      keyboard: false,
-      tap: false,
-      touchZoom: false
-    });
-    createTileLayer(miniMap);
-    fitUnits(miniMap, [16, 16], markers.mini);
-    miniReady = true;
     if (window.ResizeObserver) new ResizeObserver(function () {
-      miniMap.invalidateSize({ pan: false });
-      highlight(activeId);
-    }).observe(miniMap.getContainer());
-    highlight(activeId);
+      if (!node.getClientRects().length) return;
+      map.invalidateSize({ pan: false }); frame(key, false);
+    }).observe(node);
   }
-
-  function initLargeMapIfNeeded() {
-    if (largeReady || !leafletReady || !window.L) return;
-    largeMap = window.L.map(mapNode, {
-      scrollWheelZoom: true,
-      zoomControl: true,
-      attributionControl: true
-    });
-    createTileLayer(largeMap);
-    fitUnits(largeMap, [36, 36], markers.large);
-    largeReady = true;
-    if (window.ResizeObserver) new ResizeObserver(function () {
-      largeMap.invalidateSize({ pan: false });
-    }).observe(largeMap.getContainer());
-    highlight(activeId);
-  }
-
   function openModal() {
     lastFocused = document.activeElement;
-    modal.classList.add('is-open');
-    modal.setAttribute('aria-hidden', 'false');
+    previousOverflow = document.body.style.overflow;
+    modal.classList.add('is-open'); modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
-    loadLeafletAssets().then(function () {
-      initMiniMapIfNeeded();
-      initLargeMapIfNeeded();
-      window.setTimeout(function () { if (largeMap) largeMap.invalidateSize(); }, 90);
-    }).catch(showMapFallback);
-    window.setTimeout(function () { closeBtn.focus(); }, 40);
+    closeBtn.focus();
+    loadLeaflet().then(function () {
+      initMap('large');
+      requestAnimationFrame(function () { maps.large.invalidateSize({ pan: false }); frame('large', false); });
+    }).catch(function () { showFallback(mapNode); });
   }
-
   function closeModal() {
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-    if (lastFocused && lastFocused.focus) lastFocused.focus();
+    modal.classList.remove('is-open'); modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = previousOverflow || '';
+    if (lastFocused) lastFocused.focus();
   }
-
-  openBtn.addEventListener('click', function (e) {
-    e.stopPropagation();
-    openModal();
+  buildSidebar();
+  // Mantém a medição dos destinos da parceira, sem dados pessoais.
+  modal.querySelectorAll('[data-sl-pastore-agendar],[data-sl-pastore-rota],[data-sl-pastore-conhecer]').forEach(function (a) {
+    a.addEventListener('click', function () {
+      var name = a.hasAttribute('data-sl-pastore-agendar') ? 'click_agendar_pastore'
+        : a.hasAttribute('data-sl-pastore-rota') ? 'click_rota_pastore_ipanema' : 'click_mapa_pastore_ipanema';
+      CFG.track(name, CFG.locationParams(CFG.byId('pastore-ipanema')));
+    });
   });
-  miniNode.addEventListener('click', function (e) { if (!e.target.closest('a,button')) openModal(); });
-  miniNode.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      openModal();
-    }
+  openBtn.addEventListener('click', function (event) { event.stopPropagation(); openModal(); });
+  // Pins abrem o próprio popup; só o fundo funciona como atalho de ampliação.
+  miniNode.addEventListener('click', function (event) {
+    if (!event.target.closest('a,button,.leaflet-marker-icon,.leaflet-popup')) openModal();
   });
   closeBtn.addEventListener('click', closeModal);
-  modal.addEventListener('click', function (e) {
-    if (e.target && e.target.getAttribute('data-map-close') === 'backdrop') closeModal();
+  modal.addEventListener('click', function (event) {
+    if (event.target.getAttribute('data-map-close') === 'backdrop') closeModal();
   });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
   });
-
-  /* ---------------------------------------------------------------------- *
-   * Analytics do cartão da unidade parceira                                *
-   * Substitui o antigo bloco inline MAP_PASTORE_IPANEMA_TRACK_V1 e passa a  *
-   * valer também para a página /espirometria-rio-de-janeiro/.              *
-   * window.track() é no-op enquanto o visitante não aceita os cookies.      *
-   * ---------------------------------------------------------------------- */
-  (function bindPartnerTracking() {
-    var ipanema = CFG.byId('pastore-ipanema');
-    var bindings = [
-      ['[data-sl-pastore-conhecer]', 'click_mapa_pastore_ipanema', { acao: 'conhecer_unidade' }],
-      ['[data-sl-pastore-rota]', 'click_rota_pastore_ipanema', { destino: 'google_maps' }],
-      ['[data-sl-pastore-wa]', 'click_whatsapp_ipanema', {}],
-      ['[data-sl-pastore-agendar]', 'click_agendar_pastore', { destino: 'paciente.centromedicopastore.com.br' }]
-    ];
-
-    bindings.forEach(function (entry) {
-      document.querySelectorAll(entry[0]).forEach(function (node) {
-        node.addEventListener('click', function () {
-          var params = CFG.locationParams(ipanema);
-          params.origem = 'modal_mapa';
-          Object.keys(entry[2]).forEach(function (k) { params[k] = entry[2][k]; });
-          CFG.track(entry[1], params);
-        });
-      });
-    });
-  })();
-
-  /* Formulário -> mapa */
-  document.addEventListener('sl:booking:location', function (event) {
-    var id = event && event.detail ? event.detail.id : null;
-    var loc = id ? CFG.byId(id) : null;
-    highlight(loc && loc.coords ? id : null);
-  });
-
+  document.addEventListener('sl:booking:location', function (event) { highlight(event.detail.id); });
   if ('IntersectionObserver' in window) {
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          loadLeafletAssets().then(initMiniMapIfNeeded).catch(showMapFallback);
-          io.disconnect();
-        }
-      });
-    }, { rootMargin: '120px' });
-    io.observe(miniNode);
+    var observer = new IntersectionObserver(function (entries) {
+      if (!entries.some(function (entry) { return entry.isIntersecting; })) return;
+      loadLeaflet().then(function () { initMap('mini'); }).catch(function () { showFallback(miniNode); });
+      observer.disconnect();
+    }, { rootMargin: '120px' }); observer.observe(miniNode);
   } else {
-    loadLeafletAssets().then(initMiniMapIfNeeded).catch(showMapFallback);
+    loadLeaflet().then(function () { initMap('mini'); }).catch(function () { showFallback(miniNode); });
   }
-
 })(window, document);

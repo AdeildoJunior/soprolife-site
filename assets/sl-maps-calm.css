@@ -1,0 +1,88 @@
+/* M26.11 — Cartografia secundária; pins e controles sem filtro.
+   OSM raster não permite remover POIs isoladamente. Este tratamento é o
+   fallback autorizado: dessaturação + contraste baixo somente nos tiles. */
+:root { --sl-map-paper: #f7f9fa; --sl-map-ink: #0b2239; --sl-map-teal: #087f79; }
+html body .sl-map-calm.leaflet-container { background: var(--sl-map-paper) !important; font-family: var(--sl-font); }
+html body .sl-map-calm .leaflet-tile-pane { filter: saturate(.08) contrast(.58) brightness(1.22) !important; opacity: .42 !important; }
+html body .sl-map-calm .leaflet-marker-pane,
+html body .sl-map-calm .leaflet-popup-pane,
+html body .sl-map-calm .leaflet-control-container { filter: none !important; opacity: 1 !important; }
+html body .sl-map-calm .leaflet-tile { width: 256px !important; height: 256px !important; max-width: none !important; filter: none !important; }
+/* Alvos 44 px; pin vetorial CSS próprio e numeração igual à lista. */
+html body .sl-map-calm .sl-calm-marker { background: none; border: 0; cursor: pointer; }
+.sl-calm-marker__pin { display: grid; place-items: center; position: absolute; width: 32px; height: 32px; top: 4px; left: 6px; border-radius: 50% 50% 50% 5px; transform: rotate(-45deg); background: var(--sl-map-teal); border: 3px solid #fff; box-shadow: 0 0 0 3px #ffffffb8, 0 3px 9px #0b223925; }
+.sl-calm-marker__pin > span { transform: rotate(45deg); font-size: 13px; font-weight: 750; color: #fff; line-height: 1; }
+.sl-calm-marker.is-active .sl-calm-marker__pin { background: var(--sl-map-ink); box-shadow: 0 0 0 3px #fff, 0 0 0 5px #087f7970, 0 4px 12px #0b223925; }
+.sl-map-calm .leaflet-popup-content-wrapper { border-radius: 14px; box-shadow: 0 5px 24px #0b223917; padding: 2px; }
+.sl-map-calm .leaflet-popup-content { margin: 16px 20px; line-height: 1.5; }
+.sl-map-popup__eyebrow { display: block; font-size: 11px; letter-spacing: .04em; color: #47616d; margin-bottom: 6px; }
+.sl-map-popup__title { display: block; font-size: 16px; color: var(--sl-map-ink); line-height: 1.3; padding-right: 18px; }
+.sl-map-calm .sl-map-popup p { font-size: 13px; line-height: 1.5; color: #47616d; margin: 8px 0; }
+.sl-map-popup__links { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.sl-map-calm .sl-map-popup__links a { color: #076b65; font-size: 13px; font-weight: 650; min-height: 44px; display: inline-flex; align-items: center; }
+.sl-map-calm a.leaflet-popup-close-button { width: 44px; height: 44px; padding-top: 7px; color: #496171; }
+html body .sl-map-calm .leaflet-control-attribution { font-size: 11px !important; background: #ffffffed !important; padding: 2px 6px; display: block !important; }
+html body .sl-map-calm .leaflet-control-attribution a { color: #46606e !important; }
+.sl-map-calm .leaflet-bar { border: 1px solid #dce5e7; box-shadow: 0 2px 8px #0b223909; }
+.sl-map-calm .leaflet-control-zoom a { width: 40px; height: 40px; line-height: 40px; color: #233f52; background: #fff; }
+/* Formulário e mapa com áreas equivalentes, sem largura fixa herdada. */
+html body #agendamento .sl-booking-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr) !important; gap: 30px !important; }
+html body #agendamento .sl-units-placeholder { background: var(--sl-map-paper) !important; }
+html body #agendamento #sl-units-map-mini { min-height: 430px !important; border-radius: 16px !important; }
+html body .sl-map-calm .sl-map-open-btn { padding: 10px 16px; min-height: 44px; border: 1px solid #dce5e7 !important; background: #fff !important; box-shadow: 0 2px 8px #0b223908 !important; font-size: 13px !important; }
+/* Modal amplo. O mapa ocupa a área restante após a faixa lateral de 280px. */
+html body .sl-map-calm-modal { position: fixed !important; inset: 0 !important; width: 100vw !important; max-width: none !important; height: 100dvh !important; padding: 0 !important; margin: 0 !important; z-index: 10000 !important; }
+html body .sl-map-calm-modal.is-open { display: flex !important; align-items: center !important; justify-content: center !important; }
+html body .sl-map-calm-modal .sl-map-modal__backdrop { position: absolute !important; inset: 0 !important; background: #122d3a55 !important; backdrop-filter: blur(3px); }
+html body .sl-map-calm-modal .sl-map-modal__dialog { position: relative !important; inset: auto !important; margin: 0 !important; width: 90vw !important; max-width: 1600px !important; height: 86dvh !important; max-height: 960px !important; border: 0 !important; border-radius: 20px !important; overflow: hidden !important; background: #fff; }
+html body .sl-map-calm-modal .sl-map-modal__header { display: flex !important; align-items: center; gap: 16px; flex: 0 0 auto; padding: 16px 24px !important; background: #fff !important; border-bottom: 1px solid #e7edef !important; }
+html body .sl-map-calm-modal .sl-map-modal__header h3 { margin: 0 !important; font-size: 17px !important; font-weight: 650; color: var(--sl-map-ink) !important; flex: 1; }
+html body .sl-map-calm-modal .sl-map-modal__header > button { flex: 0 0 auto; min-height: 44px; padding: 8px 12px !important; border: 0 !important; background: transparent !important; color: #385666 !important; box-shadow: none !important; border-radius: 8px !important; font-size: 13px; cursor: pointer; }
+html body .sl-map-calm-modal .sl-map-modal__header > button:hover { background: #f0f5f4 !important; }
+html body .sl-map-calm-modal .sl-map-modal__body { display: grid !important; grid-template-columns: 280px minmax(0, 1fr) !important; gap: 0 !important; padding: 0 !important; min-height: 0 !important; flex: 1; height: auto !important; overflow: hidden !important; }
+html body .sl-map-calm-modal .sl-map-modal__info { border: 0 !important; border-right: 1px solid #e7edef !important; border-radius: 0 !important; background: #fff !important; box-shadow: none !important; padding: 26px 18px !important; display: block !important; overflow-y: auto !important; min-height: 0; height: auto !important; }
+html body .sl-map-calm-modal :is(.sl-map-modal__map-wrap, .sl-map-modal__map) { min-width: 0 !important; min-height: 0 !important; height: 100% !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; overflow: hidden; }
+html body .sl-map-calm-modal .sl-map-calm { width: 100% !important; height: 100% !important; min-height: 0 !important; border: 0 !important; border-radius: 0 !important; }
+html body .sl-map-calm-modal .sl-map-sidebar-kicker { font-size: 10px; font-weight: 700; letter-spacing: .14em; color: #617680; }
+html body .sl-map-calm-modal .sl-map-sidebar-title { font-size: 19px !important; font-weight: 650; letter-spacing: -.025em; color: var(--sl-map-ink) !important; margin: 8px 0 !important; }
+html body .sl-map-calm-modal .sl-map-sidebar-intro { font-size: 13px !important; line-height: 1.5; color: #536b78 !important; margin: 0 0 20px !important; }
+.sl-map-unit-list { display: grid; gap: 0; }
+.sl-map-unit-row { border-bottom: 1px solid #eaf0f1; padding: 4px 0; }
+.sl-map-unit-select { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 82px; text-align: left; padding: 16px 10px; border: 0; border-radius: 10px; background: #fff; color: var(--sl-map-ink); cursor: pointer; font: inherit; }
+.sl-map-unit-select:hover { background: #f6f9f8; }
+.sl-map-unit-select[aria-pressed='true'] { background: #edf6f3; }
+.sl-map-unit-number { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%; background: #e4f2ee; color: #096b64; font-size: 12px; font-weight: 750; }
+.sl-map-unit-select[aria-pressed='true'] .sl-map-unit-number { background: var(--sl-map-ink); color: #fff; }
+.sl-map-unit-copy strong { display: block; font-size: 14px; line-height: 1.4; font-weight: 650; margin-bottom: 5px; }
+.sl-map-unit-copy > span { display: block; font-size: 12px; line-height: 1.5; color: #526a77; }
+.sl-map-unit-actions { display: none; gap: 16px; padding: 0 10px 4px 48px; flex-wrap: wrap; }
+.sl-map-unit-row.is-selected .sl-map-unit-actions { display: flex; }
+.sl-map-unit-actions a { display: inline-flex; align-items: center; min-height: 44px; color: #076b65 !important; font-size: 12px; font-weight: 650; text-decoration: none; }
+.sl-map-unit-actions a:hover { text-decoration: underline; }
+html body .sl-map-calm-modal .sl-map-home-note { font-size: 12px !important; line-height: 1.6; color: #536b78; margin: 20px 0 0 !important; }
+.sl-map-home-note button { display: block; background: none; border: 0; padding: 0; min-height: 44px; color: #076b65; font-size: 13px; font-weight: 650; cursor: pointer; }
+html body .sl-map-calm-modal .sl-map-address-note { font-size: 11px !important; color: #607681 !important; line-height: 1.6; margin: 12px 0 0 !important; }
+.sl-map-selection-status { position: absolute; width: 1px; height: 1px; padding: 0; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+.sl-map-partner-details { margin: 16px 0; font-size: 12px; color: #496171; }
+.sl-map-partner-details summary { cursor: pointer; min-height: 44px; padding: 10px 0; color: #076b65; }
+.sl-map-partner-details__content { padding-top: 10px; line-height: 1.6; }
+html body .sl-map-partner-details__content :is(p,address,span,h4) { font-size: 12px !important; color: #496171 !important; font-style: normal; background: transparent !important; }
+html body .sl-map-partner-details__content a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 !important; background: none !important; border: 0 !important; color: #076b65 !important; font-size: 12px !important; box-shadow: none !important; }
+html body .sl-map-partner-details__content :is(.sl-actions,.sl-map-partner-card__actions) { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+@media (max-width: 800px) {
+  html body #agendamento .sl-booking-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  html body #agendamento #sl-units-map-mini { height: 320px !important; min-height: 320px !important; }
+  html body .sl-map-calm-modal .sl-map-modal__dialog { width: calc(100vw - 20px) !important; height: 94dvh !important; max-height: none !important; border-radius: 16px !important; }
+  html body .sl-map-calm-modal .sl-map-modal__header { padding: 10px 14px !important; gap: 8px; }
+  html body .sl-map-calm-modal .sl-map-modal__header h3 { font-size: 14px !important; }
+  html body .sl-map-calm-modal .sl-map-overview { display: none; }
+  html body .sl-map-calm-modal .sl-map-modal__body { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(240px, 1fr) minmax(160px, .65fr) !important; }
+  html body .sl-map-calm-modal :is(.sl-map-modal__map-wrap,.sl-map-modal__map) { grid-row: 1; }
+  html body .sl-map-calm-modal .sl-map-modal__info { grid-row: 2; padding: 14px 16px !important; border-right: 0 !important; border-top: 1px solid #e7edef !important; }
+  html body .sl-map-calm-modal .sl-map-sidebar-kicker, html body .sl-map-calm-modal .sl-map-sidebar-intro { display: none; }
+  html body .sl-map-calm-modal .sl-map-sidebar-title { font-size: 16px !important; margin: 0 0 6px !important; }
+  .sl-map-unit-select { min-height: 74px; padding: 12px 8px; }
+}
+@media (max-width: 800px) and (max-height: 500px) {
+  html body .sl-map-calm-modal .sl-map-modal__body { overflow-y: auto !important; grid-template-rows: 250px 180px !important; }
+}

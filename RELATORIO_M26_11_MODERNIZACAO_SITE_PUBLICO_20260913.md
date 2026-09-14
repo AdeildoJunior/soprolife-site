@@ -29,12 +29,32 @@ O provedor encontrado foi Leaflet com tiles CARTO Voyager. Os mapas realmente pr
 - Todos os tiles passaram a usar `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, sem chave.
 - Attribution com link de copyright visível nas versões pequenas e ampliadas.
 - Removidos largura fixa e deslocamento negativo do mapa da agenda; grid responsivo e altura definida no celular.
-- Tiles mantêm dimensões originais de 256 px, sem os filtros e redimensionamentos de imagens gerais.
+- Tiles mantêm dimensões originais de 256 px, sem redimensionamentos de imagens gerais. A base recebe tratamento cromático próprio, descrito abaixo.
 - `ResizeObserver` atualiza o tamanho do Leaflet; o mapa compartilhado reenquadra os marcadores ao mudar de tamanho ou unidade.
 - Mantidas as coordenadas existentes de Barra, Zona Norte e Pastore Ipanema. Domiciliar não recebe endereço inventado.
 - Falhas de tiles/CDN mostram acesso alternativo ao OpenStreetMap. Links de rota existentes continuam disponíveis.
 
 Referências técnicas: [política de tiles OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/) e [Leaflet 1.9.4](https://leafletjs.com/reference.html). O navegador faz o carregamento normal dos tiles visíveis, com cache HTTP e Referer; não foi criado download offline ou armazenamento em service worker. Mapas continuam dependendo de conexão e disponibilidade do provedor externo.
+
+### Ajuste final solicitado: mapa claro e modal amplo
+
+A modernização e a agenda do commit `ea5d4f7` foram preservadas. A continuação finaliza o ajuste visual dos mapas no mesmo worktree. O último teste interrompido havia identificado uma regra antiga de Ipanema (`position:absolute; inset:24px`) que deslocava o modal em 768 px. O posicionamento foi unificado com o das demais páginas.
+
+Antes de escolher a base clara, foram verificadas as condições oficiais atuais:
+
+- [CARTO Basemaps Terms, atualizados em 26/08/2026](https://carto.com/legal/basemap-terms/): o acesso gratuito exige chave emitida pela CARTO; requisições sem chave podem receber marca d’água. Positron não foi adotado sem autenticação.
+- [Stadia Maps — autenticação](https://docs.stadiamaps.com/authentication/): dispensa autenticação no desenvolvimento local, mas exige cadastro/autenticação de domínio em produção. Não foi introduzida dependência que funcionaria somente no localhost.
+
+Foi aplicado o fallback expressamente autorizado: OpenStreetMap com forte dessaturação, contraste reduzido e clareamento apenas na camada dos tiles. Pins, popups, controles e attribution permanecem sem filtro. Como a base é raster, POIs e símbolos não podem ser removidos individualmente: ficam visualmente secundários, sem prometer uma cartografia vetorial nova.
+
+- `assets/sl-maps-calm.css`: acabamento comum nas três páginas com mapa; formulário e mapa com áreas equivalentes.
+- `assets/sl-units-map.js`: implementação única também para Ipanema, com coordenadas centralizadas em `SL_BOOKING`. Removidos os handlers antigos que abriam WhatsApp ao clicar no card da unidade.
+- Pins próprios numerados, teal/navy, halo branco e seleção com anel adicional. Clique mostra nome, resumo, Como chegar e WhatsApp; não envia mensagem nem abre WhatsApp automaticamente.
+- Lista e pins sincronizados com a unidade do formulário. A lista apresenta uma linha compacta por unidade e ações secundárias apenas na selecionada. Informações e links da parceira permanecem em detalhes expansíveis.
+- Modal centralizado com 90% da largura e 86% da altura no desktop; faixa lateral de 280 px e mapa ocupando a maior parte da área útil. Em 1440 px, a área do mapa tem aproximadamente 1016 px de largura.
+- No celular, mapa acima da lista, rolagem interna da lista e modal dentro da viewport. Escape e Fechar devolvem o foco ao botão de abertura.
+- `invalidateSize` e reenquadramento ao abrir/redimensionar; todos os pins físicos enquadrados na visão geral, com margem para não ficarem cobertos pelo botão de ampliação ou attribution.
+- Nenhuma chave, segredo, provedor CARTO ativo ou tentativa de esconder marca d’água foi introduzida.
 
 ## Agenda e data
 
@@ -59,6 +79,7 @@ Não existe consulta a uma fonte real de reservas nessa agenda pública. Nenhuma
 - `tests/m26-11-preservation.py`: comparação com a base de 21 HTMLs; metadados, títulos, JSON-LD e links originais preservados. Sitemap, robots, resultados, redirects, service worker e CNAME idênticos à base.
 - `node --check` nos três scripts compartilhados alterados e `git diff --check`.
 - Resultado final: 70 combinações sem overflow horizontal, 10 registros funcionais, 6 registros de mapas e zero erros JavaScript. Evidência estruturada: `artifacts/m26-11/test-results.json`.
+- `tests/m26-11-maps-calm.cjs`: teste específico das três páginas com mapa nas cinco larguras; seleção lista → pin e pin → lista/formulário, popup, destinos das ações, attribution, tiles reais, enquadramento dos pins, ausência de overflow e resize com modal aberto de 1440 para 390 px. Evidência: `artifacts/m26-11/maps-calm-results.json`.
 
 Os testes não enviam WhatsApp, não submetem dados pessoais e não chamam a API clínica. Links externos são inspecionados, sem confirmar agendamentos reais. Validação executada em Chromium; não representa certificação formal de acessibilidade nem teste em aparelhos físicos/Safari.
 
@@ -67,6 +88,8 @@ Os testes não enviam WhatsApp, não submetem dados pessoais e não chamam a API
 Diretório: `artifacts/m26-11/screenshots/`.
 
 Principais: `home-desktop.png`, `home-mobile.png`, `espirometria-desktop.png`, `espirometria-mobile.png`. Há também versões `-completa.png` de página inteira e `-agenda.png` com o card selecionado. As capturas de agenda ocultam somente header/barra fixa durante a captura para que não cubram o conteúdo; as capturas principais mostram a interface normal. Datas e seleções são sintéticas, produzidas localmente.
+
+Capturas do ajuste final: `mapa-normal-desktop.png`, `mapa-ampliado-desktop.png`, `mapa-normal-390px.png`, `mapa-ampliado-390px.png` e `mapa-pin-selecionado-desktop.png`. As imagens de mapa normal mostram o card completo para avaliar sua integração com o formulário; os modais mostram a interface normal com o fundo da página desfocado.
 
 Servidor local utilizado: `http://127.0.0.1:8111/`.
 
@@ -80,6 +103,7 @@ Para repetir os testes, com Playwright/Chromium disponíveis:
 
 ```bash
 NODE_PATH=/tmp/m26-11-browser/node_modules node tests/m26-11-browser.cjs
+NODE_PATH=/tmp/m26-11-browser/node_modules node tests/m26-11-maps-calm.cjs
 python3 tests/m26-11-preservation.py
 ```
 

@@ -4996,75 +4996,7 @@ body{
 </style>
 
 
-<script id="sopro-map-unit-whatsapp-hotfix">
-/* SOPRO:MAP_UNIT_WHATSAPP_HOTFIX_V1 */
-(function(){
-  var phone = '5521998901775';
 
-  function formatDate(iso){
-    if(!iso) return '';
-    var parts = iso.split('-');
-    return parts.length === 3 ? [parts[2], parts[1], parts[0]].join('/') : iso;
-  }
-
-  function openMapUnitWhatsApp(unit){
-    var serviceEl = document.getElementById('sl-booking-service');
-    var dateEl = document.getElementById('sl-booking-date');
-
-    var service = serviceEl && serviceEl.value ? serviceEl.value : 'Atendimento domiciliar';
-    var date = dateEl && dateEl.value ? formatDate(dateEl.value) : '';
-
-    var text = 'Olá, gostaria de agendar pela Sopro Life.\n'
-      + 'Tipo de espirometria: ' + service + '\n'
-      + 'Localidade: ' + unit + '\n';
-
-    if(date){
-      text += 'Data de interesse: ' + date + '\n';
-    }
-
-    text += 'Gostaria de confirmar disponibilidade pelo WhatsApp.';
-
-    var url = 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(text);
-    window.open(url, '_blank', 'noopener');
-  }
-
-  function getCard(target){
-    return target && target.closest ? target.closest('.sl-map-unit-card') : null;
-  }
-
-  document.addEventListener('click', function(event){
-    var card = getCard(event.target);
-    if(!card) return;
-
-    var unit = card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim();
-    if(!unit) return;
-
-    openMapUnitWhatsApp(unit);
-  });
-
-  document.addEventListener('keydown', function(event){
-    if(event.key !== 'Enter' && event.key !== ' ') return;
-
-    var card = getCard(event.target);
-    if(!card) return;
-
-    event.preventDefault();
-
-    var unit = card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim();
-    if(!unit) return;
-
-    openMapUnitWhatsApp(unit);
-  });
-
-  document.querySelectorAll('.sl-map-unit-card').forEach(function(card){
-    if(!card.getAttribute('role')) card.setAttribute('role','button');
-    if(!card.getAttribute('tabindex')) card.setAttribute('tabindex','0');
-    var unit = card.getAttribute('data-map-unit') || card.textContent.replace('WhatsApp','').trim();
-    card.setAttribute('aria-label', 'Abrir WhatsApp para ' + unit);
-    card.setAttribute('title', 'Abrir WhatsApp para ' + unit);
-  });
-})();
-</script>
 
 
 <!-- SOPRO:MAP_PASTORE_IPANEMA_TRACK -> centralizado em /assets/sl-units-map.js -->
@@ -5927,6 +5859,7 @@ header .sl-header-instagram:hover.sl-header a.sl-header-instagram:hover {
 }
 </script>
 <link rel="stylesheet" href="/assets/sl-modern.css?v=m26-11">
+<link rel="stylesheet" href="/assets/sl-maps-calm.css?v=m26-11-mapas">
 <script src="/assets/sl-modern.js?v=m26-11" defer></script>
 </body>
 </html>
