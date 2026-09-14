@@ -33,7 +33,7 @@ def synthetic_national_config(**changes) -> NationalDpsConfiguration:
         version="SYNTH-M29-DISPATCH-v1", layout_version="restricted-v1.01-20260727",
         issuer_cnpj="11222333000181", issuer_name="SOPROLIFE SAUDE LTDA (SINTETICO)",
         issuer_municipio_ibge="3304557", issuer_op_simp_nac=3, issuer_reg_esp_trib=0,
-        codigo_tributacao_nacional="140501", municipio_prestacao_ibge="3304557",
+        codigo_tributacao_nacional="140501",
         trib_issqn=1, tp_ret_issqn=1,
         amount_basis="financial_entry.valor", competence_rule="service_date",
         own_revenue_confirmed=True, validation_reference="SYNTHETIC-ONLY",
@@ -72,7 +72,8 @@ def restricted_source(db, users):
     db.flush()
     e = SpirometryExam(public_code="ESP-M29D", person_id=p.id, status="Realizado",
                        data_exame=date(2026, 8, 10), data_exame_precisao="dia",
-                       modalidade="residencial", broncodilatador=True)
+                       modalidade="residencial", broncodilatador=True,
+                       municipio_atendimento_ibge="3304557")
     db.add(e)
     db.flush()
     f = FinancialEntry(public_code="LAN-M29D", tipo="receita", categoria="Espirometria",
@@ -146,7 +147,8 @@ def test_recipient_without_cpf_blocks_at_dispatch(db, users, fully_configured_se
     db.flush()
     e = SpirometryExam(public_code="ESP-M29D-NOCPF", person_id=p.id, status="Realizado",
                        data_exame=date(2026, 8, 10), data_exame_precisao="dia",
-                       modalidade="residencial", broncodilatador=True)
+                       modalidade="residencial", broncodilatador=True,
+                       municipio_atendimento_ibge="3304557")
     db.add(e)
     db.flush()
     f = FinancialEntry(public_code="LAN-M29D-NOCPF", tipo="receita", categoria="Espirometria",
@@ -181,6 +183,60 @@ def test_draft_configuration_never_becomes_active(db, users, restricted_doc, ful
         nfse.operate(db, restricted_doc.id, "issue", "m29-gate-draft-config", fully_configured_settings,
                      users["gestor"].id)
     assert error.value.detail["codigo"] == "national_dps_configuration_not_defined_for_any_real_document"
+
+
+def test_missing_service_location_blocks_at_dispatch(db, users, fully_configured_settings):
+    """M31 — mirrors test_recipient_without_cpf_blocks_at_dispatch: a
+    document reaching the dispatcher without a structured, supported service
+    municipality must be refused BEFORE a RestrictedNfseProvider is ever
+    constructed, never silently defaulted to Rio de Janeiro."""
+    p = Person(public_code="PES-M31D-NOLOC", nome_completo="Pessoa Sem Local",
+              nome_normalizado="pessoa sem local", cpf="52998224725")
+    db.add(p)
+    db.flush()
+    e = SpirometryExam(public_code="ESP-M31D-NOLOC", person_id=p.id, status="Realizado",
+                       data_exame=date(2026, 8, 10), data_exame_precisao="dia",
+                       modalidade="residencial", broncodilatador=True,
+                       municipio_atendimento_ibge=None)
+    db.add(e)
+    db.flush()
+    f = FinancialEntry(public_code="LAN-M31D-NOLOC", tipo="receita", categoria="Espirometria",
+                       valor=Decimal("220.00"), status="Recebido", spirometry_exam_id=e.id,
+                       data_competencia=date(2026, 9, 1))
+    db.add(f)
+    db.commit()
+    _validate_fiscal_policies(db, users, suffix="-NOLOC")
+    doc = nfse.prepare(db, e.id, fully_configured_settings, users["gestor"].id)
+    _validate_active_config(db, users)
+    with pytest.raises(HTTPException) as error:
+        nfse.operate(db, doc.id, "issue", "m31-gate-no-location", fully_configured_settings,
+                     users["gestor"].id)
+    assert error.value.detail["codigo"] == "service_location_missing"
+
+
+def test_unsupported_service_location_blocks_at_dispatch(db, users, fully_configured_settings):
+    p = Person(public_code="PES-M31D-BADLOC", nome_completo="Pessoa Local Não Suportado",
+              nome_normalizado="pessoa local nao suportado", cpf="52998224725")
+    db.add(p)
+    db.flush()
+    e = SpirometryExam(public_code="ESP-M31D-BADLOC", person_id=p.id, status="Realizado",
+                       data_exame=date(2026, 8, 10), data_exame_precisao="dia",
+                       modalidade="residencial", broncodilatador=True,
+                       municipio_atendimento_ibge="9999999")
+    db.add(e)
+    db.flush()
+    f = FinancialEntry(public_code="LAN-M31D-BADLOC", tipo="receita", categoria="Espirometria",
+                       valor=Decimal("220.00"), status="Recebido", spirometry_exam_id=e.id,
+                       data_competencia=date(2026, 9, 1))
+    db.add(f)
+    db.commit()
+    _validate_fiscal_policies(db, users, suffix="-BADLOC")
+    doc = nfse.prepare(db, e.id, fully_configured_settings, users["gestor"].id)
+    _validate_active_config(db, users)
+    with pytest.raises(HTTPException) as error:
+        nfse.operate(db, doc.id, "issue", "m31-gate-bad-location", fully_configured_settings,
+                     users["gestor"].id)
+    assert error.value.detail["codigo"] == "service_location_unsupported"
 
 
 # --------------------------------------------------------------------- happy path
@@ -308,7 +364,8 @@ def test_batch_endpoint_restricted_network_off_is_safe(fiscal_restricted_enabled
     db.flush()
     e = SpirometryExam(public_code="ESP-BATCHR", person_id=p.id, status="Realizado",
                        data_exame=date(2026, 8, 10), data_exame_precisao="dia",
-                       modalidade="residencial", broncodilatador=True)
+                       modalidade="residencial", broncodilatador=True,
+                       municipio_atendimento_ibge="3304557")
     db.add(e)
     db.flush()
     f = FinancialEntry(public_code="LAN-BATCHR", tipo="receita", categoria="Espirometria",

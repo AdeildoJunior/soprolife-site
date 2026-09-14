@@ -34,7 +34,8 @@ def restricted_source(db, users):
     db.flush()
     e = SpirometryExam(public_code='ESP-PRE', person_id=p.id, status='Realizado',
                        data_exame=date(2026, 8, 10), data_exame_precisao='dia',
-                       modalidade='residencial', broncodilatador=True)
+                       modalidade='residencial', broncodilatador=True,
+                       municipio_atendimento_ibge='3304557')
     db.add(e)
     db.flush()
     f = FinancialEntry(public_code='LAN-PRE', tipo='receita', categoria='Espirometria',
@@ -58,7 +59,7 @@ def national_config():
         version='SYNTH-RESTRICTED-v1', layout_version='restricted-v1.01-20260727',
         issuer_cnpj='11222333000181', issuer_name='SOPROLIFE SAUDE LTDA (SINTETICO)',
         issuer_municipio_ibge='3304557', issuer_op_simp_nac=3, issuer_reg_esp_trib=0,
-        codigo_tributacao_nacional='140501', municipio_prestacao_ibge='3304557',
+        codigo_tributacao_nacional='140501',
         trib_issqn=1, tp_ret_issqn=1,
         amount_basis='financial_entry.valor', competence_rule='service_date',
         own_revenue_confirmed=True, validation_reference='SYNTHETIC-ONLY',

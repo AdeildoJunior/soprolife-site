@@ -21,7 +21,7 @@ from decimal import Decimal
 from lxml import etree
 
 from .config import NationalDpsConfiguration
-from .identifiers import DpsIdComponents, assert_cnpj, assert_cpf, build_dps_id
+from .identifiers import DpsIdComponents, assert_cnpj, assert_cpf, assert_municipio_ibge, build_dps_id
 
 NFSE_NS = "http://www.sped.fazenda.gov.br/nfse"
 NSMAP = {None: NFSE_NS}
@@ -68,6 +68,14 @@ class DpsInput:
     tomador: Recipient
     descricao_servico: str
     valor_servico: Decimal
+    # TCLocPrest/cLocPrestacao (M31) — where THIS service was actually
+    # rendered. Deliberately per-document, never part of ``config``: the
+    # same NationalDpsConfiguration (a company-wide, versioned tax profile)
+    # can back documents rendered in different municipalities (e.g. a HOME
+    # exam in Rio vs. one in Niterói). Callers must resolve/validate this via
+    # ``service_location.spirometry_service_municipio_ibge`` before
+    # constructing ``DpsInput`` — this dataclass only checks shape.
+    municipio_prestacao_ibge: str
 
     def __post_init__(self):
         if self.dh_emi.tzinfo is None:
@@ -76,6 +84,7 @@ class DpsInput:
             raise DpsBuildError("Valor do serviço fora da faixa aceitável (TSDec15V2).")
         if not self.descricao_servico or len(self.descricao_servico) > 2000:
             raise DpsBuildError("Descrição do serviço é obrigatória e limitada a 2000 caracteres.")
+        assert_municipio_ibge(self.municipio_prestacao_ibge)
 
 
 def _el(parent, tag, text=None, **attrs):
@@ -138,7 +147,7 @@ def build_dps_element(data: DpsInput) -> etree._Element:
 
     serv = _el(inf, "serv")
     loc_prest = _el(serv, "locPrest")
-    _el(loc_prest, "cLocPrestacao", cfg.municipio_prestacao_ibge)
+    _el(loc_prest, "cLocPrestacao", data.municipio_prestacao_ibge)
     c_serv = _el(serv, "cServ")
     _el(c_serv, "cTribNac", cfg.codigo_tributacao_nacional)
     if cfg.codigo_tributacao_municipal:

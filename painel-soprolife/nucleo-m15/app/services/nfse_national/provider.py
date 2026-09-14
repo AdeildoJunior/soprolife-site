@@ -47,6 +47,11 @@ class RestrictedIssueContext:
     numero_dps_display: str
     serie_dps_display: str
     certificate: LoadedCertificate
+    # M31 — per-document service location (TCLocPrest/cLocPrestacao), already
+    # validated by the caller (dispatch.resolve_restricted_provider) via
+    # service_location.spirometry_service_municipio_ibge. Never part of
+    # ``config``: see the M31 note on NationalDpsConfiguration.
+    municipio_prestacao_ibge: str
 
 
 class RestrictedNfseProvider:
@@ -75,6 +80,7 @@ class RestrictedNfseProvider:
             tomador=ctx.recipient,
             descricao_servico=request.description,
             valor_servico=Decimal(request.amount),
+            municipio_prestacao_ibge=ctx.municipio_prestacao_ibge,
         )
         root = build_dps_element(data)
         signed = sign_dps(root, ctx.certificate)

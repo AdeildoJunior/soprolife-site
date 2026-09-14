@@ -50,7 +50,7 @@
     validation_state: "draft",
     issuer_cnpj: "63544026000110",
     issuer_name: "SoproLife Diagnósticos e Soluções em Saúde LTDA",
-    issuer_municipio_ibge: "3304557", municipio_prestacao_ibge: "3304557",
+    issuer_municipio_ibge: "3304557",
     issuer_op_simp_nac: "3", issuer_reg_ap_trib_sn: "1", issuer_reg_esp_trib: "0",
     codigo_tributacao_nacional: "040201", codigo_tributacao_municipal: "001",
     codigo_nbs: "123019900", trib_issqn: "1", tp_ret_issqn: "1", p_tot_trib_sn: "6.00",
@@ -192,7 +192,6 @@
         <label>CNPJ do emissor<input name="issuer_cnpj" required maxlength="14" value="${esc(d.issuer_cnpj)}"></label>
         <label>Razão social do emissor<input name="issuer_name" required value="${esc(d.issuer_name)}"></label>
         <label>Município do emissor (IBGE)<input name="issuer_municipio_ibge" required pattern="[0-9]{7}" value="${esc(d.issuer_municipio_ibge)}"></label>
-        <label>Município da prestação (IBGE)<input name="municipio_prestacao_ibge" required pattern="[0-9]{7}" value="${esc(d.municipio_prestacao_ibge)}"></label>
         <label>Situação — Simples Nacional<select name="issuer_op_simp_nac">${opts(OP_SIMP_NAC_LABELS, d.issuer_op_simp_nac)}</select></label>
         <label>Regime de apuração (Simples, opcional)
           <select name="issuer_reg_ap_trib_sn">
@@ -479,7 +478,6 @@
         codigo_tributacao_nacional: f.codigo_tributacao_nacional.value.trim(),
         codigo_tributacao_municipal: optionalText("codigo_tributacao_municipal"),
         codigo_nbs: optionalText("codigo_nbs"),
-        municipio_prestacao_ibge: f.municipio_prestacao_ibge.value.trim(),
         trib_issqn: Number(f.trib_issqn.value),
         tp_ret_issqn: Number(f.tp_ret_issqn.value),
         p_tot_trib_sn: optionalDecimal("p_tot_trib_sn"),

@@ -21,7 +21,7 @@ def synthetic_configuration_payload(**overrides):
             "issuer_municipio_ibge": "3304557", "issuer_op_simp_nac": 3,
             "issuer_reg_ap_trib_sn": 1, "issuer_reg_esp_trib": 0,
             "codigo_tributacao_nacional": "040201", "codigo_tributacao_municipal": "001",
-            "codigo_nbs": "123019900", "municipio_prestacao_ibge": "3304557",
+            "codigo_nbs": "123019900",
             "trib_issqn": 1, "tp_ret_issqn": 1, "p_tot_trib_sn": "6.00",
             "amount_basis": "financial_entry.valor", "competence_rule": "service_date",
             "own_revenue_confirmed": True, "validation_reference": "SOPROLIFE-M29-ROUTER-TEST",

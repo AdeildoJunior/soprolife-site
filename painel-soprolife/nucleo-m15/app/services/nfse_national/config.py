@@ -75,8 +75,20 @@ class NationalDpsConfiguration(NationalDpsInput):
     codigo_tributacao_municipal: str | None = Field(None, max_length=20)
     codigo_nbs: str | None = Field(None, max_length=9)
 
-    # TCLocPrest — where the service was rendered (domestic only; comExt unsupported).
-    municipio_prestacao_ibge: str
+    # TCLocPrest (serv/locPrest/cLocPrestacao) — where the service was
+    # actually rendered — is DELIBERATELY NOT modeled here (M31). It varies
+    # per attendance (a HOME exam may be in Rio or Niterói; DIRECT is not
+    # guaranteed fixed either), so it cannot be a versioned COMPANY-wide
+    # constant like every other field in this contract. It is resolved per
+    # document from the immutable ``FiscalPreparation.service_municipio_ibge``
+    # snapshot (itself sourced from the structured, exam-level
+    # ``SpirometryExam.municipio_atendimento_ibge``) and passed directly to
+    # ``DpsInput``/``RestrictedIssueContext`` — see
+    # ``services/nfse_national/service_location.py``. A prior version of this
+    # foundation (M27-M29) incorrectly modeled it here, which silently forced
+    # every document to whatever single municipality happened to be
+    # configured — the exact bug M31 fixes. See the M31 report for the full
+    # rationale and the DPS_v1.01.xsd/tiposComplexos_v1.01.xsd evidence.
 
     # TCTribMunicipal
     trib_issqn: TribISSQN
@@ -113,7 +125,7 @@ class NationalDpsConfiguration(NationalDpsInput):
     def _cnpj_shape(cls, value: str) -> str:
         return assert_cnpj(value)
 
-    @field_validator("issuer_municipio_ibge", "municipio_prestacao_ibge")
+    @field_validator("issuer_municipio_ibge")
     @classmethod
     def _municipio_shape(cls, value: str) -> str:
         return assert_municipio_ibge(value)

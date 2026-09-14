@@ -321,6 +321,12 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
         String(30)
     )  # residencial|cowork|clinica_parceira
     local_atendimento: Mapped[str | None] = mapped_column(String(200))
+    # M31 — código IBGE (7 dígitos) do município onde o exame foi FISICAMENTE
+    # realizado. Estruturado e distinto de `local_atendimento` (texto livre,
+    # nunca usado como fonte fiscal) e da incidência do ISSQN (que o Sistema
+    # Nacional NFS-e calcula sozinho — ver services/nfse_national/service_location.py).
+    # Nunca inferido de endereço de paciente, nome de clínica ou texto livre.
+    municipio_atendimento_ibge: Mapped[str | None] = mapped_column(String(7))
     partner_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("partners.id"))
     partner_unit_id: Mapped[str | None] = mapped_column(
         String(UUID_LEN), ForeignKey("partner_units.id")
@@ -379,6 +385,10 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
             "AND encerrado_por_user_id IS NOT NULL "
             "AND encerramento_observacao IS NOT NULL)",
             name="encerramento_com_evidencia",
+        ),
+        CheckConstraint(
+            "municipio_atendimento_ibge IS NULL OR length(municipio_atendimento_ibge) = 7",
+            name="municipio_atendimento_ibge_sete_digitos",
         ),
     )
 
@@ -2738,6 +2748,15 @@ class FiscalPreparation(Base):
     flow: Mapped[str] = mapped_column(String(20))
     service_date: Mapped[date | None] = mapped_column(Date)
     competence: Mapped[date | None] = mapped_column(Date)
+    # M31 — snapshot IMUTÁVEL (esta tabela é append-only, gatilho de banco
+    # recusa UPDATE/DELETE) do município onde o exame foi realizado, no
+    # momento exato do preparo. Nunca a incidência do ISSQN (conceito
+    # distinto — ver services/nfse_national/service_location.py). Copiado
+    # cru de SpirometryExam.municipio_atendimento_ibge por evaluate(); um
+    # valor diferente em um preparo mais novo naturalmente muda o
+    # `fingerprint` e torna o preparo anterior stale, como qualquer outro
+    # campo aqui.
+    service_municipio_ibge: Mapped[str | None] = mapped_column(String(7))
     amount_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     description: Mapped[str | None] = mapped_column(String(200))
     blocking_reasons: Mapped[list] = mapped_column(JSON)
@@ -2746,6 +2765,7 @@ class FiscalPreparation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     __table_args__ = (
         CheckConstraint("amount_snapshot IS NULL OR (financial_entry_id IS NOT NULL AND policy_id IS NOT NULL AND amount_snapshot > 0)", name="fiscal_snapshot_source"),
+        CheckConstraint("service_municipio_ibge IS NULL OR length(service_municipio_ibge) = 7", name="service_municipio_ibge_sete_digitos"),
     )
 
 

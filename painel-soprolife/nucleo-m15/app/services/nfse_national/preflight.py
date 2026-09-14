@@ -43,6 +43,11 @@ from .config import NationalDpsConfiguration
 from .dps_builder import DpsBuildError, DpsInput, Recipient, build_dps_element, serialize_dps
 from .identifiers import DpsIdComponents, InvalidIdentifierError
 from .service_description import ServiceDescriptionUndetermined, spirometry_service_description
+from .service_location import (
+    ServiceLocationUndetermined,
+    ServiceLocationUnsupported,
+    spirometry_service_municipio_ibge,
+)
 from .signer import LoadedCertificate, SignatureError, load_pkcs12_certificate, sign_dps, verify_dps_signature
 from .xsd_validation import XsdValidationError, validate_dps_xml
 
@@ -169,6 +174,16 @@ def run_offline_preflight(db: Session, document_id: str, settings: Settings, act
         descricao_servico = spirometry_service_description(exam.broncodilatador if exam else None)
     except ServiceDescriptionUndetermined:
         return _blocked(doc.id, Stage.DPS_BUILD, ["service_description_undetermined"])
+    # M31 — service LOCATION comes only from the immutable preparation
+    # snapshot (never a live re-read of the exam): a service municipality
+    # changed after preparation is caught by the staleness check in step 2
+    # above, exactly like amount/policy/flow already are.
+    try:
+        municipio_prestacao_ibge = spirometry_service_municipio_ibge(preparation.service_municipio_ibge)
+    except ServiceLocationUndetermined:
+        return _blocked(doc.id, Stage.DPS_BUILD, ["service_location_missing"])
+    except ServiceLocationUnsupported:
+        return _blocked(doc.id, Stage.DPS_BUILD, ["service_location_unsupported"])
     try:
         dps_id = DpsIdComponents(
             codigo_municipio=national_config.issuer_municipio_ibge, tipo_inscricao_federal=2,
@@ -181,6 +196,7 @@ def run_offline_preflight(db: Session, document_id: str, settings: Settings, act
             serie_dps_display=serie_dps_display, competencia=preparation.competence,
             tomador=recipient, descricao_servico=descricao_servico,
             valor_servico=Decimal(str(preparation.amount_snapshot)),
+            municipio_prestacao_ibge=municipio_prestacao_ibge,
         )
         unsigned_root = build_dps_element(data)
     except (DpsBuildError, InvalidIdentifierError) as exc:

@@ -115,7 +115,7 @@ SAFE_CONFIGURATION_FIELDS = (
     "version", "layout_version", "issuer_cnpj", "issuer_name", "issuer_municipio_ibge",
     "issuer_inscricao_municipal", "issuer_op_simp_nac", "issuer_reg_ap_trib_sn",
     "issuer_reg_esp_trib", "codigo_tributacao_nacional", "codigo_tributacao_municipal",
-    "codigo_nbs", "municipio_prestacao_ibge", "trib_issqn", "tp_ret_issqn",
+    "codigo_nbs", "trib_issqn", "tp_ret_issqn",
     "aliquota_percentual", "ind_tot_trib", "p_tot_trib_sn", "validation_reference",
 )
 

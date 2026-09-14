@@ -42,7 +42,6 @@ def real_soprolife_national_configuration(**overrides) -> NationalDpsConfigurati
         codigo_tributacao_nacional="040201",  # 04.02.01 — Análises clínicas e congêneres
         codigo_tributacao_municipal="001",    # Análises clínicas, patologia ou congênere
         codigo_nbs="123019900",
-        municipio_prestacao_ibge=RIO_DE_JANEIRO_IBGE,
         trib_issqn=1,                       # Operação Tributável
         tp_ret_issqn=1,                     # Não Retido
         p_tot_trib_sn=Decimal("6.00"),      # CURRENT Simples Nacional percentage (accountant-supplied)
@@ -65,14 +64,16 @@ def synthetic_certificate():
     return load_pkcs12_certificate(p12_bytes, password)
 
 
-def _make_ready_document(db, users, settings, *, broncodilatador, code):
+def _make_ready_document(db, users, settings, *, broncodilatador, code,
+                         municipio_atendimento_ibge=RIO_DE_JANEIRO_IBGE):
     p = Person(public_code=f"PES-{code}", nome_completo=f"Paciente Sintético {code}",
               nome_normalizado=f"paciente sintetico {code}".lower(), cpf="52998224725")
     db.add(p)
     db.flush()
     e = SpirometryExam(public_code=f"ESP-{code}", person_id=p.id, status="Realizado",
                        data_exame=date(2026, 8, 10), data_exame_precisao="dia",
-                       modalidade="residencial", broncodilatador=broncodilatador)
+                       modalidade="residencial", broncodilatador=broncodilatador,
+                       municipio_atendimento_ibge=municipio_atendimento_ibge)
     db.add(e)
     db.flush()
     f = FinancialEntry(public_code=f"LAN-{code}", tipo="receita", categoria="Espirometria",

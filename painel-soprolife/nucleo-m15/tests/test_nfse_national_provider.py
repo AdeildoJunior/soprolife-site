@@ -42,7 +42,7 @@ def context():
         version="SYNTH-RESTRICTED-v1", layout_version="restricted-v1.01-20260727",
         issuer_cnpj="11222333000181", issuer_name="SOPROLIFE SAUDE LTDA (SINTETICO)",
         issuer_municipio_ibge="3304557", issuer_op_simp_nac=3, issuer_reg_esp_trib=0,
-        codigo_tributacao_nacional="140501", municipio_prestacao_ibge="3304557",
+        codigo_tributacao_nacional="140501",
         trib_issqn=1, tp_ret_issqn=1,
         amount_basis="financial_entry.valor", competence_rule="service_date",
         own_revenue_confirmed=True, validation_reference="SYNTHETIC-ONLY",
@@ -55,7 +55,8 @@ def context():
     return RestrictedIssueContext(config=cfg, dps_id=dps_id,
                                   recipient=Recipient(nome="Paciente Um", sem_nif_motivo=1),
                                   ver_aplic="m27-0.1", numero_dps_display="1",
-                                  serie_dps_display="1", certificate=cert)
+                                  serie_dps_display="1", certificate=cert,
+                                  municipio_prestacao_ibge="3304557")
 
 
 def request():

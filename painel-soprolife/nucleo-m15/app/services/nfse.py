@@ -145,6 +145,13 @@ def evaluate(db: Session, exam_id: str, environment: str) -> dict:
                 policy_id=policy.id if policy else None,
                 recipient_person_id=person.id if person else None,
                 flow=flow, service_date=service_date, competence=service_date,
+                # M31 — raw structured snapshot, copied as-is (never validated
+                # or defaulted here). Universal gate for ALL environments
+                # would be scope creep: whether a value is required/supported
+                # is a REAL-DOCUMENT concern, checked only where the national
+                # DPS is actually built (preflight.py/dispatch.py), exactly
+                # like `broncodilatador`/service_description.py already is.
+                service_municipio_ibge=exam.municipio_atendimento_ibge,
                 amount_snapshot=entry.valor if entry and policy and not reasons else None,
                 description=description, blocking_reasons=sorted(set(reasons)))
 
@@ -452,7 +459,7 @@ def serialize_document(db, doc):
     if prep:
         data['preparation'] = {k: getattr(prep, k) for k in (
             'id', 'financial_entry_id', 'policy_id', 'recipient_person_id', 'flow',
-            'service_date', 'competence', 'description', 'created_at')}
+            'service_date', 'competence', 'service_municipio_ibge', 'description', 'created_at')}
         data['preparation']['amount_snapshot'] = str(prep.amount_snapshot) if prep.amount_snapshot is not None else None
         # No CPF/name lookup is needed for a technical fiscal foundation.
     return data
