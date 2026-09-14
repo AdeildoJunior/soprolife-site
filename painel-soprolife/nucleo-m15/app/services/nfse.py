@@ -21,6 +21,7 @@ from ..models import (FiscalPolicy, FiscalDocument, FiscalPreparation, FiscalAtt
                       FinancialEntry, SpirometryExam, Person, utcnow)
 from .idempotency import idempotent_create, payload_fingerprint
 from .nfse_national import dispatch as national_dispatch
+from .nfse_national.identifiers import NFSE_ACCESS_KEY_PATTERN
 from .nfse_providers import get_provider, ProviderRequest, ProviderResult, Outcome
 
 
@@ -197,7 +198,7 @@ def _request(doc, preparation, operation_id, *, description=None):
                            description or preparation.description)
 
 
-def _normalized(result, operation, document_id):
+def _normalized(result, operation, document_id, provider_name=None):
     allowed = {Outcome.UNCERTAIN, Outcome.REJECTED}
     if operation in {'issue', 'reconcile'}:
         allowed.add(Outcome.SIMULATED)
@@ -208,11 +209,18 @@ def _normalized(result, operation, document_id):
     if (not isinstance(result, ProviderResult) or
             not isinstance(result.outcome, Outcome) or result.outcome not in allowed):
         return ProviderResult(Outcome.UNCERTAIN)
-    # The only implemented provider uses technical UUID IDs. Raw responses,
-    # errors, personal document numbers and arbitrary external IDs never persist.
-    if result.external_id and (not re.fullmatch(r'MOCK-[0-9a-f-]{36}', result.external_id) or
-                               result.external_id != 'MOCK-' + document_id):
-        return ProviderResult(Outcome.UNCERTAIN)
+    if result.external_id:
+        if provider_name == 'restricted':
+            # Government-issued NFS-e access key (TSIdNFSe) — a national
+            # identifier, never derived from our own document_id.
+            if not NFSE_ACCESS_KEY_PATTERN.fullmatch(result.external_id):
+                return ProviderResult(Outcome.UNCERTAIN)
+        # The only other implemented provider uses technical UUID IDs. Raw
+        # responses, errors, personal document numbers and arbitrary
+        # external IDs never persist.
+        elif (not re.fullmatch(r'MOCK-[0-9a-f-]{36}', result.external_id) or
+              result.external_id != 'MOCK-' + document_id):
+            return ProviderResult(Outcome.UNCERTAIN)
     if result.outcome in {Outcome.SIMULATED, Outcome.CANCELLED} and not result.external_id:
         return ProviderResult(Outcome.UNCERTAIN)
     return result
@@ -316,13 +324,25 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
     db.commit()  # Durable intent before crossing the provider boundary.
     request = _request(doc, preparation, target.operation_id if target else operation_id,
                        description=description_override)
+    access_key_conflict = False
     try:
         result = (provider.query(request, target.operation) if target else
                   provider.issue(request) if operation == 'issue' else provider.cancel(request))
-        result = _normalized(result, operation, doc.id)
+        result = _normalized(result, operation, doc.id, provider.name)
         if target and ((target.operation == 'issue' and result.outcome == Outcome.CANCELLED) or
                        (target.operation == 'cancel' and result.outcome == Outcome.SIMULATED)):
             result = ProviderResult(Outcome.UNCERTAIN)
+        if result.external_id:
+            # Immutable external fiscal evidence: a document's access key,
+            # once recorded by any past completed attempt, may never be
+            # silently replaced by a different one from a later call.
+            existing_external_id = db.scalar(select(FiscalAttempt.external_id).where(
+                FiscalAttempt.document_id == doc.id, FiscalAttempt.phase == 'completed',
+                FiscalAttempt.external_id.is_not(None),
+            ).order_by(FiscalAttempt.number.desc()).limit(1))
+            if existing_external_id and existing_external_id != result.external_id:
+                result = ProviderResult(Outcome.UNCERTAIN)
+                access_key_conflict = True
     except Exception:
         # Never persist exception text or guess that a timeout means rejection.
         result = ProviderResult(Outcome.UNCERTAIN)
@@ -345,7 +365,9 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
         state = 'simulated'
     else:
         uncertain, state = True, 'uncertain'
-    error = 'provider_uncertain' if uncertain else 'provider_rejected' if result.outcome == Outcome.REJECTED else None
+    error = ('access_key_conflict' if access_key_conflict else
+             'provider_uncertain' if uncertain else
+             'provider_rejected' if result.outcome == Outcome.REJECTED else None)
     db.add(FiscalAttempt(**common, phase='completed', outcome=result.outcome.value,
                          completed_at=utcnow(), external_id=result.external_id,
                          error_code=error, reconciliation_required=uncertain,

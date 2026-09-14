@@ -17,10 +17,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from ..nfse_providers import ProviderRequest, ProviderResult
+from ..nfse_providers import Outcome, ProviderRequest, ProviderResult
 from .config import NationalDpsConfiguration
 from .dps_builder import DpsInput, Recipient, build_dps_element, serialize_dps
-from .identifiers import DpsIdComponents
+from .identifiers import (DpsIdComponents, InvalidIdentifierError, build_dps_id,
+                          extract_nfse_access_key, find_nfse_access_key_best_effort)
 from .responses import classify_issue_response, classify_reconcile_response, to_provider_outcome
 from .signer import LoadedCertificate, sign_dps, verify_dps_signature
 from .transport import PATH_GET_DPS, PATH_ISSUE_NFSE, RestrictedTransport, TransportRequest
@@ -95,26 +96,49 @@ class RestrictedNfseProvider:
                                                               body=signed_xml))
         except Exception as caught:  # network/timeout/gate errors, never proof of anything
             exc = caught
+
+        # A 2xx alone is never proof of issuance — the official manual states
+        # the success body IS the generated NFS-e XML (§1.3.2.a). Anything
+        # that isn't a well-formed <NFSe> with a schema-shaped access key
+        # (infNFSe/@Id, TSIdNFSe) is malformed, never a silent success.
+        access_key: str | None = None
+        if response is not None and 200 <= response.status_code < 300 and response.body:
+            try:
+                access_key = extract_nfse_access_key(response.body)
+            except InvalidIdentifierError:
+                access_key = None
         classified = classify_issue_response(
             http_status=response.status_code if response else None, exc=exc,
-            body_valid=bool(response and 200 <= response.status_code < 300 and response.body),
+            body_valid=access_key is not None,
         )
         outcome = to_provider_outcome(classified, operation="issue")
-        return ProviderResult(outcome)
+        external_id = access_key if outcome == Outcome.SIMULATED else None
+        return ProviderResult(outcome, external_id)
 
     def query(self, request: ProviderRequest, operation: str) -> ProviderResult:
+        # Reconciliation/query is keyed by the OFFICIAL DPS identifier
+        # (TSIdDPS) this provider itself built for the original submission —
+        # never `request.operation_id` (an internal idempotency UUID with no
+        # fiscal meaning to the government API).
+        dps_id_value = build_dps_id(self._context.dps_id)
         exc: Exception | None = None
         response = None
         try:
             response = self._transport.send(TransportRequest(
-                method="GET", path=PATH_GET_DPS.format(dps_id=request.operation_id)))
+                method="GET", path=PATH_GET_DPS.format(dps_id=dps_id_value)))
         except Exception as caught:
             exc = caught
+
+        access_key: str | None = None
+        if response is not None and 200 <= response.status_code < 300 and response.body:
+            access_key = find_nfse_access_key_best_effort(response.body)
         classified = classify_reconcile_response(
             http_status=response.status_code if response else None, exc=exc,
-            body_valid=bool(response and 200 <= response.status_code < 300 and response.body),
+            body_valid=access_key is not None,
         )
-        return ProviderResult(to_provider_outcome(classified, operation=operation))
+        outcome = to_provider_outcome(classified, operation=operation)
+        external_id = access_key if outcome in (Outcome.SIMULATED, Outcome.CANCELLED) else None
+        return ProviderResult(outcome, external_id)
 
     def cancel(self, request: ProviderRequest) -> ProviderResult:
         # No official event/cancellation contract has been verified as

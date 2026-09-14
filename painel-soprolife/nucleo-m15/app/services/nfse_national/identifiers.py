@@ -11,11 +11,21 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from lxml import etree
+
 CNPJ_PATTERN = re.compile(r"^[0-9A-Z]{14}$")
 CPF_PATTERN = re.compile(r"^[0-9]{11}$")
 MUNICIPIO_IBGE_PATTERN = re.compile(r"^[0-9]{7}$")
 # TSIdDPS (tiposSimples_v1.01.xsd): "DPS" + cMun(7) + tipoInsc(1) + inscricao(14) + serie(5) + numero(15)
 DPS_ID_PATTERN = re.compile(r"^DPS[0-9]{7}(1[0-9]{14}|2[0-9A-Z]{14})[0-9]{20}$")
+# TSIdNFSe (tiposSimples_v1.01.xsd): "NFS" + cMun(7) + ambGer(1) + tipoInsc(1) +
+# inscricao(14) + numNFSe(13) + anoMesEmis(4) + codNum(9) + DV(1) = 53 chars.
+# This is the "chave de acesso" — the value of the ``Id`` attribute on
+# ``infNFSe`` in the NFS-e XML the API returns for a successful ``POST /nfse``
+# (manual dos contribuintes, §1.3.2.a: "...ou o arquivo XML da NFS-e gerada").
+NFSE_ACCESS_KEY_PATTERN = re.compile(r"^NFS[0-9]{9}[0-9A-Z]{14}[0-9]{27}$")
+_NFSE_ACCESS_KEY_SCAN_PATTERN = re.compile(rb"NFS[0-9]{9}[0-9A-Z]{14}[0-9]{27}")
+NFSE_XML_NS = "http://www.sped.fazenda.gov.br/nfse"
 
 
 class InvalidIdentifierError(ValueError):
@@ -39,6 +49,66 @@ def assert_municipio_ibge(value: str) -> str:
     if not isinstance(value, str) or not MUNICIPIO_IBGE_PATTERN.fullmatch(value):
         raise InvalidIdentifierError("Código de município IBGE deve ter 7 dígitos.")
     return value
+
+
+def assert_nfse_access_key(value: str) -> str:
+    """Validate the NFS-e access key (chave de acesso) shape only — TSIdNFSe,
+    53 chars, prefix ``NFS``. Never proof of issuance by itself; callers still
+    need a confirmed provider response before trusting this."""
+    if not isinstance(value, str) or not NFSE_ACCESS_KEY_PATTERN.fullmatch(value):
+        raise InvalidIdentifierError(
+            "Chave de acesso da NFS-e deve seguir o padrão TSIdNFSe "
+            "(53 posições, prefixo 'NFS')."
+        )
+    return value
+
+
+def extract_nfse_access_key(xml_bytes: bytes) -> str:
+    """Parse a returned NFS-e XML (``POST /nfse`` success body, per the
+    official contributor manual §1.3.2.a) and return its access key —
+    ``infNFSe/@Id`` (``TSIdNFSe``). Raises ``InvalidIdentifierError`` for
+    anything that isn't a well-formed ``<NFSe>`` document with a
+    schema-shaped access key; never guesses a value.
+    """
+    try:
+        root = etree.fromstring(xml_bytes)
+    except etree.XMLSyntaxError as exc:
+        raise InvalidIdentifierError(f"Corpo não é XML bem formado: {exc}") from exc
+    if root.tag != f"{{{NFSE_XML_NS}}}NFSe":
+        raise InvalidIdentifierError("Elemento raiz não é <NFSe> no namespace oficial.")
+    inf = root.find(f"{{{NFSE_XML_NS}}}infNFSe")
+    if inf is None:
+        raise InvalidIdentifierError("infNFSe ausente na NFS-e retornada.")
+    raw_id = inf.get("Id")
+    if not raw_id:
+        raise InvalidIdentifierError("Atributo Id ausente em infNFSe.")
+    return assert_nfse_access_key(raw_id)
+
+
+def find_nfse_access_key_best_effort(body: bytes) -> str | None:
+    """Best-effort access-key extraction for reconciliation (``GET /dps/{id}``).
+
+    The official contributor manual confirms this endpoint "recupera a chave
+    de acesso da NFS-e" but — unlike ``POST /nfse`` — does not document the
+    exact response envelope (JSON vs. the same NFS-e XML), and the restricted
+    Swagger (``adn.producaorestrita.nfse.gov.br``) requires an mTLS client
+    certificate at the TLS layer even to view, so it could not be reached to
+    confirm the exact schema (see OFFICIAL_SOURCES_USED.md M30 addendum).
+
+    Rather than guess a JSON field name, this tries the one confirmed shape
+    (the full NFS-e XML) first, then falls back to locating the single
+    occurrence of the officially-defined ``TSIdNFSe`` pattern anywhere in the
+    raw body. Zero or ambiguous (more than one distinct) matches return
+    ``None`` — fail closed, never a guess.
+    """
+    try:
+        return extract_nfse_access_key(body)
+    except InvalidIdentifierError:
+        pass
+    matches = {m.decode("ascii") for m in _NFSE_ACCESS_KEY_SCAN_PATTERN.findall(body)}
+    if len(matches) == 1:
+        return matches.pop()
+    return None
 
 
 @dataclass(frozen=True)

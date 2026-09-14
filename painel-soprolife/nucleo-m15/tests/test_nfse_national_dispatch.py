@@ -22,7 +22,8 @@ from app.services.nfse_national.config import NationalDpsConfiguration
 from app.services.nfse_national.signer import generate_synthetic_test_certificate
 from app.services.nfse_national.transport import FakeTransport, TransportResponse
 import tests.test_nfse_foundation as _foundation
-from tests.test_nfse_foundation import policy_payload
+from tests.test_nfse_foundation import events, policy_payload
+from tests.test_nfse_national_provider import VALID_ACCESS_KEY, _nfse_xml
 
 fiscal_enabled = _foundation.fiscal_enabled  # pytest fixture reuse
 
@@ -206,6 +207,26 @@ def test_full_wiring_reaches_restricted_provider_via_fake_transport(
     # anything but UNCERTAIN, exactly as it would for any other provider.
     # This is the correct, honest, fail-closed behavior today, not a bug.
     assert doc.state == "uncertain"
+
+
+def test_full_wiring_with_real_nfse_response_converges_to_simulated(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """M30 — with the response-contract fix, a well-formed NFS-e success body
+    (the official contract for POST /nfse) now converges all the way to
+    'simulated', with the REAL government access key recorded as
+    external_id — never a MOCK-shaped one, never invented.
+    """
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[TransportResponse(status_code=200, body=_nfse_xml())])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m30-full-wiring-real-1",
+                       fully_configured_settings, users["gestor"].id)
+    assert len(fake.received) == 1
+    assert doc.state == "simulated"
+    completed = [a for a in events(db, doc) if a.phase == "completed"]
+    assert completed[-1].outcome == "simulated"
+    assert completed[-1].external_id == VALID_ACCESS_KEY
 
 
 def test_full_wiring_without_bronchodilator_variant(
