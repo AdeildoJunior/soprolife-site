@@ -429,6 +429,135 @@ def test_injected_provider_bypasses_dispatch_entirely(db, users, restricted_doc,
     assert doc.state == "failed"
 
 
+# --------------------------------------------------------- M35 — safe provider HTTP diagnostics
+
+
+@pytest.mark.parametrize("status,expected_code", [
+    (400, "provider_rejected:http_400"),
+    (401, "provider_rejected:http_401"),
+    (403, "provider_rejected:http_403"),
+    (422, "provider_rejected:http_422"),
+])
+def test_issue_client_error_persists_safe_http_diagnostic(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings, status, expected_code):
+    """M35 — root-cause investigation of a real REJECTED restricted response
+    (M34's synthetic validation) found that FiscalAttempt.error_code carried
+    only the fixed generic label 'provider_rejected' — not even the HTTP
+    status. This is the fix: still fails closed exactly as before (state
+    still 'failed'), just a more specific, still-privacy-safe label."""
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[TransportResponse(status_code=status, body=b"")])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", f"m35-http-{status}", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "failed"  # M33/M34 state-machine behavior unchanged
+    completed = [a for a in events(db, doc) if a.phase == "completed"]
+    assert completed[-1].outcome == "rejected"
+    assert completed[-1].error_code == expected_code
+
+
+def test_issue_server_error_persists_safe_http_diagnostic_and_stays_uncertain(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """A 500 now gets a more specific error_code than before, but the fiscal
+    state machine is untouched: still Outcome.UNCERTAIN, still doc.state
+    'uncertain', still reconciliation_required — only the label changes."""
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[TransportResponse(status_code=500, body=b"")])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m35-http-500", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "uncertain"
+    completed = [a for a in events(db, doc) if a.phase == "completed"]
+    assert completed[-1].outcome == "uncertain"
+    assert completed[-1].error_code == "provider_server_error:http_500"
+    assert completed[-1].reconciliation_required is True
+
+
+def test_issue_timeout_persists_generic_diagnostic_label(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[TimeoutError("synthetic timeout")])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m35-timeout", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "uncertain"
+    completed = [a for a in events(db, doc) if a.phase == "completed"]
+    assert completed[-1].error_code == "provider_timeout"
+
+
+def test_issue_connection_error_persists_generic_diagnostic_label(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[ConnectionError("synthetic connection error")])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m35-conn-error", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "uncertain"
+    completed = [a for a in events(db, doc) if a.phase == "completed"]
+    assert completed[-1].error_code == "provider_connection_error"
+
+
+def test_issue_success_error_code_unchanged(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """M33/M34 behavior unchanged: a real success still records error_code=None."""
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[TransportResponse(status_code=200, body=_nfse_xml())])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m35-success", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "simulated"
+    completed = [a for a in events(db, doc) if a.phase == "completed"]
+    assert completed[-1].error_code is None
+
+
+def test_reconcile_404_not_found_error_code_unchanged(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """M33/M34 behavior unchanged: a reconciliation confirming absence still
+    leaves error_code None — the new diagnostic labeling only applies to
+    rejected/uncertain outcomes, never to a confirmed-absence NOT_FOUND."""
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[
+        TimeoutError("issue #1 -> uncertain"),
+        TransportResponse(status_code=404, body=b""),
+    ])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m35-precede-reconcile",
+                       fully_configured_settings, users["gestor"].id)
+    assert doc.state == "uncertain"
+
+    doc = nfse.operate(db, restricted_doc.id, "reconcile", "m35-reconcile-404",
+                       fully_configured_settings, users["gestor"].id)
+    assert doc.state == "failed"
+    completed = [a for a in events(db, doc) if a.phase == "completed"]
+    assert completed[-1].outcome == "not_found"
+    assert completed[-1].error_code is None
+
+
+def test_rejection_diagnostic_never_leaks_response_body_content(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """Even if a 4xx body contained something sensitive-looking, the
+    diagnostic persisted to the DB never parses body content — only the
+    HTTP status number, end to end through nfse.operate()."""
+    _validate_active_config(db, users)
+    sensitive_body = b'{"cpf":"12345678901","mensagem":"segredo interno da rejeicao","codigo":"X99"}'
+    fake = FakeTransport(responses=[TransportResponse(status_code=400, body=sensitive_body)])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m35-leak-check", fully_configured_settings,
+                       users["gestor"].id)
+    completed = [a for a in events(db, doc) if a.phase == "completed"]
+    error_code = completed[-1].error_code
+    assert error_code == "provider_rejected:http_400"
+    for leaked in (b"12345678901", b"segredo", b"X99", b"cpf", b"mensagem"):
+        assert leaked not in error_code.encode()
+
+
 # --------------------------------------------------------- batch safety (section I)
 
 

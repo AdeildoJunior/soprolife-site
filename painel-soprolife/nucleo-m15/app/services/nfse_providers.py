@@ -24,6 +24,11 @@ class Outcome(str, Enum):
 class ProviderResult:
     outcome: Outcome
     external_id: str | None = None
+    # M35 — stable, privacy-safe transport diagnostic (e.g. "provider_rejected:http_400"),
+    # never response body/headers. See nfse_national.responses.safe_diagnostic_code().
+    # Optional and provider-specific: MockNfseProvider never sets it, so every
+    # existing call site (positional or keyword, 1-2 args) is unaffected.
+    diagnostic_code: str | None = None
 
 
 @dataclass(frozen=True)

@@ -184,6 +184,61 @@ def test_cancel_is_intentionally_unsupported(context):
     assert transport.received == []  # never even attempted a request
 
 
+# --------------------------------------------------------- M35 — safe HTTP-status diagnostic
+
+
+def test_issue_client_error_carries_http_status_diagnostic(context):
+    transport = FakeTransport(responses=[TransportResponse(400, b"")])
+    provider = RestrictedNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.REJECTED
+    assert result.diagnostic_code == "provider_rejected:http_400"
+
+
+def test_issue_server_error_carries_http_status_diagnostic(context):
+    transport = FakeTransport(responses=[TransportResponse(500, b"")])
+    provider = RestrictedNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.UNCERTAIN
+    assert result.diagnostic_code == "provider_server_error:http_500"
+
+
+def test_issue_timeout_carries_generic_diagnostic(context):
+    transport = FakeTransport(responses=[TimeoutError("t")])
+    provider = RestrictedNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.UNCERTAIN
+    assert result.diagnostic_code == "provider_timeout"
+
+
+def test_issue_success_has_no_diagnostic(context):
+    transport = FakeTransport(responses=[TransportResponse(201, _nfse_xml())])
+    provider = RestrictedNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.SIMULATED
+    assert result.diagnostic_code is None
+
+
+def test_reconcile_not_found_carries_http_status_diagnostic(context):
+    transport = FakeTransport(responses=[TransportResponse(404, b"")])
+    provider = RestrictedNfseProvider(transport=transport, context=context)
+    result = provider.query(request(), "issue")
+    assert result.outcome == Outcome.NOT_FOUND
+    assert result.diagnostic_code == "provider_confirmed_not_found:http_404"
+
+
+def test_issue_rejection_diagnostic_never_leaks_response_body(context):
+    """Even a 4xx body containing something sensitive-looking must never
+    reach the diagnostic string — only the HTTP status number does."""
+    sensitive_body = b'{"cpf":"12345678901","mensagem":"segredo interno","codigo":"X99"}'
+    transport = FakeTransport(responses=[TransportResponse(403, sensitive_body)])
+    provider = RestrictedNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.diagnostic_code == "provider_rejected:http_403"
+    for leaked in (b"12345678901", b"segredo", b"X99", b"cpf", b"mensagem"):
+        assert leaked not in result.diagnostic_code.encode()
+
+
 def test_amount_from_request_never_invented_by_provider(context):
     transport = FakeTransport(responses=[TransportResponse(201, b"<NFSe/>")])
     provider = RestrictedNfseProvider(transport=transport, context=context)

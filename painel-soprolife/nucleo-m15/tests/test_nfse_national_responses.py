@@ -5,6 +5,7 @@ from app.services.nfse_national.responses import (
     TransportOutcome,
     classify_issue_response,
     classify_reconcile_response,
+    safe_diagnostic_code,
     to_provider_outcome,
 )
 from app.services.nfse_providers import Outcome
@@ -79,3 +80,61 @@ def test_reconcile_server_error_is_never_not_found():
 def test_reconcile_success_maps_to_simulated_evidence():
     classified = classify_reconcile_response(http_status=200, exc=None, body_valid=True)
     assert to_provider_outcome(classified, operation="reconcile") == Outcome.SIMULATED
+
+
+# --------------------------------------------------------- M35 — safe HTTP-status diagnostic
+
+
+@pytest.mark.parametrize("status,expected", [
+    (400, "provider_rejected:http_400"),
+    (401, "provider_rejected:http_401"),
+    (403, "provider_rejected:http_403"),
+    (409, "provider_rejected:http_409"),
+    (422, "provider_rejected:http_422"),
+])
+def test_safe_diagnostic_code_client_error(status, expected):
+    classified = classify_issue_response(http_status=status, exc=None, body_valid=False)
+    assert safe_diagnostic_code(classified) == expected
+
+
+@pytest.mark.parametrize("status", [500, 502, 503, 504])
+def test_safe_diagnostic_code_server_error(status):
+    classified = classify_issue_response(http_status=status, exc=None, body_valid=False)
+    assert safe_diagnostic_code(classified) == f"provider_server_error:http_{status}"
+
+
+def test_safe_diagnostic_code_malformed_2xx():
+    classified = classify_issue_response(http_status=200, exc=None, body_valid=False)
+    assert safe_diagnostic_code(classified) == "provider_malformed_response:http_200"
+
+
+def test_safe_diagnostic_code_timeout():
+    classified = classify_issue_response(http_status=None, exc=TimeoutError("t"), body_valid=False)
+    assert safe_diagnostic_code(classified) == "provider_timeout"
+
+
+def test_safe_diagnostic_code_connection_error():
+    classified = classify_issue_response(http_status=None, exc=ConnectionError("c"), body_valid=False)
+    assert safe_diagnostic_code(classified) == "provider_connection_error"
+
+
+def test_safe_diagnostic_code_reconcile_not_found():
+    classified = classify_reconcile_response(http_status=404, exc=None, body_valid=False)
+    assert safe_diagnostic_code(classified) == "provider_confirmed_not_found:http_404"
+
+
+def test_safe_diagnostic_code_success_is_none():
+    """A clean success needs no diagnostic label at all."""
+    classified = classify_issue_response(http_status=201, exc=None, body_valid=True)
+    assert safe_diagnostic_code(classified) is None
+
+
+def test_safe_diagnostic_code_never_touches_response_body():
+    """Structural guarantee, not just a behavioral one: the function only
+    ever receives a ClassifiedResponse (transport_outcome + http_status +
+    a fixed internal `detail` label) — there is no body/header parameter
+    for it to leak, by construction of ClassifiedResponse itself."""
+    import dataclasses
+    fields = {f.name for f in dataclasses.fields(
+        classify_issue_response(http_status=400, exc=None, body_valid=False))}
+    assert fields == {"transport_outcome", "http_status", "detail"}

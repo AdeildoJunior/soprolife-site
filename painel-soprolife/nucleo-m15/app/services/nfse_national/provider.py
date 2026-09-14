@@ -22,7 +22,8 @@ from .config import NationalDpsConfiguration
 from .dps_builder import DpsInput, Recipient, build_dps_element, serialize_dps
 from .identifiers import (DpsIdComponents, InvalidIdentifierError, build_dps_id,
                           extract_nfse_access_key, find_nfse_access_key_best_effort)
-from .responses import classify_issue_response, classify_reconcile_response, to_provider_outcome
+from .responses import (classify_issue_response, classify_reconcile_response, safe_diagnostic_code,
+                        to_provider_outcome)
 from .signer import LoadedCertificate, sign_dps, verify_dps_signature
 from .transport import PATH_GET_DPS, PATH_ISSUE_NFSE, RestrictedTransport, TransportRequest
 from .xsd_validation import XsdValidationError, validate_dps_xml
@@ -119,7 +120,7 @@ class RestrictedNfseProvider:
         )
         outcome = to_provider_outcome(classified, operation="issue")
         external_id = access_key if outcome == Outcome.SIMULATED else None
-        return ProviderResult(outcome, external_id)
+        return ProviderResult(outcome, external_id, safe_diagnostic_code(classified))
 
     def query(self, request: ProviderRequest, operation: str) -> ProviderResult:
         # Reconciliation/query is keyed by the OFFICIAL DPS identifier
@@ -144,7 +145,7 @@ class RestrictedNfseProvider:
         )
         outcome = to_provider_outcome(classified, operation=operation)
         external_id = access_key if outcome in (Outcome.SIMULATED, Outcome.CANCELLED) else None
-        return ProviderResult(outcome, external_id)
+        return ProviderResult(outcome, external_id, safe_diagnostic_code(classified))
 
     def cancel(self, request: ProviderRequest) -> ProviderResult:
         # No official event/cancellation contract has been verified as

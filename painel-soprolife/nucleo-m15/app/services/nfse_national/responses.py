@@ -71,6 +71,42 @@ def _classify_exception(exc: Exception) -> ClassifiedResponse:
     return ClassifiedResponse(TransportOutcome.CONNECTION_ERROR, None, "erro_conexao")
 
 
+def safe_diagnostic_code(classified: ClassifiedResponse) -> str | None:
+    """Stable, privacy-safe diagnostic string for ``FiscalAttempt.error_code``
+    — HTTP status only (or a fixed transport-level label when there is no
+    status, e.g. a timeout), never response body/header content.
+
+    M34/M35 — the official manuals (``manual-contribuintes-apis-adn.pdf`` /
+    ``manual-contribuintes-emissor-publico-v1-2-out2025.pdf``) confirm in
+    prose that a rejection returns "a mensagem de erro com o motivo da
+    rejeição" (§1.3.2.a) but document no field-level schema for that body —
+    no example payload, no error-code table. The only place that schema
+    would be defined (the restricted Swagger UI) requires an mTLS client
+    certificate even to view (M30 addendum) and was never reached. So this
+    function parses NOTHING from the response body — only the already-public,
+    already-logged-everywhere HTTP status code, which carries no PII and
+    needs no schema to interpret.
+
+    Purely descriptive: never consulted by the state machine, which keys
+    off ``Outcome``/``uncertain`` alone (see ``nfse.operate()``) — changing
+    this function can never change a document's fiscal state.
+    """
+    t = classified.transport_outcome
+    if t is TransportOutcome.HTTP_CLIENT_ERROR:
+        return f"provider_rejected:http_{classified.http_status}"
+    if t is TransportOutcome.HTTP_SERVER_ERROR:
+        return f"provider_server_error:http_{classified.http_status}"
+    if t is TransportOutcome.MALFORMED_RESPONSE:
+        return f"provider_malformed_response:http_{classified.http_status}"
+    if t is TransportOutcome.NOT_FOUND:
+        return "provider_confirmed_not_found:http_404"
+    if t is TransportOutcome.TIMEOUT:
+        return "provider_timeout"
+    if t is TransportOutcome.CONNECTION_ERROR:
+        return "provider_connection_error"
+    return None  # HTTP_SUCCESS: no diagnostic needed for a clean success
+
+
 def to_provider_outcome(classified: ClassifiedResponse, *, operation: str) -> Outcome:
     """Map onto the M26 ``Outcome`` enum used by the mock queue's state
     machine, so a future wiring reuses the exact same reconciliation

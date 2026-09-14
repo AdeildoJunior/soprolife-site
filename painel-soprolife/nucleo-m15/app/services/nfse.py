@@ -383,9 +383,15 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
         state = 'simulated'
     else:
         uncertain, state = True, 'uncertain'
+    # M35 — same classification as before; when the provider boundary
+    # captured a safe transport diagnostic (HTTP status only, never body —
+    # see nfse_national.responses.safe_diagnostic_code()), it replaces the
+    # generic label with a more specific one (e.g. "provider_rejected:http_400").
+    # Diagnostic-only: never influences `uncertain`/`state` above.
+    diagnostic = result.diagnostic_code
     error = ('access_key_conflict' if access_key_conflict else
-             'provider_uncertain' if uncertain else
-             'provider_rejected' if result.outcome == Outcome.REJECTED else None)
+             (diagnostic or 'provider_uncertain') if uncertain else
+             (diagnostic or 'provider_rejected') if result.outcome == Outcome.REJECTED else None)
     db.add(FiscalAttempt(**common, phase='completed', outcome=result.outcome.value,
                          completed_at=utcnow(), external_id=result.external_id,
                          error_code=error, reconciliation_required=uncertain,
