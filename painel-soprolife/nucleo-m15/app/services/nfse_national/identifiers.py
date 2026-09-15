@@ -86,7 +86,13 @@ def extract_nfse_access_key(xml_bytes: bytes) -> str:
 
 
 def find_nfse_access_key_best_effort(body: bytes) -> str | None:
-    """Best-effort access-key extraction for reconciliation (``GET /dps/{id}``).
+    """Tolerant access-key extraction for an UNCOMPRESSED reconciliation body.
+
+    M38: this is no longer the reconciliation entry point — it is the fallback
+    tier of ``wire.find_nfse_access_key_in_response``, which first decodes the
+    documented ``nfseXmlGZipB64`` envelope (a GZip-compressed key is invisible
+    to the raw scan below). Everything this function already proved still
+    holds; nothing here was weakened.
 
     The official contributor manual confirms this endpoint "recupera a chave
     de acesso da NFS-e" but — unlike ``POST /nfse`` — does not document the

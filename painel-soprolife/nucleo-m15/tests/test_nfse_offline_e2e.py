@@ -32,7 +32,8 @@ from app.services.nfse_national.xsd_validation import validate_dps_xml
 from app.services.nfse_providers import Outcome, ProviderRequest
 import tests.test_nfse_foundation as _foundation
 from tests.test_nfse_foundation import policy_payload
-from tests.test_nfse_national_provider import VALID_ACCESS_KEY, _nfse_xml
+from tests.test_nfse_national_provider import (VALID_ACCESS_KEY, _sent_dps_xml,
+                                               _success_body)
 
 fiscal_enabled = _foundation.fiscal_enabled  # pytest fixture reuse
 
@@ -114,7 +115,7 @@ def test_offline_e2e_document_to_classified_success(db, users, restricted_settin
     signed_xml = (settings.resolved_fiscal_artifacts_storage_dir() / signed_path).read_bytes()
     validate_dps_xml(signed_xml)  # the staged bytes are still schema-valid on disk
 
-    transport = FakeTransport(responses=[TransportResponse(201, _nfse_xml())])
+    transport = FakeTransport(responses=[TransportResponse(201, _success_body())])
     provider = RestrictedNfseProvider(transport=transport, context=_issue_context(national_config, certificate))
     request = ProviderRequest(document_id=doc.id, operation_id='e2e-op-1', preparation_id='irrelevant',
                               amount='220.00', competence='2026-08-10', description='desc')
@@ -124,7 +125,8 @@ def test_offline_e2e_document_to_classified_success(db, users, restricted_settin
     # The FakeTransport actually received the signed DPS bytes it built itself
     # (proves the provider signs its own payload, not the one staged by
     # preflight — the two remain independently reproducible, never shared state).
-    assert transport.received[0].body is not None
+    # M38 — the wire body is the JSON envelope; the signed DPS lives inside it.
+    assert b'infDPS' in _sent_dps_xml(transport)
 
 
 def test_offline_e2e_uncertain_never_resent_blindly(db, users, restricted_settings, national_config, tmp_path):

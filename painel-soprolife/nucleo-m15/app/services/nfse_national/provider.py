@@ -20,12 +20,14 @@ from decimal import Decimal
 from ..nfse_providers import Outcome, ProviderRequest, ProviderResult
 from .config import NationalDpsConfiguration
 from .dps_builder import DpsInput, Recipient, build_dps_element, serialize_dps
-from .identifiers import (DpsIdComponents, InvalidIdentifierError, build_dps_id,
-                          extract_nfse_access_key, find_nfse_access_key_best_effort)
+from .identifiers import DpsIdComponents, build_dps_id
 from .responses import (classify_issue_response, classify_reconcile_response, safe_diagnostic_code,
                         to_provider_outcome)
 from .signer import LoadedCertificate, sign_dps, verify_dps_signature
 from .transport import PATH_GET_DPS, PATH_ISSUE_NFSE, RestrictedTransport, TransportRequest
+from .wire import (JSON_ACCEPT_HEADERS, JSON_REQUEST_HEADERS, WireFormatError,
+                   build_issue_request_body, decode_nfse_success_envelope,
+                   find_nfse_access_key_in_response)
 from .xsd_validation import XsdValidationError, validate_dps_xml
 
 
@@ -96,23 +98,38 @@ class RestrictedNfseProvider:
         except XsdValidationError as exc:
             raise RestrictedProviderError(f"DPS construída não é válida contra o XSD: {exc}") from exc
 
+        # M38 — the documented SEFIN contract is JSON in / JSON out, never raw
+        # XML: the body is {"dpsXmlGZipB64": gzip+base64(signed XML)} with
+        # Content-Type/Accept: application/json. Sending the signed XML
+        # directly is what produced HTTP 415 on DPS #3. The signed bytes are
+        # compressed as-is — never re-parsed or re-serialized, which would
+        # break the XMLDSig digest.
+        #
+        # Encoded OUTSIDE the try below on purpose: a failure here is a local
+        # bug, not a transport event, and must raise instead of being
+        # misclassified as a connection error (i.e. as UNCERTAIN, which would
+        # then block the document behind a reconciliation it never needed).
+        request_body = build_issue_request_body(signed_xml)
+
         exc: Exception | None = None
         response = None
         try:
-            response = self._transport.send(TransportRequest(method="POST", path=PATH_ISSUE_NFSE,
-                                                              body=signed_xml))
+            response = self._transport.send(TransportRequest(
+                method="POST", path=PATH_ISSUE_NFSE, body=request_body,
+                headers=dict(JSON_REQUEST_HEADERS)))
         except Exception as caught:  # network/timeout/gate errors, never proof of anything
             exc = caught
 
-        # A 2xx alone is never proof of issuance — the official manual states
-        # the success body IS the generated NFS-e XML (§1.3.2.a). Anything
-        # that isn't a well-formed <NFSe> with a schema-shaped access key
-        # (infNFSe/@Id, TSIdNFSe) is malformed, never a silent success.
+        # A 2xx alone is never proof of issuance. The success envelope
+        # (NFSePostResponseSucesso) must parse as JSON, carry both chaveAcesso
+        # and nfseXmlGZipB64, roundtrip base64->gzip into a well-formed <NFSe>
+        # with a schema-shaped infNFSe/@Id (TSIdNFSe), and both access keys
+        # must agree. Anything less is malformed, never a silent success.
         access_key: str | None = None
         if response is not None and 200 <= response.status_code < 300 and response.body:
             try:
-                access_key = extract_nfse_access_key(response.body)
-            except InvalidIdentifierError:
+                access_key = decode_nfse_success_envelope(response.body).access_key
+            except WireFormatError:
                 access_key = None
         classified = classify_issue_response(
             http_status=response.status_code if response else None, exc=exc,
@@ -132,13 +149,19 @@ class RestrictedNfseProvider:
         response = None
         try:
             response = self._transport.send(TransportRequest(
-                method="GET", path=PATH_GET_DPS.format(dps_id=dps_id_value)))
+                method="GET", path=PATH_GET_DPS.format(dps_id=dps_id_value),
+                headers=dict(JSON_ACCEPT_HEADERS)))
         except Exception as caught:
             exc = caught
 
+        # M38 — the service produces application/json, so this path now decodes
+        # the nfseXmlGZipB64 envelope when the body carries it (a compressed
+        # key is invisible to the legacy raw-byte scan). See
+        # wire.find_nfse_access_key_in_response for the audit of what the GET
+        # contract does and does not prove.
         access_key: str | None = None
         if response is not None and 200 <= response.status_code < 300 and response.body:
-            access_key = find_nfse_access_key_best_effort(response.body)
+            access_key = find_nfse_access_key_in_response(response.body)
         classified = classify_reconcile_response(
             http_status=response.status_code if response else None, exc=exc,
             body_valid=access_key is not None,

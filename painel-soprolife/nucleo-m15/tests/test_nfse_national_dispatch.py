@@ -25,7 +25,8 @@ from app.services.nfse_national.transport import (FakeTransport, PATH_GET_DPS,
                                                    PATH_ISSUE_NFSE, TransportResponse)
 import tests.test_nfse_foundation as _foundation
 from tests.test_nfse_foundation import events, policy_payload
-from tests.test_nfse_national_provider import VALID_ACCESS_KEY, _nfse_xml
+from tests.test_nfse_national_provider import (VALID_ACCESS_KEY, _sent_dps_xml,
+                                               _success_body)
 
 fiscal_enabled = _foundation.fiscal_enabled  # pytest fixture reuse
 
@@ -318,7 +319,7 @@ def test_full_wiring_with_real_nfse_response_converges_to_simulated(
     external_id — never a MOCK-shaped one, never invented.
     """
     _validate_active_config(db, users)
-    fake = FakeTransport(responses=[TransportResponse(status_code=200, body=_nfse_xml())])
+    fake = FakeTransport(responses=[TransportResponse(status_code=200, body=_success_body())])
     monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
 
     doc = nfse.operate(db, restricted_doc.id, "issue", "m30-full-wiring-real-1",
@@ -343,7 +344,7 @@ def test_full_wiring_without_bronchodilator_variant(
 
     nfse.operate(db, doc.id, "issue", "m29-full-wiring-2", fully_configured_settings, users["gestor"].id)
     assert len(fake.received) == 1
-    sent_xml = fake.received[0].body
+    sent_xml = _sent_dps_xml(fake)
     assert b"Espirometria sem broncodilatador" in sent_xml
 
 
@@ -364,7 +365,7 @@ def test_first_issue_attempt_builds_dps_for_its_own_attempt_number(
     assert doc.state == "uncertain"
     assert len(fake.received) == 1
     assert fake.received[0].path == PATH_ISSUE_NFSE
-    assert _expected_dps_id(1).encode() in fake.received[0].body
+    assert _expected_dps_id(1).encode() in _sent_dps_xml(fake, 0)
 
 
 def test_reconcile_queries_original_issue_dps_not_reconcile_attempt_number(
@@ -535,7 +536,7 @@ def test_issue_success_error_code_unchanged(
         monkeypatch, db, users, restricted_doc, fully_configured_settings):
     """M33/M34 behavior unchanged: a real success still records error_code=None."""
     _validate_active_config(db, users)
-    fake = FakeTransport(responses=[TransportResponse(status_code=200, body=_nfse_xml())])
+    fake = FakeTransport(responses=[TransportResponse(status_code=200, body=_success_body())])
     monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
 
     doc = nfse.operate(db, restricted_doc.id, "issue", "m35-success", fully_configured_settings,
@@ -606,8 +607,8 @@ def test_document_a_gets_dps_1_document_b_gets_dps_2_end_to_end(
     nfse.operate(db, restricted_doc.id, "issue", "m36-doc-a", fully_configured_settings, users["gestor"].id)
     nfse.operate(db, restricted_doc_b.id, "issue", "m36-doc-b", fully_configured_settings, users["gestor"].id)
 
-    sent_a = fake.received[0].body
-    sent_b = fake.received[1].body
+    sent_a = _sent_dps_xml(fake, 0)
+    sent_b = _sent_dps_xml(fake, 1)
     assert _expected_dps_id(1).encode() in sent_a
     assert _expected_dps_id(2).encode() in sent_b
     assert sent_a != sent_b
@@ -627,8 +628,8 @@ def test_rejected_document_a_does_not_free_its_number(
     assert doc_a.state == "failed"
     nfse.operate(db, restricted_doc_b.id, "issue", "m36-rej-b", fully_configured_settings, users["gestor"].id)
 
-    assert _expected_dps_id(1).encode() in fake.received[0].body  # A kept #1
-    assert _expected_dps_id(2).encode() in fake.received[1].body  # B got #2, never reused A's
+    assert _expected_dps_id(1).encode() in _sent_dps_xml(fake, 0)  # A kept #1
+    assert _expected_dps_id(2).encode() in _sent_dps_xml(fake, 1)  # B got #2, never reused A's
 
 
 def test_uncertain_document_a_does_not_free_its_number(
@@ -645,7 +646,7 @@ def test_uncertain_document_a_does_not_free_its_number(
     assert doc_a.state == "uncertain"
     nfse.operate(db, restricted_doc_b.id, "issue", "m36-unc-b", fully_configured_settings, users["gestor"].id)
 
-    assert _expected_dps_id(2).encode() in fake.received[1].body  # B got #2, never A's #1
+    assert _expected_dps_id(2).encode() in _sent_dps_xml(fake, 1)  # B got #2, never A's #1
 
 
 def test_reprocess_retry_after_rejection_keeps_original_dps_number(
@@ -656,7 +657,7 @@ def test_reprocess_retry_after_rejection_keeps_original_dps_number(
     _validate_active_config(db, users)
     fake = FakeTransport(responses=[
         TransportResponse(status_code=400, body=b""),        # attempt #1 -> rejected
-        TransportResponse(status_code=200, body=_nfse_xml()),  # attempt #2 (reprocess) -> issued
+        TransportResponse(status_code=200, body=_success_body()),  # attempt #2 (reprocess) -> issued
     ])
     monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
 
@@ -667,8 +668,8 @@ def test_reprocess_retry_after_rejection_keeps_original_dps_number(
                        users["gestor"].id, reprocess=True)
     assert doc.state == "simulated"
 
-    assert _expected_dps_id(1).encode() in fake.received[0].body
-    assert _expected_dps_id(1).encode() in fake.received[1].body  # SAME number, not #2
+    assert _expected_dps_id(1).encode() in _sent_dps_xml(fake, 0)
+    assert _expected_dps_id(1).encode() in _sent_dps_xml(fake, 1)  # SAME number, not #2
 
 
 def test_reconcile_after_rejection_uses_documents_original_dps_number(
@@ -736,12 +737,12 @@ def test_preflight_tsiddps_equals_issue_tsiddps_for_same_document(
     signed = next(a for a in preflight_result.staged_artifacts if a.kind == "dps_signed_xml")
     preflight_xml = (stored_dir / signed.relative_path).read_bytes()
 
-    fake = FakeTransport(responses=[TransportResponse(status_code=200, body=_nfse_xml())])
+    fake = FakeTransport(responses=[TransportResponse(status_code=200, body=_success_body())])
     monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
     doc = nfse.operate(db, restricted_doc.id, "issue", "m36-preflight-vs-issue",
                        fully_configured_settings, users["gestor"].id)
     assert doc.state == "simulated"
-    issued_xml = fake.received[0].body
+    issued_xml = _sent_dps_xml(fake)
 
     expected_id = _expected_dps_id(1)
     assert expected_id.encode() in preflight_xml
@@ -782,7 +783,7 @@ def test_preflight_issue_and_reconcile_all_share_the_same_dps_number(
                        users["gestor"].id)
     assert doc.state == "failed"
 
-    assert _expected_dps_id(1).encode() in fake.received[0].body  # issue used A's preflight number
+    assert _expected_dps_id(1).encode() in _sent_dps_xml(fake, 0)  # issue used A's preflight number
     assert fake.received[1].path == PATH_GET_DPS.format(dps_id=_expected_dps_id(1))  # reconcile too
 
 

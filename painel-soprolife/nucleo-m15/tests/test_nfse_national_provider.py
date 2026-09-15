@@ -1,10 +1,16 @@
 """M27/M30 — RestrictedNfseProvider: construção+assinatura+transporte ponta a
 ponta, sempre com FakeTransport (nunca rede real).
 
-M30 acrescenta o contrato real de resposta (§1.3.2.a do manual oficial dos
-contribuintes: sucesso do POST /nfse retorna o arquivo XML da NFS-e gerada) e
-a correção do identificador usado por query()/reconciliação (TSIdDPS, nunca
-``operation_id``)."""
+M30 acrescenta o contrato real de resposta e a correção do identificador usado
+por query()/reconciliação (TSIdDPS, nunca ``operation_id``).
+
+M38 corrige o formato de fio: requisição e resposta do SEFIN Nacional são
+JSON (``dpsXmlGZipB64``/``nfseXmlGZipB64`` = XML -> GZip -> Base64), nunca XML
+cru — ver ``tests/test_nfse_m38_wire_format.py`` para a prova detalhada do
+envelope. Aqui os corpos apenas passam a ser construídos/lidos nesse formato.
+"""
+import json
+
 import pytest
 
 from app.services.nfse_national.config import NationalDpsConfiguration
@@ -17,6 +23,7 @@ from app.services.nfse_national.provider import (
 )
 from app.services.nfse_national.signer import generate_synthetic_test_certificate, load_pkcs12_certificate
 from app.services.nfse_national.transport import FakeTransport, TransportResponse
+from app.services.nfse_national.wire import decode_b64_gzip_xml, encode_xml_gzip_b64
 from app.services.nfse_providers import Outcome, ProviderRequest
 
 # TSIdNFSe (tiposSimples_v1.01.xsd): "NFS" + cMun(7) + ambGer(1) + tipoInsc(1)
@@ -34,6 +41,25 @@ def _nfse_xml(access_key: str = VALID_ACCESS_KEY) -> bytes:
         f'<infNFSe Id="{access_key}"></infNFSe>'
         '</NFSe>'
     ).encode("utf-8")
+
+
+def _success_body(access_key: str = VALID_ACCESS_KEY) -> bytes:
+    """A documented ``NFSePostResponseSucesso`` envelope (M38)."""
+    return json.dumps({
+        "tipoAmbiente": 2,
+        "versaoAplicativo": "restrita",
+        "dataHoraProcessamento": "2026-09-15T00:00:00-03:00",
+        "idDps": "DPS330455721122233300018100001000000000000001",
+        "chaveAcesso": access_key,
+        "nfseXmlGZipB64": encode_xml_gzip_b64(_nfse_xml(access_key)),
+    }).encode("utf-8")
+
+
+def _sent_dps_xml(transport: FakeTransport, index: int = 0) -> bytes:
+    """The signed DPS XML actually carried by request ``index``, recovered
+    from the JSON/GZip/Base64 envelope exactly as SEFIN would recover it."""
+    payload = json.loads(transport.received[index].body.decode("utf-8"))
+    return decode_b64_gzip_xml(payload["dpsXmlGZipB64"])
 
 
 @pytest.fixture
@@ -71,19 +97,21 @@ def test_provider_rejects_wrong_environment(context):
 
 
 def test_issue_success_sends_signed_xsd_valid_dps(context):
-    transport = FakeTransport(responses=[TransportResponse(201, _nfse_xml())])
+    transport = FakeTransport(responses=[TransportResponse(201, _success_body())])
     provider = RestrictedNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.outcome == Outcome.SIMULATED
     sent = transport.received[0]
     assert sent.method == "POST" and sent.path == "/nfse"
-    assert b"<ds:Signature" in sent.body or b"Signature" in sent.body
+    dps_xml = _sent_dps_xml(transport)
+    assert b"<ds:Signature" in dps_xml or b"Signature" in dps_xml
 
 
 def test_issue_success_extracts_real_access_key(context):
-    """M30 — the official manual states POST /nfse success returns the NFS-e
-    XML itself; the access key is infNFSe/@Id (TSIdNFSe), never invented."""
-    transport = FakeTransport(responses=[TransportResponse(200, _nfse_xml())])
+    """M30/M38 — the access key comes from the NFS-e XML inside the success
+    envelope (infNFSe/@Id, TSIdNFSe), cross-checked against the envelope's own
+    ``chaveAcesso``; never invented."""
+    transport = FakeTransport(responses=[TransportResponse(200, _success_body())])
     provider = RestrictedNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.outcome == Outcome.SIMULATED
@@ -98,9 +126,13 @@ def test_issue_success_extracts_real_access_key(context):
     b"",
 ])
 def test_issue_malformed_success_body_never_becomes_issued(context, body):
-    """A 2xx status is never proof of issuance by itself — a success body
-    that isn't a well-formed NFS-e with a schema-shaped access key must fail
-    closed to UNCERTAIN, never SIMULATED."""
+    """A 2xx status is never proof of issuance by itself — a success body that
+    isn't the documented JSON envelope carrying a well-formed NFS-e with a
+    schema-shaped access key must fail closed to UNCERTAIN, never SIMULATED.
+
+    M38 note: raw NFS-e XML is included here on purpose. It was the shape the
+    pre-M38 code accepted as success; under the real, documented contract it is
+    NOT a valid POST /nfse response envelope and must no longer be believed."""
     transport = FakeTransport(responses=[TransportResponse(200, body)])
     provider = RestrictedNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
@@ -212,7 +244,7 @@ def test_issue_timeout_carries_generic_diagnostic(context):
 
 
 def test_issue_success_has_no_diagnostic(context):
-    transport = FakeTransport(responses=[TransportResponse(201, _nfse_xml())])
+    transport = FakeTransport(responses=[TransportResponse(201, _success_body())])
     provider = RestrictedNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.outcome == Outcome.SIMULATED
@@ -244,5 +276,4 @@ def test_amount_from_request_never_invented_by_provider(context):
     provider = RestrictedNfseProvider(transport=transport, context=context)
     req = ProviderRequest("doc-1", "op-1", "prep-1", "77.50", "2026-08-10", "Descrição fixa.")
     provider.issue(req)
-    sent_body = transport.received[0].body
-    assert b"77.50" in sent_body
+    assert b"77.50" in _sent_dps_xml(transport)
