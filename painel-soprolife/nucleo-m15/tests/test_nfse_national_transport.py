@@ -10,6 +10,7 @@ ephemeral, tightly-permissioned temp files, supplied via ``verify=``).
 """
 import ssl
 
+import httpx
 import pytest
 
 from app.services.nfse_national import transport as transport_module
@@ -19,6 +20,8 @@ from app.services.nfse_national.signer import (
     private_key_pem,
 )
 from app.services.nfse_national.transport import (
+    PATH_GET_DPS,
+    PATH_ISSUE_NFSE,
     FakeTransport,
     HttpxRestrictedTransport,
     NetworkGateClosedError,
@@ -233,3 +236,137 @@ def test_send_never_passes_verify_false(monkeypatch):
                                          mtls_certificate_pem=cert_pem, mtls_key_pem=key_pem)
     transport.send(TransportRequest("GET", "/dps/x"))
     assert _CapturingClient.last_kwargs.get("verify") is not False
+
+
+# ------------------------------------------------------------ M37 — Sefin Nacional base + ADN guard
+#
+# 2026-09-15 live read-only route sweep (never a POST — HEAD/GET/OPTIONS
+# only) proved:
+#   - https://adn.producaorestrita.nfse.gov.br/nfse            -> 404, opaque
+#     (no Allow header, no JSON body) on every method: the route simply
+#     isn't there.
+#   - https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse
+#     -> 405 on every method, `Allow: POST`, JSON body: the route EXISTS
+#     and accepts exactly POST. The same host's docs page
+#     (.../API/SefinNacional/docs/index) itself loads its own "try it"
+#     scripts from this exact `/SefinNacional/...` base, confirming it's
+#     the real runtime base, not just a doc-only alias.
+# The tests below (a) fail-closed-prove ADN can never be the issuance
+# target for this transport, no matter how `m31-restricted.env` is
+# misconfigured, and (b) prove — through REAL httpx URL-join logic
+# (httpx.MockTransport: no socket, no DNS, but genuine httpx.Client
+# base_url+path resolution) — that the confirmed Sefin Nacional base
+# resolves issuance/lookup requests to the EXACT URLs the live sweep
+# confirmed exist.
+
+SEFIN_NACIONAL_BASE_URL = "https://sefin.producaorestrita.nfse.gov.br/SefinNacional"
+
+
+def test_send_refuses_adn_restricted_host_even_with_gate_open():
+    """Even a fully-open gate (restricted environment, network enabled,
+    https) can never send a request to the ADN distribution host through
+    this transport — the ONLY transport capable of a real POST /nfse. This
+    makes "issuance accidentally targets ADN" impossible by construction,
+    not dependent on the config file being edited correctly."""
+    transport = HttpxRestrictedTransport(
+        base_url="https://adn.producaorestrita.nfse.gov.br",
+        network_enabled=True, environment="restricted")
+    with pytest.raises(NetworkGateClosedError, match="adn_distribution_host"):
+        transport.send(TransportRequest("POST", PATH_ISSUE_NFSE, body=b"<DPS/>"))
+
+
+def test_send_refuses_adn_restricted_host_with_contribuintes_prefix_too():
+    """Same guard, for the /contribuintes-prefixed candidate the live sweep
+    also ruled out (candidate B) — the host alone is enough to refuse,
+    regardless of whatever path prefix a future misconfiguration adds."""
+    transport = HttpxRestrictedTransport(
+        base_url="https://adn.producaorestrita.nfse.gov.br/contribuintes",
+        network_enabled=True, environment="restricted")
+    with pytest.raises(NetworkGateClosedError, match="adn_distribution_host"):
+        transport.send(TransportRequest("POST", PATH_ISSUE_NFSE, body=b"<DPS/>"))
+
+
+def test_sefin_nacional_host_is_not_blocked_by_the_adn_guard():
+    """Sanity check for the guard itself: it must be host-specific, never so
+    broad it also blocks the now-confirmed-correct Sefin Nacional host."""
+    transport = HttpxRestrictedTransport(base_url=SEFIN_NACIONAL_BASE_URL,
+                                         network_enabled=False, environment="restricted")
+    with pytest.raises(NetworkGateClosedError, match="restricted_network_gate_disabled"):
+        transport.send(TransportRequest("GET", "/dps/x"))  # gate-closed, not ADN-guard
+
+
+class _UrlCapturingTransport(httpx.BaseTransport):
+    """A REAL httpx transport backend (so httpx's OWN base_url+path join
+    logic runs, unmodified) that never opens a socket — it answers every
+    request in-process. Captures the exact outgoing request for assertion."""
+
+    def __init__(self):
+        self.last_request: httpx.Request | None = None
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        self.last_request = request
+        return httpx.Response(200, content=b'{"ok": true}')
+
+
+_REAL_HTTPX_CLIENT = httpx.Client  # captured at import time, before any monkeypatch can touch it
+
+
+def _real_httpx_client_factory(capture: _UrlCapturingTransport):
+    """Stands in for transport_module.httpx.Client: builds a REAL
+    httpx.Client (genuine URL-join behavior) but backed by the in-memory
+    capturing transport above instead of a real network transport. `verify`
+    is accepted and discarded — MockTransport-style backends never perform
+    a TLS handshake, so it has nothing to apply to.
+
+    Uses the ``_REAL_HTTPX_CLIENT`` reference captured above, never the
+    module-global ``httpx.Client`` — monkeypatching that global to install
+    THIS factory would otherwise make the factory call itself (the
+    ``httpx`` module object is shared between this test file and
+    ``transport_module``, so patching one patches both)."""
+    def factory(*, base_url, timeout, verify=None):  # noqa: ARG001 — verify unused, matches real call shape
+        return _REAL_HTTPX_CLIENT(base_url=base_url, timeout=timeout, transport=capture)
+
+    return factory
+
+
+def test_issue_request_resolves_to_exact_confirmed_sefin_nfse_url(monkeypatch):
+    capture = _UrlCapturingTransport()
+    monkeypatch.setattr(transport_module.httpx, "Client", _real_httpx_client_factory(capture))
+    transport = HttpxRestrictedTransport(base_url=SEFIN_NACIONAL_BASE_URL,
+                                         network_enabled=True, environment="restricted")
+    transport.send(TransportRequest("POST", PATH_ISSUE_NFSE, body=b"<DPS/>"))
+    assert str(capture.last_request.url) == (
+        "https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse"
+    )
+    assert capture.last_request.method == "POST"
+
+
+def test_dps_lookup_request_resolves_to_exact_confirmed_sefin_dps_url(monkeypatch):
+    capture = _UrlCapturingTransport()
+    monkeypatch.setattr(transport_module.httpx, "Client", _real_httpx_client_factory(capture))
+    transport = HttpxRestrictedTransport(base_url=SEFIN_NACIONAL_BASE_URL,
+                                         network_enabled=True, environment="restricted")
+    dps_id = "DPS330455726354402600011000001000000000000002"  # shape only, not a real lookup
+    transport.send(TransportRequest("GET", PATH_GET_DPS.format(dps_id=dps_id)))
+    assert str(capture.last_request.url) == (
+        f"https://sefin.producaorestrita.nfse.gov.br/SefinNacional/dps/{dps_id}"
+    )
+    assert capture.last_request.method == "GET"
+
+
+def test_issue_request_never_resolves_under_the_adn_host():
+    """Belt-and-suspenders: even if the ADN-host guard above were ever
+    removed by mistake, this proves the URL httpx would build for the ADN
+    base is a DIFFERENT string than the confirmed Sefin Nacional issuance
+    URL — the two are not somehow the same endpoint under different names.
+    No monkeypatch here: this bypasses the ADN guard deliberately, only to
+    inspect the URL httpx would have built — _assert_gate_open() is NOT
+    called, this is a pure URL-join check, not a call through send()."""
+    capture = _UrlCapturingTransport()
+    with _REAL_HTTPX_CLIENT(base_url="https://adn.producaorestrita.nfse.gov.br",
+                            transport=capture) as client:
+        client.request("POST", PATH_ISSUE_NFSE)
+    assert str(capture.last_request.url) == "https://adn.producaorestrita.nfse.gov.br/nfse"
+    assert str(capture.last_request.url) != (
+        "https://sefin.producaorestrita.nfse.gov.br/SefinNacional/nfse"
+    )

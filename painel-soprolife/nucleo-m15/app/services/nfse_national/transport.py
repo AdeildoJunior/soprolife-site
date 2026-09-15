@@ -42,6 +42,21 @@ class NetworkGateClosedError(RuntimeError):
     'restricted'. Never bypassable by constructor arguments alone."""
 
 
+# M37 — the ADN (Ambiente de Dados Nacional) restricted host is a
+# distribution/query service, never an issuance one: the official
+# contributor manuals confirm it documents GET /DFe/{NSU} and NFS-e/event
+# consultation, not DPS issuance, and a live read-only route sweep
+# (2026-09-15) proved it directly — HEAD/GET/OPTIONS on this host's
+# candidate ``/nfse`` paths all 404 with no ``Allow`` header (opaque,
+# route-not-found), while the confirmed Sefin Nacional issuance host
+# answers those same methods with 405 + ``Allow: POST``. This transport is
+# the ONLY thing that ever sends a real POST /nfse, so this check alone is
+# enough to make "issuance accidentally targets ADN" structurally
+# impossible — never a guess, never dependent on `m31-restricted.env`
+# being edited correctly by hand.
+FORBIDDEN_ISSUANCE_HOSTS = frozenset({"adn.producaorestrita.nfse.gov.br"})
+
+
 @dataclass(frozen=True)
 class TransportRequest:
     method: Literal["GET", "POST", "HEAD"]
@@ -139,6 +154,8 @@ class HttpxRestrictedTransport:
             raise NetworkGateClosedError("restricted_network_gate_disabled")
         if not self._base_url.startswith("https://"):
             raise NetworkGateClosedError("restricted_base_url_must_be_https")
+        if httpx.URL(self._base_url).host in FORBIDDEN_ISSUANCE_HOSTS:
+            raise NetworkGateClosedError("restricted_base_url_must_not_be_adn_distribution_host")
 
     def send(self, request: TransportRequest) -> TransportResponse:
         self._assert_gate_open()
