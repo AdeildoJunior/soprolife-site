@@ -113,9 +113,11 @@ def test_alembic_graph_fiscal_after_m26_9(tmp_path, monkeypatch):
     script = ScriptDirectory.from_config(cfg)
     # M27 added one migration (9c310c422ce2, fiscal_artifacts) on top of the
     # M26.10 head, M29 added one more (ba3afa480112, national_dps_configurations)
-    # on top of that, and M31 added one more (a58f6c31d9e7, service_location)
-    # on top of that — this now confirms THAT chain, not a fork of it.
-    assert script.get_heads() == ['a58f6c31d9e7']
+    # on top of that, M31 added one more (a58f6c31d9e7, service_location) on
+    # top of that, and M36 added one more (3a97d7535a49, durable dps
+    # numbering) on top of that — this now confirms THAT chain, not a fork.
+    assert script.get_heads() == ['3a97d7535a49']
+    assert script.get_revision('3a97d7535a49').down_revision == 'a58f6c31d9e7'
     assert script.get_revision('a58f6c31d9e7').down_revision == 'ba3afa480112'
     assert script.get_revision('ba3afa480112').down_revision == '9c310c422ce2'
     assert script.get_revision('9c310c422ce2').down_revision == 'f6a1d9e28b40'

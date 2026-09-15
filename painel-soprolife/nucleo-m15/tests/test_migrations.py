@@ -154,14 +154,15 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
 def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     cfg = _alembic_config(f"sqlite:///{tmp_path}/heads.db")
-    # M31 (a58f6c31d9e7, local da prestação vs. incidência do ISSQN), sobre
-    # M29 (ba3afa480112, configuração fiscal nacional versionada), sobre M27
-    # (9c310c422ce2, artefatos fiscais privados), sobre a migração fiscal
-    # M26.10 (f6a1d9e28b40, fila e evidências imutáveis), é a head atual — o
-    # valor esperado aqui é atualizado a cada
-    # nova migration; o que a asserção realmente prova é continuar existindo
-    # EXATAMENTE uma head (sem ponto de ramificação acidental).
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["a58f6c31d9e7"]
+    # M36 (3a97d7535a49, numeração durável de DPS), sobre M31 (a58f6c31d9e7,
+    # local da prestação vs. incidência do ISSQN), sobre M29 (ba3afa480112,
+    # configuração fiscal nacional versionada), sobre M27 (9c310c422ce2,
+    # artefatos fiscais privados), sobre a migração fiscal M26.10
+    # (f6a1d9e28b40, fila e evidências imutáveis), é a head atual — o valor
+    # esperado aqui é atualizado a cada nova migration; o que a asserção
+    # realmente prova é continuar existindo EXATAMENTE uma head (sem ponto
+    # de ramificação acidental).
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["3a97d7535a49"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(

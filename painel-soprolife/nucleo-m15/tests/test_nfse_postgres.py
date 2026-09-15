@@ -66,3 +66,63 @@ def test_concurrent_issue_never_calls_provider_twice(engine, db, users, settings
     assert len(calls) == 1
     assert db.scalar(select(func.count()).select_from(FiscalAttempt)) == 2
     assert nfse.get_document(db, doc_id).state == 'simulated'
+
+
+def test_concurrent_dps_number_allocation_never_collides(engine, db, users, settings, source):
+    """M36 — real transaction race: two DIFFERENT documents allocating a
+    numero_dps in the SAME scope at the same instant must never receive the
+    same number. Row-locked allocation (DpsNumberSequence.with_for_update())
+    is only genuinely race-safe against real PostgreSQL locking — this is
+    the one place that guarantee is actually exercised under true
+    concurrency, matching test_concurrent_issue_never_calls_provider_twice
+    above for the exact same reason.
+    """
+    from app.services.nfse_national.dps_numbering import allocate_dps_number
+    from tests.test_nfse_foundation import policy_payload
+
+    nfse.create_policy(db, policy_payload(), users['admin'].id)
+    doc_a = nfse.prepare(db, source[0].id, settings, users['gestor'].id)
+
+    # A second, independent document — same scope, never sharing exam/prep with A.
+    from datetime import date
+    from decimal import Decimal
+    from app.models import FinancialEntry, Person, SpirometryExam
+    p = Person(public_code='PES-PGRACE-B', nome_completo='Pessoa Sintética PG Race B',
+              nome_normalizado='pessoa sintetica pg race b')
+    db.add(p)
+    db.flush()
+    e = SpirometryExam(public_code='ESP-PGRACE-B', person_id=p.id, status='Realizado',
+                       data_exame=date(2026, 8, 10), data_exame_precisao='dia',
+                       modalidade='residencial', broncodilatador=True)
+    db.add(e)
+    db.flush()
+    f = FinancialEntry(public_code='LAN-PGRACE-B', tipo='receita', categoria='Espirometria',
+                       valor=Decimal('123.45'), status='Recebido', spirometry_exam_id=e.id,
+                       data_competencia=date(2026, 9, 1))
+    db.add(f)
+    db.commit()
+    doc_b = nfse.prepare(db, e.id, settings, users['gestor'].id)
+
+    scope = dict(codigo_municipio='3304557', tipo_inscricao_federal=2,
+                inscricao_federal='63544026000110', serie_dps='00001')
+    barrier = Barrier(2)
+
+    def worker(document_id):
+        with Session(engine, expire_on_commit=False) as session:
+            barrier.wait(timeout=10)
+            number = allocate_dps_number(session, document_id=document_id, **scope)
+            session.commit()
+            return number
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        numbers = list(pool.map(worker, [doc_a.id, doc_b.id]))
+
+    assert numbers[0] != numbers[1]
+    assert sorted(numbers) == [1, 2]
+    # Re-running for the SAME two documents (sequential now) must return the
+    # SAME numbers already allocated — no new allocation, no drift.
+    with Session(engine, expire_on_commit=False) as session:
+        again_a = allocate_dps_number(session, document_id=doc_a.id, **scope)
+        again_b = allocate_dps_number(session, document_id=doc_b.id, **scope)
+        session.commit()
+    assert {again_a, again_b} == set(numbers)

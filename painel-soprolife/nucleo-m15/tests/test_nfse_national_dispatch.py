@@ -102,6 +102,36 @@ def restricted_doc(db, users, restricted_source, fully_configured_settings):
     return nfse.prepare(db, restricted_source[1].id, fully_configured_settings, users["gestor"].id)
 
 
+@pytest.fixture
+def restricted_source_b(db, users):
+    """A SECOND, independent exam/document — same issuer scope as
+    ``restricted_source`` (same synthetic_national_config), used to prove
+    numero_dps allocation is correctly scoped across DIFFERENT documents,
+    never per-document (see M36)."""
+    p = Person(public_code="PES-M29D-B", nome_completo="Pessoa Sintética M29 Dispatch B",
+              nome_normalizado="pessoa sintetica m29 dispatch b", cpf="11144477735")
+    db.add(p)
+    db.flush()
+    e = SpirometryExam(public_code="ESP-M29D-B", person_id=p.id, status="Realizado",
+                       data_exame=date(2026, 8, 10), data_exame_precisao="dia",
+                       modalidade="residencial", broncodilatador=True,
+                       municipio_atendimento_ibge="3304557")
+    db.add(e)
+    db.flush()
+    f = FinancialEntry(public_code="LAN-M29D-B", tipo="receita", categoria="Espirometria",
+                       valor=Decimal("220.00"), status="Recebido", spirometry_exam_id=e.id,
+                       data_competencia=date(2026, 9, 1))
+    db.add(f)
+    db.commit()
+    return p, e, f
+
+
+@pytest.fixture
+def restricted_doc_b(db, users, restricted_source_b, fully_configured_settings):
+    _validate_fiscal_policies(db, users)  # idempotent: same version+config as restricted_doc's call
+    return nfse.prepare(db, restricted_source_b[1].id, fully_configured_settings, users["gestor"].id)
+
+
 def _validate_active_config(db, users, *, effective_from=date(2026, 1, 1)):
     fiscal_config.create_version(
         db, environment="restricted", effective_from=effective_from, validation_state="validated",
@@ -556,6 +586,133 @@ def test_rejection_diagnostic_never_leaks_response_body_content(
     assert error_code == "provider_rejected:http_400"
     for leaked in (b"12345678901", b"segredo", b"X99", b"cpf", b"mensagem"):
         assert leaked not in error_code.encode()
+
+
+# --------------------------------------------------------- M36 — durable, globally-unique DPS numbering
+
+
+def test_document_a_gets_dps_1_document_b_gets_dps_2_end_to_end(
+        monkeypatch, db, users, restricted_doc, restricted_doc_b, fully_configured_settings):
+    """Root-cause regression (M36): two DIFFERENT documents, same issuer
+    scope, must never both submit numero_dps=1 — end to end, through the
+    real dispatch path, asserted on the actual outbound XML."""
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[
+        TransportResponse(status_code=200, body=b"<nfse-ok/>"),
+        TransportResponse(status_code=200, body=b"<nfse-ok/>"),
+    ])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    nfse.operate(db, restricted_doc.id, "issue", "m36-doc-a", fully_configured_settings, users["gestor"].id)
+    nfse.operate(db, restricted_doc_b.id, "issue", "m36-doc-b", fully_configured_settings, users["gestor"].id)
+
+    sent_a = fake.received[0].body
+    sent_b = fake.received[1].body
+    assert _expected_dps_id(1).encode() in sent_a
+    assert _expected_dps_id(2).encode() in sent_b
+    assert sent_a != sent_b
+
+
+def test_rejected_document_a_does_not_free_its_number(
+        monkeypatch, db, users, restricted_doc, restricted_doc_b, fully_configured_settings):
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[
+        TransportResponse(status_code=400, body=b""),  # A -> rejected
+        TransportResponse(status_code=200, body=b"<nfse-ok/>"),  # B -> issued
+    ])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc_a = nfse.operate(db, restricted_doc.id, "issue", "m36-rej-a", fully_configured_settings,
+                         users["gestor"].id)
+    assert doc_a.state == "failed"
+    nfse.operate(db, restricted_doc_b.id, "issue", "m36-rej-b", fully_configured_settings, users["gestor"].id)
+
+    assert _expected_dps_id(1).encode() in fake.received[0].body  # A kept #1
+    assert _expected_dps_id(2).encode() in fake.received[1].body  # B got #2, never reused A's
+
+
+def test_uncertain_document_a_does_not_free_its_number(
+        monkeypatch, db, users, restricted_doc, restricted_doc_b, fully_configured_settings):
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[
+        TimeoutError("A -> uncertain"),
+        TransportResponse(status_code=200, body=b"<nfse-ok/>"),  # B -> issued
+    ])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc_a = nfse.operate(db, restricted_doc.id, "issue", "m36-unc-a", fully_configured_settings,
+                         users["gestor"].id)
+    assert doc_a.state == "uncertain"
+    nfse.operate(db, restricted_doc_b.id, "issue", "m36-unc-b", fully_configured_settings, users["gestor"].id)
+
+    assert _expected_dps_id(2).encode() in fake.received[1].body  # B got #2, never A's #1
+
+
+def test_reprocess_retry_after_rejection_keeps_original_dps_number(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """Idempotent retry of the SAME document (M15's `reprocessar` path, a
+    NEW idempotency key over the SAME failed document) must reuse the
+    original numero_dps — never mint a second one."""
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[
+        TransportResponse(status_code=400, body=b""),        # attempt #1 -> rejected
+        TransportResponse(status_code=200, body=_nfse_xml()),  # attempt #2 (reprocess) -> issued
+    ])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m36-retry-1", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "failed"
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m36-retry-2", fully_configured_settings,
+                       users["gestor"].id, reprocess=True)
+    assert doc.state == "simulated"
+
+    assert _expected_dps_id(1).encode() in fake.received[0].body
+    assert _expected_dps_id(1).encode() in fake.received[1].body  # SAME number, not #2
+
+
+def test_reconcile_after_rejection_uses_documents_original_dps_number(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """M33's contract, now derived from the M36 durable allocation instead
+    of FiscalAttempt.number: reconciliation always targets the ONE number
+    this document was ever assigned."""
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[
+        TimeoutError("issue #1 -> uncertain"),
+        TransportResponse(status_code=404, body=b""),  # reconcile #2
+    ])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m36-reconcile-1", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "uncertain"
+    doc = nfse.operate(db, restricted_doc.id, "reconcile", "m36-reconcile-2", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "failed"
+
+    reconcile_request = fake.received[1]
+    assert reconcile_request.path == PATH_GET_DPS.format(dps_id=_expected_dps_id(1))
+
+
+def test_dps_number_allocation_persisted_independently_of_fiscal_attempt_number(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """Explicit proof of the M36 requirement: numero_dps no longer tracks
+    FiscalAttempt.number at all. Three attempts on the SAME document (all
+    uncertain, so FiscalAttempt.number climbs to 1, 2, 3) must all still
+    submit numero_dps=1 — never 2 or 3."""
+    _validate_active_config(db, users)
+    fake = FakeTransport(responses=[TimeoutError("t")] * 3)
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+
+    nfse.operate(db, restricted_doc.id, "issue", "m36-fa-1", fully_configured_settings, users["gestor"].id)
+    nfse.operate(db, restricted_doc.id, "reconcile", "m36-fa-2", fully_configured_settings, users["gestor"].id)
+    nfse.operate(db, restricted_doc.id, "reconcile", "m36-fa-3", fully_configured_settings, users["gestor"].id)
+
+    attempts = [a for a in events(db, doc=restricted_doc) if a.phase == "started"]
+    assert [a.number for a in attempts] == [1, 2, 3]  # FiscalAttempt sequence still climbs
+    expected_path = PATH_GET_DPS.format(dps_id=_expected_dps_id(1))
+    assert fake.received[1].path == expected_path  # reconcile #2 targets DPS #1
+    assert fake.received[2].path == expected_path  # reconcile #3 also targets DPS #1, never #2/#3
 
 
 # --------------------------------------------------------- batch safety (section I)

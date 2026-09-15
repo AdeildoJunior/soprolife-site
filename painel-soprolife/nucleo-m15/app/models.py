@@ -2803,6 +2803,53 @@ class FiscalAttempt(Base):
     )
 
 
+class DpsNumberSequence(Base):
+    """M36 — durable global counter for ``numero_dps`` (TSIdDPS), keyed by
+    EXACTLY the components that make a TSIdDPS unique per the official
+    schema (``nfse_national.identifiers.DPS_ID_PATTERN``): issuer
+    municipality + tipo de inscrição federal + inscrição federal (CNPJ/CPF,
+    already zero-padded to 14) + série DPS — see
+    ``nfse_national.dps_numbering.scope_key_for``. NEVER per FiscalDocument
+    or FiscalAttempt: that was the M36 root cause (two different documents'
+    first real dispatch both minted ``numero_dps=1`` under the identical
+    scope, since numbering was scoped per document instead of per issuer).
+
+    Mutable by design — this IS the counter, and is allocated with the same
+    row-lock pattern as ``CodeSequence``/``ids.allocate_public_code`` (row
+    locking is only genuinely race-safe on PostgreSQL; SQLite is used for
+    deterministic single-writer tests only, exactly like the rest of this
+    module's sequence allocation — see ``app/db.py`` and M23).
+    """
+    __tablename__ = "dps_number_sequences"
+    scope_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    next_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class DpsNumberAllocation(Base):
+    """M36 — append-only: the ONE ``numero_dps`` a ``FiscalDocument`` will
+    EVER use, within exactly one scope (see ``DpsNumberSequence``). Written
+    once, on the document's first real dispatch attempt; every later
+    attempt for the same document (idempotent retry, reconcile #2/#3, ...)
+    reads this row back instead of allocating again — see
+    ``nfse_national.dps_numbering.allocate_dps_number``.
+
+    Never updated, never deleted (enforced at the database level — see
+    migration): a rejected/uncertain outcome leaves this row exactly as-is,
+    so the number stays permanently assigned to this document, never freed,
+    never reused. ``uq_dps_number_scope`` below is a belt-and-suspenders
+    database-level guarantee, independent of application code, that no two
+    documents can ever hold the same (scope, number) pair.
+    """
+    __tablename__ = "dps_number_allocations"
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_documents.id"), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(64), index=True)
+    dps_number: Mapped[int] = mapped_column(Integer)
+    allocated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        UniqueConstraint("scope_key", "dps_number", name="uq_dps_number_scope"),
+    )
+
+
 class FiscalArtifact(Base):
     """M27 — append-only index of private technical fiscal artifacts.
 

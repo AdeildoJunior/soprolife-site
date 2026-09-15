@@ -37,7 +37,7 @@ from sqlalchemy.orm import Session
 
 from ...config import Settings
 from ...models import FiscalDocument, FiscalPreparation, Person, SpirometryExam
-from . import fiscal_config
+from . import dps_numbering, fiscal_config
 from .dps_builder import Recipient
 from .identifiers import DpsIdComponents, InvalidIdentifierError
 from .provider import RestrictedIssueContext, RestrictedNfseProvider
@@ -100,7 +100,7 @@ def _service_location(preparation: FiscalPreparation) -> str:
 
 
 def resolve_restricted_provider(db: Session, settings: Settings, doc: FiscalDocument,
-                                preparation: FiscalPreparation, actor: str, *, dps_number: int,
+                                preparation: FiscalPreparation, actor: str, *,
                                 transport: RestrictedTransport | None = None) -> RestrictedNfseProvider:
     """Builds a ``RestrictedNfseProvider`` bound to exactly this document, or
     fails closed with a specific blocker code. ``transport`` is a test-only
@@ -135,6 +135,17 @@ def resolve_restricted_provider(db: Session, settings: Settings, doc: FiscalDocu
     municipio_prestacao_ibge = _service_location(preparation)
     certificate = _load_certificate(settings)
 
+    # M36 — durable, globally-unique numero_dps, keyed by document_id alone:
+    # the SAME call, for the SAME document, on any later attempt (retry,
+    # reconcile #2/#3, ...) always returns the number already allocated on
+    # the first — never a fresh one derived from this attempt's own
+    # FiscalAttempt.number (that was the M36 root cause). See
+    # dps_numbering.allocate_dps_number().
+    dps_number = dps_numbering.allocate_dps_number(
+        db, document_id=doc.id, codigo_municipio=national_config.issuer_municipio_ibge,
+        tipo_inscricao_federal=2, inscricao_federal=national_config.issuer_cnpj,
+        serie_dps="00001",
+    )
     try:
         dps_id = DpsIdComponents(
             codigo_municipio=national_config.issuer_municipio_ibge, tipo_inscricao_federal=2,
