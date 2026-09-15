@@ -129,6 +129,134 @@ def test_blocked_at_artifact_staging_when_storage_not_configured(db, users, rest
     assert result.stage_reached == Stage.ARTIFACT_STAGING
 
 
+# --------------------------------------------------------------- M36 — preflight shares durable DPS identity
+
+
+def _second_document(db, users, restricted_settings, *, code):
+    """An independent, second document — same issuer scope as
+    ``restricted_ready`` — used to prove numero_dps allocation is per
+    DOCUMENT, never a shared/independent default. Reuses the validated
+    HOME policy ``restricted_ready`` already created (every caller of this
+    helper also depends on that fixture) — creating a second one would
+    make the policy resolution ambiguous."""
+    p = Person(public_code=f'PES-PRE-{code}', nome_completo=f'Pessoa Sintética Preflight {code}',
+              nome_normalizado=f'pessoa sintetica preflight {code}'.lower())
+    db.add(p)
+    db.flush()
+    e = SpirometryExam(public_code=f'ESP-PRE-{code}', person_id=p.id, status='Realizado',
+                       data_exame=date(2026, 8, 10), data_exame_precisao='dia',
+                       modalidade='residencial', broncodilatador=True,
+                       municipio_atendimento_ibge='3304557')
+    db.add(e)
+    db.flush()
+    f = FinancialEntry(public_code=f'LAN-PRE-{code}', tipo='receita', categoria='Espirometria',
+                       valor=Decimal('180.00'), status='Recebido', spirometry_exam_id=e.id,
+                       data_competencia=date(2026, 9, 1))
+    db.add(f)
+    db.commit()
+    return nfse.prepare(db, e.id, restricted_settings, users['gestor'].id)
+
+
+def test_preflight_allocates_dps_number_1_for_first_document(
+        db, users, restricted_ready, national_config, recipient, synthetic_certificate, tmp_path):
+    from app.models import DpsNumberAllocation
+
+    settings = Settings(nfse_enabled=True, nfse_environment='restricted',
+                        nfse_fiscal_artifacts_dir=tmp_path / 'fiscal-artifacts')
+    result = run_offline_preflight(db, restricted_ready.id, settings, users['gestor'].id,
+                                   national_config=national_config, recipient=recipient,
+                                   certificate=synthetic_certificate)
+    assert result.status == 'ready_to_send'
+    signed = next(a for a in result.staged_artifacts if a.kind == 'dps_signed_xml')
+    signed_xml = (settings.resolved_fiscal_artifacts_storage_dir() / signed.relative_path).read_bytes()
+    assert b'nDPS>1<' in signed_xml
+
+    allocation = db.get(DpsNumberAllocation, restricted_ready.id)
+    assert allocation.dps_number == 1
+
+
+def test_repeated_preflight_keeps_same_dps_number(
+        db, users, restricted_ready, national_config, recipient, synthetic_certificate, tmp_path):
+    from app.models import DpsNumberAllocation
+
+    settings = Settings(nfse_enabled=True, nfse_environment='restricted',
+                        nfse_fiscal_artifacts_dir=tmp_path / 'fiscal-artifacts')
+    run_offline_preflight(db, restricted_ready.id, settings, users['gestor'].id,
+                          national_config=national_config, recipient=recipient,
+                          certificate=synthetic_certificate)
+    run_offline_preflight(db, restricted_ready.id, settings, users['gestor'].id,
+                          national_config=national_config, recipient=recipient,
+                          certificate=synthetic_certificate)
+    run_offline_preflight(db, restricted_ready.id, settings, users['gestor'].id,
+                          national_config=national_config, recipient=recipient,
+                          certificate=synthetic_certificate)
+    allocation = db.get(DpsNumberAllocation, restricted_ready.id)
+    assert allocation.dps_number == 1  # never advanced by re-running preflight
+
+
+def test_second_document_preflight_allocates_dps_number_2(
+        db, users, restricted_ready, restricted_settings, national_config, recipient,
+        synthetic_certificate, tmp_path):
+    settings = Settings(nfse_enabled=True, nfse_environment='restricted',
+                        nfse_fiscal_artifacts_dir=tmp_path / 'fiscal-artifacts')
+    first = run_offline_preflight(db, restricted_ready.id, settings, users['gestor'].id,
+                                  national_config=national_config, recipient=recipient,
+                                  certificate=synthetic_certificate)
+    doc_b = _second_document(db, users, restricted_settings, code='DPS2')
+    second = run_offline_preflight(db, doc_b.id, settings, users['gestor'].id,
+                                   national_config=national_config, recipient=recipient,
+                                   certificate=synthetic_certificate)
+    assert first.status == second.status == 'ready_to_send'
+
+    stored_dir = settings.resolved_fiscal_artifacts_storage_dir()
+    xml_a = (stored_dir / next(a for a in first.staged_artifacts
+                              if a.kind == 'dps_signed_xml').relative_path).read_bytes()
+    xml_b = (stored_dir / next(a for a in second.staged_artifacts
+                              if a.kind == 'dps_signed_xml').relative_path).read_bytes()
+    assert b'nDPS>1<' in xml_a
+    assert b'nDPS>2<' in xml_b
+    assert xml_a != xml_b
+
+
+def test_blocked_preflight_still_permanently_reserves_its_number(
+        db, users, restricted_ready, restricted_settings, national_config, recipient,
+        synthetic_certificate, tmp_path):
+    """A preflight that allocates a number and THEN blocks at a later stage
+    (here: artifact storage not configured) must still keep that number
+    reserved — the next document's preflight must get #2, never reuse #1."""
+    from app.models import DpsNumberAllocation
+
+    blocked = run_offline_preflight(db, restricted_ready.id, restricted_settings, users['gestor'].id,
+                                    national_config=national_config, recipient=recipient,
+                                    certificate=synthetic_certificate)
+    assert blocked.status == 'blocked'
+    assert blocked.stage_reached == Stage.ARTIFACT_STAGING
+    allocation = db.get(DpsNumberAllocation, restricted_ready.id)
+    assert allocation.dps_number == 1  # reserved despite blocking later
+
+    doc_b = _second_document(db, users, restricted_settings, code='RESV2')
+    settings = Settings(nfse_enabled=True, nfse_environment='restricted',
+                        nfse_fiscal_artifacts_dir=tmp_path / 'fiscal-artifacts')
+    result_b = run_offline_preflight(db, doc_b.id, settings, users['gestor'].id,
+                                     national_config=national_config, recipient=recipient,
+                                     certificate=synthetic_certificate)
+    assert result_b.status == 'ready_to_send'
+    signed_b = next(a for a in result_b.staged_artifacts if a.kind == 'dps_signed_xml')
+    signed_xml_b = (settings.resolved_fiscal_artifacts_storage_dir() / signed_b.relative_path).read_bytes()
+    assert b'nDPS>2<' in signed_xml_b  # never reused #1
+
+
+def test_no_independent_dps_number_parameter_remains():
+    """M36 fix contract: ONE source of truth for the official DPS number —
+    the independent numero_dps_display/serie_dps_display defaults this
+    function used to accept are gone entirely."""
+    import inspect
+
+    params = inspect.signature(run_offline_preflight).parameters
+    assert 'numero_dps_display' not in params
+    assert 'serie_dps_display' not in params
+
+
 def test_full_chain_reaches_ready_to_send_and_stages_artifacts(
         db, users, restricted_ready, national_config, recipient, synthetic_certificate, tmp_path):
     settings = Settings(nfse_enabled=True, nfse_environment='restricted',

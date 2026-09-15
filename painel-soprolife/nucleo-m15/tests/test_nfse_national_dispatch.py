@@ -715,6 +715,77 @@ def test_dps_number_allocation_persisted_independently_of_fiscal_attempt_number(
     assert fake.received[2].path == expected_path  # reconcile #3 also targets DPS #1, never #2/#3
 
 
+# --------------------------------------------- M36 (continued) — preflight/issue share one DPS identity
+
+
+def test_preflight_tsiddps_equals_issue_tsiddps_for_same_document(
+        monkeypatch, db, users, restricted_doc, fully_configured_settings):
+    """Root-cause regression: run_offline_preflight() used to build its
+    staged/signed DPS with an independent, hardcoded numero_dps_display="1"
+    default — completely disconnected from the durable allocator the real
+    issue path uses. The signed artifact a human reviews before
+    authorizing a real POST must be the SAME identity that POST actually
+    submits."""
+    from app.services.nfse_national.preflight import run_offline_preflight
+
+    _validate_active_config(db, users)
+    preflight_result = run_offline_preflight(db, restricted_doc.id, fully_configured_settings,
+                                             users["gestor"].id)
+    assert preflight_result.status == "ready_to_send"
+    stored_dir = fully_configured_settings.resolved_fiscal_artifacts_storage_dir()
+    signed = next(a for a in preflight_result.staged_artifacts if a.kind == "dps_signed_xml")
+    preflight_xml = (stored_dir / signed.relative_path).read_bytes()
+
+    fake = FakeTransport(responses=[TransportResponse(status_code=200, body=_nfse_xml())])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m36-preflight-vs-issue",
+                       fully_configured_settings, users["gestor"].id)
+    assert doc.state == "simulated"
+    issued_xml = fake.received[0].body
+
+    expected_id = _expected_dps_id(1)
+    assert expected_id.encode() in preflight_xml
+    assert expected_id.encode() in issued_xml
+
+
+def test_preflight_issue_and_reconcile_all_share_the_same_dps_number(
+        monkeypatch, db, users, restricted_doc, restricted_doc_b, fully_configured_settings):
+    """Full chain, both documents: preflight allocates first, real issue
+    (rejected) reuses it, reconcile reuses it too — and a SECOND document's
+    preflight never collides with the first's."""
+    from app.services.nfse_national.preflight import run_offline_preflight
+
+    _validate_active_config(db, users)
+    preflight_a = run_offline_preflight(db, restricted_doc.id, fully_configured_settings, users["gestor"].id)
+    assert preflight_a.status == "ready_to_send"
+    signed_a = next(a for a in preflight_a.staged_artifacts if a.kind == "dps_signed_xml")
+    xml_a = (fully_configured_settings.resolved_fiscal_artifacts_storage_dir()
+            / signed_a.relative_path).read_bytes()
+    assert _expected_dps_id(1).encode() in xml_a
+
+    preflight_b = run_offline_preflight(db, restricted_doc_b.id, fully_configured_settings, users["gestor"].id)
+    assert preflight_b.status == "ready_to_send"
+    signed_b = next(a for a in preflight_b.staged_artifacts if a.kind == "dps_signed_xml")
+    xml_b = (fully_configured_settings.resolved_fiscal_artifacts_storage_dir()
+            / signed_b.relative_path).read_bytes()
+    assert _expected_dps_id(2).encode() in xml_b  # never collides with A's #1
+
+    fake = FakeTransport(responses=[
+        TimeoutError("issue -> uncertain"),
+        TransportResponse(status_code=404, body=b""),  # reconcile -> confirmed absent
+    ])
+    monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
+    doc = nfse.operate(db, restricted_doc.id, "issue", "m36-chain-issue", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "uncertain"
+    doc = nfse.operate(db, restricted_doc.id, "reconcile", "m36-chain-reconcile", fully_configured_settings,
+                       users["gestor"].id)
+    assert doc.state == "failed"
+
+    assert _expected_dps_id(1).encode() in fake.received[0].body  # issue used A's preflight number
+    assert fake.received[1].path == PATH_GET_DPS.format(dps_id=_expected_dps_id(1))  # reconcile too
+
+
 # --------------------------------------------------------- batch safety (section I)
 
 

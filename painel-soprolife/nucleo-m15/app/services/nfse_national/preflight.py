@@ -38,7 +38,7 @@ from ...models import FiscalArtifact, Person, SpirometryExam
 from ...services import nfse
 from ...services.idempotency import payload_fingerprint
 from . import artifacts as artifact_storage
-from . import fiscal_config
+from . import dps_numbering, fiscal_config
 from .config import NationalDpsConfiguration
 from .dps_builder import DpsBuildError, DpsInput, Recipient, build_dps_element, serialize_dps
 from .identifiers import DpsIdComponents, InvalidIdentifierError
@@ -124,7 +124,6 @@ def _try_load_settings_certificate(settings: Settings) -> LoadedCertificate | No
 def run_offline_preflight(db: Session, document_id: str, settings: Settings, actor: str, *,
                           national_config: NationalDpsConfiguration | None = None,
                           recipient: Recipient | None = None,
-                          numero_dps_display: str = "1", serie_dps_display: str = "1",
                           ver_aplic: str = "sl-preflight-0.1",
                           certificate: LoadedCertificate | None = None) -> PreflightResult:
     doc = nfse.get_document(db, document_id)
@@ -164,6 +163,25 @@ def run_offline_preflight(db: Session, document_id: str, settings: Settings, act
                 return _blocked(doc.id, Stage.NATIONAL_CONFIG, ["recipient_identity_invalid"])
     if recipient is None:
         return _blocked(doc.id, Stage.NATIONAL_CONFIG, ["recipient_identity_not_supplied"])
+
+    # M36 — durable, globally-unique numero_dps, keyed by document_id alone:
+    # the EXACT same allocator dispatch.py's real issue/reconcile path uses
+    # (see nfse_national.dps_numbering), so a signed preflight artifact and
+    # a real transmitted DPS for the same document always share one
+    # TSIdDPS — never an independent display/default number. Once
+    # allocated here, it is durable and committed immediately: even if a
+    # LATER stage below blocks (schema, signature, artifact storage), the
+    # number stays permanently reserved for this document — never reused by
+    # another document (see dps_numbering.allocate_dps_number's own
+    # contract: gaps are fine, reuse is not).
+    dps_number = dps_numbering.allocate_dps_number(
+        db, document_id=doc.id, codigo_municipio=national_config.issuer_municipio_ibge,
+        tipo_inscricao_federal=2, inscricao_federal=national_config.issuer_cnpj,
+        serie_dps="00001",
+    )
+    db.commit()
+    numero_dps_display = str(dps_number)
+    serie_dps_display = "1"
 
     # 4. Deterministic DPS build (unsigned). The service description is
     # NEVER the mock-era free-text `preparation.description` — it comes only
