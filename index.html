@@ -4101,6 +4101,21 @@ body{
 
 <!-- SOPRO:SL_BOOKING_SHARED_CSS -->
 <link rel="stylesheet" href="/assets/sl-booking.css">
+
+<style id="sopro-home-booking-gap-40">
+/* SOPRO:HOME_BOOKING_GAP_40_V1
+   Home: aproxima agenda/mapa do hero em 40%, sem alterar outras páginas. */
+@media (min-width: 801px) {
+  html body .sl-hero-v3 {
+    padding-bottom: clamp(22px, 3vw, 38px) !important;
+  }
+
+  html body .sl-booking-section#agendamento {
+    padding-top: clamp(22px, 3vw, 41px) !important;
+  }
+}
+</style>
+
 </head>
 <body class="sl-typo-clean">
 
@@ -4192,6 +4207,76 @@ body{
     </div>
   </div>
 </section>
+
+
+<div id="sl-booking-desktop-anchor" aria-hidden="true"></div>
+<section class="sl-booking-section" id="agendamento">
+        <div class="sl-container">
+          <div class="sl-booking-align">
+            <div class="sl-booking-card">
+          <div class="sl-booking-head">
+            <span class="sl-booking-kicker">Agendamento rápido</span>
+            <h2 class="sl-booking-title">Agende sua Espirometria</h2>
+            <p class="sl-booking-sub">Escolha o melhor horário e confirme pelo WhatsApp.</p>
+          </div>
+
+          <div class="sl-booking-grid">
+            <div class="sl-booking-controls">
+              <!-- SOPRO:BOOKING_FIELDS_SHARED_V1
+                   Estilo em /assets/sl-booking.css · lógica em /assets/sl-booking.js.
+                   As opções de Localidade são reconciliadas com a configuração
+                   central (SL_BOOKING.LOCATIONS) no carregamento da página. -->
+              <div class="sl-booking-field">
+                <label for="sl-booking-service">Tipo de Espirometria</label>
+                <span class="sl-field-wrap sl-field-wrap--select">
+                  <select id="sl-booking-service" class="sl-field-control" name="servico">
+                    <option value="Espirometria simples" selected>Espirometria simples</option>
+                    <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
+                    <option value="Empresas / PCMSO">Empresas / PCMSO</option>
+                  </select>
+                </span>
+              </div>
+
+              <div class="sl-booking-field">
+                <label for="sl-booking-unit">Localidade</label>
+                <span class="sl-field-wrap sl-field-wrap--select">
+                  <select id="sl-booking-unit" class="sl-field-control" name="unidade">
+                    <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
+                    <option value="Unidade Barra">Unidade Barra</option>
+                    <option value="Unidade Zona Norte — Shopping Nova América">Unidade Zona Norte — Shopping Nova América</option>
+                    <option value="Centro Médico Pastore — Ipanema">Pastore Ipanema — Unidade parceira</option>
+                  </select>
+                </span>
+              </div>
+
+              <div class="sl-booking-field">
+                <label for="sl-booking-date">Data</label>
+                <span class="sl-field-wrap sl-field-wrap--date">
+                  <input id="sl-booking-date" class="sl-field-control" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa" />
+                </span>
+              </div>
+
+              <div>
+                <div class="sl-booking-slots-title">Horários disponíveis</div>
+                <div class="sl-booking-slots" id="sl-booking-slots"></div>
+                <p class="sl-booking-note">Horários sujeitos a confirmação pelo WhatsApp.</p>
+              </div>
+            </div>
+
+            <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
+              <div class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" aria-label="Ampliar mapa das unidades" role="button" tabindex="0">
+                <span class="sl-mini-map-target" aria-hidden="true">
+                  <span></span><span></span><span></span><span></span>
+                </span>
+                <button class="sl-btn sl-map-open-btn" type="button" id="sl-open-map-modal" aria-label="Ampliar mapa das unidades">Ampliar mapa</button>
+              </div>
+            </aside>
+          </div>
+        </div>
+        </div>
+        </div>
+      </section>
+
 <!-- ============== BANNER TELEMEDICINA ============== -->
 <aside class="sl-tele-banner sl-tele-banner--meet">
   <div class="sl-tele-banner__content">
@@ -4320,73 +4405,7 @@ body{
       </section>
 
 
-      <div id="sl-booking-desktop-anchor" aria-hidden="true"></div>
-<section class="sl-booking-section" id="agendamento">
-        <div class="sl-container">
-          <div class="sl-booking-align">
-            <div class="sl-booking-card">
-          <div class="sl-booking-head">
-            <span class="sl-booking-kicker">Agendamento rápido</span>
-            <h2 class="sl-booking-title">Agende sua Espirometria</h2>
-            <p class="sl-booking-sub">Escolha o melhor horário e confirme pelo WhatsApp.</p>
-          </div>
 
-          <div class="sl-booking-grid">
-            <div class="sl-booking-controls">
-              <!-- SOPRO:BOOKING_FIELDS_SHARED_V1
-                   Estilo em /assets/sl-booking.css · lógica em /assets/sl-booking.js.
-                   As opções de Localidade são reconciliadas com a configuração
-                   central (SL_BOOKING.LOCATIONS) no carregamento da página. -->
-              <div class="sl-booking-field">
-                <label for="sl-booking-service">Tipo de Espirometria</label>
-                <span class="sl-field-wrap sl-field-wrap--select">
-                  <select id="sl-booking-service" class="sl-field-control" name="servico">
-                    <option value="Espirometria simples" selected>Espirometria simples</option>
-                    <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
-                    <option value="Empresas / PCMSO">Empresas / PCMSO</option>
-                  </select>
-                </span>
-              </div>
-
-              <div class="sl-booking-field">
-                <label for="sl-booking-unit">Localidade</label>
-                <span class="sl-field-wrap sl-field-wrap--select">
-                  <select id="sl-booking-unit" class="sl-field-control" name="unidade">
-                    <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
-                    <option value="Unidade Barra">Unidade Barra</option>
-                    <option value="Unidade Zona Norte — Shopping Nova América">Unidade Zona Norte — Shopping Nova América</option>
-                    <option value="Centro Médico Pastore — Ipanema">Pastore Ipanema — Unidade parceira</option>
-                  </select>
-                </span>
-              </div>
-
-              <div class="sl-booking-field">
-                <label for="sl-booking-date">Data</label>
-                <span class="sl-field-wrap sl-field-wrap--date">
-                  <input id="sl-booking-date" class="sl-field-control" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa" />
-                </span>
-              </div>
-
-              <div>
-                <div class="sl-booking-slots-title">Horários disponíveis</div>
-                <div class="sl-booking-slots" id="sl-booking-slots"></div>
-                <p class="sl-booking-note">Horários sujeitos a confirmação pelo WhatsApp.</p>
-              </div>
-            </div>
-
-            <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
-              <div class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" aria-label="Ampliar mapa das unidades" role="button" tabindex="0">
-                <span class="sl-mini-map-target" aria-hidden="true">
-                  <span></span><span></span><span></span><span></span>
-                </span>
-                <button class="sl-btn sl-map-open-btn" type="button" id="sl-open-map-modal" aria-label="Ampliar mapa das unidades">Ampliar mapa</button>
-              </div>
-            </aside>
-          </div>
-        </div>
-        </div>
-        </div>
-      </section>
 
       <div class="sl-map-modal" id="sl-map-modal" aria-hidden="true">
         <div class="sl-map-modal__backdrop" data-map-close="backdrop"></div>
