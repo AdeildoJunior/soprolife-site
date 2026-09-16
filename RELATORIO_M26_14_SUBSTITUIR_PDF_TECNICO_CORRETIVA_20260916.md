@@ -1,6 +1,9 @@
 # M26.14 — Substituir PDF técnico de uma corretiva ainda não iniciada
 
 16/09/2026. Worktree `claude-m26-14-substituir-pdf-tecnico`, base `painel-soprolife-v01` (`4dd6527`).
+Entregue: commit `9d7890b`, integrado por fast-forward, deploy na VPS confirmado (`git status` limpo em
+`9d7890b` em oficial e produção), `soprolife-m15-api.service` reiniciado (único que carrega o código
+alterado), health `200`/`200`. Sem migration.
 
 ## Contexto real
 
