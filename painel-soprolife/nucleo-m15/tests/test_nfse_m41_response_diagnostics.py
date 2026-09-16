@@ -143,6 +143,35 @@ def test_flat_shape_supports_erro_field_too():
     assert result == (SefinValidationError(None, None, None, None, "falha de validacao"),)
 
 
+def test_nested_erro_object_shape_is_supported():
+    """M43 — observed on GET /nfse/{chaveAcesso} in production (2026-09-16):
+    a top-level 'erro' key whose VALUE is itself an object carrying the
+    documented fields, not a plain string."""
+    body = json.dumps({
+        "tipoAmbiente": 1, "versaoAplicativo": "1.0",
+        "dataHoraProcessamento": "2026-09-16T00:00:00-03:00",
+        "erro": {"codigo": "E9999", "mensagem": "chave de acesso nao localizada"},
+    }).encode()
+    result = decode_documented_error_fields(body)
+    assert result == (SefinValidationError(codigo="E9999", descricao=None, complemento=None,
+                                           mensagem="chave de acesso nao localizada", erro=None),)
+
+
+def test_nested_erro_object_with_undocumented_inner_fields_ignored():
+    body = json.dumps({
+        "erro": {"codigo": "E1", "internalTrace": "top secret", "nested": {"leak": "me"}},
+    }).encode()
+    result = decode_documented_error_fields(body)
+    assert result == (SefinValidationError(codigo="E1", descricao=None, complemento=None,
+                                           mensagem=None, erro=None),)
+
+
+def test_erro_as_plain_string_still_works_not_only_nested_object():
+    body = json.dumps({"erro": "mensagem simples"}).encode()
+    result = decode_documented_error_fields(body)
+    assert result == (SefinValidationError(None, None, None, None, "mensagem simples"),)
+
+
 def test_undocumented_fields_never_read_in_flat_shape():
     body = json.dumps({"codigo": "E3", "stackTrace": "top secret internals",
                        "internalDebugInfo": {"leak": "me"}}).encode()

@@ -117,18 +117,29 @@ def summarize_response_shape(body: bytes, content_type: str | None) -> ResponseS
     )
 
 
+def _extract_documented_fields_from(obj: dict) -> dict:
+    values = {name: obj.get(name) for name in DOCUMENTED_ERROR_FIELD_NAMES}
+    return {k: v for k, v in values.items() if isinstance(v, str)}
+
+
 def decode_documented_error_fields(body: bytes) -> tuple[SefinValidationError, ...]:
-    """Support BOTH documented SEFIN error shapes in one call:
+    """Support every documented SEFIN error shape seen so far, in one call:
 
     1. ``NFSePostResponseErro`` — a top-level ``erros`` array of objects,
        each with ``codigo``/``descricao``/``complemento`` (see
        ``wire.decode_nfse_error_envelope``, unchanged, reused here).
-    2. ``ResponseErro`` — a flatter shape with the same kind of fields
-       directly at the top level, optionally also ``mensagem``/``erro``.
+    2. ``ResponseErro`` (flat) — the same kind of fields directly at the
+       top level, optionally also ``mensagem``/``erro`` as STRINGS.
+    3. ``ResponseErro`` (nested under ``erro``) — M43 addition: a
+       top-level ``erro`` key whose VALUE is itself an object carrying the
+       documented fields (observed on ``GET /nfse/{chaveAcesso}`` in
+       production, 2026-09-16) rather than a plain string.
 
     Never raises; an unrecognized shape yields an empty tuple, exactly like
     ``wire.decode_nfse_error_envelope`` already does. Only the five
-    documented field names are ever read, at either shape.
+    documented field names are ever read, at either shape or nesting level
+    — never anything else in the JSON, and never a value that is not
+    already a plain string.
     """
     from .wire import decode_nfse_error_envelope  # local import: avoid a cycle at module load
 
@@ -141,8 +152,15 @@ def decode_documented_error_fields(body: bytes) -> tuple[SefinValidationError, .
         return ()
     if FIELD_ERROR_LIST in payload:
         return ()  # an `erros` key existed but decode_nfse_error_envelope already tried it
-    values = {name: payload.get(name) for name in DOCUMENTED_ERROR_FIELD_NAMES}
-    values = {k: v for k, v in values.items() if isinstance(v, str)}
+
+    values = _extract_documented_fields_from(payload)
+    erro_value = payload.get("erro")
+    if isinstance(erro_value, dict):
+        # Shape 3: don't let the flat scan above have already claimed a
+        # string "erro" from a sibling key with the same name — merge, with
+        # the nested object's own fields taking precedence since they are
+        # more specific.
+        values = {**values, **_extract_documented_fields_from(erro_value)}
     if not values:
         return ()
     return (SefinValidationError(

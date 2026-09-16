@@ -4,8 +4,13 @@ Builds exactly the element tree described in ``DPS_v1.01.xsd`` /
 ``tiposComplexos_v1.01.xsd`` (vendored under ``schemas/restricted/``). Only
 elements proven required by that schema — or needed to describe SoproLife's
 own DIRECT/HOME spirometry service — are emitted; every optional group this
-foundation does not yet support (comExt, obra, atvEvento, IBSCBS, tribFed,
+foundation does not yet support (comExt, obra, atvEvento, IBSCBS,
 vDescCondIncond, vDedRed, subst, interm) is left out rather than guessed.
+``tribFed/piscofins`` (CST/tpRetPisCofins only) is the one exception (M43):
+emitted when ``NationalDpsConfiguration.pis_cofins_cst`` is set, proven from
+two real successfully-issued production NFS-e for this exact CNPJ/Simples
+Nacional profile — never guessed, never emitted for a CPF-identified issuer
+(E0675 forbids that combination).
 
 Determinism: the caller supplies ``dh_emi`` explicitly (never
 ``datetime.now()`` inside this module), so the same ``DpsInput`` always
@@ -174,6 +179,20 @@ def build_dps_element(data: DpsInput) -> etree._Element:
     _el(trib_mun, "tpRetISSQN", cfg.tp_ret_issqn)
     if cfg.aliquota_percentual is not None:
         _el(trib_mun, "pAliq", f"{cfg.aliquota_percentual.quantize(Decimal('0.01'))}")
+    # M43 — tribFed/piscofins, between tribMun and totTrib per the schema's
+    # TCInfoTributacao sequence order. Proven from two real, successfully
+    # issued production NFS-e for this exact CNPJ/Simples-Nacional profile:
+    # both embedded DPS carry CST + tpRetPisCofins here (nothing else in
+    # the group) — see NationalDpsConfiguration.pis_cofins_cst docstring.
+    # E0675 forbids tribFed only for a CPF-identified issuer; SoproLife is
+    # CNPJ-identified, so this is permitted. Only emitted when configured
+    # (``None`` keeps prior byte-identical behavior).
+    if cfg.pis_cofins_cst is not None:
+        trib_fed = _el(trib, "tribFed")
+        piscofins = _el(trib_fed, "piscofins")
+        _el(piscofins, "CST", cfg.pis_cofins_cst)
+        if cfg.pis_cofins_tp_ret is not None:
+            _el(piscofins, "tpRetPisCofins", cfg.pis_cofins_tp_ret)
     tot_trib = _el(trib, "totTrib")
     if cfg.p_tot_trib_sn is not None:
         _el(tot_trib, "pTotTribSN", f"{cfg.p_tot_trib_sn.quantize(Decimal('0.01'))}")

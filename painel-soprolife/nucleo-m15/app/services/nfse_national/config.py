@@ -34,6 +34,15 @@ TpRetISSQN = Literal[1, 2, 3]
 OpSimpNac = Literal[1, 2, 3]
 # TCRegTrib/regEspTrib
 RegEspTrib = Literal[0, 1, 2, 3, 4, 5, 6, 9]
+# TCTribOutrosPisCofins/CST (tiposSimples_v1.01.xsd TSTipoCST) — full enum.
+PisCofinsCst = Literal[
+    "00", "01", "02", "03", "04", "05", "06", "07", "08", "09",
+    "49", "50", "51", "52", "53", "54", "55", "56",
+    "60", "61", "62", "63", "64", "65", "66", "67",
+    "70", "71", "72", "73", "74", "75", "98", "99",
+]
+# TCTribOutrosPisCofins/tpRetPisCofins (TSTipoRetPISCofins)
+TpRetPisCofins = Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 
 class NationalDpsInput(BaseModel):
@@ -114,6 +123,21 @@ class NationalDpsConfiguration(NationalDpsInput):
     ind_tot_trib: Literal[0] = 0
     p_tot_trib_sn: Decimal | None = Field(None, ge=0, le=100, max_digits=6, decimal_places=2)
 
+    # TCTribFederal/piscofins (valores/trib/tribFed/piscofins) — M43. Proven
+    # from TWO real, successfully-issued production NFS-e for this exact
+    # CNPJ/municipality/Simples-Nacional profile (access keys ending
+    # ...136469 and ...747856, fetched 2026-09-16): both embedded DPS
+    # documents carry CST=00 ("Nenhum") and tpRetPisCofins=0 ("PIS/COFINS/
+    # CSLL Não Retidos") inside tribFed/piscofins — nothing else in that
+    # group (no vBCPisCofins/aliquotas/vPis/vCofins in either real note).
+    # E0675 forbids tribFed only when the DPS issuer is CPF-identified;
+    # SoproLife is CNPJ-identified, so this is permitted. Both fields
+    # optional here (``None`` omits the whole group, byte-identical to
+    # pre-M43 behavior) — only set when the same profile is proven to need
+    # them; never fabricated for a different issuer identity.
+    pis_cofins_cst: PisCofinsCst | None = None
+    pis_cofins_tp_ret: TpRetPisCofins | None = None
+
     # Explicit policy decisions carried over from the M26 contract shape.
     amount_basis: Literal["financial_entry.valor"]
     competence_rule: Literal["service_date"]
@@ -186,6 +210,20 @@ class NationalDpsConfiguration(NationalDpsInput):
                 )
         return self
 
+    # M43 — TCTribOutrosPisCofins/CST is a required child (no minOccurs="0"
+    # in tiposComplexos_v1.01.xsd) of the OPTIONAL piscofins group: the
+    # group itself may be entirely absent, but once tpRetPisCofins is
+    # supplied (meaning the builder WILL emit the piscofins group), CST
+    # must accompany it, or the resulting DPS would be schema-invalid.
+    @model_validator(mode="after")
+    def _pis_cofins_invariant(self) -> "NationalDpsConfiguration":
+        if self.pis_cofins_tp_ret is not None and self.pis_cofins_cst is None:
+            raise ValueError(
+                "pis_cofins_cst é obrigatório sempre que pis_cofins_tp_ret é informado "
+                "(CST é elemento obrigatório dentro do grupo opcional piscofins)."
+            )
+        return self
+
     def missing_fields(self) -> list[str]:
         """Required-but-empty optional fields.
 
@@ -197,7 +235,8 @@ class NationalDpsConfiguration(NationalDpsInput):
         return sorted(key for key, value in self.model_dump().items() if value is None
                        and key not in {"codigo_tributacao_municipal", "codigo_nbs",
                                        "issuer_inscricao_municipal", "aliquota_percentual",
-                                       "issuer_reg_ap_trib_sn", "p_tot_trib_sn"})
+                                       "issuer_reg_ap_trib_sn", "p_tot_trib_sn",
+                                       "pis_cofins_cst", "pis_cofins_tp_ret"})
 
 
 class NationalDpsConfigurationVersionCreate(NationalDpsInput):
