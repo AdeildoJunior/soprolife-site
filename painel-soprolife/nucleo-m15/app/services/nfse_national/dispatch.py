@@ -57,12 +57,30 @@ def fail(code: str, status: int = 503):
 
 
 def _load_certificate(settings: Settings) -> LoadedCertificate:
+    # M45 — closes two unhandled-exception gaps found while diagnosing a
+    # local HTTP 500 on DPS #9 (2026-09-16): a path of ``None`` raises
+    # ``TypeError`` from ``Path(None)`` (not ``OSError``), and a missing
+    # password raises ``ValueError`` from
+    # ``resolved_nfse_restricted_certificate_password()`` — neither was
+    # caught here, so either would have escaped as an unhandled 500
+    # instead of the same clean, fail-closed blocker every other
+    # misconfiguration in this function already produces. `readiness`
+    # (called by every real caller before this) is expected to catch both
+    # first, but this function must degrade the same way on its own if it
+    # is ever reached with either missing — never propagate a raw
+    # exception past this boundary.
+    if settings.nfse_restricted_certificate_path is None:
+        fail("restricted_certificate_path_not_configured")
     try:
         raw = Path(settings.nfse_restricted_certificate_path).read_bytes()
     except OSError:
         fail("restricted_certificate_path_unreadable")
     try:
-        return load_pkcs12_certificate(raw, settings.resolved_nfse_restricted_certificate_password())
+        password = settings.resolved_nfse_restricted_certificate_password()
+    except ValueError:
+        fail("restricted_certificate_password_missing")
+    try:
+        return load_pkcs12_certificate(raw, password)
     except SignatureError:
         fail("restricted_certificate_unreadable")
 
