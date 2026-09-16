@@ -110,17 +110,21 @@ def _ensure_sqlite_dir(url: str) -> None:
 # conexão morta no meio da requisição de um paciente, não.
 POOL_RECYCLE_SEGUNDOS = 1800
 
-# M46 — SQLite's own default busy timeout is 0: any transaction whose COMMIT
-# needs to escalate to an EXCLUSIVE lock while another pooled connection still
-# holds even a SHARED one (e.g. a GET request's session left open a moment
-# longer than a concurrent fiscal issuance's own durable-intent commit) fails
-# INSTANTLY with "database is locked", instead of the standard SQLite
-# behavior of waiting for the lock to clear. Reproduced deterministically
-# (tests/test_db_sqlite_concurrency.py) and proven to be the exact cause of
-# the DPS #9 local 500s (M45 mission): the durable-intent `db.commit()` in
-# `nfse.operate()` is a plain, short-lived write — the failure was never
-# about certificates or fiscal data, only about this timeout being unset.
-SQLITE_BUSY_TIMEOUT_MS = 5000
+# M46 — a transaction whose COMMIT needs to escalate to an EXCLUSIVE lock
+# while another pooled connection still holds even a SHARED one (e.g. a GET
+# request's session left open a moment longer than a concurrent fiscal
+# issuance's own durable-intent commit) fails with "database is locked" once
+# the wait exceeds this timeout. CORRECTION (still in this same mission):
+# Python's own ``sqlite3`` module already defaults ``connect(timeout=5.0)``
+# regardless of any PRAGMA, so simply restating 5000ms here changed nothing
+# for the real DPS #9 failure — that contention genuinely outlasts 5s (real
+# certificate decryption is the leading suspect, being timed directly now in
+# `dispatch.py`'s M46-TIMING lines pending real evidence). Raised to a much
+# more generous bound: this is a single-operator restricted-lab tool issuing
+# one document at a time, so a worst-case 30s wait is an acceptable, bounded
+# cost for eliminating spurious lock failures — never an infinite wait, and
+# never a fiscal-network retry.
+SQLITE_BUSY_TIMEOUT_MS = 30000
 
 
 def build_engine(url: str | None = None):

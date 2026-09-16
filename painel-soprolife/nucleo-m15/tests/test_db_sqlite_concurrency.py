@@ -3,16 +3,30 @@
 DPS #9 (M45 mission) hit a real HTTP 500 with `sqlite3.OperationalError:
 database is locked` at the durable-intent `db.commit()` inside
 `nfse.operate()`, followed by a SECOND, unrelated-looking failure on the
-very next request (`cannot start a transaction within a transaction`). This
-file proves both symptoms are real and deterministic under the OLD engine
-configuration (no threads needed — SQLite's own locking rules make this
-reproducible in a single thread with two overlapping sessions), and that the
-M46 fix (`PRAGMA busy_timeout` + a `handle_error` listener that discards a
-poisoned pooled connection instead of returning it) resolves both, without
-weakening durable-intent semantics, without adding fiscal-network retries,
-and without touching PostgreSQL behavior at all (every listener here is
-registered only inside `build_engine()`'s `if url.startswith("sqlite")`
-branch).
+very next request (`cannot start a transaction within a transaction`). Both
+symptoms are reproduced deterministically here (no threads needed for the
+"old" reproduction — SQLite's own locking rules make it reproducible in a
+single thread with two overlapping sessions).
+
+CORRECTION made within this same mission, kept here for the record: Python's
+own ``sqlite3`` module already defaults ``connect(timeout=5.0)`` regardless
+of any PRAGMA — so the OLD configuration was never failing "instantly"; a
+lock held for the ENTIRE test (as below) always fails after ~5s either way.
+Restating `PRAGMA busy_timeout=5000` therefore changed nothing for real
+contention that genuinely outlasts 5 seconds (confirmed on a second real
+DPS #9 attempt, still failing identically after that "fix"). The two real,
+structural improvements this file proves are: (1) the `handle_error`
+listener that discards a poisoned pooled connection instead of returning it
+— this DOES fully eliminate the second-order "transaction within a
+transaction" cascade, confirmed on that same second real attempt; and (2)
+raising `SQLITE_BUSY_TIMEOUT_MS` well past Python's own 5s default (to 30s)
+narrows, but does not claim to eliminate, the window in which genuine
+multi-second contention can still exceed the bound — a bounded wait is
+never a promise of eventual success, by design (see
+`test_session_not_poisoned_after_a_genuine_lock_timeout` below). Neither
+change weakens durable-intent semantics, adds a fiscal-network retry, or
+touches PostgreSQL (every listener here is registered only inside
+`build_engine()`'s `if url.startswith("sqlite")` branch).
 """
 import sqlite3
 import tempfile
@@ -58,9 +72,10 @@ def _audit_row(n=""):
 
 
 def test_old_configuration_reproduces_database_is_locked(tmp_path):
-    """A read transaction left open (mirrors an un-closed GET session) makes
-    a concurrent durable-intent COMMIT fail INSTANTLY under the old
-    configuration — no busy_timeout means SQLite never waits."""
+    """A read transaction left open FOR THE WHOLE TEST (mirrors a GET
+    session that never releases its lock) makes a concurrent durable-intent
+    COMMIT fail — after Python's own ~5s default busy_timeout is exhausted
+    (this takes ~5s to run; see the module docstring's correction)."""
     engine = _old_style_engine(f"sqlite:///{tmp_path}/old.db")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine, expire_on_commit=False)
@@ -102,6 +117,22 @@ def test_old_configuration_poisons_the_pooled_connection_after_lock_failure(tmp_
 
 
 # ============================================================ Phase C — fix proven
+
+
+def test_configured_timeout_exceeds_pythons_own_default():
+    """Python's ``sqlite3`` module defaults ``connect(timeout=5.0)``
+    regardless of any PRAGMA (confirmed directly: a bare
+    ``sqlite3.connect(":memory:")`` already reports `PRAGMA busy_timeout`
+    == 5000) — so our own configured value must be STRICTLY GREATER than
+    that default, or it changes nothing for contention that already
+    outlasts 5s (exactly what happened on the real DPS #9 retry)."""
+    default_conn = sqlite3.connect(":memory:")
+    try:
+        python_default_ms = default_conn.execute("PRAGMA busy_timeout").fetchone()[0]
+    finally:
+        default_conn.close()
+    assert python_default_ms == 5000
+    assert db_module.SQLITE_BUSY_TIMEOUT_MS > python_default_ms
 
 
 def test_new_engine_sets_busy_timeout(tmp_path):
