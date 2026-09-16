@@ -2388,6 +2388,27 @@
             </label>
             <button class="m15-btn" type="submit">Confirmar reatribuição</button>
           </form>` : ""}
+        ${/* M26.14 — o PDF do espirômetro pode sair sem a anotação do
+              motivo do exame, e isso só aparece DEPOIS de já existir uma
+              corretiva aberta por outro motivo. A corretiva herda o PDF
+              técnico do predecessor por padrão; esta ação troca o arquivo
+              sem apagar a versão antiga (fica no histórico) — só antes de
+              a médica começar a elaborar (`status === "atribuido"`). */""}
+        ${selected && selected.is_corrective && selected.status === "atribuido" ? `
+          <form id="reportReplaceOriginalPdfForm" class="report-reassign-form">
+            <h4>Substituir PDF técnico desta corretiva</h4>
+            <p class="report-help">Só é possível antes de a médica começar a
+              elaborar. A versão antiga do PDF permanece no histórico — nada
+              é apagado.</p>
+            <input type="hidden" name="document_id" value="${esc(selected.document_id)}">
+            <label for="reportReplaceOriginalPdfFile">Novo PDF técnico (corrigido)
+              <input id="reportReplaceOriginalPdfFile" name="file" type="file"
+                accept="application/pdf" required>
+            </label>
+            <button class="m15-btn" type="submit"${
+              state.busy ? " disabled" : ""
+            }>Substituir PDF técnico</button>
+          </form>` : ""}
       </section>`;
   }
 
@@ -4119,6 +4140,45 @@
     }
   }
 
+  // M26.14 — troca só o arquivo técnico; nenhum outro campo do documento
+  // muda. Reaproveita o mesmo limite/mensagens de `uploadOriginal`.
+  async function replaceOriginalPdf(form) {
+    if (state.busy) return;
+    const file = form.elements.file.files[0];
+    if (!file) {
+      announce("Selecione o PDF técnico corrigido.", "erro");
+      focusStatusMessage();
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      announce("O PDF excede o limite de 25 MiB.", "erro");
+      focusStatusMessage();
+      return;
+    }
+    const documentId = form.elements.document_id.value;
+    const payload = new FormData();
+    payload.append("file", file);
+    state.busy = true;
+    announce("Substituindo o PDF técnico…", "");
+    render();
+    let houveErro = false;
+    try {
+      await client().api(
+        `/laudos/${encodeURIComponent(documentId)}/pdf-tecnico-original`,
+        { method: "POST", body: payload }
+      );
+      announce("PDF técnico substituído. A versão anterior continua no histórico.", "ok");
+      await loadAuthenticatedData();
+    } catch (error) {
+      houveErro = true;
+      announce(readableError(error), "erro");
+    } finally {
+      state.busy = false;
+      render();
+      if (houveErro) focusStatusMessage();
+    }
+  }
+
   async function compose(form) {
     state.interpretation = form.elements.interpretation_text.value;
     const payload = {
@@ -4888,6 +4948,8 @@
       publishAddendum(event.target);
     } else if (event.target.id === "reportReassignForm") {
       reassign(event.target);
+    } else if (event.target.id === "reportReplaceOriginalPdfForm") {
+      replaceOriginalPdf(event.target);
     } else if (event.target.id === "reportPhysicianAdminForm") {
       savePhysician(event.target);
     } else if (event.target.id === "reportCorrectionForm") {

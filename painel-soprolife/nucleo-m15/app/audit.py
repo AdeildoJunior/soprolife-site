@@ -80,6 +80,10 @@ ALLOWED_KEYS = {
     # corretivo aberto pela ação, e um booleano dizendo se foi o admin (e
     # não a própria médica) quem acionou a abertura.
     "corrective_document_id", "retornado_por_admin",
+    # M26.14 — substituição do PDF técnico de uma corretiva ainda não
+    # iniciada: só o id da versão anterior (superada, nunca apagada) e da
+    # nova, ambos identificadores técnicos.
+    "previous_version_id",
 }
 
 _MAX_STR = 120

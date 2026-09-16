@@ -2135,6 +2135,103 @@ async def upload_report_document(
     }
 
 
+@router.post("/{document_id}/pdf-tecnico-original")
+async def replace_original_pdf(
+    document_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    operator: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    """Substitui o PDF técnico (kind=original) de uma CORRETIVA ainda não
+    iniciada pela médica — nunca do documento raiz, nunca depois que ela já
+    começou a elaborar.
+
+    M26.14 — motivo real: o PDF do aparelho de espirometria às vezes sai
+    incompleto (ex.: sem a anotação do motivo do exame), e isso só é
+    percebido DEPOIS de abrir uma corretiva por outro motivo (conteúdo
+    clínico). O mecanismo de corretiva do M25.2/M26.12 sempre HERDA o PDF
+    técnico do predecessor byte a byte — não existia como trocar o
+    arquivo em si. Esta rota fecha essa lacuna sem abrir mão de nenhuma
+    garantia: a versão antiga do PDF permanece no histórico, imutável
+    (append-only — nunca é apagada), só deixa de ser a corrente.
+    """
+    document = _lock_document_or_404(db, document_id)
+    if document.corrects_document_id is None:
+        raise ReportDomainError(
+            409,
+            "nao_e_corretiva",
+            "Só é possível substituir o PDF técnico de um documento corretivo — "
+            "nunca do laudo original.",
+        )
+    if document.status != STATUS_ATRIBUIDO:
+        raise ReportDomainError(
+            409,
+            "corretiva_ja_iniciada",
+            "A médica já começou a elaborar este laudo; a substituição do PDF "
+            "técnico só é permitida antes disso.",
+        )
+    assignment = _active_assignment(db, document.id, lock=True)
+    if assignment is None:
+        raise ReportDomainError(
+            409,
+            "corretiva_sem_atribuicao_ativa",
+            "Este documento não tem atribuição médica ativa.",
+        )
+    profile = db.get(PhysicianProfile, assignment.physician_profile_id)
+    if profile is None:
+        raise ReportDomainError(
+            404, "perfil_medico_nao_encontrado", "Perfil médico não encontrado."
+        )
+
+    settings = get_settings()
+    raw = await _read_upload_bounded(
+        file, max_size_bytes=settings.reports_max_upload_bytes
+    )
+    try:
+        validate_pdf_bytes(
+            raw,
+            max_size_bytes=settings.reports_max_upload_bytes,
+            declared_content_type=file.content_type,
+        )
+    except InvalidPdfError as exc:
+        raise ReportDomainError(422, exc.codigo, exc.mensagem) from None
+
+    previous_version = _version_by_kind(db, document.id, KIND_ORIGINAL)
+
+    with report_publication_transaction(db) as publication:
+        version = _store_new_version(
+            db,
+            publication=publication,
+            document=document,
+            exam_id=document.spirometry_exam_id,
+            kind=KIND_ORIGINAL,
+            data=raw,
+            created_by_user_id=operator.id,
+            **_physician_snapshot(profile, document),
+        )
+        document.current_version_id = version.id
+        audit(
+            db,
+            "laudo_pdf_tecnico_substituido",
+            entidade="report_documents",
+            entidade_id=document.id,
+            user_id=operator.id,
+            request_id=_request_id(request),
+            detalhes={
+                "report_code": document.public_code,
+                "previous_version_id": (
+                    previous_version.id if previous_version else None
+                ),
+                "report_version_id": version.id,
+            },
+        )
+        publication.commit()
+    return {
+        **ser_report_document(document, versions=_all_versions(db, document.id)),
+    }
+
+
 @router.get("")
 def list_report_documents_operational(
     status: str | None = None,
