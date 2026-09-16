@@ -395,19 +395,30 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
                          idempotency_key=payload_fingerprint({'completed': operation_id}),
                          idempotency_fingerprint=payload_fingerprint(identity)))
     doc.state = state
-    # M40 — already-sanitized SEFIN validation detail (see
-    # nfse_national.error_sanitizer), if the provider captured any: recorded
-    # through the SAME append-only, allowlisted audit trail as every other
-    # event here (app/audit.py — truncates/sanitizes independently, a second
-    # layer on top of the provider boundary's own sanitizer). Never affects
-    # `error_code`/`state`/`uncertain` above, and never the raw response body.
+    # M40/M41 — already-sanitized SEFIN validation/shape detail (see
+    # nfse_national.error_sanitizer / response_diagnostics), if the provider
+    # captured any: recorded through the SAME append-only, allowlisted audit
+    # trail as every other event here (app/audit.py — truncates/sanitizes
+    # independently, a second layer on top of the provider boundary's own
+    # sanitizer). Never affects `error_code`/`state`/`uncertain` above, and
+    # never the raw response body.
     sefin_detail = {}
     for field, audit_key in (('codigo', 'sefin_erro_codigos'),
                              ('descricao', 'sefin_erro_descricoes'),
-                             ('complemento', 'sefin_erro_complementos')):
+                             ('complemento', 'sefin_erro_complementos'),
+                             ('mensagem', 'sefin_erro_mensagens'),
+                             ('erro', 'sefin_erro_erros')):
         values = [e[field] for e in (result.validation_errors or ()) if e.get(field)]
         if values:
             sefin_detail[audit_key] = values
+    shape = result.response_shape
+    if shape:
+        sefin_detail['sefin_resposta_tipo_corpo'] = shape.get('body_kind')
+        sefin_detail['sefin_resposta_content_type'] = shape.get('content_type')
+        sefin_detail['sefin_resposta_tamanho'] = shape.get('content_length')
+        sefin_detail['sefin_resposta_sha256'] = shape.get('sha256')
+        if shape.get('top_level_keys'):
+            sefin_detail['sefin_resposta_chaves_json'] = list(shape['top_level_keys'])
     record(db, operation + '_completed', 'fiscal_document', doc.id, actor, request_id,
            provider=provider.name, resultado=result.outcome.value, status=state, sequencia=number,
            **sefin_detail)

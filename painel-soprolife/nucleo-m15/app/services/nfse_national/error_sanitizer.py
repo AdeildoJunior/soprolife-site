@@ -67,6 +67,11 @@ class SanitizedValidationError:
     codigo: str | None
     descricao: str | None
     complemento: str | None
+    # M41 — the two additional documented safe scalar fields (see
+    # wire.SefinValidationError / response_diagnostics.py), sanitized the
+    # same way as the other three.
+    mensagem: str | None = None
+    erro: str | None = None
 
 
 def sanitize_sefin_errors(
@@ -83,6 +88,8 @@ def sanitize_sefin_errors(
             codigo=_clean(item.codigo),
             descricao=_clean(item.descricao),
             complemento=_clean(item.complemento),
+            mensagem=_clean(item.mensagem),
+            erro=_clean(item.erro),
         )
         for item in errors[:MAX_ERRORS]
     )

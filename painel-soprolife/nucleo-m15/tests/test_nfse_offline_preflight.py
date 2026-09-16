@@ -58,11 +58,13 @@ def national_config():
     return NationalDpsConfiguration(
         version='SYNTH-RESTRICTED-v1', layout_version='restricted-v1.01-20260727',
         issuer_cnpj='11222333000181', issuer_name='SOPROLIFE SAUDE LTDA (SINTETICO)',
-        issuer_municipio_ibge='3304557', issuer_op_simp_nac=3, issuer_reg_esp_trib=0,
+        issuer_municipio_ibge='3304557', issuer_op_simp_nac=3,
+        issuer_reg_ap_trib_sn=1, issuer_reg_esp_trib=0,
         codigo_tributacao_nacional='140501',
         trib_issqn=1, tp_ret_issqn=1,
         amount_basis='financial_entry.valor', competence_rule='service_date',
         own_revenue_confirmed=True, validation_reference='SYNTHETIC-ONLY',
+        p_tot_trib_sn=Decimal('6.00'),
     )
 
 

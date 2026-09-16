@@ -69,6 +69,11 @@ class TransportRequest:
 class TransportResponse:
     status_code: int
     body: bytes
+    # M41 — the ONLY response header ever carried past this boundary (see
+    # response_diagnostics.py). Every other header (any cookie, trace id,
+    # server banner, etc.) is never read here and never exists on this
+    # object — there is no field to carry it, by construction.
+    content_type: str | None = None
 
 
 class RestrictedTransport(Protocol):
@@ -173,7 +178,8 @@ class HttpxRestrictedTransport:
         with httpx.Client(base_url=self._base_url, timeout=self._timeout_seconds, verify=verify) as client:
             response = client.request(request.method, request.path, content=request.body,
                                        headers=request.headers)
-        return TransportResponse(status_code=response.status_code, body=response.content)
+        return TransportResponse(status_code=response.status_code, body=response.content,
+                                 content_type=response.headers.get("content-type"))
 
 
 @dataclass

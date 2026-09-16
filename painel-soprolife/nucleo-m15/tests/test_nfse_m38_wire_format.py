@@ -17,6 +17,7 @@ import base64
 import gzip
 import io
 import json
+from decimal import Decimal
 
 import httpx
 import pytest
@@ -84,11 +85,13 @@ def context():
     cfg = NationalDpsConfiguration(
         version="SYNTH-RESTRICTED-v1", layout_version="restricted-v1.01-20260727",
         issuer_cnpj="11222333000181", issuer_name="SOPROLIFE SAUDE LTDA (SINTETICO)",
-        issuer_municipio_ibge="3304557", issuer_op_simp_nac=3, issuer_reg_esp_trib=0,
+        issuer_municipio_ibge="3304557", issuer_op_simp_nac=3,
+        issuer_reg_ap_trib_sn=1, issuer_reg_esp_trib=0,
         codigo_tributacao_nacional="140501",
         trib_issqn=1, tp_ret_issqn=1,
         amount_basis="financial_entry.valor", competence_rule="service_date",
         own_revenue_confirmed=True, validation_reference="SYNTHETIC-ONLY",
+        p_tot_trib_sn=Decimal("6.00"),
     )
     dps_id = DpsIdComponents(codigo_municipio="3304557", tipo_inscricao_federal=2,
                              inscricao_federal="11222333000181", serie_dps="00001",
@@ -413,10 +416,10 @@ def test_error_envelope_never_changes_classification(context):
     result, _ = _issue_with(context, TransportResponse(422, erro))
     assert result.outcome == Outcome.REJECTED
     assert result.diagnostic_code == "provider_rejected:http_422"
-    # M40 — this is the new, intentional surface: the actual SEFIN code and
-    # description are no longer thrown away.
+    # M40/M41 — this is the new, intentional surface: the actual SEFIN code
+    # and description are no longer thrown away.
     assert result.validation_errors == ({"codigo": "E0001", "descricao": "segredo interno",
-                                        "complemento": None},)
+                                        "complemento": None, "mensagem": None, "erro": None},)
     assert "segredo" not in (result.diagnostic_code or "")
 
 

@@ -60,6 +60,7 @@ class _CapturingClient:
         class _Response:
             status_code = 200
             content = b"<synthetic-ok/>"
+            headers = {}
         return _Response()
 
 

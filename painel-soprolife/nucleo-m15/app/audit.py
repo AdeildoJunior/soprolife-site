@@ -84,6 +84,13 @@ ALLOWED_KEYS = {
     # `_sanitize_value` (corte em 120 chars, só escalares numa lista
     # pequena). Nunca corpo bruto da resposta, nunca XML, nunca Base64.
     "sefin_erro_codigos", "sefin_erro_descricoes", "sefin_erro_complementos",
+    # M41 — os dois campos documentados adicionais (forma "ResponseErro")
+    # e o resumo de FORMATO da resposta (nunca conteúdo):
+    # nfse_national.response_diagnostics.summarize_response_shape já entrega
+    # só contagens/hash/nomes de chave, nunca corpo/XML/Base64/certificado.
+    "sefin_erro_mensagens", "sefin_erro_erros",
+    "sefin_resposta_tipo_corpo", "sefin_resposta_content_type",
+    "sefin_resposta_tamanho", "sefin_resposta_sha256", "sefin_resposta_chaves_json",
 }
 
 _MAX_STR = 120

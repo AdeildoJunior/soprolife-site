@@ -242,16 +242,22 @@ def find_nfse_access_key_in_response(body: bytes) -> str | None:
 
 @dataclass(frozen=True)
 class SefinValidationError:
-    """One item of the documented ``NFSePostResponseErro.erros[]`` array.
+    """One documented SEFIN error entry.
 
-    Only these three fields are documented — anything else in the JSON
-    (at any level, in ``erros[]`` or elsewhere) is silently ignored and
-    never reaches this object or any caller of
-    :func:`decode_nfse_error_envelope`.
+    ``codigo``/``descricao``/``complemento`` are the ``NFSePostResponseErro
+    .erros[]`` item fields (see :func:`decode_nfse_error_envelope`).
+    ``mensagem``/``erro`` (M41) are the two additional documented safe
+    scalar names used by the flatter ``ResponseErro`` shape (see
+    ``response_diagnostics.decode_documented_error_fields``) — always
+    ``None`` when this object comes from an ``erros[]`` item, since that
+    array's items never carry them. Anything else in the JSON, at any
+    level, is silently ignored and never reaches this object.
     """
     codigo: str | None
     descricao: str | None
     complemento: str | None
+    mensagem: str | None = None
+    erro: str | None = None
 
 
 def decode_nfse_error_envelope(body: bytes) -> tuple[SefinValidationError, ...]:

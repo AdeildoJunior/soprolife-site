@@ -155,4 +155,4 @@ def test_never_carries_xml_certificate_base64_or_raw_request_content():
         "E1", "<DPS>conteudo</DPS>", "QUJDREVGRw==signed-payload-look-alike")
     sanitized = sanitize_sefin_errors((fake_leak,))
     assert len(sanitized) == 1
-    assert set(vars(sanitized[0])) == {"codigo", "descricao", "complemento"}
+    assert set(vars(sanitized[0])) == {"codigo", "descricao", "complemento", "mensagem", "erro"}

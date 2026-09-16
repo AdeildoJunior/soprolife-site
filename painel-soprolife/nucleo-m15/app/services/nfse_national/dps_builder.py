@@ -129,7 +129,16 @@ def build_dps_element(data: DpsInput) -> etree._Element:
     _el(prest, "CNPJ", cfg.issuer_cnpj)
     if cfg.issuer_inscricao_municipal:
         _el(prest, "IM", cfg.issuer_inscricao_municipal)
-    _el(prest, "xNome", cfg.issuer_name)
+    # M41 — Anexo I (business rules), rule row 202, error E0121: "Se o
+    # emitente da DPS for o prestador de serviço (tpEmit for igual a 1),
+    # então o nome ou razão social não deve ser informado." This builder
+    # ALWAYS emits tpEmit=1 (SoproLife always issues its own DPS as the
+    # service provider — see the tpEmit element above), so prest/xNome must
+    # NEVER be emitted here. Proven, real rejection code, not a guess:
+    # confirmed via the official ANEXO_I-SEFIN_ADN-DPS_NFSe-SNNFSe-PRODREST
+    # -v1.01-20260209.xlsx business-rule sheet. `cfg.issuer_name` is kept on
+    # the configuration model regardless — it remains useful metadata (e.g.
+    # for reports/audit) even though the DPS itself must never carry it.
     reg_trib = _el(prest, "regTrib")
     _el(reg_trib, "opSimpNac", cfg.issuer_op_simp_nac)
     if cfg.issuer_reg_ap_trib_sn is not None:

@@ -15,7 +15,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .identifiers import assert_cnpj, assert_municipio_ibge
 
@@ -129,6 +129,62 @@ class NationalDpsConfiguration(NationalDpsInput):
     @classmethod
     def _municipio_shape(cls, value: str) -> str:
         return assert_municipio_ibge(value)
+
+    # M41 — Simples Nacional (ME/EPP) cross-field invariants, cited from the
+    # official ANEXO_I-SEFIN_ADN-DPS_NFSe-SNNFSe-PRODREST-v1.01-20260209.xlsx
+    # business-rule sheet (rows 226-227 and 538-539). Enforced HERE, at
+    # configuration-validation time, rather than only in the builder: a
+    # config that violates one of these can never be created/versioned in
+    # the first place, so no DPS can ever be built from it.
+    @model_validator(mode="after")
+    def _simples_nacional_invariants(self) -> "NationalDpsConfiguration":
+        if self.issuer_op_simp_nac == 3:
+            # E0166 — "É obrigatorio o preenchimento do campo de regime de
+            # apuração dos tributos do SN para o optante do Simples Nacional
+            # ME/EPP." (regApTribSN mandatory when opSimpNac=3.)
+            if self.issuer_reg_ap_trib_sn is None:
+                raise ValueError(
+                    "issuer_reg_ap_trib_sn é obrigatório quando issuer_op_simp_nac=3 "
+                    "(regra SEFIN E0166)."
+                )
+            # E0712 — "Se a situação do emitente da DPS perante o Simples
+            # Nacional [...] for ME/EPP, o choice indTotTrib nunca poderá
+            # ser informado." The builder chooses pTotTribSN over indTotTrib
+            # only when p_tot_trib_sn is set (see dps_builder.py); requiring
+            # it here for every opSimpNac=3 config makes the forbidden
+            # indTotTrib branch unreachable for this profile.
+            if self.p_tot_trib_sn is None:
+                raise ValueError(
+                    "p_tot_trib_sn é obrigatório quando issuer_op_simp_nac=3 — o "
+                    "choice indTotTrib nunca pode ser usado para ME/EPP (regra SEFIN E0712)."
+                )
+            # E0175 — "quando o prestador optante pelo Simples Nacional tiver
+            # o regime de apuração dos tributos ocorrendo também pelo
+            # Simples Nacional [regApTribSN=1], o regime especial de
+            # tributação do ISSQN deve ser 'Nenhum' (regEspTrib = 0)."
+            if self.issuer_reg_ap_trib_sn == 1 and self.issuer_reg_esp_trib != 0:
+                raise ValueError(
+                    "issuer_reg_esp_trib deve ser 0 (Nenhum) quando issuer_reg_ap_trib_sn=1 "
+                    "(regra SEFIN E0175)."
+                )
+        else:
+            # E0162 — "Não é permitido ao não optante do Simples Nacional e
+            # o MEI preencherem o campo de indicação do regime de apuração
+            # dos tributos apurados." (regApTribSN forbidden when
+            # opSimpNac is 1 - não optante - or 2 - MEI.)
+            if self.issuer_reg_ap_trib_sn is not None:
+                raise ValueError(
+                    "issuer_reg_ap_trib_sn não pode ser preenchido quando "
+                    "issuer_op_simp_nac != 3 (regra SEFIN E0162)."
+                )
+            # E0174 — "Quando o prestador da NFS-e é MEI (opSimpNac = 2) o "
+            # regime especial de tributação deve ser 'Nenhum' (regEspTrib = 0)."
+            if self.issuer_op_simp_nac == 2 and self.issuer_reg_esp_trib != 0:
+                raise ValueError(
+                    "issuer_reg_esp_trib deve ser 0 (Nenhum) quando issuer_op_simp_nac=2 "
+                    "(MEI) (regra SEFIN E0174)."
+                )
+        return self
 
     def missing_fields(self) -> list[str]:
         """Required-but-empty optional fields.
