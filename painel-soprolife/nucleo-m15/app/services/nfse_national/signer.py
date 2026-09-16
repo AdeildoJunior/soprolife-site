@@ -22,6 +22,7 @@ from cryptography.x509.oid import NameOID
 from lxml import etree
 from signxml import XMLSigner, XMLVerifier
 from signxml.exceptions import InvalidSignature
+from signxml.util import namespaces as _signxml_namespaces
 
 NFSE_NS = "http://www.sped.fazenda.gov.br/nfse"
 DS_NS = "http://www.w3.org/2000/09/xmldsig#"
@@ -116,6 +117,22 @@ def sign_dps(root: etree._Element, loaded: LoadedCertificate) -> etree._Element:
     (vendored alongside DPS_v1.01.xsd) and the RSA/SHA-256 signature method the
     manual documents; this is the same algorithm family already used for
     PAdES in ``report_pades.py``, kept consistent across the codebase.
+
+    M45 — SEFIN rule E1228 ("Uso de prefixo de namespace não permitido na
+    área de dados descompactada") rejected every real restricted attempt
+    (DPS #1-#8, confirmed on DPS #8's real response, 2026-09-16) because
+    signxml's DEFAULT configuration emits the signature as
+    ``<ds:Signature xmlns:ds="...">`` — a namespace PREFIX, forbidden
+    anywhere in the decompressed DPS. ``signer.namespaces = {None:
+    XMLDSig-URI}`` is signxml's own supported, documented mechanism for
+    this (see ``XMLSigner._ds_tag`` upstream — it explicitly special-cases
+    exactly this configuration to avoid spurious ``xmlns=""`` resets in
+    C14N output, referencing signxml issue #275): every ``ds:``-prefixed
+    element becomes an equivalent unprefixed one under a
+    ``xmlns="http://www.w3.org/2000/09/xmldsig#"`` default-namespace
+    declaration on ``<Signature>`` itself — the signature bytes/algorithms
+    are generated fresh in this form; nothing here signs first and
+    rewrites text afterward.
     """
     inf = root.find(f"{{{NFSE_NS}}}infDPS")
     if inf is None:
@@ -129,13 +146,27 @@ def sign_dps(root: etree._Element, loaded: LoadedCertificate) -> etree._Element:
         digest_algorithm="sha256",
         c14n_algorithm="http://www.w3.org/2001/10/xml-exc-c14n#",
     )
+    signer.namespaces = {None: _signxml_namespaces.ds}
     signed = signer.sign(
         root,
         key=loaded.private_key,
         cert=[loaded.certificate_pem],
         reference_uri=f"#{dps_id}",
     )
-    return signed
+    # M45 — signxml's raw in-memory ``Signature`` element (and its
+    # unprefixed descendants) carry NO namespace at the lxml object-model
+    # level even though they serialize correctly as
+    # ``xmlns="http://www.w3.org/2000/09/xmldsig#"`` — only a serialize+
+    # reparse round trip resolves that default-namespace declaration back
+    # into each element's actual qualified name, which every real consumer
+    # of this function's output already does (``serialize_dps`` then
+    # ``validate_dps_xml``/the wire transport both work from bytes, then
+    # re-parse). Doing that round trip HERE, once, makes the RETURNED
+    # object itself behave correctly for any Clark-notation/namespace-aware
+    # query too — proven to be byte-for-byte identical output (nothing
+    # about the signed content changes) and the signature verifies
+    # correctly on the result (see the M45 XSD/signature test suite).
+    return etree.fromstring(etree.tostring(signed))
 
 
 def verify_dps_signature(signed_root: etree._Element, expected_certificate_pem: bytes) -> None:
