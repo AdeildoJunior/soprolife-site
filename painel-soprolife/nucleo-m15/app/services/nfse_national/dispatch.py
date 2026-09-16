@@ -30,7 +30,6 @@ gets past the first re-check — which is exactly the point.
 """
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -133,22 +132,16 @@ def resolve_restricted_provider(db: Session, settings: Settings, doc: FiscalDocu
     if not settings.nfse_restricted_network_enabled:
         fail("restricted_network_gate_disabled")
 
-    # M46 — TEMPORARY diagnostic timing only (never a secret: wall-clock
-    # durations in milliseconds, printed to the process's own stdout, which
-    # the M45/M46 gate-open launcher already captures to a private 0600
-    # log). The M46 SQLite fix (busy_timeout + handle_error discard) turned
-    # out to leave the ROOT "database is locked" unexplained — Python's own
-    # sqlite3 module already defaults to a 5s busy_timeout, so the real
-    # question is what holds this session's transaction open for LONGER
-    # than that between `get_document(..., lock=True)` (start of
-    # `operate()`) and `db.commit()` (durable intent). The two real
-    # certificate-decryption calls below (readiness's own validity check,
-    # then this function's own `_load_certificate`) are the only
-    # CPU-bound, potentially slow work in between — timed here to find out,
-    # not to guess a third time.
-    _t0 = time.monotonic()
+    # M47 — the M46 diagnostic timing that used to bracket this call (and
+    # `_load_certificate` below) has been removed: it was added to test
+    # whether real certificate decryption was holding `operate()`'s
+    # transaction open past the busy_timeout, and that hypothesis is now
+    # refuted. The lock holder was never inside this process at all — it was
+    # the orchestration script's own session, left open across the HTTP POST
+    # (see scripts/nfse_m45_dps9_restricted_issue.py and
+    # tests/test_nfse_orchestrator_self_lock.py). However long these calls
+    # take is therefore irrelevant to that failure.
     readiness = compute_provider_readiness(db, settings, environment="restricted")
-    print(f"M46-TIMING compute_provider_readiness took {time.monotonic() - _t0:.3f}s", flush=True)
     # `readiness.blockers` already covers: certificate presence/validity,
     # secret presence, base URL, network gate, fiscal policy completeness,
     # artifact storage, and whether ANY national configuration exists for
@@ -167,9 +160,7 @@ def resolve_restricted_provider(db: Session, settings: Settings, doc: FiscalDocu
     recipient = _recipient(db, preparation)
     _service_description(db, doc)  # validated here too: fail closed before ever returning a provider
     municipio_prestacao_ibge = _service_location(preparation)
-    _t1 = time.monotonic()
     certificate = _load_certificate(settings)
-    print(f"M46-TIMING _load_certificate took {time.monotonic() - _t1:.3f}s", flush=True)
 
     # M36 — durable, globally-unique numero_dps, keyed by document_id alone:
     # the SAME call, for the SAME document, on any later attempt (retry,

@@ -6,7 +6,6 @@ started event and its audit record are durably committed. No real adapter exists
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import re
-import time
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -248,10 +247,6 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
     expected_name = {'mock': 'mock', 'restricted': 'restricted'}.get(settings.nfse_environment)
     if provider.environment != settings.nfse_environment or provider.name != expected_name:
         fail('provider_environment_mismatch', 503)
-    # M46 — TEMPORARY diagnostic timing (see dispatch.py's matching M46-TIMING
-    # lines): marks when this session's transaction opens, so the gap to the
-    # durable-intent commit below is directly measurable.
-    _m46_span_start = time.monotonic()
     doc = get_document(db, document_id, lock=True)
     if doc.environment != settings.nfse_environment:
         fail('document_environment_mismatch')
@@ -341,10 +336,14 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
     doc.state = 'reconciling' if operation == 'reconcile' else 'issuing'
     record(db, operation + '_started', 'fiscal_document', doc.id, actor, request_id,
            provider=provider.name, status=doc.state, sequencia=number)
-    print(f"M46-TIMING span from lock to pre-commit: {time.monotonic() - _m46_span_start:.3f}s", flush=True)
-    _m46_commit_start = time.monotonic()
+    # M47 — this commit must escalate SQLite to an EXCLUSIVE lock. It fails
+    # with "database is locked" if ANY other connection still holds even a
+    # SHARED one — including a caller that opened its own session and kept it
+    # open across the very HTTP request it is waiting on. That was the real
+    # DPS #9 failure; the caller-side rule and its regression test live in
+    # scripts/nfse_m45_dps9_restricted_issue.py and
+    # tests/test_nfse_orchestrator_self_lock.py.
     db.commit()  # Durable intent before crossing the provider boundary.
-    print(f"M46-TIMING db.commit() itself took {time.monotonic() - _m46_commit_start:.3f}s", flush=True)
     request = _request(doc, preparation, target.operation_id if target else operation_id,
                        description=description_override)
     access_key_conflict = False

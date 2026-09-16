@@ -18,14 +18,22 @@ DPS #9 attempt, still failing identically after that "fix"). The two real,
 structural improvements this file proves are: (1) the `handle_error`
 listener that discards a poisoned pooled connection instead of returning it
 — this DOES fully eliminate the second-order "transaction within a
-transaction" cascade, confirmed on that same second real attempt; and (2)
-raising `SQLITE_BUSY_TIMEOUT_MS` well past Python's own 5s default (to 30s)
-narrows, but does not claim to eliminate, the window in which genuine
-multi-second contention can still exceed the bound — a bounded wait is
-never a promise of eventual success, by design (see
-`test_session_not_poisoned_after_a_genuine_lock_timeout` below). Neither
-change weakens durable-intent semantics, adds a fiscal-network retry, or
-touches PostgreSQL (every listener here is registered only inside
+transaction" cascade, confirmed on that same second real attempt.
+
+M47 CORRECTION — the second thing this file used to claim (that raising
+`SQLITE_BUSY_TIMEOUT_MS` to 30s "narrows the window") was wrong about the
+real failure, and the constant has been returned to 5000. There was no
+window to narrow: the lock holder was the ORCHESTRATION SCRIPT's own
+session, held open across the HTTP POST whose reply that same process was
+blocked on. The writer therefore waited the full bound and failed
+identically at any value (30.050s at 30000ms, 3.008s at 3000ms). The
+scenarios below remain valid as descriptions of GENUINE transient
+contention between request-scoped sessions; they are simply not what
+DPS #9 hit. The real root cause, its deterministic reproduction and the
+caller-side fix live in tests/test_nfse_orchestrator_self_lock.py.
+
+No change here weakens durable-intent semantics, adds a fiscal-network
+retry, or touches PostgreSQL (every listener is registered only inside
 `build_engine()`'s `if url.startswith("sqlite")` branch).
 """
 import sqlite3
@@ -119,20 +127,30 @@ def test_old_configuration_poisons_the_pooled_connection_after_lock_failure(tmp_
 # ============================================================ Phase C — fix proven
 
 
-def test_configured_timeout_exceeds_pythons_own_default():
+def test_configured_timeout_matches_pythons_own_default():
     """Python's ``sqlite3`` module defaults ``connect(timeout=5.0)``
     regardless of any PRAGMA (confirmed directly: a bare
     ``sqlite3.connect(":memory:")`` already reports `PRAGMA busy_timeout`
-    == 5000) — so our own configured value must be STRICTLY GREATER than
-    that default, or it changes nothing for contention that already
-    outlasts 5s (exactly what happened on the real DPS #9 retry)."""
+    == 5000). We restate that same value explicitly so the bound is visible
+    and pinned at the SQLAlchemy layer instead of being inherited silently
+    from the driver.
+
+    M47 CORRECTION to this file's own earlier reasoning: raising this past
+    the default was tried (30000) and measurably did NOT fix the real DPS #9
+    failure — the holder was the calling script's own session, kept open
+    across the HTTP POST it was blocked waiting on, so the writer simply
+    waited the entire bound and failed identically (30.050s at 30000ms vs
+    3.008s at 3000ms). A longer timeout cannot win a circular wait; it only
+    turns a fast, legible error into a long hang. See
+    tests/test_nfse_orchestrator_self_lock.py for the proven root cause.
+    """
     default_conn = sqlite3.connect(":memory:")
     try:
         python_default_ms = default_conn.execute("PRAGMA busy_timeout").fetchone()[0]
     finally:
         default_conn.close()
     assert python_default_ms == 5000
-    assert db_module.SQLITE_BUSY_TIMEOUT_MS > python_default_ms
+    assert db_module.SQLITE_BUSY_TIMEOUT_MS == python_default_ms
 
 
 def test_new_engine_sets_busy_timeout(tmp_path):

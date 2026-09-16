@@ -110,21 +110,27 @@ def _ensure_sqlite_dir(url: str) -> None:
 # conexão morta no meio da requisição de um paciente, não.
 POOL_RECYCLE_SEGUNDOS = 1800
 
-# M46 — a transaction whose COMMIT needs to escalate to an EXCLUSIVE lock
-# while another pooled connection still holds even a SHARED one (e.g. a GET
-# request's session left open a moment longer than a concurrent fiscal
-# issuance's own durable-intent commit) fails with "database is locked" once
-# the wait exceeds this timeout. CORRECTION (still in this same mission):
-# Python's own ``sqlite3`` module already defaults ``connect(timeout=5.0)``
-# regardless of any PRAGMA, so simply restating 5000ms here changed nothing
-# for the real DPS #9 failure — that contention genuinely outlasts 5s (real
-# certificate decryption is the leading suspect, being timed directly now in
-# `dispatch.py`'s M46-TIMING lines pending real evidence). Raised to a much
-# more generous bound: this is a single-operator restricted-lab tool issuing
-# one document at a time, so a worst-case 30s wait is an acceptable, bounded
-# cost for eliminating spurious lock failures — never an infinite wait, and
-# never a fiscal-network retry.
-SQLITE_BUSY_TIMEOUT_MS = 30000
+# M46/M47 — a transaction whose COMMIT needs to escalate to an EXCLUSIVE lock
+# while another connection still holds even a SHARED one fails with "database
+# is locked" once the wait exceeds this timeout.
+#
+# This value deliberately EQUALS Python's own ``sqlite3`` default
+# (``connect(timeout=5.0)``, applied regardless of any PRAGMA). It is restated
+# here so the bound is visible and pinned at the SQLAlchemy layer rather than
+# inherited invisibly from the driver — NOT as a fix for anything.
+#
+# M47 — do NOT raise this to make a "database is locked" go away. That was
+# tried (5000 -> 30000) for the real DPS #9 failure and proved to be the wrong
+# lever: the holder there was the CALLER's own long-lived session, kept open
+# across the HTTP POST it was simultaneously blocked waiting for. That is a
+# circular wait, so the writer simply waited the full bound and failed
+# identically — measured at 30.050s with a 30000ms timeout, vs 3.008s with
+# 3000ms. Legitimate contention in this app is between request-scoped sessions
+# that hold locks for milliseconds; a lock that outlasts seconds is structural,
+# and the fix belongs in whoever holds it, not in a longer wait here. Keeping
+# the bound short also keeps such a bug loud and fast instead of turning it
+# into a half-minute hang.
+SQLITE_BUSY_TIMEOUT_MS = 5000
 
 
 def build_engine(url: str | None = None):
