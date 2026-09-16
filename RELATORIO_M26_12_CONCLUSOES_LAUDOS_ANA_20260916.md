@@ -212,40 +212,61 @@ receita/financeiro (o caminho de código não importa nem toca nenhum modelo fin
 
 ## 6. HEAD oficial
 
-**Ainda não commitado.** Árvore de trabalho no worktree `claude-m26-12-conclusoes-laudos`, branch de
-mesmo nome, base `fa3de29` (`origin/painel-soprolife-v01`). Sete arquivos alterados/criados, todos
-revisados e testados (ver diffstat abaixo). Por regra permanente deste repositório
-(`soprolife-etapa-segura`: "commit só do usuário", sem exceção mesmo quando o enunciado da tarefa pede
-commit/push/deploy), **aguardo sua confirmação explícita** antes de commitar, dar push, integrar por
-fast-forward em `painel-soprolife-v01` e fazer o deploy mínimo.
+Commit `a11a57d` (branch `claude-m26-12-conclusoes-laudos`, base `fa3de29`), commitado, pushado, e
+integrado por **fast-forward** em `painel-soprolife-v01` no checkout oficial
+(`/home/fedorasurf/soprolife-site`). `origin/painel-soprolife-v01` confirmado em `fa3de29` limpo
+imediatamente antes da integração — nenhum commit concorrente entrou entre a autorização e o merge.
+Onze arquivos alterados/criados (1537 inserções, 75 remoções):
 
 ```
- painel-soprolife/css/report-workflow.css                    |  77 +++++-
- painel-soprolife/js/report-workflow.js                       | 236 ++++++++++++++++-
- painel-soprolife/nucleo-m15/app/audit.py                     |   4 +
- painel-soprolife/nucleo-m15/app/routers/reports.py           | 295 ++++++++++++++++-----
- painel-soprolife/nucleo-m15/app/serializers.py                |   3 +
- painel-soprolife/nucleo-m15/tests/test_m24a_frontend_contract.py |   7 +
- painel-soprolife/nucleo-m15/tests/test_m24b_report_publication.py|  16 +-
- + novos: nucleo-m15/tests/test_m26_12_retornar_para_correcao.py,
-          scripts/test-m26-12-conclusoes-laudos.js
+ RELATORIO_M26_12_CONCLUSOES_LAUDOS_ANA_20260916.md                |  251 ++
+ painel-soprolife/css/report-workflow.css                          |   77 +-
+ painel-soprolife/index.html                                       |    4 +-
+ painel-soprolife/js/report-workflow.js                            |  236 ++-
+ painel-soprolife/nucleo-m15/app/audit.py                          |    4 +
+ painel-soprolife/nucleo-m15/app/routers/reports.py                |  295 ++--
+ painel-soprolife/nucleo-m15/app/serializers.py                    |    3 +
+ painel-soprolife/nucleo-m15/tests/test_m24a_frontend_contract.py  |    7 +
+ painel-soprolife/nucleo-m15/tests/test_m24b_report_publication.py |   16 +-
+ painel-soprolife/nucleo-m15/tests/test_m26_12_retornar_para_correcao.py | 308 ++ (novo)
+ painel-soprolife/scripts/test-m26-12-conclusoes-laudos.js         |  411 ++ (novo)
 ```
 
-Sem migration (nenhuma coluna nova) — só duas chaves novas na allowlist Python de auditoria.
+`index.html` entrou também: bump do carimbo de cache-busting de `report-workflow.css`/`.js`
+(`?v=2026090102` → `?v=2026091601`), para navegadores com o arquivo antigo em cache pegarem a versão
+nova. Sem migration — nenhuma coluna de banco nova; só duas chaves novas na allowlist Python de
+auditoria (`app/audit.py`).
 
 ## 7. HEAD produção
 
-Não verificado nesta sessão a partir daqui (nenhuma ação na VPS além da consulta read-only de dados de
-laudo autorizada por você para a seção 3). Pelo registro de memória mais recente, a VPS seguia em
-commits anteriores a M26.10; recomendo confirmar `git -C /opt/soprolife/soprolife-site rev-parse
---short HEAD` antes de qualquer deploy.
+`a11a57d` — confirmado antes do deploy que a VPS estava em `fa3de29` (mesma base, limpa), `git pull
+--ff-only origin painel-soprolife-v01` aplicado sem conflito, `git status --short` limpo depois.
+
+Serviço reiniciado: **somente `soprolife-m15-api.service`** (o único que carrega o código Python
+alterado — `app/routers/reports.py`, `app/serializers.py`, `app/audit.py`). Confirmado por grep que
+`soprolife-portal-resultados.service` não importa o router de laudos, então não precisava reiniciar.
+`soprolife-painel.service`/`soprolife-painel-loopback.service` servem os arquivos estáticos
+(JS/CSS/HTML) direto do disco — mudança de front não exige restart, e ficaram intocados. Reinício
+confirmado limpo via `journalctl` (parou e voltou sem erro, `active`).
 
 ## 8. Health
 
-Não aplicável ainda — nenhum deploy foi feito.
+- Painel (`127.0.0.1:8765/`): **200**
+- API M15 (`127.0.0.1:8015/api/v1/health`): **200**
+- Serviço reiniciado ativo (`systemctl is-active soprolife-m15-api.service`): `active`
+
+Nenhum teste funcional foi feito contra dado real de paciente ou laudo — só health/smoke, exatamente
+como pedido. "Retornar para correção" **não** foi exercitado em produção; toda a cobertura funcional
+dessa ação é a suite sintética (seção 5).
 
 ## 9. Caminho do relatório
 
-`/home/fedorasurf/soprolife-worktrees/claude-m26-12-conclusoes-laudos/RELATORIO_M26_12_CONCLUSOES_LAUDOS_ANA_20260916.md`
-(raiz do worktree, mesmo padrão dos relatórios anteriores da série M25/M26 — será commitado junto do
-código quando autorizado, e `RELATORIOS/ULTIMO_RELATORIO.md` deve passar a apontar para ele).
+Commitado no repositório: `RELATORIO_M26_12_CONCLUSOES_LAUDOS_ANA_20260916.md` (raiz do repo,
+commit `a11a57d`, branch `painel-soprolife-v01`). Cópia local em
+`/home/fedorasurf/soprolife-site/RELATORIO_M26_12_CONCLUSOES_LAUDOS_ANA_20260916.md`.
+
+## 10. Árvore limpa
+
+Confirmado limpo em três lugares, todos em `a11a57d`: checkout oficial (`/home/fedorasurf/soprolife-site`),
+VPS (`/opt/soprolife/soprolife-site`), e o worktree da missão foi removido (`git worktree remove` +
+`prune`, já totalmente mergeado — nada ficou pendurado em `~/soprolife-worktrees/`).
