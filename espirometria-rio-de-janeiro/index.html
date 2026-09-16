@@ -2164,6 +2164,48 @@ body{
 
 <!-- SOPRO:SL_BOOKING_SHARED_CSS -->
 <link rel="stylesheet" href="/assets/sl-booking.css">
+
+<style id="sopro-crosslink-barra-style">
+.sl-barra-crosslink{
+  max-width:1180px;
+  margin:18px auto 34px;
+  padding:16px 20px;
+  border:1px solid rgba(11,34,57,.12);
+  border-radius:14px;
+  background:#f5fbfa;
+  color:#496171;
+  font-size:.92rem;
+  line-height:1.55;
+}
+.sl-barra-crosslink strong{
+  display:block;
+  margin-bottom:3px;
+  color:#0b2239;
+}
+.sl-barra-crosslink span{
+  display:inline;
+}
+.sl-barra-crosslink a{
+  display:inline-block;
+  margin-left:6px;
+  color:#087f79;
+  font-weight:700;
+  text-decoration:none;
+}
+.sl-barra-crosslink a:hover{
+  text-decoration:underline;
+}
+@media(max-width:700px){
+  .sl-barra-crosslink{
+    margin:16px 16px 28px;
+  }
+  .sl-barra-crosslink a{
+    display:block;
+    margin:7px 0 0;
+  }
+}
+</style>
+
 </head>
 <body> <!-- Header com logo encostada à esquerda --> <header class="sl-header">
 <div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a>
@@ -2367,6 +2409,18 @@ body{
         </div><!-- SOPRO:FIX_CONTAINER_AGENDAMENTO — fecha .sl-container da seção
                     de agendamento, que estava sem par e deixava .sl-page aberta -->
       </section>
+<!-- SOPRO:INTERNAL_LINK_BARRA_RIO_V1 -->
+<div class="sl-barra-crosslink">
+  <strong>Procurando espirometria na Barra da Tijuca?</strong>
+  <span>
+    A Sopro Life atende no Shopping Downtown,
+    na Avenida das Américas.
+  </span>
+  <a href="/espirometria-barra-da-tijuca/">
+    Ver espirometria na Barra da Tijuca →
+  </a>
+</div>
+
 <!-- SOPRO:RJ_HOME_BOOKING_SECTION_END -->
 <!-- SOPRO:FAQ_SECTION_START -->
 <section class="sl-section" id="perguntas-frequentes" aria-label="Perguntas frequentes sobre espirometria">
