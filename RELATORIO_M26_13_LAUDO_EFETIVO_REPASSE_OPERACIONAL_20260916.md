@@ -1,10 +1,8 @@
 # M26.13 — Laudo efetivo, produção da médica, repasse e limpeza operacional
 
 16/09/2026. Worktree `claude-m26-13-laudos-efetivos-repasse`, base `painel-soprolife-v01` (`cfe71fd`,
-o mesmo commit já em produção ao final da M26.12). Trabalho técnico e testes concluídos; **commit/push/
-integração/deploy aguardando autorização explícita** (mesma regra permanente do repositório —
-`soprolife-etapa-segura`: "commit só do usuário" — e desta vez o enunciado também não pediu deploy
-incondicional, só relatar "se houver").
+o mesmo commit já em produção ao final da M26.12). Entrega autorizada explicitamente e executada nesta
+sessão (commit, push, integração ff-only, deploy mínimo e smoke — ver seções 7-9).
 
 ---
 
@@ -139,10 +137,10 @@ por competência; médica e operacional recebem 403; médica inexistente 404; la
 ativa e aparece no histórico com o motivo certo; laudo entregue idem; laudo ativo normal continua visível
 por padrão. Todos passando.
 
-**Suíte completa do backend**, rodada duas vezes (antes e depois do achado da seção 5): sem falhas
-relacionadas a este trabalho (excluído apenas `test_live_multisheet_reader.py`, ausência de
-`googleapiclient` no venv local de teste — confirmada idêntica no checkout oficial intocado, nada a ver
-com laudos).
+**Suíte completa do backend**, rodada três vezes (antes do achado da seção 5, depois de corrigi-lo, e
+uma confirmação final): **1771 passaram, 30 skipped, 0 falhas relacionadas a este trabalho** na rodada
+final (excluído apenas `test_live_multisheet_reader.py`, ausência de `googleapiclient` no venv local de
+teste — confirmada idêntica no checkout oficial intocado, nada a ver com laudos).
 
 **Frontend** (Playwright, navegador real, API sintética em memória):
 - `scripts/test-m26-13-producao-medica.js` (novo) — 6 cenários: botão "Ver produção" por médica, nasce
@@ -162,21 +160,34 @@ com laudos).
 
 ## 7. HEAD oficial
 
-**Ainda não commitado.** Trabalho completo no worktree `claude-m26-13-laudos-efetivos-repasse`, base
-`cfe71fd` (idêntica ao `origin/painel-soprolife-v01` e à VPS neste momento). Sem migration — nenhuma
-coluna nova. Aguardando sua confirmação para commitar, dar push, integrar por fast-forward e (se
-autorizado) fazer o deploy mínimo.
+Commit `5f19b4c` (branch `claude-m26-13-laudos-efetivos-repasse`, base `cfe71fd`), commitado, pushado e
+integrado por **fast-forward** em `painel-soprolife-v01` no checkout oficial
+(`/home/fedorasurf/soprolife-site`). `origin/painel-soprolife-v01` confirmado em `cfe71fd` limpo
+imediatamente antes da integração — nenhum commit concorrente entrou entre a autorização e o merge.
+Sem migration — nenhuma coluna de banco nova.
 
 ## 8. HEAD da produção
 
-Sem deploy nesta missão até este ponto. A VPS segue em `cfe71fd` (confirmado limpo agora mesmo,
-`git status --short` vazio).
+`5f19b4c` — confirmado antes do deploy que a VPS estava em `cfe71fd` (mesma base, limpa), `git pull
+--ff-only origin painel-soprolife-v01` aplicado sem conflito, `git status --short` limpo depois.
+
+Serviço reiniciado: **somente `soprolife-m15-api.service`** (único que carrega o código Python alterado
+— `finance.py`, `reports.py`, `medical_transfers.py`). `css/medical-transfers.css`, `js/medical-
+transfers.js`, `js/report-workflow.js` e `index.html` são estáticos, servidos direto do disco por
+`soprolife-painel(-loopback).service` — não exigem restart, e ficaram intocados. Reinício confirmado
+limpo via `journalctl` (parou e voltou sem erro, `active`).
 
 ## 9. Health/smoke
 
-Não aplicável ainda — nenhum deploy foi feito.
+- Painel (`127.0.0.1:8765/`): **200**
+- API M15 (`127.0.0.1:8015/api/v1/health`): **200**
+- Serviço reiniciado ativo (`systemctl is-active soprolife-m15-api.service`): `active`
+
+Árvore limpa confirmada em três lugares, todos em `5f19b4c`: checkout oficial, VPS, e o worktree da
+missão foi removido (`git worktree remove` + `prune`, já totalmente mergeado).
 
 ## 10. Caminho do relatório
 
-`/home/fedorasurf/soprolife-worktrees/claude-m26-13-laudos-efetivos-repasse/RELATORIO_M26_13_LAUDO_EFETIVO_REPASSE_OPERACIONAL_20260916.md`
-(raiz do worktree, mesmo padrão da M26.12 — será commitado junto do código quando autorizado).
+Commitado no repositório: `RELATORIO_M26_13_LAUDO_EFETIVO_REPASSE_OPERACIONAL_20260916.md` (raiz do
+repo, commit `5f19b4c`, branch `painel-soprolife-v01`). Cópia local em
+`/home/fedorasurf/soprolife-site/RELATORIO_M26_13_LAUDO_EFETIVO_REPASSE_OPERACIONAL_20260916.md`.
