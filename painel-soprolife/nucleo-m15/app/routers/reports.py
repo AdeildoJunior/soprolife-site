@@ -27,9 +27,9 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from ..audit import audit
 from ..config import get_settings
@@ -1215,6 +1215,8 @@ def _technical_report_row(
     include_assignment_ids: bool = False,
     location: dict | None = None,
     person: Person | None = None,
+    has_corrective_successor: bool = False,
+    is_delivered: bool = False,
 ) -> dict:
     data = {
         # M25.15 — `patient` é a referência humana principal da linha; os
@@ -1250,6 +1252,13 @@ def _technical_report_row(
         # isso a médica via o rótulo "corrigido" mas nunca o porquê.
         "correction_reason_code": document.correction_reason_code,
         "validation_code": document.validation_code,
+        # M26.13 — este documento específico já foi superado por uma
+        # corretiva, e/ou já foi entregue ao paciente. Nenhum dos dois muda
+        # `document.status` (ele fica `liberado` para sempre, ver M26.12) —
+        # sem este par, a fila operacional não tinha como distinguir "ainda
+        # em aberto" de "já resolvido, só não foi arquivado".
+        "has_corrective_successor": has_corrective_successor,
+        "is_delivered": is_delivered,
         # M25.24 — carimbo do encerramento operacional do EXAME. `None` na
         # fila ativa. Presente, a linha tem de aparecer marcada como
         # histórico: uma lista que junta encerrado e pendente sem etiqueta
@@ -2139,11 +2148,35 @@ def list_report_documents_operational(
     # linha, nunca misturados sem etiqueta.
     incluir_encerrados: bool = False,
     somente_encerrados: bool = False,
+    # M26.13 — "Concluído — aguardando assinatura qualificada" persistia
+    # para sempre, porque nem uma corretiva nem uma entrega mudam
+    # `ReportDocument.status` (fica `liberado` por desenho, ver M26.12): um
+    # laudo já superado por correção, ou já entregue ao paciente, continuava
+    # ocupando a fila ativa como se ainda estivesse pendente. Mesmo padrão
+    # de `incluir_encerrados`/`somente_encerrados` acima — o histórico
+    # existe, só não polui a visão de trabalho por padrão.
+    incluir_superados: bool = False,
+    somente_superados: bool = False,
     db: Session = Depends(get_db),
     _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
+    corrective = aliased(ReportDocument)
+    has_corrective_successor = exists().where(
+        corrective.corrects_document_id == ReportDocument.id
+    )
+    is_delivered = exists().where(
+        ExternalSignedDocument.report_document_id == ReportDocument.id,
+        ExternalSignedDocument.status == ASSINADO_ENTREGUE,
+    )
     statement = (
-        select(ReportDocument, SpirometryExam, ReportAssignment, Person)
+        select(
+            ReportDocument,
+            SpirometryExam,
+            ReportAssignment,
+            Person,
+            has_corrective_successor,
+            is_delivered,
+        )
         .join(
             SpirometryExam,
             SpirometryExam.id == ReportDocument.spirometry_exam_id,
@@ -2185,6 +2218,14 @@ def list_report_documents_operational(
         statement = statement.where(
             SpirometryExam.encerramento_motivo.is_(None)
         )
+    if somente_superados:
+        statement = statement.where(
+            has_corrective_successor | is_delivered
+        )
+    elif not incluir_superados:
+        statement = statement.where(
+            ~has_corrective_successor, ~is_delivered
+        )
     rows = db.execute(
         statement.order_by(ReportDocument.created_at.desc()).limit(200)
     ).all()
@@ -2196,8 +2237,10 @@ def list_report_documents_operational(
             include_assignment_ids=True,
             person=person,
             location=_queue_location(db, document, exam),
+            has_corrective_successor=bool(superado),
+            is_delivered=bool(entregue),
         )
-        for document, exam, assignment, person in rows
+        for document, exam, assignment, person, superado, entregue in rows
     ]
 
 

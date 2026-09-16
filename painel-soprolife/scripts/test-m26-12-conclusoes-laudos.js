@@ -259,6 +259,13 @@ async function runAdminScenario(browser) {
         const body = options && options.body ? JSON.parse(options.body) : null;
         window.calls.push({ url, method, body });
         if (url === "/laudos") return [];
+        if (url === "/laudos?somente_superados=true") {
+          return [{
+            document_id: "doc-superado", patient: { full_name: "Paciente Superado" },
+            report_code: "LAU-000005", exam_code: "ESP-000005", status: "liberado",
+            has_corrective_successor: true, is_delivered: false, location_key: "pastore",
+          }];
+        }
         if (url === "/laudos/medicos-disponiveis") return [];
         if (url === "/laudos/exames?somente_sem_laudo=true") return { itens: [] };
         if (url === "/laudos/assinatura-externa/fila") {
@@ -288,6 +295,20 @@ async function runAdminScenario(browser) {
 
   await page.addScriptTag({ path: path.join(panel, "js/report-workflow.js") });
   await page.waitForSelector(".report-delivery-row");
+
+  await check("M26.13 — laudo superado sai da fila ativa e aparece no histórico recolhido", async () => {
+    // A fila ativa (`report-operation-row`) só existe dentro de
+    // "Acompanhamento operacional"; o item superado não deve estar lá.
+    assert.equal(
+      await page.locator('.report-operation-row:has-text("Paciente Superado")').count(),
+      0
+    );
+    const historico = page.locator(".report-closed-catalog", { hasText: "Históricos operacionais" });
+    assert.match(await historico.locator("summary").innerText(), /Históricos operacionais \(1\)/);
+    await historico.locator("summary").click();
+    assert.match(await historico.innerText(), /Paciente Superado/);
+    assert.match(await historico.innerText(), /Superado por corretiva/);
+  });
 
   await check("botão só aparece em laudo liberado/assinado, nunca em atribuído", async () => {
     assert.equal(await page.locator('[data-report-return-correction-open="doc-liberado"]').count(), 1);
@@ -368,7 +389,7 @@ async function runOperationalOnlyScenario(browser) {
       hasSession: () => false,
       apiBlob: async () => new Blob(),
       api: async (url) => {
-        if (url === "/laudos") return [];
+        if (url === "/laudos" || url === "/laudos?somente_superados=true") return [];
         if (url === "/laudos/medicos-disponiveis") return [];
         if (url === "/laudos/exames?somente_sem_laudo=true") return { itens: [] };
         if (url === "/laudos/assinatura-externa/fila") {

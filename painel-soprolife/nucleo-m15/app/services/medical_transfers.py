@@ -2,6 +2,17 @@
 
 O único marco elegível é ``ReportDocument.released_at``. Status posterior,
 assinatura e entrega não participam do predicado nem da competência.
+
+M26.13 — 1 exame corrigido não pode virar 2 laudos pagos. Uma corretiva
+(M25.2/M26.12) é um documento NOVO (`ReportDocument.corrects_document_id`
+apontando para o original) que também passa por `released_at` quando a
+médica a conclui de novo — sem a exclusão abaixo, o exame contava duas
+vezes: uma pelo original, outra pela correção. A regra adotada é estável
+de propósito: o documento-RAIZ (`corrects_document_id IS NULL`) é o único
+que conta, sempre pela competência da SUA PRÓPRIA `released_at` — nunca a
+da corretiva. Isso significa que corrigir um laudo depois NUNCA move a
+contagem para outro mês nem soma um segundo laudo, mesmo que a competência
+original já tenha repasse registrado/pago.
 """
 
 from datetime import date, datetime, time, timezone
@@ -13,8 +24,20 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import PhysicianProfile, PhysicianTransfer, ReportDocument, User
+from ..models import (
+    ASSINADO_ENTREGUE,
+    ASSINADO_EM_CONFERENCIA,
+    ASSINADO_RECUSADO,
+    PhysicianProfile,
+    PhysicianTransfer,
+    ReportAssignment,
+    ReportDocument,
+    ReportDocumentVersion,
+    ExternalSignedDocument,
+    User,
+)
 from ..serializers import iso, money, to_local
+from .report_conclusions import CONCLUSION_OPTIONS
 
 MONEY_QUANT = Decimal("0.01")
 
@@ -55,13 +78,18 @@ def _utc_boundaries(competence: date) -> tuple[datetime, datetime]:
 def eligible_report_count(
     db: Session, physician_profile_id: str, competence: date
 ) -> int:
-    """Conta cada documento uma vez, pelo mês local de sua conclusão."""
+    """Conta cada EXAME uma vez, pelo mês local da conclusão do documento-raiz.
+
+    Uma corretiva (`corrects_document_id` preenchido) nunca conta — ela é a
+    mesma produção clínica do original, apenas corrigida.
+    """
 
     start, end = _utc_boundaries(competence)
     return int(
         db.scalar(
             select(func.count(func.distinct(ReportDocument.id))).where(
                 ReportDocument.released_physician_profile_id == physician_profile_id,
+                ReportDocument.corrects_document_id.is_(None),
                 ReportDocument.released_at.is_not(None),
                 ReportDocument.released_at >= start,
                 ReportDocument.released_at < end,
@@ -200,4 +228,159 @@ def medical_transfer_dashboard(db: Session, competence: date) -> dict:
 def calculate_reference_total(quantity: int, unit_amount: Decimal) -> Decimal:
     return (Decimal(quantity) * unit_amount).quantize(
         MONEY_QUANT, rounding=ROUND_HALF_UP
+    )
+
+
+# M26.13 — status aceitos de "voltou assinado" (tudo que NÃO é a conferência
+# em andamento nem a recusa). `em_conferencia` é transitório; `recusado`
+# nunca vira evidência de assinatura.
+_SIGNED_BACK_EXCLUDED = (ASSINADO_EM_CONFERENCIA, ASSINADO_RECUSADO)
+
+
+def physician_production_summary(
+    db: Session, physician_profile_id: str, competence: date
+) -> dict:
+    """Produção da médica na competência, na MESMA regra de "laudo efetivo"
+    de `eligible_report_count`: 1 exame == no máximo 1 laudo contado, pelo
+    documento-raiz, mesmo que tenha sido corrigido depois.
+
+    Resolvido em Python (não numa única query agregada) de propósito: o
+    volume por médica/mês é pequeno (dezenas, não milhares) e a lógica de
+    "qual documento da cadeia é o VIGENTE" fica auditável passo a passo, em
+    vez de uma expressão SQL com COALESCE/OUTER JOIN difícil de conferir à
+    mão — o dado é de repasse médico, errar aqui é errar pagamento.
+    """
+
+    start, end = _utc_boundaries(competence)
+    roots = list(
+        db.execute(
+            select(ReportDocument).where(
+                ReportDocument.released_physician_profile_id == physician_profile_id,
+                ReportDocument.corrects_document_id.is_(None),
+                ReportDocument.released_at.is_not(None),
+                ReportDocument.released_at >= start,
+                ReportDocument.released_at < end,
+            )
+        ).scalars()
+    )
+    effective = len(roots)
+    if effective == 0:
+        return {
+            "competencia": competence_key(competence),
+            "efetivos": 0,
+            "corrigidos": 0,
+            "assinados": 0,
+            "entregues": 0,
+            "aguardando_assinatura": 0,
+            "pendentes": _pending_count(db, physician_profile_id),
+            "distribuicao_conclusao": [],
+        }
+
+    root_ids = [root.id for root in roots]
+    correctives = {
+        row.corrects_document_id: row
+        for row in db.execute(
+            select(ReportDocument).where(
+                ReportDocument.corrects_document_id.in_(root_ids)
+            )
+        ).scalars()
+    }
+    # O VIGENTE de cada exame é a corretiva, se existir; senão o próprio
+    # original. É o vigente que decide "assinada"/"entregue"/conclusão —
+    # nunca o original quando ele já foi superado.
+    vigente_by_root = {
+        root.id: correctives.get(root.id, root) for root in roots
+    }
+    vigente_ids = [doc.id for doc in vigente_by_root.values()]
+
+    signed_status_by_document: dict[str, set[str]] = {}
+    for row in db.execute(
+        select(
+            ExternalSignedDocument.report_document_id,
+            ExternalSignedDocument.status,
+        ).where(ExternalSignedDocument.report_document_id.in_(vigente_ids))
+    ):
+        signed_status_by_document.setdefault(row.report_document_id, set()).add(
+            row.status
+        )
+
+    conclusion_code_by_version: dict[str, str | None] = {}
+    version_ids = [
+        doc.current_version_id
+        for doc in vigente_by_root.values()
+        if doc.current_version_id
+    ]
+    if version_ids:
+        for row in db.execute(
+            select(
+                ReportDocumentVersion.id,
+                ReportDocumentVersion.conclusion_code_snapshot,
+            ).where(ReportDocumentVersion.id.in_(version_ids))
+        ):
+            conclusion_code_by_version[row.id] = row.conclusion_code_snapshot
+
+    corrected = 0
+    signed = 0
+    delivered = 0
+    conclusion_counts: dict[str, int] = {}
+    for root in roots:
+        vigente = vigente_by_root[root.id]
+        if vigente.id != root.id:
+            corrected += 1
+        statuses = signed_status_by_document.get(vigente.id, set())
+        is_signed = bool(statuses - set(_SIGNED_BACK_EXCLUDED))
+        is_delivered = ASSINADO_ENTREGUE in statuses
+        if is_signed:
+            signed += 1
+        if is_delivered:
+            delivered += 1
+        code = conclusion_code_by_version.get(vigente.current_version_id)
+        if code:
+            conclusion_counts[code] = conclusion_counts.get(code, 0) + 1
+
+    labels = {option.code: option for option in CONCLUSION_OPTIONS}
+    distribution = [
+        {
+            "conclusion_code": code,
+            "rotulo": labels[code].short_label if code in labels else code,
+            "grupo": labels[code].group if code in labels else "outro",
+            "quantidade": count,
+        }
+        for code, count in sorted(
+            conclusion_counts.items(), key=lambda item: item[1], reverse=True
+        )
+    ]
+
+    return {
+        "competencia": competence_key(competence),
+        "efetivos": effective,
+        "corrigidos": corrected,
+        "assinados": signed,
+        "entregues": delivered,
+        "aguardando_assinatura": effective - signed,
+        "pendentes": _pending_count(db, physician_profile_id),
+        "distribuicao_conclusao": distribution,
+    }
+
+
+def _pending_count(db: Session, physician_profile_id: str) -> int:
+    """Laudos atualmente na bancada da médica, ainda sem conclusão — estado
+    ATUAL, não é filtrado por competência (não existe `released_at` para
+    filtrar um laudo que ainda não foi liberado)."""
+
+    return int(
+        db.scalar(
+            select(func.count(func.distinct(ReportAssignment.report_document_id)))
+            .select_from(ReportAssignment)
+            .join(
+                ReportDocument,
+                ReportDocument.id == ReportAssignment.report_document_id,
+            )
+            .where(
+                ReportAssignment.physician_profile_id == physician_profile_id,
+                ReportAssignment.active.is_(True),
+                ReportDocument.status.in_(("atribuido", "em_elaboracao")),
+            )
+        )
+        or 0
     )

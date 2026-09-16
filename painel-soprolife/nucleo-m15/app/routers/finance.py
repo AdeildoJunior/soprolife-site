@@ -68,6 +68,7 @@ from ..services.medical_transfers import (
     eligible_report_count,
     medical_transfer_dashboard,
     parse_competence,
+    physician_production_summary,
 )
 
 router = APIRouter(tags=["financeiro"])
@@ -547,6 +548,31 @@ def list_physician_transfers(
     """Área administrativa separada de receitas, Pastore e pacientes."""
 
     return medical_transfer_dashboard(db, parse_competence(competencia))
+
+
+# M26.13 — produção por médica: mesma regra de "laudo efetivo" do repasse
+# (`eligible_report_count`), com o detalhamento que falta para explicar o
+# número — quantos foram corrigidos, quantos já voltaram assinados/foram
+# entregues, e a distribuição por conclusão (catálogo fechado, nunca texto
+# livre nem inferência clínica nova).
+@router.get("/financeiro/repasses-medicos/{physician_profile_id}/producao")
+def get_physician_production(
+    physician_profile_id: str,
+    competencia: str | None = None,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_GESTOR)),
+):
+    profile = db.get(PhysicianProfile, physician_profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Médica não encontrada.")
+    summary = physician_production_summary(
+        db, physician_profile_id, parse_competence(competencia)
+    )
+    return {
+        "physician_profile_id": profile.id,
+        "medica": profile.professional_name,
+        **summary,
+    }
 
 
 @router.post("/financeiro/repasses-medicos", status_code=201)

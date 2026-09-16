@@ -83,6 +83,64 @@
 .medical-transfers-history[open] summary { margin-bottom: 8px; }
 .medical-history-month { border: 0; background: none; color: var(--navy); font: inherit; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; padding: 6px 0; }
 .medical-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* M26.13 — produção por médica: cartões + donut por grupo de conclusão,
+   abertos sob demanda. Fica FORA de `.medical-transfers-table-wrap`
+   (mesmo lugar de `.medical-transfers-form-slot`, usado por "Registrar
+   repasse"): dentro da tabela ele herdaria a largura destravada pelo
+   scroll horizontal e nunca conseguiria refluir no celular. */
+.medical-actions-cell { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.medical-production-slot:empty { display: none; }
+.medical-production {
+  margin: 0 0 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--line-light);
+}
+.medical-production-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.medical-production-header h4 { margin: 0; font-size: 14px; color: var(--navy); }
+.medical-production-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.medical-production-card {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--line-light);
+  text-align: center;
+}
+.medical-production-card strong {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+.medical-production-card span { font-size: 11px; color: var(--medical-muted); }
+.medical-production-chart-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.medical-production-chart-wrap { position: relative; width: 150px; height: 150px; flex-shrink: 0; }
+.medical-production-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12px; color: var(--text); }
+.medical-production-legend li { display: flex; align-items: center; gap: 8px; }
+.medical-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+@media (max-width: 480px) {
+  .medical-actions-cell { justify-content: flex-start; }
+  .medical-production-chart-row { flex-direction: column; align-items: flex-start; }
+}
 @media (max-width: 720px) {
   .medical-transfers { padding: 16px; }
   .medical-transfers-header { align-items: flex-start; gap: 14px; }

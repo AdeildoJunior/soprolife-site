@@ -589,6 +589,10 @@ def test_assets_alterados_tem_cache_busting_atual():
 
     Se este teste falhar depois de alterar report-workflow.js ou .css, a
     correção é subir o `?v=`, não relaxar o teste.
+
+    M26.12/M26.13 subiram o carimbo para `2026091601` (frases frequentes,
+    devolução para correção médica e a limpeza do acompanhamento
+    operacional) — o pino abaixo acompanha, não fica preso em 2026090102.
     """
 
     import re
@@ -597,6 +601,6 @@ def test_assets_alterados_tem_cache_busting_atual():
         re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
     )
     assert versoes, "os assets precisam continuar versionados"
-    assert versoes == {"2026090102"}, (
+    assert versoes == {"2026091601"}, (
         "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
     )

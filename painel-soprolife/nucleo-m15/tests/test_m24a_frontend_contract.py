@@ -255,6 +255,13 @@ def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
         # nenhum texto livre, nenhum dado de paciente.
         "correction_reason_code",
         "validation_code",
+        # M26.13 — este documento específico já foi superado por corretiva
+        # e/ou já foi entregue ao paciente. Booleanos derivados (EXISTS em
+        # `report_documents`/`external_signed_documents`); nunca dado de
+        # paciente. Sempre presentes (default False fora do endpoint
+        # operacional) para não criar chave condicional na fila.
+        "has_corrective_successor",
+        "is_delivered",
         # M25.6 — agrupamento da fila por unidade. `location_key` é um id de
         # unidade (ou a origem controlada) e `location_name` é o nome
         # institucional da clínica: os dois são carimbos de LOCAL, da mesma

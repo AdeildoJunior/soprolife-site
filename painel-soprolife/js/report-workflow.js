@@ -226,6 +226,9 @@
     reportsMode: "disabled",
     queue: [],
     operational: [],
+    // M26.13 — laudos já superados por corretiva ou já entregues; saíram
+    // da fila ativa (`operational`) e moram só na seção recolhida.
+    operationalHistory: [],
     physicians: [],
     signatureAsset: null,
     templates: [],
@@ -2306,6 +2309,41 @@
       </details>`;
   }
 
+  // M26.13 — "Concluído — aguardando assinatura qualificada" persistia para
+  // sempre: nem corretiva nem entrega mudam `ReportDocument.status` (fica
+  // `liberado` por desenho, M26.12). Um laudo já superado ou já entregue
+  // saiu da fila ATIVA (o backend já filtra por padrão) e mora aqui —
+  // mesmo padrão de `renderClosedExams` acima: recolhido, não escondido.
+  function renderSupersededHistory() {
+    const lista = Array.isArray(state.operationalHistory)
+      ? state.operationalHistory : [];
+    const linhas = lista.length
+      ? lista.map((item) => `
+          <li class="report-closed-row">
+            <div class="report-closed-body">
+              <strong class="report-item-name">${esc(patientName(item))}</strong>
+              <span>${contextLine(item)}</span>
+              ${codeTrail(item)}
+              <span class="report-closed-reason">${
+                item.has_corrective_successor && item.is_delivered
+                  ? "Corrigido e entregue"
+                  : item.has_corrective_successor
+                    ? "Superado por corretiva"
+                    : "Entregue ao paciente"
+              }</span>
+            </div>
+          </li>`).join("")
+      : `<div class="report-empty">Nenhum laudo superado ou entregue neste recorte.</div>`;
+    return `
+      <details class="report-closed-catalog">
+        <summary>Históricos operacionais (${lista.length})</summary>
+        <p class="report-help">Laudos já corrigidos (a versão vigente é a
+          corretiva, que aparece na fila ativa) ou já entregues ao
+          paciente. Nada foi apagado — só saíram da fila de trabalho.</p>
+        <ul class="report-closed-list">${linhas}</ul>
+      </details>`;
+  }
+
   function renderOperationalList() {
     const selected = selectedOperational();
     const rows = state.operational.length
@@ -2326,6 +2364,7 @@
         <h3 id="operationalListTitle">Acompanhamento operacional</h3>
         <p class="report-help">Paciente, local, atribuição e estado técnico. A interpretação clínica não é exposta aqui.</p>
         <div class="report-operation-list">${rows}</div>
+        ${renderSupersededHistory()}
         ${renderClosedExams()}
         ${selected && selected.status === "atribuido" ? `
           <form id="reportReassignForm" class="report-reassign-form">
@@ -3139,6 +3178,12 @@
       if (can("operacional")) {
         calls.push(client().api("/laudos"));
         labels.push("operational");
+        // M26.13 — o histórico recolhido (superados/entregues) que saiu da
+        // fila ativa acima. Chamada própria, com o mesmo recorte do
+        // servidor (`somente_superados`) — o navegador não recalcula quem
+        // é "superado", só exibe o que o backend já decidiu.
+        calls.push(client().api("/laudos?somente_superados=true"));
+        labels.push("operationalHistory");
         calls.push(client().api("/laudos/medicos-disponiveis"));
         labels.push("physicians");
         // M25.17 — a chamada a `/unidades` saiu junto com o seletor de

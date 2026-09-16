@@ -9,6 +9,21 @@
   let helpBubble = null;
   let helpAnchor = null;
   let helpTimer = null;
+  // M26.13 — produção por médica: cartões + donut, sob demanda (um clique
+  // por médica), com cache por competência para não refazer a chamada ao
+  // trocar de aba e voltar. Mesma paleta de `app.js` (`CHART_COLORS`) — os
+  // dois módulos são closures separadas e não compartilham `const`.
+  const CHART_COLORS = [
+    "rgba(29, 183, 166, .92)", "rgba(99, 102, 241, .92)", "rgba(245, 158, 11, .92)",
+    "rgba(239, 68, 68, .90)", "rgba(16, 185, 129, .90)", "rgba(37, 99, 235, .90)",
+  ];
+  const GROUP_LABELS = {
+    normal: "Normal", obstrutivo: "Obstrutivo", restritivo: "Restritivo",
+    misto: "Misto", inespecifico: "Inespecífico", personalizado: "Personalizado",
+  };
+  let productionCache = {};
+  let productionChart = null;
+  let openProductionFor = null;
   const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
   const HELP = {
     competencia: "Mês em que a médica concluiu o laudo. Assinatura e entrega posteriores não mudam a competência.",
@@ -137,6 +152,7 @@
   }
 
   function rowHtml(row, canManage) {
+    const open = openProductionFor === row.physician_profile_id;
     return `<tr>
       <td class="medical-doctor">${esc(row.medica)}</td>
       <td class="num">${esc(row.quantidade_laudos_elegiveis)}</td>
@@ -145,12 +161,117 @@
       <td class="num">${brl(row.valor_pago)}</td>
       <td>${fmtDate(row.data_pagamento)}</td>
       <td><span class="medical-transfer-status ${row.status === "Pago" ? "is-paid" : "is-pending"}">${esc(row.status)}</span></td>
-      <td>${canManage && !row.id
-        ? `<button type="button" class="m15-btn m15-btn-sec cad-btn-mini" data-medical-create="${esc(row.physician_profile_id)}">Fechar</button>`
-        : canManage && row.id && row.status !== "Pago"
-          ? `<button type="button" class="m15-btn m15-btn-sec cad-btn-mini" data-medical-pay="${esc(row.id)}">Registrar pagamento</button>`
-          : ""}</td>
+      <td class="medical-actions-cell">
+        <button type="button" class="m15-btn m15-btn-sec cad-btn-mini" aria-expanded="${open}"
+          data-medical-production-toggle="${esc(row.physician_profile_id)}">${
+            open ? "Ocultar produção" : "Ver produção"
+          }</button>
+        ${canManage && !row.id
+          ? `<button type="button" class="m15-btn m15-btn-sec cad-btn-mini" data-medical-create="${esc(row.physician_profile_id)}">Fechar</button>`
+          : canManage && row.id && row.status !== "Pago"
+            ? `<button type="button" class="m15-btn m15-btn-sec cad-btn-mini" data-medical-pay="${esc(row.id)}">Registrar pagamento</button>`
+            : ""}
+      </td>
     </tr>`;
+  }
+
+  // M26.13 — cartões resumidos + donut por grupo de conclusão. O grupo
+  // (normal/obstrutivo/restritivo/misto/inespecifico/personalizado) vem do
+  // catálogo FECHADO de `report_conclusions.py` — nunca inferido aqui.
+  //
+  // O painel mora FORA da tabela (mesmo padrão de `.medical-transfers-form-
+  // slot`, usado por "Registrar repasse"/"Registrar pagamento" acima) — não
+  // dentro de uma `<tr>`. A tabela tem scroll horizontal próprio
+  // (`.medical-transfers-table-wrap`); um grid de cartões PRECISA da largura
+  // real da viewport para refluir no celular, e dentro da `<tr>` ele herdava
+  // a largura INTEIRA da tabela destravada, sem nunca poder encolher.
+  function productionHtml(payload) {
+    const groups = {};
+    (payload.distribuicao_conclusao || []).forEach((item) => {
+      groups[item.grupo] = (groups[item.grupo] || 0) + item.quantidade;
+    });
+    const entries = Object.entries(groups);
+    return `<div class="medical-production">
+      <div class="medical-production-header">
+        <h4>Produção de ${esc(payload.medica)} · ${esc(monthLabel(payload.competencia, true))}</h4>
+        <button type="button" class="m15-btn m15-btn-sec cad-btn-mini" data-medical-production-toggle="${esc(payload.physician_profile_id)}">Fechar</button>
+      </div>
+      <div class="medical-production-cards">
+        <div class="medical-production-card"><strong>${esc(payload.efetivos)}</strong><span>Laudos efetivos</span></div>
+        <div class="medical-production-card"><strong>${esc(payload.corrigidos)}</strong><span>Corrigidos</span></div>
+        <div class="medical-production-card"><strong>${esc(payload.assinados)}</strong><span>Assinados</span></div>
+        <div class="medical-production-card"><strong>${esc(payload.entregues)}</strong><span>Entregues</span></div>
+        <div class="medical-production-card"><strong>${esc(payload.aguardando_assinatura)}</strong><span>Aguardando assinatura</span></div>
+        <div class="medical-production-card"><strong>${esc(payload.pendentes)}</strong><span>Pendentes agora</span></div>
+      </div>
+      ${entries.length ? `
+        <div class="medical-production-chart-row">
+          <div class="medical-production-chart-wrap">
+            <canvas id="medicalProductionChart" role="img" aria-label="Distribuição por grupo de conclusão"></canvas>
+          </div>
+          <ul class="medical-production-legend">
+            ${entries.map(([group, count], i) => `<li><span class="medical-legend-dot" style="background:${
+              CHART_COLORS[i % CHART_COLORS.length]
+            }"></span>${esc(GROUP_LABELS[group] || group)} · ${count}</li>`).join("")}
+          </ul>
+        </div>` : `<p class="medical-transfers-note">Sem conclusões liberadas nesta competência.</p>`}
+      <p class="medical-transfers-note">"Pendentes agora" é a bancada atual da médica — não é filtrado pela competência selecionada, porque um laudo ainda não concluído não tem data de conclusão para filtrar.</p>
+    </div>`;
+  }
+
+  function destroyProductionChart() {
+    if (productionChart) { productionChart.destroy(); productionChart = null; }
+  }
+
+  function renderProduction(slot, payload) {
+    slot.innerHTML = productionHtml(payload);
+    destroyProductionChart();
+    const canvas = slot.querySelector("#medicalProductionChart");
+    if (!canvas || typeof Chart === "undefined") return;
+    const groups = {};
+    (payload.distribuicao_conclusao || []).forEach((item) => {
+      groups[item.grupo] = (groups[item.grupo] || 0) + item.quantidade;
+    });
+    const entries = Object.entries(groups);
+    if (!entries.length) return;
+    productionChart = new Chart(canvas, {
+      type: "doughnut",
+      data: {
+        labels: entries.map(([group]) => GROUP_LABELS[group] || group),
+        datasets: [{
+          data: entries.map(([, count]) => count),
+          backgroundColor: entries.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+          borderWidth: 3,
+          borderColor: "#f3f7fb",
+          hoverOffset: 8,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "68%",
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } },
+        },
+      },
+    });
+  }
+
+  function loadProduction(profileId) {
+    const slot = document.querySelector(`#${ROOT} .medical-production-slot`);
+    if (!slot || !data) return;
+    const key = `${profileId}|${data.competencia}`;
+    if (productionCache[key]) { renderProduction(slot, productionCache[key]); return; }
+    slot.innerHTML = '<p class="medical-transfers-note">Carregando produção…</p>';
+    api(`/financeiro/repasses-medicos/${encodeURIComponent(profileId)}/producao?competencia=${encodeURIComponent(data.competencia)}`)
+      .then((payload) => {
+        productionCache[key] = payload;
+        if (openProductionFor === profileId) renderProduction(slot, payload);
+      })
+      .catch((err) => {
+        slot.innerHTML = `<p class="medical-transfers-note is-error" role="alert">${esc(err.message || err)}</p>`;
+      });
   }
 
   function historyHtml(rows) {
@@ -188,8 +309,12 @@
         <thead><tr><th scope="col">Médica</th><th scope="col" class="num">${help("Laudos", "laudos")}</th><th scope="col" class="num">${help("Unitário", "unitario")}</th><th scope="col" class="num">${help("Referência", "referencia")}</th><th scope="col" class="num">${help("Pago", "pago")}</th><th scope="col">${help("Pagamento", "pagamento")}</th><th scope="col">${help("Status", "status")}</th><th scope="col"><span class="medical-sr-only">Ações</span></th></tr></thead>
         <tbody>${rows.length ? rows.map((row) => rowHtml(row, canManage)).join("") : '<tr><td colspan="8" class="medical-empty">Nenhum laudo concluído nesta competência.<small>Escolha outro mês para consultar os repasses.</small></td></tr>'}</tbody>
       </table></div>
+      <div class="medical-production-slot"></div>
       <details class="medical-transfers-history"><summary>Histórico de competências</summary>${historyHtml(payload.historico || [])}</details>
     </article>`;
+    // M26.13 — o slot nasce vazio; se uma médica já estava com o painel
+    // aberto antes da competência mudar, busca a produção do mês novo agora.
+    if (openProductionFor) loadProduction(openProductionFor);
   }
 
   function openCreate(profileId) {
@@ -239,7 +364,13 @@
     hideHelp();
     const root = document.getElementById(ROOT);
     if (!root) return Promise.resolve();
-    if (!m15() || !m15().hasToken() || !m15().can("gestor")) { data = null; currentMonth = null; root.innerHTML = ""; root.removeAttribute("aria-busy"); return Promise.resolve(); }
+    if (!m15() || !m15().hasToken() || !m15().can("gestor")) {
+      data = null; currentMonth = null; root.innerHTML = ""; root.removeAttribute("aria-busy");
+      destroyProductionChart();
+      openProductionFor = null;
+      productionCache = {};
+      return Promise.resolve();
+    }
     if (!data) root.innerHTML = '<article class="panel medical-transfers">Carregando Repasses médicos…</article>';
     root.setAttribute("aria-busy", "true");
     const controls = Array.from(root.querySelectorAll("button, input, select"), (el) => [el, el.disabled]);
@@ -264,8 +395,14 @@
   }
 
   document.addEventListener("click", (event) => {
-    const target = event.target.closest && event.target.closest("[data-medical-open],[data-medical-create],[data-medical-pay],[data-medical-refresh],[data-medical-cancel],[data-medical-month],[data-medical-current]");
+    const target = event.target.closest && event.target.closest("[data-medical-open],[data-medical-create],[data-medical-pay],[data-medical-refresh],[data-medical-cancel],[data-medical-month],[data-medical-current],[data-medical-production-toggle]");
     if (!target) return;
+    if (target.hasAttribute("data-medical-production-toggle")) {
+      const profileId = target.dataset.medicalProductionToggle;
+      openProductionFor = openProductionFor === profileId ? null : profileId;
+      render(data);
+      return;
+    }
     if (target.hasAttribute("data-medical-open")) openCreate();
     else if (target.hasAttribute("data-medical-create")) openCreate(target.dataset.medicalCreate);
     else if (target.hasAttribute("data-medical-pay")) openPayment(target.dataset.medicalPay);
