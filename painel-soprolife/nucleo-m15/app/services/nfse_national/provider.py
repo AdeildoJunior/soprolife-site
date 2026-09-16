@@ -20,14 +20,21 @@ from decimal import Decimal
 from ..nfse_providers import Outcome, ProviderRequest, ProviderResult
 from .config import NationalDpsConfiguration
 from .dps_builder import DpsInput, Recipient, build_dps_element, serialize_dps
+from .error_sanitizer import sanitize_sefin_errors
 from .identifiers import DpsIdComponents, build_dps_id
-from .responses import (classify_issue_response, classify_reconcile_response, safe_diagnostic_code,
-                        to_provider_outcome)
+from .responses import (TransportOutcome, classify_issue_response, classify_reconcile_response,
+                        safe_diagnostic_code, to_provider_outcome)
 from .signer import LoadedCertificate, sign_dps, verify_dps_signature
 from .transport import PATH_GET_DPS, PATH_ISSUE_NFSE, RestrictedTransport, TransportRequest
 from .wire import (JSON_ACCEPT_HEADERS, JSON_REQUEST_HEADERS, WireFormatError,
-                   build_issue_request_body, decode_nfse_success_envelope,
-                   find_nfse_access_key_in_response)
+                   build_issue_request_body, decode_nfse_error_envelope,
+                   decode_nfse_success_envelope, find_nfse_access_key_in_response)
+
+# M40 — a 4xx/5xx body is only ever worth parsing for structured detail on
+# these two transport outcomes; a 2xx (however malformed) is never treated
+# as if it might also be an error envelope, and a timeout/connection error
+# has no body to parse in the first place.
+_ERROR_BODY_OUTCOMES = (TransportOutcome.HTTP_CLIENT_ERROR, TransportOutcome.HTTP_SERVER_ERROR)
 from .xsd_validation import XsdValidationError, validate_dps_xml
 
 
@@ -137,7 +144,19 @@ class RestrictedNfseProvider:
         )
         outcome = to_provider_outcome(classified, operation="issue")
         external_id = access_key if outcome == Outcome.SIMULATED else None
-        return ProviderResult(outcome, external_id, safe_diagnostic_code(classified))
+        # M40 — the ONLY place a 4xx/5xx body is ever parsed. Never changes
+        # `classified`/`outcome` above (those are HTTP-status-only, unchanged
+        # since M35): this is purely additive, already-sanitized diagnostic
+        # detail for a human to read, never consulted by the state machine.
+        validation_errors = None
+        if response is not None and response.body and classified.transport_outcome in _ERROR_BODY_OUTCOMES:
+            sanitized = sanitize_sefin_errors(decode_nfse_error_envelope(response.body))
+            if sanitized:
+                validation_errors = tuple(
+                    {"codigo": e.codigo, "descricao": e.descricao, "complemento": e.complemento}
+                    for e in sanitized
+                )
+        return ProviderResult(outcome, external_id, safe_diagnostic_code(classified), validation_errors)
 
     def query(self, request: ProviderRequest, operation: str) -> ProviderResult:
         # Reconciliation/query is keyed by the OFFICIAL DPS identifier

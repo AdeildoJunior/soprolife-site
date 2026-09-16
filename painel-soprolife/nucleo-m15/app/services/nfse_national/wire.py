@@ -60,6 +60,10 @@ JSON_ACCEPT_HEADERS: dict[str, str] = {"Accept": MEDIA_TYPE_JSON}
 FIELD_DPS_XML = "dpsXmlGZipB64"
 FIELD_NFSE_XML = "nfseXmlGZipB64"
 FIELD_ACCESS_KEY = "chaveAcesso"
+FIELD_ERROR_LIST = "erros"
+FIELD_ERROR_CODE = "codigo"
+FIELD_ERROR_DESCRIPTION = "descricao"
+FIELD_ERROR_COMPLEMENT = "complemento"
 
 
 class WireFormatError(ValueError):
@@ -234,3 +238,63 @@ def find_nfse_access_key_in_response(body: bytes) -> str | None:
             return None
         return key_from_xml
     return find_nfse_access_key_best_effort(body)
+
+
+@dataclass(frozen=True)
+class SefinValidationError:
+    """One item of the documented ``NFSePostResponseErro.erros[]`` array.
+
+    Only these three fields are documented — anything else in the JSON
+    (at any level, in ``erros[]`` or elsewhere) is silently ignored and
+    never reaches this object or any caller of
+    :func:`decode_nfse_error_envelope`.
+    """
+    codigo: str | None
+    descricao: str | None
+    complemento: str | None
+
+
+def decode_nfse_error_envelope(body: bytes) -> tuple[SefinValidationError, ...]:
+    """M40 — best-effort decode of ``NFSePostResponseErro`` (4xx/5xx bodies).
+
+    Root cause this fixes: until M40, a rejection's ``error_code`` was only
+    ever the HTTP status (``provider_rejected:http_400``) because nothing
+    downstream of the transport ever looked at the response BODY for a
+    4xx/5xx — even though the documented error schema
+    (``codigo``/``descricao``/``complemento`` per item of ``erros[]``) carries
+    the actual SEFIN validation reason. This function is the only place that
+    body is ever parsed.
+
+    Deliberately tolerant, never raises: an unparseable/unexpected shape
+    (not JSON, not an object, no ``erros`` array, a non-list ``erros``, a
+    non-object item) simply yields fewer/no entries — this is diagnostics
+    only and must never risk being mistaken for classification (outcome/
+    state are decided entirely by HTTP status elsewhere, see
+    ``responses.py`` — unchanged by this function's result).
+
+    Every value that is not literally a string is dropped (mapped to
+    ``None``) rather than coerced, so a hostile/malformed field (e.g. an
+    object or array where a string is documented) can never smuggle
+    structured data through as if it were text.
+    """
+    try:
+        payload = _parse_json_object(body)
+    except WireFormatError:
+        return ()
+    raw_errors = payload.get(FIELD_ERROR_LIST)
+    if not isinstance(raw_errors, list):
+        return ()
+
+    def _text(value) -> str | None:
+        return value if isinstance(value, str) else None
+
+    errors = []
+    for item in raw_errors:
+        if not isinstance(item, dict):
+            continue
+        errors.append(SefinValidationError(
+            codigo=_text(item.get(FIELD_ERROR_CODE)),
+            descricao=_text(item.get(FIELD_ERROR_DESCRIPTION)),
+            complemento=_text(item.get(FIELD_ERROR_COMPLEMENT)),
+        ))
+    return tuple(errors)

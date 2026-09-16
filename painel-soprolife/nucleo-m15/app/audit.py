@@ -76,6 +76,14 @@ ALLOWED_KEYS = {
     # Fechamento de repasse: IDs técnicos, quantidade e valores monetários.
     "quantidade_laudos", "valor_unitario", "total_referencia",
     "valor_pago", "data_pagamento",
+    # M40 — detalhe estruturado de rejeição SEFIN (NFSePostResponseErro),
+    # já sanitizado ANTES de chegar aqui por
+    # nfse_national.error_sanitizer.sanitize_sefin_errors (contagem limitada,
+    # strings truncadas, CPF/CNPJ/chave de acesso/UUID mascarados). Esta
+    # allowlist é a segunda camada: cada valor ainda passa por
+    # `_sanitize_value` (corte em 120 chars, só escalares numa lista
+    # pequena). Nunca corpo bruto da resposta, nunca XML, nunca Base64.
+    "sefin_erro_codigos", "sefin_erro_descricoes", "sefin_erro_complementos",
 }
 
 _MAX_STR = 120

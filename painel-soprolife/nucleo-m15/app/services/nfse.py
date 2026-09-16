@@ -395,8 +395,22 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
                          idempotency_key=payload_fingerprint({'completed': operation_id}),
                          idempotency_fingerprint=payload_fingerprint(identity)))
     doc.state = state
+    # M40 — already-sanitized SEFIN validation detail (see
+    # nfse_national.error_sanitizer), if the provider captured any: recorded
+    # through the SAME append-only, allowlisted audit trail as every other
+    # event here (app/audit.py — truncates/sanitizes independently, a second
+    # layer on top of the provider boundary's own sanitizer). Never affects
+    # `error_code`/`state`/`uncertain` above, and never the raw response body.
+    sefin_detail = {}
+    for field, audit_key in (('codigo', 'sefin_erro_codigos'),
+                             ('descricao', 'sefin_erro_descricoes'),
+                             ('complemento', 'sefin_erro_complementos')):
+        values = [e[field] for e in (result.validation_errors or ()) if e.get(field)]
+        if values:
+            sefin_detail[audit_key] = values
     record(db, operation + '_completed', 'fiscal_document', doc.id, actor, request_id,
-           provider=provider.name, resultado=result.outcome.value, status=state, sequencia=number)
+           provider=provider.name, resultado=result.outcome.value, status=state, sequencia=number,
+           **sefin_detail)
     db.commit()
     return doc
 

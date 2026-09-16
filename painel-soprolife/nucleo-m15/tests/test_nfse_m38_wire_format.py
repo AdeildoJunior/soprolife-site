@@ -399,9 +399,11 @@ def test_http_error_diagnostics_remain_safe_and_correct(context, status, expecte
         assert leaked not in result.diagnostic_code
 
 
-def test_error_envelope_is_never_parsed_into_the_result(context):
-    """NFSePostResponseErro is documented, but nothing in it is persisted:
-    classification needs only the HTTP status (M35)."""
+def test_error_envelope_never_changes_classification(context):
+    """NFSePostResponseErro is documented and (M40) surfaced in
+    ``validation_errors`` for a human to read, but it never changes
+    classification: outcome/state/error_code stay HTTP-status-only,
+    exactly as M35 established."""
     erro = json.dumps({
         "tipoAmbiente": 2, "versaoAplicativo": "restrita-1.0",
         "dataHoraProcessamento": "2026-09-15T00:00:00-03:00",
@@ -411,6 +413,10 @@ def test_error_envelope_is_never_parsed_into_the_result(context):
     result, _ = _issue_with(context, TransportResponse(422, erro))
     assert result.outcome == Outcome.REJECTED
     assert result.diagnostic_code == "provider_rejected:http_422"
+    # M40 — this is the new, intentional surface: the actual SEFIN code and
+    # description are no longer thrown away.
+    assert result.validation_errors == ({"codigo": "E0001", "descricao": "segredo interno",
+                                        "complemento": None},)
     assert "segredo" not in (result.diagnostic_code or "")
 
 

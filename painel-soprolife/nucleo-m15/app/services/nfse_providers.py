@@ -29,6 +29,14 @@ class ProviderResult:
     # Optional and provider-specific: MockNfseProvider never sets it, so every
     # existing call site (positional or keyword, 1-2 args) is unaffected.
     diagnostic_code: str | None = None
+    # M40 — already-sanitized structured validation detail from a 4xx/5xx
+    # body's documented ``erros[]`` (see nfse_national.error_sanitizer and
+    # nfse_national.wire.decode_nfse_error_envelope), as plain dicts with
+    # only the keys "codigo"/"descricao"/"complemento" — kept provider-
+    # agnostic (no nfse_national import here) the same way diagnostic_code
+    # is. Never the raw response body. Optional: every existing call site
+    # is unaffected.
+    validation_errors: tuple[dict, ...] | None = None
 
 
 @dataclass(frozen=True)
