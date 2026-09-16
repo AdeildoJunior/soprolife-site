@@ -487,7 +487,8 @@
 .report-upload-form,
 .report-reassign-form,
 .report-admin-profile-form,
-.report-correction-form {
+.report-correction-form,
+.report-return-correction-form {
   display: grid;
   gap: 12px;
   margin-top: 14px;
@@ -500,6 +501,7 @@
 .report-reassign-form label,
 .report-admin-profile-form label,
 .report-correction-form label,
+.report-return-correction-form label,
 .report-inline-form label {
   display: grid;
   gap: 5px;
@@ -987,6 +989,15 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   color: #4a5b70 !important;
 }
 
+/* M26.12 — "Correção solicitada" é uma tarefa pendente, não um fato
+   histórico como "corrigido"/"concluído": por isso usa o mesmo tom de
+   atenção do `.report-status-erro`, não o âmbar informativo do resto da
+   fila. */
+.report-queue-flag.is-correction-requested {
+  background: var(--danger-soft);
+  color: #8a2727 !important;
+}
+
 /* -------------------------------------------- seleção de conclusão */
 
 .report-conclusion-picker {
@@ -1075,6 +1086,49 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   display: grid;
   gap: 6px;
   margin-top: 10px;
+}
+
+/* M26.12 — "Frases frequentes": discreto de propósito. É um atalho de
+   digitação, não um catálogo clínico como os chips de conclusão/BD acima
+   — por isso não usa `.report-conclusion-chip` (que muda de cor quando
+   "selecionado"; aqui não há seleção, só inserção). */
+.report-frequent-phrases {
+  margin: 10px 0;
+}
+
+.report-frequent-phrase-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.report-frequent-phrase-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-xs);
+  background: #fff;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+  min-height: 38px;
+  overflow-wrap: break-word;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.report-frequent-phrase-chip:hover {
+  border-color: var(--teal, #1b9c93);
+  border-style: solid;
+  background: var(--sky-soft);
+  color: var(--navy);
+}
+
+.report-frequent-phrase-chip:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
 }
 
 /* --------------------------------------------------- laudo nativo */
@@ -2318,10 +2372,24 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  /* M26.12 — sem isto, o formulário de devolução (que pede 100% da
+     largura) herdava o "nunca encolher" padrão de item flex e empurrava a
+     linha inteira para fora da viewport no celular, em vez de quebrar. */
+  min-width: 0;
 }
 
 .report-delivery-actions .m15-btn {
   min-height: 40px;
+}
+
+/* M26.12 — o formulário de devolução nasce DENTRO de um flex-wrap de
+   botões; sem ocupar a linha inteira ele ficaria espremido ao lado deles
+   em vez de abrir como um bloco de confirmação. */
+.report-delivery-actions .report-return-correction-form {
+  flex-basis: 100%;
+  min-width: 0;
+  margin-top: 8px;
+  padding-top: 10px;
 }
 
 /* M25.29G — a confirmação da conferência, na própria linha da fila.
@@ -2390,6 +2458,13 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   .report-delivery-actions {
     width: 100%;
     flex-direction: column;
+    /* M26.12 — `flex-wrap: wrap` (base rule, para a grade de botões no
+       desktop) sobrevivia à mudança de eixo. Em coluna, "quebrar linha"
+       vira "abrir uma SEGUNDA COLUNA à direita" sempre que o conteúdo não
+       coubesse na altura disponível — foi assim que o formulário de
+       devolução (alto, com select e dois botões) escapou para fora da
+       viewport em vez de empilhar. Uma coluna não tem "linha" para quebrar. */
+    flex-wrap: nowrap;
   }
 
   /* M25.29E — no iPhone estes botões passaram a ser a única forma de baixar

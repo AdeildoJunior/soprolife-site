@@ -76,6 +76,10 @@ ALLOWED_KEYS = {
     # Fechamento de repasse: IDs técnicos, quantidade e valores monetários.
     "quantidade_laudos", "valor_unitario", "total_referencia",
     "valor_pago", "data_pagamento",
+    # M26.12 — "retornar para correção": identificador técnico do documento
+    # corretivo aberto pela ação, e um booleano dizendo se foi o admin (e
+    # não a própria médica) quem acionou a abertura.
+    "corrective_document_id", "retornado_por_admin",
 }
 
 _MAX_STR = 120

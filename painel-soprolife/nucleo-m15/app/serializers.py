@@ -654,6 +654,9 @@ def ser_report_document(
         "current_version_id": doc.current_version_id,
         "superseded_by_id": doc.superseded_by_id,
         "corrects_document_id": doc.corrects_document_id,
+        # M26.12 — motivo de catálogo fechado da correção, para a médica ver
+        # o porquê (não só que é "corrigido"), sem inventar texto livre.
+        "correction_reason_code": doc.correction_reason_code,
         "clinical_started_at": iso(doc.clinical_started_at),
         "ready_for_signature_at": iso(doc.ready_for_signature_at),
         "signed_at": iso(doc.signed_at),

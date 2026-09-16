@@ -49,9 +49,11 @@ from ..models import (
     PAREAMENTO_CODIGO_LAUDO,
     PAREAMENTO_CODIGO_VALIDACAO,
     PAREAMENTO_METADADO,
+    RESULTADO_REVOGADO,
     ExternalSignatureBatch,
     ExternalSignedDocument,
     PartnerUnit,
+    PatientResultAccess,
     Person,
     PhysicianProfile,
     PhysicianSignatureAsset,
@@ -118,6 +120,7 @@ from ..services.exam_closure import (
     closure_payload,
     reopen_exam,
 )
+from ..services import patient_results as prs
 from ..services.pdf_validation import InvalidPdfError, validate_pdf_bytes
 from ..services.report_catalog import (
     PILOT_FOOTER_CODE,
@@ -1242,6 +1245,10 @@ def _technical_report_row(
         else None,
         "locked": document.status == STATUS_LAUDO_LIBERADO,
         "is_corrective": document.corrects_document_id is not None,
+        # M26.12 — motivo de catálogo fechado escolhido ao abrir a
+        # corretiva (própria médica OU devolução administrativa). Sem
+        # isso a médica via o rótulo "corrigido" mas nunca o porquê.
+        "correction_reason_code": document.correction_reason_code,
         "validation_code": document.validation_code,
         # M25.24 — carimbo do encerramento operacional do EXAME. `None` na
         # fila ativa. Presente, a linha tem de aparecer marcada como
@@ -4554,6 +4561,21 @@ def list_delivery_queue(
 
     from .patient_results import resumo_do_acesso
 
+    # M26.12 — "Retornar para laudadora" só faz sentido uma vez por
+    # predecessor (o servidor já recusa a segunda com 409); consultar isso
+    # em lote evita N+1 numa fila de até 300 linhas.
+    predecessor_ids_com_corretiva = {
+        row[0]
+        for row in db.execute(
+            select(ReportDocument.corrects_document_id).where(
+                ReportDocument.corrects_document_id.in_(
+                    [document.id for document, _exam, _person, _assignment in linhas]
+                )
+            )
+        ).all()
+        if row[0] is not None
+    }
+
     itens = []
     for document, exam, person, assignment in linhas:
         assinado = _assinado_mais_recente(db, document.id)
@@ -4569,6 +4591,7 @@ def list_delivery_queue(
             "estado": atual,
             "estado_rotulo": FILA_ROTULOS[atual],
             "status_clinico": document.status,
+            "has_corrective": document.id in predecessor_ids_com_corretiva,
             "released_at": iso(document.released_at),
             "physician_profile_id": (
                 assignment.physician_profile_id if assignment else None
@@ -5400,22 +5423,30 @@ def resolve_qualified_signature(
     }
 
 
-@router.post("/{document_id}/nova-versao-corretiva", status_code=201)
-def open_corrective_document(
-    document_id: str,
-    payload: ReportCorrectiveCreate,
-    request: Request,
-    db: Session = Depends(get_db),
-    physician_user: User = Depends(get_current_user),
-):
-    predecessor = _lock_document_or_404(db, document_id)
-    profile, _assignment = _require_assigned_physician(
-        db, physician_user, predecessor, lock=True
-    )
-    # Correção posterior é permitida a partir de um documento realmente
-    # fechado: assinado com evidência QUALIFICADA (caminho futuro) ou
-    # LIBERADO institucionalmente (caminho M25.2). Nos dois casos o
-    # predecessor é preservado integralmente — nunca reescrito nem apagado.
+def _open_corrective_document(
+    db: Session,
+    *,
+    predecessor: ReportDocument,
+    profile: PhysicianProfile,
+    reason_code: str,
+    actor_user_id: str,
+    request_id: str | None,
+) -> tuple[ReportDocument, ReportDocumentVersion, ReportAssignment]:
+    """Núcleo de abertura de laudo corretivo — reaproveitado por dois
+    chamadores: a própria médica (`/nova-versao-corretiva`, auto-serviço) e
+    o admin devolvendo o laudo (`/retornar-para-correcao`, M26.12).
+
+    `profile` é SEMPRE a médica responsável pela autoria clínica do
+    documento novo — nunca o admin. Isso é o que garante que devolver um
+    laudo não transfere autoria clínica para quem apenas administra o
+    fluxo (M26.12, item 3: "não cria autoria médica para o admin").
+
+    Correção posterior só é aceita a partir de um documento realmente
+    fechado: assinado com evidência QUALIFICADA (caminho futuro) ou
+    LIBERADO institucionalmente (caminho M25.2 real). Nos dois casos o
+    predecessor é preservado integralmente — nunca reescrito nem apagado;
+    nada aqui toca `predecessor.status` nem nenhuma de suas versões.
+    """
     if predecessor.status not in {STATUS_ASSINADO, STATUS_LAUDO_LIBERADO}:
         raise ReportDomainError(
             409,
@@ -5481,55 +5512,78 @@ def open_corrective_document(
         )
     original = _read_stored_version(original_version)
 
+    with report_publication_transaction(db) as publication:
+        corrective = ReportDocument(
+            public_code=allocate_public_code(db, "report_documents"),
+            spirometry_exam_id=predecessor.spirometry_exam_id,
+            status=STATUS_ATRIBUIDO,
+            origin_type=predecessor.origin_type,
+            origin_label=predecessor.origin_label,
+            origin_partner_unit_id=predecessor.origin_partner_unit_id,
+            corrects_document_id=predecessor.id,
+            correction_reason_code=reason_code,
+            created_by_user_id=actor_user_id,
+        )
+        db.add(corrective)
+        db.flush()
+        assignment = _create_assignment(
+            db,
+            document=corrective,
+            profile=profile,
+            performed_by_user_id=actor_user_id,
+            reason_code="corrective_document",
+            event_type="corrective_assigned",
+        )
+        new_original = _store_new_version(
+            db,
+            publication=publication,
+            document=corrective,
+            exam_id=corrective.spirometry_exam_id,
+            kind=KIND_ORIGINAL,
+            data=original.data,
+            created_by_user_id=actor_user_id,
+            **_physician_snapshot(profile, corrective),
+        )
+        corrective.current_version_id = new_original.id
+        audit(
+            db,
+            "laudo_corretivo_aberto",
+            entidade="report_documents",
+            entidade_id=corrective.id,
+            user_id=actor_user_id,
+            request_id=request_id,
+            detalhes={
+                "status": corrective.status,
+                "reason_code": reason_code,
+                "predecessor_document_id": predecessor.id,
+                "assignment_id": assignment.id,
+            },
+        )
+        publication.commit()
+    return corrective, new_original, assignment
+
+
+@router.post("/{document_id}/nova-versao-corretiva", status_code=201)
+def open_corrective_document(
+    document_id: str,
+    payload: ReportCorrectiveCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    physician_user: User = Depends(get_current_user),
+):
+    predecessor = _lock_document_or_404(db, document_id)
+    profile, _assignment = _require_assigned_physician(
+        db, physician_user, predecessor, lock=True
+    )
     try:
-        with report_publication_transaction(db) as publication:
-            corrective = ReportDocument(
-                public_code=allocate_public_code(db, "report_documents"),
-                spirometry_exam_id=predecessor.spirometry_exam_id,
-                status=STATUS_ATRIBUIDO,
-                origin_type=predecessor.origin_type,
-                origin_label=predecessor.origin_label,
-                origin_partner_unit_id=predecessor.origin_partner_unit_id,
-                corrects_document_id=predecessor.id,
-                correction_reason_code=payload.reason_code,
-                created_by_user_id=physician_user.id,
-            )
-            db.add(corrective)
-            db.flush()
-            assignment = _create_assignment(
-                db,
-                document=corrective,
-                profile=profile,
-                performed_by_user_id=physician_user.id,
-                reason_code="corrective_document",
-                event_type="corrective_assigned",
-            )
-            new_original = _store_new_version(
-                db,
-                publication=publication,
-                document=corrective,
-                exam_id=corrective.spirometry_exam_id,
-                kind=KIND_ORIGINAL,
-                data=original.data,
-                created_by_user_id=physician_user.id,
-                **_physician_snapshot(profile, corrective),
-            )
-            corrective.current_version_id = new_original.id
-            audit(
-                db,
-                "laudo_corretivo_aberto",
-                entidade="report_documents",
-                entidade_id=corrective.id,
-                user_id=physician_user.id,
-                request_id=_request_id(request),
-                detalhes={
-                    "status": corrective.status,
-                    "reason_code": payload.reason_code,
-                    "predecessor_document_id": predecessor.id,
-                    "assignment_id": assignment.id,
-                },
-            )
-            publication.commit()
+        corrective, new_original, assignment = _open_corrective_document(
+            db,
+            predecessor=predecessor,
+            profile=profile,
+            reason_code=payload.reason_code,
+            actor_user_id=physician_user.id,
+            request_id=_request_id(request),
+        )
     except IntegrityError:
         raise ReportDomainError(
             409,
@@ -5542,6 +5596,119 @@ def open_corrective_document(
         ),
         "assignment": ser_report_assignment(assignment),
     }
+
+
+# M26.12 — "Retornar para laudadora": a Dra. Ana relatou que, hoje, corrigir
+# um laudo já concluído obriga a apagar cadastro/exame/paciente e refazer
+# tudo. Isso nunca deveria ser necessário: o mecanismo de corretiva do
+# M25.2 já existe, já preserva o predecessor imutável e intocado, e já
+# suporta reabrir a partir de um laudo liberado OU já assinado/entregue
+# externamente (a entrega é um status à parte, em `ExternalSignedDocument`,
+# nunca em `ReportDocument.status` — abrir corretiva não olha para ela).
+#
+# A única peça que faltava era um caminho ADMIN — hoje `/nova-versao-
+# corretiva` só é acionável pela própria médica atribuída. Este endpoint
+# aciona o MESMO núcleo (`_open_corrective_document`), sempre atribuindo o
+# documento novo à médica que de fato liberou o laudo (via a atribuição
+# ativa do predecessor, nunca ao admin) — a autoria clínica nunca muda de
+# mãos. Além disso, se o paciente já tinha acesso ao PDF antigo, esse
+# acesso é revogado automaticamente: sem isso, o link já enviado
+# continuaria servindo o PDF superado sem aviso nenhum (ver auditoria
+# M26.12 do portal de resultados).
+@router.post("/{document_id}/retornar-para-correcao", status_code=201)
+def return_report_for_correction(
+    document_id: str,
+    payload: ReportCorrectiveCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(ROLE_ADMIN)),
+):
+    predecessor = _lock_document_or_404(db, document_id)
+    assignment = _active_assignment(db, predecessor.id, lock=True)
+    if assignment is None:
+        raise ReportDomainError(
+            409,
+            "laudo_sem_atribuicao_ativa",
+            "Este laudo não possui médica atribuída para devolver a correção.",
+        )
+    profile, _account = _profile_for_assignment(
+        db, assignment.physician_profile_id, lock=True
+    )
+    status_anterior = predecessor.status
+    request_id = _request_id(request)
+    try:
+        corrective, new_original, new_assignment = _open_corrective_document(
+            db,
+            predecessor=predecessor,
+            profile=profile,
+            reason_code=payload.reason_code,
+            actor_user_id=admin_user.id,
+            request_id=request_id,
+        )
+    except IntegrityError:
+        raise ReportDomainError(
+            409,
+            "laudo_ja_possui_corretiva",
+            "Este laudo já possui documento corretivo.",
+        ) from None
+    audit(
+        db,
+        "laudo_devolvido_para_correcao",
+        entidade="report_documents",
+        entidade_id=predecessor.id,
+        user_id=admin_user.id,
+        request_id=request_id,
+        detalhes={
+            "status_anterior": status_anterior,
+            "reason_code": payload.reason_code,
+            "corrective_document_id": corrective.id,
+            "physician_profile_id": profile.id,
+            "retornado_por_admin": True,
+        },
+    )
+    db.commit()
+
+    # Revoga o acesso do paciente ao PDF do laudo predecessor, se existir.
+    # Falha aqui NÃO desfaz a corretiva já criada (já commitada acima) — o
+    # laudo foi devolvido de qualquer forma; o aviso avisa quem devolveu que
+    # a revogação precisa ser conferida manualmente.
+    aviso = None
+    acesso = db.execute(
+        select(PatientResultAccess).where(
+            PatientResultAccess.report_document_id == predecessor.id
+        )
+    ).scalar_one_or_none()
+    if acesso is not None and acesso.status != RESULTADO_REVOGADO:
+        try:
+            prs.revoke(
+                db,
+                acesso,
+                user_id=admin_user.id,
+                motivo=(
+                    "Laudo devolvido para correção médica; "
+                    "o PDF anterior foi superado."
+                ),
+                request_id=request_id,
+            )
+            db.commit()
+        except Exception:  # noqa: BLE001 — nunca perder a corretiva já criada
+            db.rollback()
+            aviso = (
+                "O laudo foi devolvido para correção, mas não foi possível "
+                "revogar automaticamente o acesso do paciente ao PDF "
+                "anterior — revogue manualmente em 'Acesso ao resultado'."
+            )
+
+    response = {
+        **ser_report_document(
+            corrective, versions=[new_original], include_clinical=True
+        ),
+        "assignment": ser_report_assignment(new_assignment),
+        "predecessor_document_id": predecessor.id,
+    }
+    if aviso:
+        response["aviso"] = aviso
+    return response
 
 
 @router.get("/{document_id}/assinatura")

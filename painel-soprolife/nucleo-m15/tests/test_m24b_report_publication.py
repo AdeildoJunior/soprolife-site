@@ -277,8 +277,22 @@ def test_success_has_no_database_row_with_missing_file(db, publication_context):
         reports_router.upload_report_document,
         reports_router.compose_report_document,
         reports_router.prepare_report_signature,
-        reports_router.open_corrective_document,
+        # M26.12 — a corretiva ganhou um SEGUNDO chamador (devolução
+        # administrativa, `return_report_for_correction`), então o núcleo
+        # publicador foi extraído para `_open_corrective_document` e os dois
+        # endpoints passaram a delegar a ele. O `with` continua existindo,
+        # só que agora num nível abaixo dos endpoints — checar o núcleo
+        # cobre os dois chamadores de uma vez.
+        reports_router._open_corrective_document,
     ],
 )
 def test_all_file_publishing_routes_use_the_same_transaction_contract(route):
     assert "with report_publication_transaction(db)" in inspect.getsource(route)
+
+
+def test_both_corrective_callers_delegate_to_the_shared_publishing_core():
+    for route in (
+        reports_router.open_corrective_document,
+        reports_router.return_report_for_correction,
+    ):
+        assert "_open_corrective_document(" in inspect.getsource(route)

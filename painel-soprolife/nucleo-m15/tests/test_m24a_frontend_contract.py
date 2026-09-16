@@ -247,6 +247,13 @@ def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
         "released_at",
         "locked",
         "is_corrective",
+        # M26.12 — motivo de catálogo fechado da correção ("correção
+        # clínica" / "de identificação" / "técnica do documento"), para a
+        # fila da médica mostrar o PORQUÊ de um item já vir marcado como
+        # corretivo, não só o fato "corrigido". Mesmo catálogo fechado de
+        # `correction_reason_code` já usado em `/nova-versao-corretiva`;
+        # nenhum texto livre, nenhum dado de paciente.
+        "correction_reason_code",
         "validation_code",
         # M25.6 — agrupamento da fila por unidade. `location_key` é um id de
         # unidade (ou a origem controlada) e `location_name` é o nome

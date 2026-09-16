@@ -65,6 +65,33 @@
   const RELEASE_CONFIRMATION = "ASSINAR E LIBERAR";
   const ADDENDUM_CONFIRMATION = "PUBLICAR ADENDO";
 
+  // M26.12 — biblioteca de "frases frequentes" para o texto final do laudo.
+  // Extraída SOMENTE do texto de conclusão (nunca dado de paciente) dos 25
+  // laudos liberados pela Dra. Ana em produção até 16/09/2026, lidos em
+  // consulta read-only. Normalização aplicada: espaços duplicados,
+  // capitalização e erros ortográficos evidentes (ex.: "iaolados" virou
+  // "isolados"); nenhuma frase clínica nova foi criada — cada item abaixo
+  // corresponde a um padrão que ela já escreveu de próprio punho pelo menos
+  // duas vezes. Ver RELATORIO_M26_12_CONCLUSOES_LAUDOS_ANA_20260916.md.
+  const FREQUENT_CONCLUSION_PHRASES = [
+    "Espirometria dentro dos limites da normalidade.",
+    "Sem resposta significativa ao broncodilatador.",
+    "Sugerido complementar com volumes pulmonares.",
+    "Redução de CVF e VEF1 isolados.",
+    "Distúrbio ventilatório obstrutivo leve.",
+  ];
+
+  // M26.12 — mesmos três motivos fechados que o backend aceita em
+  // `ReportCorrectionReason` (`schemas.py`), reaproveitados tanto pelo
+  // formulário de auto-serviço da médica (`reportCorrectionForm`, abaixo)
+  // quanto pela devolução administrativa (`renderReturnCorrectionAction`).
+  const CORRECTION_REASONS = [
+    ["clinical_correction", "Correção clínica"],
+    ["identification_correction", "Correção de identificação"],
+    ["technical_document_correction", "Correção técnica do documento"],
+  ];
+  const CORRECTION_REASON_LABELS = Object.fromEntries(CORRECTION_REASONS);
+
   // ------------------------------------------ M25.24 — ajuda contextual
   //
   // Catálogo ÚNICO de explicações da área médica. Cada texto descreve o que
@@ -262,6 +289,10 @@
     resultBusy: false,
     deliveryFilter: "",
     deliveryBusy: false,
+    // M26.12 — "Retornar para laudadora": qual linha tem o formulário de
+    // motivo aberto, e se uma devolução está em voo.
+    returnCorrectionTarget: "",
+    returnCorrectionBusy: false,
     // M25.24 — `null` = "ainda não mexeu nesta sessão, use a preferência
     // guardada". true/false = escolha explícita da médica agora.
     howItWorksOpen: null,
@@ -721,6 +752,19 @@
     }
   }
 
+  // M26.12 — `#reportStatus` mora no topo do painel inteiro; numa tela
+  // comprida (fila + formulário do laudo) um erro anunciado ali fica fora
+  // da viewport de quem acabou de clicar "Concluir" lá embaixo, e parece
+  // que nada aconteceu. Chamado DEPOIS de `render()`, porque o `finally`
+  // sempre repinta e um nó antigo perderia a referência.
+  function focusStatusMessage() {
+    const target = document.getElementById("reportStatus");
+    if (!target) return;
+    target.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+  }
+
   function releasePdfUrls() {
     Object.keys(state.pdfUrls).forEach((key) => {
       // M25.18 — `pdfUrls` passou a guardar object URL (token da CLI) OU um
@@ -995,8 +1039,21 @@
             <span>${contextLine(item)}</span>
             ${statusChip("laudo", item.status, statusLabel(item.status))}
             ${codeTrail(item)}
+            ${/* M26.12 — enquanto a corretiva ainda não foi trabalhada
+                  (`atribuido`), "corrigido" (particípio, tempo passado) lê
+                  como concluído. "Correção solicitada" é o que de fato está
+                  acontecendo: alguém pediu, ela ainda não mexeu. Depois que
+                  ela começa a elaborar, o rótulo genérico volta — o pedido
+                  já foi atendido. */""}
             ${item.is_corrective
-              ? `<span class="report-queue-flag">corrigido</span>` : ""}
+              ? item.status === "atribuido"
+                ? `<span class="report-queue-flag is-correction-requested">Correção solicitada${
+                    item.correction_reason_code
+                      ? ` — ${esc(CORRECTION_REASON_LABELS[item.correction_reason_code] || "")}`
+                      : ""
+                  }</span>`
+                : `<span class="report-queue-flag">corrigido</span>`
+              : ""}
             ${item.locked && item.status !== "liberado"
               ? `<span class="report-queue-flag is-locked">concluído</span>` : ""}
           </button>`).join("")
@@ -1156,7 +1213,7 @@
           <label for="reportCustomConclusion" class="report-custom-conclusion">
             Conclusão personalizada
             <textarea id="reportCustomConclusion" name="conclusion_custom_text"
-              maxlength="2000" rows="3"
+              maxlength="2000" rows="3" spellcheck="true" lang="pt-BR"
               placeholder="Escreva a conclusão completa.">${esc(state.customConclusion)}</textarea>
           </label>` : ""}
       </fieldset>
@@ -1170,6 +1227,23 @@
       </fieldset>`;
   }
 
+  // M26.12 — chips de inserção, não de seleção: não há estado "escolhido",
+  // cada clique apenas acrescenta a frase ao texto final (ver
+  // `insertFrequentPhrase`). Por isso não usam `aria-pressed`/`is-selected`
+  // como os chips de conclusão/BD acima.
+  function renderFrequentPhrases() {
+    const buttons = FREQUENT_CONCLUSION_PHRASES.map((phrase) => `
+      <button type="button" class="report-frequent-phrase-chip"
+        data-report-frequent-phrase="${esc(phrase)}">
+        ${esc(phrase)}
+      </button>`).join("");
+    return `
+      <div class="report-frequent-phrases">
+        <p class="report-help">Frases frequentes — clique para inserir no texto final. Dá para combinar mais de uma e editar à vontade depois.</p>
+        <div class="report-chip-grid report-frequent-phrase-grid">${buttons}</div>
+      </div>`;
+  }
+
   function renderNativeReportForm(detail) {
     const editable = ["atribuido", "em_elaboracao"].includes(detail.status);
     if (!editable) return "";
@@ -1179,10 +1253,12 @@
         <h4>Laudo médico da SoproLife</h4>
         <p class="report-help">Documento próprio, gerado pelo Centro de Comando. O PDF técnico da MIR permanece intacto e continua sendo baixado separadamente.</p>
         ${renderConclusionPicker()}
+        ${renderFrequentPhrases()}
         <label for="reportFinalText">
           Texto final do laudo
           <textarea id="reportFinalText" name="final_text" maxlength="6000"
             rows="5" aria-describedby="reportFinalTextHelp"
+            spellcheck="true" lang="pt-BR"
             placeholder="Escolha uma conclusão para montar o texto — e edite livremente antes de assinar.">${esc(state.finalText)}</textarea>
           <span id="reportFinalTextHelp" class="report-help">Este é o texto que será assinado. Você pode reescrevê-lo por completo.</span>
         </label>
@@ -1593,8 +1669,15 @@
                 }`
               : ""}
             ${detail.corrects_document_id
-              ? `<span class="report-status-chip report-corrigido-flag">Documento corretivo</span>${
-                  helpTip("corrigido")
+              ? `<span class="report-status-chip report-corrigido-flag">${
+                  detail.status === "atribuido"
+                    ? "Correção solicitada" : "Documento corretivo"
+                }</span>${helpTip("corrigido")}${
+                  detail.correction_reason_code
+                    ? `<span class="report-help">Motivo: ${esc(
+                        CORRECTION_REASON_LABELS[detail.correction_reason_code] || ""
+                      )}</span>`
+                    : ""
                 }`
               : ""}
             ${/* M25.4 — "Liberado" e "Conteúdo bloqueado" repetiam o chip de
@@ -1695,9 +1778,7 @@
             <div class="report-compact-field-wrap">
               <label for="reportCorrectionReason">Motivo técnico da correção
                 <select id="reportCorrectionReason" name="reason_code" required>
-                  <option value="clinical_correction">Correção clínica</option>
-                  <option value="identification_correction">Correção de identificação</option>
-                  <option value="technical_document_correction">Correção técnica do documento</option>
+                  ${options(CORRECTION_REASONS, "")}
                 </select>
               </label>
               ${helpTip("motivo-correcao")}
@@ -2529,9 +2610,54 @@
                  data-delivery-deliver="${esc(assinado.signed_document_id)}">
                  Marcar como entregue
                </button>` : ""}
+          ${/* M26.12 — "Retornar para laudadora" é ROLE_ADMIN no servidor
+                (nunca operacional): devolver conteúdo clínico já liberado
+                é uma reversão de peso maior que baixar/entregar arquivo, e
+                o botão só aparece para quem de fato consegue executá-la. */""}
+          ${can("admin") ? renderReturnCorrectionAction(item) : ""}
           ${renderResultAccessActions(item)}
         </div>
       </div>`;
+  }
+
+  // M26.12 — a Dra. Ana relatou que corrigir um laudo já concluído hoje
+  // obriga a apagar cadastro/exame/paciente. Isto reabre o mecanismo de
+  // corretiva do M25.2 (nunca apaga nem reescreve o predecessor) a partir
+  // de uma ação administrativa, sempre reatribuindo à MESMA médica que
+  // liberou — ver `_open_corrective_document` no backend.
+  const CORRETIVEL = new Set(["liberado", "assinado"]);
+  function renderReturnCorrectionAction(item) {
+    if (!CORRETIVEL.has(item.status_clinico) || item.has_corrective) return "";
+    const open = state.returnCorrectionTarget === item.document_id;
+    if (!open) {
+      return `
+        <button type="button" class="m15-btn"
+          data-report-return-correction-open="${esc(item.document_id)}"${
+            state.returnCorrectionBusy ? " disabled" : ""
+          }>Retornar para laudadora</button>`;
+    }
+    return `
+      <form class="report-return-correction-form"
+        data-report-return-correction-form="${esc(item.document_id)}">
+        <p class="report-help"><strong>Devolver ${esc(item.report_code)} (${
+          esc(patientName(item))
+        }) para correção da médica?</strong> O documento atual não é apagado
+          nem alterado — permanece completo no histórico. Um novo documento
+          corretivo é aberto para a mesma médica que liberou o laudo.</p>
+        <label>Motivo
+          <select name="reason_code" required>
+            <option value="">Selecione</option>
+            ${options(CORRECTION_REASONS, "")}
+          </select>
+        </label>
+        <div class="report-release-buttons">
+          <button type="button" class="m15-btn"
+            data-report-return-correction-cancel>Cancelar</button>
+          <button class="m15-btn m15-btn-primary" type="submit"${
+            state.returnCorrectionBusy ? " disabled" : ""
+          }>Confirmar devolução</button>
+        </div>
+      </form>`;
   }
 
   // M25.29G criou aqui uma confirmação em dois passos para substituir o
@@ -3259,6 +3385,27 @@
     state.suggestedText = suggestion;
   }
 
+  // M26.12 — insere a frase inteira no texto final, preservando o que já
+  // estava escrito. Não duplica se a MESMA frase já existe como linha
+  // própria (comparação exata, sem tentar detectar paráfrase — a médica
+  // decide se quer repetir algo escrito com outras palavras).
+  function insertFrequentPhrase(phrase) {
+    const current = state.finalText || "";
+    const already = current
+      .split("\n")
+      .some((line) => line.trim() === phrase.trim());
+    if (already) {
+      announce("Esta frase já está no texto.", "");
+      return;
+    }
+    const trimmed = current.replace(/\s+$/, "");
+    state.finalText = trimmed ? `${trimmed}\n${phrase}` : phrase;
+    // M25.2 — editar o texto final invalida a prévia conferida, mesmo
+    // quando a edição vem de um chip em vez de digitação direta.
+    state.previewVersionId = "";
+    state.previewTextSha256 = "";
+  }
+
   function readNativeForm() {
     const form = document.getElementById("reportNativeForm");
     if (form) {
@@ -3279,10 +3426,12 @@
   // prévia atual antes de concluir: o que mudou é que a médica não precisa
   // mais saber disso para chegar ao documento final.
   async function previewNativeReport(opcoes) {
+    if (state.busy) return;
     const concluir = Boolean(opcoes && opcoes.concluir);
     readNativeForm();
     if (!state.conclusionCode) {
       announce("Selecione uma conclusão antes de continuar.", "erro");
+      focusStatusMessage();
       return;
     }
     const payload = {
@@ -3337,6 +3486,12 @@
       if (state.confirmRelease) {
         const heading = document.getElementById("reportReleaseConfirmTitle");
         if (heading) heading.focus();
+      } else if (state.noticeKind === "erro") {
+        // M26.12 — mesmo cuidado para o caso de erro: sem isto, a mensagem
+        // nascia no topo do painel inteiro, fora da viewport de quem
+        // acabou de clicar "Concluir" lá embaixo — e parecia que nada
+        // tinha acontecido.
+        focusStatusMessage();
       }
     }
   }
@@ -3644,8 +3799,10 @@
   }
 
   async function releaseReport() {
+    if (state.busy) return;
     if (!state.previewVersionId || !state.previewTextSha256) {
       announce("Gere a prévia do laudo antes de concluir.", "erro");
+      focusStatusMessage();
       return;
     }
     state.busy = true;
@@ -3681,6 +3838,8 @@
       // depois, então a bancada da médica congelava até um F5.
       state.busy = false;
       render();
+      // M26.12 — mesmo cuidado de "erro perto da ação" do preview.
+      if (state.noticeKind === "erro") focusStatusMessage();
     }
   }
 
@@ -4226,6 +4385,43 @@
     }
   }
 
+  // M26.12 — administrativo: reabre a corretiva EM NOME da médica que
+  // liberou (nunca do admin) e, se o paciente já tinha acesso ao PDF
+  // anterior, o servidor revoga esse acesso na mesma chamada.
+  async function returnForCorrection(form) {
+    if (state.returnCorrectionBusy) return;
+    const documentId = form.getAttribute("data-report-return-correction-form");
+    // O `<select required>` já bloqueia o submit nativamente com a opção
+    // vazia — mesmo padrão de `reportReassignForm`/`reassign()`, sem
+    // checagem duplicada aqui.
+    const reasonCode = form.elements.reason_code.value;
+    state.returnCorrectionBusy = true;
+    announce("Devolvendo o laudo para correção…", "");
+    render();
+    let precisaDeAtencao = false;
+    try {
+      const result = await client().api(
+        `/laudos/${encodeURIComponent(documentId)}/retornar-para-correcao`,
+        { method: "POST", body: JSON.stringify({ reason_code: reasonCode }) }
+      );
+      state.returnCorrectionTarget = "";
+      if (result && result.aviso) {
+        precisaDeAtencao = true;
+        announce(`Laudo devolvido para correção. ${result.aviso}`, "");
+      } else {
+        announce("Laudo devolvido para correção da médica.", "ok");
+      }
+      await loadAuthenticatedData();
+    } catch (error) {
+      precisaDeAtencao = true;
+      announce(readableError(error), "erro");
+    } finally {
+      state.returnCorrectionBusy = false;
+      render();
+      if (precisaDeAtencao) focusStatusMessage();
+    }
+  }
+
   function handleClick(event) {
     // M25.24 — a ajuda vem ANTES de tudo. O ícone pode estar dentro de uma
     // linha de laudo ou ao lado de um botão de ação; sem interromper aqui,
@@ -4325,6 +4521,19 @@
     }
     if (button.matches("[data-delivery-deliver]")) {
       registerDelivery(button.getAttribute("data-delivery-deliver"));
+      return;
+    }
+    // ---------------------------------------------------------- M26.12
+    if (button.matches("[data-report-return-correction-open]")) {
+      state.returnCorrectionTarget = button.getAttribute(
+        "data-report-return-correction-open"
+      );
+      render();
+      return;
+    }
+    if (button.matches("[data-report-return-correction-cancel]")) {
+      state.returnCorrectionTarget = "";
+      render();
       return;
     }
     // ---------------------------------------------------------- M26.4
@@ -4489,6 +4698,17 @@
       render();
       return;
     }
+    if (button.matches("[data-report-frequent-phrase]")) {
+      readNativeForm();
+      insertFrequentPhrase(button.getAttribute("data-report-frequent-phrase"));
+      render();
+      const editor = document.getElementById("reportFinalText");
+      if (editor) {
+        editor.focus();
+        editor.setSelectionRange(editor.value.length, editor.value.length);
+      }
+      return;
+    }
     if (button.matches("[data-report-preview-only]")) {
       previewNativeReport({ concluir: false });
       return;
@@ -4631,6 +4851,8 @@
       uploadSignatureAsset(event.target);
     } else if (event.target.id === "reportClosureForm") {
       closeExamAsHistorical(event.target);
+    } else if (event.target.matches("[data-report-return-correction-form]")) {
+      returnForCorrection(event.target);
     }
   }
 
