@@ -1,6 +1,7 @@
 """Engine e sessão SQLAlchemy 2. SQLite para dev/teste, PostgreSQL 16 alvo."""
 
 import pathlib
+import sqlite3
 
 from sqlalchemy import MetaData, create_engine, event, inspect
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -109,6 +110,18 @@ def _ensure_sqlite_dir(url: str) -> None:
 # conexão morta no meio da requisição de um paciente, não.
 POOL_RECYCLE_SEGUNDOS = 1800
 
+# M46 — SQLite's own default busy timeout is 0: any transaction whose COMMIT
+# needs to escalate to an EXCLUSIVE lock while another pooled connection still
+# holds even a SHARED one (e.g. a GET request's session left open a moment
+# longer than a concurrent fiscal issuance's own durable-intent commit) fails
+# INSTANTLY with "database is locked", instead of the standard SQLite
+# behavior of waiting for the lock to clear. Reproduced deterministically
+# (tests/test_db_sqlite_concurrency.py) and proven to be the exact cause of
+# the DPS #9 local 500s (M45 mission): the durable-intent `db.commit()` in
+# `nfse.operate()` is a plain, short-lived write — the failure was never
+# about certificates or fiscal data, only about this timeout being unset.
+SQLITE_BUSY_TIMEOUT_MS = 5000
+
 
 def build_engine(url: str | None = None):
     url = url or get_settings().database_url
@@ -141,10 +154,35 @@ def build_engine(url: str | None = None):
         def _sqlite_connect(dbapi_conn, _record):  # pragma: no cover - trivial
             dbapi_conn.isolation_level = None
             dbapi_conn.execute("PRAGMA foreign_keys=ON")
+            # M46 — wait for a transient lock to clear instead of failing
+            # instantly (see SQLITE_BUSY_TIMEOUT_MS above).
+            dbapi_conn.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
 
         @event.listens_for(engine, "begin")
         def _sqlite_begin(conn):  # pragma: no cover - trivial
             conn.exec_driver_sql("BEGIN")
+
+        @event.listens_for(engine, "handle_error")
+        def _sqlite_discard_connection_on_lock_conflict(context):
+            # M46 — a genuine SQLITE_BUSY (contention that outlasted even
+            # busy_timeout) leaves the pysqlite connection's own transaction
+            # bookkeeping inconsistent: the next checkout of that SAME pooled
+            # connection then fails with "cannot start a transaction within a
+            # transaction" on its very next BEGIN — a healthy-looking session
+            # poisoned by a PRIOR, unrelated request's failure (reproduced in
+            # tests/test_db_sqlite_concurrency.py; this is exactly what turned
+            # one local DPS #9 500 into a second, unrelated-looking one on the
+            # very next GET during the M45 mission). Marking the error as a
+            # disconnect tells SQLAlchemy's pool to discard this ONE
+            # connection object outright rather than return it for reuse —
+            # every other pooled connection is untouched, and the next
+            # checkout simply opens a fresh one.
+            original = context.original_exception
+            if isinstance(original, sqlite3.OperationalError) and (
+                "database is locked" in str(original)
+                or "cannot start a transaction within a transaction" in str(original)
+            ):
+                context.is_disconnect = True
     return engine
 
 
