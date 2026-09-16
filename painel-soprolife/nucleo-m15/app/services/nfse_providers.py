@@ -29,14 +29,15 @@ class ProviderResult:
     # Optional and provider-specific: MockNfseProvider never sets it, so every
     # existing call site (positional or keyword, 1-2 args) is unaffected.
     diagnostic_code: str | None = None
-    # M40/M41 — already-sanitized structured validation detail from a 4xx/5xx
-    # body's documented shape (``NFSePostResponseErro.erros[]`` or the
-    # flatter ``ResponseErro``; see nfse_national.error_sanitizer and
+    # M40/M41/M44 — already-sanitized structured validation detail from a
+    # 4xx/5xx body's documented shape (``NFSePostResponseErro.erros[]``
+    # items — full ``MensagemProcessamento``, M44 — or the flatter
+    # ``ResponseErro``; see nfse_national.error_sanitizer and
     # nfse_national.response_diagnostics), as plain dicts with only the
-    # keys "codigo"/"descricao"/"complemento"/"mensagem"/"erro" — kept
-    # provider-agnostic (no nfse_national import here) the same way
-    # diagnostic_code is. Never the raw response body. Optional: every
-    # existing call site is unaffected.
+    # keys "codigo"/"descricao"/"complemento"/"mensagem"/"erro"/
+    # "parametros" — kept provider-agnostic (no nfse_national import here)
+    # the same way diagnostic_code is. Never the raw response body.
+    # Optional: every existing call site is unaffected.
     validation_errors: tuple[dict, ...] | None = None
     # M41 — a bounded SHAPE summary of the same 4xx/5xx response, present
     # even when validation_errors is empty (DPS #5's exact case: HTTP 400

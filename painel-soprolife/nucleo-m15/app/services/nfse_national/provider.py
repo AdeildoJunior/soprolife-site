@@ -22,7 +22,8 @@ from .config import NationalDpsConfiguration
 from .dps_builder import DpsInput, Recipient, build_dps_element, serialize_dps
 from .error_sanitizer import sanitize_sefin_errors
 from .identifiers import DpsIdComponents, build_dps_id
-from .response_diagnostics import decode_documented_error_fields, summarize_response_shape
+from .response_diagnostics import (classify_erros_array, decode_documented_error_fields,
+                                   summarize_response_shape)
 from .responses import (TransportOutcome, classify_issue_response, classify_reconcile_response,
                         safe_diagnostic_code, to_provider_outcome)
 from .signer import LoadedCertificate, sign_dps, verify_dps_signature
@@ -145,7 +146,7 @@ class RestrictedNfseProvider:
         )
         outcome = to_provider_outcome(classified, operation="issue")
         external_id = access_key if outcome == Outcome.SIMULATED else None
-        # M40/M41 — the ONLY place a 4xx/5xx body is ever parsed. Never
+        # M40/M41/M44 — the ONLY place a 4xx/5xx body is ever parsed. Never
         # changes `classified`/`outcome` above (those are HTTP-status-only,
         # unchanged since M35): this is purely additive, already-sanitized
         # diagnostic detail for a human to read, never consulted by the
@@ -165,11 +166,19 @@ class RestrictedNfseProvider:
                 "top_level_keys": shape.top_level_keys,
             }
             if response.body:
+                # M44 — the explicit empty/decoded/unrecognized distinction
+                # DPS #6/#7 needed: an `erros[]` array can be present with
+                # items that are structurally real but simply didn't decode
+                # (the bug this milestone fixes) versus genuinely empty.
+                erros_summary = classify_erros_array(response.body)
+                response_shape["erros_status"] = erros_summary.status
+                response_shape["erros_count"] = erros_summary.item_count
+                response_shape["erros_item_field_names"] = erros_summary.item_field_names
                 sanitized = sanitize_sefin_errors(decode_documented_error_fields(response.body))
                 if sanitized:
                     validation_errors = tuple(
                         {"codigo": e.codigo, "descricao": e.descricao, "complemento": e.complemento,
-                         "mensagem": e.mensagem, "erro": e.erro}
+                         "mensagem": e.mensagem, "erro": e.erro, "parametros": e.parametros}
                         for e in sanitized
                     )
         return ProviderResult(outcome, external_id, safe_diagnostic_code(classified),

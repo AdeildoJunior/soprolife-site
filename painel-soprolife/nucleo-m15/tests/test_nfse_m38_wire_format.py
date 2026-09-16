@@ -416,10 +416,11 @@ def test_error_envelope_never_changes_classification(context):
     result, _ = _issue_with(context, TransportResponse(422, erro))
     assert result.outcome == Outcome.REJECTED
     assert result.diagnostic_code == "provider_rejected:http_422"
-    # M40/M41 — this is the new, intentional surface: the actual SEFIN code
-    # and description are no longer thrown away.
+    # M40/M41/M44 — this is the new, intentional surface: the actual SEFIN
+    # code and description are no longer thrown away.
     assert result.validation_errors == ({"codigo": "E0001", "descricao": "segredo interno",
-                                        "complemento": None, "mensagem": None, "erro": None},)
+                                        "complemento": None, "mensagem": None, "erro": None,
+                                        "parametros": None},)
     assert "segredo" not in (result.diagnostic_code or "")
 
 

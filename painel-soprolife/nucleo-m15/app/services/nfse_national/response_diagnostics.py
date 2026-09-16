@@ -118,8 +118,17 @@ def summarize_response_shape(body: bytes, content_type: str | None) -> ResponseS
 
 
 def _extract_documented_fields_from(obj: dict) -> dict:
-    values = {name: obj.get(name) for name in DOCUMENTED_ERROR_FIELD_NAMES}
-    return {k: v for k, v in values.items() if isinstance(v, str)}
+    from .wire import _ci_field, _raw_parametros  # local import: avoid a cycle at module load
+
+    values = {}
+    for name in DOCUMENTED_ERROR_FIELD_NAMES:
+        v = _ci_field(obj, name)
+        if isinstance(v, str):
+            values[name] = v
+    parametros = _raw_parametros(_ci_field(obj, "parametros"))
+    if parametros:
+        values["parametros"] = parametros
+    return values
 
 
 def decode_documented_error_fields(body: bytes) -> tuple[SefinValidationError, ...]:
@@ -166,5 +175,51 @@ def decode_documented_error_fields(body: bytes) -> tuple[SefinValidationError, .
     return (SefinValidationError(
         codigo=values.get("codigo"), descricao=values.get("descricao"),
         complemento=values.get("complemento"), mensagem=values.get("mensagem"),
-        erro=values.get("erro"),
+        erro=values.get("erro"), parametros=values.get("parametros"),
     ),)
+
+
+# M44 — see PII_TAGS-style rationale in error_sanitizer.py: any item field
+# name is safe to record (a JSON key, never a value), bounded in count.
+MAX_ERRO_ITEM_FIELD_NAMES = 20
+
+
+@dataclass(frozen=True)
+class ErrosArraySummary:
+    status: str  # "erros_empty" | "erros_nonempty_decoded" | "erros_nonempty_unrecognized"
+    item_count: int
+    item_field_names: tuple[str, ...]
+
+
+def classify_erros_array(body: bytes) -> ErrosArraySummary:
+    """Structural classification of the top-level ``erros`` array,
+    INDEPENDENT of whether any value was extractable from it — this is
+    exactly the distinction DPS #6/#7 needed: 'no erros array at all' vs.
+    'erros array present but every item was unusable' vs. 'erros array
+    present and at least one item decoded'. Only item KEY NAMES are ever
+    recorded for an unrecognized item, never values. Never raises.
+    """
+    from .wire import FIELD_ERROR_LIST, decode_nfse_error_envelope  # avoid a cycle at module load
+
+    try:
+        payload = _parse_json_object(body)
+    except WireFormatError:
+        return ErrosArraySummary("erros_empty", 0, ())
+    raw_errors = payload.get(FIELD_ERROR_LIST)
+    if not isinstance(raw_errors, list) or not raw_errors:
+        return ErrosArraySummary("erros_empty", 0, ())
+
+    decoded = decode_nfse_error_envelope(body)
+    any_decoded = any(
+        e.codigo or e.descricao or e.complemento or e.mensagem or e.parametros
+        for e in decoded
+    )
+    field_names: set[str] = set()
+    for item in raw_errors:
+        if isinstance(item, dict):
+            field_names.update(_truncate(str(k), MAX_KEY_LEN) for k in item.keys())
+    status = "erros_nonempty_decoded" if any_decoded else "erros_nonempty_unrecognized"
+    return ErrosArraySummary(
+        status=status, item_count=len(raw_errors),
+        item_field_names=tuple(sorted(field_names))[:MAX_ERRO_ITEM_FIELD_NAMES],
+    )

@@ -30,6 +30,9 @@ from .wire import SefinValidationError
 # and an unbounded list is itself a minor resource/log-noise risk.
 MAX_ERRORS = 5
 MAX_STR_LEN = 200
+# M44 — MensagemProcessamento.parametros is documented as an array; a
+# hostile/broken provider could send an arbitrarily long one.
+MAX_PARAMETROS = 10
 
 # Order matters: the longest/most-specific pattern is masked first, so a
 # 53-digit access key is replaced whole before a shorter CNPJ/CPF-length
@@ -62,6 +65,24 @@ def _clean(value: str | None) -> str | None:
     return _mask(value[:MAX_STR_LEN])
 
 
+def _clean_parametros(value: tuple | None) -> tuple | None:
+    """M44 — sanitize MensagemProcessamento.parametros: cap length, mask/
+    truncate every string element the same way as any other free-text
+    field, pass numeric/boolean elements through unchanged (they cannot
+    carry PII-shaped text). ``value`` is already type-narrowed to JSON
+    primitives by ``wire._raw_parametros`` — nothing here can fail to
+    coerce. Returns ``None`` for ``None``/empty input, never an empty
+    tuple, so downstream truthiness checks treat "no parametros" uniformly
+    with every other optional field."""
+    if not value:
+        return None
+    cleaned = tuple(
+        _mask(item[:MAX_STR_LEN]) if isinstance(item, str) else item
+        for item in value[:MAX_PARAMETROS]
+    )
+    return cleaned or None
+
+
 @dataclass(frozen=True)
 class SanitizedValidationError:
     codigo: str | None
@@ -72,6 +93,9 @@ class SanitizedValidationError:
     # same way as the other three.
     mensagem: str | None = None
     erro: str | None = None
+    # M44 — MensagemProcessamento.parametros, sanitized (see
+    # _clean_parametros above).
+    parametros: tuple | None = None
 
 
 def sanitize_sefin_errors(
@@ -81,7 +105,8 @@ def sanitize_sefin_errors(
 
     Never raises: ``errors`` is already a tuple of ``SefinValidationError``
     (see ``wire.decode_nfse_error_envelope``), so every field is already
-    ``str | None`` — there is nothing left here that can fail to coerce.
+    ``str | None`` (or, for ``parametros``, a tuple of JSON primitives) —
+    there is nothing left here that can fail to coerce.
     """
     return tuple(
         SanitizedValidationError(
@@ -90,6 +115,7 @@ def sanitize_sefin_errors(
             complemento=_clean(item.complemento),
             mensagem=_clean(item.mensagem),
             erro=_clean(item.erro),
+            parametros=_clean_parametros(item.parametros),
         )
         for item in errors[:MAX_ERRORS]
     )

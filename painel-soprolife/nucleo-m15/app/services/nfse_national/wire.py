@@ -244,32 +244,77 @@ def find_nfse_access_key_in_response(body: bytes) -> str | None:
 class SefinValidationError:
     """One documented SEFIN error entry.
 
-    ``codigo``/``descricao``/``complemento`` are the ``NFSePostResponseErro
-    .erros[]`` item fields (see :func:`decode_nfse_error_envelope`).
-    ``mensagem``/``erro`` (M41) are the two additional documented safe
-    scalar names used by the flatter ``ResponseErro`` shape (see
-    ``response_diagnostics.decode_documented_error_fields``) — always
-    ``None`` when this object comes from an ``erros[]`` item, since that
-    array's items never carry them. Anything else in the JSON, at any
-    level, is silently ignored and never reaches this object.
+    M44 — the official ``NFSePostResponseErro.erros[]`` item type is
+    ``MensagemProcessamento``, which carries ALL FIVE of ``mensagem``,
+    ``parametros``, ``codigo``, ``descricao``, ``complemento``. Until this
+    fix, :func:`decode_nfse_error_envelope` only ever read
+    ``codigo``/``descricao``/``complemento`` per item — an item shaped
+    exactly like ``{"mensagem": "..."}`` (no other key) silently decoded to
+    an ALL-``None`` entry, which still counted as "found" (a non-empty
+    tuple) and therefore was never reported as unrecognized either: this is
+    the exact blind spot behind DPS #6/#7's HTTP 400 with a present but
+    seemingly-empty ``erros[]``.
+
+    ``erro`` (M43) is the one field that is NOT part of
+    ``MensagemProcessamento`` — it only ever comes from the separate flat/
+    nested ``ResponseErro`` shape (see
+    ``response_diagnostics.decode_documented_error_fields``), so it stays
+    ``None`` for every ``erros[]`` item. ``parametros`` is the raw
+    (type-narrowed, not yet sanitized) list of JSON primitive scalars from
+    the item, or ``None``/``()`` when absent or unusable — sanitization
+    (truncation, PII masking, count cap) happens downstream in
+    ``error_sanitizer.sanitize_sefin_errors``. Anything else in the JSON,
+    at any level, is silently ignored and never reaches this object.
     """
     codigo: str | None
     descricao: str | None
     complemento: str | None
     mensagem: str | None = None
     erro: str | None = None
+    parametros: tuple | None = None
+
+
+def _ci_field(obj: dict, name: str):
+    """Case-insensitive-by-convention lookup for ONE documented field name:
+    tries the exact name first, then its Capitalized form (e.g. "codigo"
+    then "Codigo"). These are the only two casings ever observed from a
+    SEFIN endpoint anywhere in this codebase — the erros[]/ResponseErro
+    fields are documented lowercase, and the CNC consulta API (a
+    different but also-official SEFIN endpoint, M42/M43) uses PascalCase
+    for every field it returns (``TipoAmbiente``, ``SituacaoCadastral``,
+    ...). Never guesses any OTHER casing, and never invents a field name
+    not already in ``obj``.
+    """
+    if name in obj:
+        return obj[name]
+    capitalized = name[:1].upper() + name[1:]
+    return obj.get(capitalized)
+
+
+def _raw_parametros(value) -> tuple | None:
+    """Type-narrow (never sanitize — that is error_sanitizer's job) a
+    'parametros' field into a tuple of JSON primitive scalars, or None
+    when the field is absent/not a list. A nested object/array/None INSIDE
+    the list is silently dropped, never coerced to text."""
+    if not isinstance(value, list):
+        return None
+    return tuple(v for v in value if isinstance(v, (str, int, float, bool)))
 
 
 def decode_nfse_error_envelope(body: bytes) -> tuple[SefinValidationError, ...]:
-    """M40 — best-effort decode of ``NFSePostResponseErro`` (4xx/5xx bodies).
+    """M40/M44 — best-effort decode of ``NFSePostResponseErro`` (4xx/5xx
+    bodies). Each item of ``erros[]`` is a ``MensagemProcessamento``:
+    ``mensagem``, ``parametros``, ``codigo``, ``descricao``,
+    ``complemento`` — ALL FIVE, not just the three this function read
+    before M44. This function is the only place that body is ever parsed.
 
-    Root cause this fixes: until M40, a rejection's ``error_code`` was only
-    ever the HTTP status (``provider_rejected:http_400``) because nothing
-    downstream of the transport ever looked at the response BODY for a
-    4xx/5xx — even though the documented error schema
-    (``codigo``/``descricao``/``complemento`` per item of ``erros[]``) carries
-    the actual SEFIN validation reason. This function is the only place that
-    body is ever parsed.
+    M44 root cause fixed here: an item shaped exactly like
+    ``{"mensagem": "..."}`` (documented, and the actual shape behind DPS
+    #6/#7's HTTP 400) used to decode to an all-``None`` entry — silently
+    dropping the one field it had, while still counting as "found" (a
+    non-empty tuple), so nothing downstream ever flagged it as
+    unrecognized either. See ``response_diagnostics.classify_erros_array``
+    for the new explicit empty/decoded/unrecognized distinction.
 
     Deliberately tolerant, never raises: an unparseable/unexpected shape
     (not JSON, not an object, no ``erros`` array, a non-list ``erros``, a
@@ -278,9 +323,9 @@ def decode_nfse_error_envelope(body: bytes) -> tuple[SefinValidationError, ...]:
     state are decided entirely by HTTP status elsewhere, see
     ``responses.py`` — unchanged by this function's result).
 
-    Every value that is not literally a string is dropped (mapped to
-    ``None``) rather than coerced, so a hostile/malformed field (e.g. an
-    object or array where a string is documented) can never smuggle
+    Every scalar value that is not literally a string is dropped (mapped
+    to ``None``) rather than coerced, so a hostile/malformed field (e.g.
+    an object or array where a string is documented) can never smuggle
     structured data through as if it were text.
     """
     try:
@@ -299,8 +344,10 @@ def decode_nfse_error_envelope(body: bytes) -> tuple[SefinValidationError, ...]:
         if not isinstance(item, dict):
             continue
         errors.append(SefinValidationError(
-            codigo=_text(item.get(FIELD_ERROR_CODE)),
-            descricao=_text(item.get(FIELD_ERROR_DESCRIPTION)),
-            complemento=_text(item.get(FIELD_ERROR_COMPLEMENT)),
+            codigo=_text(_ci_field(item, FIELD_ERROR_CODE)),
+            descricao=_text(_ci_field(item, FIELD_ERROR_DESCRIPTION)),
+            complemento=_text(_ci_field(item, FIELD_ERROR_COMPLEMENT)),
+            mensagem=_text(_ci_field(item, "mensagem")),
+            parametros=_raw_parametros(_ci_field(item, "parametros")),
         ))
     return tuple(errors)

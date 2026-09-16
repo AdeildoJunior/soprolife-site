@@ -91,6 +91,12 @@ ALLOWED_KEYS = {
     "sefin_erro_mensagens", "sefin_erro_erros",
     "sefin_resposta_tipo_corpo", "sefin_resposta_content_type",
     "sefin_resposta_tamanho", "sefin_resposta_sha256", "sefin_resposta_chaves_json",
+    # M44 — MensagemProcessamento.parametros (flattened across every erros[]
+    # item, already sanitized) and the explicit erros[] empty/decoded/
+    # unrecognized classification — never the raw body, never item values
+    # beyond the already-sanitized parametros scalars.
+    "sefin_erro_parametros", "sefin_erros_status", "sefin_erros_contagem",
+    "sefin_erros_nomes_campos",
 }
 
 _MAX_STR = 120

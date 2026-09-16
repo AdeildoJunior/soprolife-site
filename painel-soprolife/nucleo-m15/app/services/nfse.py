@@ -395,7 +395,7 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
                          idempotency_key=payload_fingerprint({'completed': operation_id}),
                          idempotency_fingerprint=payload_fingerprint(identity)))
     doc.state = state
-    # M40/M41 — already-sanitized SEFIN validation/shape detail (see
+    # M40/M41/M44 — already-sanitized SEFIN validation/shape detail (see
     # nfse_national.error_sanitizer / response_diagnostics), if the provider
     # captured any: recorded through the SAME append-only, allowlisted audit
     # trail as every other event here (app/audit.py — truncates/sanitizes
@@ -411,6 +411,14 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
         values = [e[field] for e in (result.validation_errors or ()) if e.get(field)]
         if values:
             sefin_detail[audit_key] = values
+    # M44 — parametros is a tuple-per-item; flatten across every error item
+    # into one list of scalars, matching the shape the audit allowlist's
+    # own sanitizer already expects for every other list field here.
+    parametros_flat = [
+        item for e in (result.validation_errors or ()) for item in (e.get('parametros') or ())
+    ]
+    if parametros_flat:
+        sefin_detail['sefin_erro_parametros'] = parametros_flat
     shape = result.response_shape
     if shape:
         sefin_detail['sefin_resposta_tipo_corpo'] = shape.get('body_kind')
@@ -419,6 +427,12 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
         sefin_detail['sefin_resposta_sha256'] = shape.get('sha256')
         if shape.get('top_level_keys'):
             sefin_detail['sefin_resposta_chaves_json'] = list(shape['top_level_keys'])
+        if shape.get('erros_status'):
+            sefin_detail['sefin_erros_status'] = shape['erros_status']
+        if shape.get('erros_count') is not None:
+            sefin_detail['sefin_erros_contagem'] = shape['erros_count']
+        if shape.get('erros_item_field_names'):
+            sefin_detail['sefin_erros_nomes_campos'] = list(shape['erros_item_field_names'])
     record(db, operation + '_completed', 'fiscal_document', doc.id, actor, request_id,
            provider=provider.name, resultado=result.outcome.value, status=state, sequencia=number,
            **sefin_detail)
