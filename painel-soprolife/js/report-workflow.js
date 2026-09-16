@@ -3366,8 +3366,16 @@
         const heading = document.getElementById("reportDetailHeading");
         if (heading) heading.focus();
       }
-      const original = Array.isArray(detail.versoes)
-        ? detail.versoes.find((item) => item.kind === "original") : null;
+      // M26.15 — `detail.versoes.find(kind === "original")` pegava a
+      // PRIMEIRA versão original do array (a mais antiga), nunca a
+      // VIGENTE. Isso nunca dava problema porque, antes da M26.14, só
+      // existia uma versão original por documento — "primeira" e "vigente"
+      // eram sempre a mesma. A M26.14 (substituir PDF técnico de
+      // corretiva) passou a permitir uma SEGUNDA versão original, e a
+      // tela continuava mostrando a superada. `versionByKind` já resolve
+      // isso certo (percorre de trás para frente) — reaproveitado aqui em
+      // vez de manter uma segunda implementação divergente.
+      const original = versionByKind("original");
       // Cada entrega gera auditoria mínima. Sequenciar evita duas gravações
       // concorrentes na mesma sessão/banco local e mantém os dois Blob URLs
       // estáveis para a comparação.
