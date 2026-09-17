@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from lxml import etree
 
@@ -65,7 +66,11 @@ class Recipient:
 class DpsInput:
     config: NationalDpsConfiguration
     dps_id: DpsIdComponents
-    dh_emi: datetime  # explicit, UTC — never generated inside the builder
+    # Explicit, timezone-AWARE — never generated inside the builder. Any zone
+    # is accepted (UTC is the natural way to capture "now"); M49's
+    # EMISSION_TIMEZONE conversion at serialization time makes the written
+    # form correct regardless, without altering the instant.
+    dh_emi: datetime
     ver_aplic: str
     numero_dps_display: str  # nDPS (TSNumDPS) — the caller's own numbering
     serie_dps_display: str  # serie (TSSerieDPS)
@@ -84,7 +89,7 @@ class DpsInput:
 
     def __post_init__(self):
         if self.dh_emi.tzinfo is None:
-            raise DpsBuildError("dh_emi precisa ser timezone-aware (UTC).")
+            raise DpsBuildError("dh_emi precisa ser timezone-aware.")
         if not (0 < self.valor_servico < Decimal("10000000000000.00")):
             raise DpsBuildError("Valor do serviço fora da faixa aceitável (TSDec15V2).")
         if not self.descricao_servico or len(self.descricao_servico) > 2000:
@@ -106,6 +111,29 @@ def _decimal_text(value: Decimal) -> str:
     return f"{value.quantize(Decimal('0.01'))}"
 
 
+# M49 — the civil time zone dhEmi is EXPRESSED in. Not a conversion of the
+# instant: `astimezone` below preserves the exact moment and only changes how
+# it is written down.
+#
+# Why this is required, proven from the real DPS #9 rejection (2026-09-16):
+# `dhEmi` is typed `TSDateTimeUTC` in tiposSimples_v1.01.xsd, but that name
+# means "carries a UTC offset designator", not "must be expressed in UTC" —
+# the pattern accepts any offset from -11:00 to +12:00, `+00:00` included.
+# We emitted the UTC wall clock with `+00:00`, which is schema-valid and, as
+# an INSTANT, was 1.4s BEFORE Sefin's own processing. Sefin rejected it with
+# E0008 ("a data de emissão da DPS não pode ser posterior à data do seu
+# processamento") anyway — which is only possible if the rule compares civil
+# wall-clock readings, not instants. Confirmed by the two real successfully
+# issued production NFS-e, where Sefin's OWN `dhProc` is written `-03:00` and
+# equals the accepted `dhEmi` to the second.
+#
+# Consequence of the old behaviour: between 21:00 and 23:59 in Brasília the
+# UTC wall clock is already on the NEXT DAY and reads ~3h higher, so every
+# DPS emitted in that window looked ~3h in the future to Sefin. DPS #9 was
+# emitted at 23:34:37-03:00 and serialized as 2026-09-17T02:34:37+00:00.
+EMISSION_TIMEZONE = ZoneInfo("America/Sao_Paulo")
+
+
 def build_dps_element(data: DpsInput) -> etree._Element:
     """Return the unsigned ``<DPS>`` root element (``TCDPS``), ready for XSD
     validation and, separately, for XMLDSig signing over ``infDPS``."""
@@ -122,7 +150,12 @@ def build_dps_element(data: DpsInput) -> etree._Element:
     inf.set("Id", dps_id_value)
 
     _el(inf, "tpAmb", cfg.tp_amb)
-    _el(inf, "dhEmi", data.dh_emi.strftime("%Y-%m-%dT%H:%M:%S") + _utc_offset(data.dh_emi))
+    # M49 — expressed in the issuer's civil time (see EMISSION_TIMEZONE).
+    # `astimezone` keeps the instant identical; only the written form changes.
+    # Callers may pass any aware datetime (UTC is the natural way to capture
+    # "now") and still get a correct, Sefin-comparable dhEmi.
+    dh_emi_local = data.dh_emi.astimezone(EMISSION_TIMEZONE)
+    _el(inf, "dhEmi", dh_emi_local.strftime("%Y-%m-%dT%H:%M:%S") + _utc_offset(dh_emi_local))
     _el(inf, "verAplic", data.ver_aplic)
     _el(inf, "serie", data.serie_dps_display)
     _el(inf, "nDPS", data.numero_dps_display)
