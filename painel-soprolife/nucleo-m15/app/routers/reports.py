@@ -2532,6 +2532,17 @@ def recover_report_after_physician_unavailable(
 @router.get("/meus")
 def list_my_report_queue(
     status: str | None = None,
+    # M26.17 — mesmo par `incluir_superados`/`somente_superados` do
+    # Acompanhamento operacional (M26.13): por padrão, "Meus laudos" agora
+    # EXCLUI o que já foi superado por corretiva ou já foi entregue — caso
+    # real: LAU-000035/036 de Claudia continuavam na lista ativa como
+    # "Concluído — aguardando assinatura qualificada", como se ainda
+    # precisassem de ação, mesmo já substituídos pela LAU-000038. O
+    # histórico continua acessível (`incluir_superados`/`somente_superados`
+    # — usado pela seção recolhida "Históricos" da própria tela), só não
+    # entope a fila de trabalho por padrão.
+    incluir_superados: bool = False,
+    somente_superados: bool = False,
     db: Session = Depends(get_db),
     physician_user: User = Depends(get_current_user),
 ):
@@ -2590,6 +2601,14 @@ def list_my_report_queue(
     )
     if status:
         statement = statement.where(ReportDocument.status == status)
+    if somente_superados:
+        statement = statement.where(
+            has_corrective_successor | is_delivered
+        )
+    elif not incluir_superados:
+        statement = statement.where(
+            ~has_corrective_successor, ~is_delivered
+        )
     rows = db.execute(
         statement.order_by(ReportAssignment.assigned_at.desc()).limit(200)
     ).all()
@@ -6148,14 +6167,9 @@ def compose_native_report_preview(
     has_post_bd = _exam_has_post_bd(exam)
 
     try:
-        conclusion_text = resolve_conclusion_text(
-            conclusion_code=payload.conclusion_code,
-            custom_text=payload.conclusion_custom_text,
-        )
-        bronchodilator_text = resolve_bronchodilator_text(
-            bronchodilator_code=payload.bronchodilator_code,
-            has_post_bd=has_post_bd,
-        )
+        # M26.17 — `final_text` precisa existir ANTES de `resolve_conclusion_
+        # text` para poder servir de origem quando a médica escreveu tudo na
+        # caixa grande e deixou a pequena ("Conclusão personalizada") vazia.
         if payload.final_text is None:
             final_text = compose_default_conclusion_text(
                 conclusion_code=payload.conclusion_code,
@@ -6165,6 +6179,15 @@ def compose_native_report_preview(
             )
         else:
             final_text = normalize_final_text(payload.final_text)
+        conclusion_text = resolve_conclusion_text(
+            conclusion_code=payload.conclusion_code,
+            custom_text=payload.conclusion_custom_text,
+            final_text_fallback=final_text,
+        )
+        bronchodilator_text = resolve_bronchodilator_text(
+            bronchodilator_code=payload.bronchodilator_code,
+            has_post_bd=has_post_bd,
+        )
         observations = normalize_observations(payload.observations)
     except ConclusionCatalogError as exc:
         raise ReportDomainError(422, exc.codigo, exc.mensagem) from None

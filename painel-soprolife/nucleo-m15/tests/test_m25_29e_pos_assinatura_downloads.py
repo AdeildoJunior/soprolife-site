@@ -594,8 +594,10 @@ def test_assets_alterados_tem_cache_busting_atual():
     PDF técnico de corretiva não iniciada) subiu para `2026091602`; a M26.15
     (corrigir qual versão "original" o painel carrega quando existe mais de
     uma) subiu para `2026091603`; a M26.16 (marcar em "Meus laudos" um
-    documento já superado por corretiva) subiu para `2026091604` — o pino
-    abaixo acompanha, não fica preso numa versão anterior.
+    documento já superado por corretiva) subiu para `2026091604`; a M26.17
+    (histórico recolhido de superados em "Meus laudos") subiu para
+    `2026091605` — o pino abaixo acompanha, não fica preso numa versão
+    anterior.
     """
 
     import re
@@ -604,6 +606,6 @@ def test_assets_alterados_tem_cache_busting_atual():
         re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
     )
     assert versoes, "os assets precisam continuar versionados"
-    assert versoes == {"2026091604"}, (
+    assert versoes == {"2026091605"}, (
         "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
     )

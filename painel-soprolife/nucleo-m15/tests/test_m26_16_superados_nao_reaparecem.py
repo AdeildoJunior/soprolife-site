@@ -63,7 +63,17 @@ def case(client, auth, db, person):
 
 
 def _minha_fila(client, doctor_auth):
-    resposta = client.get("/api/v1/laudos/meus", headers=doctor_auth)
+    # M26.17 — por padrão "Meus laudos" agora EXCLUI o que já foi superado
+    # (mesma regra de `list_report_documents_operational`). Este arquivo
+    # testa o VALOR da marcação `has_corrective_successor`/`is_delivered`
+    # em cada documento, não o filtro em si (isso tem teste próprio em
+    # `test_m26_17_liberdade_texto_laudo.py`) — por isso pede o conjunto
+    # completo aqui.
+    resposta = client.get(
+        "/api/v1/laudos/meus",
+        params={"incluir_superados": "true"},
+        headers=doctor_auth,
+    )
     assert resposta.status_code == 200, resposta.text
     return resposta.json()
 

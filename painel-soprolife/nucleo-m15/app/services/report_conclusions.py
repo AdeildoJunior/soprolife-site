@@ -266,9 +266,24 @@ def _normalize_text(value: str) -> str:
 
 
 def resolve_conclusion_text(
-    *, conclusion_code: str, custom_text: str | None
+    *,
+    conclusion_code: str,
+    custom_text: str | None,
+    final_text_fallback: str | None = None,
 ) -> str:
-    """Texto por extenso da conclusão principal escolhida."""
+    """Texto por extenso da conclusão principal escolhida.
+
+    M26.17 — a tela tem DUAS caixas de texto livre quando a conclusão é
+    "Personalizado": a pequena ("Conclusão personalizada", `custom_text`) e
+    a grande, sempre visível, que é o texto que de fato vai ser assinado
+    ("Texto final do laudo", `final_text`). Uma médica real escreveu tudo
+    na caixa grande e deixou a pequena vazia — e levou um bloqueio dizendo
+    que "a conclusão personalizada exige texto", mesmo com o laudo cheio de
+    texto dela. A médica é livre para escrever onde quiser: se a caixa
+    pequena estiver vazia mas a grande tiver texto, usa a grande (truncada
+    ao limite deste campo, que é só metadado de auditoria) em vez de
+    bloquear.
+    """
 
     option = CONCLUSIONS_BY_CODE.get(conclusion_code)
     if option is None:
@@ -285,6 +300,9 @@ def resolve_conclusion_text(
         return option.full_text
     normalized = _normalize_text(custom_text or "")
     if len(normalized) < 3:
+        fallback = _normalize_text(final_text_fallback or "")
+        if len(fallback) >= 3:
+            return fallback[:MAX_CUSTOM_CONCLUSION_CHARS]
         raise ConclusionCatalogError(
             "texto_personalizado_ausente",
             "A conclusão personalizada exige texto escrito pela médica.",

@@ -229,6 +229,9 @@
     // M26.13 — laudos já superados por corretiva ou já entregues; saíram
     // da fila ativa (`operational`) e moram só na seção recolhida.
     operationalHistory: [],
+    // M26.17 — mesma ideia, mas para "Meus laudos" da própria médica: saem
+    // da fila ativa (`queue`) por padrão e moram na seção recolhida dela.
+    queueHistory: [],
     physicians: [],
     signatureAsset: null,
     templates: [],
@@ -1128,6 +1131,7 @@
           ${items}
         </div>
         ${renderBatchBar(lista)}
+        ${renderMyQueueHistory()}
       </section>`;
   }
 
@@ -2360,6 +2364,42 @@
       </details>`;
   }
 
+  // M26.17 — mesma ideia de `renderSupersededHistory` acima, agora para a
+  // fila da PRÓPRIA médica ("Meus laudos"). Caso real: LAU-000035 e
+  // LAU-000036 de Claudia continuavam na lista ativa como "Concluído —
+  // aguardando assinatura qualificada", como se ainda precisassem de ação,
+  // mesmo já substituídos pela LAU-000038. O backend agora exclui os
+  // superados/entregues da fila ativa por padrão; aqui só exibe o que ele
+  // já decidiu.
+  function renderMyQueueHistory() {
+    const lista = Array.isArray(state.queueHistory) ? state.queueHistory : [];
+    const linhas = lista.length
+      ? lista.map((item) => `
+          <li class="report-closed-row">
+            <div class="report-closed-body">
+              <strong class="report-item-name">${esc(patientName(item))}</strong>
+              <span>${contextLine(item)}</span>
+              ${codeTrail(item)}
+              <span class="report-closed-reason">${
+                item.has_corrective_successor && item.is_delivered
+                  ? "Corrigido e entregue"
+                  : item.has_corrective_successor
+                    ? "Superado por corretiva"
+                    : "Entregue ao paciente"
+              }</span>
+            </div>
+          </li>`).join("")
+      : `<div class="report-empty">Nenhum laudo superado ou entregue neste recorte.</div>`;
+    return `
+      <details class="report-closed-catalog">
+        <summary>Históricos (${lista.length})</summary>
+        <p class="report-help">Laudos seus já corrigidos (a versão vigente é
+          a corretiva, que aparece acima na fila ativa) ou já entregues ao
+          paciente. Nada foi apagado — só saíram da lista de trabalho.</p>
+        <ul class="report-closed-list">${linhas}</ul>
+      </details>`;
+  }
+
   function renderOperationalList() {
     const selected = selectedOperational();
     const rows = state.operational.length
@@ -3203,6 +3243,13 @@
           ? `?status=${encodeURIComponent(state.statusFilter)}` : "";
         calls.push(client().api(`/laudos/meus${suffix}`));
         labels.push("queue");
+        // M26.17 — o histórico recolhido (superados/entregues) que saiu da
+        // fila ativa acima. Mesmo padrão de `operationalHistory` (M26.13):
+        // chamada própria, com o mesmo recorte do servidor
+        // (`somente_superados`) — o navegador não recalcula quem é
+        // "superado", só exibe o que o backend já decidiu.
+        calls.push(client().api("/laudos/meus?somente_superados=true"));
+        labels.push("queueHistory");
         calls.push(client().api("/laudos/templates?catalog=clinical"));
         labels.push("templates");
         // M25.20 — o que está aguardando assinatura qualificada. Lista
