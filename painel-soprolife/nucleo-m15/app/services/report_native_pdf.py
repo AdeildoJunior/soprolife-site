@@ -1498,11 +1498,17 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
     # O LOCAL de realização não entra aqui: ele encabeça o documento, na
     # célula central do cabeçalho, como num laudo impresso em papel timbrado
     # da unidade. Repeti-lo no corpo era a mesma informação duas vezes.
+    #
+    # M26.18 — "Indicação" saiu do laudo por decisão explícita: o PDF
+    # técnico do aparelho (KoKo ou MIR) já traz a indicação do exame e é
+    # SEMPRE entregue junto com o laudo, como documento separado. Repetir
+    # aqui só reproduziria o "não informada" de sempre — `indicacao_
+    # clinica` nunca foi escrito por nenhum fluxo do sistema (nem cadastro,
+    # nem upload), então o campo nunca teve como ser preenchido.
     exam_fields: list[tuple[str, str]] = [
         ("Exame", exam.public_code),
         ("Data", exam_date),
         ("Pós-BD", _post_bd_label(exam.has_post_bd)),
-        ("Indicação", exam.clinical_indication or "não informada"),
     ]
     composer.draw_identification_table(patient_fields, exam_fields)
 
