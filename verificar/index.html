@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SoproLife — Verificar laudo</title>
+
+<!-- M26.19 — mesma regra do portal de resultados (M26.4): esta página não
+     se indexa, não se arquiva e não se resume em buscador. -->
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content="Confirme a autenticidade de um laudo SoproLife pelo código de verificação impresso no documento.">
+
+<!-- Sem Google Analytics, sem pixel, sem CDN, sem fonte externa — mesma
+     postura do portal de resultados. `connect-src` lista exatamente a
+     origem que esta página contata. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  connect-src https://resultados-api.soprolife.com.br;
+  img-src 'self' data:;
+  style-src 'unsafe-inline';
+  script-src 'unsafe-inline';
+  base-uri 'none';
+  form-action 'none';
+  frame-ancestors 'none'">
+
+<link rel="icon" href="/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+<style>
+  :root {
+    --navy: #0b2a3d;
+    --navy-claro: #12405c;
+    --teal: #0f8a8a;
+    --teal-escuro: #0b6d6d;
+    --tinta: #16232b;
+    --suave: #5b6b76;
+    --linha: #dde5ea;
+    --fundo: #f4f7f9;
+    --branco: #ffffff;
+    --erro: #a4302a;
+    --erro-fundo: #fdf1f0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--fundo);
+    color: var(--tinta);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--navy);
+    color: #eaf3f7;
+    padding: 22px 20px;
+    text-align: center;
+  }
+  header .marca { font-size: 20px; font-weight: 700; letter-spacing: .02em; }
+  header .marca span { color: #7fd3d3; }
+  header p { margin: 4px 0 0; font-size: 14px; color: #b9d2de; }
+
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 22px 18px 40px;
+  }
+  .cartao {
+    background: var(--branco);
+    border: 1px solid var(--linha);
+    border-radius: 14px;
+    padding: 22px 20px;
+    box-shadow: 0 1px 2px rgba(11, 42, 61, .05), 0 8px 24px rgba(11, 42, 61, .05);
+  }
+  h1 { font-size: 21px; margin: 0 0 6px; color: var(--navy); }
+  .apoio { margin: 0 0 20px; color: var(--suave); font-size: 15px; }
+
+  label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 7px; }
+  input[type="text"] {
+    width: 100%;
+    font-size: 18px;
+    padding: 14px 14px;
+    border: 1px solid #c3d0d8;
+    border-radius: 10px;
+    background: #fbfdfe;
+    color: var(--tinta);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  input[type="text"]:focus {
+    outline: 3px solid rgba(15, 138, 138, .28);
+    border-color: var(--teal);
+  }
+  .dica { margin: 8px 0 0; font-size: 13px; color: var(--suave); }
+
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 0;
+    border-radius: 10px;
+  }
+  .principal {
+    width: 100%;
+    margin-top: 18px;
+    background: var(--teal);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 700;
+    padding: 16px;
+    min-height: 54px;
+  }
+  .principal:hover { background: var(--teal-escuro); }
+  .principal[disabled] { background: #9db6bb; cursor: progress; }
+
+  .aviso {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--erro-fundo);
+    border: 1px solid #f0cfcc;
+    color: var(--erro);
+    font-size: 15px;
+  }
+
+  .selo {
+    display: inline-block; margin-bottom: 14px; font-size: 13px; font-weight: 700;
+    color: #0b6d6d; background: #e5f4f4; border: 1px solid #b9e0e0;
+    padding: 5px 11px; border-radius: 999px;
+  }
+  .laudo-codigo {
+    font-size: 20px; font-weight: 700; color: var(--navy); letter-spacing: .03em;
+  }
+  .linha-dado { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; padding: 7px 0; border-top: 1px solid var(--linha); }
+  .linha-dado dt { color: var(--suave); margin: 0; }
+  .linha-dado dd { margin: 0; font-weight: 600; text-align: right; }
+  .hash { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
+
+  .orientacao {
+    margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--linha);
+    font-size: 14px; color: var(--suave);
+  }
+  .trocar {
+    display: inline-block; margin-top: 18px; font-size: 14px; color: var(--teal-escuro);
+    text-decoration: underline; background: none; padding: 0;
+  }
+  footer {
+    text-align: center; padding: 20px 18px 28px;
+    font-size: 13px; color: var(--suave);
+  }
+  .oculto { display: none !important; }
+  @media (max-width: 380px) {
+    main { padding: 16px 12px 32px; }
+    .cartao { padding: 18px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="marca">Sopro<span>Life</span></div>
+  <p>Verificar autenticidade de laudo</p>
+</header>
+
+<main>
+  <section id="etapaEntrada" class="cartao">
+    <h1>Confirme um laudo</h1>
+    <p class="apoio">Digite o código de verificação impresso no laudo (ao lado do QR code, no cabeçalho do documento).</p>
+
+    <form id="formEntrada" novalidate>
+      <label for="codigo">Código de verificação</label>
+      <input id="codigo" name="codigo" type="text"
+             inputmode="text" autocomplete="off" autocapitalize="characters"
+             spellcheck="false" placeholder="EX.: X3XFQWFHV4NZ" maxlength="24">
+      <p class="dica">O código tem entre 8 e 24 letras e números, sem espaço.</p>
+      <button class="principal" type="submit" id="botaoVerificar">
+        Verificar laudo
+      </button>
+    </form>
+
+    <div id="avisoEntrada" class="aviso oculto" role="alert"></div>
+  </section>
+
+  <section id="etapaResultado" class="cartao oculto" aria-live="polite">
+    <span class="selo" id="seloStatus">Documento liberado e autêntico</span>
+    <div class="laudo-codigo" id="laudoCodigo"></div>
+    <dl>
+      <div class="linha-dado"><dt>Código de verificação</dt><dd id="codigoConfirmado">—</dd></div>
+      <div class="linha-dado"><dt>Liberado em</dt><dd id="liberadoEm">—</dd></div>
+      <div class="linha-dado"><dt>Médica responsável</dt><dd id="medicaNome">—</dd></div>
+      <div class="linha-dado"><dt>CRM</dt><dd id="medicaCrm">—</dd></div>
+      <div class="linha-dado"><dt>RQE</dt><dd id="medicaRqe">—</dd></div>
+      <div class="linha-dado"><dt>Instituição</dt><dd id="instituicao">—</dd></div>
+    </dl>
+    <p class="linha-dado" style="flex-direction:column; align-items:flex-start; gap:4px;">
+      <dt>Hash de integridade (SHA-256)</dt>
+      <dd class="hash" id="documentoHash">—</dd>
+    </p>
+
+    <p class="orientacao">
+      Este código confirma que o documento é um laudo real e liberado pela
+      SoproLife. Ele não revela nome de paciente nem conteúdo clínico — a
+      confirmação da identidade da pessoa examinada é do próprio documento
+      em papel ou PDF que você está conferindo.
+    </p>
+    <button type="button" class="principal trocar" id="botaoNovaConsulta">Verificar outro código</button>
+  </section>
+
+  <section id="etapaMensagem" class="cartao oculto" role="alert">
+    <h1 id="mensagemTitulo">Não localizado</h1>
+    <p class="apoio" id="mensagemTexto"></p>
+    <button type="button" class="principal trocar" id="botaoTentarNovamente">Tentar outro código</button>
+  </section>
+</main>
+
+<footer>
+  SoproLife Diagnósticos e Soluções em Saúde
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // A API pública mínima. É a ÚNICA origem que esta página contata, e a CSP
+  // no <head> repete a mesma lista.
+  var API = "https://resultados-api.soprolife.com.br/p/v1";
+
+  var elEntrada = document.getElementById("etapaEntrada");
+  var elResultado = document.getElementById("etapaResultado");
+  var elMensagem = document.getElementById("etapaMensagem");
+  var elAviso = document.getElementById("avisoEntrada");
+  var campo = document.getElementById("codigo");
+  var botao = document.getElementById("botaoVerificar");
+
+  function mostrar(secao) {
+    [elEntrada, elResultado, elMensagem].forEach(function (el) {
+      el.classList.toggle("oculto", el !== secao);
+    });
+  }
+
+  function mensagemFinal(titulo, texto) {
+    document.getElementById("mensagemTitulo").textContent = titulo;
+    document.getElementById("mensagemTexto").textContent = texto;
+    mostrar(elMensagem);
+  }
+
+  function avisar(texto) {
+    elAviso.textContent = texto;
+    elAviso.classList.remove("oculto");
+  }
+
+  var MSG_REDE =
+    "Não foi possível conectar agora. Verifique sua internet e tente novamente.";
+  var MSG_SERVIDOR =
+    "Não foi possível verificar o laudo agora. Tente novamente em alguns instantes.";
+
+  function erroDaResposta(corpo, status) {
+    if (status >= 500) return MSG_SERVIDOR;
+    if (corpo && corpo.erro && corpo.erro.mensagem) return corpo.erro.mensagem;
+    if (status === 429) {
+      return "Muitas tentativas seguidas. Aguarde alguns minutos e tente novamente.";
+    }
+    return "Não foi possível verificar este código agora. Tente novamente em alguns minutos.";
+  }
+
+  function dataHoraBr(iso) {
+    if (!iso) return "—";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
+    var dd = String(d.getDate()).padStart(2, "0");
+    var mm = String(d.getMonth() + 1).padStart(2, "0");
+    var aa = d.getFullYear();
+    var hh = String(d.getHours()).padStart(2, "0");
+    var mi = String(d.getMinutes()).padStart(2, "0");
+    return dd + "/" + mm + "/" + aa + " às " + hh + ":" + mi;
+  }
+
+  function renderizar(dados) {
+    document.getElementById("laudoCodigo").textContent = dados.laudo || "";
+    document.getElementById("codigoConfirmado").textContent = dados.codigo_verificacao || "—";
+    document.getElementById("liberadoEm").textContent = dataHoraBr(dados.liberado_em);
+    document.getElementById("medicaNome").textContent = dados.medica_nome || "—";
+    document.getElementById("medicaCrm").textContent = dados.medica_crm || "—";
+    document.getElementById("medicaRqe").textContent = dados.medica_rqe || "—";
+    document.getElementById("instituicao").textContent = dados.instituicao || "—";
+    document.getElementById("documentoHash").textContent = dados.documento_sha256 || "—";
+    mostrar(elResultado);
+  }
+
+  // Só letras e números, maiúsculo, sem espaço — igual ao servidor.
+  var CODIGO_RE = /^[A-Z0-9]{8,24}$/;
+
+  function normalizarCodigo(valor) {
+    return String(valor || "").trim().toUpperCase().replace(/\s+/g, "");
+  }
+
+  function consultar(codigo) {
+    botao.disabled = true;
+    botao.textContent = "Verificando…";
+    elAviso.classList.add("oculto");
+
+    fetch(API + "/verificar/" + encodeURIComponent(codigo), { credentials: "omit" })
+      .then(function (resposta) {
+        return resposta.json().catch(function () { return null; })
+          .then(function (corpo) { return { ok: resposta.ok, status: resposta.status, corpo: corpo }; });
+      }).then(function (r) {
+        botao.disabled = false;
+        botao.textContent = "Verificar laudo";
+        if (r.ok) { renderizar(r.corpo); return; }
+        if (r.status === 404) {
+          mensagemFinal("Não localizado", erroDaResposta(r.corpo, r.status));
+          return;
+        }
+        avisar(erroDaResposta(r.corpo, r.status));
+      }).catch(function () {
+        botao.disabled = false;
+        botao.textContent = "Verificar laudo";
+        avisar(MSG_REDE);
+      });
+  }
+
+  document.getElementById("formEntrada").addEventListener("submit", function (evento) {
+    evento.preventDefault();
+    var codigo = normalizarCodigo(campo.value);
+    if (!CODIGO_RE.test(codigo)) {
+      avisar("Informe o código de verificação exatamente como está impresso no laudo.");
+      return;
+    }
+    consultar(codigo);
+  });
+
+  function voltarAoFormulario() {
+    campo.value = "";
+    mostrar(elEntrada);
+    campo.focus();
+  }
+  document.getElementById("botaoNovaConsulta").addEventListener("click", voltarAoFormulario);
+  document.getElementById("botaoTentarNovamente").addEventListener("click", voltarAoFormulario);
+
+  // O QR do laudo aponta para esta página com o código no FRAGMENTO
+  // (#/CODIGO) — nunca num caminho de servidor, então a mesma página
+  // estática de sempre responde, sem depender de rota dinâmica no GitHub
+  // Pages. Um código já vindo no link consulta sozinho, sem exigir digitar.
+  (function consultarSeVeioPeloLink() {
+    var bruto = String(window.location.hash || "").replace(/^#\/?/, "");
+    var codigo = normalizarCodigo(bruto);
+    if (!codigo) return;
+    campo.value = codigo;
+    if (CODIGO_RE.test(codigo)) consultar(codigo);
+  })();
+})();
+</script>
+</body>
+</html>

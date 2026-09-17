@@ -61,6 +61,7 @@ from ..models import (
     PatientResultSession,
     Person,
     PersonContact,
+    PhysicianProfile,
     ReportDocument,
     ReportDocumentVersion,
     SpirometryExam,
@@ -620,6 +621,84 @@ def technical_version(
         .order_by(ReportDocumentVersion.version_number.desc())
     ).first()
     return VersaoPortal(*linha) if linha else None
+
+
+# ------------------------------------------- M26.19 — verificação pública
+#
+# A sexta coisa que a superfície pública sabe fazer: confirmar que um código
+# impresso no rodapé de um laudo corresponde a um documento real e liberado.
+# Sem sessão, sem 2º fator — qualquer pessoa com o código (a própria
+# paciente, um convênio, um empregador) pode conferir. Por isso o retorno é
+# ainda mais estreito que o do acesso pessoal: nada de paciente, nada de
+# exame, nada clínico — só o que já está impresso no papel.
+
+
+@dataclass(frozen=True)
+class LaudoVerificacaoPortal:
+    id: str
+    public_code: str
+    validation_code: str
+    status: str
+    released_at: datetime | None
+    released_physician_profile_id: str | None
+    current_version_id: str | None
+
+
+@dataclass(frozen=True)
+class MedicaVerificacaoPortal:
+    id: str
+    professional_name: str
+    crm_number: str | None
+    crm_state: str | None
+    crm_display: str | None
+    rqe: str | None
+
+
+def find_report_by_validation_code(
+    db: Session, codigo: str
+) -> LaudoVerificacaoPortal | None:
+    linha = db.execute(
+        select(
+            ReportDocument.id,
+            ReportDocument.public_code,
+            ReportDocument.validation_code,
+            ReportDocument.status,
+            ReportDocument.released_at,
+            ReportDocument.released_physician_profile_id,
+            ReportDocument.current_version_id,
+        ).where(ReportDocument.validation_code == codigo)
+    ).first()
+    return LaudoVerificacaoPortal(*linha) if linha else None
+
+
+def load_physician_public(
+    db: Session, profile_id: str
+) -> MedicaVerificacaoPortal | None:
+    """Só o registro profissional PÚBLICO — o mesmo que já sai no rodapé do
+    laudo (nome, CRM, RQE). Nada do que vive na conta de autenticação."""
+
+    linha = db.execute(
+        select(
+            PhysicianProfile.id,
+            PhysicianProfile.professional_name,
+            PhysicianProfile.crm_number,
+            PhysicianProfile.crm_state,
+            PhysicianProfile.crm_display,
+            PhysicianProfile.rqe,
+        ).where(PhysicianProfile.id == profile_id)
+    ).first()
+    return MedicaVerificacaoPortal(*linha) if linha else None
+
+
+def version_sha256(db: Session, version_id: str) -> str | None:
+    """Só o hash — é o único pedaço de `VersaoPortal` que a verificação usa."""
+
+    linha = db.execute(
+        select(ReportDocumentVersion.sha256).where(
+            ReportDocumentVersion.id == version_id
+        )
+    ).first()
+    return linha[0] if linha else None
 
 
 # ------------------------------------------------------------- WhatsApp

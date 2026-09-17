@@ -1,15 +1,20 @@
-"""As CINCO coisas que a superfície pública sabe fazer.
+"""As SEIS coisas que a superfície pública sabe fazer.
 
 1. validar o acesso (token do link + data de nascimento);
 2. conferir o segundo fator;
 3. listar os documentos daquele acesso;
 4. servir o PDF assinado correspondente;
-5. servir o PDF técnico correspondente.
+5. servir o PDF técnico correspondente;
+6. confirmar que um código impresso no laudo corresponde a um documento
+   real e liberado (M26.19) — sem sessão nenhuma, e sem devolver paciente,
+   exame nem conteúdo clínico.
 
-Não há uma sexta. Não existe rota de busca, de listagem, de paciente, de
-exame, de laudo, de usuário nem de qualquer outra coisa — e o teste
-`test_rota_publica_nao_expoe_outros_endpoints` congela isso comparando o
-conjunto de rotas registradas com esta lista.
+Não existe rota de busca, de listagem, de paciente, de usuário nem de
+qualquer outra coisa — e o teste
+`test_18_e_23_superficie_publica_tem_exatamente_estas_rotas` congela isso
+comparando o conjunto de rotas registradas com esta lista. Crescer a lista
+acima (a sétima coisa) exige atualizar esse teste na MESMA mudança — é a
+fricção deliberada que existe para isso.
 
 `/health` acompanha, e é institucional: devolve `{"status": "ok"}` e mais
 nada. Sem ele não existe smoke de produção nem monitoração.
@@ -26,6 +31,7 @@ Regras de conversa com quem está do outro lado:
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -36,7 +42,9 @@ from ..audit import audit
 from ..config import get_settings
 from ..db import get_db
 from ..errors import ReportDomainError
+from ..models import STATUS_LAUDO_LIBERADO
 from ..services import patient_results as prs
+from ..services.crm_display import format_crm_full
 from ..services.download_names import (
     SUFIXO_ASSINADO,
     SUFIXO_MIR,
@@ -79,6 +87,18 @@ MSG_EXPIRADO = (
     "Este acesso expirou. Entre em contato com a SoproLife para gerar um "
     "novo link."
 )
+# M26.19 — mesma mensagem para código inexistente e para código de laudo
+# ainda não liberado (prévia, corretiva em elaboração etc.): a mesma regra
+# de "resposta genérica sempre" das outras rotas.
+MSG_LAUDO_NAO_LOCALIZADO = (
+    "Nenhum laudo liberado corresponde a este código. Confira o código "
+    "impresso no documento."
+)
+
+# Mesmo formato aceito pela verificação administrativa equivalente
+# (`GET /laudos/validacao/{codigo}` no Command Center) — os dois lêem o
+# mesmo `validation_code`.
+_CODIGO_VALIDACAO_RE = re.compile(r"^[A-Z0-9]{8,24}$")
 
 
 def _invalido() -> ReportDomainError:
@@ -91,6 +111,10 @@ def _tentativas() -> ReportDomainError:
 
 def _expirado() -> ReportDomainError:
     return ReportDomainError(410, "acesso_expirado", MSG_EXPIRADO)
+
+
+def _laudo_nao_localizado() -> ReportDomainError:
+    return ReportDomainError(404, "laudo_nao_localizado", MSG_LAUDO_NAO_LOCALIZADO)
 
 
 class PedidoDeAcesso(BaseModel):
@@ -346,6 +370,77 @@ def baixar_tecnico(request: Request, db: Session = Depends(get_db)) -> Response:
         sufixo=SUFIXO_MIR,
         tipo="exame_tecnico",
     )
+
+
+@router.get("/verificar/{codigo}")
+def verificar_laudo(
+    codigo: str, request: Request, db: Session = Depends(get_db)
+) -> dict:
+    """Confirma que um código impresso no laudo é real e liberado.
+
+    Sem sessão, sem cookie, sem 2º fator — é o próprio código (alta entropia,
+    impresso no papel) que autoriza a consulta, do mesmo jeito que conferir
+    a autenticidade de um diploma ou de uma certidão. A resposta é SÓ
+    institucional: nada de nome de paciente, nada de código de exame, nada
+    clínico. O mesmo código inexistente e o mesmo código de um laudo ainda
+    não liberado (prévia, corretiva em elaboração) produzem a mensagem
+    idêntica — não é um oráculo de "este laudo existe mas não terminou".
+    """
+
+    _exigir_portal_ligado()
+    origem = origem_da_requisicao(request)
+    if limitador.bloqueado(origem):
+        raise _tentativas()
+
+    normalizado = (codigo or "").strip().upper()
+    if not _CODIGO_VALIDACAO_RE.fullmatch(normalizado):
+        limitador.registrar_falha(origem)
+        raise _laudo_nao_localizado()
+
+    laudo = prs.find_report_by_validation_code(db, normalizado)
+    if laudo is None or laudo.status != STATUS_LAUDO_LIBERADO:
+        limitador.registrar_falha(origem)
+        raise _laudo_nao_localizado()
+
+    medica = (
+        prs.load_physician_public(db, laudo.released_physician_profile_id)
+        if laudo.released_physician_profile_id
+        else None
+    )
+    sha256 = (
+        prs.version_sha256(db, laudo.current_version_id)
+        if laudo.current_version_id
+        else None
+    )
+    audit(
+        db,
+        "laudo_verificado_publicamente",
+        entidade="report_documents",
+        entidade_id=laudo.id,
+        detalhes={
+            "validation_code": laudo.validation_code,
+            "report_code": laudo.public_code,
+        },
+    )
+    db.commit()
+    return {
+        "laudo": laudo.public_code,
+        "codigo_verificacao": laudo.validation_code,
+        "liberado_em": laudo.released_at.isoformat() if laudo.released_at else None,
+        "medica_nome": medica.professional_name if medica else None,
+        "medica_crm": (
+            format_crm_full(
+                medica.crm_number,
+                medica.crm_state,
+                crm_display=medica.crm_display,
+            )
+            if medica
+            else None
+        ),
+        "medica_rqe": medica.rqe if medica else None,
+        "documento_sha256": sha256,
+        "instituicao": "SoproLife Diagnósticos e Soluções em Saúde",
+    }
 
 
 def _exigir_portal_ligado() -> None:

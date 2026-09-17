@@ -12,11 +12,16 @@
 --   * ler as versões de PDF (para localizar e conferir o arquivo);
 --   * ler e atualizar as tabelas do próprio portal;
 --   * INSERIR na trilha de auditoria — e ler de volta APENAS o `id` da
---     linha que acabou de inserir, porque `RETURNING` exige isso.
+--     linha que acabou de inserir, porque `RETURNING` exige isso;
+--   * M26.19 — ler de `report_documents` só o necessário para CONFIRMAR
+--     que um código impresso é real e liberado (nada de paciente, exame,
+--     financeiro ou de outras corretivas), e de `physician_profiles` só o
+--     registro profissional PÚBLICO da médica (nome, CRM, RQE), o mesmo
+--     que já sai impresso no rodapé do laudo.
 --
 -- O que ele NÃO PODE, nem por engano de código:
 --   * ler ou escrever em financial_entries, partners, users, leads,
---     followups, crm, report_documents, external_signature_batches…;
+--     followups, crm, external_signature_batches…;
 --   * ler o CONTEÚDO de audit_logs — `acao`, `entidade`, `detalhes`,
 --     `user_id`, `ts_utc` são ilegíveis; só o `id` é visível;
 --   * apagar nada, em lugar nenhum;
@@ -98,6 +103,19 @@ GRANT INSERT (ts_utc, request_id, user_id, acao, entidade, entidade_id,
   ON audit_logs TO soprolife_portal;
 GRANT SELECT (id) ON audit_logs TO soprolife_portal;
 GRANT USAGE ON SEQUENCE audit_logs_id_seq TO soprolife_portal;
+
+-- M26.19 — a sexta superfície pública: confirmar que um código impresso no
+-- laudo é real e liberado, sem sessão de paciente nenhuma. Só o necessário
+-- para essa única pergunta — nada de paciente, exame, financeiro nem de
+-- outras versões/corretivas do mesmo documento.
+GRANT SELECT (id, public_code, validation_code, status, released_at,
+              released_physician_profile_id, current_version_id)
+  ON report_documents TO soprolife_portal;
+
+-- O registro profissional PÚBLICO da médica (nome, CRM, RQE) — o mesmo que
+-- já sai impresso no rodapé do laudo. Nada de certificado, nada de conta.
+GRANT SELECT (id, professional_name, crm_number, crm_state, crm_display, rqe)
+  ON physician_profiles TO soprolife_portal;
 
 -- Um objeto criado no futuro não ganha permissão retroativa.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public

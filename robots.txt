@@ -5,5 +5,8 @@ Allow: /
 # X-Robots-Tag da API pública e a meta robots da própria página, que valem
 # mesmo para um rastreador que ignore este arquivo.
 Disallow: /resultados/
+# M26.19 — mesma regra para a verificação pública de laudo: nada aqui é
+# conteúdo de busca.
+Disallow: /verificar/
 
 Sitemap: https://soprolife.com.br/sitemap.xml

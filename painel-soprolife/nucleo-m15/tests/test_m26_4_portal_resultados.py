@@ -714,7 +714,13 @@ def test_17_portal_nao_aceita_cookie_administrativo_como_atalho(
 
 
 def test_18_e_23_superficie_publica_tem_exatamente_estas_rotas(portal):
-    """O congelamento da superfície. Uma rota nova aqui QUEBRA o teste."""
+    """O congelamento da superfície. Uma rota nova aqui QUEBRA o teste.
+
+    M26.19 — a sétima rota (`/p/v1/verificar/{codigo}`) entrou aqui de
+    propósito, na MESMA mudança que a criou: é a fricção deliberada que
+    este teste existe para forçar. Ela não usa sessão nem cookie — é o
+    próprio código, de alta entropia, impresso no laudo, que autoriza.
+    """
 
     from app.portal.main import create_portal_app
 
@@ -730,6 +736,7 @@ def test_18_e_23_superficie_publica_tem_exatamente_estas_rotas(portal):
         ("/p/v1/sair", ("POST",)),
         ("/p/v1/documentos/laudo-assinado", ("GET",)),
         ("/p/v1/documentos/exame-tecnico", ("GET",)),
+        ("/p/v1/verificar/{codigo}", ("GET",)),
     }
     # Nem /api/v1, nem /docs, nem /openapi.json.
     caminhos = {p for p, _ in rotas}
