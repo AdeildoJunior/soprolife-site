@@ -277,20 +277,38 @@ def physician_production_summary(
         }
 
     root_ids = [root.id for root in roots]
-    correctives = {
-        row.corrects_document_id: row
-        for row in db.execute(
-            select(ReportDocument).where(
-                ReportDocument.corrects_document_id.in_(root_ids)
-            )
-        ).scalars()
-    }
-    # O VIGENTE de cada exame é a corretiva, se existir; senão o próprio
-    # original. É o vigente que decide "assinada"/"entregue"/conclusão —
-    # nunca o original quando ele já foi superado.
-    vigente_by_root = {
-        root.id: correctives.get(root.id, root) for root in roots
-    }
+    # M26.16 — a cadeia de correção pode ter mais de um salto (caso real:
+    # LAU-000035 → LAU-000036 → LAU-000038, conteúdo clínico corrigido e
+    # DEPOIS o PDF técnico corrigido). A versão anterior resolvia só UM
+    # salto a partir da raiz (`corrects_document_id.in_(root_ids)`) — numa
+    # cadeia de 2+ saltos, "vigente" ficava presa no meio, num documento já
+    # SUPERADO, e a assinatura/conclusão eram lidas do laudo errado. Aqui a
+    # cadeia é percorrida inteira até o documento TERMINAL (o que ninguém
+    # mais corrigiu).
+    successor_by_predecessor: dict[str, ReportDocument] = {}
+    frontier = set(root_ids)
+    while frontier:
+        proximo = list(
+            db.execute(
+                select(ReportDocument).where(
+                    ReportDocument.corrects_document_id.in_(frontier)
+                )
+            ).scalars()
+        )
+        if not proximo:
+            break
+        for doc in proximo:
+            successor_by_predecessor[doc.corrects_document_id] = doc
+        frontier = {doc.id for doc in proximo}
+    # O VIGENTE de cada exame é o fim da cadeia de correções, se existir;
+    # senão o próprio original. É o vigente que decide "assinada"/
+    # "entregue"/conclusão — nunca um documento já superado no meio.
+    vigente_by_root: dict[str, ReportDocument] = {}
+    for root in roots:
+        atual = root
+        while atual.id in successor_by_predecessor:
+            atual = successor_by_predecessor[atual.id]
+        vigente_by_root[root.id] = atual
     vigente_ids = [doc.id for doc in vigente_by_root.values()]
 
     signed_status_by_document: dict[str, set[str]] = {}

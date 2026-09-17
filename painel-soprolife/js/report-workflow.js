@@ -1057,6 +1057,22 @@
                   }</span>`
                 : `<span class="report-queue-flag">corrigido</span>`
               : ""}
+            ${/* M26.16 — o chip de status acima ("Concluído — aguardando
+                  assinatura qualificada") vem de `document.status`, que
+                  NUNCA muda quando o documento é superado por uma corretiva
+                  mais nova (fica `liberado` por desenho). Sem esta etiqueta,
+                  um laudo já corrigido — caso real: LAU-000035 e LAU-000036
+                  de Claudia, superados por LAU-000038 — parecia ainda
+                  precisar de assinatura, quando na verdade a médica não tem
+                  mais nada a fazer nele. */""}
+            ${item.has_corrective_successor || item.is_delivered
+              ? `<span class="report-queue-flag is-locked">${
+                  item.has_corrective_successor && item.is_delivered
+                    ? "Corrigido e entregue"
+                    : item.has_corrective_successor
+                      ? "Superado por corretiva"
+                      : "Entregue ao paciente"
+                }</span>` : ""}
             ${item.locked && item.status !== "liberado"
               ? `<span class="report-queue-flag is-locked">concluído</span>` : ""}
           </button>`).join("")

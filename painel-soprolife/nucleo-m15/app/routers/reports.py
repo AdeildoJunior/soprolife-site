@@ -2543,8 +2543,29 @@ def list_my_report_queue(
         raise ReportDomainError(
             422, "status_laudo_invalido", "Status de laudo inválido."
         )
+    # M26.16 — um documento corrigido (M26.12/M26.14) nunca muda o próprio
+    # `status` (fica `liberado` por desenho) e a atribuição antiga nunca é
+    # desativada (ver `_open_corrective_document`): sem este par, "Meus
+    # laudos" mostrava o documento SUPERADO como "Concluído — aguardando
+    # assinatura qualificada", como se ainda precisasse de ação. Mesmo par
+    # de subqueries de `list_report_documents_operational`.
+    corrective = aliased(ReportDocument)
+    has_corrective_successor = exists().where(
+        corrective.corrects_document_id == ReportDocument.id
+    )
+    is_delivered = exists().where(
+        ExternalSignedDocument.report_document_id == ReportDocument.id,
+        ExternalSignedDocument.status == ASSINADO_ENTREGUE,
+    )
     statement = (
-        select(ReportDocument, SpirometryExam, ReportAssignment, Person)
+        select(
+            ReportDocument,
+            SpirometryExam,
+            ReportAssignment,
+            Person,
+            has_corrective_successor,
+            is_delivered,
+        )
         .join(
             ReportAssignment,
             (ReportAssignment.report_document_id == ReportDocument.id)
@@ -2579,8 +2600,10 @@ def list_my_report_queue(
             assignment,
             location=_queue_location(db, document, exam),
             person=person,
+            has_corrective_successor=bool(superado),
+            is_delivered=bool(entregue),
         )
-        for document, exam, assignment, person in rows
+        for document, exam, assignment, person, superado, entregue in rows
     ]
 
 
@@ -3714,6 +3737,14 @@ def _aguardando_assinatura_externa(db: Session, *, profile_id: str):
             (ASSINADO_EM_CONFERENCIA, ASSINADO_RECUSADO)
         )
     )
+    # M26.16 — corrigir (M26.12/M26.14) nunca muda o `status` do predecessor
+    # (fica `liberado` por desenho): sem esta exclusão, um laudo já SUPERADO
+    # aparecia aqui pronto para assinatura externa. Único ponto de checagem
+    # — fecha listar, baixar e receber de volta assinado.
+    corrective = aliased(ReportDocument)
+    tem_corretiva_sucessora = exists().where(
+        corrective.corrects_document_id == ReportDocument.id
+    )
     return db.execute(
         select(ReportDocument, SpirometryExam, Person)
         .join(
@@ -3738,6 +3769,7 @@ def _aguardando_assinatura_externa(db: Session, *, profile_id: str):
             # COBRANÇA por eles.
             SpirometryExam.encerramento_motivo.is_(None),
             ReportDocument.id.not_in(ja_recebidos),
+            ~tem_corretiva_sucessora,
         )
         .order_by(ReportDocument.released_at.desc())
     ).all()

@@ -593,8 +593,9 @@ def test_assets_alterados_tem_cache_busting_atual():
     M26.12/M26.13 subiram o carimbo para `2026091601`; a M26.14 (substituir
     PDF técnico de corretiva não iniciada) subiu para `2026091602`; a M26.15
     (corrigir qual versão "original" o painel carrega quando existe mais de
-    uma) subiu para `2026091603` — o pino abaixo acompanha, não fica preso
-    numa versão anterior.
+    uma) subiu para `2026091603`; a M26.16 (marcar em "Meus laudos" um
+    documento já superado por corretiva) subiu para `2026091604` — o pino
+    abaixo acompanha, não fica preso numa versão anterior.
     """
 
     import re
@@ -603,6 +604,6 @@ def test_assets_alterados_tem_cache_busting_atual():
         re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
     )
     assert versoes, "os assets precisam continuar versionados"
-    assert versoes == {"2026091603"}, (
+    assert versoes == {"2026091604"}, (
         "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
     )
