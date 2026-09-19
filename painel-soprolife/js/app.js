@@ -2925,12 +2925,17 @@ function renderMarketingSection() {
     renderMktPages();
     renderMktTrafficSources();
     renderMktFunnel();
+    renderMktIpanema();
     renderMktAlerts();
     renderMktTrendChart();
   } else {
     renderMktKpiStripDemo();
     renderSeoFocus();
     renderSeoList();
+    // Sem snapshot real não existe número de Ipanema para mostrar — e o
+    // painel nunca preenche esse bloco com dado demonstrativo.
+    const ipanemaPanel = document.querySelector("#mktIpanemaPanel");
+    if (ipanemaPanel) ipanemaPanel.hidden = true;
   }
 }
 
@@ -3490,6 +3495,134 @@ function renderMktFunnel() {
   el.innerHTML = events.slice(0, 5).map((e) =>
     mktMiniRow(escapeHtml(e.event), [`${e.count.toLocaleString("pt-BR")} ocorr.`], e.count, maxCount)
   ).join("");
+}
+
+/* ── M26.20 — Pastore Ipanema: demanda gerada pela SoproLife ───────────────
+   Tudo abaixo vem do bloco ga4.pastoreIpanema do snapshot real. Nada é
+   estimado nem preenchido com valor de demonstração: ausência de dado vira
+   "N/D" e zero real vira 0. */
+
+const MKT_IPANEMA_ND = "N/D";
+
+// Ausência (null/undefined) é diferente de zero: o GA4 não respondeu não é
+// "não houve clique". Só formatamos número quando existe número.
+function mktIpanemaValor(n) {
+  return Number.isFinite(n) ? n.toLocaleString("pt-BR") : MKT_IPANEMA_ND;
+}
+
+function renderMktIpanema() {
+  const panel = document.querySelector("#mktIpanemaPanel");
+  if (!panel) return;
+
+  const bloco = state.marketingSeo?.ga4?.pastoreIpanema;
+  if (!bloco) { panel.hidden = true; return; }
+
+  const kpisEl = document.querySelector("#mktIpanemaKpis");
+  const noteEl = document.querySelector("#mktIpanemaNote");
+  const subEl  = document.querySelector("#mktIpanemaSubtitle");
+  if (!kpisEl) { panel.hidden = true; return; }
+  panel.hidden = false;
+
+  const pag = bloco.page || null;
+  // events vem como lista {event, count, users} — mesmo formato de ga4.events.
+  const ev  = Array.isArray(bloco.events) ? bloco.events : null;
+  const evRow   = (nome) => (ev ? ev.find((e) => e.event === nome) : undefined);
+  const evCount = (nome) => evRow(nome)?.count;
+  const evUsers = (nome) => evRow(nome)?.users;
+
+  const pessoas = (nome) => {
+    const u = evUsers(nome);
+    return Number.isFinite(u) ? ` Pessoas distintas que dispararam o evento: ${u.toLocaleString("pt-BR")}.` : "";
+  };
+
+  const conv = bloco.conversion || null;
+  const convValor = conv && Number.isFinite(conv.rate)
+    ? `${conv.rate.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+    : MKT_IPANEMA_ND;
+  const convTip = conv
+    ? `Fórmula: ${conv.formula}. No período: ${mktIpanemaValor(conv.numerator)} ÷ ${mktIpanemaValor(conv.denominator)}.`
+      + (Number.isFinite(conv.rate) ? "" : " Sem visualizações no período, a divisão é indefinida — por isso N/D, não 0%.")
+    : "Conversão indisponível: o GA4 não devolveu visualizações e/ou eventos no período.";
+
+  const intent = bloco.intentInteractions || null;
+
+  const kpis = [
+    {
+      label: "Visitas",
+      value: mktIpanemaValor(pag?.pageviews),
+      src: "GA4 · page_view",
+      tip: "Visualizações da página /espirometria-ipanema/ no período (screenPageViews). Conta visualizações, não pessoas.",
+    },
+    {
+      label: "Usuários",
+      value: mktIpanemaValor(pag?.users),
+      src: "GA4 · activeUsers",
+      tip: "Usuários ativos que viram a página no período. Usuários não se somam entre caminhos, então o painel usa o maior valor devolvido pelo GA4 — nunca a soma das linhas.",
+    },
+    {
+      label: "Agendamentos → Pastore",
+      value: mktIpanemaValor(evCount("click_agendar_pastore")),
+      src: "GA4 · eventCount",
+      tip: "Cliques em click_agendar_pastore: pessoas enviadas ao sistema oficial de agendamento da Pastore. Mede encaminhamento, NÃO exame realizado nem paciente convertido."
+        + pessoas("click_agendar_pastore"),
+    },
+    {
+      label: "WhatsApp",
+      value: mktIpanemaValor(evCount("click_whatsapp_ipanema")),
+      src: "GA4 · eventCount",
+      tip: "Cliques em click_whatsapp_ipanema: contatos iniciados no WhatsApp da SoproLife a partir da landing de Ipanema."
+        + pessoas("click_whatsapp_ipanema"),
+    },
+    {
+      label: "Rotas",
+      value: mktIpanemaValor(evCount("click_rota_pastore_ipanema")),
+      src: "GA4 · eventCount",
+      tip: "Cliques em click_rota_pastore_ipanema: solicitações de rota/Google Maps para a unidade Pastore Ipanema."
+        + pessoas("click_rota_pastore_ipanema"),
+    },
+    {
+      label: "Conversão",
+      value: convValor,
+      src: "GA4 · calculado",
+      tip: convTip,
+    },
+    {
+      label: "Interações de intenção",
+      value: mktIpanemaValor(intent?.interactions),
+      src: "GA4 · eventCount",
+      tip: "Soma dos cliques em agendar + WhatsApp + rota. É soma de INTERAÇÕES, não de pessoas únicas: a mesma pessoa pode contar mais de uma vez.",
+    },
+  ];
+
+  kpisEl.innerHTML = kpis.map((k) => `
+    <article class="mkt-kpi-card kpi-ipanema mkt-tip"${mktTipAttrs(k.tip, k.label, k.value)}>
+      <span class="mkt-kpi-label">${escapeHtml(k.label)}</span>
+      <strong class="mkt-kpi-value">${escapeHtml(k.value)}</strong>
+      <small class="mkt-kpi-src">${escapeHtml(k.src)}</small>
+    </article>
+  `).join("");
+
+  const meta = state.marketingSeo?.meta;
+  const periodo = (meta?.periodStart && meta?.periodEnd)
+    ? `${meta.periodStart} a ${meta.periodEnd}`
+      + (meta.lookbackDays ? ` (${meta.lookbackDays} dias)` : "")
+    : null;
+  if (subEl) {
+    subEl.innerHTML = `<span class="tt" data-tip="Google Analytics 4 — ferramenta de análise de tráfego e comportamento do site.">GA4</span> · dados reais`
+      + (periodo ? ` · ${escapeHtml(periodo)}` : "");
+  }
+
+  if (noteEl) {
+    const utm = bloco.outboundUtm || {};
+    const utmTxt = (utm.source && utm.medium && utm.campaign)
+      ? ` Os links de saída vão marcados com <code>utm_source=${escapeHtml(utm.source)}</code>, <code>utm_medium=${escapeHtml(utm.medium)}</code> e <code>utm_campaign=${escapeHtml(utm.campaign)}</code> — essas sessões são medidas no GA4 da Pastore, não neste.`
+      : "";
+    noteEl.innerHTML =
+      `<strong>Origem:</strong> GA4 · dados reais${periodo ? ` · período consultado: ${escapeHtml(periodo)}` : ""}. `
+      + `<strong>“Agendamentos → Pastore”</strong> representa cliques enviados ao sistema de agendamento da Pastore — encaminhamento/intenção, não exames concluídos nem pacientes convertidos. `
+      + `<strong>“Interações de intenção”</strong> é a soma de cliques dos três eventos: são interações, não pessoas únicas.`
+      + utmTxt;
+  }
 }
 
 function renderMktAlerts() {

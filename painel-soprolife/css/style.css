@@ -3192,6 +3192,27 @@ td { font-size: .94rem; }
 .kpi-sc::before  { background: var(--teal); }
 .kpi-ga4::before { background: #4285f4; }
 
+/* M26.20 — Pastore Ipanema. Os cards reusam .mkt-kpi-card sem variação de
+   cor: a "régua única" do M17 desliga ::before para toda a família
+   (.mkt-kpi-card::before { display: none }), então uma listra própria aqui
+   seria regra morta — e o pedido é justamente não destoar do resto da tela. */
+.mkt-ipanema-panel .mkt-kpi-strip { margin-bottom: 10px; }
+
+.mkt-ipanema-note {
+  margin: 0;
+  font-size: .78rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.mkt-ipanema-note code {
+  font-size: .74rem;
+  background: var(--line-light);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--text);
+}
+
 .mkt-kpi-label {
   display: block;
   font-size: .71rem;

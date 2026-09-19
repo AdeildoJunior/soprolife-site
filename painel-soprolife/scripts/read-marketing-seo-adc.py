@@ -102,6 +102,43 @@ SC_DATA_STATE = "all"
 SC_LOOKBACK_DAYS = 28
 SC_DETAIL_ROW_LIMIT = 25000
 
+# ── M26.20 — demanda que a SoproLife gera para a Pastore Ipanema ────────────
+# A landing https://soprolife.com.br/espirometria-ipanema/ já está instrumentada
+# no site público (espirometria-ipanema/index.html). Aqui só LEMOS o que o GA4
+# registrou: nenhum número é estimado, derivado de amostra ou inventado.
+#
+# `pagePath` no GA4 já vem sem query string, então BEGINS_WITH cobre
+# "/espirometria-ipanema" e "/espirometria-ipanema/" sem depender de barra final.
+IPANEMA_PAGE_PATH_PREFIX = "/espirometria-ipanema"
+
+# Evento que representa encaminhamento ao sistema oficial da Pastore. NÃO é
+# exame realizado nem paciente convertido — é intenção/encaminhamento.
+IPANEMA_EVENT_AGENDAR = "click_agendar_pastore"
+IPANEMA_EVENT_WHATSAPP = "click_whatsapp_ipanema"
+IPANEMA_EVENT_ROTA = "click_rota_pastore_ipanema"
+IPANEMA_EVENTS = (
+    IPANEMA_EVENT_AGENDAR,
+    IPANEMA_EVENT_WHATSAPP,
+    IPANEMA_EVENT_ROTA,
+)
+
+# Marcação que a landing anexa aos links de saída para a Pastore. Fica no
+# snapshot como documentação do encaminhamento: quem mede essas sessões é o
+# GA4 DA PASTORE, não o nosso — por isso não vira métrica aqui.
+IPANEMA_OUTBOUND_UTM = {
+    "source": "soprolife",
+    "medium": "referral",
+    "campaign": "espirometria_ipanema",
+}
+
+# Fórmula exibida no painel. Numerador é contagem de EVENTO; denominador é
+# contagem de VISUALIZAÇÃO de página. As duas são métricas de evento no GA4
+# (screenPageViews é o evento page_view), então a divisão é homogênea.
+IPANEMA_CONVERSION_FORMULA = (
+    "click_agendar_pastore (eventCount) ÷ page_view da página Ipanema "
+    "(screenPageViews) × 100"
+)
+
 # ── Credencial durável de leitura (M21) ─────────────────────────────────────
 # Caminho padrão de produção. Fica FORA do Git por construção (/opt), com
 # permissão restrita, e nunca é lido pelo navegador.
@@ -283,14 +320,24 @@ def _load_google_libs():
 
 
 def _load_ga4_lib():
+    """Cliente GA4 + tipos usados nas consultas (inclui os de filtro, M26.20)."""
     try:
         from google.analytics.data_v1beta import BetaAnalyticsDataClient
         from google.analytics.data_v1beta.types import (
             RunReportRequest, Dimension, Metric, DateRange,
+            Filter, FilterExpression,
         )
-        return BetaAnalyticsDataClient, RunReportRequest, Dimension, Metric, DateRange, None
+        tipos = {
+            "RunReportRequest": RunReportRequest,
+            "Dimension": Dimension,
+            "Metric": Metric,
+            "DateRange": DateRange,
+            "Filter": Filter,
+            "FilterExpression": FilterExpression,
+        }
+        return BetaAnalyticsDataClient, tipos, None
     except ImportError as exc:
-        return None, None, None, None, None, str(exc)
+        return None, None, str(exc)
 
 
 def _fetch_search_console(build, credentials, site_url, start_date, end_date, top_limit):
@@ -422,11 +469,145 @@ def _fetch_search_console(build, credentials, site_url, start_date, end_date, to
     return result, warnings
 
 
+def montar_bloco_pastore_ipanema(pagina, eventos):
+    """Monta o bloco Pastore Ipanema a partir de resultados já lidos do GA4.
+
+    Função PURA (sem rede, sem credencial) — é o ponto testável do contrato.
+
+    pagina:  dict {"pageviews", "users", "sessions"} ou None quando a consulta
+             não pôde ser feita. None significa INDISPONÍVEL (o painel mostra
+             "N/D"); zero significa "consultamos e não houve tráfego".
+    eventos: dict {nome_evento: {"count": int, "users": int}} ou None quando a
+             consulta de eventos falhou. O GA4 não devolve linha para evento
+             com zero ocorrências, então evento ausente numa consulta BEM
+             SUCEDIDA é legitimamente 0 — não é ausência de dado.
+
+    A saída guarda os eventos em LISTA de {"event", "count", "users"}, no mesmo
+    formato de `ga4.events`. Nome de evento como CHAVE seria rejeitado pela
+    guarda de PII (`click_whatsapp_ipanema` casa com a lista de chaves de
+    contato proibidas) — e, fora isso, lista é o formato que o painel já lê.
+    """
+    bloco = {
+        "pagePathPrefix": IPANEMA_PAGE_PATH_PREFIX,
+        "outboundUtm": dict(IPANEMA_OUTBOUND_UTM),
+        "page": None,
+        "events": None,
+        "intentInteractions": None,
+        "conversion": None,
+    }
+
+    if isinstance(pagina, dict):
+        bloco["page"] = {
+            "pageviews": int(pagina.get("pageviews") or 0),
+            "users": int(pagina.get("users") or 0),
+            "sessions": int(pagina.get("sessions") or 0),
+        }
+
+    agendar = None
+    if isinstance(eventos, dict):
+        lidos = []
+        for nome in IPANEMA_EVENTS:
+            bruto = eventos.get(nome) or {}
+            lidos.append({
+                "event": nome,
+                "count": int(bruto.get("count") or 0),
+                "users": int(bruto.get("users") or 0),
+            })
+            if nome == IPANEMA_EVENT_AGENDAR:
+                agendar = lidos[-1]["count"]
+        bloco["events"] = lidos
+        # Soma de INTERAÇÕES (eventCount), nunca de pessoas únicas: a mesma
+        # pessoa pode clicar em agendar, WhatsApp e rota e contar três vezes.
+        bloco["intentInteractions"] = {
+            "interactions": sum(e["count"] for e in lidos),
+            "metric": "eventCount",
+            "note": "Soma de interações, não de pessoas únicas.",
+        }
+
+    pageviews = (bloco["page"] or {}).get("pageviews")
+    if pageviews is not None and agendar is not None:
+        bloco["conversion"] = {
+            # Divisão por zero não é 0% nem 100%: é indefinida. O painel
+            # mostra "N/D" e continua honesto quando não houve visita.
+            "rate": round(agendar / pageviews * 100, 2) if pageviews > 0 else None,
+            "numerator": agendar,
+            "numeratorMetric": "eventCount",
+            "numeratorEvent": IPANEMA_EVENT_AGENDAR,
+            "denominator": pageviews,
+            "denominatorMetric": "screenPageViews",
+            "formula": IPANEMA_CONVERSION_FORMULA,
+        }
+
+    return bloco
+
+
+def _fetch_ga4_pastore_ipanema(ga4_query, tipos):
+    """Consulta GA4 restrita à landing de Ipanema e aos 3 eventos da parceria.
+
+    Reaproveita o `ga4_query` do bloco GA4 (mesmo cliente, mesma credencial,
+    mesmo período). Não abre conexão nova nem cria arquitetura paralela.
+    """
+    Filter = tipos["Filter"]
+    FilterExpression = tipos["FilterExpression"]
+
+    filtro_pagina = FilterExpression(
+        filter=Filter(
+            field_name="pagePath",
+            string_filter=Filter.StringFilter(
+                match_type=Filter.StringFilter.MatchType.BEGINS_WITH,
+                value=IPANEMA_PAGE_PATH_PREFIX,
+                case_sensitive=False,
+            ),
+        )
+    )
+    filtro_eventos = FilterExpression(
+        filter=Filter(
+            field_name="eventName",
+            in_list_filter=Filter.InListFilter(values=list(IPANEMA_EVENTS)),
+        )
+    )
+    # A landing pode ter mais de um pagePath sob o prefixo; somamos as linhas
+    # em vez de assumir que o GA4 devolveu exatamente uma.
+    pagina = None
+    resp = ga4_query(
+        ["pagePath"], ["screenPageViews", "activeUsers", "sessions"],
+        limit=100, dimension_filter=filtro_pagina,
+    )
+    if resp is not None:
+        pagina = {"pageviews": 0, "users": 0, "sessions": 0}
+        for row in resp.rows:
+            vals = row.metric_values
+            pagina["pageviews"] += int(vals[0].value) if len(vals) > 0 else 0
+            # activeUsers por linha NÃO é somável sem viés (a mesma pessoa
+            # pode aparecer em duas linhas). Guardamos o maior valor como
+            # piso conhecido e deixamos isso explícito no painel.
+            linha_users = int(vals[1].value) if len(vals) > 1 else 0
+            pagina["users"] = max(pagina["users"], linha_users)
+            pagina["sessions"] += int(vals[2].value) if len(vals) > 2 else 0
+
+    eventos = None
+    resp = ga4_query(
+        ["eventName"], ["eventCount", "totalUsers"],
+        limit=len(IPANEMA_EVENTS), dimension_filter=filtro_eventos,
+    )
+    if resp is not None:
+        eventos = {}
+        for row in resp.rows:
+            nome = row.dimension_values[0].value
+            vals = row.metric_values
+            eventos[nome] = {
+                "count": int(vals[0].value) if len(vals) > 0 else 0,
+                "users": int(vals[1].value) if len(vals) > 1 else 0,
+            }
+
+    return montar_bloco_pastore_ipanema(pagina, eventos)
+
+
 def _fetch_ga4(credentials, property_id, start_date, end_date, top_limit):
     warnings = []
     result = {}
 
-    GA4Client, RunReportRequest, Dimension, Metric, DateRange, import_err = _load_ga4_lib()
+    GA4Client, tipos, import_err = _load_ga4_lib()
     if GA4Client is None:
         if import_err:
             warnings.append(
@@ -440,13 +621,18 @@ def _fetch_ga4(credentials, property_id, start_date, end_date, top_limit):
             )
         return result, warnings
 
+    RunReportRequest = tipos["RunReportRequest"]
+    Dimension = tipos["Dimension"]
+    Metric = tipos["Metric"]
+    DateRange = tipos["DateRange"]
+
     try:
         client = GA4Client(credentials=credentials)
     except Exception as exc:
         warnings.append(f"GA4: falha ao inicializar cliente — {exc}")
         return result, warnings
 
-    def ga4_query(dimensions, metrics, limit=top_limit):
+    def ga4_query(dimensions, metrics, limit=top_limit, dimension_filter=None):
         try:
             req = RunReportRequest(
                 property=f"properties/{property_id}",
@@ -454,6 +640,7 @@ def _fetch_ga4(credentials, property_id, start_date, end_date, top_limit):
                 dimensions=[Dimension(name=d) for d in dimensions],
                 metrics=[Metric(name=m) for m in metrics],
                 limit=limit,
+                **({"dimension_filter": dimension_filter} if dimension_filter else {}),
             )
             return client.run_report(request=req)
         except Exception as exc:
@@ -512,6 +699,11 @@ def _fetch_ga4(credentials, property_id, start_date, end_date, top_limit):
             }
             for row in resp.rows
         ]
+
+    # M26.20 — Pastore Ipanema. Consultas próprias (com filtro) em vez de
+    # garimpar topPages/events: aquelas duas listas são truncadas por
+    # `topLimit`, e um evento fora do top 20 apareceria como ausente.
+    result["pastoreIpanema"] = _fetch_ga4_pastore_ipanema(ga4_query, tipos)
 
     return result, warnings
 
