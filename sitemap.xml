@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://soprolife.com.br/</loc>
-    <lastmod>2026-01-04</lastmod>
+    <lastmod>2026-09-19</lastmod>
   </url>
   <url>
     <loc>https://soprolife.com.br/conheca/</loc>
@@ -10,7 +10,7 @@
   </url>
   <url>
     <loc>https://soprolife.com.br/espirometria-rio-de-janeiro/</loc>
-    <lastmod>2026-07-28</lastmod>
+    <lastmod>2026-09-19</lastmod>
   </url>
   <url>
     <loc>https://soprolife.com.br/espirometria/</loc>
@@ -45,6 +45,12 @@
   <url>
     <loc>https://soprolife.com.br/espirometria-barra-da-tijuca/</loc>
     <lastmod>2026-09-16</lastmod>
+  </url>
+
+
+  <url>
+    <loc>https://soprolife.com.br/espirometria-zona-norte-rio-de-janeiro/</loc>
+    <lastmod>2026-09-19</lastmod>
   </url>
 
 </urlset>
