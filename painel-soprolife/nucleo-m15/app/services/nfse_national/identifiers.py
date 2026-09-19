@@ -25,6 +25,21 @@ DPS_ID_PATTERN = re.compile(r"^DPS[0-9]{7}(1[0-9]{14}|2[0-9A-Z]{14})[0-9]{20}$")
 # (manual dos contribuintes, §1.3.2.a: "...ou o arquivo XML da NFS-e gerada").
 NFSE_ACCESS_KEY_PATTERN = re.compile(r"^NFS[0-9]{9}[0-9A-Z]{14}[0-9]{27}$")
 _NFSE_ACCESS_KEY_SCAN_PATTERN = re.compile(rb"NFS[0-9]{9}[0-9A-Z]{14}[0-9]{27}")
+# M52.1 — the SAME key without the literal ``NFS`` prefix: 50 characters.
+#
+# This is not a variant we invented: it is the form the live restricted API
+# actually returns. ``GET /dps/{idDPS}`` answered (2026-09-19) with
+# ``{"chaveAcesso": "<50 chars>", ...}`` and a ``Location`` header ending in
+# ``/nfse/<the same 50 chars>``. The 53-character ``TSIdNFSe`` above is the
+# ``infNFSe/@Id`` ATTRIBUTE inside the NFS-e XML; the ``chaveAcesso`` field
+# and the queryable ``/nfse/{chave}`` path segment are that same identifier
+# WITHOUT the prefix. Both describe one NFS-e; they are two encodings of it.
+#
+# Treating them as if they had to be string-equal is exactly what made the
+# codebase unable to read a successful response (see
+# ``normalize_nfse_access_key`` and ``nfse_access_keys_match``).
+NFSE_ACCESS_KEY_BARE_PATTERN = re.compile(r"^[0-9]{9}[0-9A-Z]{14}[0-9]{27}$")
+NFSE_ACCESS_KEY_PREFIX = "NFS"
 NFSE_XML_NS = "http://www.sped.fazenda.gov.br/nfse"
 
 
@@ -61,6 +76,84 @@ def assert_nfse_access_key(value: str) -> str:
             "(53 posições, prefixo 'NFS')."
         )
     return value
+
+
+def normalize_nfse_access_key(value: str) -> str:
+    """Return the CANONICAL access key: the bare 50-character form.
+
+    Accepts either encoding of the one identifier — the 53-character
+    ``TSIdNFSe`` (``NFS`` + 50) as it appears in ``infNFSe/@Id``, or the bare
+    50-character value as it appears in the JSON ``chaveAcesso`` field and in
+    the ``Location``/``GET /nfse/{chave}`` path segment.
+
+    The bare form is canonical on purpose: it is what the API itself hands
+    back and the only form that can be used to query ``/nfse/{chave}``.
+
+    Raises ``InvalidIdentifierError`` for anything else — never guesses,
+    never truncates, never pads.
+    """
+    if not isinstance(value, str):
+        raise InvalidIdentifierError("Chave de acesso deve ser uma string.")
+    candidate = value.strip()
+    if NFSE_ACCESS_KEY_PATTERN.fullmatch(candidate):
+        return candidate[len(NFSE_ACCESS_KEY_PREFIX):]
+    if NFSE_ACCESS_KEY_BARE_PATTERN.fullmatch(candidate):
+        return candidate
+    raise InvalidIdentifierError(
+        "Chave de acesso da NFS-e deve seguir o padrão TSIdNFSe "
+        "(53 posições com prefixo 'NFS') ou a forma nua de 50 posições."
+    )
+
+
+def nfse_access_key_id(value: str) -> str:
+    """Return the key in the ``TSIdNFSe`` form: ``NFS`` + the 50 characters.
+
+    This is the form this codebase already stores as ``external_id`` and the
+    form that appears as ``infNFSe/@Id``. Kept as the storage/interop
+    convention so M52.1's parser fix does not silently change what a
+    successful issuance records — use :func:`normalize_nfse_access_key` when
+    you need the bare form for a ``/nfse/{chave}`` URL.
+    """
+    return NFSE_ACCESS_KEY_PREFIX + normalize_nfse_access_key(value)
+
+
+def nfse_access_keys_match(*values: str | None) -> bool:
+    """True only when every supplied value is a VALID access key and all of
+    them normalize to the same canonical key.
+
+    Fails closed: any ``None``, any malformed value, or any disagreement
+    returns False. Used to cross-check the key that arrives by several
+    independent channels at once (JSON body, ``Location`` header, the NFS-e
+    XML's own ``infNFSe/@Id``) — agreement across channels is what makes the
+    key trustworthy enough to record.
+    """
+    normalized = set()
+    for value in values:
+        if value is None:
+            return False
+        try:
+            normalized.add(normalize_nfse_access_key(value))
+        except InvalidIdentifierError:
+            return False
+    return len(normalized) == 1
+
+
+def access_key_from_location_header(location: str | None) -> str | None:
+    """Canonical key from a ``Location`` header pointing at ``…/nfse/{chave}``.
+
+    Returns ``None`` — never raises — when the header is absent, is not an
+    ``/nfse/`` location, or does not end in a valid key. The caller decides
+    what an absent corroborating channel means.
+    """
+    if not isinstance(location, str) or not location.strip():
+        return None
+    tail = location.strip().rstrip("/").rsplit("/", 1)[-1]
+    if not tail:
+        return None
+    try:
+        return normalize_nfse_access_key(tail)
+    except InvalidIdentifierError:
+        return None
 
 
 def extract_nfse_access_key(xml_bytes: bytes) -> str:

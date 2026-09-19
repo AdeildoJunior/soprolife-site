@@ -43,8 +43,10 @@ import json
 import zlib
 from dataclasses import dataclass
 
-from .identifiers import (InvalidIdentifierError, extract_nfse_access_key,
-                          find_nfse_access_key_best_effort)
+from .identifiers import (InvalidIdentifierError, access_key_from_location_header,
+                          extract_nfse_access_key, find_nfse_access_key_best_effort,
+                          nfse_access_key_id, nfse_access_keys_match,
+                          normalize_nfse_access_key)
 
 MEDIA_TYPE_JSON = "application/json"
 
@@ -179,9 +181,65 @@ def decode_nfse_success_envelope(body: bytes) -> DecodedNfseEnvelope:
         key_from_xml = extract_nfse_access_key(nfse_xml)
     except InvalidIdentifierError as exc:
         raise WireFormatError("nfse_xml_invalido") from exc
-    if key_from_xml != raw_key.strip():
+    # M52.1 — compare the two channels as IDENTIFIERS, not as strings.
+    # ``infNFSe/@Id`` is the 53-character ``NFS``-prefixed form; the JSON
+    # ``chaveAcesso`` is the bare 50-character form of the very same key. The
+    # previous ``!=`` demanded byte equality between two different encodings
+    # of one identifier, so this cross-check could never pass against the real
+    # API — it rejected genuine successes as "malformed". Normalizing both
+    # sides keeps the check exactly as strict (a genuinely different key still
+    # fails) while letting the true encoding difference through.
+    if not nfse_access_keys_match(key_from_xml, raw_key):
         raise WireFormatError("chave_acesso_divergente_do_xml")
+    # A chave devolvida continua sendo a forma TSIdNFSe vinda do XML — a
+    # convencao de armazenamento nao muda com esta correcao.
     return DecodedNfseEnvelope(access_key=key_from_xml, nfse_xml=nfse_xml)
+
+
+def decode_nfse_document_response(body: bytes, *, expected_access_key: str | None = None
+                                  ) -> DecodedNfseEnvelope:
+    """Decode a ``GET /nfse/{chaveAcesso}`` response into the NFS-e XML.
+
+    M53 — the live restricted API answers this endpoint with
+    ``application/json`` carrying the SAME envelope as ``POST /nfse``:
+
+        {"tipoAmbiente": 2, "versaoAplicativo": "...",
+         "dataHoraProcessamento": "...", "chaveAcesso": "<50>",
+         "nfseXmlGZipB64": "<gzip+base64 of the NFS-e XML>"}
+
+    It is NOT raw XML. Assuming XML and calling an XML parser straight on the
+    bytes is what made M52.1 report "fetch failed" on a perfectly good HTTP
+    200 — the document was there the whole time, one base64+gzip hop away.
+
+    Because the contributor manual does not pin the envelope for this
+    endpoint, both shapes are accepted: the JSON envelope above, or a raw
+    NFS-e XML document. Anything else fails closed with ``WireFormatError``.
+
+    ``expected_access_key`` (either encoding) is cross-checked against the
+    envelope and the XML when supplied; disagreement fails closed.
+    """
+    stripped = body.lstrip() if body else b""
+    if not stripped:
+        raise WireFormatError("corpo_vazio")
+
+    if stripped[:1] == b"<":
+        # Raw NFS-e XML — the other documented possibility.
+        try:
+            key_from_xml = extract_nfse_access_key(body)
+        except InvalidIdentifierError as exc:
+            raise WireFormatError("nfse_xml_invalido") from exc
+        if expected_access_key is not None and not nfse_access_keys_match(
+                key_from_xml, expected_access_key):
+            raise WireFormatError("chave_acesso_divergente_do_esperado")
+        return DecodedNfseEnvelope(access_key=key_from_xml, nfse_xml=body)
+
+    # JSON envelope. Reuse the POST success decoder so there is exactly ONE
+    # implementation of the base64+gzip+cross-check logic.
+    decoded = decode_nfse_success_envelope(body)
+    if expected_access_key is not None and not nfse_access_keys_match(
+            decoded.access_key, expected_access_key):
+        raise WireFormatError("chave_acesso_divergente_do_esperado")
+    return decoded
 
 
 def looks_like_nfse_envelope(body: bytes) -> bool:
@@ -197,7 +255,7 @@ def looks_like_nfse_envelope(body: bytes) -> bool:
         return False
 
 
-def find_nfse_access_key_in_response(body: bytes) -> str | None:
+def find_nfse_access_key_in_response(body: bytes, *, location_header: str | None = None) -> str | None:
     """Best-effort access-key extraction for reconciliation (``GET /dps/{id}``).
 
     M38 audit of the GET contract, stated honestly: the available evidence
@@ -234,9 +292,50 @@ def find_nfse_access_key_in_response(body: bytes) -> str | None:
         except (WireFormatError, InvalidIdentifierError):
             return None
         declared = payload.get(FIELD_ACCESS_KEY)
-        if isinstance(declared, str) and declared.strip() and declared.strip() != key_from_xml:
-            return None
+        if isinstance(declared, str) and declared.strip():
+            # M52.1 — identifier comparison, not string comparison (see
+            # decode_nfse_success_envelope).
+            if not nfse_access_keys_match(key_from_xml, declared):
+                return None
         return key_from_xml
+
+    # M52.1 — the REAL ``GET /dps/{idDPS}`` shape, observed live on
+    # 2026-09-19 against Produção Restrita:
+    #
+    #   200 application/json
+    #   Location: …/SefinNacional/nfse/<50-char key>
+    #   {"chaveAcesso": "<50-char key>", "dataHoraProcessamento": "…",
+    #    "tipoAmbiente": 2, "versaoAplicativo": "…"}
+    #
+    # There is no ``nfseXmlGZipB64`` here — this endpoint returns the KEY, as
+    # the contributor manual says ("recupera a chave de acesso da NFS-e"), not
+    # the document. The previous code fell straight through to the raw-byte
+    # scan, which only looks for the 53-character ``NFS``-prefixed form and
+    # therefore found nothing in a body that plainly carried the key.
+    #
+    # When ``location_header`` is supplied it must AGREE. Disagreement between
+    # the two channels returns None (fail closed) rather than picking one.
+    location_key = access_key_from_location_header(location_header)
+    try:
+        payload = _parse_json_object(body)
+    except WireFormatError:
+        payload = None
+    if isinstance(payload, dict):
+        declared = payload.get(FIELD_ACCESS_KEY)
+        if isinstance(declared, str) and declared.strip():
+            try:
+                declared_key = normalize_nfse_access_key(declared)
+            except InvalidIdentifierError:
+                return None
+            if location_key is not None and location_key != declared_key:
+                return None
+            # Devolvido na MESMA convencao dos demais caminhos (TSIdNFSe,
+            # prefixado). Use normalize_nfse_access_key() para montar a URL
+            # /nfse/{chave}, que usa a forma nua.
+            return nfse_access_key_id(declared_key)
+
+    # No usable key in the body. A Location header alone is corroboration,
+    # not a response contract, so it is never promoted to "the key" on its own.
     return find_nfse_access_key_best_effort(body)
 
 
