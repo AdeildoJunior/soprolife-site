@@ -67,16 +67,35 @@ class RestrictedIssueContext:
     municipio_prestacao_ibge: str
 
 
+# M56 — the two environments this provider may be bound to. The provider
+# itself is environment-agnostic by construction: build -> sign -> POST ->
+# parse -> keep evidence is identical fiscal work whether tpAmb says
+# homologation or production, and duplicating it for production would mean
+# two parsers to keep in step with SEFIN instead of one. WHERE the request
+# goes, and whether it may go at all, is decided entirely by the transport
+# handed in here (``HttpxRestrictedTransport`` vs ``HttpxProductionTransport``,
+# each with its own independent gate) — never by this class.
+#
+# Being constructible for production is NOT the same as being reachable:
+# ``nfse_providers.get_provider()`` still refuses environment='production'
+# outright, so ``nfse.operate()`` has no path to one. See
+# test_nfse_m56_production_gates.py.
+SUPPORTED_ENVIRONMENTS = ("restricted", "production")
+
+
 class RestrictedNfseProvider:
     """Not registered anywhere by default — see module docstring."""
 
-    name = "restricted"
-
     def __init__(self, *, transport: RestrictedTransport, context: RestrictedIssueContext,
                  environment: str = "restricted"):
-        if environment != "restricted":
-            raise RestrictedProviderError("RestrictedNfseProvider só opera em environment='restricted'.")
+        if environment not in SUPPORTED_ENVIRONMENTS:
+            raise RestrictedProviderError(
+                "RestrictedNfseProvider só opera em environment='restricted' ou 'production'.")
         self.environment = environment
+        # Kept in lockstep with `environment` so `nfse.operate()`'s
+        # name-vs-environment cross-check cannot be satisfied by a provider
+        # bound to the other one.
+        self.name = environment
         self._transport = transport
         self._context = context
 

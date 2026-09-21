@@ -95,8 +95,26 @@ def request():
 
 def test_provider_rejects_wrong_environment(context):
     transport = FakeTransport(responses=[])
-    with pytest.raises(RestrictedProviderError):
-        RestrictedNfseProvider(transport=transport, context=context, environment="production")
+    for environment in ("mock", "homologacao", "prod", "PRODUCTION", ""):
+        with pytest.raises(RestrictedProviderError):
+            RestrictedNfseProvider(transport=transport, context=context, environment=environment)
+
+
+def test_provider_accepts_production_but_that_alone_reaches_nothing(context):
+    """M56 — the provider became bindable to production (the build/sign/parse
+    work is identical, and duplicating it would mean two parsers to keep in
+    step with SEFIN). Reachability is a separate question, answered by the
+    transport's gate and by get_provider() — see
+    test_nfse_m56_production_gates.py. Constructing one here sends nothing:
+    the FakeTransport has no queued response and is never called."""
+    transport = FakeTransport(responses=[])
+    provider = RestrictedNfseProvider(transport=transport, context=context,
+                                      environment="production")
+    assert provider.environment == "production"
+    # name tracks environment, so nfse.operate()'s name-vs-environment
+    # cross-check can never be satisfied by a provider bound to the other one.
+    assert provider.name == "production"
+    assert transport.received == []
 
 
 def test_issue_success_sends_signed_xsd_valid_dps(context):

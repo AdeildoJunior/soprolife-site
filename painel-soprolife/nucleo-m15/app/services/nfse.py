@@ -218,9 +218,13 @@ def _normalized(result, operation, document_id, provider_name=None):
             not isinstance(result.outcome, Outcome) or result.outcome not in allowed):
         return ProviderResult(Outcome.UNCERTAIN)
     if result.external_id:
-        if provider_name == 'restricted':
+        if provider_name in {'restricted', 'production'}:
             # Government-issued NFS-e access key (TSIdNFSe) — a national
-            # identifier, never derived from our own document_id.
+            # identifier, never derived from our own document_id. M56 — the
+            # same shape in production: the key format is set by SEFIN, not
+            # by the environment, so leaving 'production' out here would
+            # have sent a genuine production key down the mock branch below
+            # and downgraded a real issuance to UNCERTAIN.
             if not NFSE_ACCESS_KEY_PATTERN.fullmatch(result.external_id):
                 return ProviderResult(Outcome.UNCERTAIN)
         # The only other implemented provider uses technical UUID IDs. Raw
