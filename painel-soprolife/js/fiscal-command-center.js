@@ -16,7 +16,11 @@
   const ROOT = "fiscalRoot";
   const STATE_LABELS = {
     pending: "Elegível", blocked: "Bloqueada", issuing: "Emitindo…",
-    simulated: "Emitida (simulada)", failed: "Falhou", uncertain: "Incerta — reconciliar",
+    // M57 — "issued" é NFS-e real na SEFIN; "simulated" é só o mock, que não
+    // emite nada em lugar nenhum. Antes os dois eram o mesmo estado e uma
+    // NFS-e oficial aparecia no painel como simulação.
+    issued: "Emitida", simulated: "Simulada (mock)",
+    failed: "Falhou", uncertain: "Incerta — reconciliar",
     reconciling: "Reconciliando…", cancelled: "Cancelada",
   };
   const CATEGORY_LABELS = {
@@ -160,7 +164,7 @@
         <tbody>${versions.map((v) => `<tr>
           <td><code>${esc(v.version)}</code></td><td>${esc(v.environment)}</td>
           <td>${fmtDate(v.effective_from)}</td>
-          <td><span class="fiscal-chip ${v.validation_state === "validated" ? "fiscal-state-simulated" : "fiscal-chip-uncertain"}">${v.validation_state === "validated" ? "Validada" : "Rascunho"}</span></td>
+          <td><span class="fiscal-chip ${v.validation_state === "validated" ? "fiscal-state-issued" : "fiscal-chip-uncertain"}">${v.validation_state === "validated" ? "Validada" : "Rascunho"}</span></td>
           <td>${fmtDate(v.created_at)}</td>
         </tr>`).join("")}</tbody>
       </table></div>
@@ -241,7 +245,8 @@
       ["Elegíveis", summary.eligible, "eligible"],
       ["Bloqueadas", summary.blocked_total, "blocked"],
       ["Aguardando reconciliação", summary.reconciliation_required, "uncertain"],
-      ["Emitidas", summary.simulated, "simulated"],
+      ["Emitidas", summary.issued || 0, "issued"],
+      ["Simuladas (mock)", summary.simulated || 0, "simulated"],
       ["Falharam", summary.failed, "failed"],
     ];
     const breakdown = Object.entries(summary.blocked_breakdown || {})
@@ -325,7 +330,7 @@
           <div class="fiscal-actions">
             <label>Filtro
               <select data-fiscal-filter-select>
-                ${["pending", "blocked", "uncertain", "reconciling", "simulated", "failed", "cancelled"]
+                ${["pending", "blocked", "uncertain", "reconciling", "issued", "simulated", "failed", "cancelled"]
                   .map((s) => `<option value="${s}"${state.filter === s ? " selected" : ""}>${esc(STATE_LABELS[s] || s)}</option>`).join("")}
               </select>
             </label>

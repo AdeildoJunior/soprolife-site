@@ -121,7 +121,8 @@
 .fiscal-state-pending { background: #e0f2f1; color: #0f766e; }
 .fiscal-state-blocked { background: #fbe7e7; color: #992c2c; }
 .fiscal-state-issuing, .fiscal-state-reconciling { background: rgba(99,102,241,.12); color: #4f46e5; }
-.fiscal-state-simulated { background: #dff4e5; color: #17622f; }
+.fiscal-state-issued { background: #dff4e5; color: #17622f; }
+.fiscal-state-simulated { background: #eef2f6; color: #4a5c6b; }
 .fiscal-state-failed { background: #fbe7e7; color: #992c2c; }
 .fiscal-state-uncertain { background: #fef3e0; color: #b5730a; }
 .fiscal-state-cancelled { background: #eef2f6; color: #64798b; }
