@@ -115,7 +115,7 @@ def test_production_readiness_never_all_satisfied_without_real_credential(db):
     assert by_name['production_endpoint_correct'].satisfied is False
     assert by_name['verified_real_credential'].satisfied is False
     assert by_name['restricted_validation_successful'].satisfied is False
-    assert by_name['explicit_human_production_authorization'].satisfied is False
+    assert by_name['explicit_human_authorization'].satisfied is False
 
 
 def test_production_endpoint_gate_is_structurally_impossible_even_with_everything_else(db, users, tmp_path):
@@ -147,4 +147,4 @@ def test_production_gates_default_to_false_never_true_by_omission(db):
     result = compute_production_readiness(db, Settings())
     by_name = {g.name: g for g in result.gates}
     assert by_name['restricted_validation_successful'].satisfied is False
-    assert by_name['explicit_human_production_authorization'].satisfied is False
+    assert by_name['explicit_human_authorization'].satisfied is False
