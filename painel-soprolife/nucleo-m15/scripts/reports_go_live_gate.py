@@ -5,6 +5,36 @@ This contract is deliberately separate from the general M15 gate.  It never
 creates a directory, changes a unit, writes configuration, or enables reports.
 M24C also keeps an unconditional production blocker while legal footer text
 and a qualified signature provider remain unapproved/unconfigured.
+
+M26.21 — por que este gate parou de ler o workspace por HTTPS anônimo
+---------------------------------------------------------------------
+Até aqui ``check_https_workspace`` fazia um GET ANÔNIMO de
+``/painel-soprolife/`` e exigia encontrar no HTML ``id="laudos-espirometria"``
+e ``report-workflow.js``; depois fazia um GET ANÔNIMO de
+``data/m15-config.json`` e exigia 200. Os dois eram possíveis quando o gate
+nasceu (M24B), porque o painel inteiro ainda era servido sem autenticação.
+A M25.23 fechou esse vazamento: hoje o painel devolve ``login.html`` a quem
+não tem sessão e recusa o manifesto com 401. O resultado foi o deploy do
+commit f9c0761 abortar em ``reports_https_workspace_markup_missing`` — o
+workspace ESTAVA no release; o que chegou ao gate foi a tela de login.
+
+A correção não afrouxa nada e não devolve nada ao anonimato. O contrato foi
+separado em duas metades:
+
+* **superfície anônima** (``go_live_https_gate``): prova positiva de que a tela
+  de login é servida em ``/painel-soprolife/`` e prova NEGATIVA de que nem a
+  casca administrativa nem a bancada de laudos vazam ali, mais o 401 do
+  manifesto de boot;
+* **release e backend efetivo**: o workspace de laudos e os flags são lidos do
+  checkout implantado (fonte local versionada, a mesma que o servidor serve), e
+  o estado REAL do backend vem do probe anônimo de ``/api/m15/laudos``, que
+  distingue os três casos sem sessão nenhuma — 401 (piloto servindo),
+  503+``relatorios_desabilitados`` e 503+``relatorios_producao_bloqueada``.
+
+Preflight e postflight passaram a diferir de propósito: no preflight o checkout
+já é o release ALVO enquanto os serviços ainda rodam o release ANTERIOR, então
+exigir concordância ali tornaria a primeira ativação impossível; o postflight,
+esse sim, exige que o backend efetivo seja exatamente o do release implantado.
 """
 
 from __future__ import annotations
@@ -40,7 +70,24 @@ REPORTS_WORKFLOW_MARKERS = (
     'id="laudos-espirometria"',
     "report-workflow.js",
 )
+# M26.21 — onde o workspace passou a ser provado: no checkout implantado.
+REPORTS_INDEX_SOURCE = "painel-soprolife/index.html"
+REPORTS_WORKFLOW_SOURCE = "painel-soprolife/js/report-workflow.js"
+# Estados de laudos que o backend consegue declarar a um cliente ANÔNIMO.
+# Não são opinião do gate: saem direto de `_require_reports_enabled` na API.
+EFFECTIVE_DISABLED = "disabled"
+EFFECTIVE_PILOT = "pilot"
+EFFECTIVE_PRODUCTION_BLOCKED = "production_blocked"
 M24C_PRODUCTION_BLOCKER = "m24c_signature_and_legal_approval_missing"
+# Tradução estável das rejeições da superfície anônima (go_live_https_gate)
+# para o vocabulário deste contrato.
+_TRADUCAO_SUPERFICIE_ANONIMA = {
+    https_transport.CODIGO_PAINEL_NAO_200: "reports_https_panel_not_200",
+    https_transport.CODIGO_PAINEL_VAZOU_ADMIN: (
+        "reports_https_workspace_markup_leaked"
+    ),
+    https_transport.CODIGO_PAINEL_SEM_LOGIN: "reports_https_login_screen_missing",
+}
 
 
 class ReportsGateError(RuntimeError):
@@ -221,72 +268,138 @@ def _report_error_code(payload: dict) -> str | None:
     return error.get("codigo") if isinstance(error, dict) else None
 
 
+def check_release_workspace(repo_root: pathlib.Path) -> tuple[bool, str]:
+    """M26.21 — o workspace de laudos existe MESMO no release implantado?
+
+    Esta é a metade administrativa da prova, e ela é feita na fonte local
+    versionada — exatamente os arquivos que o servidor entrega a uma sessão
+    válida. Provar isso por HTTPS anônimo exigiria republicar o Command Center
+    sem sessão, que é justamente o vazamento que a M25.23 fechou.
+
+    Devolve ``(reports_enabled, reports_mode)`` do release, já validados
+    fail-closed um contra o outro por ``read_target_frontend_mode``.
+    """
+
+    repo_root = repo_root.resolve(strict=True)
+    mode = read_target_frontend_mode(repo_root)
+    enabled = _read_target_frontend_flag(repo_root)
+
+    try:
+        html = (repo_root / REPORTS_INDEX_SOURCE).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ReportsGateError("reports_release_index_unreadable") from exc
+    # Mesmo código de erro histórico: o que mudou foi a FONTE da prova, não a
+    # exigência. Se o workspace sumir do release, o deploy continua abortando
+    # aqui, e agora por um motivo que é de fato o motivo.
+    if any(marker not in html for marker in REPORTS_WORKFLOW_MARKERS):
+        raise ReportsGateError("reports_https_workspace_markup_missing")
+
+    workflow = repo_root / REPORTS_WORKFLOW_SOURCE
+    try:
+        script_bytes = workflow.read_bytes()
+    except OSError as exc:
+        raise ReportsGateError("reports_release_workflow_script_missing") from exc
+    if not script_bytes.strip():
+        raise ReportsGateError("reports_release_workflow_script_missing")
+    return enabled, mode
+
+
+def _effective_backend_state(getter, base: str, deadline: float) -> str:
+    """Estado REAL de laudos no backend em execução, provado sem sessão.
+
+    ``/api/m15/laudos`` é anônimo-observável por construção: a dependência
+    ``_require_reports_enabled`` roda ANTES da autenticação e devolve três
+    respostas distinguíveis. Um 401 só aparece quando o piloto está servindo
+    de verdade — é a autenticação recusando, não a feature.
+    """
+
+    status, body = getter(base + REPORTS_API_PATH, deadline)
+    payload = _json_object(body, "reports_https_api_response_invalid")
+    code = _report_error_code(payload)
+    if status == 401:
+        if code in ("relatorios_desabilitados", "relatorios_producao_bloqueada"):
+            raise ReportsGateError("reports_https_api_response_invalid")
+        return EFFECTIVE_PILOT
+    if status == 503 and code == "relatorios_desabilitados":
+        return EFFECTIVE_DISABLED
+    if status == 503 and code == "relatorios_producao_bloqueada":
+        return EFFECTIVE_PRODUCTION_BLOCKED
+    raise ReportsGateError("reports_https_api_response_invalid")
+
+
+def _expected_backend_state(enabled: bool, mode: str) -> str:
+    if mode == "production":
+        return EFFECTIVE_PRODUCTION_BLOCKED
+    if mode == "pilot" and enabled:
+        return EFFECTIVE_PILOT
+    return EFFECTIVE_DISABLED
+
+
 def check_https_workspace(
     base_url: str,
     *,
+    repo_root: pathlib.Path,
     expected_enabled: bool | None,
     expected_mode: str | None = None,
     http_get=None,
 ) -> bool:
-    """Prove frontend workspace/API agreement over verified HTTPS.
+    """Prova o estado real de laudos sem exigir sessão nem expor nada.
 
-    ``expected_enabled``/``expected_mode`` are ``None`` by default, which
-    accepts whatever is CURRENTLY served as long as it is internally
-    consistent — this is what lets preflight run against a currently
-    disabled deployment on the way to a first pilot activation. Callers
-    that need to prove the POST-deploy state (postflight) pass the exact
-    target values.
+    Três provas independentes, todas fail-closed:
+
+    1. **superfície anônima** — ``/painel-soprolife/`` responde 200 com a tela
+       de login e SEM nenhuma marcação do Command Center (inclusive sem a
+       bancada de laudos), e ``data/m15-config.json`` responde 401. A segunda
+       metade é prova negativa: se o vazamento da M25.23 voltasse, o deploy
+       aborta;
+    2. **release implantado** — o workspace e os flags vêm do checkout local;
+    3. **backend efetivo** — o probe anônimo de ``/api/m15/laudos``.
+
+    ``expected_enabled``/``expected_mode`` são ``None`` no PREFLIGHT: ali o
+    checkout já é o release alvo enquanto os serviços ainda rodam o release
+    anterior, então o único requisito sobre o backend é que ele declare um
+    estado RECONHECIDO. O postflight passa os valores exatos e aí sim exige
+    que o backend efetivo seja o do release implantado.
     """
 
     base = https_transport.validar_base_url(base_url)
     getter = http_get or https_transport.http_get
     deadline = time.monotonic() + https_transport.TOTAL_TIMEOUT_S
 
-    panel_status, panel_body = getter(
-        base + REPORTS_PANEL_PATH,
-        deadline,
-    )
-    if panel_status != 200:
-        raise ReportsGateError("reports_https_panel_not_200")
-    panel = panel_body.decode("utf-8", errors="replace")
-    if any(marker not in panel for marker in REPORTS_WORKFLOW_MARKERS):
-        raise ReportsGateError("reports_https_workspace_markup_missing")
+    try:
+        https_transport.checar_entrada_anonima(base, deadline, get=getter)
+    except https_transport.GateError as exc:
+        # Tradução por CÓDIGO, não por texto: a mensagem é para o operador.
+        raise ReportsGateError(
+            _TRADUCAO_SUPERFICIE_ANONIMA.get(
+                getattr(exc, "codigo", None), "reports_https_panel_not_200"
+            )
+        ) from exc
+    try:
+        https_transport.checar_protegidos_nao_vazam(base, deadline, get=getter)
+    except https_transport.GateError as exc:
+        raise ReportsGateError("reports_https_config_not_protected") from exc
 
-    config_status, config_body = getter(
-        base + REPORTS_CONFIG_PATH,
-        deadline,
-    )
-    if config_status != 200:
-        raise ReportsGateError("reports_https_config_not_200")
-    config = _json_object(config_body, "reports_https_config_invalid")
-    frontend_enabled = config.get("reports_enabled")
-    if frontend_enabled is not True and frontend_enabled is not False:
-        raise ReportsGateError("reports_https_frontend_flag_invalid")
-    if config.get("api_base") != REPORTS_API_BASE:
-        raise ReportsGateError("reports_https_api_base_invalid")
-    served_mode = config.get("reports_mode")
-    if served_mode is not None:
-        if served_mode not in REPORTS_MODES:
-            raise ReportsGateError("reports_https_frontend_mode_invalid")
-        mode_expects_enabled = served_mode in ("pilot", "production")
-        if mode_expects_enabled is not frontend_enabled:
-            raise ReportsGateError("reports_https_frontend_mode_flag_mismatch")
-    elif expected_mode is not None:
-        raise ReportsGateError("reports_https_frontend_mode_invalid")
-    if expected_enabled is not None and frontend_enabled is not expected_enabled:
+    release_enabled, release_mode = check_release_workspace(repo_root)
+    effective = _effective_backend_state(getter, base, deadline)
+
+    if expected_enabled is None and expected_mode is None:
+        return release_enabled
+
+    if expected_enabled is not None and release_enabled is not expected_enabled:
         raise ReportsGateError("reports_https_target_flag_mismatch")
-    if expected_mode is not None and served_mode != expected_mode:
+    if expected_mode is not None and release_mode != expected_mode:
         raise ReportsGateError("reports_https_target_mode_mismatch")
 
-    api_status, api_body = getter(base + REPORTS_API_PATH, deadline)
-    api_payload = _json_object(api_body, "reports_https_api_response_invalid")
-    error_code = _report_error_code(api_payload)
-    if frontend_enabled:
-        if api_status != 401 or error_code == "relatorios_desabilitados":
-            raise ReportsGateError("reports_https_api_frontend_disagree")
-    elif api_status != 503 or error_code != "relatorios_desabilitados":
-        raise ReportsGateError("reports_https_api_frontend_disagree")
-    return frontend_enabled
+    esperado = _expected_backend_state(
+        release_enabled if expected_enabled is None else expected_enabled,
+        release_mode if expected_mode is None else expected_mode,
+    )
+    if effective != esperado:
+        if effective == EFFECTIVE_PILOT or esperado == EFFECTIVE_PILOT:
+            raise ReportsGateError("reports_https_target_flag_mismatch")
+        raise ReportsGateError("reports_https_target_mode_mismatch")
+    return release_enabled
 
 
 def check_preflight(
@@ -328,10 +441,12 @@ def check_preflight(
     )
     if not https_base_url:
         raise ReportsGateError("reports_https_base_url_missing")
-    # Preflight accepts either currently-disabled or currently-enabled state,
-    # but only if the served frontend and unauthenticated API agree.
+    # M26.21 — preflight aceita o estado servido atual (o backend ainda roda o
+    # release anterior) desde que a superfície anônima esteja correta, o
+    # workspace exista no release e o backend declare um estado reconhecido.
     check_https_workspace(
         https_base_url,
+        repo_root=repo_root,
         expected_enabled=None,
         http_get=http_get,
     )
@@ -493,13 +608,16 @@ def check_pilot_preflight(
     )
     if not https_base_url:
         raise ReportsGateError("reports_https_base_url_missing")
-    # M24D — a primeira ativação do piloto parte de um release atualmente
-    # SERVIDO como disabled (nunca houve laudos em produção antes). O
-    # preflight aceita esse estado — ou um piloto já ativo — desde que
-    # frontend e API concordem entre si; só o postflight (depois do deploy)
-    # exige o novo estado servido enabled=true e reports_mode="pilot".
+    # M24D/M26.21 — a primeira ativação do piloto parte de um backend ainda
+    # DESABILITADO (nunca houve laudos em produção antes), enquanto o checkout
+    # já é o release alvo. O preflight aceita esse estado — ou um piloto já
+    # ativo — desde que a superfície anônima esteja correta, o workspace exista
+    # no release e o backend declare um estado reconhecido; só o postflight
+    # (depois do deploy) exige reports_enabled=true e reports_mode="pilot"
+    # efetivos no backend.
     check_https_workspace(
         https_base_url,
+        repo_root=repo_root,
         expected_enabled=None,
         expected_mode=None,
         http_get=http_get,
@@ -534,16 +652,22 @@ def verify_storage_and_unit_contract(
 
 def check_pilot_postflight(
     *,
+    repo_root: pathlib.Path,
     mode_value: str | None,
     backend_flag: str | None,
     https_base_url: str | None,
     http_get=None,
 ) -> bool:
     """M24D — só deve ser chamado pelo deploy quando o modo alvo é "pilot".
-    Ao contrário do preflight (que aceita um release atualmente servido
-    como disabled), o postflight sempre EXIGE que o estado agora SERVIDO
-    esteja com reports_enabled=true e reports_mode="pilot" concordando
-    entre frontend e API — nunca aceita "ainda desabilitado" aqui.
+    Ao contrário do preflight (que aceita um backend ainda desabilitado), o
+    postflight sempre EXIGE que o release implantado esteja com
+    reports_enabled=true e reports_mode="pilot" E que o backend em execução
+    esteja de fato servindo o piloto — nunca aceita "ainda desabilitado".
+
+    M26.21 — a prova do backend é o probe anônimo de ``/api/m15/laudos``: com
+    o piloto servindo, ele responde 401 (autenticação recusando); desabilitado
+    ou em produção bloqueada, responde 503 com código próprio. Nada disso
+    precisa de sessão, e nenhum artefato protegido é exposto.
     """
 
     enabled = _parse_backend_flag(backend_flag)
@@ -553,6 +677,7 @@ def check_pilot_postflight(
         raise ReportsGateError("reports_https_base_url_missing")
     check_https_workspace(
         https_base_url,
+        repo_root=repo_root,
         expected_enabled=True,
         expected_mode="pilot",
         http_get=http_get,
@@ -654,6 +779,7 @@ def main(argv: list[str]) -> int:
             print("true" if result.enabled else "false")
         elif phase == "postflight-pilot":
             check_pilot_postflight(
+                repo_root=repo_root,
                 mode_value=os.environ.get("M15_REPORTS_MODE"),
                 backend_flag=os.environ.get("M15_REPORTS_ENABLED"),
                 https_base_url=os.environ.get("SOPROLIFE_M15_HTTPS_BASE_URL"),
@@ -688,7 +814,15 @@ def main(argv: list[str]) -> int:
             if expected:
                 raise ReportsGateError(M24C_PRODUCTION_BLOCKER)
             print("true" if expected else "false")
-    except (ReportsGateError, OSError, ValueError) as exc:
+    except (
+        ReportsGateError,
+        # Falha de rede/TLS/URL vem do transporte compartilhado e sempre
+        # rejeita. Sem esta linha ela saía como traceback: o deploy abortava
+        # do mesmo jeito, mas o operador lia um stack trace em vez do motivo.
+        https_transport.GateError,
+        OSError,
+        ValueError,
+    ) as exc:
         print(
             f"ERRO REPORTS GO-LIVE (fail-closed): {exc}",
             file=sys.stderr,

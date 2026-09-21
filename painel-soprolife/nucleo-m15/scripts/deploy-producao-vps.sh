@@ -9,9 +9,13 @@
 #   SOPROLIFE_M15_GO_LIVE=YES   (exatamente YES, maiúsculo)
 #   SOPROLIFE_M15_HTTPS_BASE_URL=https://painel-privado.exemplo.ts.net/
 # Nesse modo o endereço HTTPS privado é validado ANTES de qualquer mutação e
-# novamente APÓS o deploy (painel 200, health status=ok, enabled=true servido,
-# m15-security.js servido e carregado antes de m15-nucleo.js). Releases com
-# enabled=false continuam com o comportamento atual, sem exigir variáveis.
+# novamente APÓS o deploy. M26.21: a validação é anônima por desenho — o painel
+# responde 200 com a TELA DE LOGIN, o health responde status=ok e o manifesto
+# m15-config.json responde 401 a quem não tem sessão. Os artefatos
+# administrativos do release são conferidos no checkout implantado, nunca
+# expostos por HTTPS, e o deploy nunca carrega token, senha ou cookie
+# administrativo. Releases com enabled=false continuam com o comportamento
+# atual, sem exigir variáveis.
 set -Eeuo pipefail
 IFS=$'\n\t'
 umask 077
@@ -478,11 +482,15 @@ assert cfg["enabled"] is (sys.argv[2] == "true")
 assert cfg["api_base"] == "/painel-soprolife/api/m15"
 PY
 
-# M15.5B: em go-live, revalida o endereço HTTPS privado APÓS o deploy —
-# painel 200, health status=ok, enabled=true servido, m15-security.js servido
-# e carregado antes de m15-nucleo.js no index.html publicado.
+# M15.5B/M26.21: em go-live, revalida o endereço HTTPS privado APÓS o deploy.
+# O que é público prova-se por HTTPS (tela de login servida sem sessão, health
+# status=ok, m15-config.json recusado com 401, bytes de login.html e
+# m15-security.js idênticos aos do release); o que é administrativo prova-se no
+# checkout implantado (check-source) mais o casamento entre a versão informada
+# pelo health e a versão do release. Nenhuma credencial entra aqui.
 if (( GO_LIVE_MODE )); then
-  soprolife_go_live_validar_https pos "${SOPROLIFE_M15_HTTPS_BASE_URL-}" || \
+  soprolife_go_live_validar_https pos "${SOPROLIFE_M15_HTTPS_BASE_URL-}" \
+    "$REPO_ROOT" || \
     fail "validação HTTPS pós-deploy do go-live falhou"
 fi
 

@@ -167,21 +167,97 @@ class TestRedirecionadorSeguro(unittest.TestCase):
         self.assertIsInstance(novo, urllib.request.Request)
 
 
-def respostas_pos_validas():
-    return {
-        BASE + gate.CAMINHO_PAINEL: (200, SCRIPTS_ORDENADOS.encode("utf-8")),
-        BASE + gate.CAMINHO_HEALTH: (200, b'{"status": "ok"}'),
-        BASE + gate.CAMINHO_CONFIG: (
+# M26.21 — o que o painel devolve a um cliente ANÔNIMO desde a M25.23: a tela
+# de login, no mesmo endereço, sem nada do Command Center.
+LOGIN_HTML = (
+    "<!doctype html><html><body>"
+    '<form id="loginForm">'
+    '<input id="email" type="email" /><input id="password" type="password" />'
+    "</form>"
+    '<script src="./js/m15-security.js"></script>'
+    "</body></html>"
+)
+# A resposta real de command-center-local-server.py::_deny para protected_data.
+CORPO_401 = rb'{"ok": false, "error": "Sess\u00e3o necess\u00e1ria."}'
+GUARDA_JS = (
+    '(function(){ "use strict";\n'
+    "// bloqueia HTTP remoto: só https: ou loopback (localhost/127.x)\n"
+    'function classify(loc){ if (loc.protocol === "https:") return "https";\n'
+    '  if (loc.hostname === "localhost" || /^127\\./.test(loc.hostname))'
+    ' return "localdev"; return "blocked"; }\n'
+    "window.SoproM15Security = { classify: classify };\n"
+    "})();"
+)
+VERSAO_RELEASE = "9.9.9"
+INDEX_ADMIN = (
+    "<html><body>"
+    '<section id="laudos-espirometria"></section>'
+    + SCRIPTS_ORDENADOS
+    + '<script src="./js/report-workflow.js?v=1" defer></script>'
+    "</body></html>"
+)
+
+
+def arquivos_do_release(**mudancas):
+    """Árvore mínima de um release enabled=true, já no formato do checkout."""
+    arquivos = {
+        "painel-soprolife/data/m15-config.json": json.dumps(
+            {"enabled": True, "api_base": "/painel-soprolife/api/m15"}
+        ),
+        "painel-soprolife/js/m15-security.js": GUARDA_JS,
+        "painel-soprolife/js/m15-nucleo.js":
+            "(function(){ var token = null; /* só em memória */ })();",
+        "painel-soprolife/index.html": INDEX_ADMIN,
+        "painel-soprolife/login.html": LOGIN_HTML,
+        "painel-soprolife/scripts/test-m15-go-live.js":
+            "// 63 casos de segurança do go-live\nprocess.exit(0);",
+        "painel-soprolife/nucleo-m15/app/__init__.py":
+            f'"""sintético."""\n\n__version__ = "{VERSAO_RELEASE}"\n',
+    }
+    arquivos.update(mudancas)
+    return arquivos
+
+
+def montar_release(raiz: pathlib.Path, **mudancas) -> str:
+    for relativo, conteudo in arquivos_do_release(**mudancas).items():
+        if conteudo is None:
+            continue
+        caminho = raiz / relativo
+        caminho.parent.mkdir(parents=True, exist_ok=True)
+        caminho.write_text(conteudo, encoding="utf-8")
+    return str(raiz)
+
+
+def respostas_validas(**mudancas):
+    """O que a VPS responde HOJE a um cliente sem sessão, com tudo correto."""
+    respostas = {
+        BASE + gate.CAMINHO_PAINEL: (200, LOGIN_HTML.encode("utf-8")),
+        BASE + gate.CAMINHO_HEALTH: (
             200,
             json.dumps(
-                {"enabled": True, "api_base": "/painel-soprolife/api/m15"}
+                {
+                    "status": "ok",
+                    "versao": VERSAO_RELEASE,
+                    "ambiente": "prod",
+                    "banco": "ok",
+                }
             ).encode("utf-8"),
         ),
-        BASE + gate.CAMINHO_SECURITY_JS: (200, b'/* guarda */ var x = "blocked";'),
+        BASE + gate.CAMINHO_CONFIG: (401, CORPO_401),
+        BASE + gate.CAMINHO_SECURITY_JS: (200, GUARDA_JS.encode("utf-8")),
     }
+    respostas.update(
+        {BASE + caminho: valor for caminho, valor in mudancas.items()}
+    )
+    return respostas
 
 
 class TestProbesHttps(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.release = montar_release(pathlib.Path(self.tmp.name))
+
     def com_respostas(self, respostas):
         def falso_http_get(url, prazo_final, opener=None):
             if url not in respostas:
@@ -190,108 +266,225 @@ class TestProbesHttps(unittest.TestCase):
 
         return mock.patch.object(gate, "http_get", side_effect=falso_http_get)
 
+    def pre_rejeita(self, respostas, trecho=None):
+        with self.com_respostas(respostas):
+            with self.assertRaises(gate.GateError) as capturado:
+                gate.checar_https_pre(BASE + "/")
+        if trecho:
+            self.assertIn(trecho, str(capturado.exception))
+
+    def pos_rejeita(self, respostas, release=None, trecho=None):
+        with self.com_respostas(respostas):
+            with self.assertRaises(gate.GateError) as capturado:
+                gate.checar_https_pos(BASE + "/", release or self.release)
+        if trecho:
+            self.assertIn(trecho, str(capturado.exception))
+
+    # ── superfície anônima correta ───────────────────────────────────────
+
     def test_pre_valido_aceito_com_rede_mockada(self):
-        with self.com_respostas(respostas_pos_validas()):
+        with self.com_respostas(respostas_validas()):
             gate.checar_https_pre(BASE + "/")
 
     def test_pos_valido_aceito_com_rede_mockada(self):
-        with self.com_respostas(respostas_pos_validas()):
-            gate.checar_https_pos(BASE + "/")
-
-    def pos_rejeita(self, respostas):
-        with self.com_respostas(respostas):
-            with self.assertRaises(gate.GateError):
-                gate.checar_https_pos(BASE + "/")
+        with self.com_respostas(respostas_validas()):
+            gate.checar_https_pos(BASE + "/", self.release)
 
     def test_painel_nao_200_rejeitado(self):
-        r = respostas_pos_validas()
-        r[BASE + gate.CAMINHO_PAINEL] = (503, b"manutencao")
-        with self.com_respostas(r):
-            with self.assertRaises(gate.GateError):
-                gate.checar_https_pre(BASE + "/")
+        self.pre_rejeita(
+            respostas_validas(**{gate.CAMINHO_PAINEL: (503, b"manutencao")})
+        )
 
     def test_health_nao_200_rejeitado(self):
-        r = respostas_pos_validas()
-        r[BASE + gate.CAMINHO_HEALTH] = (500, b'{"status": "ok"}')
-        with self.com_respostas(r):
-            with self.assertRaises(gate.GateError):
-                gate.checar_https_pre(BASE + "/")
+        self.pre_rejeita(
+            respostas_validas(
+                **{gate.CAMINHO_HEALTH: (500, b'{"status": "ok"}')}
+            )
+        )
 
     def test_health_sem_status_ok_rejeitado(self):
         for corpo in (b'{"status": "iniciando"}', b'{"ok": true}', b"[]",
                       b"ok", b'"ok"', b"{}"):
-            r = respostas_pos_validas()
-            r[BASE + gate.CAMINHO_HEALTH] = (200, corpo)
-            with self.com_respostas(r):
-                with self.assertRaises(gate.GateError):
-                    gate.checar_https_pre(BASE + "/")
+            self.pre_rejeita(
+                respostas_validas(**{gate.CAMINHO_HEALTH: (200, corpo)})
+            )
 
-    def test_pos_config_servida_sem_enabled_true_rejeitada(self):
-        r = respostas_pos_validas()
-        r[BASE + gate.CAMINHO_CONFIG] = (
-            200, b'{"enabled": false, "api_base": "/painel-soprolife/api/m15"}'
-        )
-        self.pos_rejeita(r)
+    # ── o Command Center não pode voltar a vazar (prova NEGATIVA) ────────
 
-    def test_pos_config_servida_com_api_base_alterado_rejeitada(self):
-        r = respostas_pos_validas()
-        r[BASE + gate.CAMINHO_CONFIG] = (
-            200, b'{"enabled": true, "api_base": "https://outro.exemplo/api"}'
+    def test_painel_anonimo_servindo_o_command_center_e_rejeitado(self):
+        """A regressão da M25.23: o painel administrativo antes do login."""
+        self.pre_rejeita(
+            respostas_validas(
+                **{gate.CAMINHO_PAINEL: (200, INDEX_ADMIN.encode("utf-8"))}
+            ),
+            trecho="vazou marcação",
         )
-        self.pos_rejeita(r)
+
+    def test_painel_anonimo_vazando_so_a_bancada_de_laudos_e_rejeitado(self):
+        vazado = LOGIN_HTML.replace(
+            "</body>",
+            '<section id="laudos-espirometria"></section></body>',
+        )
+        self.pre_rejeita(
+            respostas_validas(
+                **{gate.CAMINHO_PAINEL: (200, vazado.encode("utf-8"))}
+            ),
+            trecho="vazou marcação",
+        )
+
+    def test_painel_anonimo_sem_a_tela_de_login_e_rejeitado(self):
+        self.pre_rejeita(
+            respostas_validas(
+                **{gate.CAMINHO_PAINEL: (200, b"<html><body>ok</body></html>")}
+            ),
+            trecho="tela de login",
+        )
+
+    def test_config_publico_anonimo_e_rejeitado(self):
+        """Tornar o manifesto público de novo faria o go-live abortar."""
+        self.pre_rejeita(
+            respostas_validas(
+                **{
+                    gate.CAMINHO_CONFIG: (
+                        200,
+                        b'{"enabled": true, '
+                        b'"api_base": "/painel-soprolife/api/m15"}',
+                    )
+                }
+            ),
+            trecho="voltou a ser público",
+        )
+
+    def test_config_com_status_inesperado_e_rejeitado(self):
+        for status in (403, 404, 500, 302):
+            self.pre_rejeita(
+                respostas_validas(
+                    **{gate.CAMINHO_CONFIG: (status, CORPO_401)}
+                ),
+                trecho="exigido 401",
+            )
+
+    def test_401_que_vaza_conteudo_do_manifesto_e_rejeitado(self):
+        self.pre_rejeita(
+            respostas_validas(
+                **{
+                    gate.CAMINHO_CONFIG: (
+                        401,
+                        b'{"ok": false, "enabled": true}',
+                    )
+                }
+            ),
+            trecho="carrega conteúdo do manifesto",
+        )
+
+    # ── postflight: serviço e bytes servidos conferem com o release ──────
+
+    def test_pos_health_de_outra_versao_rejeitado(self):
+        corpo = json.dumps(
+            {
+                "status": "ok",
+                "versao": "0.0.1",
+                "ambiente": "prod",
+                "banco": "ok",
+            }
+        ).encode("utf-8")
+        self.pos_rejeita(
+            respostas_validas(**{gate.CAMINHO_HEALTH: (200, corpo)}),
+            trecho="não é a do release implantado",
+        )
+
+    def test_pos_health_sem_ambiente_prod_rejeitado(self):
+        corpo = json.dumps(
+            {
+                "status": "ok",
+                "versao": VERSAO_RELEASE,
+                "ambiente": "dev",
+                "banco": "ok",
+            }
+        ).encode("utf-8")
+        self.pos_rejeita(
+            respostas_validas(**{gate.CAMINHO_HEALTH: (200, corpo)}),
+            trecho='ambiente "prod"',
+        )
+
+    def test_pos_health_com_banco_degradado_rejeitado(self):
+        corpo = json.dumps(
+            {
+                "status": "ok",
+                "versao": VERSAO_RELEASE,
+                "ambiente": "prod",
+                "banco": "erro",
+            }
+        ).encode("utf-8")
+        self.pos_rejeita(
+            respostas_validas(**{gate.CAMINHO_HEALTH: (200, corpo)}),
+            trecho="banco saudável",
+        )
 
     def test_pos_m15_security_nao_200_rejeitado(self):
-        r = respostas_pos_validas()
-        r[BASE + gate.CAMINHO_SECURITY_JS] = (404, b"")
-        self.pos_rejeita(r)
-
-    def test_pos_ordem_de_scripts_invertida_rejeitada(self):
-        r = respostas_pos_validas()
-        invertido = (
-            '<script src="./js/m15-nucleo.js?v=1" defer></script>\n'
-            '<script src="./js/m15-security.js?v=1" defer></script>'
+        self.pos_rejeita(
+            respostas_validas(**{gate.CAMINHO_SECURITY_JS: (404, b"")})
         )
-        r[BASE + gate.CAMINHO_PAINEL] = (200, invertido.encode("utf-8"))
-        self.pos_rejeita(r)
 
-    def test_pos_html_sem_guarda_rejeitado(self):
-        r = respostas_pos_validas()
-        r[BASE + gate.CAMINHO_PAINEL] = (
-            200, b'<script src="./js/m15-nucleo.js?v=1" defer></script>'
+    def test_pos_m15_security_de_outro_release_rejeitado(self):
+        self.pos_rejeita(
+            respostas_validas(
+                **{gate.CAMINHO_SECURITY_JS: (200, b"/* release antigo */")}
+            ),
+            trecho="não é o do release implantado",
         )
-        self.pos_rejeita(r)
+
+    def test_pos_tela_de_login_de_outro_release_rejeitada(self):
+        antiga = LOGIN_HTML.replace("</body>", "<!-- release antigo --></body>")
+        self.pos_rejeita(
+            respostas_validas(
+                **{gate.CAMINHO_PAINEL: (200, antiga.encode("utf-8"))}
+            ),
+            trecho="não é o do release implantado",
+        )
+
+    def test_pos_release_reprovado_no_check_source_rejeitado(self):
+        """O postflight reexamina os artefatos administrativos na fonte local."""
+        outro = tempfile.TemporaryDirectory()
+        self.addCleanup(outro.cleanup)
+        release = montar_release(
+            pathlib.Path(outro.name),
+            **{
+                "painel-soprolife/index.html":
+                    '<script src="./js/m15-nucleo.js?v=1" defer></script>'
+                    '<script src="./js/m15-security.js?v=1" defer></script>'
+            },
+        )
+        self.pos_rejeita(respostas_validas(), release=release)
+
+    def test_pos_release_sem_versao_legivel_rejeitado(self):
+        outro = tempfile.TemporaryDirectory()
+        self.addCleanup(outro.cleanup)
+        release = montar_release(
+            pathlib.Path(outro.name),
+            **{"painel-soprolife/nucleo-m15/app/__init__.py": '"""sem versão."""\n'},
+        )
+        self.pos_rejeita(respostas_validas(), release=release, trecho="__version__")
+
+
+class TestAridadeDaCli(unittest.TestCase):
+    """check-https-pos exige o repo root; um argumento a mais/menos é erro."""
+
+    def test_pos_sem_repo_root_e_erro_de_uso(self):
+        self.assertEqual(gate.main(["gate", "check-https-pos", BASE]), 2)
+
+    def test_pre_com_argumento_extra_e_erro_de_uso(self):
+        self.assertEqual(
+            gate.main(["gate", "check-https-pre", BASE, "/tmp"]), 2
+        )
+
+    def test_subcomando_desconhecido_e_erro_de_uso(self):
+        self.assertEqual(gate.main(["gate", "check-https-durante", BASE]), 2)
 
 
 class TestChecagensEstaticas(unittest.TestCase):
     def montar_alvo(self, **mudancas):
-        raiz = pathlib.Path(self.tmp.name)
-        arquivos = {
-            "painel-soprolife/data/m15-config.json": json.dumps(
-                {"enabled": True, "api_base": "/painel-soprolife/api/m15"}
-            ),
-            "painel-soprolife/js/m15-security.js":
-                '(function(){ "use strict";\n'
-                '// bloqueia HTTP remoto: só https: ou loopback (localhost/127.x)\n'
-                'function classify(loc){ if (loc.protocol === "https:") return "https";\n'
-                '  if (loc.hostname === "localhost" || /^127\\./.test(loc.hostname))'
-                ' return "localdev"; return "blocked"; }\n'
-                'window.SoproM15Security = { classify: classify };\n'
-                "})();",
-            "painel-soprolife/js/m15-nucleo.js":
-                "(function(){ var token = null; /* só em memória */ })();",
-            "painel-soprolife/index.html":
-                "<html><body>" + SCRIPTS_ORDENADOS + "</body></html>",
-            "painel-soprolife/scripts/test-m15-go-live.js":
-                "// 63 casos de segurança do go-live\nprocess.exit(0);",
-        }
-        arquivos.update(mudancas)
-        for relativo, conteudo in arquivos.items():
-            if conteudo is None:
-                continue
-            caminho = raiz / relativo
-            caminho.parent.mkdir(parents=True, exist_ok=True)
-            caminho.write_text(conteudo, encoding="utf-8")
-        return str(raiz)
+        return montar_release(pathlib.Path(self.tmp.name), **mudancas)
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -14,6 +14,23 @@ import reports_go_live_gate as gate  # noqa: E402
 BASE = "https://reports-gate.example.invalid"
 
 
+# M26.21 — a marcação do workspace passou a ser provada NO RELEASE (fonte local
+# versionada), e não mais por GET anônimo do painel; o repositório sintético
+# precisa, portanto, conter o index administrativo e o script da bancada.
+INDEX_COM_WORKSPACE = (
+    '<html><body><section id="laudos-espirometria"></section>'
+    '<script src="./js/report-workflow.js?v=1" defer></script>'
+    "</body></html>"
+)
+LOGIN_HTML = (
+    "<!doctype html><html><body>"
+    '<form id="loginForm"><input id="password" type="password" /></form>'
+    '<script src="./js/m15-security.js"></script>'
+    "</body></html>"
+)
+CORPO_401 = rb'{"ok": false, "error": "Sess\u00e3o necess\u00e1ria."}'
+
+
 def _repo(tmp_path: Path, *, reports_enabled: bool) -> Path:
     repo = tmp_path / "synthetic-repo"
     config = repo / "painel-soprolife/data/m15-config.json"
@@ -23,11 +40,19 @@ def _repo(tmp_path: Path, *, reports_enabled: bool) -> Path:
             {
                 "enabled": True,
                 "reports_enabled": reports_enabled,
+                # O gate único (M24B/M24C) só é exercitado com enabled=true em
+                # modo produção — que permanece bloqueado incondicionalmente.
+                "reports_mode": "production" if reports_enabled else "disabled",
                 "api_base": "/painel-soprolife/api/m15",
             }
         ),
         encoding="utf-8",
     )
+    index = repo / "painel-soprolife/index.html"
+    index.write_text(INDEX_COM_WORKSPACE, encoding="utf-8")
+    workflow = repo / "painel-soprolife/js/report-workflow.js"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("// bancada de laudos\n", encoding="utf-8")
     return repo
 
 
@@ -38,28 +63,28 @@ def _private_root(tmp_path: Path) -> Path:
     return root
 
 
-def _https_responses(*, enabled: bool):
-    api_status = 401 if enabled else 503
-    api_code = "http_401" if enabled else "relatorios_desabilitados"
+def _https_responses(*, effective: str = gate.EFFECTIVE_DISABLED):
+    """A superfície ANÔNIMA real do painel desde a M25.23.
+
+    O painel devolve a tela de login (200) e o manifesto de boot devolve 401.
+    O único canal que declara o estado de laudos sem sessão é
+    `/api/m15/laudos`, e ele distingue os três casos.
+    """
+    api = {
+        gate.EFFECTIVE_PILOT: (401, {"erro": {"codigo": "http_401"}}),
+        gate.EFFECTIVE_DISABLED: (
+            503,
+            {"erro": {"codigo": "relatorios_desabilitados"}},
+        ),
+        gate.EFFECTIVE_PRODUCTION_BLOCKED: (
+            503,
+            {"erro": {"codigo": "relatorios_producao_bloqueada"}},
+        ),
+    }[effective]
     return {
-        BASE + gate.REPORTS_PANEL_PATH: (
-            200,
-            b'<section id="laudos-espirometria"></section>'
-            b'<script src="./js/report-workflow.js"></script>',
-        ),
-        BASE + gate.REPORTS_CONFIG_PATH: (
-            200,
-            json.dumps(
-                {
-                    "reports_enabled": enabled,
-                    "api_base": gate.REPORTS_API_BASE,
-                }
-            ).encode(),
-        ),
-        BASE + gate.REPORTS_API_PATH: (
-            api_status,
-            json.dumps({"erro": {"codigo": api_code}}).encode(),
-        ),
+        BASE + gate.REPORTS_PANEL_PATH: (200, LOGIN_HTML.encode()),
+        BASE + gate.REPORTS_CONFIG_PATH: (401, CORPO_401),
+        BASE + gate.REPORTS_API_PATH: (api[0], json.dumps(api[1]).encode()),
     }
 
 
@@ -82,7 +107,7 @@ def _enabled_check(repo, root, *, unit_text=None, **overrides):
         "expected_uid": os.getuid(),
         "expected_gid": os.getgid(),
         "https_base_url": BASE,
-        "http_get": _getter(_https_responses(enabled=False)),
+        "http_get": _getter(_https_responses()),
     }
     values.update(overrides)
     return gate.check_preflight(**values)
@@ -224,36 +249,126 @@ def test_backup_attestation_is_independent_and_exact(tmp_path):
         assert str(caught.value) == "reports_coordinated_backup_not_attested"
 
 
-def test_https_preflight_and_postflight_require_api_frontend_agreement():
+def test_https_postflight_exige_backend_efetivo_igual_ao_release(tmp_path):
+    """M26.21 — o acordo deixou de ser lido no config servido (hoje protegido)
+    e passou a ser provado contra o BACKEND efetivo, via probe anônimo."""
+
+    desligado = _repo(tmp_path / "off", reports_enabled=False)
     assert (
         gate.check_https_workspace(
             BASE,
+            repo_root=desligado,
             expected_enabled=False,
-            http_get=_getter(_https_responses(enabled=False)),
+            http_get=_getter(_https_responses()),
         )
         is False
     )
+
+    producao = _repo(tmp_path / "prod", reports_enabled=True)
     assert (
         gate.check_https_workspace(
             BASE,
+            repo_root=producao,
             expected_enabled=True,
-            http_get=_getter(_https_responses(enabled=True)),
+            expected_mode="production",
+            http_get=_getter(
+                _https_responses(effective=gate.EFFECTIVE_PRODUCTION_BLOCKED)
+            ),
         )
         is True
     )
 
-    mismatched = _https_responses(enabled=True)
-    mismatched[BASE + gate.REPORTS_API_PATH] = (
-        503,
-        b'{"erro":{"codigo":"relatorios_desabilitados"}}',
+    # Release alvo em produção, backend ainda desabilitado: divergência.
+    with pytest.raises(gate.ReportsGateError) as caught:
+        gate.check_https_workspace(
+            BASE,
+            repo_root=producao,
+            expected_enabled=True,
+            expected_mode="production",
+            http_get=_getter(_https_responses()),
+        )
+    assert str(caught.value) == "reports_https_target_mode_mismatch"
+
+    # Release alvo desligado, mas o backend está servindo o piloto.
+    with pytest.raises(gate.ReportsGateError) as caught:
+        gate.check_https_workspace(
+            BASE,
+            repo_root=desligado,
+            expected_enabled=False,
+            http_get=_getter(_https_responses(effective=gate.EFFECTIVE_PILOT)),
+        )
+    assert str(caught.value) == "reports_https_target_flag_mismatch"
+
+
+def test_https_workspace_recusa_vazamento_do_command_center(tmp_path):
+    """Prova NEGATIVA: se o painel voltar a sair sem login, o gate aborta."""
+
+    repo = _repo(tmp_path, reports_enabled=False)
+    vazando = _https_responses()
+    vazando[BASE + gate.REPORTS_PANEL_PATH] = (
+        200,
+        b'<section id="laudos-espirometria"></section>'
+        b'<script src="./js/report-workflow.js"></script>',
     )
     with pytest.raises(gate.ReportsGateError) as caught:
         gate.check_https_workspace(
             BASE,
-            expected_enabled=True,
-            http_get=_getter(mismatched),
+            repo_root=repo,
+            expected_enabled=False,
+            http_get=_getter(vazando),
         )
-    assert str(caught.value) == "reports_https_api_frontend_disagree"
+    assert str(caught.value) == "reports_https_workspace_markup_leaked"
+
+
+def test_https_workspace_recusa_manifesto_publico(tmp_path):
+    repo = _repo(tmp_path, reports_enabled=False)
+    publico = _https_responses()
+    publico[BASE + gate.REPORTS_CONFIG_PATH] = (
+        200,
+        json.dumps(
+            {"reports_enabled": False, "api_base": gate.REPORTS_API_BASE}
+        ).encode(),
+    )
+    with pytest.raises(gate.ReportsGateError) as caught:
+        gate.check_https_workspace(
+            BASE,
+            repo_root=repo,
+            expected_enabled=False,
+            http_get=_getter(publico),
+        )
+    assert str(caught.value) == "reports_https_config_not_protected"
+
+
+def test_https_workspace_recusa_release_sem_workspace(tmp_path):
+    """A verificação histórica continua existindo — na fonte certa."""
+
+    repo = _repo(tmp_path, reports_enabled=False)
+    (repo / "painel-soprolife/index.html").write_text(
+        "<html><body>sem bancada</body></html>", encoding="utf-8"
+    )
+    with pytest.raises(gate.ReportsGateError) as caught:
+        gate.check_https_workspace(
+            BASE,
+            repo_root=repo,
+            expected_enabled=False,
+            http_get=_getter(_https_responses()),
+        )
+    assert str(caught.value) == "reports_https_workspace_markup_missing"
+
+
+def test_https_workspace_recusa_release_sem_script_da_bancada(tmp_path):
+    repo = _repo(tmp_path, reports_enabled=False)
+    (repo / "painel-soprolife/js/report-workflow.js").write_text(
+        "   \n", encoding="utf-8"
+    )
+    with pytest.raises(gate.ReportsGateError) as caught:
+        gate.check_https_workspace(
+            BASE,
+            repo_root=repo,
+            expected_enabled=False,
+            http_get=_getter(_https_responses()),
+        )
+    assert str(caught.value) == "reports_release_workflow_script_missing"
 
 
 def test_no_deployment_mutation_precedes_reports_gate():

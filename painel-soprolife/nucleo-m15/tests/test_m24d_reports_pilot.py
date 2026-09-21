@@ -70,6 +70,22 @@ def test_modo_invalido_falha_fechado(monkeypatch):
 # ------------------------------------------------------- gate: piloto
 
 
+# M26.21 — o workspace é provado no RELEASE (fonte local versionada), não mais
+# por GET anônimo do painel; o repositório sintético precisa carregá-lo.
+INDEX_COM_WORKSPACE = (
+    '<html><body><section id="laudos-espirometria"></section>'
+    '<script src="./js/report-workflow.js?v=1" defer></script>'
+    "</body></html>"
+)
+LOGIN_HTML = (
+    "<!doctype html><html><body>"
+    '<form id="loginForm"><input id="password" type="password" /></form>'
+    '<script src="./js/m15-security.js"></script>'
+    "</body></html>"
+)
+CORPO_401 = rb'{"ok": false, "error": "Sess\u00e3o necess\u00e1ria."}'
+
+
 def _synthetic_repo(tmp_path: Path, *, reports_enabled: bool) -> Path:
     repo = tmp_path / "synthetic-repo"
     config = repo / "painel-soprolife/data/m15-config.json"
@@ -85,6 +101,12 @@ def _synthetic_repo(tmp_path: Path, *, reports_enabled: bool) -> Path:
         ),
         encoding="utf-8",
     )
+    (repo / "painel-soprolife/index.html").write_text(
+        INDEX_COM_WORKSPACE, encoding="utf-8"
+    )
+    workflow = repo / "painel-soprolife/js/report-workflow.js"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("// bancada de laudos\n", encoding="utf-8")
     return repo
 
 
@@ -96,21 +118,18 @@ def _private_root(tmp_path: Path, name: str = "synthetic-private-reports") -> Pa
 
 
 def _https_responses(*, enabled: bool):
+    """Superfície ANÔNIMA real (M25.23): login no painel, 401 no manifesto.
+
+    `enabled` descreve o BACKEND efetivo — a única coisa que um cliente sem
+    sessão consegue observar, via `/api/m15/laudos`.
+    """
     api_status = 401 if enabled else 503
     api_code = "http_401" if enabled else "relatorios_desabilitados"
+    base = "https://pilot-gate.example.invalid"
     return {
-        "https://pilot-gate.example.invalid" + gate.REPORTS_PANEL_PATH: (
-            200,
-            b'<section id="laudos-espirometria"></section>'
-            b'<script src="./js/report-workflow.js"></script>',
-        ),
-        "https://pilot-gate.example.invalid" + gate.REPORTS_CONFIG_PATH: (
-            200,
-            json.dumps(
-                {"reports_enabled": enabled, "api_base": gate.REPORTS_API_BASE}
-            ).encode(),
-        ),
-        "https://pilot-gate.example.invalid" + gate.REPORTS_API_PATH: (
+        base + gate.REPORTS_PANEL_PATH: (200, LOGIN_HTML.encode()),
+        base + gate.REPORTS_CONFIG_PATH: (401, CORPO_401),
+        base + gate.REPORTS_API_PATH: (
             api_status,
             json.dumps({"erro": {"codigo": api_code}}).encode(),
         ),

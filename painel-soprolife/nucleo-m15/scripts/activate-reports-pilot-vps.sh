@@ -127,11 +127,16 @@ do_rollback() {
   soprolife_priv systemctl restart "$LOOPBACK_UNIT" || rollback_ok=0
   soprolife_priv systemctl restart "$TAILSCALE_UNIT" || rollback_ok=0
 
-  if python3 - "$SCRIPT_DIR" "$HTTPS_BASE_URL" <<'PY'
+  if python3 - "$SCRIPT_DIR" "$HTTPS_BASE_URL" "$REPO_ROOT" <<'PY'
+import pathlib
 import sys
 sys.path.insert(0, sys.argv[1])
 import reports_go_live_gate as gate
-gate.check_https_workspace(sys.argv[2], expected_enabled=False)
+# M26.21 — o release volta a ser lido do worktree restaurado (fonte local
+# versionada); o HTTPS prova a superfície anônima e o backend efetivo.
+gate.check_https_workspace(
+    sys.argv[2], repo_root=pathlib.Path(sys.argv[3]), expected_enabled=False
+)
 PY
   then
     echo "ROLLBACK: frontend/API confirmados desabilitados de novo." >&2
@@ -210,11 +215,16 @@ export SOPROLIFE_REPORTS_BACKUP_MANIFEST="$BACKUP_MANIFEST"
 export SOPROLIFE_M15_HTTPS_BASE_URL="$HTTPS_BASE_URL"
 
 echo "== verificando que o frontend/API servidos hoje estão desabilitados =="
-python3 - "$SCRIPT_DIR" "$HTTPS_BASE_URL" <<'PY'
+python3 - "$SCRIPT_DIR" "$HTTPS_BASE_URL" "$REPO_ROOT" <<'PY'
+import pathlib
 import sys
 sys.path.insert(0, sys.argv[1])
 import reports_go_live_gate as gate
-gate.check_https_workspace(sys.argv[2], expected_enabled=False)
+# M26.21 — o worktree de produção ainda está no commit de fiação (laudos
+# desabilitados): é dele que saem os flags, e do probe anônimo o estado real.
+gate.check_https_workspace(
+    sys.argv[2], repo_root=pathlib.Path(sys.argv[3]), expected_enabled=False
+)
 PY
 
 # ── Preflight do piloto contra worktree destacado no commit ALVO ────────────
@@ -305,12 +315,16 @@ assert cfg.get("reports_enabled") is True, "reports_enabled != true no config se
 assert cfg.get("reports_mode") == "pilot", "reports_mode != pilot no config servido"
 PY
 
-python3 - "$SCRIPT_DIR" "$HTTPS_BASE_URL" <<'PY'
+python3 - "$SCRIPT_DIR" "$HTTPS_BASE_URL" "$REPO_ROOT" <<'PY'
+import pathlib
 import sys
 sys.path.insert(0, sys.argv[1])
 import reports_go_live_gate as gate
 frontend_enabled = gate.check_https_workspace(
-    sys.argv[2], expected_enabled=True, expected_mode="pilot"
+    sys.argv[2],
+    repo_root=pathlib.Path(sys.argv[3]),
+    expected_enabled=True,
+    expected_mode="pilot",
 )
 assert frontend_enabled is True
 PY

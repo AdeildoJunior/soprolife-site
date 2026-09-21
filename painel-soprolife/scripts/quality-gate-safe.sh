@@ -191,6 +191,12 @@ run "test-deploy-go-live (M15.5B shell)" \
   bash painel-soprolife/nucleo-m15/scripts/test-deploy-go-live.sh
 run "test_go_live_https_gate (M15.5B Python)" \
   env PYTHONDONTWRITEBYTECODE=1 python3 painel-soprolife/nucleo-m15/scripts/test_go_live_https_gate.py
+# M26.21 — prova, no mesmo teste, que o servidor continua fechado para quem não
+# tem sessão E que os gates de go-live provam o release sem depender disso.
+run "py_compile test_m26_21_go_live_auth_compat" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 -m py_compile painel-soprolife/nucleo-m15/scripts/test_m26_21_go_live_auth_compat.py
+run "test_m26_21_go_live_auth_compat (M26.21)" \
+  env PYTHONDONTWRITEBYTECODE=1 python3 painel-soprolife/nucleo-m15/scripts/test_m26_21_go_live_auth_compat.py
 
 secao "9/10 Git — whitespace e guard rails de staging"
 run "git diff --check" git diff --check

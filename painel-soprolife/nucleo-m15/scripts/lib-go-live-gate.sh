@@ -67,13 +67,29 @@ soprolife_go_live_checar_fonte_alvo() {
 }
 
 soprolife_go_live_validar_https() {
-  # $1 = pre|pos ; $2 = URL base HTTPS validada.
-  case "$1" in
-    pre|pos) ;;
+  # $1 = pre|pos ; $2 = URL base HTTPS validada ; $3 = repo root (só em "pos").
+  #
+  # M26.21 — a fase "pos" passou a exigir o repo root do release implantado: os
+  # artefatos administrativos (index.html, m15-config.json) são validados na
+  # fonte local versionada, e não mais por GET anônimo, porque desde a M25.23
+  # eles não são — e não podem voltar a ser — públicos. Repo root ausente é
+  # rejeição, nunca validação parcial.
+  local fase="$1" base_url="$2" repo_root="${3-}"
+  case "$fase" in
+    pre)
+      soprolife_go_live_gate_py check-https-pre "$base_url"
+      ;;
+    pos)
+      if [ -z "$repo_root" ]; then
+        echo "ERRO GO-LIVE (fail-closed): a validação HTTPS pós-deploy exige o" \
+          "repo root do release implantado." >&2
+        return 1
+      fi
+      soprolife_go_live_gate_py check-https-pos "$base_url" "$repo_root"
+      ;;
     *)
-      echo "ERRO GO-LIVE (fail-closed): fase desconhecida '$1'." >&2
+      echo "ERRO GO-LIVE (fail-closed): fase desconhecida '$fase'." >&2
       return 1
       ;;
   esac
-  soprolife_go_live_gate_py "check-https-$1" "$2"
 }

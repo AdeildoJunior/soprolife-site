@@ -78,6 +78,22 @@ def _run_in_pty(
         os.close(master_fd)
 
 
+# M26.21 — o workspace é provado no RELEASE (fonte local versionada), não mais
+# por GET anônimo do painel; o repositório sintético precisa carregá-lo.
+INDEX_COM_WORKSPACE = (
+    '<html><body><section id="laudos-espirometria"></section>'
+    '<script src="./js/report-workflow.js?v=1" defer></script>'
+    "</body></html>"
+)
+LOGIN_HTML = (
+    "<!doctype html><html><body>"
+    '<form id="loginForm"><input id="password" type="password" /></form>'
+    '<script src="./js/m15-security.js"></script>'
+    "</body></html>"
+)
+CORPO_401 = rb'{"ok": false, "error": "Sess\u00e3o necess\u00e1ria."}'
+
+
 def _synthetic_repo(tmp_path: Path, *, mode: str, enabled: bool) -> Path:
     repo = tmp_path / "synthetic-repo"
     config = repo / "painel-soprolife/data/m15-config.json"
@@ -93,6 +109,12 @@ def _synthetic_repo(tmp_path: Path, *, mode: str, enabled: bool) -> Path:
         ),
         encoding="utf-8",
     )
+    (repo / "painel-soprolife/index.html").write_text(
+        INDEX_COM_WORKSPACE, encoding="utf-8"
+    )
+    workflow = repo / "painel-soprolife/js/report-workflow.js"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("// bancada de laudos\n", encoding="utf-8")
     return repo
 
 
@@ -104,28 +126,24 @@ def _private_root(tmp_path: Path) -> Path:
 
 
 def _https_responses(*, served_enabled: bool, served_mode: str):
-    api_status = 401 if served_enabled else 503
-    api_code = "http_401" if served_enabled else "relatorios_desabilitados"
+    """Superfície ANÔNIMA real (M25.23) + estado EFETIVO do backend.
+
+    M26.21 — o painel devolve a tela de login e o manifesto devolve 401 a quem
+    não tem sessão. O estado de laudos que o backend declara sem sessão vem de
+    `/api/m15/laudos`: 401 quando o piloto está servindo, 503 com
+    `relatorios_desabilitados` quando desligado e 503 com
+    `relatorios_producao_bloqueada` em modo produção.
+    """
+    if served_mode == "production":
+        api = (503, {"erro": {"codigo": "relatorios_producao_bloqueada"}})
+    elif served_enabled:
+        api = (401, {"erro": {"codigo": "http_401"}})
+    else:
+        api = (503, {"erro": {"codigo": "relatorios_desabilitados"}})
     return {
-        BASE + gate.REPORTS_PANEL_PATH: (
-            200,
-            b'<section id="laudos-espirometria"></section>'
-            b'<script src="./js/report-workflow.js"></script>',
-        ),
-        BASE + gate.REPORTS_CONFIG_PATH: (
-            200,
-            json.dumps(
-                {
-                    "reports_enabled": served_enabled,
-                    "reports_mode": served_mode,
-                    "api_base": gate.REPORTS_API_BASE,
-                }
-            ).encode(),
-        ),
-        BASE + gate.REPORTS_API_PATH: (
-            api_status,
-            json.dumps({"erro": {"codigo": api_code}}).encode(),
-        ),
+        BASE + gate.REPORTS_PANEL_PATH: (200, LOGIN_HTML.encode()),
+        BASE + gate.REPORTS_CONFIG_PATH: (401, CORPO_401),
+        BASE + gate.REPORTS_API_PATH: (api[0], json.dumps(api[1]).encode()),
     }
 
 
@@ -298,7 +316,9 @@ def test_primeira_ativacao_recusada_sem_todas_as_condicoes(
 
 
 def test_pilot_postflight_exige_enabled_e_modo_pilot_servidos(tmp_path):
+    repo = _synthetic_repo(tmp_path, mode="pilot", enabled=True)
     result = gate.check_pilot_postflight(
+        repo_root=repo,
         mode_value="pilot",
         backend_flag="true",
         https_base_url=BASE,
@@ -309,9 +329,13 @@ def test_pilot_postflight_exige_enabled_e_modo_pilot_servidos(tmp_path):
     assert result is True
 
 
-def test_pilot_postflight_recusa_quando_env_local_nao_esta_em_pilot_habilitado():
+def test_pilot_postflight_recusa_quando_env_local_nao_esta_em_pilot_habilitado(
+    tmp_path,
+):
+    repo = _synthetic_repo(tmp_path, mode="pilot", enabled=True)
     with pytest.raises(gate.ReportsGateError) as caught:
         gate.check_pilot_postflight(
+            repo_root=repo,
             mode_value="pilot",
             backend_flag="false",
             https_base_url=BASE,
@@ -320,6 +344,7 @@ def test_pilot_postflight_recusa_quando_env_local_nao_esta_em_pilot_habilitado()
 
     with pytest.raises(gate.ReportsGateError) as caught:
         gate.check_pilot_postflight(
+            repo_root=repo,
             mode_value="disabled",
             backend_flag="true",
             https_base_url=BASE,
@@ -327,14 +352,36 @@ def test_pilot_postflight_recusa_quando_env_local_nao_esta_em_pilot_habilitado()
     assert str(caught.value) == "reports_pilot_mode_not_selected"
 
 
-def test_pilot_postflight_recusa_quando_servido_diverge_do_alvo():
+def test_pilot_postflight_recusa_quando_backend_efetivo_diverge_do_alvo(tmp_path):
+    """M26.21 — a divergência é provada contra o BACKEND (probe anônimo de
+    /api/m15/laudos), não contra um m15-config.json servido publicamente."""
+
+    repo = _synthetic_repo(tmp_path, mode="pilot", enabled=True)
     with pytest.raises(gate.ReportsGateError) as caught:
         gate.check_pilot_postflight(
+            repo_root=repo,
             mode_value="pilot",
             backend_flag="true",
             https_base_url=BASE,
             http_get=_getter(
                 _https_responses(served_enabled=False, served_mode="disabled")
+            ),
+        )
+    assert str(caught.value) == "reports_https_target_flag_mismatch"
+
+
+def test_pilot_postflight_recusa_release_que_nao_esta_em_pilot(tmp_path):
+    """O env de deploy pode dizer "pilot", mas o release implantado manda."""
+
+    repo = _synthetic_repo(tmp_path, mode="disabled", enabled=False)
+    with pytest.raises(gate.ReportsGateError) as caught:
+        gate.check_pilot_postflight(
+            repo_root=repo,
+            mode_value="pilot",
+            backend_flag="true",
+            https_base_url=BASE,
+            http_get=_getter(
+                _https_responses(served_enabled=True, served_mode="pilot")
             ),
         )
     assert str(caught.value) == "reports_https_target_flag_mismatch"

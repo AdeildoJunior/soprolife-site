@@ -35,8 +35,9 @@ exige, todas ao mesmo tempo, antes de qualquer mutação:
 - `SOPROLIFE_REPORTS_BACKUP_MANIFEST` apontando para um manifesto de backup
   verificado (ver abaixo) — recente (≤24h), com hashes reais dos artefatos
   e contagens técnicas não-negativas;
-- acordo HTTPS pré e pós-deploy entre API e frontend
-  (`check_https_workspace`).
+- superfície anônima correta e acordo com o BACKEND efetivo, pré e
+  pós-deploy (`check_https_workspace`) — ver "Como o acordo é provado
+  hoje (M26.21)".
 
 Qualquer condição ausente recusa a habilitação (`ReportsGateError`) antes de
 qualquer mutação. Nenhuma etapa do gate cria diretório, altera unidade ou
@@ -89,11 +90,53 @@ versionado (`data/m15-config.json`, campo `reports_mode`) e escolhe o gate:
   incondicional.
 
 **Primeira ativação (transição segura disabled → pilot):** o preflight do
-piloto aceita o release atualmente SERVIDO como `disabled` (nunca houve
-laudos em produção antes), desde que frontend e API concordem entre si —
-ele não exige que o piloto já esteja ativo antes de rodar. O postflight,
-por outro lado, sempre exige que o NOVO estado servido esteja com
+piloto aceita um BACKEND ainda `disabled` (nunca houve laudos em produção
+antes) — ele não exige que o piloto já esteja ativo antes de rodar. O
+postflight, por outro lado, sempre exige que o backend em execução esteja
+de fato servindo o piloto, e que o release implantado esteja com
 `reports_enabled=true` e `reports_mode="pilot"`.
+
+## Como o acordo é provado hoje (M26.21)
+
+O gate original fazia GET ANÔNIMO de `/painel-soprolife/` procurando
+`id="laudos-espirometria"` e `report-workflow.js`, e GET ANÔNIMO de
+`data/m15-config.json` esperando HTTP 200. Isso funcionava quando o painel
+inteiro era público; a M25.23 fechou esse vazamento e o deploy do commit
+`f9c0761` passou a abortar em `reports_https_workspace_markup_missing`
+mesmo com o workspace presente no release.
+
+O contrato foi reconstruído em três provas independentes, todas anônimas e
+todas fail-closed:
+
+1. **Superfície anônima** — `/painel-soprolife/` devolve 200 com a tela de
+   login e SEM nenhuma marcação administrativa (prova negativa: se o
+   Command Center voltar a vazar, o gate aborta com
+   `reports_https_workspace_markup_leaked`); `data/m15-config.json` devolve
+   401 (`reports_https_config_not_protected` se voltar a ser público).
+2. **Release implantado** — o workspace (`index.html` + `js/report-workflow.js`)
+   e os flags `reports_enabled`/`reports_mode` são lidos do checkout que o
+   servidor de fato serve. O código histórico
+   `reports_https_workspace_markup_missing` continua existindo e agora só
+   aparece quando o workspace realmente falta no release.
+3. **Backend efetivo** — o probe anônimo de `/api/m15/laudos` distingue os
+   três estados sem sessão nenhuma, porque `_require_reports_enabled` roda
+   ANTES da autenticação:
+
+   | Resposta anônima | Estado efetivo |
+   | --- | --- |
+   | `401` (autenticação recusando) | piloto servindo |
+   | `503` + `relatorios_desabilitados` | desabilitado |
+   | `503` + `relatorios_producao_bloqueada` | produção bloqueada |
+
+   Qualquer outra combinação é `reports_https_api_response_invalid`.
+
+Preflight e postflight usam as MESMAS três provas e diferem só no rigor do
+item 3: o preflight aceita qualquer estado reconhecido (o checkout já é o
+release alvo enquanto os serviços ainda rodam o anterior); o postflight
+exige que o estado efetivo seja exatamente o do release implantado.
+
+Nenhuma dessas provas usa cookie, token ou sessão humana: o deploy continua
+sem credencial administrativa.
 
 Quando `pilot` é o modo alvo, o `EnvironmentFile` gravado contém:
 

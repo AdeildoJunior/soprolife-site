@@ -134,6 +134,25 @@ echo "── fase desconhecida da validação HTTPS ──"
 soprolife_go_live_validar_https durante "$URL_OK" >/dev/null 2>&1
 caso "fase desconhecida falha fechado (rc 1)" 1 $?
 
+# M26.21 — a fase "pos" passou a exigir o repo root do release implantado,
+# porque os artefatos administrativos são validados na fonte local (o GET
+# anônimo deles recebe login.html/401 desde a M25.23). Sem o repo root, a
+# rejeição acontece ANTES de qualquer acesso de rede.
+soprolife_go_live_validar_https pos "$URL_OK" >/dev/null 2>&1
+caso "fase pos sem repo root falha fechado (rc 1)" 1 $?
+
+soprolife_go_live_validar_https pos "$URL_OK" "" >/dev/null 2>&1
+caso "fase pos com repo root vazio falha fechado (rc 1)" 1 $?
+
+# A CLI do gate também é fail-closed quanto à aridade por subcomando.
+python3 "$SCRIPT_DIR/go_live_https_gate.py" check-https-pos "$URL_OK" \
+  >/dev/null 2>&1
+caso "CLI check-https-pos sem repo root é erro de uso (rc 2)" 2 $?
+
+python3 "$SCRIPT_DIR/go_live_https_gate.py" check-https-pre "$URL_OK" extra \
+  >/dev/null 2>&1
+caso "CLI check-https-pre com argumento extra é erro de uso (rc 2)" 2 $?
+
 echo "── fiação do deploy-producao-vps.sh (anti-regressão) ──"
 
 DEPLOY="$SCRIPT_DIR/deploy-producao-vps.sh"
@@ -158,6 +177,10 @@ fiacao "deploy valida HTTPS antes da mutação" \
   'soprolife_go_live_validar_https pre'
 fiacao "deploy revalida HTTPS após o deploy" \
   'soprolife_go_live_validar_https pos'
+# M26.21 — o postflight geral precisa do checkout implantado para provar os
+# artefatos administrativos sem exigir vazamento anônimo.
+fiacao "postflight geral recebe o repo root do release implantado" \
+  'soprolife_go_live_validar_https pos "\${SOPROLIFE_M15_HTTPS_BASE_URL-}" \\'
 fiacao "deploy carrega gate independente de laudos" \
   'lib-reports-go-live-gate.sh'
 fiacao "deploy valida laudos antes de qualquer mutação" \
