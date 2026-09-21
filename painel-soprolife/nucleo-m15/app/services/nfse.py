@@ -28,6 +28,25 @@ from .nfse_providers import get_provider, ProviderRequest, ProviderResult, Outco
 
 PERFORMED = {'Realizado', 'Laudo Liberado'}
 IN_FLIGHT = {'issuing', 'reconciling'}
+# M57 — environments whose provider reaches a real tax authority. 'production'
+# is listed for the state vocabulary only; get_provider() still refuses to
+# build a production provider at all (M56, deliberate).
+REAL_ENVIRONMENTS = {'restricted', 'production'}
+# The two terminal success states. They are distinct on purpose: 'issued' means
+# an NFS-e exists at SEFIN, 'simulated' means the mock invented an identifier
+# and nothing exists anywhere. Every place that used to ask "is this document
+# successfully issued?" by comparing to the single old value 'simulated' now
+# asks it of this set, so neither state can be silently forgotten.
+SUCCESS_STATES = {'issued', 'simulated'}
+
+
+def success_state(environment: str) -> str:
+    """The terminal success state a document in this environment may reach.
+
+    Derived from the environment, never from a provider-supplied label, so a
+    misbehaving provider cannot promote a mock run to a real issuance.
+    """
+    return 'issued' if environment in REAL_ENVIRONMENTS else 'simulated'
 
 
 def fail(code, status=409):
@@ -209,7 +228,16 @@ def _request(doc, preparation, operation_id, *, description=None):
 def _normalized(result, operation, document_id, provider_name=None):
     allowed = {Outcome.UNCERTAIN, Outcome.REJECTED}
     if operation in {'issue', 'reconcile'}:
-        allowed.add(Outcome.SIMULATED)
+        # M57 — a success outcome is admissible only in the vocabulary of the
+        # provider that reported it: a real provider says ISSUED, the mock
+        # says SIMULATED, and neither may speak for the other. This is the
+        # structural reason a mock run can never be mistaken for, or
+        # upgraded into, a real issuance — and the reason a real provider
+        # that reported the old 'simulated' label would now be treated as
+        # malfunctioning (UNCERTAIN, requiring reconciliation) rather than
+        # silently recorded as a success under the wrong word.
+        allowed.add(Outcome.ISSUED if provider_name in REAL_ENVIRONMENTS
+                    else Outcome.SIMULATED)
     if operation in {'cancel', 'reconcile'}:
         allowed.add(Outcome.CANCELLED)
     if operation == 'reconcile':
@@ -218,7 +246,7 @@ def _normalized(result, operation, document_id, provider_name=None):
             not isinstance(result.outcome, Outcome) or result.outcome not in allowed):
         return ProviderResult(Outcome.UNCERTAIN)
     if result.external_id:
-        if provider_name in {'restricted', 'production'}:
+        if provider_name in REAL_ENVIRONMENTS:
             # Government-issued NFS-e access key (TSIdNFSe) — a national
             # identifier, never derived from our own document_id. M56 — the
             # same shape in production: the key format is set by SEFIN, not
@@ -233,7 +261,7 @@ def _normalized(result, operation, document_id, provider_name=None):
         elif (not re.fullmatch(r'MOCK-[0-9a-f-]{36}', result.external_id) or
               result.external_id != 'MOCK-' + document_id):
             return ProviderResult(Outcome.UNCERTAIN)
-    if result.outcome in {Outcome.SIMULATED, Outcome.CANCELLED} and not result.external_id:
+    if result.outcome in {Outcome.ISSUED, Outcome.SIMULATED, Outcome.CANCELLED} and not result.external_id:
         return ProviderResult(Outcome.UNCERTAIN)
     return result
 
@@ -267,7 +295,7 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
         fail('preparation_required')
     target = None
     if operation == 'issue':
-        if doc.state == 'simulated':
+        if doc.state in SUCCESS_STATES:
             return doc
         allowed = {'failed'} if reprocess else {'pending'}
         if doc.state not in allowed or doc.eligibility != 'eligible':
@@ -283,8 +311,8 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
     elif operation == 'cancel':
         if doc.state == 'cancelled':
             return doc
-        if doc.state != 'simulated':
-            fail('only_simulated_document_can_be_cancelled')
+        if doc.state not in SUCCESS_STATES:
+            fail('only_issued_document_can_be_cancelled')
     elif operation == 'reconcile':
         if doc.state not in IN_FLIGHT | {'uncertain'}:
             fail('reconciliation_not_required')
@@ -357,7 +385,8 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
                   provider.issue(request) if operation == 'issue' else provider.cancel(request))
         result = _normalized(result, operation, doc.id, provider.name)
         if target and ((target.operation == 'issue' and result.outcome == Outcome.CANCELLED) or
-                       (target.operation == 'cancel' and result.outcome == Outcome.SIMULATED)):
+                       (target.operation == 'cancel' and
+                        result.outcome in {Outcome.ISSUED, Outcome.SIMULATED})):
             result = ProviderResult(Outcome.UNCERTAIN)
         if result.external_id:
             # Immutable external fiscal evidence: a document's access key,
@@ -380,16 +409,24 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
     uncertain = result.outcome == Outcome.UNCERTAIN or bool(newer)
     if uncertain:
         state = 'uncertain'
-    elif result.outcome == Outcome.SIMULATED:
-        state = 'simulated'
+    elif result.outcome in {Outcome.ISSUED, Outcome.SIMULATED}:
+        # M57 — the state comes from the document's OWN environment, not from
+        # the outcome's label. _normalized() has already refused any success
+        # outcome that does not match the provider kind, so these two always
+        # agree here; deriving from the environment keeps that true even if a
+        # future provider is wired in carelessly.
+        state = success_state(doc.environment)
     elif result.outcome == Outcome.CANCELLED:
         state = 'cancelled'
     elif operation == 'reconcile' and result.outcome == Outcome.NOT_FOUND:
-        state = 'failed' if target.operation == 'issue' else 'simulated'
+        # A cancellation that the authority never registered leaves the
+        # document where it was: successfully issued.
+        state = 'failed' if target.operation == 'issue' else success_state(doc.environment)
     elif result.outcome == Outcome.REJECTED and operation == 'issue':
         state = 'failed'
     elif result.outcome == Outcome.REJECTED and operation == 'cancel':
-        state = 'simulated'
+        # The cancellation was refused — the NFS-e is still issued.
+        state = success_state(doc.environment)
     else:
         uncertain, state = True, 'uncertain'
     # M35 — same classification as before; when the provider boundary
@@ -527,8 +564,8 @@ def queue_summary(db: Session, environment: str) -> dict:
     rows = db.execute(select(FiscalDocument.state, FiscalDocument.blocking_reasons)
                       .where(FiscalDocument.environment == environment)).all()
     counts = {
-        'eligible': 0, 'issuing': 0, 'simulated': 0, 'failed': 0, 'uncertain': 0,
-        'reconciling': 0, 'cancelled': 0,
+        'eligible': 0, 'issuing': 0, 'issued': 0, 'simulated': 0, 'failed': 0,
+        'uncertain': 0, 'reconciling': 0, 'cancelled': 0,
     }
     blocked_breakdown = {label: 0 for label, _ in BLOCK_CATEGORIES}
     blocked_breakdown['blocked_other'] = 0
@@ -543,7 +580,14 @@ def queue_summary(db: Session, environment: str) -> dict:
             counts[state] += 1
     return {'environment': environment, 'total': len(rows), 'eligible': counts['eligible'],
             'blocked_total': blocked_total, 'blocked_breakdown': blocked_breakdown,
-            'issuing': counts['issuing'], 'simulated': counts['simulated'],
+            'issuing': counts['issuing'], 'issued': counts['issued'],
+            # M57 — 'simulated' now counts ONLY genuine mock runs. It stays in
+            # the payload (it is still a real queue state in the mock
+            # environment) but no longer carries real issuances: those are
+            # 'issued'. A caller that reads only 'simulated' therefore reports
+            # zero for a restricted/production queue instead of silently
+            # mislabelling official NFS-e as simulations.
+            'simulated': counts['simulated'],
             'failed': counts['failed'], 'uncertain': counts['uncertain'],
             'reconciling': counts['reconciling'], 'cancelled': counts['cancelled'],
             'reconciliation_required': counts['uncertain'] + counts['reconciling']}
@@ -555,6 +599,16 @@ def serialize_document(db, doc):
             'state', 'eligibility', 'blocking_reasons', 'created_at', 'updated_at')}
     data['reconciliation_required'] = doc.state in IN_FLIGHT | {'uncertain'}
     data['monetary_source'] = 'Financeiro_Lancamentos / financial_entries'
+    # M57 — DOCUMENTED, DELIBERATELY UNCHANGED. `fiscal_validity` is not a
+    # synonym for `state == 'issued'` and M57 does not make it one. It is a
+    # hard-coded declaration that THIS SYSTEM does not assert the fiscal
+    # validity of anything it serializes: not the mock's invented IDs, and
+    # not yet the real NFS-e from restricted issuance either, because
+    # asserting validity is a business/accounting decision (who may rely on
+    # this payload, for what, and under whose responsibility) that nobody has
+    # taken. M55 and M56 both flagged it; changing it needs an explicit
+    # contract, not a state rename. See the M57 report's FISCAL_VALIDITY
+    # section for the recommendation.
     data['fiscal_validity'] = False
     if prep:
         data['preparation'] = {k: getattr(prep, k) for k in (

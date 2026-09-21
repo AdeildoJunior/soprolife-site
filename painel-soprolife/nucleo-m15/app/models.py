@@ -2733,7 +2733,11 @@ class FiscalDocument(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("spirometry_exam_id", "environment", name="uq_fiscal_exam_environment"),
         CheckConstraint("environment IN ('mock','restricted','production')", name="fiscal_document_environment"),
-        CheckConstraint("state IN ('blocked','pending','issuing','simulated','failed','uncertain','reconciling','cancelled')", name="fiscal_document_state"),
+        # M57 — 'issued' (a real NFS-e exists at the tax authority) is a
+        # DIFFERENT terminal success state from 'simulated' (the mock invented
+        # an identifier and nothing was issued anywhere). 'simulated' is kept,
+        # narrowed to genuine mock runs; see services/nfse.success_state().
+        CheckConstraint("state IN ('blocked','pending','issuing','issued','simulated','failed','uncertain','reconciling','cancelled')", name="fiscal_document_state"),
     )
 
 

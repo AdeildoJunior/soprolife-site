@@ -13,6 +13,17 @@ from ..config import Settings
 
 
 class Outcome(str, Enum):
+    # M57 — the two success outcomes are deliberately DIFFERENT words, because
+    # they are different facts about the world. ISSUED means a real provider
+    # confirmed a real NFS-e exists at a tax authority (restricted included:
+    # DPS #10 produced an official document under tpAmb=2). SIMULATED means
+    # nothing was issued anywhere — the mock invented an identifier locally.
+    # Until M57 both shared the name 'simulated', so a genuine NFS-e was
+    # recorded with a word that reads as "nothing happened". Which of the two
+    # a provider may return is enforced per provider kind in
+    # ``nfse._normalized`` — a mock can never report ISSUED, and a real
+    # provider can never report SIMULATED.
+    ISSUED = 'issued'
     SIMULATED = 'simulated'
     CANCELLED = 'cancelled'
     UNCERTAIN = 'uncertain'

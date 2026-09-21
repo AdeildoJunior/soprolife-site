@@ -120,7 +120,12 @@ def to_provider_outcome(classified: ClassifiedResponse, *, operation: str) -> Ou
     if t is TransportOutcome.NOT_FOUND:
         return Outcome.NOT_FOUND
     if t is TransportOutcome.HTTP_SUCCESS:
-        return Outcome.SIMULATED if operation != "cancel" else Outcome.CANCELLED
+        # M57 — this provider only ever talks to a real tax authority
+        # (restricted or production), so a clean success here is a real
+        # issuance and says so: ISSUED, never SIMULATED. Reporting
+        # SIMULATED from this module is now a contract violation that
+        # ``nfse._normalized`` downgrades to UNCERTAIN.
+        return Outcome.ISSUED if operation != "cancel" else Outcome.CANCELLED
     if t is TransportOutcome.HTTP_CLIENT_ERROR:
         return Outcome.REJECTED
     # server error, timeout, connection error, malformed response: never a

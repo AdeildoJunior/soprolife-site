@@ -171,7 +171,7 @@ class RestrictedNfseProvider:
             body_valid=access_key is not None,
         )
         outcome = to_provider_outcome(classified, operation="issue")
-        external_id = access_key if outcome == Outcome.SIMULATED else None
+        external_id = access_key if outcome == Outcome.ISSUED else None
         # M40/M41/M44 — the ONLY place a 4xx/5xx body is ever parsed. Never
         # changes `classified`/`outcome` above (those are HTTP-status-only,
         # unchanged since M35): this is purely additive, already-sanitized
@@ -263,7 +263,7 @@ class RestrictedNfseProvider:
             body_valid=access_key is not None,
         )
         outcome = to_provider_outcome(classified, operation=operation)
-        external_id = access_key if outcome in (Outcome.SIMULATED, Outcome.CANCELLED) else None
+        external_id = access_key if outcome in (Outcome.ISSUED, Outcome.CANCELLED) else None
         return ProviderResult(outcome, external_id, safe_diagnostic_code(classified))
 
     def cancel(self, request: ProviderRequest) -> ProviderResult:
