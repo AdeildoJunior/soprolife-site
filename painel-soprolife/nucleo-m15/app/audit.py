@@ -97,6 +97,12 @@ ALLOWED_KEYS = {
     # beyond the already-sanitized parametros scalars.
     "sefin_erro_parametros", "sefin_erros_status", "sefin_erros_contagem",
     "sefin_erros_nomes_campos",
+    # M55 — carimbo de processamento do proprio SEFIN
+    # (``dataHoraProcessamento``) e os digests das evidencias de SUCESSO
+    # (XML submetido e NFS-e devolvida). Apenas timestamp e hashes: nunca
+    # corpo, nunca XML, nunca Base64, nunca PII.
+    "sefin_data_hora_processamento", "evidencia_dps_enviado_sha256",
+    "evidencia_nfse_recebida_sha256", "evidencia_persistencia_falhou",
 }
 
 _MAX_STR = 120

@@ -18,8 +18,9 @@ from ..fiscal_schemas import PolicyCreate, TaxConfiguration
 from ..finance_categories import CATEGORIA_ESPIROMETRIA, e_receita_propria_do_componente
 from ..ids import new_uuid
 from ..models import (FiscalPolicy, FiscalDocument, FiscalPreparation, FiscalAttempt,
-                      FinancialEntry, SpirometryExam, Person, utcnow)
+                      FiscalArtifact, FinancialEntry, SpirometryExam, Person, utcnow)
 from .idempotency import idempotent_create, payload_fingerprint
+from .nfse_national import artifacts as artifact_storage
 from .nfse_national import dispatch as national_dispatch
 from .nfse_national.identifiers import NFSE_ACCESS_KEY_PATTERN
 from .nfse_providers import get_provider, ProviderRequest, ProviderResult, Outcome
@@ -396,11 +397,14 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
     error = ('access_key_conflict' if access_key_conflict else
              (diagnostic or 'provider_uncertain') if uncertain else
              (diagnostic or 'provider_rejected') if result.outcome == Outcome.REJECTED else None)
-    db.add(FiscalAttempt(**common, phase='completed', outcome=result.outcome.value,
-                         completed_at=utcnow(), external_id=result.external_id,
-                         error_code=error, reconciliation_required=uncertain,
-                         idempotency_key=payload_fingerprint({'completed': operation_id}),
-                         idempotency_fingerprint=payload_fingerprint(identity)))
+    completed_event = FiscalAttempt(
+        **common, phase='completed', outcome=result.outcome.value,
+        completed_at=utcnow(), external_id=result.external_id,
+        error_code=error, reconciliation_required=uncertain,
+        idempotency_key=payload_fingerprint({'completed': operation_id}),
+        idempotency_fingerprint=payload_fingerprint(identity))
+    db.add(completed_event)
+    db.flush()
     doc.state = state
     # M40/M41/M44 — already-sanitized SEFIN validation/shape detail (see
     # nfse_national.error_sanitizer / response_diagnostics), if the provider
@@ -440,6 +444,38 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
             sefin_detail['sefin_erros_contagem'] = shape['erros_count']
         if shape.get('erros_item_field_names'):
             sefin_detail['sefin_erros_nomes_campos'] = list(shape['erros_item_field_names'])
+    # M55 — evidence of a SUCCESS, persisted with the same append-only
+    # discipline a rejection already had. The bytes we submitted and the
+    # document the government returned are written as FiscalArtifacts; only
+    # their digests reach the audit trail.
+    #
+    # Deliberately BEST-EFFORT: evidence must never be able to fail a fiscal
+    # operation. A full disk or a permissions problem here would otherwise
+    # roll back an attempt the provider has already completed — turning a
+    # recorded success into a phantom. Any failure is itself recorded, as a
+    # boolean, and the fiscal outcome stands.
+    if result.provider_processed_at:
+        sefin_detail['sefin_data_hora_processamento'] = result.provider_processed_at
+    evidence = [('dps_signed_xml', result.submitted_document),
+                ('nfse_xml', result.returned_document)]
+    if any(payload for _, payload in evidence):
+        try:
+            root = settings.resolved_fiscal_artifacts_storage_dir()
+            for kind, payload in evidence:
+                if not payload:
+                    continue
+                stored = artifact_storage.write_artifact(
+                    root, document_id=doc.id, attempt_id=completed_event.id,
+                    kind=kind, data=payload)
+                db.add(FiscalArtifact(document_id=doc.id, attempt_id=completed_event.id,
+                                      kind=kind, storage_relative_path=str(stored.relative_path),
+                                      sha256=stored.sha256, size_bytes=stored.size_bytes,
+                                      created_by=actor))
+                sefin_detail['evidencia_dps_enviado_sha256' if kind == 'dps_signed_xml'
+                             else 'evidencia_nfse_recebida_sha256'] = stored.sha256
+        except Exception:
+            # Never re-raise: see the note above. The boolean is the signal.
+            sefin_detail['evidencia_persistencia_falhou'] = True
     record(db, operation + '_completed', 'fiscal_document', doc.id, actor, request_id,
            provider=provider.name, resultado=result.outcome.value, status=state, sequencia=number,
            **sefin_detail)

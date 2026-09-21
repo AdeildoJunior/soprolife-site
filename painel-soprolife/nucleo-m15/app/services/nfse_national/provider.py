@@ -29,6 +29,7 @@ from .responses import (TransportOutcome, classify_issue_response, classify_reco
 from .signer import LoadedCertificate, sign_dps, verify_dps_signature
 from .transport import PATH_GET_DPS, PATH_ISSUE_NFSE, RestrictedTransport, TransportRequest
 from .wire import (JSON_ACCEPT_HEADERS, JSON_REQUEST_HEADERS, WireFormatError,
+                   extract_processing_timestamp,
                    build_issue_request_body, decode_nfse_success_envelope,
                    find_nfse_access_key_in_response)
 from .xsd_validation import XsdValidationError, validate_dps_xml
@@ -135,11 +136,17 @@ class RestrictedNfseProvider:
         # with a schema-shaped infNFSe/@Id (TSIdNFSe), and both access keys
         # must agree. Anything less is malformed, never a silent success.
         access_key: str | None = None
+        returned_document: bytes | None = None
         if response is not None and 200 <= response.status_code < 300 and response.body:
             try:
-                access_key = decode_nfse_success_envelope(response.body).access_key
+                decoded = decode_nfse_success_envelope(response.body)
             except WireFormatError:
                 access_key = None
+            else:
+                access_key = decoded.access_key
+                # M55 — keep the document the government actually returned, so a
+                # success leaves the same forensic trail a rejection already did.
+                returned_document = decoded.nfse_xml
         classified = classify_issue_response(
             http_status=response.status_code if response else None, exc=exc,
             body_valid=access_key is not None,
@@ -153,6 +160,24 @@ class RestrictedNfseProvider:
         # state machine.
         validation_errors = None
         response_shape = None
+        # M55 — summarize the SHAPE of every response, 2xx included. This block
+        # used to run only for 4xx/5xx, so a 201 whose body we failed to decode
+        # recorded nothing at all: no content_type, no sha256, no top-level key
+        # names. That is precisely why `provider_malformed_response:http_201`
+        # was undiagnosable from the audit trail alone and needed four
+        # missions and a live re-query to explain. Shape is bounded metadata
+        # (type/length/hash/key NAMES) — never body content, never PII — and,
+        # like every other diagnostic here, never touches `classified`/
+        # `outcome`.
+        if response is not None and classified.transport_outcome not in _ERROR_BODY_OUTCOMES:
+            success_shape = summarize_response_shape(response.body or b"", response.content_type)
+            response_shape = {
+                "content_type": success_shape.content_type,
+                "content_length": success_shape.content_length,
+                "sha256": success_shape.sha256,
+                "body_kind": success_shape.body_kind,
+                "top_level_keys": success_shape.top_level_keys,
+            }
         if response is not None and classified.transport_outcome in _ERROR_BODY_OUTCOMES:
             # M41 — captured for EVERY 4xx/5xx, even one with no usable
             # erros[]/ResponseErro (DPS #5's exact case): shape/hash/keys
@@ -181,8 +206,15 @@ class RestrictedNfseProvider:
                          "mensagem": e.mensagem, "erro": e.erro, "parametros": e.parametros}
                         for e in sanitized
                     )
+        # M55 — Sefin's own processing timestamp, read from the documented
+        # top-level `dataHoraProcessamento`. A plain timestamp: no PII, no
+        # payload. Absent or malformed simply yields None.
+        processed_at = extract_processing_timestamp(response.body) if response is not None else None
         return ProviderResult(outcome, external_id, safe_diagnostic_code(classified),
-                              validation_errors, response_shape)
+                              validation_errors, response_shape,
+                              submitted_document=signed_xml,
+                              returned_document=returned_document,
+                              provider_processed_at=processed_at)
 
     def query(self, request: ProviderRequest, operation: str) -> ProviderResult:
         # Reconciliation/query is keyed by the OFFICIAL DPS identifier

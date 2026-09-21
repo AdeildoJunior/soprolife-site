@@ -66,6 +66,7 @@ FIELD_ERROR_LIST = "erros"
 FIELD_ERROR_CODE = "codigo"
 FIELD_ERROR_DESCRIPTION = "descricao"
 FIELD_ERROR_COMPLEMENT = "complemento"
+FIELD_PROCESSED_AT = "dataHoraProcessamento"
 
 
 class WireFormatError(ValueError):
@@ -194,6 +195,35 @@ def decode_nfse_success_envelope(body: bytes) -> DecodedNfseEnvelope:
     # A chave devolvida continua sendo a forma TSIdNFSe vinda do XML — a
     # convencao de armazenamento nao muda com esta correcao.
     return DecodedNfseEnvelope(access_key=key_from_xml, nfse_xml=nfse_xml)
+
+
+def extract_processing_timestamp(body: bytes | None) -> str | None:
+    """Sefin's own ``dataHoraProcessamento``, or None.
+
+    M55 — this value is present on every documented JSON response (success
+    and error alike) and was never kept. It is the government's clock for the
+    operation, which is exactly what an E0008-class dispute needs: M49 had to
+    reason about it indirectly because the field had been observed but never
+    persisted.
+
+    Deliberately total and non-raising: a missing field, a non-JSON body, a
+    non-string value or an absurdly long one all return None. It is a plain
+    timestamp string — never PII, never payload — and is bounded here so a
+    hostile body cannot push unbounded text into the audit trail.
+    """
+    if not body:
+        return None
+    try:
+        payload = _parse_json_object(body)
+    except WireFormatError:
+        return None
+    value = payload.get(FIELD_PROCESSED_AT)
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or len(value) > 64:
+        return None
+    return value
 
 
 def decode_nfse_document_response(body: bytes, *, expected_access_key: str | None = None

@@ -45,6 +45,19 @@ class ProviderResult:
     # top_level_keys only — never body content. See
     # nfse_national.response_diagnostics.summarize_response_shape().
     response_shape: dict | None = None
+    # M55 — SUCCESS-side evidence, the gap that made a real HTTP 201 take four
+    # missions to explain. Until now nothing about a 2xx was ever kept: not the
+    # bytes we submitted, not the document the government returned, not its
+    # processing timestamp. Only 4xx/5xx bodies were ever summarized, so a
+    # successful issuance left no forensic trail at all.
+    #
+    # All three are optional and provider-specific (the mock never sets them),
+    # so every existing call site is unaffected. They are EVIDENCE ONLY: the
+    # state machine never reads them, exactly like diagnostic_code and
+    # response_shape.
+    submitted_document: bytes | None = None   # the exact signed DPS bytes sent
+    returned_document: bytes | None = None    # the NFS-e XML the API returned
+    provider_processed_at: str | None = None  # Sefin `dataHoraProcessamento`
 
 
 @dataclass(frozen=True)
