@@ -4714,6 +4714,7 @@ def _assinado_mais_recente(
 @router.get("/assinatura-externa/fila")
 def list_delivery_queue(
     estado: str | None = None,
+    incluir_superados: bool = False,
     db: Session = Depends(get_db),
     _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
@@ -4722,6 +4723,22 @@ def list_delivery_queue(
     A transição para "assinado recebido" é AUTOMÁTICA: ela acontece quando a
     médica confirma o lote devolvido. Ninguém precisa avisar a administração
     por WhatsApp de que os laudos voltaram.
+
+    M26.22 — um laudo que já tem CORRETIVA SUCESSORA não é entrega pendente:
+    ele foi substituído, e quem vai ao paciente é o sucessor. Continuar
+    listando o predecessor criava duas linhas do mesmo atendimento na fila e,
+    pior, contava o predecessor nos totalizadores — um "Aguardando assinatura"
+    que ninguém podia resolver, porque assinar o documento superado não
+    entrega nada. É a MESMA regra que `/laudos/acompanhamento` e
+    `/laudos/assinatura-externa/pendentes` já aplicavam; esta fila era a
+    única das três sem ela.
+
+    Excluir não é esconder: nada é apagado, o histórico continua intacto e
+    `incluir_superados=true` traz os predecessores de volta para auditoria.
+
+    O "entregue" NÃO entra nessa exclusão de propósito, embora
+    `/acompanhamento` o exclua: lá a lista é de trabalho pendente, aqui
+    "Entregue" é um dos cinco estados do próprio percurso e precisa aparecer.
     """
 
     _require_reports_enabled()
@@ -4730,8 +4747,19 @@ def list_delivery_queue(
             422, "estado_fila_invalido", "Estado de fila inválido."
         )
 
-    linhas = db.execute(
-        select(ReportDocument, SpirometryExam, Person, ReportAssignment)
+    corretiva = aliased(ReportDocument)
+    tem_corretiva_sucessora = exists().where(
+        corretiva.corrects_document_id == ReportDocument.id
+    )
+
+    statement = (
+        select(
+            ReportDocument,
+            SpirometryExam,
+            Person,
+            ReportAssignment,
+            tem_corretiva_sucessora,
+        )
         .join(
             SpirometryExam,
             SpirometryExam.id == ReportDocument.spirometry_exam_id,
@@ -4746,29 +4774,26 @@ def list_delivery_queue(
         # M25.24 — a fila de ENTREGA também é lista de trabalho. Um exame
         # encerrado como histórico não tem entrega a fazer.
         .where(SpirometryExam.encerramento_motivo.is_(None))
-        .order_by(ReportDocument.created_at.desc())
-        .limit(300)
+    )
+    # M26.22 — o corte acontece NA CONSULTA, antes do LIMIT e antes dos
+    # contadores. Filtrar depois, em Python, deixaria os superados ocupando
+    # vagas das 300 linhas e ainda exigiria recontar à mão.
+    if not incluir_superados:
+        statement = statement.where(~tem_corretiva_sucessora)
+
+    linhas = db.execute(
+        statement.order_by(ReportDocument.created_at.desc()).limit(300)
     ).all()
 
     from .patient_results import resumo_do_acesso
 
     # M26.12 — "Retornar para laudadora" só faz sentido uma vez por
-    # predecessor (o servidor já recusa a segunda com 409); consultar isso
-    # em lote evita N+1 numa fila de até 300 linhas.
-    predecessor_ids_com_corretiva = {
-        row[0]
-        for row in db.execute(
-            select(ReportDocument.corrects_document_id).where(
-                ReportDocument.corrects_document_id.in_(
-                    [document.id for document, _exam, _person, _assignment in linhas]
-                )
-            )
-        ).all()
-        if row[0] is not None
-    }
-
+    # predecessor (o servidor já recusa a segunda com 409). M26.22 — o dado
+    # que responde isso passou a vir do próprio SELECT, como quinta coluna:
+    # é a mesma pergunta que agora decide a filtragem, e fazer as duas com
+    # um único exists() evita tanto o N+1 quanto duas verdades divergentes.
     itens = []
-    for document, exam, person, assignment in linhas:
+    for document, exam, person, assignment, superado in linhas:
         assinado = _assinado_mais_recente(db, document.id)
         atual = _estado_de_entrega(document, assinado)
         if estado is not None and atual != estado:
@@ -4782,7 +4807,7 @@ def list_delivery_queue(
             "estado": atual,
             "estado_rotulo": FILA_ROTULOS[atual],
             "status_clinico": document.status,
-            "has_corrective": document.id in predecessor_ids_com_corretiva,
+            "has_corrective": bool(superado),
             "released_at": iso(document.released_at),
             "physician_profile_id": (
                 assignment.physician_profile_id if assignment else None

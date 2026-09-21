@@ -239,3 +239,102 @@ def test_producao_le_assinatura_do_documento_terminal_em_cadeia_de_dois_saltos(
         "assinada) e mostrava 0"
     )
     assert producao["aguardando_assinatura"] == 0
+
+
+# ------------------------------- M26.22 — fila de entrega ADMINISTRATIVA
+#
+# As duas listas acima (a da médica) já excluíam superados. A fila de
+# entrega da administração era a terceira porta e continuava aberta: em
+# produção, ESP-000050 devolvia LAU-000035, LAU-000036 e LAU-000038 juntos,
+# e o contador "Aguardando assinatura" marcava 1 por causa do LAU-000036 —
+# uma pendência que ninguém conseguia resolver, porque assinar um documento
+# já substituído não entrega nada a ninguém.
+
+
+def _fila_entrega(client, auth, **params):
+    resposta = client.get(
+        "/api/v1/laudos/assinatura-externa/fila",
+        params=params or None,
+        headers=auth("operacional"),
+    )
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
+
+
+def _contador(fila, chave):
+    return next(e["total"] for e in fila["estados"] if e["chave"] == chave)
+
+
+def test_fila_de_entrega_exclui_documentos_superados(client, auth, case):
+    raiz, corretiva1, corretiva2 = _abrir_cadeia_de_dois_saltos(client, case)
+
+    fila = _fila_entrega(client, auth)
+    ids = {item["document_id"] for item in fila["itens"]}
+
+    assert raiz not in ids, (
+        "a raiz já foi superada duas vezes — não é entrega pendente, quem "
+        "vai ao paciente é o fim da cadeia"
+    )
+    assert corretiva1 not in ids, (
+        "corretiva1 foi superada pela corretiva2; era exatamente ela que "
+        "aparecia como 'Aguardando assinatura' em ESP-000050"
+    )
+    assert corretiva2 in ids, (
+        "o documento vigente TEM de continuar na fila — excluir superados "
+        "não pode esvaziar a entrega real"
+    )
+
+
+def test_contadores_da_fila_ignoram_superados(client, auth, case):
+    """O contador é o que a tela mostra em destaque; ele precisa ser
+    calculado DEPOIS da exclusão, não sobre a coleção crua."""
+
+    raiz, corretiva1, corretiva2 = _abrir_cadeia_de_dois_saltos(client, case)
+
+    fila = _fila_entrega(client, auth)
+
+    assert _contador(fila, "aguardando_assinatura") == 0, (
+        "raiz e corretiva1 estão liberadas e sem assinado — antes da M26.22 "
+        "elas inflavam este contador mesmo já substituídas"
+    )
+    assert _contador(fila, "aguardando_laudo") == 1, (
+        "só a corretiva2 (aberta, ainda não liberada) é trabalho de verdade"
+    )
+    assert sum(e["total"] for e in fila["estados"]) == len(fila["itens"]), (
+        "a soma dos contadores tem de bater com os itens devolvidos — se "
+        "divergir, o contador voltou a ser calculado sobre outra coleção"
+    )
+
+
+def test_fila_de_entrega_devolve_superados_sob_pedido_explicito(
+    client, auth, case
+):
+    """Excluir não é apagar: a auditoria continua alcançando os superados."""
+
+    raiz, corretiva1, corretiva2 = _abrir_cadeia_de_dois_saltos(client, case)
+
+    fila = _fila_entrega(client, auth, incluir_superados="true")
+    por_id = {item["document_id"]: item for item in fila["itens"]}
+
+    assert {raiz, corretiva1, corretiva2} <= set(por_id)
+    assert por_id[raiz]["has_corrective"] is True
+    assert por_id[corretiva1]["has_corrective"] is True
+    assert por_id[corretiva2]["has_corrective"] is False, (
+        "o fim da cadeia nunca é superado — se vier marcado, a coluna do "
+        "SELECT está lendo a relação ao contrário"
+    )
+
+
+def test_laudo_sem_corretiva_permanece_na_fila_de_entrega(client, auth, case):
+    """Sem corretiva, nada muda — a M26.22 não pode estreitar a fila normal."""
+
+    document_id = case["document"]["id"]
+    _liberar(client, case)
+
+    fila = _fila_entrega(client, auth)
+    alvo = next(
+        item for item in fila["itens"] if item["document_id"] == document_id
+    )
+    assert alvo["estado"] == "aguardando_assinatura"
+    assert alvo["has_corrective"] is False
+    assert _contador(fila, "aguardando_assinatura") == 1
