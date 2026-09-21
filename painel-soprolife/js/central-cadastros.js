@@ -125,6 +125,120 @@
     });
   }
 
+  /* Máscara de CPF durante a digitação: 000.000.000-00.
+   *
+   * O valor VISÍVEL ganha pontos e traço; o valor ENVIADO continua sendo só
+   * os 11 dígitos. O núcleo guarda `people.cpf` como String(11) com CHECK de
+   * comprimento (`services/cpf.py` é a única porta de entrada), então mandar
+   * a máscara faria o servidor limpar de novo aquilo que a tela acabou de
+   * montar — e deixaria duas representações circulando pelo mesmo campo.
+   *
+   * O cursor é reposicionado por CONTAGEM DE DÍGITOS, não por deslocamento
+   * de caracteres: reescrever `input.value` joga o cursor para o fim, e
+   * apagar no meio de um CPF já digitado ficaria impossível. Contar dígitos
+   * também faz o backspace sobre um separador se comportar como o operador
+   * espera — some o dígito, não o ponto sozinho.
+   */
+  const CPF_DIGITOS = 11;
+
+  function cpfDigitos(valor) {
+    return String(valor == null ? "" : valor).replace(/\D/g, "").slice(0, CPF_DIGITOS);
+  }
+
+  // Progressiva e SEM separador à direita: "097" não vira "097.", senão o
+  // backspace apagaria um ponto que a máscara recolocaria em seguida.
+  function cpfFormatado(digitos) {
+    const d = cpfDigitos(digitos);
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+    if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+
+  // Posição de texto logo após o n-ésimo dígito do valor formatado.
+  function cpfPosDoDigito(texto, n) {
+    if (n <= 0) return 0;
+    let vistos = 0;
+    for (let i = 0; i < texto.length; i++) {
+      if (texto[i] >= "0" && texto[i] <= "9") {
+        vistos += 1;
+        if (vistos === n) return i + 1;
+      }
+    }
+    return texto.length;
+  }
+
+  const CPF_ERRO_INCOMPLETO = "CPF deve ter 11 dígitos.";
+
+  // A mensagem vive ao lado do campo, dentro do mesmo .m15-field, para o
+  // leitor de tela anunciá-la junto do input (aria-describedby) em vez de
+  // depender de um toast que some.
+  function cpfCaixaErro(input) {
+    const campo = input.closest(".m15-field") || input.parentNode;
+    let box = campo.querySelector("[data-cpf-erro]");
+    if (!box) {
+      box = document.createElement("span");
+      box.className = "m15-field-help cad-campo-erro";
+      box.setAttribute("data-cpf-erro", "1");
+      box.setAttribute("role", "alert");
+      box.id = (input.getAttribute("name") || "cpf") + "-erro";
+      box.hidden = true;
+      campo.appendChild(box);
+    }
+    return box;
+  }
+
+  function cpfMostrarErro(input, mostrar) {
+    const box = cpfCaixaErro(input);
+    const campo = input.closest(".m15-field");
+    box.hidden = !mostrar;
+    box.textContent = mostrar ? CPF_ERRO_INCOMPLETO : "";
+    if (mostrar) input.setAttribute("aria-describedby", box.id);
+    else input.removeAttribute("aria-describedby");
+    // Classe própria, e não `cad-campo-pendente`: aquela é âmbar e significa
+    // "o servidor apontou um campo faltante". Aqui o dado está errado agora,
+    // na tela, e o operador consegue corrigir sem enviar nada.
+    if (campo) campo.classList.toggle("cad-campo-invalido", !!mostrar);
+    input.setAttribute("aria-invalid", mostrar ? "true" : "false");
+  }
+
+  // Preenchido e incompleto é erro; vazio é ausência legítima (o núcleo
+  // aceita paciente sem CPF de propósito).
+  function cpfIncompleto(input) {
+    const d = cpfDigitos(input.value);
+    return d.length > 0 && d.length < CPF_DIGITOS;
+  }
+
+  // Valida no blur/submit e devolve se está utilizável. Nunca chamada
+  // durante a digitação: acusar "faltam dígitos" no terceiro caractere é
+  // ruído garantido, porque TODO CPF passa por incompleto antes de existir.
+  function cpfValidarCampo(input) {
+    const ruim = cpfIncompleto(input);
+    cpfMostrarErro(input, ruim);
+    return !ruim;
+  }
+
+  function cpfMask(input) {
+    input.addEventListener("input", () => {
+      const antes = input.value;
+      const cursor = input.selectionStart == null ? antes.length : input.selectionStart;
+      const digitosAteCursor = cpfDigitos(antes.slice(0, cursor)).length;
+      const out = cpfFormatado(antes);
+      if (out !== antes) {
+        // Reescrever `value` manda o cursor para o fim do campo; a posição
+        // é sempre recolocada, inclusive quando a digitação JÁ estava no
+        // fim — sem isso, `value` e cursor saem de sincronia e o caractere
+        // seguinte entra antes do separador, embaralhando o número.
+        input.value = out;
+        const pos = cpfPosDoDigito(out, digitosAteCursor);
+        try { input.setSelectionRange(pos, pos); } catch (e) { /* input sem seleção */ }
+      }
+      // Enquanto digita, o erro só SAI de cena — nunca entra.
+      cpfMostrarErro(input, false);
+    });
+    input.addEventListener("blur", () => { cpfValidarCampo(input); });
+  }
+
   function toast(msg, kind) {
     const el = document.createElement("div");
     el.className = "m15-toast" + (kind === "erro" ? " m15-toast-erro" : "");
@@ -704,6 +818,8 @@
     if (novaBox) {
       const fone = root.querySelector(`[name="${prefix}_fone"]`);
       if (fone) phoneMask(fone);
+      const cpf = root.querySelector(`[name="${prefix}_cpf"]`);
+      if (cpf) cpfMask(cpf);
       const gfone = root.querySelector(`[name="${prefix}_gfone"]`);
       if (gfone) phoneMask(gfone);
       // menor de idade → revela o bloco de responsável
@@ -745,6 +861,8 @@
       if (dupAviso) dupAviso.hidden = true;
       const gBox = root.querySelector("#" + prefix + "GuardianBox");
       if (gBox) gBox.hidden = true;
+      const cpfEl = root.querySelector(`[name="${prefix}_cpf"]`);
+      if (cpfEl) cpfMostrarErro(cpfEl, false);
     };
 
     picker.selecionada = function () { return picker.selected; };
@@ -773,7 +891,16 @@
       if (fone) payload.contatos.push({ tipo: "whatsapp", valor: fone, principal: true });
       if (email) payload.contatos.push({ tipo: "email", valor: email, principal: !fone });
       setIf(payload, "data_nascimento", leia("nasc"));
-      setIf(payload, "cpf", leia("cpf"));
+      /* CPF: a tela mostra 097.445.907-73, a API recebe 09744590773.
+       * `people.cpf` é String(11) com CHECK de comprimento; a máscara é
+       * apresentação e morre aqui. Incompleto trava o envio com a MESMA
+       * frase do blur, em vez de deixar o 422 do servidor explicar depois. */
+      const cpfEl = root.querySelector(`[name="${prefix}_cpf"]`);
+      if (cpfEl && !cpfValidarCampo(cpfEl)) {
+        cpfEl.focus();
+        throw new Error(CPF_ERRO_INCOMPLETO);
+      }
+      setIf(payload, "cpf", cpfDigitos(leia("cpf")));
       setIf(payload, "sexo", leia("sexo"));
       setIf(payload, "consentimento_whatsapp", leia("consent"));
       return payload;

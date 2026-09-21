@@ -478,6 +478,24 @@
 
 .m15-field.cad-campo-pendente .m15-field-label { color: #8a5a00; }
 
+/* ------------------------------------------- campo invalido na propria tela
+   Distinto do ambar de "campo faltante apontado pelo servidor": aqui o valor
+   digitado esta errado agora e o operador corrige sem enviar nada. */
+.m15-field.cad-campo-invalido {
+  position: relative;
+  border-left: 3px solid #b23b37;
+  padding-left: 9px;
+  border-radius: 3px;
+  background: #fff6f5;
+}
+
+.m15-field.cad-campo-invalido .m15-field-label { color: #8f2f2c; }
+
+.m15-field-help.cad-campo-erro {
+  color: #b23b37;
+  font-weight: 600;
+}
+
 .cad-sucesso-pendencia {
   display: block;
   margin-top: 6px;
