@@ -41,7 +41,9 @@ def test_fila_resumo_rbac_and_shape(fiscal_enabled, client, auth):
     assert body == {
         'environment': 'mock', 'total': 0, 'eligible': 0, 'blocked_total': 0,
         'blocked_breakdown': body['blocked_breakdown'],
-        'issuing': 0, 'simulated': 0, 'failed': 0, 'uncertain': 0,
+        # M57 — 'issued' joins the payload as the real-issuance counter;
+        # 'simulated' stays and now counts ONLY genuine mock runs.
+        'issuing': 0, 'issued': 0, 'simulated': 0, 'failed': 0, 'uncertain': 0,
         'reconciling': 0, 'cancelled': 0, 'reconciliation_required': 0,
     }
 

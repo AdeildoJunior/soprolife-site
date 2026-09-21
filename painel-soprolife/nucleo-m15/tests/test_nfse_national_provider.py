@@ -121,7 +121,7 @@ def test_issue_success_sends_signed_xsd_valid_dps(context):
     transport = FakeTransport(responses=[TransportResponse(201, _success_body())])
     provider = RestrictedNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
-    assert result.outcome == Outcome.SIMULATED
+    assert result.outcome == Outcome.ISSUED
     sent = transport.received[0]
     assert sent.method == "POST" and sent.path == "/nfse"
     dps_xml = _sent_dps_xml(transport)
@@ -135,7 +135,7 @@ def test_issue_success_extracts_real_access_key(context):
     transport = FakeTransport(responses=[TransportResponse(200, _success_body())])
     provider = RestrictedNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
-    assert result.outcome == Outcome.SIMULATED
+    assert result.outcome == Outcome.ISSUED
     assert result.external_id == VALID_ACCESS_KEY
 
 
@@ -149,7 +149,7 @@ def test_issue_success_extracts_real_access_key(context):
 def test_issue_malformed_success_body_never_becomes_issued(context, body):
     """A 2xx status is never proof of issuance by itself — a success body that
     isn't the documented JSON envelope carrying a well-formed NFS-e with a
-    schema-shaped access key must fail closed to UNCERTAIN, never SIMULATED.
+    schema-shaped access key must fail closed to UNCERTAIN, never ISSUED.
 
     M38 note: raw NFS-e XML is included here on purpose. It was the shape the
     pre-M38 code accepted as success; under the real, documented contract it is
@@ -206,7 +206,7 @@ def test_reconcile_finds_issued_document_and_extracts_access_key(context):
     transport = FakeTransport(responses=[TransportResponse(200, _nfse_xml())])
     provider = RestrictedNfseProvider(transport=transport, context=context)
     result = provider.query(request(), "issue")
-    assert result.outcome == Outcome.SIMULATED
+    assert result.outcome == Outcome.ISSUED
     assert result.external_id == VALID_ACCESS_KEY
 
 
@@ -268,7 +268,7 @@ def test_issue_success_has_no_diagnostic(context):
     transport = FakeTransport(responses=[TransportResponse(201, _success_body())])
     provider = RestrictedNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
-    assert result.outcome == Outcome.SIMULATED
+    assert result.outcome == Outcome.ISSUED
     assert result.diagnostic_code is None
 
 

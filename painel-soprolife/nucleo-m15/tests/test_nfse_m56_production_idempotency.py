@@ -110,7 +110,7 @@ def test_replaying_the_same_operation_key_produces_no_second_post(
 
     doc = nfse.operate(db, restricted_doc.id, "issue", "same-key",
                        fully_configured_settings, users["gestor"].id)
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
     assert len(_posts(fake)) == 1
 
     # The FakeTransport has no queued response left: a second POST would
@@ -124,9 +124,10 @@ def test_replaying_the_same_operation_key_produces_no_second_post(
 
 def test_a_different_key_on_an_already_issued_document_still_posts_nothing(
         monkeypatch, db, users, restricted_doc, fully_configured_settings):
-    """Idempotency by key is not the only guard: a document already in
-    ``simulated`` short-circuits before the provider is ever resolved, so
-    even a fresh key cannot produce a second NFS-e."""
+    """Idempotency by key is not the only guard: a document already in a
+    terminal success state (``issued`` here — M57) short-circuits before the
+    provider is ever resolved, so even a fresh key cannot produce a second
+    NFS-e."""
     _validate_active_config(db, users)
     fake = _wire(monkeypatch, [TransportResponse(201, success_body())])
     nfse.operate(db, restricted_doc.id, "issue", "key-1",
@@ -135,7 +136,7 @@ def test_a_different_key_on_an_already_issued_document_still_posts_nothing(
 
     again = nfse.operate(db, restricted_doc.id, "issue", "key-2-totally-different",
                          fully_configured_settings, users["gestor"].id)
-    assert again.state == "simulated"
+    assert again.state == "issued"
     assert len(_posts(fake)) == 1
 
 
@@ -185,7 +186,7 @@ def test_uncertain_requires_reconcile_before_any_retry(
 def test_a_conclusive_get_dps_success_closes_the_document_against_retry(
         monkeypatch, db, users, restricted_doc, fully_configured_settings):
     """A reconcile that finds the NFS-e settles the matter: the document
-    becomes ``simulated`` and a subsequent issue is a no-op, not a POST."""
+    becomes ``issued`` and a subsequent issue is a no-op, not a POST."""
     _validate_active_config(db, users)
     fake = _wire(monkeypatch, [
         TimeoutError("sem resposta"),
@@ -195,13 +196,13 @@ def test_a_conclusive_get_dps_success_closes_the_document_against_retry(
                  fully_configured_settings, users["gestor"].id)
     doc = nfse.operate(db, restricted_doc.id, "reconcile", "k2",
                        fully_configured_settings, users["gestor"].id)
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
     assert _external_id(db, doc) == VALID_ACCESS_KEY
 
     posts_before = len(_posts(fake))
     again = nfse.operate(db, restricted_doc.id, "issue", "k3",
                          fully_configured_settings, users["gestor"].id)
-    assert again.state == "simulated"
+    assert again.state == "issued"
     assert len(_posts(fake)) == posts_before
 
 
@@ -311,7 +312,7 @@ def production_provider(context):  # noqa: F811 — fixture from the provider te
 def test_production_bound_provider_keeps_the_submitted_signed_xml(production_provider):
     provider, transport = production_provider([TransportResponse(201, success_body())])
     result = provider.issue(provider_request())
-    assert result.outcome == Outcome.SIMULATED
+    assert result.outcome == Outcome.ISSUED
     # The exact bytes submitted, not a re-serialization: identical to what
     # the transport carried, recovered from the envelope as SEFIN would.
     sent = json.loads(transport.received[0].body.decode("utf-8"))
@@ -352,7 +353,7 @@ def test_production_bound_provider_normalizes_the_access_key(production_provider
     }).encode("utf-8")
     provider, _ = production_provider([TransportResponse(201, body)])
     result = provider.issue(provider_request())
-    assert result.outcome == Outcome.SIMULATED
+    assert result.outcome == Outcome.ISSUED
     assert result.external_id == VALID_ACCESS_KEY
     assert NFSE_ACCESS_KEY_PATTERN.fullmatch(result.external_id)
 
@@ -383,7 +384,7 @@ def test_production_evidence_reaches_artifacts_and_audit_without_pii(
     _wire(monkeypatch, [TransportResponse(201, success_body())])
     doc = nfse.operate(db, restricted_doc.id, "issue", "k1",
                        fully_configured_settings, users["gestor"].id)
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
 
     kinds = {a.kind for a in db.query(FiscalArtifact).filter_by(document_id=doc.id).all()}
     assert {"dps_signed_xml", "nfse_xml"} <= kinds

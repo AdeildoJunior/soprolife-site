@@ -90,7 +90,11 @@ def test_dps_number_migration_survives_downgrade_upgrade(tmp_path, monkeypatch):
     url = f'sqlite:///{tmp_path}/dps_numbering_cycle.db'
     cfg = config(url)
     command.upgrade(cfg, 'head')
-    command.downgrade(cfg, '-1')
+    # Down to the revision just BELOW the dps numbering one, named explicitly
+    # rather than as '-1': M57 (a7d2c95e4f13) sits on top of 3a97d7535a49, so a
+    # relative step no longer lands here — and would again drift the next time
+    # a migration is added.
+    command.downgrade(cfg, 'a58f6c31d9e7')
     eng = create_engine(url)
     tables = set(inspect(eng).get_table_names())
     assert 'dps_number_sequences' not in tables

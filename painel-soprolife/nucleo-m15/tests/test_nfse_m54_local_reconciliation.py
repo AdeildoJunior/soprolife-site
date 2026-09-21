@@ -74,10 +74,10 @@ def test_uncertain_plus_official_proof_converges_to_success(
                             [TransportResponse(200, dps_query_body())])
     doc = nfse.operate(db, doc.id, "reconcile", "m54-rec", fully_configured_settings,
                        users["gestor"].id)
-    assert doc.state == "simulated"          # the domain's success state for an issue
+    assert doc.state == "issued"             # the domain's success state for an issue
     last = completed(db, doc)[-1]
     assert last.operation == "reconcile"
-    assert last.outcome == "simulated"
+    assert last.outcome == "issued"
     assert last.external_id == VALID_ACCESS_KEY   # TSIdNFSe storage convention
     assert last.reconciliation_required is False
 
@@ -149,7 +149,7 @@ def test_reconcile_is_idempotent_on_the_same_key(
                        users["gestor"].id)
     assert db.query(FiscalAttempt).filter_by(document_id=doc.id).count() == n_attempts
     assert len(fake.received) == calls
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
 
 
 # ------------------------------------------------------- fail-closed --------
@@ -165,7 +165,7 @@ def test_a_reconciled_document_refuses_further_reconciliation(
                              TransportResponse(200, dps_query_body(OTHER_KEY[3:]))])
     doc = nfse.operate(db, doc.id, "reconcile", "m54-rec-1", fully_configured_settings,
                        users["gestor"].id)
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
     recorded = completed(db, doc)[-1].external_id
     assert recorded == VALID_ACCESS_KEY
     calls = len(fake.received)

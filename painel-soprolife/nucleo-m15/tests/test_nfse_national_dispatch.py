@@ -304,21 +304,24 @@ def test_full_wiring_reaches_restricted_provider_via_fake_transport(
     doc = nfse.operate(db, restricted_doc.id, "issue", "m29-full-wiring-1", fully_configured_settings,
                        users["gestor"].id)
     assert len(fake.received) == 1  # the transport really was called exactly once
-    # A well-formed 2xx response classifies as SIMULATED at the transport
+    # A well-formed 2xx response classifies as ISSUED at the transport
     # level, but the restricted provider never returns an external_id (no
     # NFS-e access-key extraction exists yet — see the M29 report) and
-    # nfse._normalized() already refuses to treat SIMULATED-without-id as
+    # nfse._normalized() already refuses to treat a success-without-id as
     # anything but UNCERTAIN, exactly as it would for any other provider.
     # This is the correct, honest, fail-closed behavior today, not a bug.
     assert doc.state == "uncertain"
 
 
-def test_full_wiring_with_real_nfse_response_converges_to_simulated(
+def test_full_wiring_with_real_nfse_response_converges_to_issued(
         monkeypatch, db, users, restricted_doc, fully_configured_settings):
     """M30 — with the response-contract fix, a well-formed NFS-e success body
-    (the official contract for POST /nfse) now converges all the way to
-    'simulated', with the REAL government access key recorded as
+    (the official contract for POST /nfse) now converges all the way to a
+    terminal success, with the REAL government access key recorded as
     external_id — never a MOCK-shaped one, never invented.
+
+    M57 — that terminal state is 'issued', not 'simulated': this document's
+    environment is 'restricted', where an NFS-e really does exist at SEFIN.
     """
     _validate_active_config(db, users)
     fake = FakeTransport(responses=[TransportResponse(status_code=200, body=_success_body())])
@@ -327,9 +330,9 @@ def test_full_wiring_with_real_nfse_response_converges_to_simulated(
     doc = nfse.operate(db, restricted_doc.id, "issue", "m30-full-wiring-real-1",
                        fully_configured_settings, users["gestor"].id)
     assert len(fake.received) == 1
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
     completed = [a for a in events(db, doc) if a.phase == "completed"]
-    assert completed[-1].outcome == "simulated"
+    assert completed[-1].outcome == "issued"
     assert completed[-1].external_id == VALID_ACCESS_KEY
 
 
@@ -543,7 +546,7 @@ def test_issue_success_error_code_unchanged(
 
     doc = nfse.operate(db, restricted_doc.id, "issue", "m35-success", fully_configured_settings,
                        users["gestor"].id)
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
     completed = [a for a in events(db, doc) if a.phase == "completed"]
     assert completed[-1].error_code is None
 
@@ -668,7 +671,7 @@ def test_reprocess_retry_after_rejection_keeps_original_dps_number(
     assert doc.state == "failed"
     doc = nfse.operate(db, restricted_doc.id, "issue", "m36-retry-2", fully_configured_settings,
                        users["gestor"].id, reprocess=True)
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
 
     assert _expected_dps_id(1).encode() in _sent_dps_xml(fake, 0)
     assert _expected_dps_id(1).encode() in _sent_dps_xml(fake, 1)  # SAME number, not #2
@@ -743,7 +746,7 @@ def test_preflight_tsiddps_equals_issue_tsiddps_for_same_document(
     monkeypatch.setattr(dispatch, "HttpxRestrictedTransport", lambda **kwargs: fake)
     doc = nfse.operate(db, restricted_doc.id, "issue", "m36-preflight-vs-issue",
                        fully_configured_settings, users["gestor"].id)
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
     issued_xml = _sent_dps_xml(fake)
 
     expected_id = _expected_dps_id(1)

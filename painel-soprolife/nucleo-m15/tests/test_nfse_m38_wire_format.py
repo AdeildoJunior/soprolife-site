@@ -282,7 +282,7 @@ def test_success_201_envelope_is_decoded_and_key_extracted(context):
     infNFSe/@Id, cross-checked against the envelope's own chaveAcesso."""
     result, _ = _issue_with(context, TransportResponse(201, _success_envelope(
         access_key=VALID_ACCESS_KEY, xml_access_key=VALID_ACCESS_KEY)))
-    assert result.outcome == Outcome.SIMULATED
+    assert result.outcome == Outcome.ISSUED
     assert result.external_id == VALID_ACCESS_KEY
     assert result.diagnostic_code is None
 
@@ -462,7 +462,7 @@ def test_reconcile_decodes_the_gzip_envelope_when_the_body_carries_one(context):
         access_key=VALID_ACCESS_KEY, xml_access_key=VALID_ACCESS_KEY))])
     provider = RestrictedNfseProvider(transport=transport, context=context)
     result = provider.query(request(), "issue")
-    assert result.outcome == Outcome.SIMULATED
+    assert result.outcome == Outcome.ISSUED
     assert result.external_id == VALID_ACCESS_KEY
 
 

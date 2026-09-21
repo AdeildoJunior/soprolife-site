@@ -79,7 +79,7 @@ def test_processing_timestamp_reaches_the_audit_trail(
         monkeypatch, db, users, restricted_doc, fully_configured_settings):
     doc, _ = issue(db, users, restricted_doc, fully_configured_settings, monkeypatch,
                    TransportResponse(201, success_body_with_timestamp()))
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
     assert audit_detail(db, doc)["sefin_data_hora_processamento"] == PROCESSED_AT
 
 
@@ -128,7 +128,7 @@ def test_success_persists_the_submitted_dps_and_the_returned_nfse(
         monkeypatch, db, users, restricted_doc, fully_configured_settings):
     doc, fake = issue(db, users, restricted_doc, fully_configured_settings, monkeypatch,
                       TransportResponse(201, success_body_with_timestamp()))
-    assert doc.state == "simulated"
+    assert doc.state == "issued"
     kinds = {a.kind for a in artifacts(db, doc)}
     assert {"dps_signed_xml", "nfse_xml"} <= kinds
 
@@ -205,7 +205,7 @@ def test_evidence_failure_never_fails_the_fiscal_operation(
     monkeypatch.setattr(artifact_storage, "write_artifact", boom)
     doc, _ = issue(db, users, restricted_doc, fully_configured_settings, monkeypatch,
                    TransportResponse(201, success_body_with_timestamp()))
-    assert doc.state == "simulated"          # the fiscal outcome stands
+    assert doc.state == "issued"             # the fiscal outcome stands
     detail = audit_detail(db, doc)
     assert detail["evidencia_persistencia_falhou"] is True
     assert detail["sefin_data_hora_processamento"] == PROCESSED_AT

@@ -11,10 +11,14 @@ from app.services.nfse_national.responses import (
 from app.services.nfse_providers import Outcome
 
 
-def test_http_success_classified_and_mapped_to_simulated():
+def test_http_success_classified_and_mapped_to_issued():
+    # M57 — this module only ever speaks for a real tax authority, so a clean
+    # 2xx is a real issuance: ISSUED, never SIMULATED (which means the mock
+    # invented an identifier and nothing exists anywhere).
     classified = classify_issue_response(http_status=201, exc=None, body_valid=True)
     assert classified.transport_outcome == TransportOutcome.HTTP_SUCCESS
-    assert to_provider_outcome(classified, operation="issue") == Outcome.SIMULATED
+    assert to_provider_outcome(classified, operation="issue") == Outcome.ISSUED
+    assert to_provider_outcome(classified, operation="issue") != Outcome.SIMULATED
 
 
 def test_http_success_on_cancel_mapped_to_cancelled():
@@ -77,9 +81,9 @@ def test_reconcile_server_error_is_never_not_found():
     assert to_provider_outcome(classified, operation="reconcile") == Outcome.UNCERTAIN
 
 
-def test_reconcile_success_maps_to_simulated_evidence():
+def test_reconcile_success_maps_to_issued_evidence():
     classified = classify_reconcile_response(http_status=200, exc=None, body_valid=True)
-    assert to_provider_outcome(classified, operation="reconcile") == Outcome.SIMULATED
+    assert to_provider_outcome(classified, operation="reconcile") == Outcome.ISSUED
 
 
 # --------------------------------------------------------- M35 — safe HTTP-status diagnostic

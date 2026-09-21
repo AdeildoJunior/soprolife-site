@@ -122,7 +122,10 @@ def test_offline_e2e_document_to_classified_success(db, users, restricted_settin
     request = ProviderRequest(document_id=doc.id, operation_id='e2e-op-1', preparation_id='irrelevant',
                               amount='220.00', competence='2026-08-10', description='desc')
     outcome = provider.issue(request)
-    assert outcome.outcome == Outcome.SIMULATED
+    # M57 — a RESTRICTED provider reports ISSUED. The mock-provider batch
+    # assertions further down stay 'simulated' on purpose: nothing is issued
+    # anywhere there.
+    assert outcome.outcome == Outcome.ISSUED
     assert outcome.external_id == VALID_ACCESS_KEY
     # The FakeTransport actually received the signed DPS bytes it built itself
     # (proves the provider signs its own payload, not the one staged by
