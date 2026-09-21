@@ -5,13 +5,21 @@ Endpoint paths below come from the current official contributor manual
 see OFFICIAL_SOURCES_USED.md) — nothing here is a community guess.
 
 Fail-closed contract, enforced in code rather than only by configuration:
-- ``ProductionTransport`` has no working implementation. It exists only so a
-  caller can name it; every method unconditionally raises. There is no
-  configuration value that makes it functional — production network access
-  is impossible by construction, not by a flag that could be flipped.
-- ``HttpxRestrictedTransport`` re-checks the network gate on every single
-  call, even if the caller already checked it — a stale settings object or a
-  future call site that forgets the check still cannot reach the network.
+- BOTH real transports re-check their own gate on every single call, even if
+  the caller already checked it — a stale settings object or a future call
+  site that forgets the check still cannot reach the network.
+- The two gates are INDEPENDENT (M56). ``HttpxRestrictedTransport`` accepts
+  only ``environment='restricted'`` and only the restricted network flag;
+  ``HttpxProductionTransport`` accepts only ``environment='production'`` and
+  only the production network flag. Neither flag can ever satisfy the other
+  transport, so enabling Produção Restrita cannot enable production and vice
+  versa — proven by test, not only by naming.
+- ``ProductionTransport`` is constructed CLOSED: every one of its gate
+  arguments defaults to the refusing value, so ``ProductionTransport()``
+  with no arguments still raises on ``send()``, exactly as it did when the
+  class had no implementation at all. Opening it requires naming the
+  production environment, the production flag and an allowlisted URL
+  together, explicitly, at the call site.
 - ``FakeTransport`` is for tests only; it never touches a socket.
 """
 from __future__ import annotations
@@ -37,9 +45,10 @@ PATH_LIST_EVENTS = "/nfse/{chave_acesso}/eventos"
 
 
 class NetworkGateClosedError(RuntimeError):
-    """Raised whenever an operational call is attempted without the explicit
-    restricted network gate enabled, or against any environment other than
-    'restricted'. Never bypassable by constructor arguments alone."""
+    """Raised whenever an operational call is attempted without that
+    transport's own explicit network gate enabled, or from an environment
+    that transport does not serve. Never bypassable by constructor arguments
+    alone: each transport re-raises it from inside ``send()``, per call."""
 
 
 # M37 — the ADN (Ambiente de Dados Nacional) restricted host is a
@@ -55,6 +64,45 @@ class NetworkGateClosedError(RuntimeError):
 # impossible — never a guess, never dependent on `m31-restricted.env`
 # being edited correctly by hand.
 FORBIDDEN_ISSUANCE_HOSTS = frozenset({"adn.producaorestrita.nfse.gov.br"})
+
+# M56 — the official Sefin Nacional PRODUCTION base URL. A literal constant,
+# written out in full, deliberately NOT derived from
+# ``M15_NFSE_RESTRICTED_BASE_URL`` by any string operation: a ``replace()``
+# of "producaorestrita" would silently follow a typo, a stale value or an
+# operator's hand-edit straight into production. There is no environment
+# variable for this URL at all, so there is no arbitrary-URL surface to
+# validate in the first place — the only way to send somewhere else is to
+# edit this line, in a reviewed commit.
+PRODUCTION_BASE_URL = "https://sefin.nfse.gov.br/SefinNacional"
+
+# The ONLY host a production issuance may ever reach. An allowlist, not a
+# denylist: an unknown host fails closed. The ADN distribution host is
+# additionally refused by FORBIDDEN_ISSUANCE_HOSTS above, so it is barred
+# twice over — once for not being on this list, once for being a known
+# non-issuance service.
+ALLOWED_PRODUCTION_HOSTS = frozenset({"sefin.nfse.gov.br"})
+
+
+def assert_production_base_url(base_url: str) -> str:
+    """Return ``base_url`` normalized, or raise ``NetworkGateClosedError``.
+
+    Four independent refusals, each with its own reason code: not a string
+    with content, not HTTPS, host not on the production allowlist, host on
+    the forbidden-issuance list. Called from the production transport's
+    per-call gate, never once at construction — a mutated attribute is
+    caught on the next send, not trusted from the last one.
+    """
+    if not isinstance(base_url, str) or not base_url.strip():
+        raise NetworkGateClosedError("production_base_url_missing")
+    normalized = base_url.strip().rstrip("/")
+    if not normalized.startswith("https://"):
+        raise NetworkGateClosedError("production_base_url_must_be_https")
+    host = httpx.URL(normalized).host
+    if host in FORBIDDEN_ISSUANCE_HOSTS:
+        raise NetworkGateClosedError("production_base_url_must_not_be_adn_distribution_host")
+    if host not in ALLOWED_PRODUCTION_HOSTS:
+        raise NetworkGateClosedError("production_base_url_host_not_allowlisted")
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -78,14 +126,6 @@ class TransportResponse:
 
 class RestrictedTransport(Protocol):
     def send(self, request: TransportRequest) -> TransportResponse: ...
-
-
-class ProductionTransport:
-    """Deliberately non-functional. Production network access does not
-    exist in this codebase — not "disabled", ABSENT."""
-
-    def send(self, request: TransportRequest) -> TransportResponse:
-        raise NetworkGateClosedError("production_transport_not_implemented")
 
 
 def _write_private_file(path: str, data: bytes) -> None:
@@ -133,36 +173,45 @@ def _build_client_ssl_context(certificate_pem: bytes, key_pem: bytes) -> ssl.SSL
     return context
 
 
-class HttpxRestrictedTransport:
-    """Real HTTP transport for Produção Restrita, gated on every call.
+class _HttpxMtlsTransport:
+    """Shared mTLS HTTP machinery for both real environments.
 
-    ``mtls_certificate``/``mtls_key`` are the PEM bytes derived from the
-    loaded PKCS#12 (see ``signer.load_pkcs12_certificate``) — this class
-    never reads a certificate file itself and never sees a password.
+    Everything below is environment-agnostic: building the verified
+    ``SSLContext`` from in-memory PEM, an explicit timeout, the single
+    request, and narrowing the response down to status/body/content-type.
+    What differs between Produção Restrita and Produção is EXACTLY one
+    method — ``_assert_gate_open`` — which each subclass implements against
+    its own environment name, its own network flag and its own URL rule.
+
+    The M56 production transport therefore inherits the same discipline that
+    was proven end to end against the real SEFIN in the restricted cycle
+    (DPS #10): the same context construction, the same server verification,
+    the same ephemeral key handling, the same single non-retrying call. It
+    is not a second implementation that merely resembles the first.
+
+    ``mtls_certificate_pem``/``mtls_key_pem`` are the PEM bytes derived from
+    the loaded PKCS#12 (see ``signer.load_pkcs12_certificate``) — no
+    subclass ever reads a certificate file itself and none ever sees a
+    password.
     """
 
     def __init__(self, *, base_url: str, network_enabled: bool, environment: str,
                  timeout_seconds: float = 20.0,
                  mtls_certificate_pem: bytes | None = None,
                  mtls_key_pem: bytes | None = None):
-        self._base_url = base_url.rstrip("/")
+        self._base_url = base_url.rstrip("/") if isinstance(base_url, str) else base_url
         self._network_enabled = network_enabled
         self._environment = environment
         self._timeout_seconds = timeout_seconds
         self._mtls_certificate_pem = mtls_certificate_pem
         self._mtls_key_pem = mtls_key_pem
 
-    def _assert_gate_open(self) -> None:
-        if self._environment != "restricted":
-            raise NetworkGateClosedError("only_restricted_environment_may_use_this_transport")
-        if not self._network_enabled:
-            raise NetworkGateClosedError("restricted_network_gate_disabled")
-        if not self._base_url.startswith("https://"):
-            raise NetworkGateClosedError("restricted_base_url_must_be_https")
-        if httpx.URL(self._base_url).host in FORBIDDEN_ISSUANCE_HOSTS:
-            raise NetworkGateClosedError("restricted_base_url_must_not_be_adn_distribution_host")
+    def _assert_gate_open(self) -> None:  # pragma: no cover - abstract
+        raise NotImplementedError
 
     def send(self, request: TransportRequest) -> TransportResponse:
+        # Re-checked here, on EVERY call, never at construction: the gate a
+        # caller passed in five minutes ago is not evidence about this call.
         self._assert_gate_open()
         # httpx's `cert=` boundary hands its value straight to
         # ssl.SSLContext.load_cert_chain(), which requires file PATHS, not
@@ -175,11 +224,96 @@ class HttpxRestrictedTransport:
         verify: bool | ssl.SSLContext = True
         if self._mtls_certificate_pem and self._mtls_key_pem:
             verify = _build_client_ssl_context(self._mtls_certificate_pem, self._mtls_key_pem)
+        # `follow_redirects` is left at httpx's default of False on purpose:
+        # a 3xx is returned to the caller as a 3xx and classified as a
+        # non-success, never silently chased to whatever Location names —
+        # which is how a redirect would otherwise escape the host allowlist
+        # this class just enforced. There is no retry here either: exactly
+        # one request leaves this method, and a failure raises.
         with httpx.Client(base_url=self._base_url, timeout=self._timeout_seconds, verify=verify) as client:
             response = client.request(request.method, request.path, content=request.body,
                                        headers=request.headers)
         return TransportResponse(status_code=response.status_code, body=response.content,
                                  content_type=response.headers.get("content-type"))
+
+
+class HttpxRestrictedTransport(_HttpxMtlsTransport):
+    """Real HTTP transport for Produção Restrita, gated on every call.
+
+    Accepts ONLY ``environment='restricted'`` and ONLY the restricted
+    network flag. ``M15_NFSE_PRODUCTION_NETWORK_ENABLED`` is not read here
+    and has no field on this object: turning production on cannot turn this
+    transport on, and this transport can never be pointed at production by
+    an environment value it refuses outright.
+    """
+
+    def _assert_gate_open(self) -> None:
+        if self._environment != "restricted":
+            raise NetworkGateClosedError("only_restricted_environment_may_use_this_transport")
+        if not self._network_enabled:
+            raise NetworkGateClosedError("restricted_network_gate_disabled")
+        if not self._base_url.startswith("https://"):
+            raise NetworkGateClosedError("restricted_base_url_must_be_https")
+        if httpx.URL(self._base_url).host in FORBIDDEN_ISSUANCE_HOSTS:
+            raise NetworkGateClosedError("restricted_base_url_must_not_be_adn_distribution_host")
+        # M56 — Produção Restrita may never address the production host,
+        # however the URL got here. The restricted gate being open says
+        # nothing about production, and a restricted run that reached
+        # sefin.nfse.gov.br would be a real issuance wearing a homologation
+        # label: tpAmb=2 sent to the production endpoint.
+        if httpx.URL(self._base_url).host in ALLOWED_PRODUCTION_HOSTS:
+            raise NetworkGateClosedError("restricted_transport_must_not_target_production_host")
+
+
+class HttpxProductionTransport(_HttpxMtlsTransport):
+    """Real HTTP transport for PRODUÇÃO, gated on every call.
+
+    Constructed CLOSED. Every gate argument defaults to the refusing value —
+    ``network_enabled=False``, ``environment=""`` — so the no-argument form
+    ``HttpxProductionTransport()`` raises on ``send()`` just as the old
+    unimplemented stub did. Opening it takes three explicit, simultaneous
+    decisions at the call site: name the production environment, pass the
+    production network flag as True, and supply an allowlisted URL.
+
+    The default ``base_url`` is the official constant, so the common case
+    never has an opportunity to mistype it; the allowlist is still enforced
+    per call, so a caller that overrides it gains nothing.
+
+    Note what this class does NOT do. It has no retry, no fallback to
+    another host, no redirect following, and no notion of "try restricted
+    instead". A failed production call fails — the caller reconciles (see
+    ``provider.query`` / ``nfse.operate``'s uncertain path) rather than
+    sending a second DPS.
+    """
+
+    def __init__(self, *, base_url: str = PRODUCTION_BASE_URL, network_enabled: bool = False,
+                 environment: str = "", timeout_seconds: float = 20.0,
+                 mtls_certificate_pem: bytes | None = None,
+                 mtls_key_pem: bytes | None = None):
+        super().__init__(base_url=base_url, network_enabled=network_enabled,
+                         environment=environment, timeout_seconds=timeout_seconds,
+                         mtls_certificate_pem=mtls_certificate_pem,
+                         mtls_key_pem=mtls_key_pem)
+
+    def _assert_gate_open(self) -> None:
+        if self._environment != "production":
+            raise NetworkGateClosedError("only_production_environment_may_use_this_transport")
+        if not self._network_enabled:
+            # The M56 gate, independent of M15_NFSE_RESTRICTED_NETWORK_ENABLED:
+            # this object has no field that the restricted flag could ever
+            # reach, so no amount of restricted configuration opens it.
+            raise NetworkGateClosedError("production_network_gate_disabled")
+        # HTTPS, allowlisted host and not-the-ADN-host, each with its own
+        # reason code. Re-validated per call, never cached from __init__.
+        assert_production_base_url(self._base_url)
+
+
+# Kept under its original, widely-referenced name. Before M56 this class had
+# no implementation at all and raised unconditionally; it now carries the
+# real production transport, but its DEFAULTS still refuse, so
+# ``ProductionTransport().send(...)`` raises ``NetworkGateClosedError``
+# exactly as before — the pre-M56 safety tests continue to pass unchanged.
+ProductionTransport = HttpxProductionTransport
 
 
 @dataclass

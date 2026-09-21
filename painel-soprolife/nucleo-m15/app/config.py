@@ -81,9 +81,14 @@ class Settings(BaseSettings):
     # THE central safety switch this milestone exists to add: even with a
     # restricted base URL, a certificate path and `nfse_real_enabled=true`
     # all configured, no operational HTTP request leaves the process unless
-    # this is explicitly true. Production has no equivalent flag anywhere —
-    # `HttpxRestrictedTransport` only ever accepts environment='restricted',
-    # and `ProductionTransport` has no working implementation at all.
+    # this is explicitly true.
+    #
+    # M56 — production now has its OWN switch below. The two are separate
+    # fields with separate environment variables, read by separate transport
+    # classes: `HttpxRestrictedTransport` only ever reads this one and only
+    # ever accepts environment='restricted'; `HttpxProductionTransport` only
+    # ever reads the production one and only ever accepts
+    # environment='production'. Turning either on cannot turn the other on.
     nfse_restricted_network_enabled: bool = False
     # HTTPS base URL for Produção Restrita. Never a production hostname —
     # this codebase has no code path that would send this URL a real request
@@ -102,6 +107,25 @@ class Settings(BaseSettings):
     # fail-closed contract as `reports_storage_dir`: absent by default, must
     # be absolute, outside the Git worktree, and end up 0700.
     nfse_fiscal_artifacts_dir: Path | None = None
+
+    # M56 — PRODUCTION network gate. Deliberately a separate variable
+    # (`M15_NFSE_PRODUCTION_NETWORK_ENABLED`), never a mode of the
+    # restricted one: an operator enabling Produção Restrita for a
+    # homologation run must not be able to enable production as a side
+    # effect, and neither flag is consulted by the other environment's
+    # transport. Default False, like every other gate in this foundation.
+    #
+    # There is NO `nfse_production_base_url`. The production endpoint is the
+    # literal constant `nfse_national.transport.PRODUCTION_BASE_URL`,
+    # enforced by a host allowlist — so there is no environment variable
+    # that could point a production issuance at an arbitrary host.
+    nfse_production_network_enabled: bool = False
+    # Minimum certificate runway, in whole days, before a PRODUCTION cycle
+    # may start (see nfse_national.certificate_guard). Production-only:
+    # Produção Restrita keeps its original "not expired" rule, so this can
+    # never break a homologation run. The real A1 expires 2026-11-07 and
+    # must be renewed before the first production issuance.
+    nfse_production_certificate_min_days: int = 30
 
     @field_validator("nfse_restricted_base_url")
     @classmethod
