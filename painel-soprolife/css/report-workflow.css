@@ -1246,6 +1246,22 @@ body.report-physician-only .section:not(#laudos-espirometria) {
   padding: 14px 18px;
 }
 
+/* M26.23 — o motivo de o botão estar cinza, colado no botão.
+   Antes o `disabled` era mudo: campo preenchido, ação morta, nenhuma
+   pista. Não é mensagem de erro (ela não errou nada — só ainda não
+   escolheu a conclusão), então é âmbar de aviso, não vermelho. */
+.report-conclude-blocker {
+  margin: 8px 0 0;
+  padding: 9px 12px;
+  border-left: 3px solid var(--warn, #e8a030);
+  border-radius: var(--radius-xs);
+  background: var(--warn-soft, #fff8ed);
+  color: var(--navy, #0b1f36);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+}
+
 /* `.m15-btn` já nasce navy sólido, então "principal" e "secundário" saíam
    com exatamente o mesmo peso — dois botões escuros lado a lado, que é a
    forma visual da dúvida que esta etapa remove. Os secundários viram

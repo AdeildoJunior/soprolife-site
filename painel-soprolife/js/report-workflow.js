@@ -1267,10 +1267,38 @@
       </div>`;
   }
 
+  // M26.23 — UMA fonte de verdade sobre "dá para concluir?".
+  //
+  // O gate era `Boolean(state.conclusionCode)` escrito direto no `disabled`
+  // do botão. Ele está certo e o servidor o repete em três camadas:
+  // `ReportNativeDraft.conclusion_code` é obrigatório (`schemas.py`), a
+  // CheckConstraint `conclusion_snapshot_complete` exige o par
+  // código+texto (`models.py`) e a liberação recusa prévia sem
+  // `conclusion_code_snapshot` (`reports.py`). O defeito nunca foi o gate:
+  // era o gate ser MUDO.
+  //
+  // O caso que originou esta etapa: a médica montou o "Texto final do
+  // laudo" inteiro pelas frases frequentes — que preenchem o campo grande,
+  // o que parece ser o trabalho todo — sem tocar nos chips de Conclusão.
+  // Campo cheio, botão cinza, nenhuma explicação em lugar nenhum.
+  //
+  // Devolver a mesma string para o `disabled` e para o texto na tela é o
+  // ponto: enquanto forem duas regras, elas voltam a divergir.
+  // "" = pode concluir.
+  function concludeBlockReason() {
+    if (state.busy) return "Aguarde: o laudo ainda está sendo preparado.";
+    if (!state.conclusionCode) {
+      return "Escolha a conclusão do exame, acima. As frases frequentes"
+        + " preenchem o texto final, mas não valem como conclusão.";
+    }
+    return "";
+  }
+
   function renderNativeReportForm(detail) {
     const editable = ["atribuido", "em_elaboracao"].includes(detail.status);
     if (!editable) return "";
-    const canPreview = Boolean(state.conclusionCode);
+    const blockReason = concludeBlockReason();
+    const canPreview = !blockReason;
     return `
       <form id="reportNativeForm" class="report-clinical-form report-native-form">
         <h4>Laudo médico da SoproLife</h4>
@@ -1299,13 +1327,20 @@
               possível, mas como escolha secundária e nomeada. */""}
         <div class="report-native-actions">
           <button class="m15-btn m15-btn-primary report-conclude-cta" type="submit"${
-            state.busy || !canPreview ? " disabled" : ""
+            canPreview ? "" : " disabled aria-describedby=\"reportConcludeBlocker\""
           }>Concluir e preparar para assinatura</button>
           <button type="button" class="m15-btn report-preview-only"
             data-report-preview-only${
-              state.busy || !canPreview ? " disabled" : ""
+              canPreview ? "" : " disabled aria-describedby=\"reportConcludeBlocker\""
             }>Só conferir a prévia</button>
         </div>
+        ${/* O motivo mora colado no botão, não na barra de status lá em
+              cima: é onde ela está olhando quando o clique não acontece.
+              `role="status"` para que o leitor de tela anuncie a mudança —
+              um botão `disabled` não recebe foco, então o texto tem que
+              chegar sozinho. */""}
+        ${blockReason ? `<p class="report-conclude-blocker" id="reportConcludeBlocker"
+          role="status">${esc(blockReason)}</p>` : ""}
         <p class="report-help">A prévia serve para conferir na tela. O PDF que
           pode ser assinado só existe depois de concluir o laudo.</p>
       </form>`;
