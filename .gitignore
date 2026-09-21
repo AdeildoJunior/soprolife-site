@@ -50,3 +50,31 @@ painel-soprolife/data-private/documentos/
 # Exceção: o TEMPLATE .env.example do núcleo M15 é versionado (sem segredos);
 # arquivos .env reais continuam bloqueados pela regra .env.* acima.
 !painel-soprolife/nucleo-m15/.env.example
+
+# ── M55: barreira defensiva contra material fiscal privado ──────────────
+# Nada disto jamais deve ser versionado. As evidencias reais vivem FORA do
+# repositorio (~/.local/share/soprolife/...), e esta lista existe para que
+# uma copia acidental para dentro da arvore nao passe despercebida.
+*.pfx
+*.p12
+*.pem
+*.key
+*.jks
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+.env
+.env.*
+*-restricted.env
+secrets/
+**/secrets/
+data-private/
+nucleo-m15/var/
+# respostas cruas e artefatos fiscais (XML de NFS-e/DPS com dados do tomador)
+**/fiscal-artifacts/
+get_dps_raw_body.bin
+get_nfse_raw.*
+get_nfse_decoded.xml
+*-signed-preflight-result.json
