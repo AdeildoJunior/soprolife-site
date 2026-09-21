@@ -3679,10 +3679,12 @@
     try {
       const blob = await client().apiBlob("/laudos/lote/baixar", {
         method: "POST",
+        // M26.24 — esta rota devolve ZIP SEMPRE (`reports.py:3505`).
         body: JSON.stringify({
           document_ids: state.batchSelection,
           incluir_mir: false,
         }),
+        aceitaBlob: ["application/zip"],
       });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -3753,6 +3755,10 @@
       const blob = await client().apiBlob("/laudos/assinatura-externa/baixar", {
         method: "POST",
         body: JSON.stringify({ document_ids: state.signatureSelection }),
+        // M26.24 — UM laudo sai como PDF direto; DOIS ou mais saem num ZIP
+        // (`reports.py:4043` e `:4062`). Quem pede é quem sabe que as duas
+        // formas são legítimas — o padrão do cliente continua só PDF.
+        aceitaBlob: ["application/pdf", "application/zip"],
       });
       // O nome vem do servidor pelo `Content-Disposition`: é ele que sabe se
       // saiu um PDF com o nome da paciente ou o ZIP do dia.

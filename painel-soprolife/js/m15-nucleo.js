@@ -159,6 +159,23 @@
     return nome === "." || nome === ".." ? "" : nome;
   }
 
+  // M26.24 — o que `responseType: "blob"` aceita como arquivo.
+  //
+  // O guarda de Content-Type existe para que uma resposta que NÃO é
+  // documento (página de erro, JSON de falha, redirecionamento de login)
+  // nunca caia na pasta do usuário com cara de laudo. Ele não pode virar
+  // "aceita qualquer coisa".
+  //
+  // Mas ele só conhecia PDF, e há duas rotas que devolvem ZIP POR CONTRATO:
+  // `/laudos/lote/baixar` (sempre) e `/laudos/assinatura-externa/baixar`
+  // (quando são 2+ laudos; com 1 sai PDF direto). Baixar dois laudos para
+  // assinatura morria aqui, e a médica descobriu sozinha que baixar um a um
+  // funcionava — porque um só é PDF.
+  //
+  // Quem chama DECLARA o que aceita. O padrão continua sendo só PDF: uma
+  // rota nova não passa a aceitar ZIP por descuido.
+  var TIPOS_BLOB_PADRAO = ["application/pdf"];
+
   function api(path, options) {
     // Guarda de contexto seguro (M15.5A): em origem bloqueada NENHUMA
     // requisição de autenticação sai do navegador — nem senha, nem token.
@@ -170,6 +187,8 @@
     options = Object.assign({}, options || {});
     var responseType = options.responseType || "json";
     delete options.responseType;
+    var aceitaBlob = options.aceitaBlob || TIPOS_BLOB_PADRAO;
+    delete options.aceitaBlob;
     // FormData precisa preservar o boundary gerado pelo navegador. Definir
     // Content-Type manualmente quebraria o upload multipart dos laudos.
     var isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
@@ -203,8 +222,17 @@
           });
         }
         var contentType = (resp.headers.get("Content-Type") || "").toLowerCase();
-        if (contentType.indexOf("application/pdf") !== 0) {
-          throw new Error("A API não devolveu um PDF válido para visualização.");
+        var tipoAceito = aceitaBlob.some(function (tipo) {
+          return contentType.indexOf(tipo) === 0;
+        });
+        if (!tipoAceito) {
+          // A mensagem diz o que ERA esperado, para que "não veio PDF" e
+          // "não veio o pacote" não se confundam na tela.
+          throw new Error(
+            aceitaBlob.length === 1 && aceitaBlob[0] === "application/pdf"
+              ? "A API não devolveu um PDF válido para visualização."
+              : "A API não devolveu um arquivo válido para download."
+          );
         }
         // M25.17 — o nome do arquivo é decidido pelo SERVIDOR
         // (Content-Disposition) e precisa sobreviver até o clique de
