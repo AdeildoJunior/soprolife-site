@@ -3208,15 +3208,37 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
    encolher, e a calha devolve isso sem tirar o rótulo da tela. No celular
    não há largura para a calha, e o rótulo volta para cima. */
 @media (min-width: 721px) {
+  /* Coluna com teto, não `1fr` solto: uma família de duas conclusões
+     esticava os dois chips pela linha inteira, e a mesma sigla mudava de
+     tamanho conforme a família — exatamente o que atrapalha localizar. */
+  .report-workflow-root .report-sigla-grid {
+    grid-template-columns: repeat(auto-fill, minmax(94px, 128px));
+    justify-content: start;
+  }
+}
+
+/* A CALHA do nome da família só existe onde a coluna de trabalho é larga.
+   São duas faixas, e não uma: até 1100px a bancada está empilhada e a
+   coluna ocupa a tela toda; de 1100 a 1500 ela é METADE de uma tela
+   média, e ali os 96px da calha custam uma coluna inteira de siglas —
+   medido, 600px de bloco contra 470px com o rótulo em cima. Acima de
+   1500px a metade volta a ser larga e a calha sai de graça.
+
+   96px é a largura de "INESPECÍFICO", o nome mais longo do catálogo: com
+   menos que isso a palavra invade a primeira sigla da linha, e ela é uma
+   palavra só, sem onde quebrar. */
+@media (min-width: 721px) and (max-width: 1100px), (min-width: 1500px) {
   .report-sigla-group {
     display: grid;
-    grid-template-columns: 66px minmax(0, 1fr);
+    grid-template-columns: 96px minmax(0, 1fr);
     align-items: start;
     gap: 10px;
   }
 
   .report-sigla-group-label {
     margin: 9px 0 0;
+    font-size: 9.5px;
+    letter-spacing: .05em;
     text-align: right;
   }
 }
@@ -3487,8 +3509,32 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
 
 /* ----------------------------------------- a doca da ação principal */
 
-.report-action-dock {
+/* No desktop as duas ações voltam a dividir a mesma linha, com a
+   principal à ESQUERDA — `row-reverse` porque no DOM a secundária vem
+   primeiro, e ela vem primeiro para poder ficar fora da doca `sticky` no
+   celular. A hierarquia visual não muda: a principal é sólida e larga, a
+   secundária é contornada. */
+.report-action-area {
   margin-top: 10px;
+}
+
+@media (min-width: 721px) {
+  .report-action-area {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .report-action-area .report-action-dock {
+    flex: 1 1 260px;
+  }
+
+  .report-action-area .report-native-actions {
+    flex: 0 1 auto;
+    margin-top: 0;
+  }
 }
 
 /* =====================================================================
@@ -3570,21 +3616,37 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
     margin-top: 12px;
   }
 
+  /* `display: contents` faz o invólucro das ações sumir da caixa: sem
+     isso a doca fica presa DENTRO dele, e o trilho do `sticky` volta a
+     ter altura zero — o mesmo problema do item de grade, de novo. Com o
+     invólucro fora do caminho, o trilho passa a ser o formulário. */
+  .report-workflow-root .report-action-area {
+    display: contents;
+  }
+
+  /* O `> * + *` do formulário não alcança netos: as margens dos dois
+     blocos que o `display: contents` promoveu voltam aqui. */
+  .report-workflow-root .report-action-area > .report-native-actions {
+    margin-top: 12px;
+  }
+
   .report-workflow-root .report-action-dock {
     position: sticky;
     bottom: 0;
     z-index: 20;
-    margin: 12px -10px -10px;
-    padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+    margin: 10px -10px -10px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--line, #cfd9e4);
     background: #fff;
     box-shadow: 0 -4px 12px rgba(11, 37, 69, .08);
   }
 
-  .report-action-dock .report-conclude-cta { min-height: 48px; }
-  .report-action-dock .report-preview-only { min-height: 44px; }
+  .report-action-dock .report-conclude-cta {
+    width: 100%;
+    min-height: 48px;
+  }
 
-  .report-conclude-blocker { font-size: 12px; padding: 8px 10px; }
+  .report-conclude-blocker { margin-top: 6px; font-size: 12px; padding: 8px 10px; }
 }
 
 @media (max-width: 480px) {

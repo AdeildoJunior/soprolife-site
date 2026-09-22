@@ -1595,24 +1595,33 @@
               nada do formulário fica coberto quando a rolagem chega ao fim.
               O estado é o MESMO de antes — `concludeBlockReason()` continua
               sendo a única fonte do `disabled` e do texto. */""}
-        <div class="report-action-dock">
+        ${/* A ação secundária fica FORA da doca de propósito. Empilhada
+              junto com a principal, a doca grudada no rodapé de um iPhone
+              media 179px livre e 247px bloqueada — 21% e 29% da tela,
+              permanentes. Conferir a prévia já era o caminho secundário
+              desde a M25.29D; ele não precisa acompanhar o polegar. */""}
+        <div class="report-action-area">
           <div class="report-native-actions">
-            <button class="m15-btn m15-btn-primary report-conclude-cta" type="submit"${
-              canPreview ? "" : " disabled aria-describedby=\"reportConcludeBlocker\""
-            }>Concluir e preparar para assinatura</button>
             <button type="button" class="m15-btn report-preview-only"
               data-report-preview-only${
                 canPreview ? "" : " disabled aria-describedby=\"reportConcludeBlocker\""
               }>Só conferir a prévia</button>
             ${helpTip("previa-conferir")}
           </div>
-          ${/* O motivo mora colado no botão, não na barra de status lá em
-                cima: é onde ela está olhando quando o clique não acontece.
-                `role="status"` para que o leitor de tela anuncie a mudança —
-                um botão `disabled` não recebe foco, então o texto tem que
-                chegar sozinho. */""}
-          ${blockReason ? `<p class="report-conclude-blocker" id="reportConcludeBlocker"
-            role="status">${esc(blockReason)}</p>` : ""}
+          <div class="report-action-dock">
+            <button class="m15-btn m15-btn-primary report-conclude-cta" type="submit"${
+              canPreview ? "" : " disabled aria-describedby=\"reportConcludeBlocker\""
+            }>Concluir e preparar para assinatura</button>
+            ${/* O motivo mora colado no botão, não na barra de status lá em
+                  cima: é onde ela está olhando quando o clique não acontece.
+                  `role="status"` para que o leitor de tela anuncie a mudança —
+                  um botão `disabled` não recebe foco, então o texto tem que
+                  chegar sozinho. E ele viaja junto com a doca: um botão
+                  cinza grudado no rodapé sem explicação ao lado seria a
+                  M26.23 de volta. */""}
+            ${blockReason ? `<p class="report-conclude-blocker" id="reportConcludeBlocker"
+              role="status">${esc(blockReason)}</p>` : ""}
+          </div>
         </div>
       </form>`;
   }
