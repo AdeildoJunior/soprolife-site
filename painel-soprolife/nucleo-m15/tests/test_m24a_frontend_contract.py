@@ -262,6 +262,13 @@ def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
         # operacional) para não criar chave condicional na fila.
         "has_corrective_successor",
         "is_delivered",
+        # M26.27 — etapa do percurso até o paciente, derivada pela mesma
+        # função da fila de entrega (`_estado_de_entrega`): chave de catálogo
+        # fechado e o rótulo de `FILA_ROTULOS`. Sem ela, "Meus laudos" dizia
+        # "aguardando assinatura" num laudo com PDF assinado já aceito.
+        # Nenhum dado de paciente, nenhum texto clínico.
+        "estado_entrega",
+        "estado_entrega_rotulo",
         # M25.6 — agrupamento da fila por unidade. `location_key` é um id de
         # unidade (ou a origem controlada) e `location_name` é o nome
         # institucional da clínica: os dois são carimbos de LOCAL, da mesma
