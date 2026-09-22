@@ -69,6 +69,8 @@ depends_on = None
 # physical name below; batch mode applies that convention itself, so it must be
 # given the short form or it would look for the name doubled.
 STATE_CONSTRAINT = 'fiscal_document_state'
+# Kept for documentation only: this is what the convention expands
+# STATE_CONSTRAINT into. Never passed to an op.* call — see _replace_state_constraint.
 STATE_CONSTRAINT_PHYSICAL = 'ck_fiscal_documents_' + STATE_CONSTRAINT
 # Reproduces app.db.NAMING_CONVENTION, so the rebuilt SQLite table carries
 # exactly the constraint names the original one had.
@@ -153,8 +155,17 @@ def _replace_state_constraint(states_from, states_to) -> None:
         for statement in SQLITE_TRIGGERS:
             op.execute(statement)
     else:
-        op.drop_constraint(STATE_CONSTRAINT_PHYSICAL, 'fiscal_documents', type_='check')
-        op.create_check_constraint(STATE_CONSTRAINT_PHYSICAL, 'fiscal_documents',
+        # M62 — the SHORT logical name here too, not the expanded one.
+        # ``op.drop_constraint``/``op.create_check_constraint`` apply the
+        # project's naming convention themselves, exactly as batch mode does,
+        # so handing them the already-expanded name produced
+        # ``ck_fiscal_documents_ck_fiscal_documents_...`` and the migration failed on
+        # PostgreSQL with UndefinedObject. It was invisible because the whole
+        # suite runs on SQLite, which takes the batch branch above; the M62
+        # rehearsal against a restored copy of the real PostgreSQL database
+        # is what caught it.
+        op.drop_constraint(STATE_CONSTRAINT, 'fiscal_documents', type_='check')
+        op.create_check_constraint(STATE_CONSTRAINT, 'fiscal_documents',
                                    _check_sql(states_to))
 
 

@@ -42,6 +42,8 @@ from app.services.nfse_external_issuance import (                 # noqa: E402
     IMPORT_OPERATION, PRODUCTION_ENVIRONMENT)
 from app.services.nfse_national.recipient_identity import (       # noqa: E402
     RecipientIdentityError, assert_production_recipient)
+from app.services.nfse_national.service_location import (         # noqa: E402
+    ServiceLocationUndetermined, spirometry_service_municipio_ibge)
 
 PERFORMED = {"Realizado", "Laudo Liberado"}
 
@@ -112,6 +114,17 @@ def main() -> int:
                     cpf=getattr(person, "cpf", None))
             except RecipientIdentityError as exc:
                 blockers.append(exc.code)
+
+            # M62 — the service location (M31), checked here because
+            # ``nfse.evaluate`` does NOT check it: it is resolved later, at
+            # dispatch, and fails closed there. Without this the scanner
+            # reported as "eligible" facts that cannot actually be issued —
+            # which is exactly the wrong direction for a readiness report.
+            # On the real operational data, 0 of 48 exams carry it.
+            try:
+                spirometry_service_municipio_ibge(exam.municipio_atendimento_ibge)
+            except ServiceLocationUndetermined:
+                blockers.append("service_location_undetermined")
 
             row = {
                 "exam": identifier,

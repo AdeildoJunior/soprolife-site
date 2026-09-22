@@ -61,6 +61,7 @@ depends_on = None
 # Logical name; the project's naming convention (app/db.py) expands it, and
 # batch mode applies that convention itself, so it must be the short form.
 OPERATION_CONSTRAINT = 'fiscal_attempt_operation'
+# Documentation only — never passed to an op.* call. See M57's note.
 OPERATION_CONSTRAINT_PHYSICAL = 'ck_fiscal_attempts_' + OPERATION_CONSTRAINT
 
 NAMING_CONVENTION = {
@@ -150,8 +151,17 @@ def _replace_operation_constraint(operations_from, operations_to) -> None:
         for statement in SQLITE_TRIGGERS:
             op.execute(statement)
     else:
-        op.drop_constraint(OPERATION_CONSTRAINT_PHYSICAL, 'fiscal_attempts', type_='check')
-        op.create_check_constraint(OPERATION_CONSTRAINT_PHYSICAL, 'fiscal_attempts',
+        # M62 — the SHORT logical name here too, not the expanded one.
+        # ``op.drop_constraint``/``op.create_check_constraint`` apply the
+        # project's naming convention themselves, exactly as batch mode does,
+        # so handing them the already-expanded name produced
+        # ``ck_fiscal_attempts_ck_fiscal_attempts_...`` and the migration failed on
+        # PostgreSQL with UndefinedObject. It was invisible because the whole
+        # suite runs on SQLite, which takes the batch branch above; the M62
+        # rehearsal against a restored copy of the real PostgreSQL database
+        # is what caught it.
+        op.drop_constraint(OPERATION_CONSTRAINT, 'fiscal_attempts', type_='check')
+        op.create_check_constraint(OPERATION_CONSTRAINT, 'fiscal_attempts',
                                    _check_sql(operations_to))
 
 
