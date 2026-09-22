@@ -154,6 +154,8 @@ def test_preseed_das_sequencias(tmp_path, monkeypatch):
 def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     monkeypatch.delenv("M15_DATABASE_URL", raising=False)
     cfg = _alembic_config(f"sqlite:///{tmp_path}/heads.db")
+    # M61 (c4e8b1f37a92, operação 'import' — NFS-e emitida fora deste
+    # sistema, registada para nunca ser emitida em duplicado), sobre
     # M57 (a7d2c95e4f13, estado 'issued' — uma NFS-e real deixa de ser
     # registrada como simulação), sobre M36 (3a97d7535a49, numeração durável
     # de DPS), sobre M31 (a58f6c31d9e7, local da prestação vs. incidência do
@@ -163,7 +165,7 @@ def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     # imutáveis), é a head atual — o valor esperado aqui é atualizado a cada
     # nova migration; o que a asserção realmente prova é continuar existindo
     # EXATAMENTE uma head (sem ponto de ramificação acidental).
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["a7d2c95e4f13"]
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["c4e8b1f37a92"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(

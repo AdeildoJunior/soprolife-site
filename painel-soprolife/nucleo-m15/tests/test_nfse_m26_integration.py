@@ -115,9 +115,11 @@ def test_alembic_graph_fiscal_after_m26_9(tmp_path, monkeypatch):
     # M26.10 head, M29 added one more (ba3afa480112, national_dps_configurations)
     # on top of that, M31 added one more (a58f6c31d9e7, service_location) on
     # top of that, M36 added one more (3a97d7535a49, durable dps numbering) on
-    # top of that, and M57 added one more (a7d2c95e4f13, the 'issued' state) on
-    # top of THAT — this now confirms THAT chain, not a fork.
-    assert script.get_heads() == ['a7d2c95e4f13']
+    # top of that, M57 added one more (a7d2c95e4f13, the 'issued' state) on top
+    # of THAT, and M61 one more again (c4e8b1f37a92, the 'import' operation) —
+    # this now confirms THAT chain, not a fork.
+    assert script.get_heads() == ['c4e8b1f37a92']
+    assert script.get_revision('c4e8b1f37a92').down_revision == 'a7d2c95e4f13'
     assert script.get_revision('a7d2c95e4f13').down_revision == '3a97d7535a49'
     assert script.get_revision('3a97d7535a49').down_revision == 'a58f6c31d9e7'
     assert script.get_revision('a58f6c31d9e7').down_revision == 'ba3afa480112'
