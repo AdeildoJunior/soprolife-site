@@ -597,7 +597,10 @@ def test_assets_alterados_tem_cache_busting_atual():
     documento já superado por corretiva) subiu para `2026091604`; a M26.17
     (histórico recolhido de superados em "Meus laudos") subiu para
     `2026091605` — o pino abaixo acompanha, não fica preso numa versão
-    anterior.
+    anterior. A M26.26 (erro de renderização deixa de se passar por "catálogo
+    não carregou") alterou report-workflow.js e .css e subiu os dois para
+    `2026092201`, mas não trouxe o pino junto — o teste falhava no próprio
+    commit implantado (d0fc9de). Acompanhado na integração M63.
     """
 
     import re
@@ -606,6 +609,6 @@ def test_assets_alterados_tem_cache_busting_atual():
         re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
     )
     assert versoes, "os assets precisam continuar versionados"
-    assert versoes == {"2026091605"}, (
+    assert versoes == {"2026092201"}, (
         "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
     )
