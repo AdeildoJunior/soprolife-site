@@ -124,7 +124,7 @@ class TransportResponse:
     content_type: str | None = None
 
 
-class RestrictedTransport(Protocol):
+class NationalTransport(Protocol):
     def send(self, request: TransportRequest) -> TransportResponse: ...
 
 
@@ -289,11 +289,15 @@ class HttpxProductionTransport(_HttpxMtlsTransport):
     def __init__(self, *, base_url: str = PRODUCTION_BASE_URL, network_enabled: bool = False,
                  environment: str = "", timeout_seconds: float = 20.0,
                  mtls_certificate_pem: bytes | None = None,
-                 mtls_key_pem: bytes | None = None):
+                 mtls_key_pem: bytes | None = None,
+                 explicit_human_authorization: bool = False):
         super().__init__(base_url=base_url, network_enabled=network_enabled,
                          environment=environment, timeout_seconds=timeout_seconds,
                          mtls_certificate_pem=mtls_certificate_pem,
                          mtls_key_pem=mtls_key_pem)
+        # M59 — see _assert_gate_open. Refusing default, like every other
+        # gate argument on this class.
+        self._explicit_human_authorization = bool(explicit_human_authorization)
 
     def _assert_gate_open(self) -> None:
         if self._environment != "production":
@@ -303,6 +307,24 @@ class HttpxProductionTransport(_HttpxMtlsTransport):
             # this object has no field that the restricted flag could ever
             # reach, so no amount of restricted configuration opens it.
             raise NetworkGateClosedError("production_network_gate_disabled")
+        # M59 — THE gate that keeps production human-gated now that
+        # get_provider() resolves it.
+        #
+        # Until M59, production was unreachable because get_provider()
+        # refused the environment outright, so the network flag was the last
+        # gate that mattered. M59 wires the path, which means
+        # M15_NFSE_PRODUCTION_NETWORK_ENABLED=true plus a certificate would
+        # otherwise have been sufficient for a real issuance — turning an
+        # operator's env var into fiscal authority. It is not.
+        #
+        # This flag has NO configuration path: it is not read from Settings,
+        # the environment or the database, and `dispatch` never passes it.
+        # A real production send therefore requires a human to construct
+        # this transport deliberately, in code, out-of-band — which is the
+        # same condition `production_gates.explicit_human_authorization`
+        # names, enforced here at the only place a socket can be opened.
+        if not self._explicit_human_authorization:
+            raise NetworkGateClosedError("explicit_human_authorization_absent")
         # HTTPS, allowlisted host and not-the-ADN-host, each with its own
         # reason code. Re-validated per call, never cached from __init__.
         assert_production_base_url(self._base_url)
@@ -331,3 +353,9 @@ class FakeTransport:
         if isinstance(next_item, Exception):
             raise next_item
         return next_item
+
+
+# M59 — the Protocol was named ``RestrictedTransport`` when only one real
+# environment existed. It has always described both; the alias keeps older
+# imports working.
+RestrictedTransport = NationalTransport

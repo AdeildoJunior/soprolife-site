@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from ...config import Settings
 from ...models import FiscalPolicy
 from . import fiscal_config
+from .transport import PRODUCTION_BASE_URL, NetworkGateClosedError, assert_production_base_url
 from .signer import SignatureError, load_pkcs12_certificate
 from .xsd_validation import DPS_SCHEMA_PATH, NFSE_SCHEMA_PATH
 
@@ -212,10 +213,27 @@ def compute_provider_readiness(db: Session, settings: Settings, *,
         if perm_blocker:
             blockers.append(perm_blocker)
 
-    if not settings.nfse_restricted_base_url:
-        blockers.append("restricted_base_url_missing")
-    if not settings.nfse_restricted_network_enabled:
-        blockers.append("restricted_network_gate_disabled")
+    # M59 — endpoint and network gate are per environment. Before M59 this
+    # function always read the restricted ones, which was harmless only
+    # because production could not be resolved at all; now that it can, a
+    # production readiness check that consulted the restricted flag would be
+    # the worst kind of wrong — it would report ready for the wrong reason.
+    if environment == "production":
+        # There is no `nfse_production_base_url` by design: the endpoint is
+        # the allowlisted constant, so the only thing to verify is that the
+        # constant itself still passes the same allowlist the transport
+        # applies per call.
+        try:
+            assert_production_base_url(PRODUCTION_BASE_URL)
+        except NetworkGateClosedError as exc:
+            blockers.append(f"production_endpoint_invalid:{exc}")
+        if not settings.nfse_production_network_enabled:
+            blockers.append("production_network_gate_disabled")
+    else:
+        if not settings.nfse_restricted_base_url:
+            blockers.append("restricted_base_url_missing")
+        if not settings.nfse_restricted_network_enabled:
+            blockers.append("restricted_network_gate_disabled")
 
     policy_ready, policy_summary = _fiscal_policy_summary(db, environment)
     if not policy_ready:
@@ -248,6 +266,11 @@ def compute_provider_readiness(db: Session, settings: Settings, *,
         certificate_summary=cert_summary,
         secret_configured=secret_configured,
         restricted_network_gate_enabled=settings.nfse_restricted_network_enabled,
+        # M59 — still False, and still for a structural reason rather than a
+        # flag: resolving a production provider is now possible, but sending
+        # remains blocked by the transport's own per-call gate and by the M56
+        # activation gates, one of which (explicit_human_authorization) has
+        # no configuration path at all.
         production_gate_possible=False,
         fiscal_policy_ready=policy_ready,
         fiscal_policy_summary=policy_summary,

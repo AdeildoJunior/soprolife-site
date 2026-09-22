@@ -1,4 +1,4 @@
-"""M29 — resolves a fully-bound ``RestrictedNfseProvider`` for exactly one
+"""M29 — resolves a fully-bound ``NationalNfseProvider`` for exactly one
 document, called ONLY from ``nfse.operate()`` and ONLY once
 ``nfse_providers.get_provider()`` has already returned a
 ``RestrictedProviderPending`` marker (every STRUCTURAL/settings-only gate
@@ -40,7 +40,7 @@ from ...models import FiscalDocument, FiscalPreparation, Person, SpirometryExam
 from . import dps_numbering, fiscal_config
 from .dps_builder import Recipient
 from .identifiers import DpsIdComponents, InvalidIdentifierError
-from .provider import RestrictedIssueContext, RestrictedNfseProvider
+from .provider import NationalIssueContext, NationalNfseProvider
 from .readiness import compute_provider_readiness
 from .service_description import ServiceDescriptionUndetermined, spirometry_service_description
 from .service_location import (
@@ -49,7 +49,9 @@ from .service_location import (
     spirometry_service_municipio_ibge,
 )
 from .signer import LoadedCertificate, SignatureError, load_pkcs12_certificate, private_key_pem
-from .transport import HttpxRestrictedTransport, RestrictedTransport
+from .transport import (HttpxProductionTransport, HttpxRestrictedTransport,
+                        NationalTransport)
+from ..nfse_providers import REAL_ENVIRONMENTS
 
 
 def fail(code: str, status: int = 503):
@@ -117,19 +119,40 @@ def _service_location(preparation: FiscalPreparation) -> str:
         fail("service_location_unsupported", 409)
 
 
-def resolve_restricted_provider(db: Session, settings: Settings, doc: FiscalDocument,
+def resolve_national_provider(db: Session, settings: Settings, doc: FiscalDocument,
                                 preparation: FiscalPreparation, actor: str, *,
-                                transport: RestrictedTransport | None = None) -> RestrictedNfseProvider:
-    """Builds a ``RestrictedNfseProvider`` bound to exactly this document, or
-    fails closed with a specific blocker code. ``transport`` is a test-only
-    seam (a ``FakeTransport``); production callers never pass it, and the
-    default is always the real, gate-checked ``HttpxRestrictedTransport``.
+                                transport: NationalTransport | None = None) -> NationalNfseProvider:
+    """Builds a ``NationalNfseProvider`` bound to exactly this document, in
+    whichever real environment is configured, or fails closed with a specific
+    blocker code.
+
+    M59 — this used to hard-refuse anything but ``restricted``. It now also
+    resolves ``production``, and the ONLY differences between the two are the
+    environment name it binds, the network flag it requires, and which
+    transport it constructs. Everything else — readiness, fiscal
+    configuration, recipient, service location, certificate, durable DPS
+    numbering — is the same code for both, because it is the same fiscal work.
+
+    Resolving a production provider is NOT permission to send. The transport
+    it returns re-checks its own gate on every call and refuses before any
+    socket exists; the M56 activation gates (including the human
+    authorization that no configuration can satisfy) are untouched and
+    unbypassed by this function.
+
+    ``transport`` is a test-only seam (a ``FakeTransport``); real callers
+    never pass it.
     """
-    if settings.nfse_environment != "restricted":
+    environment = settings.nfse_environment
+    if environment not in REAL_ENVIRONMENTS:
         fail("provider_environment_mismatch")
     if not settings.nfse_real_enabled:
         fail("real_provider_disabled")
-    if not settings.nfse_restricted_network_enabled:
+    # Each environment's own network flag, never the other's: enabling
+    # Produção Restrita must not enable production as a side effect.
+    if environment == "production":
+        if not settings.nfse_production_network_enabled:
+            fail("production_network_gate_disabled")
+    elif not settings.nfse_restricted_network_enabled:
         fail("restricted_network_gate_disabled")
 
     # M47 — the M46 diagnostic timing that used to bracket this call (and
@@ -141,7 +164,7 @@ def resolve_restricted_provider(db: Session, settings: Settings, doc: FiscalDocu
     # (see scripts/nfse_m45_dps9_restricted_issue.py and
     # tests/test_nfse_orchestrator_self_lock.py). However long these calls
     # take is therefore irrelevant to that failure.
-    readiness = compute_provider_readiness(db, settings, environment="restricted")
+    readiness = compute_provider_readiness(db, settings, environment=environment)
     # `readiness.blockers` already covers: certificate presence/validity,
     # secret presence, base URL, network gate, fiscal policy completeness,
     # artifact storage, and whether ANY national configuration exists for
@@ -153,7 +176,7 @@ def resolve_restricted_provider(db: Session, settings: Settings, doc: FiscalDocu
         fail(sorted(readiness.blockers)[0])
 
     national_config = fiscal_config.resolve_active_configuration(
-        db, environment="restricted", as_of=preparation.competence)
+        db, environment=environment, as_of=preparation.competence)
     if national_config is None:
         fail("national_dps_configuration_not_defined_for_any_real_document")
 
@@ -182,25 +205,40 @@ def resolve_restricted_provider(db: Session, settings: Settings, doc: FiscalDocu
     except InvalidIdentifierError:
         fail("national_dps_configuration_invalid")
 
-    context = RestrictedIssueContext(
+    context = NationalIssueContext(
         config=national_config, dps_id=dps_id, recipient=recipient,
         ver_aplic="soprolife-m29-0.1", numero_dps_display=str(dps_number), serie_dps_display="1",
         certificate=certificate, municipio_prestacao_ibge=municipio_prestacao_ibge,
     )
-    live_transport = transport or HttpxRestrictedTransport(
-        base_url=settings.nfse_restricted_base_url,
-        network_enabled=settings.nfse_restricted_network_enabled,
-        environment=settings.nfse_environment,
-        mtls_certificate_pem=certificate.certificate_pem,
-        mtls_key_pem=private_key_pem(certificate),
-    )
-    return RestrictedNfseProvider(transport=live_transport, context=context, environment="restricted")
+    # M59 — the environment picks the transport, and each transport enforces
+    # its OWN gate on every send. Production has no configurable base URL by
+    # design: it is the allowlisted constant, so no environment variable can
+    # aim a production issuance at another host.
+    if transport is not None:
+        live_transport = transport
+    elif environment == "production":
+        live_transport = HttpxProductionTransport(
+            network_enabled=settings.nfse_production_network_enabled,
+            environment=environment,
+            mtls_certificate_pem=certificate.certificate_pem,
+            mtls_key_pem=private_key_pem(certificate),
+        )
+    else:
+        live_transport = HttpxRestrictedTransport(
+            base_url=settings.nfse_restricted_base_url,
+            network_enabled=settings.nfse_restricted_network_enabled,
+            environment=environment,
+            mtls_certificate_pem=certificate.certificate_pem,
+            mtls_key_pem=private_key_pem(certificate),
+        )
+    return NationalNfseProvider(transport=live_transport, context=context,
+                                environment=environment)
 
 
 def resolve_service_description(db: Session, doc: FiscalDocument) -> str:
     """Public wrapper so ``nfse.operate()`` can compute the real,
     structured service description for the outbound ``ProviderRequest``
-    BEFORE calling ``resolve_restricted_provider`` (which needs it too, for
+    BEFORE calling ``resolve_national_provider`` (which needs it too, for
     its own fail-closed validation) — computed once, used for both.
     """
     return _service_description(db, doc)

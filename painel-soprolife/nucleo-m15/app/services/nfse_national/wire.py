@@ -67,6 +67,7 @@ FIELD_ERROR_CODE = "codigo"
 FIELD_ERROR_DESCRIPTION = "descricao"
 FIELD_ERROR_COMPLEMENT = "complemento"
 FIELD_PROCESSED_AT = "dataHoraProcessamento"
+FIELD_TP_AMB = "tipoAmbiente"
 
 
 class WireFormatError(ValueError):
@@ -151,7 +152,8 @@ class DecodedNfseEnvelope:
     nfse_xml: bytes
 
 
-def decode_nfse_success_envelope(body: bytes) -> DecodedNfseEnvelope:
+def decode_nfse_success_envelope(body: bytes, *, expected_tp_amb: int | None = None
+                                 ) -> DecodedNfseEnvelope:
     """Decode+verify ``NFSePostResponseSucesso``. Raises ``WireFormatError``
     for anything short of a fully consistent envelope.
 
@@ -169,6 +171,27 @@ def decode_nfse_success_envelope(body: bytes) -> DecodedNfseEnvelope:
     The identifier check is what this codebase already treats as proof.
     """
     payload = _parse_json_object(body)
+
+    # M59 — the response says which environment ANSWERED. When the caller
+    # knows which one it addressed, the two must agree.
+    #
+    # This is not belt-and-braces. The pair that must never be accepted is a
+    # production request answered with tipoAmbiente=2 (homologation), which
+    # would record a practice document as a real fiscal one, and its mirror,
+    # a restricted request answered with tipoAmbiente=1, which would mean a
+    # homologation run had just issued for real. Both are indistinguishable
+    # from success by every other check in this function: the access key is
+    # well formed, the XML parses, the two channels agree. Only tipoAmbiente
+    # tells them apart.
+    #
+    # The documented envelope always carries the field, so when the caller
+    # states an expectation its absence is a failure too.
+    if expected_tp_amb is not None:
+        declared = payload.get(FIELD_TP_AMB)
+        if declared is None:
+            raise WireFormatError("tipo_ambiente_ausente")
+        if declared != expected_tp_amb:
+            raise WireFormatError("tipo_ambiente_divergente")
 
     raw_key = payload.get(FIELD_ACCESS_KEY)
     if not isinstance(raw_key, str) or not raw_key:
@@ -226,7 +249,8 @@ def extract_processing_timestamp(body: bytes | None) -> str | None:
     return value
 
 
-def decode_nfse_document_response(body: bytes, *, expected_access_key: str | None = None
+def decode_nfse_document_response(body: bytes, *, expected_access_key: str | None = None,
+                                  expected_tp_amb: int | None = None
                                   ) -> DecodedNfseEnvelope:
     """Decode a ``GET /nfse/{chaveAcesso}`` response into the NFS-e XML.
 
@@ -265,7 +289,7 @@ def decode_nfse_document_response(body: bytes, *, expected_access_key: str | Non
 
     # JSON envelope. Reuse the POST success decoder so there is exactly ONE
     # implementation of the base64+gzip+cross-check logic.
-    decoded = decode_nfse_success_envelope(body)
+    decoded = decode_nfse_success_envelope(body, expected_tp_amb=expected_tp_amb)
     if expected_access_key is not None and not nfse_access_keys_match(
             decoded.access_key, expected_access_key):
         raise WireFormatError("chave_acesso_divergente_do_esperado")

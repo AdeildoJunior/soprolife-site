@@ -23,16 +23,18 @@ from .idempotency import idempotent_create, payload_fingerprint
 from .nfse_national import artifacts as artifact_storage
 from .nfse_national import dispatch as national_dispatch
 from .nfse_national.identifiers import NFSE_ACCESS_KEY_PATTERN
-from .nfse_providers import get_provider, ProviderRequest, ProviderResult, Outcome
+from .nfse_providers import (get_provider, ProviderRequest, ProviderResult, Outcome,
+                             REAL_ENVIRONMENTS)
 from .nfse_validity import fiscal_validity
 
 
 PERFORMED = {'Realizado', 'Laudo Liberado'}
 IN_FLIGHT = {'issuing', 'reconciling'}
-# M57 — environments whose provider reaches a real tax authority. 'production'
-# is listed for the state vocabulary only; get_provider() still refuses to
-# build a production provider at all (M56, deliberate).
-REAL_ENVIRONMENTS = {'restricted', 'production'}
+# M57 defined its own copy of REAL_ENVIRONMENTS here and M59 removed it:
+# the name is imported from `nfse_providers` above, which is the single
+# definition. (The M57 comment said production was "listed for the state
+# vocabulary only, since get_provider() refuses to build one" — M59 wires
+# it, so that caveat is gone; the membership test is the same either way.)
 # The two terminal success states. They are distinct on purpose: 'issued' means
 # an NFS-e exists at SEFIN, 'simulated' means the mock invented an identifier
 # and nothing exists anywhere. Every place that used to ask "is this document
@@ -273,12 +275,18 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
     selected = get_provider(settings)
     injected = provider is not None
     provider = provider or selected
-    # Generalizes the M26 mock-only check to "provider must match the
-    # CONFIGURED environment, by both name and environment" — mock keeps
-    # its exact original behavior (environment='mock' can only ever equal
-    # settings.nfse_environment=='mock'); production has no expected name at
-    # all, so any injected/resolved provider there is refused unconditionally.
-    expected_name = {'mock': 'mock', 'restricted': 'restricted'}.get(settings.nfse_environment)
+    # "The provider must match the CONFIGURED environment, by both name and
+    # environment." M59 — this used to be a lookup table that simply had no
+    # entry for production, so any production provider was refused here. That
+    # was the M56 belt, and it is removed now that the path is wired: the rule
+    # is the same for all three environments, and production is held to it
+    # exactly like the others rather than being excluded from it.
+    #
+    # The check still bites in both directions — a provider bound to one
+    # environment can never act for a document configured for another, which
+    # is what stops a restricted-named provider reporting a success that
+    # would be recorded against a production document.
+    expected_name = settings.nfse_environment
     if provider.environment != settings.nfse_environment or provider.name != expected_name:
         fail('provider_environment_mismatch', 503)
     doc = get_document(db, document_id, lock=True)
@@ -332,9 +340,17 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
         fail('unsupported_operation', 422)
     number = (db.scalar(select(func.max(FiscalAttempt.number)).where(FiscalAttempt.document_id == doc.id)) or 0) + 1
     description_override = None
-    if not injected and settings.nfse_environment == 'restricted':
-        # M29 wiring: turn the structural-only RestrictedProviderPending
-        # marker into a fully-bound, per-document RestrictedNfseProvider.
+    if not injected and settings.nfse_environment in REAL_ENVIRONMENTS:
+        # M29 wiring: turn the structural-only RealProviderPending marker
+        # into a fully-bound, per-document NationalNfseProvider.
+        #
+        # M59 — this said `== 'restricted'`, which was the last place the
+        # production path stopped: get_provider() would hand back a
+        # production marker and operate() would then try to call issue() on
+        # the marker itself, which raises by design. Both real environments
+        # resolve the same way now; which transport gets built, and whether
+        # it may send, is decided inside dispatch and by the transport's own
+        # gate — not by this condition.
         # Re-checks every gate against the database and THIS document —
         # never trusts get_provider()'s settings-only check alone. A test
         # that injects its own `provider=` bypasses this entirely, exactly
@@ -347,7 +363,7 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
         # `doc.id` (see nfse_national.dps_numbering) — every attempt for
         # this document, issue or reconcile, first or repeated, converges on
         # the same number without needing to distinguish `target` here.
-        provider = national_dispatch.resolve_restricted_provider(
+        provider = national_dispatch.resolve_national_provider(
             db, settings, doc, preparation, actor)
         description_override = national_dispatch.resolve_service_description(db, doc)
     operation_id = new_uuid()

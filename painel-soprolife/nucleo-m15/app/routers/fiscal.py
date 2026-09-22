@@ -54,7 +54,7 @@ def _restricted_readiness(settings) -> dict:
         'layout_version': settings.nfse_restricted_layout_version,
         'network_gate_enabled': settings.nfse_restricted_network_enabled,
         'missing_configuration': missing,
-        'operational_network_possible': False,  # always: see RestrictedNfseProvider docstring
+        'operational_network_possible': False,  # always: see NationalNfseProvider docstring
     }
 
 

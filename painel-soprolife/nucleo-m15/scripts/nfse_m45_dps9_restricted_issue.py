@@ -27,7 +27,7 @@ Sequence, exactly once, no retry:
      fresh idempotency key (this is the real code path: with
      M15_NFSE_ENVIRONMENT=restricted and the network gate true on the
      server process, `nfse.operate(..., 'issue', ...)` resolves the real
-     RestrictedNfseProvider and sends the DPS to Sefin Nacional).
+     NationalNfseProvider and sends the DPS to Sefin Nacional).
   4. Read back: document state/eligibility, the completed FiscalAttempt
      row (outcome, error_code, external_id), and the full M44-decoded
      sefin_erro_* / sefin_resposta_* audit detail if the attempt was not

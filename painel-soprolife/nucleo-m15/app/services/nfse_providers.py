@@ -12,6 +12,17 @@ from fastapi import HTTPException
 from ..config import Settings
 
 
+# M59 — the environments that address the real national API. 'mock' is not
+# one of them: it has no transport, no certificate and no endpoint.
+#
+# THE single definition. `nfse.py` and `nfse_national.dispatch` import it
+# from here rather than keeping their own copies: M57 and M59 had each
+# grown one, and `nfse.py` was importing this name and then immediately
+# shadowing it with an identical local set — harmless only for as long as
+# the two stayed identical, which is not a property worth relying on.
+REAL_ENVIRONMENTS = ('restricted', 'production')
+
+
 class Outcome(str, Enum):
     # M57 — the two success outcomes are deliberately DIFFERENT words, because
     # they are different facts about the world. ISSUED means a real provider
@@ -109,13 +120,13 @@ class MockNfseProvider:
         return ProviderResult(Outcome.CANCELLED, 'MOCK-' + request.document_id)
 
 
-class RestrictedProviderPending:
+class RealProviderPending:
     """M29 — returned by ``get_provider()`` ONLY when every STRUCTURAL
-    (settings-only, no database) gate for the restricted environment is
+    (settings-only, no database) gate for the requested REAL environment is
     satisfied. This is deliberately not a working provider: it carries no
     transport, no certificate and no document context. The actual
-    ``RestrictedNfseProvider`` is built per-document by
-    ``app.services.nfse_national.dispatch.resolve_restricted_provider()``,
+    ``NationalNfseProvider`` is built per-document by
+    ``app.services.nfse_national.dispatch.resolve_national_provider()``,
     called from ``nfse.operate()`` right before dispatch — which re-checks
     every gate again (including the per-document ones this class cannot see:
     active national tax configuration, recipient identity, fiscal policy)
@@ -123,45 +134,81 @@ class RestrictedProviderPending:
     ever called directly on this object, that is itself a bug — it raises
     rather than silently doing nothing.
 
-    This module intentionally never imports ``RestrictedNfseProvider``,
+    This module intentionally never imports ``NationalNfseProvider``,
     ``HttpxRestrictedTransport`` or anything from ``nfse_national`` — the
     provider boundary stays exactly as pure as before M29 (no HTTP client,
     no certificate reader, no DPS payload); only ``nfse.operate()`` and
     ``nfse_national.dispatch`` know how to turn this marker into a real call.
     """
-    name = 'restricted'
-    environment = 'restricted'
+    # M59 — the marker now carries WHICH real environment was resolved, so
+    # `nfse.operate()`'s name-vs-environment cross-check keeps working for
+    # production exactly as it did for restricted. Defaults preserve the
+    # pre-M59 behaviour for any caller that constructs it bare.
+    def __init__(self, environment: str = 'restricted'):
+        if environment not in REAL_ENVIRONMENTS:
+            raise RuntimeError(f'Ambiente real desconhecido: {environment!r}')
+        self.environment = environment
+        self.name = environment
 
-    def _unresolved(self):
+    def _unresolved(self, *args, **kwargs):
         raise RuntimeError(
-            'RestrictedProviderPending nunca deve ser invocado diretamente — '
+            'RealProviderPending nunca deve ser invocado diretamente — '
             'nfse.operate() precisa resolvê-lo via nfse_national.dispatch antes de usar.'
         )
 
     issue = query = cancel = _unresolved
 
 
+# M59 — kept under the pre-rename name for any caller outside this tree.
+RestrictedProviderPending = RealProviderPending
+
+
 def get_provider(settings: Settings) -> NfseProvider:
+    """Resolve the provider marker for the configured environment.
+
+    M59 — production stopped being refused outright here. That refusal was
+    correct while no production transport existed; keeping it after M56
+    built one would have meant the gates below were never exercised for the
+    environment that most needs them.
+
+    RESOLVING IS NOT SENDING. This function reads settings only — no
+    database, no certificate file, no socket — and returns a marker that
+    cannot itself issue anything. Between this marker and a real request
+    stand, independently: the per-document resolution in
+    ``nfse_national.dispatch`` (which re-checks every gate and adds the ones
+    needing the database), the transport's own per-call gate, and the M56
+    activation gates, one of which no configuration can satisfy.
+    """
     if not settings.nfse_enabled:
         raise HTTPException(503, detail={'codigo': 'nfse_disabled'})
     if settings.nfse_environment == 'mock':
         return MockNfseProvider()
-    if settings.nfse_environment == 'production':
-        # No transport implementation exists for production anywhere in this
-        # codebase (structural absence, not a flag) — always unavailable.
-        raise HTTPException(503, detail={'codigo': 'production_provider_not_implemented'})
-    # environment == 'restricted': STRUCTURAL gates only (settings alone, no
-    # database access here) — every one of these must ALSO hold at the
-    # per-document resolution step; this is the first of two independent
-    # fail-closed checks, never a bypass of the second.
+    if settings.nfse_environment not in REAL_ENVIRONMENTS:
+        raise HTTPException(503, detail={'codigo': 'unknown_nfse_environment'})
+    # STRUCTURAL gates only (settings alone, no database access here) —
+    # every one of these must ALSO hold at the per-document resolution step;
+    # this is the first of two independent fail-closed checks, never a
+    # bypass of the second.
     if not settings.nfse_real_enabled:
         raise HTTPException(503, detail={'codigo': 'real_provider_disabled'})
-    if not settings.nfse_restricted_network_enabled:
-        raise HTTPException(503, detail={'codigo': 'restricted_network_gate_disabled'})
-    if not settings.nfse_restricted_base_url:
-        raise HTTPException(503, detail={'codigo': 'restricted_base_url_missing'})
+    if settings.nfse_environment == 'production':
+        # Production's OWN flag. The restricted one is never consulted here,
+        # so a homologation operator cannot enable production sideways. There
+        # is no production base URL to check: it is the allowlisted constant
+        # (see nfse_national.transport.PRODUCTION_BASE_URL).
+        if not settings.nfse_production_network_enabled:
+            raise HTTPException(503, detail={'codigo': 'production_network_gate_disabled'})
+    else:
+        # Restricted keeps its pre-M59 gate ORDER exactly, so the blocker
+        # code an operator sees for a given misconfiguration is unchanged.
+        if not settings.nfse_restricted_network_enabled:
+            raise HTTPException(503, detail={'codigo': 'restricted_network_gate_disabled'})
+        if not settings.nfse_restricted_base_url:
+            raise HTTPException(503, detail={'codigo': 'restricted_base_url_missing'})
+    # The certificate is the company's single A1 e-CNPJ, shared by both real
+    # environments, so these two gates are common to both and come last.
     if settings.nfse_restricted_certificate_path is None:
         raise HTTPException(503, detail={'codigo': 'restricted_certificate_path_missing'})
     if settings.nfse_restricted_certificate_password is None:
         raise HTTPException(503, detail={'codigo': 'restricted_certificate_password_missing'})
-    return RestrictedProviderPending()
+    return RealProviderPending(settings.nfse_environment)
