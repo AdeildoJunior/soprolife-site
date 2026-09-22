@@ -59,10 +59,21 @@ class NationalDpsConfiguration(NationalDpsInput):
     version: str = Field(min_length=1, max_length=60, pattern=r"^[A-Za-z0-9_.-]+$")
     layout_version: LayoutVersion
 
-    # tpAmb (TCInfDPS/tpAmb): 1=Produção, 2=Homologação. This foundation only
-    # ever targets restricted/homologation; production tpAmb=1 is refused by
-    # the builder regardless of what is configured here (see dps_builder.py).
-    tp_amb: Literal[2] = 2
+    # tpAmb (TCInfDPS/tpAmb): 1=Produção, 2=Homologação.
+    #
+    # M59 — this field is NO LONGER the source of truth. The builder derives
+    # tpAmb from the explicit fiscal environment it is given
+    # (``TP_AMB_BY_ENVIRONMENT`` below) and then requires THIS value to agree
+    # with it. Keeping the field serves two purposes: the versioned contract
+    # still records, immutably, which environment a stored configuration was
+    # written for; and rows already persisted (every restricted version
+    # carries ``tp_amb: 2``) keep parsing under ``extra="forbid"``.
+    #
+    # It widened from ``Literal[2]`` to ``Literal[1, 2]`` so a production
+    # configuration can exist at all. That is not a loosening: a value of 1
+    # on a configuration resolved for the restricted environment is now a
+    # hard build failure, which the old type could not even express.
+    tp_amb: Literal[1, 2] = 2
 
     # TCInfoPrestador — issuer (SoproLife). CNPJ kept textual (TSCNPJ).
     issuer_cnpj: str
@@ -92,7 +103,7 @@ class NationalDpsConfiguration(NationalDpsInput):
     # document from the immutable ``FiscalPreparation.service_municipio_ibge``
     # snapshot (itself sourced from the structured, exam-level
     # ``SpirometryExam.municipio_atendimento_ibge``) and passed directly to
-    # ``DpsInput``/``RestrictedIssueContext`` — see
+    # ``DpsInput``/``NationalIssueContext`` — see
     # ``services/nfse_national/service_location.py``. A prior version of this
     # foundation (M27-M29) incorrectly modeled it here, which silently forced
     # every document to whatever single municipality happened to be
@@ -250,3 +261,43 @@ class NationalDpsConfigurationVersionCreate(NationalDpsInput):
     effective_from: date
     validation_state: Literal["draft", "validated"] = "draft"
     configuration: NationalDpsConfiguration
+
+
+# --------------------------------------------------------------------------
+# M59 — tpAmb is a function of the FISCAL ENVIRONMENT, and of nothing else.
+#
+# Before M59 the builder hard-refused anything but 2, which made production
+# unbuildable by construction. Replacing that with "trust whatever the
+# configuration says" would have been the opposite mistake: a restricted
+# configuration edited to tp_amb=1 would have produced a production DPS
+# wearing a homologation label. So the environment decides, the stored
+# configuration must agree, and no third possibility is admitted.
+#
+# 'mock' is deliberately absent. The mock provider never enters the national
+# builder at all — it has no XML, no signature and no endpoint — so a mock
+# environment reaching this table is a bug, and it fails closed rather than
+# defaulting to homologation.
+TP_AMB_BY_ENVIRONMENT: dict[str, int] = {
+    "restricted": 2,   # Homologação / Produção Restrita
+    "production": 1,   # Produção
+}
+
+
+class UnknownFiscalEnvironmentError(ValueError):
+    """Raised for any environment that has no defined tpAmb — including
+    'mock', the empty string and None. Never falls back to a default."""
+
+
+def tp_amb_for_environment(environment: object) -> int:
+    """The one place that maps a fiscal environment to its tpAmb.
+
+    Fails closed for everything it does not recognize, so an unknown or
+    absent environment can never be silently treated as homologation.
+    """
+    try:
+        return TP_AMB_BY_ENVIRONMENT[environment]  # type: ignore[index]
+    except (KeyError, TypeError):
+        known = ", ".join(sorted(TP_AMB_BY_ENVIRONMENT))
+        raise UnknownFiscalEnvironmentError(
+            f"Ambiente fiscal {environment!r} não define tpAmb. Conhecidos: {known}."
+        ) from None

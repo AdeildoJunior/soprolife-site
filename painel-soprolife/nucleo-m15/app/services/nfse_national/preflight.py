@@ -209,7 +209,8 @@ def run_offline_preflight(db: Session, document_id: str, settings: Settings, act
             numero_dps=numero_dps_display.rjust(15, "0"),
         )
         data = DpsInput(
-            config=national_config, dps_id=dps_id, dh_emi=datetime.now(timezone.utc),
+            config=national_config, environment=doc.environment, dps_id=dps_id,
+            dh_emi=datetime.now(timezone.utc),
             ver_aplic=ver_aplic, numero_dps_display=numero_dps_display,
             serie_dps_display=serie_dps_display, competencia=preparation.competence,
             tomador=recipient, descricao_servico=descricao_servico,

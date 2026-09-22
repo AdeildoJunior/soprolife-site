@@ -26,7 +26,8 @@ from zoneinfo import ZoneInfo
 
 from lxml import etree
 
-from .config import NationalDpsConfiguration
+from .config import (NationalDpsConfiguration, UnknownFiscalEnvironmentError,
+                     tp_amb_for_environment)
 from .identifiers import DpsIdComponents, assert_cnpj, assert_cpf, assert_municipio_ibge, build_dps_id
 
 NFSE_NS = "http://www.sped.fazenda.gov.br/nfse"
@@ -65,6 +66,12 @@ class Recipient:
 @dataclass(frozen=True)
 class DpsInput:
     config: NationalDpsConfiguration
+    # M59 — the fiscal environment this DPS is being built FOR, explicit and
+    # required. It is the source of truth for tpAmb ('restricted' -> 2,
+    # 'production' -> 1); see config.tp_amb_for_environment. There is no
+    # default on purpose: a caller that does not say which environment it
+    # means gets a TypeError, never a silent homologation DPS.
+    environment: str
     dps_id: DpsIdComponents
     # Explicit, timezone-AWARE — never generated inside the builder. Any zone
     # is accepted (UTC is the natural way to capture "now"); M49's
@@ -138,8 +145,21 @@ def build_dps_element(data: DpsInput) -> etree._Element:
     """Return the unsigned ``<DPS>`` root element (``TCDPS``), ready for XSD
     validation and, separately, for XMLDSig signing over ``infDPS``."""
     cfg = data.config
-    if cfg.tp_amb != 2:
-        raise DpsBuildError("Este builder só emite tpAmb=2 (Homologação/Restrita).")
+    # M59 — tpAmb comes from the explicit environment, never from the stored
+    # configuration alone, and the two must agree. A restricted configuration
+    # can therefore never produce a production DPS (nor the reverse), and an
+    # unrecognized environment — 'mock' included — fails closed here rather
+    # than defaulting to homologation.
+    try:
+        tp_amb = tp_amb_for_environment(data.environment)
+    except UnknownFiscalEnvironmentError as exc:
+        raise DpsBuildError(str(exc)) from exc
+    if cfg.tp_amb != tp_amb:
+        raise DpsBuildError(
+            f"Configuração fiscal declara tp_amb={cfg.tp_amb}, mas o ambiente "
+            f"{data.environment!r} exige tpAmb={tp_amb}. Recusado: uma DPS de "
+            f"produção nunca pode ser emitida sob configuração de homologação, "
+            f"nem o contrário.")
 
     dps_id_value = build_dps_id(data.dps_id)
 
@@ -149,7 +169,7 @@ def build_dps_element(data: DpsInput) -> etree._Element:
     inf = etree.SubElement(root, f"{{{NFSE_NS}}}infDPS")
     inf.set("Id", dps_id_value)
 
-    _el(inf, "tpAmb", cfg.tp_amb)
+    _el(inf, "tpAmb", tp_amb)
     # M49 — expressed in the issuer's civil time (see EMISSION_TIMEZONE).
     # `astimezone` keeps the instant identical; only the written form changes.
     # Callers may pass any aware datetime (UTC is the natural way to capture

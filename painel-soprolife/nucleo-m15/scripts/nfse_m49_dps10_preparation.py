@@ -158,6 +158,8 @@ def main():
         # builder is responsible for writing it in civil time (M49).
         dh_emi_utc = datetime.now(timezone.utc)
         data = DpsInput(
+            # M59 — ambiente explícito; estes scripts sempre emitiram em Restrita.
+            environment="restricted",
             config=national_config, dps_id=dps_id, dh_emi=dh_emi_utc,
             ver_aplic="m49-dps10-check", numero_dps_display=str(dps_number),
             serie_dps_display="1",
