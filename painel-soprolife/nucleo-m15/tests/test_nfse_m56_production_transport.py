@@ -43,9 +43,17 @@ def _pems():
 def _open_production_transport(**overrides):
     """A production transport with every gate deliberately open. Building
     one sends nothing; only ``send()`` would, and every test that calls it
-    has replaced ``httpx.Client`` first."""
+    has replaced ``httpx.Client`` first.
+
+    M59 — ``explicit_human_authorization`` joins the list. It is the gate
+    that keeps production human-gated now that ``get_provider()`` resolves
+    the environment, and it has no configuration path, so a human passing it
+    in code is exactly what "every gate open" means. The tests below are
+    about what the transport does AFTER the gates — the mTLS context, the
+    timeout, the single non-retrying request — so they have to get past them.
+    """
     kwargs = dict(base_url=PRODUCTION_BASE_URL, network_enabled=True,
-                  environment="production")
+                  environment="production", explicit_human_authorization=True)
     kwargs.update(overrides)
     return HttpxProductionTransport(**kwargs)
 
@@ -193,7 +201,7 @@ def test_restricted_transport_refuses_the_production_host():
 
 def test_production_transport_refuses_the_restricted_base_url():
     transport = HttpxProductionTransport(base_url=RESTRICTED_BASE_URL, network_enabled=True,
-                                         environment="production")
+                                         explicit_human_authorization=True, environment="production")
     with pytest.raises(NetworkGateClosedError) as excinfo:
         transport.send(TransportRequest("POST", "/nfse", body=b"{}"))
     assert "production_base_url_host_not_allowlisted" in str(excinfo.value)
@@ -201,7 +209,7 @@ def test_production_transport_refuses_the_restricted_base_url():
 
 def test_production_transport_refuses_the_adn_distribution_host():
     transport = HttpxProductionTransport(base_url="https://adn.producaorestrita.nfse.gov.br",
-                                         network_enabled=True, environment="production")
+                                         explicit_human_authorization=True, network_enabled=True, environment="production")
     with pytest.raises(NetworkGateClosedError) as excinfo:
         transport.send(TransportRequest("POST", "/nfse", body=b"{}"))
     assert "adn_distribution_host" in str(excinfo.value)

@@ -22,6 +22,7 @@ And, throughout: production batch issuance does not exist, and every route
 into a real production POST is still closed.
 """
 import hashlib
+from dataclasses import replace
 import json
 
 import pytest
@@ -32,7 +33,7 @@ from app.config import Settings
 from app.models import AuditLog, DpsNumberAllocation, FiscalArtifact, FiscalAttempt
 from app.services import nfse
 from app.services.nfse_national import dispatch
-from app.services.nfse_national.provider import RestrictedNfseProvider
+from app.services.nfse_national.provider import NationalNfseProvider
 from app.services.nfse_national.transport import (
     FakeTransport,
     HttpxProductionTransport,
@@ -61,9 +62,17 @@ assert len(OTHER_ACCESS_KEY) == 53
 PROCESSED_AT = "2026-09-19T01:57:15.3962113-03:00"
 
 
-def success_body(access_key: str = VALID_ACCESS_KEY) -> bytes:
+def success_body(access_key: str = VALID_ACCESS_KEY, *, tp_amb: int = 2) -> bytes:
+    """M59 — ``tipoAmbiente`` is now cross-checked against the environment
+    the provider addressed, so it has to be stated rather than assumed.
+
+    The default is 2 because most callers here drive the RESTRICTED
+    document fixture; the production-bound provider tests pass ``tp_amb=1``.
+    Before M59 this helper hard-coded 1 for every caller, restricted ones
+    included — harmless only because nothing compared it to anything.
+    """
     return json.dumps({
-        "tipoAmbiente": 1,
+        "tipoAmbiente": tp_amb,
         "versaoAplicativo": "SefinNacional_1.6.0",
         "dataHoraProcessamento": PROCESSED_AT,
         "chaveAcesso": access_key,
@@ -271,18 +280,32 @@ def test_no_production_batch_issuance_route_exists():
     batch_routes = [r for r in fiscal.router.routes
                     if "pendentes" in getattr(r, "path", "")]
     assert batch_routes, "o endpoint de lote deveria existir para o ambiente restrito"
-    settings = Settings(nfse_enabled=True, nfse_environment="production")
+    # M59 — the refusal code changed from `production_provider_not_implemented`
+    # (there WAS no production provider) to whichever specific gate is shut.
+    # The guarantee is the same one and is still checked here: a default
+    # production configuration cannot obtain a provider at all. Both gates
+    # are asserted, each in isolation, so neither can quietly stop refusing.
     from app.services.nfse_providers import get_provider
     with pytest.raises(HTTPException) as excinfo:
-        get_provider(settings)
-    assert excinfo.value.detail["codigo"] == "production_provider_not_implemented"
+        get_provider(Settings(nfse_enabled=True, nfse_environment="production"))
+    assert excinfo.value.detail["codigo"] == "real_provider_disabled"
+    with pytest.raises(HTTPException) as excinfo:
+        get_provider(Settings(nfse_enabled=True, nfse_environment="production",
+                              nfse_real_enabled=True))
+    assert excinfo.value.detail["codigo"] == "production_network_gate_disabled"
 
 
 def test_batch_issuance_in_production_is_refused_per_document(
         monkeypatch, db, users, restricted_doc, fully_configured_settings):
     """Even if a loop were written by hand, each iteration calls
     ``operate()``, and ``operate()`` resolves the provider FIRST — so a
-    production batch refuses on document #1 and never reaches #2."""
+    production batch refuses on document #1 and never reaches #2.
+
+    M59 — ``fully_configured_settings`` is fully configured for RESTRICTED.
+    Flipping only ``nfse_environment`` to production therefore leaves the
+    production network gate shut, which is the point: production
+    configuration does not come along for the ride.
+    """
     production = fully_configured_settings.model_copy(
         update={"nfse_environment": "production"})
     fake = _wire(monkeypatch, [TransportResponse(201, success_body())])
@@ -290,7 +313,7 @@ def test_batch_issuance_in_production_is_refused_per_document(
         with pytest.raises(HTTPException) as excinfo:
             nfse.operate(db, restricted_doc.id, "issue", "batch",
                          production, users["gestor"].id)
-        assert excinfo.value.detail["codigo"] == "production_provider_not_implemented"
+        assert excinfo.value.detail["codigo"] == "production_network_gate_disabled"
     assert fake.received == []
 
 
@@ -300,17 +323,28 @@ def test_batch_issuance_in_production_is_refused_per_document(
 @pytest.fixture
 def production_provider(context):  # noqa: F811 — fixture from the provider tests
     """A provider bound to production, driven by a fake transport. Proves
-    the parsers and the evidence trail are shared, not restricted-only."""
+    the parsers and the evidence trail are shared, not restricted-only.
+
+    M59 — the context's tax profile must now declare ``tp_amb=1``. Before
+    M59 this fixture handed a homologation profile (tp_amb=2) to a
+    production-bound provider and the builder accepted it, because tpAmb
+    was hard-wired to 2 for everyone. That combination is exactly the
+    mislabelling M59 forbids, so the fixture states the production profile
+    it always meant.
+    """
+    production_context = replace(
+        context, config=context.config.model_copy(update={"tp_amb": 1}))
+
     def build(responses):
         transport = FakeTransport(responses=list(responses))
-        provider = RestrictedNfseProvider(transport=transport, context=context,
+        provider = NationalNfseProvider(transport=transport, context=production_context,
                                           environment="production")
         return provider, transport
     return build
 
 
 def test_production_bound_provider_keeps_the_submitted_signed_xml(production_provider):
-    provider, transport = production_provider([TransportResponse(201, success_body())])
+    provider, transport = production_provider([TransportResponse(201, success_body(tp_amb=1))])
     result = provider.issue(provider_request())
     assert result.outcome == Outcome.ISSUED
     # The exact bytes submitted, not a re-serialization: identical to what
@@ -321,14 +355,14 @@ def test_production_bound_provider_keeps_the_submitted_signed_xml(production_pro
 
 
 def test_production_bound_provider_keeps_the_returned_nfse_and_timestamp(production_provider):
-    provider, _ = production_provider([TransportResponse(201, success_body())])
+    provider, _ = production_provider([TransportResponse(201, success_body(tp_amb=1))])
     result = provider.issue(provider_request())
     assert result.returned_document == _nfse_xml(VALID_ACCESS_KEY)
     assert result.provider_processed_at == PROCESSED_AT
 
 
 def test_production_bound_provider_records_response_shape_and_hash(production_provider):
-    body = success_body()
+    body = success_body(tp_amb=1)
     provider, _ = production_provider([TransportResponse(201, body, "application/json")])
     result = provider.issue(provider_request())
     shape = result.response_shape
@@ -347,6 +381,10 @@ def test_production_bound_provider_normalizes_the_access_key(production_provider
 
     bare = VALID_ACCESS_KEY[3:]
     body = json.dumps({
+        # M59 — stated because the envelope is now cross-checked against the
+        # environment. This test is about key ENCODING; the absent-field case
+        # is covered in test_nfse_m59_production_wiring.py.
+        "tipoAmbiente": 1,
         "dataHoraProcessamento": PROCESSED_AT,
         "chaveAcesso": bare,
         "nfseXmlGZipB64": encode_xml_gzip_b64(_nfse_xml(VALID_ACCESS_KEY)),
@@ -412,14 +450,24 @@ def test_production_evidence_reaches_artifacts_and_audit_without_pii(
     assert max(len(str(v)) for v in detail.values()) < 200
 
 
-def test_production_transport_is_never_reachable_from_dispatch():
-    """The last rope: ``dispatch`` resolves restricted providers only, and
-    imports no production transport at all."""
+def test_dispatch_builds_the_production_transport_closed():
+    """M59 REPLACES the M56 invariant here, and it is worth saying exactly
+    what changed and why the system is not weaker for it.
+
+    M56 asserted that ``dispatch`` did not so much as mention
+    ``HttpxProductionTransport`` — a reasonable last rope while production
+    was unreachable by design. M59 wires the path, so that assertion is now
+    false by intent. What replaces it is stronger, because it constrains
+    behaviour rather than source text: dispatch may CONSTRUCT the production
+    transport, but it must construct it CLOSED — it never passes
+    ``explicit_human_authorization``, which has no configuration path, so
+    the object it builds refuses before any socket exists.
+    """
     import inspect
 
     source = inspect.getsource(dispatch)
-    assert "HttpxProductionTransport" not in source
-    assert "ProductionTransport" not in source
+    assert "HttpxProductionTransport" in source          # the path exists now
+    assert "explicit_human_authorization" not in source  # and dispatch cannot open it
 
 
 def test_a_production_transport_built_by_hand_still_refuses():

@@ -1,4 +1,4 @@
-"""M27/M30 — RestrictedNfseProvider: construção+assinatura+transporte ponta a
+"""M27/M30 — NationalNfseProvider: construção+assinatura+transporte ponta a
 ponta, sempre com FakeTransport (nunca rede real).
 
 M30 acrescenta o contrato real de resposta e a correção do identificador usado
@@ -18,9 +18,9 @@ from app.services.nfse_national.config import NationalDpsConfiguration
 from app.services.nfse_national.dps_builder import Recipient
 from app.services.nfse_national.identifiers import DpsIdComponents, build_dps_id
 from app.services.nfse_national.provider import (
-    RestrictedIssueContext,
-    RestrictedNfseProvider,
-    RestrictedProviderError,
+    NationalIssueContext,
+    NationalNfseProvider,
+    NationalProviderError,
 )
 from app.services.nfse_national.signer import generate_synthetic_test_certificate, load_pkcs12_certificate
 from app.services.nfse_national.transport import FakeTransport, TransportResponse
@@ -81,7 +81,7 @@ def context():
                              numero_dps="000000000000001")
     p12_bytes, password = generate_synthetic_test_certificate()
     cert = load_pkcs12_certificate(p12_bytes, password)
-    return RestrictedIssueContext(config=cfg, dps_id=dps_id,
+    return NationalIssueContext(config=cfg, dps_id=dps_id,
                                   recipient=Recipient(nome="Paciente Um", sem_nif_motivo=1),
                                   ver_aplic="m27-0.1", numero_dps_display="1",
                                   serie_dps_display="1", certificate=cert,
@@ -96,8 +96,8 @@ def request():
 def test_provider_rejects_wrong_environment(context):
     transport = FakeTransport(responses=[])
     for environment in ("mock", "homologacao", "prod", "PRODUCTION", ""):
-        with pytest.raises(RestrictedProviderError):
-            RestrictedNfseProvider(transport=transport, context=context, environment=environment)
+        with pytest.raises(NationalProviderError):
+            NationalNfseProvider(transport=transport, context=context, environment=environment)
 
 
 def test_provider_accepts_production_but_that_alone_reaches_nothing(context):
@@ -108,7 +108,7 @@ def test_provider_accepts_production_but_that_alone_reaches_nothing(context):
     test_nfse_m56_production_gates.py. Constructing one here sends nothing:
     the FakeTransport has no queued response and is never called."""
     transport = FakeTransport(responses=[])
-    provider = RestrictedNfseProvider(transport=transport, context=context,
+    provider = NationalNfseProvider(transport=transport, context=context,
                                       environment="production")
     assert provider.environment == "production"
     # name tracks environment, so nfse.operate()'s name-vs-environment
@@ -119,7 +119,7 @@ def test_provider_accepts_production_but_that_alone_reaches_nothing(context):
 
 def test_issue_success_sends_signed_xsd_valid_dps(context):
     transport = FakeTransport(responses=[TransportResponse(201, _success_body())])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.outcome == Outcome.ISSUED
     sent = transport.received[0]
@@ -133,7 +133,7 @@ def test_issue_success_extracts_real_access_key(context):
     envelope (infNFSe/@Id, TSIdNFSe), cross-checked against the envelope's own
     ``chaveAcesso``; never invented."""
     transport = FakeTransport(responses=[TransportResponse(200, _success_body())])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.outcome == Outcome.ISSUED
     assert result.external_id == VALID_ACCESS_KEY
@@ -155,7 +155,7 @@ def test_issue_malformed_success_body_never_becomes_issued(context, body):
     pre-M38 code accepted as success; under the real, documented contract it is
     NOT a valid POST /nfse response envelope and must no longer be believed."""
     transport = FakeTransport(responses=[TransportResponse(200, body)])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.outcome == Outcome.UNCERTAIN
     assert result.external_id is None
@@ -163,19 +163,19 @@ def test_issue_malformed_success_body_never_becomes_issued(context, body):
 
 def test_issue_timeout_is_uncertain(context):
     transport = FakeTransport(responses=[TimeoutError("timeout")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     assert provider.issue(request()).outcome == Outcome.UNCERTAIN
 
 
 def test_issue_server_error_is_uncertain(context):
     transport = FakeTransport(responses=[TransportResponse(503, b"")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     assert provider.issue(request()).outcome == Outcome.UNCERTAIN
 
 
 def test_issue_client_error_is_rejected(context):
     transport = FakeTransport(responses=[TransportResponse(422, b"{}")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     assert provider.issue(request()).outcome == Outcome.REJECTED
 
 
@@ -184,7 +184,7 @@ def test_reconcile_queries_by_official_dps_id_never_operation_id(context):
     for the original submission — never ``request.operation_id`` (an
     internal idempotency UUID with no fiscal meaning to the government API)."""
     transport = FakeTransport(responses=[TransportResponse(404, b"")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     req = request()
     assert req.operation_id == "op-1"
     provider.query(req, "issue")
@@ -198,13 +198,13 @@ def test_reconcile_queries_by_official_dps_id_never_operation_id(context):
 
 def test_reconcile_not_found(context):
     transport = FakeTransport(responses=[TransportResponse(404, b"")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     assert provider.query(request(), "issue").outcome == Outcome.NOT_FOUND
 
 
 def test_reconcile_finds_issued_document_and_extracts_access_key(context):
     transport = FakeTransport(responses=[TransportResponse(200, _nfse_xml())])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.query(request(), "issue")
     assert result.outcome == Outcome.ISSUED
     assert result.external_id == VALID_ACCESS_KEY
@@ -217,7 +217,7 @@ def test_reconcile_success_without_extractable_key_is_uncertain(context):
     schema-shaped access key anywhere must stay UNCERTAIN, never a guessed
     success."""
     transport = FakeTransport(responses=[TransportResponse(200, b'{"status":"ok"}')])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.query(request(), "issue")
     assert result.outcome == Outcome.UNCERTAIN
     assert result.external_id is None
@@ -225,14 +225,14 @@ def test_reconcile_success_without_extractable_key_is_uncertain(context):
 
 def test_reconcile_timeout_is_uncertain_never_not_found(context):
     transport = FakeTransport(responses=[TimeoutError("t")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     assert provider.query(request(), "issue").outcome == Outcome.UNCERTAIN
 
 
 def test_cancel_is_intentionally_unsupported(context):
     transport = FakeTransport(responses=[])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
-    with pytest.raises(RestrictedProviderError):
+    provider = NationalNfseProvider(transport=transport, context=context)
+    with pytest.raises(NationalProviderError):
         provider.cancel(request())
     assert transport.received == []  # never even attempted a request
 
@@ -242,7 +242,7 @@ def test_cancel_is_intentionally_unsupported(context):
 
 def test_issue_client_error_carries_http_status_diagnostic(context):
     transport = FakeTransport(responses=[TransportResponse(400, b"")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.outcome == Outcome.REJECTED
     assert result.diagnostic_code == "provider_rejected:http_400"
@@ -250,7 +250,7 @@ def test_issue_client_error_carries_http_status_diagnostic(context):
 
 def test_issue_server_error_carries_http_status_diagnostic(context):
     transport = FakeTransport(responses=[TransportResponse(500, b"")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.outcome == Outcome.UNCERTAIN
     assert result.diagnostic_code == "provider_server_error:http_500"
@@ -258,7 +258,7 @@ def test_issue_server_error_carries_http_status_diagnostic(context):
 
 def test_issue_timeout_carries_generic_diagnostic(context):
     transport = FakeTransport(responses=[TimeoutError("t")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.outcome == Outcome.UNCERTAIN
     assert result.diagnostic_code == "provider_timeout"
@@ -266,7 +266,7 @@ def test_issue_timeout_carries_generic_diagnostic(context):
 
 def test_issue_success_has_no_diagnostic(context):
     transport = FakeTransport(responses=[TransportResponse(201, _success_body())])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.outcome == Outcome.ISSUED
     assert result.diagnostic_code is None
@@ -274,7 +274,7 @@ def test_issue_success_has_no_diagnostic(context):
 
 def test_reconcile_not_found_carries_http_status_diagnostic(context):
     transport = FakeTransport(responses=[TransportResponse(404, b"")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.query(request(), "issue")
     assert result.outcome == Outcome.NOT_FOUND
     assert result.diagnostic_code == "provider_confirmed_not_found:http_404"
@@ -285,7 +285,7 @@ def test_issue_rejection_diagnostic_never_leaks_response_body(context):
     reach the diagnostic string — only the HTTP status number does."""
     sensitive_body = b'{"cpf":"12345678901","mensagem":"segredo interno","codigo":"X99"}'
     transport = FakeTransport(responses=[TransportResponse(403, sensitive_body)])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.issue(request())
     assert result.diagnostic_code == "provider_rejected:http_403"
     for leaked in (b"12345678901", b"segredo", b"X99", b"cpf", b"mensagem"):
@@ -294,7 +294,7 @@ def test_issue_rejection_diagnostic_never_leaks_response_body(context):
 
 def test_amount_from_request_never_invented_by_provider(context):
     transport = FakeTransport(responses=[TransportResponse(201, b"<NFSe/>")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     req = ProviderRequest("doc-1", "op-1", "prep-1", "77.50", "2026-08-10", "Descrição fixa.")
     provider.issue(req)
     assert b"77.50" in _sent_dps_xml(transport)

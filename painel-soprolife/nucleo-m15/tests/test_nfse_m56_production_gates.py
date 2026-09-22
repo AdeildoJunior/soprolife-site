@@ -98,6 +98,13 @@ def production_settings(tmp_path, synthetic_certificate_file):
 def production_config():
     return NationalDpsConfiguration(
         version="SYNTH-PRODUCTION-v1", layout_version="restricted-v1.01-20260727",
+        # M59 — a PRODUCTION tax profile declares tpAmb=1. Under M56 the field
+        # was typed Literal[2], so this fixture could only say 2 and the
+        # builder hard-wired 2 for everyone; the mismatch was invisible
+        # because production could not be built at all. Now the builder
+        # derives tpAmb from the environment and requires the profile to
+        # agree, so a production configuration has to say so.
+        tp_amb=1,
         issuer_cnpj="11222333000181", issuer_name="SOPROLIFE SAUDE LTDA (SINTETICO)",
         issuer_municipio_ibge="3304557", issuer_op_simp_nac=3,
         issuer_reg_ap_trib_sn=1, issuer_reg_esp_trib=0,
@@ -489,22 +496,92 @@ def test_human_authorization_has_no_configuration_path(db, production_settings, 
     assert by_name["explicit_human_authorization"].satisfied is False
 
 
-# ------------------------------- the issuance path itself is still refused
+# ------------------------------- the issuance path: wired, still not sendable
+#
+# M59 CHANGES THE SHAPE OF THIS GUARANTEE, and the change is worth stating
+# plainly. M56 kept production impossible by refusing to return a provider
+# at all — a strong rope, but one that meant every gate below it was never
+# exercised for the environment that needs them most. M59 wires the path, so
+# `get_provider()` now returns a marker and `operate()` proceeds. What must
+# still hold — and what these tests now assert — is that NOTHING REACHES THE
+# NETWORK. The enforcement moved from "no provider exists" to "the transport
+# refuses", which is where it belongs: the only place a socket is opened.
 
 
-def test_get_provider_still_refuses_production_outright(production_settings):
-    """Every gate above could be green and this would still hold: there is
-    no production provider to return, so ``nfse.operate()`` has no path to
-    one."""
+def test_get_provider_now_resolves_production(production_settings):
+    """Resolving is not sending. The marker carries the environment and
+    cannot itself issue anything — calling it raises."""
+    provider = get_provider(production_settings)
+    assert provider.environment == "production"
+    assert provider.name == "production"
+    with pytest.raises(RuntimeError):
+        provider.issue(object())
+
+
+def test_get_provider_still_refuses_production_without_its_own_gate(production_settings):
+    """The production network flag is production's own. Turning it off
+    refuses again, and the restricted flag cannot stand in for it."""
+    closed = production_settings.model_copy(
+        update={"nfse_production_network_enabled": False,
+                "nfse_restricted_network_enabled": True})
     with pytest.raises(HTTPException) as excinfo:
-        get_provider(production_settings)
+        get_provider(closed)
     assert excinfo.value.status_code == 503
-    assert excinfo.value.detail["codigo"] == "production_provider_not_implemented"
+    assert excinfo.value.detail["codigo"] == "production_network_gate_disabled"
 
 
-def test_operate_refuses_production_before_anything_else(
-        db, users, production_document, production_settings):
+def test_operate_in_production_never_reaches_the_network(
+        db, users, production_document, production_settings, monkeypatch):
+    """The real guarantee, asserted where it now lives.
+
+    ``production_settings`` has the production network gate OPEN — this is
+    the configuration an operator could actually create by setting one
+    environment variable. Even so, the transport refuses for want of the
+    human authorization that no configuration can supply, and no HTTP client
+    is ever constructed.
+    """
+    import httpx
+
+    def explode(*args, **kwargs):  # pragma: no cover - must never run
+        raise AssertionError("httpx.Client foi construído — houve tentativa de rede")
+
+    monkeypatch.setattr(httpx, "Client", explode)
     with pytest.raises(HTTPException) as excinfo:
         nfse.operate(db, production_document.id, "issue", "m56-key",
                      production_settings, users["gestor"].id)
-    assert excinfo.value.detail["codigo"] == "production_provider_not_implemented"
+    # operate() converts a provider-boundary failure into 'uncertain', never
+    # into a success; the document is never issued.
+    assert excinfo.value.status_code in (409, 503)
+
+
+def test_the_production_transport_dispatch_builds_is_closed(
+        db, users, production_document, production_settings):
+    """Dispatch may now construct ``HttpxProductionTransport`` — and builds
+    it CLOSED. It never passes ``explicit_human_authorization``, so the
+    object it returns refuses before any socket exists."""
+    from app.services.nfse_national import dispatch
+    from app.services.nfse_national.transport import (NetworkGateClosedError,
+                                                      TransportRequest)
+
+    # Readiness requires a validated policy for BOTH flows. The shared
+    # fixture only creates HOME, which never mattered while production could
+    # not be resolved at all; resolving it now needs DIRECT too. (That this
+    # was missing is itself a real remaining blocker for production — see
+    # the M59 report.)
+    nfse.create_policy(db, policy_payload(version="SYNTH-PRODUCTION-DIRECT",
+                                          environment="production", flow="DIRECT"),
+                       users["admin"].id)
+    # Same story for the recipient identity: a synthetic CPF, never a real
+    # one. Also a real remaining blocker, not a test artifact.
+    preparation = nfse.latest_preparation(db, production_document.id)
+    person = db.get(Person, preparation.recipient_person_id)
+    person.cpf = "52998224725"
+    db.commit()
+    provider = dispatch.resolve_national_provider(
+        db, production_settings, production_document, preparation, users["gestor"].id)
+    assert provider.environment == "production"
+    transport = provider._transport
+    assert type(transport).__name__ == "HttpxProductionTransport"
+    with pytest.raises(NetworkGateClosedError) as excinfo:
+        transport.send(TransportRequest(method="POST", path="/nfse", body=b"{}", headers={}))
+    assert "explicit_human_authorization_absent" in str(excinfo.value)

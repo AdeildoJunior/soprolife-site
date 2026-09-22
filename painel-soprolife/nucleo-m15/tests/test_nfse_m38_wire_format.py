@@ -26,7 +26,7 @@ from app.services.nfse_national import transport as transport_module
 from app.services.nfse_national.config import NationalDpsConfiguration
 from app.services.nfse_national.dps_builder import Recipient
 from app.services.nfse_national.identifiers import DpsIdComponents, build_dps_id
-from app.services.nfse_national.provider import RestrictedIssueContext, RestrictedNfseProvider
+from app.services.nfse_national.provider import NationalIssueContext, NationalNfseProvider
 from app.services.nfse_national.signer import (generate_synthetic_test_certificate,
                                                load_pkcs12_certificate)
 from app.services.nfse_national.transport import (PATH_GET_DPS, PATH_ISSUE_NFSE, FakeTransport,
@@ -98,7 +98,7 @@ def context():
                              numero_dps="000000000000001")
     p12_bytes, password = generate_synthetic_test_certificate()
     cert = load_pkcs12_certificate(p12_bytes, password)
-    return RestrictedIssueContext(config=cfg, dps_id=dps_id,
+    return NationalIssueContext(config=cfg, dps_id=dps_id,
                                   recipient=Recipient(nome="Paciente Um", sem_nif_motivo=1),
                                   ver_aplic="m38-0.1", numero_dps_display="1",
                                   serie_dps_display="1", certificate=cert,
@@ -112,7 +112,7 @@ def request():
 
 def _issue_with(context, response: TransportResponse | Exception):
     transport = FakeTransport(responses=[response])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     return provider.issue(request()), transport
 
 
@@ -149,7 +149,7 @@ def test_request_roundtrip_reproduces_signed_xml_byte_for_byte(context):
     between signing and the wire would silently invalidate the XMLDSig."""
     transport = FakeTransport(responses=[TransportResponse(201, _success_envelope(
         xml_access_key=VALID_ACCESS_KEY))])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     signed_xml = provider._build_signed_dps(request())  # the same builder issue() uses
     provider.issue(request())
 
@@ -192,7 +192,7 @@ def test_raw_signed_xml_is_never_the_http_body(context):
     """(5) The regression that caused the 415, stated as a negative."""
     transport = FakeTransport(responses=[TransportResponse(201, _success_envelope(
         xml_access_key=VALID_ACCESS_KEY))])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     provider.issue(request())
     body = transport.received[0].body
     assert not body.lstrip().startswith(b"<")
@@ -214,7 +214,7 @@ def test_encoding_failure_raises_and_sends_nothing(context, monkeypatch):
     monkeypatch.setattr(provider_module, "build_issue_request_body",
                         lambda _: (_ for _ in ()).throw(WireFormatError("falha_local")))
     transport = FakeTransport(responses=[TransportResponse(201, b"{}")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     with pytest.raises(WireFormatError):
         provider.issue(request())
     assert transport.received == []
@@ -431,7 +431,7 @@ def test_no_retry_is_ever_attempted(context):
     for response in (TransportResponse(415, b"{}"), TransportResponse(500, b"{}"),
                      TransportResponse(201, b"{bad json"), TimeoutError("t")):
         transport = FakeTransport(responses=[response])
-        provider = RestrictedNfseProvider(transport=transport, context=context)
+        provider = NationalNfseProvider(transport=transport, context=context)
         provider.issue(request())
         assert len(transport.received) == 1
 
@@ -444,7 +444,7 @@ def test_reconcile_sends_accept_json_to_the_documented_dps_path(context):
     accepts the JSON the service produces. It carries no body, so it declares
     no Content-Type."""
     transport = FakeTransport(responses=[TransportResponse(404, b"")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     provider.query(request(), "issue")
     sent = transport.received[0]
     assert sent.method == "GET"
@@ -460,7 +460,7 @@ def test_reconcile_decodes_the_gzip_envelope_when_the_body_carries_one(context):
     have reconciled as UNCERTAIN forever."""
     transport = FakeTransport(responses=[TransportResponse(200, _success_envelope(
         access_key=VALID_ACCESS_KEY, xml_access_key=VALID_ACCESS_KEY))])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.query(request(), "issue")
     assert result.outcome == Outcome.ISSUED
     assert result.external_id == VALID_ACCESS_KEY
@@ -507,7 +507,7 @@ def test_reconcile_ambiguous_body_stays_uncertain():
 
 def test_reconcile_404_is_still_the_only_proven_absence(context):
     transport = FakeTransport(responses=[TransportResponse(404, b"")])
-    provider = RestrictedNfseProvider(transport=transport, context=context)
+    provider = NationalNfseProvider(transport=transport, context=context)
     result = provider.query(request(), "issue")
     assert result.outcome == Outcome.NOT_FOUND
     assert result.diagnostic_code == "provider_confirmed_not_found:http_404"

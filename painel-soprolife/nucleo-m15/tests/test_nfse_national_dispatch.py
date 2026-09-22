@@ -1,4 +1,4 @@
-"""M29 — RestrictedNfseProvider wiring into the live dispatcher (mission
+"""M29 — NationalNfseProvider wiring into the live dispatcher (mission
 section F). Every gate re-checked here is fail-closed: missing any ONE of
 them must refuse with a specific, stable blocker code — never silently fall
 back to a different provider, and never reach the transport layer.
@@ -236,7 +236,7 @@ def test_draft_configuration_never_becomes_active(db, users, restricted_doc, ful
 def test_missing_service_location_blocks_at_dispatch(db, users, fully_configured_settings):
     """M31 — mirrors test_recipient_without_cpf_blocks_at_dispatch: a
     document reaching the dispatcher without a structured, supported service
-    municipality must be refused BEFORE a RestrictedNfseProvider is ever
+    municipality must be refused BEFORE a NationalNfseProvider is ever
     constructed, never silently defaulted to Rio de Janeiro."""
     p = Person(public_code="PES-M31D-NOLOC", nome_completo="Pessoa Sem Local",
               nome_normalizado="pessoa sem local", cpf="52998224725")
@@ -293,7 +293,7 @@ def test_unsupported_service_location_blocks_at_dispatch(db, users, fully_config
 def test_full_wiring_reaches_restricted_provider_via_fake_transport(
         monkeypatch, db, users, restricted_doc, fully_configured_settings):
     """Every gate satisfied, no provider injected: nfse.operate() must build
-    a REAL, per-document RestrictedNfseProvider through the dispatch module
+    a REAL, per-document NationalNfseProvider through the dispatch module
     on its own — the only test seam is the transport (FakeTransport), never
     the provider-resolution logic itself.
     """

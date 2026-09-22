@@ -4,7 +4,7 @@ tests (M26/M27) don't already cover:
 1. A real FiscalDocument can be walked, entirely offline, all the way from
    "performed exam" through a schema-valid SIGNED DPS to a classified
    provider outcome — using FakeTransport, never a socket — by handing the
-   artifact `preflight.py` staged straight to `RestrictedNfseProvider`.
+   artifact `preflight.py` staged straight to `NationalNfseProvider`.
 2. Re-running preflight for the same document is safe: it never overwrites
    evidence, it appends a new bundle (matching the append-only contract
    FiscalAttempt already uses).
@@ -25,7 +25,7 @@ from app.services.nfse_national.config import NationalDpsConfiguration
 from app.services.nfse_national.dps_builder import Recipient
 from app.services.nfse_national.identifiers import DpsIdComponents
 from app.services.nfse_national.preflight import run_offline_preflight
-from app.services.nfse_national.provider import RestrictedIssueContext, RestrictedNfseProvider
+from app.services.nfse_national.provider import NationalIssueContext, NationalNfseProvider
 from app.services.nfse_national.signer import generate_synthetic_test_certificate, load_pkcs12_certificate
 from app.services.nfse_national.transport import FakeTransport, TransportResponse
 from app.services.nfse_national.xsd_validation import validate_dps_xml
@@ -87,7 +87,7 @@ def _issue_context(national_config, certificate):
     dps_id = DpsIdComponents(codigo_municipio='3304557', tipo_inscricao_federal=2,
                              inscricao_federal='11222333000181', serie_dps='00001',
                              numero_dps='000000000000001')
-    return RestrictedIssueContext(
+    return NationalIssueContext(
         config=national_config, dps_id=dps_id,
         recipient=Recipient(nome='Paciente Sintético E2E', sem_nif_motivo=1),
         ver_aplic='sl-e2e-0.1', numero_dps_display='1', serie_dps_display='1',
@@ -118,7 +118,7 @@ def test_offline_e2e_document_to_classified_success(db, users, restricted_settin
     validate_dps_xml(signed_xml)  # the staged bytes are still schema-valid on disk
 
     transport = FakeTransport(responses=[TransportResponse(201, _success_body())])
-    provider = RestrictedNfseProvider(transport=transport, context=_issue_context(national_config, certificate))
+    provider = NationalNfseProvider(transport=transport, context=_issue_context(national_config, certificate))
     request = ProviderRequest(document_id=doc.id, operation_id='e2e-op-1', preparation_id='irrelevant',
                               amount='220.00', competence='2026-08-10', description='desc')
     outcome = provider.issue(request)
@@ -144,7 +144,7 @@ def test_offline_e2e_uncertain_never_resent_blindly(db, users, restricted_settin
     certificate = load_pkcs12_certificate(p12_bytes, password)
 
     transport = FakeTransport(responses=[TimeoutError('synthetic timeout')])
-    provider = RestrictedNfseProvider(transport=transport, context=_issue_context(national_config, certificate))
+    provider = NationalNfseProvider(transport=transport, context=_issue_context(national_config, certificate))
     request = ProviderRequest(document_id=doc.id, operation_id='e2e-op-2', preparation_id='irrelevant',
                               amount='220.00', competence='2026-08-10', description='desc')
     outcome = provider.issue(request)

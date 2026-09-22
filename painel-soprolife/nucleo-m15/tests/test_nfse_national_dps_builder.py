@@ -38,7 +38,7 @@ def synthetic_dps_input(**changes) -> DpsInput:
                              inscricao_federal="11222333000181", serie_dps="00001",
                              numero_dps="000000000000001")
     data = dict(
-        config=synthetic_config(), dps_id=dps_id,
+        config=synthetic_config(), environment='restricted', dps_id=dps_id,
         dh_emi=datetime(2026, 9, 13, 10, 0, 0, tzinfo=timezone.utc),
         ver_aplic="soprolife-m27-0.1", numero_dps_display="1", serie_dps_display="1",
         competencia=date(2026, 8, 10),
@@ -93,12 +93,71 @@ def test_zero_amount_rejected():
         synthetic_dps_input(valor_servico=Decimal("0"))
 
 
-def test_production_ambient_rejected_by_configuration():
-    # tp_amb is typed Literal[2]: the configuration contract itself refuses
-    # anything else, before the builder's own runtime check ever runs.
-    from pydantic import ValidationError
-    with pytest.raises(ValidationError):
-        synthetic_config(tp_amb=1)
+# ------------------------------------------------- M59 — tpAmb por ambiente
+
+
+def test_tp_amb_is_derived_from_the_explicit_environment():
+    """The source of truth is the environment, not the stored configuration."""
+    from app.services.nfse_national.config import tp_amb_for_environment
+    assert tp_amb_for_environment("restricted") == 2
+    assert tp_amb_for_environment("production") == 1
+
+
+@pytest.mark.parametrize("unknown", ["mock", "", "Production", "RESTRICTED", None, 1, 2])
+def test_an_unrecognized_environment_fails_closed(unknown):
+    """'mock' is in this list on purpose: the mock provider never enters the
+    national builder, so a mock environment reaching it is a bug — and must
+    not quietly become homologation."""
+    from app.services.nfse_national.config import (UnknownFiscalEnvironmentError,
+                                                   tp_amb_for_environment)
+    with pytest.raises(UnknownFiscalEnvironmentError):
+        tp_amb_for_environment(unknown)
+
+
+def test_restricted_environment_emits_exactly_tp_amb_2():
+    xml = serialize_dps(build_dps_element(synthetic_dps_input(environment="restricted")))
+    assert b"<tpAmb>2</tpAmb>" in xml
+
+
+def test_production_environment_emits_exactly_tp_amb_1():
+    """A production configuration (tp_amb=1) under the production
+    environment is now buildable — which is the whole point of M59."""
+    xml = serialize_dps(build_dps_element(synthetic_dps_input(
+        environment="production", config=synthetic_config(tp_amb=1))))
+    assert b"<tpAmb>1</tpAmb>" in xml
+    # And the official schema really accepts it — the builder's refusal was
+    # a self-imposed guard, never an XSD limitation.
+    validate_dps_xml(xml)
+
+
+def test_a_restricted_configuration_cannot_build_a_production_dps():
+    """The failure M59 exists to prevent: a homologation tax profile used to
+    emit under tpAmb=1 would be a real issuance wearing the wrong label."""
+    with pytest.raises(DpsBuildError, match="exige tpAmb=1"):
+        build_dps_element(synthetic_dps_input(environment="production"))  # config says 2
+
+
+def test_a_production_configuration_cannot_build_a_restricted_dps():
+    """The symmetric half: a production tax profile must not be quietly used
+    for a homologation run either."""
+    with pytest.raises(DpsBuildError, match="exige tpAmb=2"):
+        build_dps_element(synthetic_dps_input(environment="restricted",
+                                              config=synthetic_config(tp_amb=1)))
+
+
+@pytest.mark.parametrize("unknown", ["mock", "", None])
+def test_the_builder_refuses_an_unrecognized_environment(unknown):
+    with pytest.raises(DpsBuildError):
+        build_dps_element(synthetic_dps_input(environment=unknown))
+
+
+def test_environment_has_no_default_so_it_cannot_be_omitted():
+    """A caller that does not say which environment it means gets a
+    TypeError, never a silent homologation DPS."""
+    import dataclasses
+    field = next(f for f in dataclasses.fields(DpsInput) if f.name == "environment")
+    assert field.default is dataclasses.MISSING
+    assert field.default_factory is dataclasses.MISSING
 
 
 def test_recipient_requires_exactly_one_identity():

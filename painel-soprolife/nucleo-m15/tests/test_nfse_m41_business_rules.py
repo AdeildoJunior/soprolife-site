@@ -51,7 +51,7 @@ def synthetic_dps_input(**changes) -> DpsInput:
                              inscricao_federal="63544026000110", serie_dps="00001",
                              numero_dps="000000000000006")
     data = dict(
-        config=synthetic_config(), dps_id=dps_id,
+        config=synthetic_config(), environment='restricted', dps_id=dps_id,
         dh_emi=datetime(2026, 9, 16, 10, 0, 0, tzinfo=timezone.utc),
         ver_aplic="soprolife-m41-0.1", numero_dps_display="6", serie_dps_display="1",
         competencia=date(2026, 9, 15),

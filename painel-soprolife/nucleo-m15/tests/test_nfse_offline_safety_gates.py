@@ -18,7 +18,7 @@ from app.services import nfse
 from app.services.nfse_national.config import NationalDpsConfiguration
 from app.services.nfse_national.dps_builder import Recipient
 from app.services.nfse_national.identifiers import DpsIdComponents
-from app.services.nfse_national.provider import RestrictedIssueContext, RestrictedNfseProvider
+from app.services.nfse_national.provider import NationalIssueContext, NationalNfseProvider
 from app.services.nfse_national.signer import generate_synthetic_test_certificate, load_pkcs12_certificate
 from app.services.nfse_national.transport import (
     FakeTransport,
@@ -52,7 +52,7 @@ def _context(national_config):
     dps_id = DpsIdComponents(codigo_municipio='3304557', tipo_inscricao_federal=2,
                              inscricao_federal='11222333000181', serie_dps='00001',
                              numero_dps='000000000000001')
-    return RestrictedIssueContext(config=national_config, dps_id=dps_id,
+    return NationalIssueContext(config=national_config, dps_id=dps_id,
                                   recipient=Recipient(nome='Paciente Um', sem_nif_motivo=1),
                                   ver_aplic='sl-gate-0.1', numero_dps_display='1',
                                   serie_dps_display='1', certificate=certificate,
@@ -103,7 +103,7 @@ def test_missing_fiscal_policy_cannot_send(db, users):
 def test_invalid_schema_never_reaches_transport(national_config):
     ctx = _context(national_config)
     transport = FakeTransport(responses=[])  # would raise AssertionError if ever called
-    provider = RestrictedNfseProvider(transport=transport, context=ctx)
+    provider = NationalNfseProvider(transport=transport, context=ctx)
     bad_request = ProviderRequest(document_id='x', operation_id='op', preparation_id='p',
                                   amount='-1', competence='2026-08-10', description='desc')
     with pytest.raises(Exception):
@@ -128,7 +128,7 @@ def test_production_transport_has_no_implementation():
 # 7. FakeTransport cannot accidentally enable production, and the low-level
 # provider boundary module stays exactly as pure as before M29 wiring: no
 # HTTP client, no certificate reader, no DPS payload, and no import of the
-# concrete RestrictedNfseProvider class. (M29 wires the RESTRICTED provider
+# concrete NationalNfseProvider class. (M29 wires the RESTRICTED provider
 # into nfse.operate() via a separate module — app.services.nfse_national.dispatch
 # — never into this one; see test_nfse_national_dispatch.py for the wiring's
 # own fail-closed proof, and the module docstring of `dispatch.py`.)
@@ -138,7 +138,7 @@ def test_fake_transport_never_wired_into_live_dispatch(db, users):
     assert provider.name == 'mock'
     assert provider.environment == 'mock'
     # The only way a FakeTransport-backed provider is ever constructed is by
-    # a test explicitly building a RestrictedNfseProvider itself — never by
+    # a test explicitly building a NationalNfseProvider itself — never by
     # any application code path reachable from an HTTP request.
     import ast
     import inspect
@@ -151,7 +151,7 @@ def test_fake_transport_never_wired_into_live_dispatch(db, users):
         for alias in node.names
     }
     assert 'FakeTransport' not in imported_names
-    assert 'RestrictedNfseProvider' not in imported_names
+    assert 'NationalNfseProvider' not in imported_names
     assert 'HttpxRestrictedTransport' not in imported_names
     assert not any('nfse_national' in (node.module or '')
                    for node in ast.walk(tree) if isinstance(node, ast.ImportFrom))

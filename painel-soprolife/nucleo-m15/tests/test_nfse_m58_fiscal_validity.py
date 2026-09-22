@@ -328,11 +328,21 @@ def test_validity_does_not_depend_on_runtime_settings(db, users, settings, monke
 
 def test_the_contract_does_not_open_any_production_path(settings, monkeypatch):
     """Defining when a production document WOULD be valid must not make one
-    reachable. get_provider() still refuses production outright."""
+    reachable.
+
+    M59 wired the production path, so ``get_provider`` no longer refuses the
+    environment as such — it refuses on the gates. The guarantee this test
+    protects is unchanged and still checked: a default configuration cannot
+    obtain a production provider.
+    """
     from fastapi import HTTPException
     from app.services.nfse_providers import get_provider
     monkeypatch.setattr(settings, 'nfse_environment', 'production', raising=False)
     monkeypatch.setattr(settings, 'nfse_enabled', True, raising=False)
     with pytest.raises(HTTPException) as error:
         get_provider(settings)
-    assert error.value.detail['codigo'] == 'production_provider_not_implemented'
+    assert error.value.detail['codigo'] == 'real_provider_disabled'
+    monkeypatch.setattr(settings, 'nfse_real_enabled', True, raising=False)
+    with pytest.raises(HTTPException) as error:
+        get_provider(settings)
+    assert error.value.detail['codigo'] == 'production_network_gate_disabled'
