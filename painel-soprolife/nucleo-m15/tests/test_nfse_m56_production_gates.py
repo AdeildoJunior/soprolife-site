@@ -576,6 +576,11 @@ def test_the_production_transport_dispatch_builds_is_closed(
     preparation = nfse.latest_preparation(db, production_document.id)
     person = db.get(Person, preparation.recipient_person_id)
     person.cpf = "52998224725"
+    # M60 — and a name the production tomador contract accepts. The shared
+    # fixture's "Paciente Exemplo M56" is a placeholder by design and is now
+    # refused on the production path, which is the guard working. Invented
+    # name, as always.
+    person.nome_completo = "Marina Rocha Albuquerque"
     db.commit()
     provider = dispatch.resolve_national_provider(
         db, production_settings, production_document, preparation, users["gestor"].id)

@@ -60,6 +60,14 @@ PROCESSED_AT = "2026-09-19T01:57:15.3962113-03:00"
 
 SYNTHETIC_CPF = "52998224725"   # valid check digits, invented person
 
+# M60 — the production tomador contract rejects placeholder names ("exemplo",
+# "teste", "mock", ...), so the document that drives the REAL production path
+# needs a plausible full name. This one is invented and must stay invented:
+# no real patient ever enters this repository. The restricted fixture below
+# keeps its obviously-fictitious name on purpose, because Produção Restrita
+# is not held to the production contract.
+PRODUCTION_RECIPIENT_NAME = "Marina Rocha Albuquerque"
+
 
 def nfse_xml(access_key: str = VALID_ACCESS_KEY) -> bytes:
     return (
@@ -150,8 +158,8 @@ def production_document(db, users, production_settings):
     Assembling this by hand is itself informative — every line is a real
     prerequisite production does not yet have in the live system.
     """
-    person = Person(public_code="PES-M59", nome_completo="Paciente Exemplo M59",
-                    nome_normalizado="paciente exemplo m59", cpf=SYNTHETIC_CPF)
+    person = Person(public_code="PES-M59", nome_completo=PRODUCTION_RECIPIENT_NAME,
+                    nome_normalizado=PRODUCTION_RECIPIENT_NAME.lower(), cpf=SYNTHETIC_CPF)
     db.add(person)
     db.flush()
     exam = SpirometryExam(public_code="ESP-M59", person_id=person.id, status="Realizado",
