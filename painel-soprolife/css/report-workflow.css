@@ -3679,3 +3679,35 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
     border-width: 3px;
   }
 }
+
+/* =====================================================================
+ * M26.26 — o catálogo de conclusões NÃO chegou.
+ *
+ * `.report-state` já é a caixa de erro do painel (é ela que `boot()` usa
+ * quando o manifesto falha); aqui ela só ganha a cor de erro e o espaço
+ * entre a explicação e o botão. O padding de 22px do estado vazio é largo
+ * demais para uma caixa que mora DENTRO do formulário do laudo.
+ * ===================================================================== */
+
+.report-catalog-error {
+  padding: 12px 14px;
+  border-style: solid;
+  border-color: var(--warn, #e8a030);
+  border-left-width: 3px;
+  background: var(--warn-soft, #fff8ed);
+  color: var(--navy, #0b1f36);
+  text-align: left;
+}
+
+.report-catalog-error p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.report-catalog-error .report-help {
+  /* A mensagem técnica do servidor, quando existe: útil para quem dá
+     suporte, discreta para quem está laudando. Nunca uma stack trace —
+     `readableError` devolve só `message` e `code`. */
+  overflow-wrap: break-word;
+}

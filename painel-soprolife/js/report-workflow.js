@@ -462,6 +462,12 @@
     // documento (ele sabe se o exame tem fase pós-broncodilatador); o
     // navegador nunca decide grau, conclusão ou compatibilidade.
     catalog: null,
+    // M26.26 — `catalog: null` significa DUAS coisas diferentes: "ainda não
+    // chegou" e "não vai chegar". A primeira é a tela de carregamento; a
+    // segunda precisa dizer o que houve e oferecer nova tentativa. Sem este
+    // campo, a falha de rede ficava indistinguível do carregamento e a tela
+    // dizia "Carregando catálogo de conclusões…" para sempre.
+    catalogError: "",
     conclusionCode: "",
     customConclusion: "",
     bronchodilatorCode: "",
@@ -476,6 +482,10 @@
     suggestedText: "",
     // M25.27 — ciclos já gastos esperando `window.SoproM15` aparecer.
     clientWaits: 0,
+    // M26.26 — a pintura falhou por erro de PROGRAMAÇÃO, não de rede.
+    // Enquanto for `true`, `safeRender()` não repinta: repintar com o mesmo
+    // estado daria a mesma exceção, em laço. Só `boot()` limpa.
+    renderFailed: false,
   };
 
   function root() {
@@ -1404,6 +1414,18 @@
   function renderConclusionPicker() {
     const catalog = state.catalog;
     if (!catalog) {
+      // M26.26 — "ainda não chegou" e "não vai chegar" deixaram de ser o
+      // mesmo estado. Sem esta separação, uma falha de rede no catálogo era
+      // servida à médica como um carregamento que nunca termina.
+      if (state.catalogError) {
+        return `
+          <div class="report-state report-catalog-error" role="alert">
+            <p>Não foi possível carregar as conclusões deste exame.</p>
+            <p class="report-help">${esc(state.catalogError)}</p>
+            <button type="button" class="m15-btn m15-btn-sm"
+              data-report-catalog-retry>Tentar novamente</button>
+          </div>`;
+      }
       return `<div class="report-empty" role="status">Carregando catálogo de conclusões…</div>`;
     }
 
@@ -3715,6 +3737,7 @@
     state.selectedDocumentId = documentId;
     state.detail = null;
     state.catalog = null;
+    state.catalogError = "";
     state.documents = null;
     state.confirmRelease = false;
     state.addendumText = "";
@@ -3779,34 +3802,104 @@
 
   // ------------------------------------------------------------- M25.2
 
-  async function loadCatalog(documentId, epoch) {
+  // ============================ M26.26 — buscar não é o mesmo que desenhar
+  //
+  // As duas funções abaixo tinham `render()` DENTRO do mesmo `try` que
+  // tratava a rede. Uma exceção de programação na pintura caía no `catch`
+  // de "não consegui buscar", que zerava `state.catalog` e repintava — e a
+  // tela ficava eternamente em "Carregando catálogo de conclusões…", sem
+  // nada no console e sem `pageerror`, porque o erro tinha sido capturado.
+  //
+  // Aconteceu de verdade na M26.25: um `siglaDe` duplicado sobrescrevia o
+  // novo, `renderConclusionPicker` lançava `TypeError`, e o sintoma era
+  // "o catálogo não carrega". O diagnóstico só saiu depois de instrumentar
+  // o `catch` à mão.
+  //
+  // A separação é a correção: o `try` cobre a REQUISIÇÃO, e só ela. Depois
+  // que o catálogo está no estado, desenhar é outro assunto — e um assunto
+  // que, se falhar, não tem o direito de dizer que o catálogo não chegou.
+
+  // Pinta a falha de RENDERIZAÇÃO sem passar por `render()`.
+  //
+  // Escrever direto no nó é deliberado: o caminho normal de pintura acabou
+  // de lançar exceção, então reutilizá-lo para anunciar a própria falha
+  // seria pedir a mesma exceção de novo. O texto é fixo e não interpola
+  // nada do estado nem do erro — a stack fica no console, nunca na tela.
+  // O botão é o `data-report-retry` que `wireRetry()` já escuta, e ele
+  // reinicia por `boot()`, que é a recuperação real de uma tela quebrada.
+  function renderRenderFailure(error) {
+    const mount = root();
     try {
-      const catalog = await client().api(
-        `/laudos/${encodeURIComponent(documentId)}/catalogo-conclusoes`
-      );
-      if (epoch !== state.loadEpoch) return;
-      state.catalog = catalog;
+      // O erro ORIGINAL, com a stack intacta: é o que faltava da outra vez.
+      console.error("[laudos] falha ao desenhar a tela:", error);
+    } catch (_e) { /* console indisponível não pode esconder a tela */ }
+    if (!mount) return;
+    mount.innerHTML = `
+      <div class="report-state" role="alert">
+        <p>Não foi possível exibir as conclusões. Atualize a página ou tente
+          novamente.</p>
+        <button type="button" class="m15-btn" data-report-retry>Tentar novamente</button>
+      </div>`;
+  }
+
+  // `render()` com uma fronteira de erro EXPLÍCITA, para os carregamentos
+  // assíncronos. Não substitui as outras chamadas de `render()` no arquivo:
+  // essas não estão dentro de um `catch` que apaga estado, então já falham
+  // de forma observável. Aqui a fronteira existe porque havia uma fronteira
+  // errada — a da rede — engolindo o que não era dela.
+  function safeRender() {
+    // Já falhou uma vez com este estado. Repintar daria a mesma exceção, em
+    // laço, por cima da mensagem que a médica precisa ler.
+    if (state.renderFailed) return;
+    try {
       render();
     } catch (error) {
-      if (epoch !== state.loadEpoch) return;
-      state.catalog = null;
-      render();
+      state.renderFailed = true;
+      renderRenderFailure(error);
+      // Relançar é o ponto: a exceção volta a ser observável (rejeição não
+      // tratada, `window.onerror`, `pageerror` no teste). A UI já está
+      // pintada antes disto, então nada se perde para quem está olhando.
+      throw error;
     }
   }
 
-  async function loadDeliveryDocuments(documentId, epoch) {
+  async function loadCatalog(documentId, epoch) {
+    let catalog;
     try {
-      const documents = await client().api(
-        `/laudos/${encodeURIComponent(documentId)}/documentos`
+      catalog = await client().api(
+        `/laudos/${encodeURIComponent(documentId)}/catalogo-conclusoes`
       );
-      if (epoch !== state.loadEpoch) return;
-      state.documents = documents;
-      render();
     } catch (error) {
       if (epoch !== state.loadEpoch) return;
-      state.documents = null;
-      render();
+      state.catalog = null;
+      state.catalogError = readableError(error);
+      safeRender();
+      return;
     }
+    if (epoch !== state.loadEpoch) return;
+    state.catalog = catalog;
+    state.catalogError = "";
+    safeRender();
+  }
+
+  async function loadDeliveryDocuments(documentId, epoch) {
+    let documents;
+    try {
+      documents = await client().api(
+        `/laudos/${encodeURIComponent(documentId)}/documentos`
+      );
+    } catch (error) {
+      if (epoch !== state.loadEpoch) return;
+      // Sem painel de documentos a bancada continua inteira — este é o
+      // fallback que já existia, e ele continua sendo o certo aqui: baixar
+      // PDF é o passo DEPOIS de concluir, não um bloqueio para laudar.
+      state.documents = null;
+      safeRender();
+      return;
+    }
+    if (epoch !== state.loadEpoch) return;
+    state.documents = documents;
+    safeRender();
   }
 
   // Monta a MESMA sugestão determinística que o servidor montaria, apenas
@@ -5202,6 +5295,17 @@
       render();
       return;
     }
+    if (button.matches("[data-report-catalog-retry]")) {
+      // M26.26 — refaz SÓ a busca do catálogo, no mesmo documento e na
+      // mesma época de carregamento. Nada de `location.reload()` nem de
+      // `boot()`: o resto da bancada está íntegro e o texto que a médica já
+      // escreveu continua no estado.
+      if (!state.selectedDocumentId) return;
+      state.catalogError = "";
+      render();
+      loadCatalog(state.selectedDocumentId, state.loadEpoch);
+      return;
+    }
     if (button.matches("[data-report-conclusion-clear]")) {
       readNativeForm();
       state.conclusionCode = "";
@@ -5488,6 +5592,23 @@
     const mount = root();
     if (!mount) return;
     wireRetry();
+    // M26.26 — `boot()` é a recuperação de uma tela que quebrou ao pintar,
+    // e é o único lugar que destrava `safeRender()`. Sem isto, "Tentar
+    // novamente" reiniciaria o carregamento e a tela continuaria sem
+    // repintar.
+    //
+    // O catálogo também cai aqui, e por um motivo concreto: se foi ele que
+    // derrubou a pintura, ele continua no estado — é exatamente isso que o
+    // `catch` errado fazia questão de apagar, e que agora preservamos para
+    // o diagnóstico. Só que deixá-lo de pé durante a RECUPERAÇÃO faz a
+    // primeira repintura de `boot()` bater na mesma exceção, e o botão de
+    // "Tentar novamente" nunca devolve a tela. Descartar aqui é deliberado
+    // e não esconde nada: a exceção original já foi registrada com a stack
+    // inteira e relançada no instante da falha, e `loadDocument()` busca o
+    // catálogo de novo logo em seguida.
+    state.renderFailed = false;
+    state.catalog = null;
+    state.catalogError = "";
 
     // M25.27 — ler o manifesto e NÃO conseguir é diferente de ler e descobrir
     // que a feature está desligada. Antes, os dois casos caíam no mesmo
