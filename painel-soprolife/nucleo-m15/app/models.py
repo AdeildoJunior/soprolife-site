@@ -2802,7 +2802,12 @@ class FiscalAttempt(Base):
     __table_args__ = (
         UniqueConstraint("operation_id", "phase", name="uq_fiscal_attempt_phase"),
         UniqueConstraint("document_id", "number", "phase", name="uq_fiscal_attempt_number"),
-        CheckConstraint("operation IN ('issue','reconcile','cancel')", name="fiscal_attempt_operation"),
+        # M61 — 'import' is an NFS-e this system did NOT issue: real, already at
+        # the tax authority, learned of out of band. It is deliberately not an
+        # 'issue' row, because fiscal_attempts is evidence of what happened at
+        # the provider boundary and no provider was ever called. See
+        # services/nfse_external_issuance.py.
+        CheckConstraint("operation IN ('issue','reconcile','cancel','import')", name="fiscal_attempt_operation"),
         CheckConstraint("phase IN ('started','completed')", name="fiscal_attempt_phase"),
     )
 

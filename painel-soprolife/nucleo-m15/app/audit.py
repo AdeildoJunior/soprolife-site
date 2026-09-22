@@ -103,6 +103,18 @@ ALLOWED_KEYS = {
     # corpo, nunca XML, nunca Base64, nunca PII.
     "sefin_data_hora_processamento", "evidencia_dps_enviado_sha256",
     "evidencia_nfse_recebida_sha256", "evidencia_persistencia_falhou",
+    # M61 — importação de NFS-e emitida fora deste sistema. Apenas a chave de
+    # acesso (identificador fiscal público, nunca PII), a data informada, o
+    # vocabulário fechado da operação/ambiente e dois booleanos que registam,
+    # explicitamente, o que NÃO se está a afirmar.
+    #
+    # `note` (texto livre do operador) foi deliberadamente DEIXADO DE FORA:
+    # esta allowlist existe precisamente para impedir que texto livre —
+    # onde um nome de paciente acabaria mais cedo ou mais tarde — chegue à
+    # trilha. A primeira versão da M61 tentou incluí-lo e a allowlist
+    # apanhou-a.
+    "external_id", "issued_on", "operation", "environment",
+    "nfse_xml_present", "fiscal_validity_claimed",
 }
 
 _MAX_STR = 120
