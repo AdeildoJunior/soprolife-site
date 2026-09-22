@@ -100,8 +100,20 @@ def create_policy(db, payload: PolicyCreate, actor, request_id=None):
     return policy
 
 
-def evaluate(db: Session, exam_id: str, environment: str) -> dict:
-    exam = db.scalar(select(SpirometryExam).where(SpirometryExam.id == exam_id).with_for_update())
+def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = True) -> dict:
+    """Fiscal eligibility of one exam.
+
+    ``for_update`` defaults to True and every real preparation path keeps it:
+    the rows it reads are locked until the caller commits, so nothing changes
+    underneath a preparation. M63 — read-only callers (the production
+    candidate scanner) pass False. They must never take row locks on the
+    operational database, and PostgreSQL refuses SELECT ... FOR UPDATE inside
+    a READ ONLY transaction anyway, which is exactly the guarantee they want.
+    """
+    def locked(stmt):
+        return stmt.with_for_update() if for_update else stmt
+
+    exam = db.scalar(locked(select(SpirometryExam).where(SpirometryExam.id == exam_id)))
     if exam is None:
         fail('missing_stable_exam_link', 422)
     reasons = []
@@ -121,10 +133,10 @@ def evaluate(db: Session, exam_id: str, environment: str) -> dict:
     flow = 'PASTORE' if partner_flow else {'residencial': 'HOME', 'cowork': 'DIRECT'}.get(exam.modalidade, 'UNSUPPORTED')
     if flow not in {'DIRECT', 'HOME'}:
         reasons.append('commercial_flow_unsupported')
-    entries = db.scalars(select(FinancialEntry).where(
+    entries = db.scalars(locked(select(FinancialEntry).where(
         FinancialEntry.spirometry_exam_id == exam.id,
         FinancialEntry.tipo == 'receita',
-    ).with_for_update()).all()
+    ))).all()
     # Reuse the ledger's own-revenue contract, including its legacy category
     # normalization. Physician transfers (M26.9) are a separate table; ledger
     # repasses/expenses and unrelated revenue categories never qualify here.

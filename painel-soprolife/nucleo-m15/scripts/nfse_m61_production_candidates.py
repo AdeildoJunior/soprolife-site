@@ -34,7 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sqlalchemy import select                                      # noqa: E402
+from sqlalchemy import select, text                                # noqa: E402
 
 from app.models import FiscalDocument, Person, SpirometryExam     # noqa: E402
 from app.services import nfse                                     # noqa: E402
@@ -58,6 +58,9 @@ def main() -> int:
     parser.add_argument("--show-public-code", action="store_true",
                         help="print the exam's public code instead of a short hash")
     parser.add_argument("--limit", type=int, default=200)
+    parser.add_argument("--shortlist", action="store_true",
+                        help="list only facts whose SOLE blocker is "
+                             "service_location_undetermined (M63)")
     args = parser.parse_args()
 
     if not os.environ.get("M15_DATABASE_URL"):
@@ -70,6 +73,11 @@ def main() -> int:
     eligible, blocked, already_invoiced = [], [], []
 
     with get_sessionmaker()() as db:
+        # M63 — read-only enforced by the DATABASE, not promised by this
+        # script: on PostgreSQL any write, and any SELECT ... FOR UPDATE, now
+        # raises instead of happening. The session is never committed either.
+        if db.get_bind().dialect.name == "postgresql":
+            db.execute(text("SET TRANSACTION READ ONLY"))
         exams = db.scalars(
             select(SpirometryExam).where(SpirometryExam.status.in_(PERFORMED))
             .order_by(SpirometryExam.data_exame.desc()).limit(args.limit)).all()
@@ -94,7 +102,7 @@ def main() -> int:
                 continue
 
             try:
-                evaluation = nfse.evaluate(db, exam.id, args.environment)
+                evaluation = nfse.evaluate(db, exam.id, args.environment, for_update=False)
             except Exception as exc:                     # noqa: BLE001 - report, never crash
                 blocked.append({"exam": identifier, "blockers": [f"evaluate_failed:{type(exc).__name__}"]})
                 continue
@@ -126,8 +134,17 @@ def main() -> int:
             except ServiceLocationUndetermined:
                 blockers.append("service_location_undetermined")
 
+            flow = evaluation.get("flow")
+            local = (exam.local_atendimento or "").strip()
             row = {
                 "exam": identifier,
+                "flow": flow,
+                # Free text. Shown for a human to decide the municipality —
+                # NEVER parsed into one. For HOME it is almost certainly the
+                # patient's own address, so it is withheld there entirely.
+                "local_atendimento": (
+                    "[omitido: atendimento domiciliar, provável endereço do paciente]"
+                    if flow == "HOME" else (local or None)),
                 "modalidade": exam.modalidade,
                 "service_date": str(exam.data_exame),
                 "municipio_ibge": exam.municipio_atendimento_ibge,
@@ -137,6 +154,23 @@ def main() -> int:
                 "blockers": sorted(blockers),
             }
             (eligible if not blockers else blocked).append(row)
+
+    if args.shortlist:
+        # A fact makes the shortlist only if the missing municipality is the
+        # ONE thing standing between it and eligibility. Any second blocker —
+        # flow, policy, revenue, identity, already invoiced — excludes it.
+        shortlist = [r for r in blocked
+                     if r.get("blockers") == ["service_location_undetermined"]]
+        print(json.dumps({
+            "environment": args.environment,
+            "exams_scanned": len(exams),
+            "shortlist_count": len(shortlist),
+            "shortlist": sorted(shortlist, key=lambda r: r["service_date"]),
+            "already_invoiced": already_invoiced,
+            "read_only": True,
+            "municipality_inferred": False,
+        }, indent=2, ensure_ascii=False))
+        return 0
 
     report = {
         "environment": args.environment,

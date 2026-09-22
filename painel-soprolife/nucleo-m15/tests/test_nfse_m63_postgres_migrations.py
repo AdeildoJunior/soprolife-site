@@ -236,3 +236,37 @@ def test_an_imported_note_survives_and_cannot_be_rewritten(postgres_url):  # noq
         assert conn.scalar(text(
             "select count(*) from fiscal_attempts where operation = 'import'")) == 1
     engine.dispose()
+
+
+# ----------------------------------------------------- the read-only scanner
+
+
+def test_evaluate_without_locks_runs_inside_a_read_only_transaction(postgres_url):  # noqa: F811
+    """The candidate scanner reads the OPERATIONAL database. It must take no
+    row locks there and be unable to write. On PostgreSQL both are enforced by
+    the database: a READ ONLY transaction refuses writes and refuses
+    SELECT ... FOR UPDATE — which is why the locking read the preparation
+    path needs is refused, and the scanner's unlocked read is not."""
+    from sqlalchemy.orm import Session
+
+    from app.services import nfse
+
+    cfg = config(postgres_url)
+    command.upgrade(cfg, 'head')
+    _seed_pre_m62(postgres_url)
+    engine = create_engine(postgres_url)
+
+    with Session(engine) as db:
+        db.execute(text('SET TRANSACTION READ ONLY'))
+        result = nfse.evaluate(db, 'e-m63', 'production', for_update=False)
+        assert 'blocking_reasons' in result
+        with pytest.raises(DBAPIError, match='read-only transaction'):
+            db.execute(text("update spirometry_exams set status = status"))
+        db.rollback()
+
+    with Session(engine) as db:
+        db.execute(text('SET TRANSACTION READ ONLY'))
+        with pytest.raises(DBAPIError, match='read-only transaction'):
+            nfse.evaluate(db, 'e-m63', 'production')          # default: locks
+        db.rollback()
+    engine.dispose()
