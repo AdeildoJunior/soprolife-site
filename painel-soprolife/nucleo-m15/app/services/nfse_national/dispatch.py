@@ -52,6 +52,12 @@ from .signer import LoadedCertificate, SignatureError, load_pkcs12_certificate, 
 from .transport import (HttpxProductionTransport, HttpxRestrictedTransport,
                         NationalTransport)
 from ..nfse_providers import REAL_ENVIRONMENTS
+from .recipient_identity import RecipientIdentityError, assert_production_recipient
+
+# The environment whose tomador identity is held to the stricter M60
+# contract. Named rather than inlined so the two places that care —
+# here and production_profile — cannot drift.
+PRODUCTION_ENVIRONMENT = "production"
 
 
 def fail(code: str, status: int = 503):
@@ -87,10 +93,25 @@ def _load_certificate(settings: Settings) -> LoadedCertificate:
         fail("restricted_certificate_unreadable")
 
 
-def _recipient(db: Session, preparation: FiscalPreparation) -> Recipient:
+def _recipient(db: Session, preparation: FiscalPreparation, environment: str) -> Recipient:
     person = db.get(Person, preparation.recipient_person_id) if preparation.recipient_person_id else None
     if person is None or not person.cpf:
         fail("recipient_identity_not_supplied", 409)
+    # M60 — production demands more of a tomador's identity than homologation
+    # does. The shape check below (TSCPF, eleven digits) is the wire contract
+    # and stays the rule for Produção Restrita, unchanged: that is the only
+    # end-to-end evidence this system has, and tpAmb=2 exists so that made-up
+    # data CAN be exercised there. Production adds check digits, rejects
+    # repeated-digit CPFs (which satisfy módulo 11), and refuses a name that
+    # is a placeholder or is not a full name.
+    #
+    # The failure code never carries the CPF or the name — see
+    # recipient_identity's privacy note.
+    if environment == PRODUCTION_ENVIRONMENT:
+        try:
+            assert_production_recipient(nome=person.nome_completo, cpf=person.cpf)
+        except RecipientIdentityError as exc:
+            fail(exc.code, 409)
     try:
         return Recipient(nome=person.nome_completo, cpf=person.cpf)
     except Exception:  # DpsBuildError/InvalidIdentifierError — malformed stored CPF
@@ -180,7 +201,7 @@ def resolve_national_provider(db: Session, settings: Settings, doc: FiscalDocume
     if national_config is None:
         fail("national_dps_configuration_not_defined_for_any_real_document")
 
-    recipient = _recipient(db, preparation)
+    recipient = _recipient(db, preparation, environment)
     _service_description(db, doc)  # validated here too: fail closed before ever returning a provider
     municipio_prestacao_ibge = _service_location(preparation)
     certificate = _load_certificate(settings)
