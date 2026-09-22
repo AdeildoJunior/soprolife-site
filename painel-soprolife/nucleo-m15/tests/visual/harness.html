@@ -115,36 +115,50 @@
         observations_snapshot:
           "Exame realizado com boa colaboração. Sugerida correlação clínica.",
         conclusion_code_snapshot: "DVO_MODERADO",
-        bronchodilator_code_snapshot: "RESPOSTA_SIGNIFICATIVA",
+        bronchodilator_code_snapshot: "RBD_POSITIVO",
         interpretation_text_sha256: "a".repeat(64),
         sha256: "b".repeat(64), version_number: 2 },
     ],
   };
 
+  // O catálogo fictício espelha, código por código, o catálogo REAL de
+  // `app/services/report_conclusions.py` — inclusive o campo `grupo`, que o
+  // servidor sempre devolveu e que o harness omitia. Um harness com códigos
+  // inventados mede um layout que não existe: as 18 conclusões reais e os 5
+  // complementos são o que a médica vê.
   const CATALOGO = {
     exame_com_pos_bd: true,
     conclusoes: [
-      ["NORMAL", "Normal"], ["DVO_LEVE", "DVO leve"],
-      ["DVO_MODERADO", "DVO moderado"], ["DVO_ACENTUADO", "DVO acentuado"],
-      ["DVR_LEVE", "DVR leve"], ["DVR_MODERADO", "DVR moderado"],
-      ["DVR_ACENTUADO", "DVR acentuado"], ["DVC_LEVE", "DVC leve"],
-      ["DVC_MODERADO", "DVC moderado"], ["DVC_ACENTUADO", "DVC acentuado"],
-      ["DVO_PEQ_VIAS", "DVO peq. vias"], ["LIMITACAO_INESPECIFICA", "Inespecífico"],
-      ["EXAME_INSUFICIENTE", "Insuficiente"], ["NORMAL_LIMITROFE", "Limítrofe"],
-      ["OBSTRUCAO_VIAS_SUP", "Vias superiores"], ["NAO_CONCLUSIVO", "Não conclusivo"],
-      ["PERSONALIZADO", "Personalizado"],
-    ].map(([codigo, rotulo]) => ({
-      codigo, rotulo, texto: `Texto fictício da conclusão ${rotulo}.`,
+      ["NORMAL", "Normal", "Espirometria dentro dos limites da normalidade.", "normal"],
+      ["DVO_LEVE", "DVO Leve", "Distúrbio ventilatório obstrutivo leve.", "obstrutivo"],
+      ["DVO_MODERADO", "DVO Moderado", "Distúrbio ventilatório obstrutivo moderado.", "obstrutivo"],
+      ["DVO_MOD_GRAVE", "DVO Mod. grave", "Distúrbio ventilatório obstrutivo moderadamente grave.", "obstrutivo"],
+      ["DVO_GRAVE", "DVO Grave", "Distúrbio ventilatório obstrutivo grave.", "obstrutivo"],
+      ["DVO_MUITO_GRAVE", "DVO Muito grave", "Distúrbio ventilatório obstrutivo muito grave.", "obstrutivo"],
+      ["DVR_SUG_LEVE", "DVR sug. Leve", "Padrão sugestivo de distúrbio ventilatório restritivo leve.", "restritivo"],
+      ["DVR_SUG_MODERADO", "DVR sug. Moderado", "Padrão sugestivo de distúrbio ventilatório restritivo moderado.", "restritivo"],
+      ["DVR_SUG_MOD_GRAVE", "DVR sug. Mod. grave", "Padrão sugestivo de distúrbio ventilatório restritivo moderadamente grave.", "restritivo"],
+      ["DVR_SUG_GRAVE", "DVR sug. Grave", "Padrão sugestivo de distúrbio ventilatório restritivo grave.", "restritivo"],
+      ["DVR_SUG_MUITO_GRAVE", "DVR sug. Muito grave", "Padrão sugestivo de distúrbio ventilatório restritivo muito grave.", "restritivo"],
+      ["DVM_SUG_LEVE", "DVM sug. Leve", "Padrão sugestivo de distúrbio ventilatório misto leve.", "misto"],
+      ["DVM_SUG_MODERADO", "DVM sug. Moderado", "Padrão sugestivo de distúrbio ventilatório misto moderado.", "misto"],
+      ["DVM_SUG_MOD_GRAVE", "DVM sug. Mod. grave", "Padrão sugestivo de distúrbio ventilatório misto moderadamente grave.", "misto"],
+      ["DVM_SUG_GRAVE", "DVM sug. Grave", "Padrão sugestivo de distúrbio ventilatório misto grave.", "misto"],
+      ["DVM_SUG_MUITO_GRAVE", "DVM sug. Muito grave", "Padrão sugestivo de distúrbio ventilatório misto muito grave.", "misto"],
+      ["DVI", "DVI", "Padrão sugestivo de distúrbio ventilatório inespecífico.", "inespecifico"],
+      ["PERSONALIZADO", "Personalizado", "", "personalizado"],
+    ].map(([codigo, rotulo, texto, grupo]) => ({
+      codigo, rotulo, texto, grupo,
       personalizado: codigo === "PERSONALIZADO",
     })),
     complementos_bd: [
-      ["SEM_COMPLEMENTO", "Sem complemento"],
-      ["RESPOSTA_SIGNIFICATIVA", "Resposta significativa"],
-      ["RESPOSTA_AUSENTE", "Sem resposta"],
-      ["RESPOSTA_PARCIAL", "Resposta parcial"],
-      ["NORMALIZACAO", "Normalização"],
-    ].map(([codigo, rotulo]) => ({
-      codigo, rotulo, texto: `Frase fictícia — ${rotulo}.`,
+      ["RBD_POSITIVO", "RBD+", "Com resposta significativa ao broncodilatador."],
+      ["RBD_NEGATIVO", "RBD−", "Sem resposta significativa ao broncodilatador."],
+      ["REV_COMPLETA", "REV completa", "Reversibilidade completa após broncodilatador."],
+      ["REV_PARCIAL", "REV parcial", "Reversibilidade parcial após broncodilatador."],
+      ["BD_NAO_REALIZADO", "BD não realizado", ""],
+    ].map(([codigo, rotulo, texto]) => ({
+      codigo, rotulo, texto, acrescenta_frase: Boolean(texto),
     })),
   };
 
@@ -161,7 +175,7 @@
         DETALHE.versoes[1].interpretation_text_snapshot,
       observations_snapshot: DETALHE.versoes[1].observations_snapshot,
       conclusion_code_snapshot: "DVO_MODERADO",
-      bronchodilator_code_snapshot: "RESPOSTA_SIGNIFICATIVA",
+      bronchodilator_code_snapshot: "RBD_POSITIVO",
       interpretation_text_sha256: "a".repeat(64),
       validation_code_snapshot: "EXEMPLO-0000-0000",
       sha256: "c".repeat(64),

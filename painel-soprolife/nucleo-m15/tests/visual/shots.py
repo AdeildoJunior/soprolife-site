@@ -23,7 +23,7 @@ SAIDA = pathlib.Path(sys.argv[2])
 SAIDA.mkdir(parents=True, exist_ok=True)
 
 VIEWPORTS = [(1920, 1080), (1440, 900), (1366, 768), (1024, 768),
-              (768, 1024), (430, 932)]
+              (768, 1024), (430, 932), (390, 844)]
 
 MEDIR = r"""
 (() => {
@@ -32,7 +32,13 @@ MEDIR = r"""
   const bancada = document.querySelector('.report-physician-workbench');
   const painel = document.querySelector('.report-clinical-panel');
   const mir = document.querySelector('.report-pdf-frame');
-  const chips = document.querySelector('.report-chip-grid');
+  // M26.25 — as conclusões passaram a ser VÁRIAS grades, uma por família
+  // clínica. A contagem de colunas continua sendo a da maior delas: é a
+  // que diz se a grade virou uma coluna alta de siglas.
+  const grades = [...document.querySelectorAll('.report-chip-grid')];
+  const chips = grades.length
+    ? grades.reduce((a, b) => (b.children.length > a.children.length ? b : a))
+    : null;
   const raiz = document.querySelector('.report-workflow-root');
   const titulo = document.querySelector('#signatureCenterTitle');
   const selo = document.querySelector('.report-signature-count');
@@ -115,6 +121,54 @@ MEDIR = r"""
           voltar, baixar].every(dentro),
         confirmacoes_na_tela:
           document.querySelectorAll('.report-release-confirm').length,
+      };
+    })(),
+    // ------------------------------------------------------- M26.25
+    // O custo de ROLAGEM da área de elaboração, que é a queixa concreta
+    // no celular. Tudo aqui é medido na página como ela está, sem
+    // depender de ninguém lembrar o número da captura anterior.
+    ...(() => {
+      const alt = (sel) => {
+        const el = document.querySelector(sel);
+        return el ? Math.round(el.getBoundingClientRect().height) : 0;
+      };
+      const doc = document.documentElement;
+      const form = document.querySelector('#reportNativeForm');
+      const cta = document.querySelector('.report-conclude-cta');
+      const painel = document.querySelector('.report-clinical-panel');
+      // Distância, em pixels de rolagem, entre o topo da página e o CTA.
+      const topoCta = cta
+        ? Math.round(cta.getBoundingClientRect().top + window.scrollY) : null;
+      // Texto permanentemente exposto na bancada: quantos parágrafos de
+      // ajuda e quantos caracteres ficam na tela sem ninguém pedir.
+      const visivel = (el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+      const ajudas = painel
+        ? [...painel.querySelectorAll('.report-help')].filter(visivel) : [];
+      const detalhes = painel
+        ? [...painel.querySelectorAll('details')] : [];
+      return {
+        altura_pagina: doc.scrollHeight,
+        altura_painel_clinico: alt('.report-clinical-panel'),
+        altura_area_elaboracao: alt('#reportNativeForm'),
+        altura_conclusoes: alt('.report-conclusion-picker'),
+        altura_texto_final: alt('#reportFinalText'),
+        telas_de_rolagem: Number(
+          (doc.scrollHeight / window.innerHeight).toFixed(2)),
+        topo_do_cta: topoCta,
+        // Quantas telas é preciso rolar até o CTA aparecer.
+        rolagem_ate_cta: topoCta === null ? null : Number(
+          (topoCta / window.innerHeight).toFixed(2)),
+        paragrafos_ajuda_visiveis: ajudas.length,
+        caracteres_ajuda_visiveis: ajudas.reduce(
+          (t, el) => t + el.innerText.trim().length, 0),
+        blocos_recolhiveis: detalhes.length,
+        blocos_recolhidos: detalhes.filter((d) => !d.open).length,
+        chips_conclusao: document.querySelectorAll(
+          '[data-report-conclusion]').length,
+        form_presente: Boolean(form),
       };
     })(),
   };

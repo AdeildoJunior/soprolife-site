@@ -10,6 +10,20 @@
  * Estes cenários valem para QUALQUER laudo nesta interface: nada aqui
  * depende de paciente, exame ou documento específico.
  *
+ * M26.25 — DUAS asserções deste arquivo mudaram de propósito, e nenhuma
+ * das duas afrouxa o gate:
+ *
+ *   * as "frases frequentes" viraram "complementos do texto", e as três que
+ *     repetiam literalmente o texto de uma entrada do catálogo saíram da
+ *     lista. O cenário B continua provando a MESMA coisa — texto final
+ *     cheio, sem conclusão, botão bloqueado e motivo na tela — só que com
+ *     os complementos que restaram;
+ *   * o cenário "desmarcar a conclusão" testava um alternador: o segundo
+ *     clique na sigla já escolhida zerava `conclusionCode`. Num celular
+ *     isso era um toque duplo acidental apagando a conclusão em silêncio.
+ *     Agora o segundo toque é inerte e limpar é um botão próprio; o teste
+ *     passa a provar as duas metades disso.
+ *
  * Navegador real, API simulada em memória, sem conexão com dados reais.
  * PLAYWRIGHT_MODULE pode apontar para uma instalação local já disponível.
  */
@@ -24,9 +38,9 @@ const screenshots = fs.mkdtempSync(path.join(os.tmpdir(), "soprolife-m2623-ui-")
 
 const CATALOG = {
   conclusoes: [
-    { codigo: "NORMAL", rotulo: "Normal", texto: "Espirometria dentro dos limites da normalidade.", personalizado: false },
-    { codigo: "DVO_LEVE", rotulo: "DVO leve", texto: "Distúrbio ventilatório obstrutivo leve.", personalizado: false },
-    { codigo: "PERSONALIZADO", rotulo: "Personalizada", texto: "", personalizado: true },
+    { codigo: "NORMAL", rotulo: "Normal", texto: "Espirometria dentro dos limites da normalidade.", grupo: "normal", personalizado: false },
+    { codigo: "DVO_LEVE", rotulo: "DVO leve", texto: "Distúrbio ventilatório obstrutivo leve.", grupo: "obstrutivo", personalizado: false },
+    { codigo: "PERSONALIZADO", rotulo: "Personalizada", texto: "", grupo: "personalizado", personalizado: true },
   ],
   complementos_bd: [
     { codigo: "BD_NAO_REALIZADO", rotulo: "Sem BD", texto: "" },
@@ -88,7 +102,7 @@ async function commonSetup(page) {
     contentType: "text/html",
     body: '<html lang="pt-BR"><body style="margin:0;padding:12px;box-sizing:border-box">'
       + '<main style="max-width:1160px;margin:auto;min-width:0">'
-      + '<div id="reportWorkflowRoot"></div></main></body></html>',
+      + '<div id="reportWorkflowRoot" class="report-workflow-root"></div></main></body></html>',
   }));
   await page.goto("https://sopro-sintetico.test/painel/");
   const html = fs.readFileSync(path.join(panel, "index.html"), "utf8");
@@ -182,24 +196,29 @@ async function runCenarios(browser) {
   // -------------------------------------------------------------------- B
   // A reprodução exata do caso relatado: texto final inteiro montado por
   // frases frequentes, campo visivelmente preenchido, botão ainda cinza.
-  await check("B — texto montado só por frases frequentes NÃO habilita, e a tela explica que falta a conclusão", async () => {
-    await page.locator(".report-frequent-phrase-chip", { hasText: "Redução de CVF e VEF1 isolados." }).click();
-    await page.locator(".report-frequent-phrase-chip", { hasText: "Sem resposta significativa ao broncodilatador." }).click();
+  await check("B — texto montado só por complementos NÃO habilita, e a tela explica que falta a conclusão", async () => {
+    await page.locator(".report-frequent-phrase-chip").nth(0).click();
+    await page.locator(".report-frequent-phrase-chip").nth(1).click();
     assert.equal(
       await page.locator("#reportFinalText").inputValue(),
-      "Redução de CVF e VEF1 isolados.\nSem resposta significativa ao broncodilatador.",
-      "as frases deveriam ter montado o texto final"
+      "Sugerido complementar com volumes pulmonares.\nRedução de CVF e VEF1 isolados.",
+      "os complementos deveriam ter montado o texto final"
     );
     assert.equal(await page.locator(cta).isDisabled(), true, "sem conclusão o gate legítimo continua de pé");
     assert.match(await page.locator(motivo).innerText(), /conclusão/i);
-    // O motivo precisa dizer que as FRASES não substituem a conclusão —
-    // era exatamente essa a confusão de quem viu o campo preenchido.
-    assert.match(await page.locator(motivo).innerText(), /frases/i);
+    // O motivo precisa dizer que os COMPLEMENTOS não substituem a
+    // conclusão — era exatamente essa a confusão de quem viu o campo cheio.
+    assert.match(await page.locator(motivo).innerText(), /complement/i);
+    // E a tela precisa dizer isso ANTES do clique, no próprio bloco.
+    assert.match(
+      await page.locator(".report-text-complements").innerText(),
+      /não concluem o laudo/i
+    );
   });
 
   // -------------------------------------------------------------------- A
   await check("A/B — escolher a conclusão habilita, e o texto vindo dos chips é o que vai no payload", async () => {
-    await page.getByRole("button", { name: "DVO leve", exact: true }).click();
+    await page.locator('[data-report-conclusion="DVO_LEVE"]').click();
     assert.equal(await page.locator(cta).isDisabled(), false, "com conclusão escolhida o botão precisa habilitar");
     assert.equal(await page.locator(previa).isDisabled(), false);
     assert.equal(await page.locator(motivo).count(), 0, "habilitado não mostra motivo de bloqueio");
@@ -212,7 +231,7 @@ async function runCenarios(browser) {
     // o texto inserido por chip chega inteiro ao corpo da requisição.
     assert.equal(
       payload.final_text,
-      "Redução de CVF e VEF1 isolados.\nSem resposta significativa ao broncodilatador."
+      "Sugerido complementar com volumes pulmonares.\nRedução de CVF e VEF1 isolados."
     );
     assert.equal(payload.conclusion_code, "DVO_LEVE");
   });
@@ -230,11 +249,28 @@ async function runCenarios(browser) {
     assert.equal(payload.final_text, "Redação inteiramente digitada pela médica.");
   });
 
-  // -------------------------------------------------------------------- C
-  await check("C — desmarcar a conclusão desabilita de novo e o motivo volta", async () => {
-    await page.getByRole("button", { name: "DVO leve", exact: true }).click();
+  // -------------------------------------------------------------- C + G
+  await check("G — tocar de novo na conclusão já escolhida NÃO apaga a seleção", async () => {
+    await page.locator('[data-report-conclusion="DVO_LEVE"]').click();
+    await page.locator('[data-report-conclusion="DVO_LEVE"]').click();
+    assert.equal(
+      await page.locator('[data-report-conclusion="DVO_LEVE"]').getAttribute("aria-pressed"),
+      "true",
+      "o toque repetido não pode desfazer a conclusão"
+    );
+    assert.equal(await page.locator(cta).isDisabled(), false, "o laudo continua concluível");
+    assert.equal(await page.locator(motivo).count(), 0);
+  });
+
+  await check("C — limpar pelo botão explícito desabilita de novo e o motivo volta", async () => {
+    await page.locator("[data-report-conclusion-clear]").click();
     assert.equal(await page.locator(cta).isDisabled(), true);
     assert.match(await page.locator(motivo).innerText(), /conclusão/i);
+    assert.equal(
+      await page.locator("[data-report-conclusion-clear]").count(),
+      0,
+      "sem conclusão escolhida não há o que limpar"
+    );
   });
 
   await check("mobile 390px — chip responde a toque (sem hover) e o motivo continua visível", async () => {
@@ -245,13 +281,18 @@ async function runCenarios(browser) {
     await chip.tap();
     assert.ok((await page.locator("#reportFinalText").inputValue()).length > 0);
     assert.equal(await page.locator(motivo).isVisible(), true, "o motivo não pode sumir no celular");
-    await page.getByRole("button", { name: "Normal", exact: true }).tap();
+    await page.locator('[data-report-conclusion="NORMAL"]').tap();
     assert.equal(await page.locator(cta).isDisabled(), false, "toque no chip de conclusão precisa habilitar");
+    // F — sem hover, o texto por extenso chega pela prévia da seleção.
+    assert.match(
+      await page.locator(".report-sigla-preview").innerText(),
+      /Espirometria dentro dos limites da normalidade\./
+    );
     await page.screenshot({ path: path.join(screenshots, "mobile-390.png"), fullPage: true });
   });
 
   await check("larguras 1440/1024/768/430/390 sem overflow horizontal com o motivo na tela", async () => {
-    await page.getByRole("button", { name: "Normal", exact: true }).click(); // volta ao estado bloqueado
+    await page.locator("[data-report-conclusion-clear]").click(); // volta ao estado bloqueado
     assert.equal(await page.locator(motivo).count(), 1);
     for (const width of [1440, 1024, 768, 430, 390]) {
       await page.setViewportSize({ width, height: 1000 });

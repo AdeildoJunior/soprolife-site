@@ -65,21 +65,121 @@
   const RELEASE_CONFIRMATION = "ASSINAR E LIBERAR";
   const ADDENDUM_CONFIRMATION = "PUBLICAR ADENDO";
 
-  // M26.12 — biblioteca de "frases frequentes" para o texto final do laudo.
-  // Extraída SOMENTE do texto de conclusão (nunca dado de paciente) dos 25
-  // laudos liberados pela Dra. Ana em produção até 16/09/2026, lidos em
-  // consulta read-only. Normalização aplicada: espaços duplicados,
-  // capitalização e erros ortográficos evidentes (ex.: "iaolados" virou
-  // "isolados"); nenhuma frase clínica nova foi criada — cada item abaixo
-  // corresponde a um padrão que ela já escreveu de próprio punho pelo menos
-  // duas vezes. Ver RELATORIO_M26_12_CONCLUSOES_LAUDOS_ANA_20260916.md.
-  const FREQUENT_CONCLUSION_PHRASES = [
-    "Espirometria dentro dos limites da normalidade.",
-    "Sem resposta significativa ao broncodilatador.",
-    "Sugerido complementar com volumes pulmonares.",
-    "Redução de CVF e VEF1 isolados.",
-    "Distúrbio ventilatório obstrutivo leve.",
+  // ================================ M26.25 — UMA área de conclusões rápidas
+  //
+  // O QUE HAVIA. Duas listas de botões, visualmente parecidas, com
+  // significados diferentes:
+  //
+  //   1. os chips de CONCLUSÃO, que definem `conclusion_code` — o campo que
+  //      o servidor exige em três camadas para concluir um laudo;
+  //   2. as "frases frequentes" (M26.12), que só preenchiam o "Texto final".
+  //
+  // A médica clicava nas frases, o texto final ficava exatamente como ela
+  // queria, e o sistema continuava pedindo uma conclusão. A M26.23 passou a
+  // EXPLICAR o bloqueio; ela não removeu a duplicidade que o produzia.
+  //
+  // O INVENTÁRIO, feito nesta etapa, mostrou que a duplicidade era quase
+  // total: das 5 frases frequentes, TRÊS eram, caractere por caractere, o
+  // `full_text` de uma entrada que já existia no catálogo fechado do
+  // servidor (`app/services/report_conclusions.py`):
+  //
+  //   "Espirometria dentro dos limites da normalidade."  = NORMAL
+  //   "Distúrbio ventilatório obstrutivo leve."          = DVO_LEVE
+  //   "Sem resposta significativa ao broncodilatador."   = RBD_NEGATIVO
+  //
+  // Essas três saem da lista de frases: clicar na sigla correspondente já
+  // escreve o mesmo texto E define o código. Nada se perdeu — o que sumiu
+  // foi o caminho que parecia concluir o laudo e não concluía.
+  //
+  // As duas restantes NÃO são conclusões autônomas; nenhuma delas descreve
+  // um distúrbio ventilatório nem cabe sozinha como conclusão de um exame.
+  // Elas continuam disponíveis, mas como COMPLEMENTOS declarados: outro
+  // bloco, outro nome, outra forma, e um aviso literal de que complemento
+  // nenhum conclui o laudo.
+  //
+  // A fonte canônica das conclusões continua sendo o servidor, e continua
+  // sendo só ele: a sigla e o qualificador são DERIVADOS do rótulo que
+  // `catalogo-conclusoes` devolve (ver `siglaDe`, abaixo). Nenhum código,
+  // texto clínico ou regra de obrigatoriedade nasce neste arquivo.
+  const TEXT_COMPLEMENTS = [
+    {
+      chave: "volumes-pulmonares",
+      rotulo: "Volumes pulmonares",
+      texto: "Sugerido complementar com volumes pulmonares.",
+    },
+    {
+      chave: "cvf-vef1-reduzidos",
+      rotulo: "CVF e VEF1 reduzidos",
+      texto: "Redução de CVF e VEF1 isolados.",
+    },
   ];
+
+  // A SIGLA É DERIVADA DO SERVIDOR, não escrita aqui.
+  //
+  // O catálogo do servidor já nasceu com uma abreviação por entrada
+  // (`short_label`, em `report_conclusions.py`), no formato "família +
+  // grau". Essas abreviações são boas — e o requisito era preservar as que
+  // fossem boas. O que faltava não era inventar siglas novas: era dar
+  // FORMA a essas, separando o que se procura (a família) do que qualifica
+  // (o grau).
+  //
+  // Por isso a divisão é mecânica: primeira palavra = sigla, resto =
+  // qualificador. Nenhuma palavra clínica é digitada neste arquivo, e é
+  // essa a razão de a regra ser assim. Se a sigla e o grau morassem num
+  // mapa aqui, o navegador passaria a ter uma SEGUNDA versão do catálogo,
+  // livre para divergir da do servidor — e um grau errado ao lado de uma
+  // sigla certa é exatamente o tipo de divergência que ninguém percebe até
+  // ela já estar num laudo assinado.
+  //
+  // O mapa de exceções abaixo existe só para o que NÃO é clínico.
+  const SIGLA_OVERRIDES = {
+    // "Personalizado" tem 13 caracteres: não cabe como sigla, e não
+    // descreve nada clínico — é o nome do caminho de texto livre.
+    PERSONALIZADO: { sigla: "LIVRE", grau: "texto próprio" },
+  };
+
+  function siglaDe(opcao) {
+    const forcada = SIGLA_OVERRIDES[opcao.codigo];
+    if (forcada) return forcada;
+    const partes = String(opcao.rotulo || opcao.codigo).trim().split(/\s+/);
+    return { sigla: partes[0].toUpperCase(), grau: partes.slice(1).join(" ") };
+  }
+
+  // Ordem das famílias na tela. As chaves são os `grupo` que o servidor
+  // devolve em `catalogo-conclusoes` — identificadores, não texto clínico.
+  // Um grupo que o servidor invente e que não esteja aqui NÃO some da
+  // tela: cai em "Outras", no fim.
+  const CONCLUSION_GROUP_ORDER = [
+    "normal", "obstrutivo", "restritivo", "misto", "inespecifico",
+    "personalizado",
+  ];
+
+  // Só o que a capitalização automática não resolve (acento, e o nome do
+  // caminho de texto livre).
+  const CONCLUSION_GROUP_LABELS = {
+    inespecifico: "Inespecífico",
+    personalizado: "Texto livre",
+  };
+
+  function grupoRotulo(chave) {
+    return CONCLUSION_GROUP_LABELS[chave]
+      || chave.charAt(0).toUpperCase() + chave.slice(1);
+  }
+
+  // NAO_ALTERNA — por que tocar de novo na sigla já escolhida não apaga.
+  //
+  // Os chips de conclusão e de pós-broncodilatador eram ALTERNADORES: o
+  // segundo clique no mesmo código zerava a escolha. Em touchscreen isso é
+  // uma armadilha — um toque duplo acidental desfazia `conclusionCode` sem
+  // nenhum sinal na tela, e o laudo voltava a ser inconcluível sem que nada
+  // parecesse ter mudado. A partir da M26.25 o segundo toque é inerte, e
+  // limpar é um ato próprio: o botão "Limpar conclusão" / "Limpar
+  // complemento", que só aparece quando existe escolha para desfazer.
+  //
+  // A semântica de domínio não muda: `conclusionCode` vazio continua
+  // significando "sem conclusão" e continua bloqueando a conclusão do
+  // laudo, com o mesmo motivo na tela. O que mudou foi só o gesto que leva
+  // até lá — de acidental para deliberado.
 
   // M26.12 — mesmos três motivos fechados que o backend aceita em
   // `ReportCorrectionReason` (`schemas.py`), reaproveitados tanto pelo
@@ -192,6 +292,48 @@
       texto:
         "Este laudo substitui um anterior. O documento substituído continua "
         + "guardado e localizável.",
+    },
+    // ------------------------------------------------------- M26.25
+    // Os textos abaixo substituem parágrafos que ficavam permanentemente
+    // abertos na bancada. O conteúdo é o mesmo; o que mudou é que ele só
+    // ocupa a tela quando alguém pede.
+    "conclusoes-rapidas": {
+      rotulo: "Ajuda sobre as conclusões rápidas",
+      texto:
+        "Cada sigla é uma conclusão completa: ao tocar nela o sistema "
+        + "escolhe a conclusão do exame E escreve o texto por extenso no "
+        + "laudo, que você pode reescrever à vontade depois. O grau é "
+        + "decisão exclusivamente sua — o sistema não calcula nem sugere. "
+        + "No computador, passe o mouse ou o teclado por uma sigla para ler "
+        + "o texto antes de escolher; no celular, o texto aparece logo "
+        + "abaixo assim que você toca.",
+    },
+    "complementos-texto": {
+      rotulo: "Ajuda sobre os complementos do texto",
+      texto:
+        "Frases que você repete com frequência e que acrescentam algo ao "
+        + "laudo sem serem, sozinhas, a conclusão do exame. Elas só "
+        + "escrevem no texto: a conclusão continua vindo de uma sigla das "
+        + "conclusões rápidas.",
+    },
+    "pos-bd": {
+      rotulo: "Ajuda sobre o complemento pós-broncodilatador",
+      texto:
+        "Acrescenta ao texto a frase sobre a resposta ao broncodilatador. "
+        + "Não substitui a conclusão do exame, e só aparece com as opções "
+        + "compatíveis com este exame.",
+    },
+    "laudo-nativo": {
+      rotulo: "Ajuda sobre o laudo médico da SoproLife",
+      texto:
+        "Documento próprio, gerado pelo Centro de Comando. O PDF técnico da "
+        + "MIR permanece intacto e continua sendo baixado separadamente.",
+    },
+    "previa-conferir": {
+      rotulo: "Ajuda sobre conferir a prévia",
+      texto:
+        "A prévia serve para conferir na tela. O PDF que pode ser assinado "
+        + "só existe depois de concluir o laudo.",
     },
   };
   // A explicação de cada estado do filtro, na linguagem de quem lauda. Vem
@@ -1198,40 +1340,122 @@
 
   // ------------------------------------------------------------- M25.2
 
+  // Um chip de sigla. A sigla é o que se procura; o qualificador, logo
+  // abaixo, é o que impede confundir "DVO leve" com "DVO grave". O texto
+  // por extenso viaja em TRÊS lugares, de propósito:
+  //
+  //   * `aria-label`, para quem usa leitor de tela — e é por isso que os
+  //     `<span>` visuais são `aria-hidden`: sem isso o nome acessível do
+  //     botão sairia com a sigla repetida antes da frase;
+  //   * `.report-sigla-tip`, o balão que aparece no hover E no foco de
+  //     teclado (CSS puro, só onde existe mouse de verdade);
+  //   * a prévia logo abaixo da grade, que é o caminho do celular, onde
+  //     hover não existe.
+  //
+  // `title` saiu: era a única fonte antes, não responde a foco de teclado,
+  // demora ~1s para aparecer e não pode ser estilizado.
+  function siglaChip(opcao, atributo, selecionado, extraClasse) {
+    const { sigla, grau } = siglaDe(opcao);
+    const texto = opcao.texto
+      || "Conclusão escrita por você, livremente, no campo que aparece "
+         + "abaixo.";
+    const descricao = grau ? `${sigla} ${grau}. ${texto}` : `${sigla}. ${texto}`;
+    return `
+      <button type="button"
+        class="report-sigla-chip${extraClasse ? ` ${extraClasse}` : ""}${
+          selecionado ? " is-selected" : ""
+        }"
+        ${atributo}="${esc(opcao.codigo)}"
+        aria-pressed="${selecionado ? "true" : "false"}"
+        aria-label="${esc(descricao)}">
+        <span class="report-sigla" aria-hidden="true">${esc(sigla)}</span>
+        ${grau
+          ? `<span class="report-sigla-grau" aria-hidden="true">${
+               esc(grau)
+             }</span>`
+          : ""}
+        <span class="report-sigla-tip" aria-hidden="true">${esc(texto)}</span>
+      </button>`;
+  }
+
+  // A prévia do que a escolha atual escreve no laudo. No celular ela é o
+  // ÚNICO caminho para ler o texto por trás de uma sigla, então não é um
+  // enfeite: é a razão de a grade poder ser compacta.
+  function renderConclusionPreview() {
+    if (!state.conclusionCode) {
+      return `
+        <p class="report-sigla-preview is-empty" role="status">
+          Nenhuma conclusão escolhida — toque numa sigla acima para ver e
+          aplicar o texto.
+        </p>`;
+    }
+    const texto = suggestedConclusionText();
+    return `
+      <p class="report-sigla-preview" role="status">
+        <span class="report-sigla-preview-label">Texto aplicado</span>
+        <span class="report-sigla-preview-text">${
+          texto
+            ? esc(texto)
+            : "Escreva a conclusão no campo abaixo."
+        }</span>
+      </p>`;
+  }
+
   function renderConclusionPicker() {
     const catalog = state.catalog;
     if (!catalog) {
       return `<div class="report-empty" role="status">Carregando catálogo de conclusões…</div>`;
     }
-    const buttons = catalog.conclusoes.map((option) => `
-      <button type="button"
-        class="report-conclusion-chip${
-          state.conclusionCode === option.codigo ? " is-selected" : ""
-        }${option.personalizado ? " is-custom" : ""}"
-        data-report-conclusion="${esc(option.codigo)}"
-        aria-pressed="${state.conclusionCode === option.codigo ? "true" : "false"}"
-        title="${esc(option.texto || "Escreva a conclusão livremente")}">
-        ${esc(option.rotulo)}
-      </button>`).join("");
 
-    const bdButtons = catalog.complementos_bd.map((option) => `
-      <button type="button"
-        class="report-bd-chip${
-          state.bronchodilatorCode === option.codigo ? " is-selected" : ""
-        }"
-        data-report-bd="${esc(option.codigo)}"
-        aria-pressed="${
-          state.bronchodilatorCode === option.codigo ? "true" : "false"
-        }"
-        title="${esc(option.texto || "Não acrescenta frase de resposta ao broncodilatador")}">
-        ${esc(option.rotulo)}
-      </button>`).join("");
+    // Agrupa pelo `grupo` que o servidor manda. Um grupo desconhecido não
+    // some da tela: vai para "Outras", no fim.
+    const conhecidos = CONCLUSION_GROUP_ORDER;
+    const porGrupo = new Map(CONCLUSION_GROUP_ORDER.map((chave) => [chave, []]));
+    catalog.conclusoes.forEach((opcao) => {
+      const grupo = conhecidos.includes(opcao.grupo) ? opcao.grupo : "outras";
+      if (!porGrupo.has(grupo)) porGrupo.set(grupo, []);
+      porGrupo.get(grupo).push(opcao);
+    });
+    const grupos = [...porGrupo.entries()]
+      .filter(([, itens]) => itens.length)
+      .map(([chave, itens]) => `
+        <div class="report-sigla-group" data-grupo="${esc(chave)}">
+          <p class="report-sigla-group-label">${
+            esc(chave === "outras" ? "Outras" : grupoRotulo(chave))
+          }</p>
+          <div class="report-chip-grid report-sigla-grid">${
+            itens.map((opcao) => siglaChip(
+              opcao, "data-report-conclusion",
+              state.conclusionCode === opcao.codigo,
+              // `report-conclusion-chip` e `report-bd-chip` continuam no
+              // elemento: são os ganchos que a evidência em navegador e os
+              // testes de CSS já usam para contar e medir os chips. A
+              // classe nova é só a forma.
+              `report-conclusion-chip${opcao.personalizado ? " is-custom" : ""}`
+            )).join("")
+          }</div>
+        </div>`).join("");
+
+    const bdChips = catalog.complementos_bd.map((opcao) => siglaChip(
+      opcao, "data-report-bd",
+      state.bronchodilatorCode === opcao.codigo, "report-bd-chip"
+    )).join("");
 
     return `
-      <fieldset class="report-conclusion-picker">
-        <legend>Conclusão</legend>
-        <p class="report-help">O botão mostra a abreviação; o PDF recebe o texto por extenso. O grau é decisão exclusivamente sua — o sistema não calcula nem sugere.</p>
-        <div class="report-chip-grid">${buttons}</div>
+      <fieldset class="report-conclusion-picker report-quick-conclusions">
+        <legend>Conclusões rápidas</legend>
+        <div class="report-picker-head">
+          ${helpTip("conclusoes-rapidas")}
+          ${/* M26.25 — LIMPAR é explícito. Antes, tocar de novo na sigla já
+                escolhida apagava `conclusionCode` em silêncio: num celular,
+                um toque duplo acidental desfazia a conclusão sem nenhum
+                sinal na tela. O botão só existe quando há o que limpar. */""}
+          ${state.conclusionCode ? `
+            <button type="button" class="report-clear-choice"
+              data-report-conclusion-clear>Limpar conclusão</button>` : ""}
+        </div>
+        <div class="report-sigla-groups">${grupos}</div>
+        ${renderConclusionPreview()}
         ${state.conclusionCode === "PERSONALIZADO" ? `
           <label for="reportCustomConclusion" class="report-custom-conclusion">
             Conclusão personalizada
@@ -1241,29 +1465,54 @@
           </label>` : ""}
       </fieldset>
 
-      <fieldset class="report-conclusion-picker">
+      ${renderTextComplements()}
+
+      <fieldset class="report-conclusion-picker report-bd-picker">
         <legend>Pós-broncodilatador</legend>
-        ${catalog.exame_com_pos_bd
-          ? `<p class="report-help">Exame com fase pós-broncodilatador.</p>`
-          : `<p class="report-help">Este exame não possui fase pós-broncodilatador; opções incompatíveis não são oferecidas.</p>`}
-        <div class="report-chip-grid">${bdButtons}</div>
+        <div class="report-picker-head">
+          ${helpTip("pos-bd")}
+          ${catalog.exame_com_pos_bd
+            ? `<span class="report-picker-note">exame com fase pós-BD</span>`
+            : `<span class="report-picker-note">exame sem fase pós-BD</span>`}
+          ${state.bronchodilatorCode ? `
+            <button type="button" class="report-clear-choice"
+              data-report-bd-clear>Limpar complemento</button>` : ""}
+        </div>
+        <div class="report-chip-grid report-sigla-grid">${bdChips}</div>
       </fieldset>`;
   }
 
-  // M26.12 — chips de inserção, não de seleção: não há estado "escolhido",
-  // cada clique apenas acrescenta a frase ao texto final (ver
-  // `insertFrequentPhrase`). Por isso não usam `aria-pressed`/`is-selected`
-  // como os chips de conclusão/BD acima.
-  function renderFrequentPhrases() {
-    const buttons = FREQUENT_CONCLUSION_PHRASES.map((phrase) => `
+  // M26.25 — COMPLEMENTOS, não conclusões.
+  //
+  // As duas frases que sobraram do catálogo da M26.12 não descrevem um
+  // distúrbio ventilatório: uma sugere outro exame, a outra descreve um
+  // achado. Nenhuma conclui um laudo sozinha, e a tela precisa dizer isso
+  // antes do clique — foi exatamente a ilusão contrária que produziu o
+  // "laudo pronto na tela, sistema dizendo que falta conclusão".
+  //
+  // Continuam sendo chips de INSERÇÃO: não há estado "escolhido", cada
+  // toque só acrescenta a frase ao texto final (ver `insertFrequentPhrase`).
+  // Por isso não usam `aria-pressed` nem `is-selected`.
+  function renderTextComplements() {
+    const buttons = TEXT_COMPLEMENTS.map((item) => `
       <button type="button" class="report-frequent-phrase-chip"
-        data-report-frequent-phrase="${esc(phrase)}">
-        ${esc(phrase)}
+        data-report-frequent-phrase="${esc(item.texto)}"
+        aria-label="Acrescentar ao texto: ${esc(item.texto)}">
+        <span class="report-complement-rotulo" aria-hidden="true">+ ${
+          esc(item.rotulo)
+        }</span>
+        <span class="report-sigla-tip" aria-hidden="true">${
+          esc(item.texto)
+        }</span>
       </button>`).join("");
     return `
-      <div class="report-frequent-phrases">
-        <p class="report-help">Frases frequentes — clique para inserir no texto final. Dá para combinar mais de uma e editar à vontade depois.</p>
-        <div class="report-chip-grid report-frequent-phrase-grid">${buttons}</div>
+      <div class="report-text-complements">
+        <p class="report-complements-head">
+          <span class="report-complements-title">Complementos do texto</span>
+          ${helpTip("complementos-texto")}
+          <span class="report-complements-warn">não concluem o laudo</span>
+        </p>
+        <div class="report-chip-grid report-complement-grid">${buttons}</div>
       </div>`;
   }
 
@@ -1288,8 +1537,12 @@
   function concludeBlockReason() {
     if (state.busy) return "Aguarde: o laudo ainda está sendo preparado.";
     if (!state.conclusionCode) {
-      return "Escolha a conclusão do exame, acima. As frases frequentes"
-        + " preenchem o texto final, mas não valem como conclusão.";
+      // M26.25 — o motivo aponta para o nome que a área tem AGORA na tela.
+      // Complementos de texto e pós-broncodilatador continuam escrevendo no
+      // laudo sem concluí-lo: é o que a frase precisa dizer.
+      return "Escolha uma conclusão rápida, acima. Os complementos de texto"
+        + " e o pós-broncodilatador preenchem o laudo, mas não concluem o"
+        + " exame.";
     }
     return "";
   }
@@ -1301,11 +1554,12 @@
     const canPreview = !blockReason;
     return `
       <form id="reportNativeForm" class="report-clinical-form report-native-form">
-        <h4>Laudo médico da SoproLife</h4>
-        <p class="report-help">Documento próprio, gerado pelo Centro de Comando. O PDF técnico da MIR permanece intacto e continua sendo baixado separadamente.</p>
+        ${/* M26.25 — o parágrafo que explicava o documento virou bolha de
+              ajuda. Ele era verdadeiro e permanente: duas linhas de texto
+              no topo da área de trabalho, em toda abertura de laudo. */""}
+        <h4>Laudo médico da SoproLife ${helpTip("laudo-nativo")}</h4>
         ${renderConclusionPicker()}
-        ${renderFrequentPhrases()}
-        <label for="reportFinalText">
+        <label for="reportFinalText" class="report-final-text-field">
           Texto final do laudo
           <textarea id="reportFinalText" name="final_text" maxlength="6000"
             rows="5" aria-describedby="reportFinalTextHelp"
@@ -1313,11 +1567,20 @@
             placeholder="Escolha uma conclusão para montar o texto — e edite livremente antes de assinar.">${esc(state.finalText)}</textarea>
           <span id="reportFinalTextHelp" class="report-help">Este é o texto que será assinado. Você pode reescrevê-lo por completo.</span>
         </label>
-        <label for="reportObservations">
-          Observações complementares (opcional)
-          <textarea id="reportObservations" name="observations" maxlength="2000"
-            rows="3">${esc(state.observations)}</textarea>
-        </label>
+        ${/* M26.25 — vazio, é um campo opcional ocupando três linhas de
+              altura no meio do caminho entre o texto do laudo e o botão que
+              termina o trabalho. Recolhido quando não há nada escrito;
+              aberto sozinho quando há, para que nada fique escondido. */""}
+        <details class="report-optional-block"${
+          state.observations ? " open" : ""
+        }>
+          <summary>Observações complementares (opcional)</summary>
+          <label for="reportObservations" class="report-optional-label">
+            <span class="report-sr-only">Observações complementares</span>
+            <textarea id="reportObservations" name="observations" maxlength="2000"
+              rows="3">${esc(state.observations)}</textarea>
+          </label>
+        </details>
         ${/* M25.29D — o fluxo tinha DOIS botões deliberados antes da
               confirmação: "Gerar prévia do laudo" e, só então, "Concluir
               laudo". Quem não conhece a máquina por dentro lê o primeiro
@@ -1325,24 +1588,32 @@
               dele é uma prévia. O botão principal agora vai de uma vez até
               a confirmação; conferir a prévia sem concluir continua
               possível, mas como escolha secundária e nomeada. */""}
-        <div class="report-native-actions">
-          <button class="m15-btn m15-btn-primary report-conclude-cta" type="submit"${
-            canPreview ? "" : " disabled aria-describedby=\"reportConcludeBlocker\""
-          }>Concluir e preparar para assinatura</button>
-          <button type="button" class="m15-btn report-preview-only"
-            data-report-preview-only${
+        ${/* M26.25 — a DOCA: ação principal e motivo do bloqueio no mesmo
+              bloco, porque no celular ela precisa grudar no rodapé como uma
+              coisa só. `position: sticky` (não `fixed`) é deliberado: o
+              elemento continua ocupando o próprio espaço no fluxo, então
+              nada do formulário fica coberto quando a rolagem chega ao fim.
+              O estado é o MESMO de antes — `concludeBlockReason()` continua
+              sendo a única fonte do `disabled` e do texto. */""}
+        <div class="report-action-dock">
+          <div class="report-native-actions">
+            <button class="m15-btn m15-btn-primary report-conclude-cta" type="submit"${
               canPreview ? "" : " disabled aria-describedby=\"reportConcludeBlocker\""
-            }>Só conferir a prévia</button>
+            }>Concluir e preparar para assinatura</button>
+            <button type="button" class="m15-btn report-preview-only"
+              data-report-preview-only${
+                canPreview ? "" : " disabled aria-describedby=\"reportConcludeBlocker\""
+              }>Só conferir a prévia</button>
+            ${helpTip("previa-conferir")}
+          </div>
+          ${/* O motivo mora colado no botão, não na barra de status lá em
+                cima: é onde ela está olhando quando o clique não acontece.
+                `role="status"` para que o leitor de tela anuncie a mudança —
+                um botão `disabled` não recebe foco, então o texto tem que
+                chegar sozinho. */""}
+          ${blockReason ? `<p class="report-conclude-blocker" id="reportConcludeBlocker"
+            role="status">${esc(blockReason)}</p>` : ""}
         </div>
-        ${/* O motivo mora colado no botão, não na barra de status lá em
-              cima: é onde ela está olhando quando o clique não acontece.
-              `role="status"` para que o leitor de tela anuncie a mudança —
-              um botão `disabled` não recebe foco, então o texto tem que
-              chegar sozinho. */""}
-        ${blockReason ? `<p class="report-conclude-blocker" id="reportConcludeBlocker"
-          role="status">${esc(blockReason)}</p>` : ""}
-        <p class="report-help">A prévia serve para conferir na tela. O PDF que
-          pode ser assinado só existe depois de concluir o laudo.</p>
       </form>`;
   }
 
@@ -1561,9 +1832,14 @@
             }</button>
         </li>`;
     };
+    // M26.25 — RECOLHIDO por padrão. Baixar PDF é o passo DEPOIS de
+    // concluir; enquanto a médica elabora, este painel era um bloco fixo
+    // entre a bancada e o resto da tela, com dois arquivos que ela não vai
+    // abrir agora. Segue a um toque, com o mesmo conteúdo e o mesmo dono
+    // impresso na primeira linha.
     return `
-      <aside class="report-documents-panel" aria-labelledby="reportDocsTitle">
-        <h4 id="reportDocsTitle">Documentos do exame</h4>
+      <details class="report-documents-panel">
+        <summary id="reportDocsTitle">Documentos do exame</summary>
         ${/* M25.15 — de quem são estes PDFs. Baixar e entregar o laudo da
               pessoa errada é o pior desfecho possível deste painel, e até
               aqui a única pista era o código do laudo. */""}
@@ -1580,7 +1856,7 @@
         ${docs.validation_code ? `
           <p class="report-validation-code">Código de verificação:
             <code>${esc(docs.validation_code)}</code></p>` : ""}
-      </aside>`;
+      </details>`;
   }
 
   function renderSignaturePanel(detail) {
@@ -1758,8 +2034,11 @@
               escolhe as siglas, edita o texto e gera a prévia. */""}
         <div class="report-clinical-split" aria-label="Exame técnico da MIR e laudo da SoproLife">
           <article class="report-source-pane">
+            ${/* M26.25 — o parágrafo "Documento original, nunca alterado
+                  nem assinado por cima" dizia, com outras palavras, o que a
+                  bolha de ajuda ao lado do título já diz por inteiro. Duas
+                  cópias da mesma frase, uma delas permanente. */""}
             <h4>Exame técnico (MIR) ${helpTip("exame-mir")}</h4>
-            <p class="report-help">Documento original, nunca alterado nem assinado por cima.</p>
             ${renderPdfFrame("original", "PDF original", original)}
           </article>
           <div class="report-work-pane">
@@ -1768,7 +2047,6 @@
                 ? kindLabel(current.kind) : "Laudo SoproLife"} ${
                 helpTip("laudo-soprolife")
               }</h4>
-              <p class="report-help">Laudo médico próprio, gerado pelo Centro de Comando.</p>
               ${renderPdfFrame(
                 "generated",
                 "PDF gerado para comparação",
@@ -3572,6 +3850,16 @@
     }
     const trimmed = current.replace(/\s+$/, "");
     state.finalText = trimmed ? `${trimmed}\n${phrase}` : phrase;
+    // M26.25 — o complemento escreve no laudo e não conclui nada. Dizer
+    // isso no instante do toque é mais barato do que deixar a médica
+    // descobrir lá embaixo que o botão continua cinza.
+    if (!state.conclusionCode) {
+      announce(
+        "Complemento acrescentado ao texto. Escolha também uma conclusão"
+        + " rápida — complemento sozinho não conclui o laudo.",
+        ""
+      );
+    }
     // M25.2 — editar o texto final invalida a prévia conferida, mesmo
     // quando a edição vem de um chip em vez de digitação direta.
     state.previewVersionId = "";
@@ -4894,8 +5182,20 @@
     if (button.matches("[data-report-conclusion]")) {
       readNativeForm();
       const code = button.getAttribute("data-report-conclusion");
-      state.conclusionCode = state.conclusionCode === code ? "" : code;
+      // M26.25 — repetir o toque não apaga (ver NAO_ALTERNA, no topo).
+      if (state.conclusionCode === code) return;
+      state.conclusionCode = code;
       // Trocar a conclusão invalida a prévia já conferida.
+      state.previewVersionId = "";
+      state.previewTextSha256 = "";
+      state.confirmRelease = false;
+      applyCatalogText();
+      render();
+      return;
+    }
+    if (button.matches("[data-report-conclusion-clear]")) {
+      readNativeForm();
+      state.conclusionCode = "";
       state.previewVersionId = "";
       state.previewTextSha256 = "";
       state.confirmRelease = false;
@@ -4906,8 +5206,19 @@
     if (button.matches("[data-report-bd]")) {
       readNativeForm();
       const code = button.getAttribute("data-report-bd");
-      state.bronchodilatorCode =
-        state.bronchodilatorCode === code ? "" : code;
+      // M26.25 — mesma regra da conclusão (ver NAO_ALTERNA, no topo).
+      if (state.bronchodilatorCode === code) return;
+      state.bronchodilatorCode = code;
+      state.previewVersionId = "";
+      state.previewTextSha256 = "";
+      state.confirmRelease = false;
+      applyCatalogText();
+      render();
+      return;
+    }
+    if (button.matches("[data-report-bd-clear]")) {
+      readNativeForm();
+      state.bronchodilatorCode = "";
       state.previewVersionId = "";
       state.previewTextSha256 = "";
       state.confirmRelease = false;

@@ -1,6 +1,16 @@
 #!/usr/bin/env node
-/* M26.12 — conclusão de laudos (frases frequentes, erro perto da ação,
+/* M26.12 — conclusão de laudos (complementos de texto, erro perto da ação,
  * duplo clique) e devolução administrativa para correção médica.
+ *
+ * M26.25 — os cenários continuam os MESMOS; o que mudou foi o nome e o
+ * conteúdo do bloco que insere frases. As três "frases frequentes" que
+ * repetiam, caractere por caractere, o texto de uma entrada do catálogo
+ * (NORMAL, DVO_LEVE, RBD_NEGATIVO) deixaram de existir como frase: a sigla
+ * correspondente já escreve o mesmo texto e ainda define o código. Restaram
+ * os dois COMPLEMENTOS, que nunca foram conclusão autônoma. As conclusões
+ * passaram a ser localizadas por `data-report-conclusion` porque o nome
+ * acessível do chip agora é a descrição inteira (sigla + texto por extenso),
+ * e não mais só o rótulo curto.
  *
  * Navegador real, API simulada em memória, sem conexão com dados reais.
  * PLAYWRIGHT_MODULE pode apontar para uma instalação local já disponível.
@@ -16,8 +26,8 @@ const screenshots = fs.mkdtempSync(path.join(os.tmpdir(), "soprolife-m2612-ui-")
 
 const CATALOG = {
   conclusoes: [
-    { codigo: "NORMAL", rotulo: "Normal", texto: "Espirometria dentro dos limites da normalidade.", personalizado: false },
-    { codigo: "PERSONALIZADO", rotulo: "Personalizada", texto: "", personalizado: true },
+    { codigo: "NORMAL", rotulo: "Normal", texto: "Espirometria dentro dos limites da normalidade.", grupo: "normal", personalizado: false },
+    { codigo: "PERSONALIZADO", rotulo: "Personalizada", texto: "", grupo: "personalizado", personalizado: true },
   ],
   complementos_bd: [
     { codigo: "BD_NAO_REALIZADO", rotulo: "Sem BD", texto: "" },
@@ -67,7 +77,7 @@ async function commonSetup(page) {
     contentType: "text/html",
     body: '<html lang="pt-BR"><body style="margin:0;padding:12px;box-sizing:border-box">'
       + '<main style="max-width:1160px;margin:auto;min-width:0">'
-      + '<div id="reportWorkflowRoot"></div></main></body></html>',
+      + '<div id="reportWorkflowRoot" class="report-workflow-root"></div></main></body></html>',
   }));
   await page.goto("https://sopro-sintetico.test/painel/");
   const html = fs.readFileSync(path.join(panel, "index.html"), "utf8");
@@ -129,43 +139,43 @@ async function runMedicaScenario(browser) {
   await page.locator("[data-report-open]").click();
   await page.waitForSelector("#reportFinalText");
 
-  await check("frases frequentes aparecem e clique insere no texto final", async () => {
+  await check("complementos do texto aparecem e clique insere no texto final", async () => {
     const chips = page.locator(".report-frequent-phrase-chip");
-    assert.ok((await chips.count()) >= 5, "esperava ao menos 5 frases frequentes");
+    assert.ok((await chips.count()) >= 2, "esperava ao menos 2 complementos de texto");
     assert.equal(await page.locator("#reportFinalText").inputValue(), "");
     await chips.first().click();
-    assert.equal(await page.locator("#reportFinalText").inputValue(), "Espirometria dentro dos limites da normalidade.");
+    assert.equal(await page.locator("#reportFinalText").inputValue(), "Sugerido complementar com volumes pulmonares.");
   });
 
-  await check("duas frases se combinam com quebra de linha, sem apagar o que já existe", async () => {
+  await check("dois complementos se combinam com quebra de linha, sem apagar o que já existe", async () => {
     await page.locator(".report-frequent-phrase-chip").nth(1).click();
     assert.equal(
       await page.locator("#reportFinalText").inputValue(),
-      "Espirometria dentro dos limites da normalidade.\nSem resposta significativa ao broncodilatador."
+      "Sugerido complementar com volumes pulmonares.\nRedução de CVF e VEF1 isolados."
     );
   });
 
-  await check("clicar na mesma frase de novo não duplica", async () => {
+  await check("clicar no mesmo complemento de novo não duplica", async () => {
     const antes = await page.locator("#reportFinalText").inputValue();
     await page.locator(".report-frequent-phrase-chip").first().click();
     assert.equal(await page.locator("#reportFinalText").inputValue(), antes);
     assert.match(await page.locator("#reportStatus").innerText(), /já está no texto/);
   });
 
-  await check("texto livre continua editável por cima das frases inseridas", async () => {
+  await check("texto livre continua editável por cima dos complementos inseridos", async () => {
     await page.locator("#reportFinalText").fill("Texto totalmente reescrito pela médica.");
     assert.equal(await page.locator("#reportFinalText").inputValue(), "Texto totalmente reescrito pela médica.");
   });
 
   await check("selecionar uma conclusão do catálogo não apaga o que a médica editou", async () => {
-    await page.getByRole("button", { name: "Normal", exact: true }).click();
+    await page.locator('[data-report-conclusion="NORMAL"]').click();
     assert.equal(await page.locator("#reportFinalText").inputValue(), "Texto totalmente reescrito pela médica.");
     assert.match(await page.locator("#reportStatus").innerText(), /texto que você editou foi preservado/);
   });
 
   await check("erro de validação foca a mensagem perto da ação, sem apagar o texto digitado", async () => {
     await page.evaluate(() => { document.getElementById("reportFinalText").value = ""; });
-    await page.getByRole("button", { name: "Personalizada", exact: true }).click();
+    await page.locator('[data-report-conclusion="PERSONALIZADO"]').click();
     await page.locator('button[type="submit"].report-conclude-cta').click();
     await page.waitForFunction(() => document.getElementById("reportStatus").textContent.includes("personalizada"));
     assert.equal(
