@@ -321,6 +321,12 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
         String(30)
     )  # residencial|cowork|clinica_parceira
     local_atendimento: Mapped[str | None] = mapped_column(String(200))
+    # M31 — código IBGE (7 dígitos) do município onde o exame foi FISICAMENTE
+    # realizado. Estruturado e distinto de `local_atendimento` (texto livre,
+    # nunca usado como fonte fiscal) e da incidência do ISSQN (que o Sistema
+    # Nacional NFS-e calcula sozinho — ver services/nfse_national/service_location.py).
+    # Nunca inferido de endereço de paciente, nome de clínica ou texto livre.
+    municipio_atendimento_ibge: Mapped[str | None] = mapped_column(String(7))
     partner_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("partners.id"))
     partner_unit_id: Mapped[str | None] = mapped_column(
         String(UUID_LEN), ForeignKey("partner_units.id")
@@ -379,6 +385,10 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
             "AND encerrado_por_user_id IS NOT NULL "
             "AND encerramento_observacao IS NOT NULL)",
             name="encerramento_com_evidencia",
+        ),
+        CheckConstraint(
+            "municipio_atendimento_ibge IS NULL OR length(municipio_atendimento_ibge) = 7",
+            name="municipio_atendimento_ibge_sete_digitos",
         ),
     )
 
@@ -2652,3 +2662,226 @@ class PatientResultSession(Base):
         DateTime(timezone=True), nullable=False
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# ---------------------------------------------------------------- fiscal
+class FiscalPolicy(Base):
+    """Immutable configuration version. Validation never changes an old version."""
+    __tablename__ = "fiscal_policies"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    version: Mapped[str] = mapped_column(String(60), unique=True)
+    environment: Mapped[str] = mapped_column(String(20))
+    flow: Mapped[str] = mapped_column(String(20))
+    service: Mapped[str] = mapped_column(String(30))
+    effective_from: Mapped[date] = mapped_column(Date)
+    effective_to: Mapped[date] = mapped_column(Date)
+    validation_state: Mapped[str] = mapped_column(String(20))
+    configuration: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint("effective_to >= effective_from", name="fiscal_policy_validity"),
+        CheckConstraint("environment IN ('mock','restricted','production')", name="fiscal_policy_environment"),
+        CheckConstraint("validation_state IN ('draft','validated')", name="fiscal_policy_validation"),
+    )
+
+
+class NationalDpsConfigurationVersion(Base):
+    """M29 — versioned, immutable snapshot of the CONCRETE national NFS-e
+    restricted-layout tax configuration (``nfse_national.config.NationalDpsConfiguration``).
+
+    Distinct from ``FiscalPolicy`` (the abstract mock-era eligibility gate,
+    keyed by flow): this holds the exact official fields the real DPS builder
+    needs (issuer CNPJ, national/municipal service codes, NBS, Simples/ISS/
+    retention selections, the approximate-tax percentage). A change to any
+    of those — e.g. the accountant adjusting the current Simples percentage
+    — is always a NEW row with a later ``effective_from``, never a mutation
+    of one already used to build a signed document: the active row for any
+    past competence date is resolved by ``effective_from <= competence``,
+    picking the latest such validated row, so a historical document always
+    reproduces the configuration that was actually active when it was built.
+    Enforced append-only at the database level (see migration), matching
+    ``FiscalArtifact``.
+    """
+    __tablename__ = "national_dps_configurations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    version: Mapped[str] = mapped_column(String(60), unique=True)
+    environment: Mapped[str] = mapped_column(String(20), index=True)
+    effective_from: Mapped[date] = mapped_column(Date, index=True)
+    validation_state: Mapped[str] = mapped_column(String(20))
+    configuration: Mapped[dict] = mapped_column(JSON)
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint("environment IN ('restricted','production')", name="national_dps_config_environment"),
+        CheckConstraint("validation_state IN ('draft','validated')", name="national_dps_config_validation"),
+    )
+
+
+class FiscalDocument(Base, TimestampMixin):
+    """Queue projection only; immutable preparations retain monetary evidence."""
+    __tablename__ = "fiscal_documents"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    spirometry_exam_id: Mapped[str] = mapped_column(String(36), ForeignKey("spirometry_exams.id"))
+    environment: Mapped[str] = mapped_column(String(20))
+    state: Mapped[str] = mapped_column(String(30), default="blocked")
+    eligibility: Mapped[str] = mapped_column(String(20), default="blocked")
+    blocking_reasons: Mapped[list] = mapped_column(JSON, default=list)
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
+    idempotency_fingerprint: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (
+        UniqueConstraint("spirometry_exam_id", "environment", name="uq_fiscal_exam_environment"),
+        CheckConstraint("environment IN ('mock','restricted','production')", name="fiscal_document_environment"),
+        # M57 — 'issued' (a real NFS-e exists at the tax authority) is a
+        # DIFFERENT terminal success state from 'simulated' (the mock invented
+        # an identifier and nothing was issued anywhere). 'simulated' is kept,
+        # narrowed to genuine mock runs; see services/nfse.success_state().
+        CheckConstraint("state IN ('blocked','pending','issuing','issued','simulated','failed','uncertain','reconciling','cancelled')", name="fiscal_document_state"),
+    )
+
+
+class FiscalPreparation(Base):
+    """Append-only snapshot, explicitly derived from one financial source + policy."""
+    __tablename__ = "fiscal_preparations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_documents.id"), index=True)
+    financial_entry_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("financial_entries.id"))
+    policy_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("fiscal_policies.id"))
+    recipient_person_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("people.id"))
+    flow: Mapped[str] = mapped_column(String(20))
+    service_date: Mapped[date | None] = mapped_column(Date)
+    competence: Mapped[date | None] = mapped_column(Date)
+    # M31 — snapshot IMUTÁVEL (esta tabela é append-only, gatilho de banco
+    # recusa UPDATE/DELETE) do município onde o exame foi realizado, no
+    # momento exato do preparo. Nunca a incidência do ISSQN (conceito
+    # distinto — ver services/nfse_national/service_location.py). Copiado
+    # cru de SpirometryExam.municipio_atendimento_ibge por evaluate(); um
+    # valor diferente em um preparo mais novo naturalmente muda o
+    # `fingerprint` e torna o preparo anterior stale, como qualquer outro
+    # campo aqui.
+    service_municipio_ibge: Mapped[str | None] = mapped_column(String(7))
+    amount_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    description: Mapped[str | None] = mapped_column(String(200))
+    blocking_reasons: Mapped[list] = mapped_column(JSON)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint("amount_snapshot IS NULL OR (financial_entry_id IS NOT NULL AND policy_id IS NOT NULL AND amount_snapshot > 0)", name="fiscal_snapshot_source"),
+        CheckConstraint("service_municipio_ibge IS NULL OR length(service_municipio_ibge) = 7", name="service_municipio_ibge_sete_digitos"),
+    )
+
+
+class FiscalAttempt(Base):
+    """Append-only events: started row is committed BEFORE provider invocation.
+
+    Completion is a NEW row sharing operation_id, never an UPDATE of started.
+    A crash leaves durable evidence requiring reconciliation.
+    """
+    __tablename__ = "fiscal_attempts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_documents.id"), index=True)
+    preparation_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_preparations.id"))
+    operation_id: Mapped[str] = mapped_column(String(36))
+    reconciles_operation_id: Mapped[str | None] = mapped_column(String(36))
+    operation: Mapped[str] = mapped_column(String(20))
+    phase: Mapped[str] = mapped_column(String(20))
+    number: Mapped[int] = mapped_column(Integer)
+    provider: Mapped[str] = mapped_column(String(30))
+    environment: Mapped[str] = mapped_column(String(20))
+    outcome: Mapped[str] = mapped_column(String(30))
+    external_id: Mapped[str | None] = mapped_column(String(100))
+    error_code: Mapped[str | None] = mapped_column(String(40))
+    reconciliation_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    actor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
+    idempotency_fingerprint: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (
+        UniqueConstraint("operation_id", "phase", name="uq_fiscal_attempt_phase"),
+        UniqueConstraint("document_id", "number", "phase", name="uq_fiscal_attempt_number"),
+        # M61 — 'import' is an NFS-e this system did NOT issue: real, already at
+        # the tax authority, learned of out of band. It is deliberately not an
+        # 'issue' row, because fiscal_attempts is evidence of what happened at
+        # the provider boundary and no provider was ever called. See
+        # services/nfse_external_issuance.py.
+        CheckConstraint("operation IN ('issue','reconcile','cancel','import')", name="fiscal_attempt_operation"),
+        CheckConstraint("phase IN ('started','completed')", name="fiscal_attempt_phase"),
+    )
+
+
+class DpsNumberSequence(Base):
+    """M36 — durable global counter for ``numero_dps`` (TSIdDPS), keyed by
+    EXACTLY the components that make a TSIdDPS unique per the official
+    schema (``nfse_national.identifiers.DPS_ID_PATTERN``): issuer
+    municipality + tipo de inscrição federal + inscrição federal (CNPJ/CPF,
+    already zero-padded to 14) + série DPS — see
+    ``nfse_national.dps_numbering.scope_key_for``. NEVER per FiscalDocument
+    or FiscalAttempt: that was the M36 root cause (two different documents'
+    first real dispatch both minted ``numero_dps=1`` under the identical
+    scope, since numbering was scoped per document instead of per issuer).
+
+    Mutable by design — this IS the counter, and is allocated with the same
+    row-lock pattern as ``CodeSequence``/``ids.allocate_public_code`` (row
+    locking is only genuinely race-safe on PostgreSQL; SQLite is used for
+    deterministic single-writer tests only, exactly like the rest of this
+    module's sequence allocation — see ``app/db.py`` and M23).
+    """
+    __tablename__ = "dps_number_sequences"
+    scope_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    next_value: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class DpsNumberAllocation(Base):
+    """M36 — append-only: the ONE ``numero_dps`` a ``FiscalDocument`` will
+    EVER use, within exactly one scope (see ``DpsNumberSequence``). Written
+    once, on the document's first real dispatch attempt; every later
+    attempt for the same document (idempotent retry, reconcile #2/#3, ...)
+    reads this row back instead of allocating again — see
+    ``nfse_national.dps_numbering.allocate_dps_number``.
+
+    Never updated, never deleted (enforced at the database level — see
+    migration): a rejected/uncertain outcome leaves this row exactly as-is,
+    so the number stays permanently assigned to this document, never freed,
+    never reused. ``uq_dps_number_scope`` below is a belt-and-suspenders
+    database-level guarantee, independent of application code, that no two
+    documents can ever hold the same (scope, number) pair.
+    """
+    __tablename__ = "dps_number_allocations"
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_documents.id"), primary_key=True)
+    scope_key: Mapped[str] = mapped_column(String(64), index=True)
+    dps_number: Mapped[int] = mapped_column(Integer)
+    allocated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        UniqueConstraint("scope_key", "dps_number", name="uq_dps_number_scope"),
+    )
+
+
+class FiscalArtifact(Base):
+    """M27 — append-only index of private technical fiscal artifacts.
+
+    Points at a file under `Settings.resolved_fiscal_artifacts_storage_dir()`
+    (never inside the Git worktree, never public/static) via a path made only
+    of internal UUIDs (see `services/nfse_national/artifacts.py`). This row
+    is evidence metadata (kind, hash, size) — never the bytes themselves and
+    never PII; the sha256 lets a later read prove the file was not altered.
+    """
+    __tablename__ = "fiscal_artifacts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_documents.id"), index=True)
+    attempt_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("fiscal_attempts.id"))
+    kind: Mapped[str] = mapped_column(String(30))
+    storage_relative_path: Mapped[str] = mapped_column(String(300))
+    sha256: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('dps_unsigned_xml','dps_signed_xml','nfse_xml','event_xml','danfse_pdf')",
+            name="fiscal_artifact_kind",
+        ),
+        CheckConstraint("size_bytes >= 0", name="fiscal_artifact_size_non_negative"),
+    )

@@ -9,3 +9,12 @@ __pycache__/
 .env
 !.env.example
 data-private/
+
+# M29 — certificado digital/PKCS#12 real do NFS-e nunca pode entrar no
+# repositório, mesmo por engano de caminho relativo. Estrutural (fail-closed
+# em app/config.py já recusa qualquer caminho dentro do worktree), mas isso
+# aqui é uma segunda rede: git nunca deve nem CONSEGUIR rastrear um destes.
+*.pfx
+*.p12
+*.pem
+*.key

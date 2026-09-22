@@ -21,6 +21,14 @@ O harness **não fica** dentro de `painel-soprolife/`: ele é copiado para lá n
 hora de rodar e removido depois. Uma página que dispensa autenticação não pode
 ser servida junto do painel.
 
+## Outros harnesses no mesmo padrão
+
+`fiscal_harness.html` / `fiscal_shots.py` — bancada da aba Fiscal (M28, fila
+de NFS-e, painel de prontidão do provedor restrito, lote "Emitir pendentes"),
+mesmo mecanismo (Chrome headless via CDP, `window.SoproM15` falso, dados
+100% fictícios). Copiar/rodar/remover segue o mesmo ciclo descrito abaixo,
+trocando os nomes dos arquivos.
+
 ## Como rodar
 
 ```bash

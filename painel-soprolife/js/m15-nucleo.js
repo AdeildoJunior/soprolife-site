@@ -1079,11 +1079,27 @@
       ? window.SoproStatus.opcoesEspirometria(statusList) : statusList;
     var statusRotulo = isExam && window.SoproStatus
       ? window.SoproStatus.espirometria : function (v) { return v; };
+    // M32 — lista de municípios de atendimento suportados, única fonte no
+    // backend (services/nfse_national/service_location.py). Cacheada por
+    // aba: não muda durante a sessão e não é PII/segredo.
+    var municipiosPromise = null;
+    function municipiosAtendimento() {
+      if (!isExam) return Promise.resolve([]);
+      if (!municipiosPromise) {
+        municipiosPromise = api("/espirometrias/municipios-atendimento")
+          .catch(function () { return []; });
+      }
+      return municipiosPromise;
+    }
     return function () {
       var status = state.filters[statusKey] || "";
       var podeEditar = can("operacional");
-      return api("/" + kind + "?tamanho=50" + (status ? "&status=" + encodeURIComponent(status) : ""))
-        .then(function (data) {
+      return Promise.all([
+        api("/" + kind + "?tamanho=50" + (status ? "&status=" + encodeURIComponent(status) : "")),
+        municipiosAtendimento(),
+      ]).then(function (results) {
+        var data = results[0];
+        var municipios = results[1];
         var items = byId(data.itens);
         body().innerHTML =
           '<div class="m15-filtros"><select id="m15AttStatus">' +
@@ -1134,7 +1150,13 @@
                 ? fld("Broncodilatador", sel("broncodilatador",
                     [["", "não informado"], ["true", "com BD"], ["false", "sem BD"]],
                     e.broncodilatador == null ? "" : String(e.broncodilatador)), 3) +
-                  fld("Responsável", inp("responsavel", e.responsavel || ""), 3)
+                  fld("Responsável", inp("responsavel", e.responsavel || ""), 3) +
+                  fld("Município onde o exame foi realizado", sel("municipio_atendimento_ibge",
+                      [["", "não informado"]].concat(municipios.map(function (m) {
+                        return [m.codigo, m.rotulo];
+                      })), e.municipio_atendimento_ibge || ""),
+                    { span: 6, help: "Necessário para a emissão fiscal da NFS-e. Um exame " +
+                      "histórico sem este dado continua em branco até ser corrigido aqui." })
                 : fld("Profissional", inp("profissional", e.profissional || ""), 6)) +
               fld("Observação", inp("observacao", e.observacao || ""), true) +
               '<div class="m15-form-full m15-actions"><button class="m15-btn" type="submit">Salvar</button> ' +
@@ -1163,6 +1185,14 @@
                     setIf(payload, "responsavel", val(f, "responsavel"));
                     if (val(f, "broncodilatador") !== "") {
                       payload.broncodilatador = val(f, "broncodilatador") === "true";
+                    }
+                    // M32 — só viaja quando o humano muda o valor (mesmo
+                    // padrão do status acima). Isso preserva o valor
+                    // gravado quando o campo não é tocado, e permite
+                    // limpar (voltar para "não informado") mandando "".
+                    var municipioNovo = val(f, "municipio_atendimento_ibge");
+                    if (municipioNovo !== (e.municipio_atendimento_ibge || "")) {
+                      payload.municipio_atendimento_ibge = municipioNovo;
                     }
                   } else {
                     setIf(payload, "profissional", val(f, "profissional"));

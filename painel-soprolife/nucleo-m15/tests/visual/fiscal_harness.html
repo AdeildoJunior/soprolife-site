@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fiscal — bancada de teste visual (dados fictícios)</title>
+<link rel="stylesheet" href="./css/style.css">
+<link rel="stylesheet" href="./css/fiscal-command-center.css">
+<style>
+  body { margin: 0; background: var(--bg, #f4f7fb); }
+  .harness-shell { padding: 20px 24px; }
+  .harness-tag {
+    margin: 0 0 12px; padding: 6px 10px; border-radius: 6px;
+    background: #fff3cd; color: #7c550f; font: 700 12px/1.4 system-ui;
+  }
+</style>
+</head>
+<body>
+<div class="harness-shell">
+  <p class="harness-tag">HARNESS DE TESTE — TODOS OS DADOS SÃO FICTÍCIOS</p>
+  <section id="fiscal" class="section active">
+    <div class="section-title">
+      <div>
+        <p class="eyebrow">NFS-e — fundação offline</p>
+        <h2>Fiscal</h2>
+        <p class="section-sub">Fila de notas fiscais, prontidão do provedor restrito e lote "Emitir pendentes"</p>
+      </div>
+    </div>
+    <div id="fiscalRoot"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const PARAMS = new URLSearchParams(location.search);
+  const CENARIO = PARAMS.get("cenario") || "mista";
+
+  const STATUS = {
+    enabled: true, environment: "mock", provider: "mock", real_issuance_available: false,
+    supported_flows: ["DIRECT", "HOME"],
+    restricted_provider_foundation: {
+      layout_version: "restricted-v1.01-20260727", network_gate_enabled: false,
+      missing_configuration: ["restricted_base_url", "restricted_certificate_path",
+        "restricted_certificate_password", "restricted_network_gate_disabled"],
+      operational_network_possible: false,
+      readiness: {
+        environment: "restricted", provider_implementation_available: true,
+        layout_version: "restricted-v1.01-20260727", schema_version: "DPS_v1.01 / NFSe_v1.01",
+        schema_fingerprint: "fictício-" + "a".repeat(16),
+        certificate_configured: false, certificate_syntactically_valid: null,
+        certificate_summary: null, secret_configured: false,
+        restricted_network_gate_enabled: false, production_gate_possible: false,
+        fiscal_policy_ready: false,
+        fiscal_policy_summary: { environment: "restricted", total_versions: 0,
+          validated_flow_coverage: { DIRECT: false, HOME: false } },
+        artifact_storage_ready: false, artifact_storage_detail: "nfse_fiscal_artifacts_dir_not_configured",
+        last_validation_time: new Date().toISOString(),
+        blockers: ["restricted_certificate_path_missing", "restricted_certificate_password_missing",
+          "restricted_base_url_missing", "restricted_network_gate_disabled",
+          "fiscal_policy_incomplete_for_environment", "artifact_storage_not_ready",
+          "national_dps_configuration_not_defined_for_any_real_document"],
+      },
+      production_readiness: {
+        all_satisfied: false,
+        gates: [
+          { name: "provider_ready", satisfied: false, detail: "7 bloqueio(s) restrito(s) pendente(s)." },
+          { name: "valid_fiscal_policy", satisfied: false, detail: "Política fiscal incompleta para o ambiente restrito." },
+          { name: "verified_real_credential", satisfied: false, detail: "Certificado ausente, ilegível, expirado ou não verificado." },
+          { name: "private_storage_ready", satisfied: false, detail: "nfse_fiscal_artifacts_dir_not_configured" },
+          { name: "restricted_validation_successful", satisfied: false, detail: "Requer confirmação humana explícita." },
+          { name: "production_endpoint_correct", satisfied: false, detail: "Não existe transporte de produção implementado (ausência estrutural)." },
+          { name: "explicit_human_production_authorization", satisfied: false, detail: "Requer autorização humana explícita e documentada." },
+        ],
+      },
+    },
+  };
+
+  function doc(id, state, overrides) {
+    return Object.assign({
+      id, spirometry_exam_id: "exame-fic-" + id, environment: "mock", state,
+      eligibility: state === "pending" ? "eligible" : state === "blocked" ? "blocked" : "eligible",
+      blocking_reasons: [], created_at: "2026-09-10T12:00:00Z", updated_at: "2026-09-10T12:00:00Z",
+      reconciliation_required: state === "uncertain" || state === "reconciling",
+      monetary_source: "Financeiro_Lancamentos / financial_entries", fiscal_validity: false,
+      preparation: { id: "prep-" + id, financial_entry_id: "fe-" + id, policy_id: "pol-" + id,
+        recipient_person_id: "pessoa-" + id, flow: "HOME", service_date: "2026-08-10",
+        competence: "2026-08-10", description: "Realização de exame de espirometria.",
+        created_at: "2026-09-10T12:00:00Z", amount_snapshot: "220.00" },
+    }, overrides || {});
+  }
+
+  const DOCS_BY_STATE = {
+    pending: [
+      doc("11111111-1111-1111-1111-111111111111", "pending"),
+      doc("22222222-2222-2222-2222-222222222222", "pending"),
+      doc("33333333-3333-3333-3333-333333333333", "pending"),
+    ],
+    blocked: [
+      doc("44444444-4444-4444-4444-444444444444", "blocked",
+        { eligibility: "blocked", blocking_reasons: ["policy_missing"] }),
+      doc("55555555-5555-5555-5555-555555555555", "blocked",
+        { eligibility: "blocked", blocking_reasons: ["commercial_flow_unsupported"] }),
+    ],
+    uncertain: [
+      doc("66666666-6666-6666-6666-666666666666", "uncertain", { reconciliation_required: true }),
+    ],
+    reconciling: [], issued: [
+      doc("77777777-7777-7777-7777-777777777777", "issued"),
+    ], simulated: [], failed: [], cancelled: [],
+  };
+
+  const SUMMARY = {
+    environment: "mock", total: 6, eligible: 3, blocked_total: 2,
+    blocked_breakdown: {
+      blocked_by_partner_model: 1, missing_required_tax_configuration: 0,
+      blocked_by_fiscal_policy: 1, blocked_by_financial_source: 0,
+      requires_reprepare: 0, pending_clinical_or_identity_data: 0, blocked_other: 0,
+    },
+    issuing: 0, issued: 1, simulated: 0, failed: 0, uncertain: 1, reconciling: 0, cancelled: 0,
+    reconciliation_required: 1,
+  };
+
+  const NATIONAL_CONFIG_ACTIVE = CENARIO === "sem-config-nacional" ? null : {
+    id: "cfg-fic-1", version: "SOPROLIFE-REAL-v1", environment: "restricted",
+    effective_from: "2026-01-01", validation_state: "validated",
+    created_by: "user-fic", created_at: "2026-09-13T12:00:00Z",
+    configuration: {
+      version: "SOPROLIFE-REAL-v1", layout_version: "restricted-v1.01-20260727",
+      issuer_cnpj: "63544026000110", issuer_name: "SoproLife Diagnósticos e Soluções em Saúde LTDA",
+      issuer_municipio_ibge: "3304557", issuer_op_simp_nac: 3, issuer_reg_ap_trib_sn: 1,
+      issuer_reg_esp_trib: 0, codigo_tributacao_nacional: "040201",
+      codigo_tributacao_municipal: "001", codigo_nbs: "123019900",
+      trib_issqn: 1, tp_ret_issqn: 1,
+      p_tot_trib_sn: "6.00", validation_reference: "SOPROLIFE-M29-REAL-PROFILE",
+    },
+  };
+  const NATIONAL_CONFIG_LIST = NATIONAL_CONFIG_ACTIVE ? [NATIONAL_CONFIG_ACTIVE] : [];
+
+  function rota(path, options) {
+    const clean = path.split("?")[0];
+    const query = path.split("?")[1] || "";
+    if (clean === "/fiscal/status") return STATUS;
+    if (clean === "/fiscal/fila-resumo") return SUMMARY;
+    if (clean === "/fiscal/configuracao-nacional") return NATIONAL_CONFIG_LIST;
+    if (clean === "/fiscal/configuracao-nacional/ativa") return NATIONAL_CONFIG_ACTIVE;
+    if (clean === "/fiscal/documentos") {
+      const m = /state=([^&]+)/.exec(query);
+      const state = m ? decodeURIComponent(m[1]) : "pending";
+      const itens = CENARIO === "vazio" ? [] : (DOCS_BY_STATE[state] || []);
+      return { itens, pagina: 1, tamanho: 100, total: itens.length };
+    }
+    if (clean === "/fiscal/emitir-pendentes" && options && options.method === "POST") {
+      const body = JSON.parse(options.body);
+      const itens = body.document_ids.map((id, i) => i === 1
+        ? { id, error: { codigo: "document_not_pending_eligible" }, status_code: 409 }
+        : Object.assign(doc(id, "issued"), {}));
+      return { itens, real_issuance_available: false };
+    }
+    return {};
+  }
+
+  window.SoproM15 = {
+    hasToken: () => true,
+    can: () => true,
+    idemKey: () => "harness-idem-" + Date.now(),
+    onSessionChange: (cb) => { window.__soproCb = cb; setTimeout(cb, 0); },
+    api: (path, options) => Promise.resolve(rota(path, options)),
+  };
+  window.__harness = { cenario: CENARIO };
+})();
+</script>
+<script src="./js/fiscal-command-center.js"></script>
+</body>
+</html>

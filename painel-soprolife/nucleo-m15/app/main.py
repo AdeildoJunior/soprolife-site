@@ -16,6 +16,7 @@ from .routers import (
     auth,
     crm,
     finance,
+    fiscal,
     followups,
     health,
     imports_audit,
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(crm.router, prefix=prefix)
     app.include_router(marketing.router, prefix=prefix)
     app.include_router(finance.router, prefix=prefix)
+    app.include_router(fiscal.router, prefix=prefix)
     app.include_router(imports_audit.router, prefix=prefix)
     app.include_router(admin_users.router, prefix=prefix)
     # M26.4 — registrado ANTES de `reports` de propósito. Os dois usam o

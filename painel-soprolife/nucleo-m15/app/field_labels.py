@@ -38,6 +38,7 @@ CAMPO_ROTULOS: dict[str, str] = {
     "espirometria.broncodilatador": "Broncodilatador",
     "espirometria.modalidade": "Modalidade",
     "espirometria.local_atendimento": "Local / unidade de atendimento",
+    "espirometria.municipio_atendimento_ibge": "Município onde o exame foi realizado",
     "espirometria.partner_id": "Parceiro",
     "espirometria.partner_unit_id": "Unidade operacional",
     "espirometria.origem": "Origem",

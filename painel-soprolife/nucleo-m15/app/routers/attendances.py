@@ -489,6 +489,7 @@ def _criar_exame(db: Session, person: Person, payload: AtendimentoCreate) -> Spi
             person_id=person.id,
             modalidade=modalidade,
             local_atendimento=local_atendimento,
+            municipio_atendimento_ibge=bloco.municipio_atendimento_ibge or None,
             partner_id=partner_id,
             partner_unit_id=partner_unit_id,
             status=bloco.status,

@@ -84,6 +84,45 @@ ALLOWED_KEYS = {
     # iniciada: só o id da versão anterior (superada, nunca apagada) e da
     # nova, ambos identificadores técnicos.
     "previous_version_id",
+    # M40 — detalhe estruturado de rejeição SEFIN (NFSePostResponseErro),
+    # já sanitizado ANTES de chegar aqui por
+    # nfse_national.error_sanitizer.sanitize_sefin_errors (contagem limitada,
+    # strings truncadas, CPF/CNPJ/chave de acesso/UUID mascarados). Esta
+    # allowlist é a segunda camada: cada valor ainda passa por
+    # `_sanitize_value` (corte em 120 chars, só escalares numa lista
+    # pequena). Nunca corpo bruto da resposta, nunca XML, nunca Base64.
+    "sefin_erro_codigos", "sefin_erro_descricoes", "sefin_erro_complementos",
+    # M41 — os dois campos documentados adicionais (forma "ResponseErro")
+    # e o resumo de FORMATO da resposta (nunca conteúdo):
+    # nfse_national.response_diagnostics.summarize_response_shape já entrega
+    # só contagens/hash/nomes de chave, nunca corpo/XML/Base64/certificado.
+    "sefin_erro_mensagens", "sefin_erro_erros",
+    "sefin_resposta_tipo_corpo", "sefin_resposta_content_type",
+    "sefin_resposta_tamanho", "sefin_resposta_sha256", "sefin_resposta_chaves_json",
+    # M44 — MensagemProcessamento.parametros (flattened across every erros[]
+    # item, already sanitized) and the explicit erros[] empty/decoded/
+    # unrecognized classification — never the raw body, never item values
+    # beyond the already-sanitized parametros scalars.
+    "sefin_erro_parametros", "sefin_erros_status", "sefin_erros_contagem",
+    "sefin_erros_nomes_campos",
+    # M55 — carimbo de processamento do proprio SEFIN
+    # (``dataHoraProcessamento``) e os digests das evidencias de SUCESSO
+    # (XML submetido e NFS-e devolvida). Apenas timestamp e hashes: nunca
+    # corpo, nunca XML, nunca Base64, nunca PII.
+    "sefin_data_hora_processamento", "evidencia_dps_enviado_sha256",
+    "evidencia_nfse_recebida_sha256", "evidencia_persistencia_falhou",
+    # M61 — importação de NFS-e emitida fora deste sistema. Apenas a chave de
+    # acesso (identificador fiscal público, nunca PII), a data informada, o
+    # vocabulário fechado da operação/ambiente e dois booleanos que registam,
+    # explicitamente, o que NÃO se está a afirmar.
+    #
+    # `note` (texto livre do operador) foi deliberadamente DEIXADO DE FORA:
+    # esta allowlist existe precisamente para impedir que texto livre —
+    # onde um nome de paciente acabaria mais cedo ou mais tarde — chegue à
+    # trilha. A primeira versão da M61 tentou incluí-lo e a allowlist
+    # apanhou-a.
+    "external_id", "issued_on", "operation", "environment",
+    "nfse_xml_present", "fiscal_validity_claimed",
 }
 
 _MAX_STR = 120

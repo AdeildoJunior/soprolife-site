@@ -76,6 +76,11 @@
           Financeiro
         </button>
 
+        <button class="nav-item" data-section="fiscal">
+          <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h7l3 3v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z"/><path d="M11 2v3h3"/><path d="M6 10h6M6 13h4"/></svg>
+          Fiscal
+        </button>
+
         <button class="nav-item" data-section="parcerias-pastore">
           <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2.6"/><circle cx="13" cy="12" r="2.6"/><path d="M7 7.6L11 10.4"/></svg>
           Parcerias
@@ -731,6 +736,18 @@
       </section>
 
 
+      <section id="fiscal" class="section">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">NFS-e — fundação offline</p>
+            <h2>Fiscal</h2>
+            <p class="section-sub">Fila de notas fiscais, prontidão do provedor restrito e lote "Emitir pendentes"</p>
+          </div>
+        </div>
+        <div id="fiscalRoot"></div>
+      </section>
+
+
       <section id="parcerias-pastore" class="section">
         <div class="section-title">
           <div>
@@ -980,6 +997,9 @@
        o módulo cria um único recibo agregado somente após confirmação. -->
   <link rel="stylesheet" href="./css/pastore-settlement.css?v=2026083001">
   <script src="./js/pastore-settlement.js?v=2026083001" defer></script>
+  <!-- Fiscal — Command Center do NFS-e (fundação offline). -->
+  <link rel="stylesheet" href="./css/fiscal-command-center.css?v=2026091301">
+  <script src="./js/fiscal-command-center.js?v=2026091301" defer></script>
   <link rel="stylesheet" href="./css/medical-transfers.css?v=2026091601">
   <script src="./js/medical-transfers.js?v=2026091601" defer></script>
   <!-- Conciliação de exames extra-Pastore (M18). Depende de window.SoproM15. -->

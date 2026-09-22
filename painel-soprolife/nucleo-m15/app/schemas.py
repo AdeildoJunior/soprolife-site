@@ -43,6 +43,24 @@ FormaPagamento = Literal["Pix", "Dinheiro", "Cartão", "Outro"]
 OrigemPreco = Literal["Tabela", "Promoção", "Parceria", "Negociação", "Cortesia"]
 TipoRepasse = Literal["percentual", "fixo", "nenhum"]
 
+# M32 — código IBGE (7 dígitos) do município onde o exame foi realizado.
+# Sempre textual (nunca int, para preservar zero à esquerda se algum dia
+# existir): mesma forma do TSCMun nacional que services/nfse_national já usa.
+# String vazia é o sinal explícito de "limpar o campo" no PATCH — mesma
+# convenção já usada por partner_id/partner_unit_id neste arquivo. Não é
+# validado contra a lista de municípios suportados pelo caminho fiscal
+# restrito: essa é uma decisão de negócio de services/nfse_national/
+# service_location.py (fail-closed lá), não do formato de entrada aqui.
+_MUNICIPIO_IBGE_RE = re.compile(r"^[0-9]{7}$")
+
+
+def _validar_municipio_atendimento_ibge(v: str | None) -> str | None:
+    if v is None or v == "":
+        return v
+    if not _MUNICIPIO_IBGE_RE.fullmatch(v):
+        raise ValueError("município IBGE deve ter exatamente 7 dígitos.")
+    return v
+
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -201,6 +219,16 @@ class ExamCreate(StrictModel):
     responsavel: str | None = Field(default=None, max_length=120)
     idempotency_key: str | None = Field(default=None, min_length=4, max_length=64)
     observacao: str | None = Field(default=None, max_length=4000)
+    # M32 — município (IBGE, 7 dígitos) onde o exame foi FISICAMENTE
+    # realizado. Nunca inferido de local_atendimento/parceiro/paciente — ver
+    # SpirometryExam.municipio_atendimento_ibge (M31) e
+    # services/nfse_national/service_location.py.
+    municipio_atendimento_ibge: str | None = Field(default=None, max_length=7)
+
+    @field_validator("municipio_atendimento_ibge")
+    @classmethod
+    def _check_municipio_atendimento_ibge(cls, v: str | None) -> str | None:
+        return _validar_municipio_atendimento_ibge(v)
 
 
 class ExamUpdate(StrictModel):
@@ -223,6 +251,15 @@ class ExamUpdate(StrictModel):
     modalidade: Literal["residencial", "cowork", "clinica_parceira"] | None = None
     partner_id: str | None = None
     partner_unit_id: str | None = None
+    # M32 — ausente = não mexe (preserva o valor gravado); "" explícito
+    # desvincula (mesma convenção de partner_id/partner_unit_id acima); um
+    # código de 7 dígitos válido grava o novo município.
+    municipio_atendimento_ibge: str | None = Field(default=None, max_length=7)
+
+    @field_validator("municipio_atendimento_ibge")
+    @classmethod
+    def _check_municipio_atendimento_ibge(cls, v: str | None) -> str | None:
+        return _validar_municipio_atendimento_ibge(v)
 
 
 class ConsultationCreate(StrictModel):
@@ -560,6 +597,13 @@ class AtendimentoEspirometria(StrictModel):
     observacao: str | None = Field(default=None, max_length=4000)
     # Acompanhamento explícito; sem isto vale a regra vigente do exame.
     proximo_followup: date | None = None
+    # M32 — município (IBGE, 7 dígitos) onde o exame foi realizado.
+    municipio_atendimento_ibge: str | None = Field(default=None, max_length=7)
+
+    @field_validator("municipio_atendimento_ibge")
+    @classmethod
+    def _check_municipio_atendimento_ibge(cls, v: str | None) -> str | None:
+        return _validar_municipio_atendimento_ibge(v)
 
 
 class AtendimentoConsulta(StrictModel):

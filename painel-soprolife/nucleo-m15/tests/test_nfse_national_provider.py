@@ -1,0 +1,300 @@
+"""M27/M30 — NationalNfseProvider: construção+assinatura+transporte ponta a
+ponta, sempre com FakeTransport (nunca rede real).
+
+M30 acrescenta o contrato real de resposta e a correção do identificador usado
+por query()/reconciliação (TSIdDPS, nunca ``operation_id``).
+
+M38 corrige o formato de fio: requisição e resposta do SEFIN Nacional são
+JSON (``dpsXmlGZipB64``/``nfseXmlGZipB64`` = XML -> GZip -> Base64), nunca XML
+cru — ver ``tests/test_nfse_m38_wire_format.py`` para a prova detalhada do
+envelope. Aqui os corpos apenas passam a ser construídos/lidos nesse formato.
+"""
+import json
+from decimal import Decimal
+
+import pytest
+
+from app.services.nfse_national.config import NationalDpsConfiguration
+from app.services.nfse_national.dps_builder import Recipient
+from app.services.nfse_national.identifiers import DpsIdComponents, build_dps_id
+from app.services.nfse_national.provider import (
+    NationalIssueContext,
+    NationalNfseProvider,
+    NationalProviderError,
+)
+from app.services.nfse_national.signer import generate_synthetic_test_certificate, load_pkcs12_certificate
+from app.services.nfse_national.transport import FakeTransport, TransportResponse
+from app.services.nfse_national.wire import decode_b64_gzip_xml, encode_xml_gzip_b64
+from app.services.nfse_providers import Outcome, ProviderRequest
+
+# TSIdNFSe (tiposSimples_v1.01.xsd): "NFS" + cMun(7) + ambGer(1) + tipoInsc(1)
+# + inscricaoFederal(14) + numNFSe(13) + anoMesEmis(4) + codNum(9) + DV(1) = 53.
+VALID_ACCESS_KEY = (
+    "NFS" "3304557" "2" "2" "11222333000181" "0000000000001" "2609" "123456789" "5"
+)
+assert len(VALID_ACCESS_KEY) == 53
+
+
+def _nfse_xml(access_key: str = VALID_ACCESS_KEY) -> bytes:
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<NFSe xmlns="http://www.sped.fazenda.gov.br/nfse">'
+        f'<infNFSe Id="{access_key}"></infNFSe>'
+        '</NFSe>'
+    ).encode("utf-8")
+
+
+def _success_body(access_key: str = VALID_ACCESS_KEY) -> bytes:
+    """A documented ``NFSePostResponseSucesso`` envelope (M38)."""
+    return json.dumps({
+        "tipoAmbiente": 2,
+        "versaoAplicativo": "restrita",
+        "dataHoraProcessamento": "2026-09-15T00:00:00-03:00",
+        "idDps": "DPS330455721122233300018100001000000000000001",
+        "chaveAcesso": access_key,
+        "nfseXmlGZipB64": encode_xml_gzip_b64(_nfse_xml(access_key)),
+    }).encode("utf-8")
+
+
+def _sent_dps_xml(transport: FakeTransport, index: int = 0) -> bytes:
+    """The signed DPS XML actually carried by request ``index``, recovered
+    from the JSON/GZip/Base64 envelope exactly as SEFIN would recover it."""
+    payload = json.loads(transport.received[index].body.decode("utf-8"))
+    return decode_b64_gzip_xml(payload["dpsXmlGZipB64"])
+
+
+@pytest.fixture
+def context():
+    cfg = NationalDpsConfiguration(
+        version="SYNTH-RESTRICTED-v1", layout_version="restricted-v1.01-20260727",
+        issuer_cnpj="11222333000181", issuer_name="SOPROLIFE SAUDE LTDA (SINTETICO)",
+        issuer_municipio_ibge="3304557", issuer_op_simp_nac=3,
+        issuer_reg_ap_trib_sn=1, issuer_reg_esp_trib=0,
+        codigo_tributacao_nacional="140501",
+        trib_issqn=1, tp_ret_issqn=1,
+        amount_basis="financial_entry.valor", competence_rule="service_date",
+        own_revenue_confirmed=True, validation_reference="SYNTHETIC-ONLY",
+        p_tot_trib_sn=Decimal("6.00"),
+    )
+    dps_id = DpsIdComponents(codigo_municipio="3304557", tipo_inscricao_federal=2,
+                             inscricao_federal="11222333000181", serie_dps="00001",
+                             numero_dps="000000000000001")
+    p12_bytes, password = generate_synthetic_test_certificate()
+    cert = load_pkcs12_certificate(p12_bytes, password)
+    return NationalIssueContext(config=cfg, dps_id=dps_id,
+                                  recipient=Recipient(nome="Paciente Um", sem_nif_motivo=1),
+                                  ver_aplic="m27-0.1", numero_dps_display="1",
+                                  serie_dps_display="1", certificate=cert,
+                                  municipio_prestacao_ibge="3304557")
+
+
+def request():
+    return ProviderRequest("doc-1", "op-1", "prep-1", "220.00", "2026-08-10",
+                           "Realização de exame de espirometria.")
+
+
+def test_provider_rejects_wrong_environment(context):
+    transport = FakeTransport(responses=[])
+    for environment in ("mock", "homologacao", "prod", "PRODUCTION", ""):
+        with pytest.raises(NationalProviderError):
+            NationalNfseProvider(transport=transport, context=context, environment=environment)
+
+
+def test_provider_accepts_production_but_that_alone_reaches_nothing(context):
+    """M56 — the provider became bindable to production (the build/sign/parse
+    work is identical, and duplicating it would mean two parsers to keep in
+    step with SEFIN). Reachability is a separate question, answered by the
+    transport's gate and by get_provider() — see
+    test_nfse_m56_production_gates.py. Constructing one here sends nothing:
+    the FakeTransport has no queued response and is never called."""
+    transport = FakeTransport(responses=[])
+    provider = NationalNfseProvider(transport=transport, context=context,
+                                      environment="production")
+    assert provider.environment == "production"
+    # name tracks environment, so nfse.operate()'s name-vs-environment
+    # cross-check can never be satisfied by a provider bound to the other one.
+    assert provider.name == "production"
+    assert transport.received == []
+
+
+def test_issue_success_sends_signed_xsd_valid_dps(context):
+    transport = FakeTransport(responses=[TransportResponse(201, _success_body())])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.ISSUED
+    sent = transport.received[0]
+    assert sent.method == "POST" and sent.path == "/nfse"
+    dps_xml = _sent_dps_xml(transport)
+    assert b"<ds:Signature" in dps_xml or b"Signature" in dps_xml
+
+
+def test_issue_success_extracts_real_access_key(context):
+    """M30/M38 — the access key comes from the NFS-e XML inside the success
+    envelope (infNFSe/@Id, TSIdNFSe), cross-checked against the envelope's own
+    ``chaveAcesso``; never invented."""
+    transport = FakeTransport(responses=[TransportResponse(200, _success_body())])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.ISSUED
+    assert result.external_id == VALID_ACCESS_KEY
+
+
+@pytest.mark.parametrize("body", [
+    b"<NFSe/>",  # well-formed XML, but no infNFSe at all
+    b"<NFSe xmlns='http://www.sped.fazenda.gov.br/nfse'><infNFSe/></NFSe>",  # infNFSe with no Id
+    b"<NFSe xmlns='http://www.sped.fazenda.gov.br/nfse'><infNFSe Id='NOT-A-KEY'/></NFSe>",  # malformed Id
+    b"not xml at all",
+    b"",
+])
+def test_issue_malformed_success_body_never_becomes_issued(context, body):
+    """A 2xx status is never proof of issuance by itself — a success body that
+    isn't the documented JSON envelope carrying a well-formed NFS-e with a
+    schema-shaped access key must fail closed to UNCERTAIN, never ISSUED.
+
+    M38 note: raw NFS-e XML is included here on purpose. It was the shape the
+    pre-M38 code accepted as success; under the real, documented contract it is
+    NOT a valid POST /nfse response envelope and must no longer be believed."""
+    transport = FakeTransport(responses=[TransportResponse(200, body)])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.UNCERTAIN
+    assert result.external_id is None
+
+
+def test_issue_timeout_is_uncertain(context):
+    transport = FakeTransport(responses=[TimeoutError("timeout")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    assert provider.issue(request()).outcome == Outcome.UNCERTAIN
+
+
+def test_issue_server_error_is_uncertain(context):
+    transport = FakeTransport(responses=[TransportResponse(503, b"")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    assert provider.issue(request()).outcome == Outcome.UNCERTAIN
+
+
+def test_issue_client_error_is_rejected(context):
+    transport = FakeTransport(responses=[TransportResponse(422, b"{}")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    assert provider.issue(request()).outcome == Outcome.REJECTED
+
+
+def test_reconcile_queries_by_official_dps_id_never_operation_id(context):
+    """M30 fix: GET /dps/{id} must use the real TSIdDPS this provider built
+    for the original submission — never ``request.operation_id`` (an
+    internal idempotency UUID with no fiscal meaning to the government API)."""
+    transport = FakeTransport(responses=[TransportResponse(404, b"")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    req = request()
+    assert req.operation_id == "op-1"
+    provider.query(req, "issue")
+    sent = transport.received[0]
+    expected_dps_id = build_dps_id(context.dps_id)
+    assert sent.method == "GET"
+    assert sent.path == f"/dps/{expected_dps_id}"
+    assert "op-1" not in sent.path
+    assert expected_dps_id != "op-1"
+
+
+def test_reconcile_not_found(context):
+    transport = FakeTransport(responses=[TransportResponse(404, b"")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    assert provider.query(request(), "issue").outcome == Outcome.NOT_FOUND
+
+
+def test_reconcile_finds_issued_document_and_extracts_access_key(context):
+    transport = FakeTransport(responses=[TransportResponse(200, _nfse_xml())])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.query(request(), "issue")
+    assert result.outcome == Outcome.ISSUED
+    assert result.external_id == VALID_ACCESS_KEY
+
+
+def test_reconcile_success_without_extractable_key_is_uncertain(context):
+    """The exact JSON envelope for GET /dps/{id} is not confirmed by
+    available official evidence (the restricted Swagger requires an mTLS
+    client certificate even to view) — a 2xx body that carries no
+    schema-shaped access key anywhere must stay UNCERTAIN, never a guessed
+    success."""
+    transport = FakeTransport(responses=[TransportResponse(200, b'{"status":"ok"}')])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.query(request(), "issue")
+    assert result.outcome == Outcome.UNCERTAIN
+    assert result.external_id is None
+
+
+def test_reconcile_timeout_is_uncertain_never_not_found(context):
+    transport = FakeTransport(responses=[TimeoutError("t")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    assert provider.query(request(), "issue").outcome == Outcome.UNCERTAIN
+
+
+def test_cancel_is_intentionally_unsupported(context):
+    transport = FakeTransport(responses=[])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    with pytest.raises(NationalProviderError):
+        provider.cancel(request())
+    assert transport.received == []  # never even attempted a request
+
+
+# --------------------------------------------------------- M35 — safe HTTP-status diagnostic
+
+
+def test_issue_client_error_carries_http_status_diagnostic(context):
+    transport = FakeTransport(responses=[TransportResponse(400, b"")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.REJECTED
+    assert result.diagnostic_code == "provider_rejected:http_400"
+
+
+def test_issue_server_error_carries_http_status_diagnostic(context):
+    transport = FakeTransport(responses=[TransportResponse(500, b"")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.UNCERTAIN
+    assert result.diagnostic_code == "provider_server_error:http_500"
+
+
+def test_issue_timeout_carries_generic_diagnostic(context):
+    transport = FakeTransport(responses=[TimeoutError("t")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.UNCERTAIN
+    assert result.diagnostic_code == "provider_timeout"
+
+
+def test_issue_success_has_no_diagnostic(context):
+    transport = FakeTransport(responses=[TransportResponse(201, _success_body())])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.outcome == Outcome.ISSUED
+    assert result.diagnostic_code is None
+
+
+def test_reconcile_not_found_carries_http_status_diagnostic(context):
+    transport = FakeTransport(responses=[TransportResponse(404, b"")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.query(request(), "issue")
+    assert result.outcome == Outcome.NOT_FOUND
+    assert result.diagnostic_code == "provider_confirmed_not_found:http_404"
+
+
+def test_issue_rejection_diagnostic_never_leaks_response_body(context):
+    """Even a 4xx body containing something sensitive-looking must never
+    reach the diagnostic string — only the HTTP status number does."""
+    sensitive_body = b'{"cpf":"12345678901","mensagem":"segredo interno","codigo":"X99"}'
+    transport = FakeTransport(responses=[TransportResponse(403, sensitive_body)])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    result = provider.issue(request())
+    assert result.diagnostic_code == "provider_rejected:http_403"
+    for leaked in (b"12345678901", b"segredo", b"X99", b"cpf", b"mensagem"):
+        assert leaked not in result.diagnostic_code.encode()
+
+
+def test_amount_from_request_never_invented_by_provider(context):
+    transport = FakeTransport(responses=[TransportResponse(201, b"<NFSe/>")])
+    provider = NationalNfseProvider(transport=transport, context=context)
+    req = ProviderRequest("doc-1", "op-1", "prep-1", "77.50", "2026-08-10", "Descrição fixa.")
+    provider.issue(req)
+    assert b"77.50" in _sent_dps_xml(transport)

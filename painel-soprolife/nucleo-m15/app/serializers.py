@@ -167,6 +167,9 @@ def ser_exam(e: m.SpirometryExam) -> dict:
         **_date_meta(e, "data_exame"),
         "modalidade": e.modalidade,
         "local_atendimento": e.local_atendimento,
+        # M32 — município IBGE (7 dígitos) onde o exame foi realizado.
+        # Textual, nunca convertido para número; None = não informado.
+        "municipio_atendimento_ibge": e.municipio_atendimento_ibge,
         "partner_id": e.partner_id,
         "partner_unit_id": e.partner_unit_id,
         "status": e.status,
