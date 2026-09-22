@@ -24,6 +24,7 @@ from .nfse_national import artifacts as artifact_storage
 from .nfse_national import dispatch as national_dispatch
 from .nfse_national.identifiers import NFSE_ACCESS_KEY_PATTERN
 from .nfse_providers import get_provider, ProviderRequest, ProviderResult, Outcome
+from .nfse_validity import fiscal_validity
 
 
 PERFORMED = {'Realizado', 'Laudo Liberado'}
@@ -599,17 +600,14 @@ def serialize_document(db, doc):
             'state', 'eligibility', 'blocking_reasons', 'created_at', 'updated_at')}
     data['reconciliation_required'] = doc.state in IN_FLIGHT | {'uncertain'}
     data['monetary_source'] = 'Financeiro_Lancamentos / financial_entries'
-    # M57 — DOCUMENTED, DELIBERATELY UNCHANGED. `fiscal_validity` is not a
-    # synonym for `state == 'issued'` and M57 does not make it one. It is a
-    # hard-coded declaration that THIS SYSTEM does not assert the fiscal
-    # validity of anything it serializes: not the mock's invented IDs, and
-    # not yet the real NFS-e from restricted issuance either, because
-    # asserting validity is a business/accounting decision (who may rely on
-    # this payload, for what, and under whose responsibility) that nobody has
-    # taken. M55 and M56 both flagged it; changing it needs an explicit
-    # contract, not a state rename. See the M57 report's FISCAL_VALIDITY
-    # section for the recommendation.
-    data['fiscal_validity'] = False
+    # M58 — the hard-coded False is gone, replaced by the explicit contract
+    # M57 said this field needed. It is still False for everything that
+    # exists today, but now BECAUSE OF A RULE rather than by fiat: mock
+    # invents identifiers, and restricted (tpAmb=2) issues real documents
+    # that carry no fiscal effect. Only a production issuance with complete,
+    # coherent evidence can be true. See services/nfse_validity.py — that is
+    # the single source of truth and nothing else may compute its own answer.
+    data['fiscal_validity'] = fiscal_validity(db, doc)
     if prep:
         data['preparation'] = {k: getattr(prep, k) for k in (
             'id', 'financial_entry_id', 'policy_id', 'recipient_person_id', 'flow',
