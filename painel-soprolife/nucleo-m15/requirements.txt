@@ -30,3 +30,11 @@ cryptography
 lxml==6.1.3
 xmlschema==4.3.2
 signxml==5.1.0
+
+# M63 — httpx é dependência de RUNTIME, não só de teste: o transporte mTLS
+# da NFS-e (app/services/nfse_national/transport.py) e o cliente IntegraICP
+# (app/services/integraicp_client.py) importam-no fora dos testes. Estava
+# declarado apenas em requirements-dev.txt e no lock, então um
+# `pip install -r requirements.txt` limpo não o instalava. Mesma versão já
+# fixada no lock e validada com o TestClient (ver o cabeçalho deste ficheiro).
+httpx==0.28.1
