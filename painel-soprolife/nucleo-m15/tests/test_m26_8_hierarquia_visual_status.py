@@ -863,9 +863,13 @@ def test_os_rotulos_visiveis_dos_estados_continuam_os_mesmos():
 
 def test_o_filtro_de_status_da_fila_medica_nao_perdeu_opcoes():
     corpo = _corpo_da_funcao(WORKFLOW_JS, "renderQueue")
+    # M26.28 — `assinado` saiu DE PROPÓSITO: o filtro atua sobre a fila
+    # ATIVA, e um laudo assinado não exige ação da médica (mora em
+    # Históricos). A trava desta etapa visual continua valendo para o resto.
     for valor in ("", "atribuido", "em_elaboracao", "assinatura_pendente",
-                  "assinado", "liberado"):
+                  "liberado"):
         assert f'["{valor}",' in corpo, valor
+    assert '["assinado",' not in corpo
 
 
 def test_nenhuma_fila_mudou_de_conteudo():

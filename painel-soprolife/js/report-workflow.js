@@ -241,9 +241,11 @@
     "meus-laudos": {
       rotulo: "Ajuda sobre Meus laudos",
       texto:
-        "Somente os laudos atribuídos ao seu perfil médico. Exames de outras "
-        + "médicas nunca aparecem aqui, e exames encerrados como histórico "
-        + "saem desta fila.",
+        "Somente os laudos atribuídos ao seu perfil médico que ainda exigem "
+        + "alguma ação sua. Exames de outras médicas nunca aparecem aqui. "
+        + "Laudos com PDF assinado já recebido, entregues ou substituídos "
+        + "por corretiva saem da fila e continuam em “Históricos”; exames "
+        + "encerrados como histórico também saem.",
     },
     "status-filtro": {
       rotulo: "Ajuda sobre o filtro de estados",
@@ -339,7 +341,11 @@
   // A explicação de cada estado do filtro, na linguagem de quem lauda. Vem
   // da lógica REAL do servidor (ver a auditoria da M25.24), não do rótulo.
   const STATUS_HELP = {
-    "": "Mostra todos os laudos atribuídos a você, em qualquer etapa.",
+    // M26.28 — a fila é só do que ainda depende de você. O que já terminou
+    // (assinado devolvido, entregue, superado) mora em "Históricos".
+    "": "Mostra todos os laudos que ainda dependem de você: pendentes de "
+      + "laudo, em elaboração e concluídos aguardando a sua assinatura. Os "
+      + "que já terminaram ficam em “Históricos”, logo abaixo.",
     atribuido:
       "O exame chegou com o PDF do equipamento e está atribuído a você; "
       + "nenhum texto clínico foi escrito ainda. Sai daqui quando você gera "
@@ -1296,14 +1302,18 @@
               Status
               <select id="reportStatusFilter"
                 aria-describedby="reportStatusFilterHelp">
+                ${/* M26.28 — o filtro atua SOBRE A FILA ATIVA (o servidor
+                      já tirou dela o que terminou). "Assinados" saiu: um
+                      laudo assinado não exige ação da médica e nunca está
+                      aqui — mora em "Históricos". Com isso, "Concluídos —
+                      aguardando assinatura" passou a ser literal: o servidor
+                      não devolve mais, sob `liberado`, laudo cujo PDF
+                      assinado já voltou. */""}
                 ${options([
-                  ["", "Todos"],
+                  ["", "Todos os ativos"],
                   ["atribuido", "Pendentes de laudo"],
                   ["em_elaboracao", "Em elaboração"],
                   ["assinatura_pendente", "Laudados — aguardando assinatura"],
-                  // M25.24 — ver `statusLabel`: a cadeia ICP-Brasil não é
-                  // conferida por este sistema em nenhum caminho.
-                  ["assinado", "Assinados — assinatura conferida"],
                   ["liberado", "Concluídos — aguardando assinatura"],
                 ], state.statusFilter)}
               </select>
@@ -2762,6 +2772,23 @@
   // mesmo já substituídos pela LAU-000038. O backend agora exclui os
   // superados/entregues da fila ativa por padrão; aqui só exibe o que ele
   // já decidiu.
+  //
+  // M26.28 — Históricos passou a receber também os laudos com PDF assinado
+  // já recebido ("Pronto para entrega"): o trabalho da médica terminou, o
+  // que falta é da administração. O motivo da linha deixou de ser adivinhado
+  // ("Entregue ao paciente" era o `else` para tudo que não fosse superado —
+  // e mentiria para um laudo só pronto para entrega): superado continua
+  // tendo prioridade; fora isso, vale o estado canônico que o servidor manda
+  // (`estado_entrega_rotulo`). E a linha abre o laudo: sair da fila de
+  // trabalho não pode virar deixar de ser consultável.
+  function myHistoryReason(item) {
+    if (item.has_corrective_successor) {
+      return item.is_delivered ? "Corrigido e entregue" : "Superado por corretiva";
+    }
+    if (item.estado_entrega_rotulo) return item.estado_entrega_rotulo;
+    return item.is_delivered ? "Entregue ao paciente" : statusLabel(item.status);
+  }
+
   function renderMyQueueHistory() {
     const lista = Array.isArray(state.queueHistory) ? state.queueHistory : [];
     const linhas = lista.length
@@ -2771,22 +2798,20 @@
               <strong class="report-item-name">${esc(patientName(item))}</strong>
               <span>${contextLine(item)}</span>
               ${codeTrail(item)}
-              <span class="report-closed-reason">${
-                item.has_corrective_successor && item.is_delivered
-                  ? "Corrigido e entregue"
-                  : item.has_corrective_successor
-                    ? "Superado por corretiva"
-                    : "Entregue ao paciente"
-              }</span>
+              <span class="report-closed-reason">${esc(myHistoryReason(item))}</span>
             </div>
+            <button type="button" class="m15-btn"
+              data-report-history-open="${esc(item.document_id)}">Abrir laudo</button>
           </li>`).join("")
-      : `<div class="report-empty">Nenhum laudo superado ou entregue neste recorte.</div>`;
+      : `<div class="report-empty">Nenhum laudo concluído, superado ou entregue neste recorte.</div>`;
     return `
       <details class="report-closed-catalog">
         <summary>Históricos (${lista.length})</summary>
-        <p class="report-help">Laudos seus já corrigidos (a versão vigente é
-          a corretiva, que aparece acima na fila ativa) ou já entregues ao
-          paciente. Nada foi apagado — só saíram da lista de trabalho.</p>
+        <p class="report-help">Laudos seus em que não há mais nada a fazer:
+          PDF assinado já recebido (a entrega é com a administração), já
+          entregues ao paciente, ou substituídos por corretiva (a versão
+          vigente aparece acima na fila ativa). Nada foi apagado — só saíram
+          da lista de trabalho.</p>
         <ul class="report-closed-list">${linhas}</ul>
       </details>`;
   }
@@ -3702,8 +3727,13 @@
       labels.forEach((label, index) => {
         state[label] = unwrapPayload(label, values[index]);
       });
+      // M26.28 — um laudo aberto a partir de "Históricos" (ou que acabou de
+      // sair da fila ativa porque o PDF assinado voltou) continua aberto: ele
+      // só deixou de ser TRABALHO, não deixou de ser da médica.
+      const naFilaOuHistorico = (item) => item.document_id === state.selectedDocumentId;
+      const historico = Array.isArray(state.queueHistory) ? state.queueHistory : [];
       if (state.selectedDocumentId &&
-          !state.queue.some((item) => item.document_id === state.selectedDocumentId)) {
+          !state.queue.some(naFilaOuHistorico) && !historico.some(naFilaOuHistorico)) {
         state.selectedDocumentId = "";
         state.detail = null;
         releasePdfUrls();
@@ -5299,6 +5329,12 @@
     }
     if (button.matches("[data-report-open]")) {
       loadDocument(button.getAttribute("data-report-open"), true);
+      return;
+    }
+    // M26.28 — abrir a partir de Históricos. Atributo próprio para que
+    // "cartão da fila ativa" continue sendo `[data-report-open]` e nada mais.
+    if (button.matches("[data-report-history-open]")) {
+      loadDocument(button.getAttribute("data-report-history-open"), true);
       return;
     }
     if (button.matches("[data-report-exam-pick]")) {

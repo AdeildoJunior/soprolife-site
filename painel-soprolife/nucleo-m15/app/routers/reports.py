@@ -2582,6 +2582,19 @@ def list_my_report_queue(
         ExternalSignedDocument.report_document_id == ReportDocument.id,
         ExternalSignedDocument.status == ASSINADO_ENTREGUE,
     )
+    # M26.28 — a fila ATIVA responde "este laudo ainda exige alguma ação da
+    # médica?", e não "o documento está `liberado`?" (`liberado` continua
+    # sendo o status depois da assinatura devolvida). O trabalho dela acaba
+    # quando: (a) uma corretiva o substituiu; (b) o PDF assinado voltou e
+    # vale — a MESMA pergunta que tira o laudo da central de assinatura; ou
+    # (c) o fluxo antigo já o marcou `assinado`. "Pronto para entrega" e
+    # "Entregue" são pendências da administração, não dela: vão para
+    # Históricos. Recusado não encerra — a médica precisa assinar de novo.
+    trabalho_encerrado = (
+        has_corrective_successor
+        | _tem_assinado_vigente()
+        | (ReportDocument.status == STATUS_ASSINADO)
+    )
     statement = (
         select(
             ReportDocument,
@@ -2615,14 +2628,13 @@ def list_my_report_queue(
     )
     if status:
         statement = statement.where(ReportDocument.status == status)
+    # O corte acontece NA CONSULTA, antes do LIMIT (lição da M26.22).
+    # `somente_superados` mantém o nome por compatibilidade: hoje significa
+    # "Históricos" — superados E laudos cujo trabalho médico terminou.
     if somente_superados:
-        statement = statement.where(
-            has_corrective_successor | is_delivered
-        )
+        statement = statement.where(trabalho_encerrado)
     elif not incluir_superados:
-        statement = statement.where(
-            ~has_corrective_successor, ~is_delivered
-        )
+        statement = statement.where(~trabalho_encerrado)
     rows = db.execute(
         statement.order_by(ReportAssignment.assigned_at.desc()).limit(200)
     ).all()
@@ -3755,6 +3767,23 @@ async def upload_signed_batch(
 _VALIDATION_CODE_RE = re.compile(r"\b[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{12}\b")
 
 
+# M26.28 — o assinado que NÃO conta como assinatura devolvida: o que ainda
+# está em conferência (a médica não confirmou o lote) e o recusado (M25.29G).
+# Qualquer outro — recebido, aceito, validado, entregue — encerra a etapa de
+# assinatura. É a regra que a central sempre usou; virou nome para que a
+# fila da médica pergunte exatamente a mesma coisa.
+_ASSINADOS_QUE_NAO_ENCERRAM = (ASSINADO_EM_CONFERENCIA, ASSINADO_RECUSADO)
+
+
+def _tem_assinado_vigente():
+    """EXISTS: este laudo já tem PDF assinado devolvido que vale."""
+
+    return exists().where(
+        ExternalSignedDocument.report_document_id == ReportDocument.id,
+        ExternalSignedDocument.status.notin_(_ASSINADOS_QUE_NAO_ENCERRAM),
+    )
+
+
 def _aguardando_assinatura_externa(db: Session, *, profile_id: str):
     """Laudos DESTA médica concluídos e ainda sem assinado confirmado.
 
@@ -3770,11 +3799,6 @@ def _aguardando_assinatura_externa(db: Session, *, profile_id: str):
     # evidência histórica, não o documento vigente: sem esta exclusão o laudo
     # ficaria fora da lista da médica para sempre, e o único caminho de
     # conserto seria apagar o registro — exatamente o que não se pode fazer.
-    ja_recebidos = select(ExternalSignedDocument.report_document_id).where(
-        ExternalSignedDocument.status.notin_(
-            (ASSINADO_EM_CONFERENCIA, ASSINADO_RECUSADO)
-        )
-    )
     # M26.16 — corrigir (M26.12/M26.14) nunca muda o `status` do predecessor
     # (fica `liberado` por desenho): sem esta exclusão, um laudo já SUPERADO
     # aparecia aqui pronto para assinatura externa. Único ponto de checagem
@@ -3806,7 +3830,7 @@ def _aguardando_assinatura_externa(db: Session, *, profile_id: str):
             # inventado. Os documentos continuam intactos — o que sai é a
             # COBRANÇA por eles.
             SpirometryExam.encerramento_motivo.is_(None),
-            ReportDocument.id.not_in(ja_recebidos),
+            ~_tem_assinado_vigente(),
             ~tem_corretiva_sucessora,
         )
         .order_by(ReportDocument.released_at.desc())
