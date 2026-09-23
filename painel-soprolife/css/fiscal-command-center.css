@@ -200,3 +200,24 @@
 @media (max-width: 560px) {
   .fiscal-config-grid { grid-template-columns: 1fr; }
 }
+
+/* M66 — emissão de produção: um por vez, confirmação dupla. */
+.fiscal-production-panel { border-left: 4px solid var(--navy, #0d2a43); }
+.fiscal-prod-counts { margin: 0 0 10px; font-size: 12px; font-weight: 700; color: var(--muted, #64798b); }
+.fiscal-key { display: block; margin-top: 4px; font-size: 10px; color: var(--muted, #64798b); word-break: break-all; }
+.fiscal-prod-description { font-size: 13px; margin: 10px 0; }
+.fiscal-modal-backdrop {
+  position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: rgba(13, 42, 67, 0.55);
+}
+.fiscal-modal {
+  width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto;
+  background: var(--card, #fff); border-radius: 12px; padding: 20px;
+  box-shadow: 0 18px 50px rgba(13, 42, 67, 0.3);
+}
+.fiscal-modal h3 { margin: 0 0 12px; color: var(--navy, #0d2a43); }
+.fiscal-modal .fiscal-actions { justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
+.fiscal-modal .safe-label { display: block; white-space: normal; line-height: 1.4; }
+.fiscal-modal .fiscal-wide { grid-column: 1 / -1; }
+.fiscal-modal dd code { word-break: break-all; white-space: normal; }
+.fiscal-production-panel .panel-header .safe-label { white-space: normal; }

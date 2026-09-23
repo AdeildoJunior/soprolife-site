@@ -75,6 +75,48 @@
     },
   };
 
+  // M66 — cenário "producao": fila por exame, confirmação dupla, sem lote.
+  if (CENARIO === "producao") {
+    STATUS.environment = "production";
+    STATUS.provider = "unavailable";
+    STATUS.production_issuance = { available: true, worker_configured: true,
+      batch_available: false, confirmation_ttl_minutes: 15 };
+  }
+  function prodRow(code, nome, status, extra) {
+    return Object.assign({ exam_id: "exame-" + code, exam_code: code, patient_name: nome,
+      service_date: "2026-09-16", modality: "cowork", flow: "DIRECT", municipio_ibge: "3304557",
+      municipio_name: "Rio de Janeiro/RJ", amount: "220.00", status,
+      status_label: { ready: "Pronto para emitir", blocked: "Bloqueado", issued: "Emitida",
+        imported: "Emitida manualmente (importada)", uncertain: "Incerta — reconciliar (só consulta)" }[status],
+      blocking_reasons: [], block_category: null, block_label: null, document_id: status === "ready" ? null : "doc-" + code,
+      document_state: null, fiscal_validity: status === "issued", external_id: null, request: null,
+      can_issue: status === "ready", can_reconcile: status === "uncertain" }, extra || {});
+  }
+  const PROD_QUEUE = { environment: "production", batch_issuance_available: false, worker_configured: true,
+    counts: { ready: 1, blocked: 3, issued: 1, imported: 1, uncertain: 1 },
+    itens: [
+      prodRow("ESP-900001", "Paciente Ficticio Alfa Um", "ready"),
+      prodRow("ESP-900002", "Paciente Ficticio Beta Dois", "blocked", { blocking_reasons: ["recipient_cpf_missing"],
+        block_category: "recipient_fiscal_data_incomplete", block_label: "Dados fiscais do paciente incompletos" }),
+      prodRow("ESP-900003", "Paciente Ficticio Gama Tres", "blocked", { municipio_ibge: null, municipio_name: null,
+        blocking_reasons: ["service_location_missing"], block_category: "missing_service_location",
+        block_label: "Município de prestação não registrado" }),
+      prodRow("ESP-900004", "Paciente Ficticio Delta Quatro", "blocked", { flow: "PASTORE", amount: null,
+        blocking_reasons: ["commercial_flow_unsupported"], block_category: "blocked_by_partner_model",
+        block_label: "Fluxo de parceria (Pastore) — não é emitido por exame" }),
+      prodRow("ESP-900005", "Paciente Ficticio Epsilon Cinco", "uncertain"),
+      prodRow("ESP-900006", "Paciente Ficticio Zeta Seis", "issued",
+        { external_id: "NFS00000000000000000000000000000000000000000000000FICT" }),
+      prodRow("ESP-900007", "Paciente Ficticio Eta Sete", "imported"),
+    ] };
+  const PROD_SUMMARY = { document_id: "doc-ESP-900001", preparation_id: "prep-fic-1", exam_code: "ESP-900001",
+    patient_name: "Paciente Ficticio Alfa Um", cpf_masked: "***.***.***-00", service_date: "2026-09-16",
+    competence: "2026-09-16", flow: "DIRECT", modality: "cowork", municipio_ibge: "3304557",
+    municipio_name: "Rio de Janeiro/RJ", amount: "220.00", amount_label: "R$ 220,00",
+    service_description: "Realização de exame de espirometria com broncodilatador.", broncodilatador: true,
+    state: "pending", eligibility: "eligible", blocking_reasons: [], block_label: null,
+    confirmation_phrase: "Confirmar emissão de R$ 220,00", can_confirm: true };
+
   function doc(id, state, overrides) {
     return Object.assign({
       id, spirometry_exam_id: "exame-fic-" + id, environment: "mock", state,
@@ -149,6 +191,17 @@
       const itens = CENARIO === "vazio" ? [] : (DOCS_BY_STATE[state] || []);
       return { itens, pagina: 1, tamanho: 100, total: itens.length };
     }
+    if (clean === "/fiscal/producao/fila") return PROD_QUEUE;
+    if (/^\/fiscal\/producao\/exames\/.+\/preparar$/.test(clean)) return PROD_SUMMARY;
+    if (/confirmar-emissao$/.test(clean)) {
+      return { id: "pedido-fic-1", document_id: PROD_SUMMARY.document_id, kind: "issue", status: "authorized",
+        amount_confirmed: "220.00", provider_post_count: 0, external_id: null, result_code: null };
+    }
+    if (/^\/fiscal\/producao\/pedidos\//.test(clean)) {
+      return { id: "pedido-fic-1", document_id: PROD_SUMMARY.document_id, kind: "issue", status: "issued",
+        amount_confirmed: "220.00", provider_post_count: 1, fiscal_validity: true, result_code: null,
+        external_id: "NFS00000000000000000000000000000000000000000000000FICT" };
+    }
     if (clean === "/fiscal/emitir-pendentes" && options && options.method === "POST") {
       const body = JSON.parse(options.body);
       const itens = body.document_ids.map((id, i) => i === 1
@@ -167,6 +220,13 @@
     api: (path, options) => Promise.resolve(rota(path, options)),
   };
   window.__harness = { cenario: CENARIO };
+  // ?passo=modal abre a confirmação; ?passo=resultado confirma e mostra o desfecho.
+  const PASSO = PARAMS.get("passo");
+  if (PASSO === "modal" || PASSO === "resultado") {
+    const click = (sel) => { const el = document.querySelector(sel); if (el) el.click(); };
+    setTimeout(() => click("[data-prod-issue]"), 300);
+    if (PASSO === "resultado") setTimeout(() => click("[data-prod-confirm]"), 700);
+  }
 })();
 </script>
 <script src="./js/fiscal-command-center.js"></script>

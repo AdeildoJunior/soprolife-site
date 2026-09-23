@@ -23,6 +23,10 @@ from .idempotency import idempotent_create, payload_fingerprint
 from .nfse_national import artifacts as artifact_storage
 from .nfse_national import dispatch as national_dispatch
 from .nfse_national.identifiers import NFSE_ACCESS_KEY_PATTERN
+from .nfse_national.recipient_identity import RecipientIdentityError, assert_production_recipient
+from .nfse_national.service_location import (ServiceLocationUndetermined,
+                                             ServiceLocationUnsupported,
+                                             spirometry_service_municipio_ibge)
 from .nfse_providers import (get_provider, ProviderRequest, ProviderResult, Outcome,
                              REAL_ENVIRONMENTS)
 from .nfse_validity import fiscal_validity
@@ -100,6 +104,45 @@ def create_policy(db, payload: PolicyCreate, actor, request_id=None):
     return policy
 
 
+RECIPIENT_FISCAL_REASONS = (
+    'recipient_cpf_missing', 'recipient_cpf_malformed', 'recipient_cpf_repeated_digits',
+    'recipient_cpf_check_digits_invalid', 'recipient_name_missing',
+    'recipient_name_not_a_full_name', 'recipient_name_looks_like_placeholder',
+    'recipient_name_too_long',
+)
+
+
+def production_fact_blockers(person, municipio_ibge) -> list[str]:
+    """M66 — what production additionally demands of the FACT, surfaced at
+    eligibility time instead of only at dispatch.
+
+    Until M66 these two checks lived only in ``nfse_national.dispatch`` (and
+    in the M61 scanner script), so a fact with no CPF or no municipality read
+    "eligible" in the queue and failed only once someone tried to send it.
+    Same rules, same codes, same modules — nothing is reimplemented here, and
+    dispatch still re-checks both, independently, right before the DPS is
+    built. Codes only: never the CPF, never the name.
+
+    Production only. Restricted keeps its pre-M66 eligibility unchanged, on
+    purpose (see recipient_identity's note on homologation data)."""
+    reasons = []
+    if person is not None and not person.arquivado:
+        if not person.cpf:
+            reasons.append('recipient_cpf_missing')
+        try:
+            assert_production_recipient(nome=person.nome_completo, cpf=person.cpf)
+        except RecipientIdentityError as exc:
+            if not (exc.code == 'recipient_cpf_malformed' and not person.cpf):
+                reasons.append(exc.code)
+    try:
+        spirometry_service_municipio_ibge(municipio_ibge)
+    except ServiceLocationUndetermined:
+        reasons.append('service_location_missing')
+    except ServiceLocationUnsupported:
+        reasons.append('service_location_unsupported')
+    return reasons
+
+
 def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = True) -> dict:
     """Fiscal eligibility of one exam.
 
@@ -172,9 +215,11 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
                 reasons.append('policy_incomplete')
         except ValidationError:
             reasons.append('policy_invalid')
+    if environment == 'production':
+        reasons.extend(production_fact_blockers(person, exam.municipio_atendimento_ibge))
     description = None
     if service_date:
-        bd = {True: ' com broncodilatador', False: ' sem broncodilatador', None: ''}[exam.broncodilatador]
+        bd ={True: ' com broncodilatador', False: ' sem broncodilatador', None: ''}[exam.broncodilatador]
         description = f'Realização de exame de espirometria{bd} em {service_date:%d/%m/%Y}.'
     return dict(financial_entry_id=entry.id if entry else None,
                 policy_id=policy.id if policy else None,
@@ -565,6 +610,11 @@ BLOCK_CATEGORIES = [
     # operator sees the real fix ("this flow needs its own model"), not
     # "create a policy" for a flow that structurally cannot have one yet.
     ('blocked_by_partner_model', {'commercial_flow_unsupported'}),
+    # M66 — production only (see production_fact_blockers). Shown to the
+    # operator as "Dados fiscais do paciente incompletos": the fix is in the
+    # patient's registration, never in the fiscal queue.
+    ('recipient_fiscal_data_incomplete', set(RECIPIENT_FISCAL_REASONS)),
+    ('missing_service_location', {'service_location_missing', 'service_location_unsupported'}),
     ('missing_required_tax_configuration', {'policy_incomplete', 'policy_invalid'}),
     ('blocked_by_fiscal_policy', {'policy_missing', 'policy_outside_validity', 'policy_ambiguous'}),
     ('blocked_by_financial_source', {'financial_entry_missing', 'financial_entry_ambiguous',

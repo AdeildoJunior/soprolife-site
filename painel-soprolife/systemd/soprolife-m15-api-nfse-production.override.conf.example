@@ -1,0 +1,13 @@
+# M66 — drop-in de exemplo para ligar a ABA FISCAL em produção no serviço web.
+# NÃO INSTALADO pela M66.
+#
+# Liga só a leitura da fila e o registro de confirmações humanas. NÃO dá ao
+# processo web o certificado, a senha, nem M15_NFSE_PRODUCTION_NETWORK_ENABLED
+# — nenhuma dessas três linhas pode aparecer aqui. Quem envia é o executor
+# one-shot (soprolife-nfse-production-worker.service).
+#
+# Destino: /etc/systemd/system/soprolife-m15-api.service.d/nfse-production.conf
+[Service]
+Environment=M15_NFSE_ENABLED=true
+Environment=M15_NFSE_ENVIRONMENT=production
+Environment=M15_NFSE_PRODUCTION_WORKER_SPOOL_DIR=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15/var/nfse-production-spool

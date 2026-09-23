@@ -126,6 +126,18 @@ class Settings(BaseSettings):
     # never break a homologation run. The real A1 expires 2026-11-07 and
     # must be renewed before the first production issuance.
     nfse_production_certificate_min_days: int = 30
+    # M66 — the production issuance button. The web process NEVER sends: it
+    # records a human confirmation and drops a doorbell file (just the
+    # request UUID) here, and a separate one-shot systemd worker — the only
+    # process that ever sees the A1 — picks it up. Unset means the button is
+    # unavailable (fail closed), not "send from the web process".
+    nfse_production_worker_spool_dir: Path | None = None
+    # Worker-only: where each request's pre-POST intent and raw responses go
+    # (0700 dirs, 0600 files, outside Git). The web process never reads it.
+    nfse_production_worker_runtime_dir: Path | None = None
+    # How long a human confirmation stays usable. Past this the worker
+    # refuses it and a new confirmation is required.
+    nfse_production_confirmation_ttl_minutes: int = 15
 
     @field_validator("nfse_restricted_base_url")
     @classmethod

@@ -8,11 +8,13 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_db
-from ..fiscal_schemas import PolicyCreate, PrepareRequest, OperationRequest, BatchRequest
+from ..fiscal_schemas import (PolicyCreate, PrepareRequest, OperationRequest, BatchRequest,
+                              ProductionIssueConfirmation)
 from ..models import FiscalPolicy, FiscalDocument, FiscalAttempt, FiscalPreparation, User
 from ..pagination import PageParams, paginate
 from ..security import ROLE_ADMIN, ROLE_GESTOR, ROLE_LEITURA, require_role
 from ..services import nfse
+from ..services import nfse_production_issuance as production
 from ..services.idempotency import payload_fingerprint
 from ..services.nfse_national import fiscal_config
 from ..services.nfse_national.config import NationalDpsConfigurationVersionCreate
@@ -29,6 +31,16 @@ def enabled():
 
 
 router = APIRouter(prefix='/fiscal', tags=['fiscal'], dependencies=[Depends(enabled)])
+
+
+def _refuse_in_production(settings):
+    """M66 — in production the web process never calls a provider: not in a
+    batch, not as a mock/reprocess/reconcile/cancel shortcut. The only way to
+    SEFIN is one confirmed request, executed by the one-shot worker. The web
+    process has no certificate or network gate anyway, so these would fail
+    later; refusing here says why, before anything is recorded."""
+    if settings.nfse_environment == 'production':
+        nfse.fail('production_operation_only_via_confirmed_worker')
 
 
 def ser_policy(policy):
@@ -71,7 +83,16 @@ def status(db: Session = Depends(get_db), settings=Depends(enabled),
     return {'enabled': settings.nfse_enabled, 'environment': settings.nfse_environment,
             'provider': 'mock' if settings.nfse_environment == 'mock' else 'unavailable',
             'real_issuance_available': False, 'supported_flows': ['DIRECT', 'HOME'],
-            'restricted_provider_foundation': block}
+            'restricted_provider_foundation': block,
+            # M66 — the button's own readiness. Never a control: the web
+            # process only records confirmations; the worker sends.
+            'production_issuance': {
+                'available': (settings.nfse_environment == 'production'
+                              and settings.nfse_production_worker_spool_dir is not None),
+                'worker_configured': settings.nfse_production_worker_spool_dir is not None,
+                'batch_available': False,
+                'confirmation_ttl_minutes': settings.nfse_production_confirmation_ttl_minutes,
+            }}
 
 
 @router.get('/fila-resumo')
@@ -163,6 +184,7 @@ def prepare(payload: PrepareRequest, request: Request, db: Session = Depends(get
 @router.post('/emitir-pendentes')
 def batch(payload: BatchRequest, request: Request, db: Session = Depends(get_db),
           settings=Depends(enabled), user: User = Depends(require_role(ROLE_GESTOR))):
+    _refuse_in_production(settings)
     # Explicit bounded selection; each document is an independent transaction.
     results = []
     for document_id in dict.fromkeys(payload.document_ids):
@@ -222,6 +244,7 @@ def _operation(action, reprocess=False):
     def endpoint(document_id: str, payload: OperationRequest, request: Request,
                  db: Session = Depends(get_db), settings=Depends(enabled),
                  user: User = Depends(require_role(ROLE_GESTOR))):
+        _refuse_in_production(settings)
         return nfse.serialize_document(db, nfse.operate(
             db, document_id, action, payload.idempotency_key, settings, user.id,
             request.state.request_id, reprocess=reprocess))
@@ -234,3 +257,56 @@ for path, operation, retry in [('emitir-mock', 'issue', False),
                                ('cancelar-mock', 'cancel', False)]:
     router.add_api_route('/documentos/{document_id}/' + path, _operation(operation, retry),
                          methods=['POST'], name='fiscal_' + path)
+
+
+# ------------------------------------- M66 — production issuance, one at a time
+#
+# Everything below needs gestor or admin. Nothing here sends: the confirmation
+# endpoint records a request for the one-shot worker, which is the only
+# process holding the A1. There is no batch variant, on purpose.
+
+
+@router.get('/producao/fila')
+def production_queue(db: Session = Depends(get_db), settings=Depends(enabled),
+                     user: User = Depends(require_role(ROLE_GESTOR))):
+    return production.production_queue(db, settings)
+
+
+@router.post('/producao/exames/{exam_id}/preparar')
+def production_prepare(exam_id: str, request: Request, db: Session = Depends(get_db),
+                       settings=Depends(enabled), user: User = Depends(require_role(ROLE_GESTOR))):
+    return production.prepare_for_confirmation(db, exam_id, settings, user.id,
+                                               request.state.request_id)
+
+
+@router.get('/producao/documentos/{document_id}/confirmacao')
+def production_confirmation(document_id: str, db: Session = Depends(get_db),
+                            settings=Depends(enabled),
+                            user: User = Depends(require_role(ROLE_GESTOR))):
+    production._require_production(settings)
+    return production.confirmation_summary(db, nfse.get_document(db, document_id))
+
+
+@router.post('/producao/documentos/{document_id}/confirmar-emissao', status_code=202)
+def production_confirm(document_id: str, payload: ProductionIssueConfirmation, request: Request,
+                       db: Session = Depends(get_db), settings=Depends(enabled),
+                       user: User = Depends(require_role(ROLE_GESTOR))):
+    return production.authorize_issue(
+        db, document_id, preparation_id=payload.preparation_id, amount=payload.amount,
+        confirmation=payload.confirmation, idempotency_key=payload.idempotency_key,
+        settings=settings, actor=user.id, request_id=request.state.request_id)
+
+
+@router.post('/producao/documentos/{document_id}/solicitar-reconciliacao', status_code=202)
+def production_reconcile(document_id: str, payload: OperationRequest, request: Request,
+                         db: Session = Depends(get_db), settings=Depends(enabled),
+                         user: User = Depends(require_role(ROLE_GESTOR))):
+    return production.authorize_reconcile(
+        db, document_id, idempotency_key=payload.idempotency_key, settings=settings,
+        actor=user.id, request_id=request.state.request_id)
+
+
+@router.get('/producao/pedidos/{request_id}')
+def production_request(request_id: str, db: Session = Depends(get_db),
+                       user: User = Depends(require_role(ROLE_GESTOR))):
+    return production.get_request(db, request_id)

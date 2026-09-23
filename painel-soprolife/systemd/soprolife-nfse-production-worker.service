@@ -1,0 +1,69 @@
+# M66 — executor ONE-SHOT de NFS-e de produção. NÃO INSTALADO pela M66.
+#
+# O serviço web (soprolife-m15-api) continua FAIL-CLOSED: nunca tem o A1 nem
+# M15_NFSE_PRODUCTION_NETWORK_ENABLED. Quando um gestor/admin confirma uma
+# emissão no Centro de Comando, a API grava um FiscalIssuanceRequest e cria
+# um arquivo-campainha (só o UUID do pedido) em
+# nucleo-m15/var/nfse-production-spool/. A unit .path irmã inicia ESTE
+# serviço uma vez; ele trata UM pedido e termina.
+#
+# Certificado e senha: LoadCredentialEncrypted= (systemd >= 250; a VPS tem
+# 255). Os .cred são cifrados com a chave do host (/var/lib/systemd/
+# credential.secret, root 0400; a VPS não tem TPM2). O systemd decifra para
+# um ramfs PRIVADO desta unit ($CREDENTIALS_DIRECTORY, dono soprolife-nfse,
+# 0400) só enquanto o processo roda. Nunca em argv, env, banco, log ou Git.
+#
+# Usuário próprio (soprolife-nfse): o processo web (soprolife) não consegue
+# ler o diretório de credenciais desta unit.
+#
+# Revogar: `systemctl disable --now soprolife-nfse-production-worker.path` e
+# apagar os dois .cred em /etc/credstore.encrypted/. Substituir o A1: cifrar
+# os novos .cred por cima (nada precisa reiniciar — cada execução lê de novo).
+
+[Unit]
+Description=SoproLife NFS-e produção — executor one-shot (um pedido confirmado por execução)
+After=postgresql.service
+Requires=postgresql.service
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=oneshot
+User=soprolife-nfse
+Group=soprolife-nfse
+SupplementaryGroups=soprolife
+WorkingDirectory=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15
+EnvironmentFile=/opt/soprolife/secrets/m15.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=M15_NFSE_PRODUCTION_WORKER_SPOOL_DIR=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15/var/nfse-production-spool
+Environment=M15_NFSE_PRODUCTION_WORKER_RUNTIME_DIR=/opt/soprolife/private/nfse-production/runtime
+Environment=M15_NFSE_FISCAL_ARTIFACTS_DIR=/opt/soprolife/private/nfse-production/artifacts
+LoadCredentialEncrypted=nfse-a1.pfx:/etc/credstore.encrypted/soprolife-nfse-a1.pfx.cred
+LoadCredentialEncrypted=nfse-a1-password:/etc/credstore.encrypted/soprolife-nfse-a1-password.cred
+ExecStart=/opt/soprolife/venvs/m15/bin/python scripts/nfse_production_worker.py
+# Um POST tem timeout de 60 s e a reconciliação faz no máximo 2 GETs.
+TimeoutStartSec=300
+UMask=0077
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadOnlyPaths=/opt/soprolife/soprolife-site
+ReadWritePaths=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15/var/nfse-production-spool
+ReadWritePaths=/opt/soprolife/private/nfse-production
+ProtectControlGroups=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

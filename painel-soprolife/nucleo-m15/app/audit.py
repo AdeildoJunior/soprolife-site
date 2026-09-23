@@ -123,6 +123,12 @@ ALLOWED_KEYS = {
     # apanhou-a.
     "external_id", "issued_on", "operation", "environment",
     "nfse_xml_present", "fiscal_validity_claimed",
+    # M66 — emissão de produção pelo Centro de Comando: o pedido confirmado
+    # por um humano, o id da operação no provedor e a contagem de chamadas
+    # (a prova de "exatamente um POST"). Identificadores técnicos e inteiros;
+    # nunca CPF, nunca senha, nunca corpo de resposta.
+    "issuance_request_id", "operation_id", "provider_post_count",
+    "provider_get_count", "second_post_attempted",
 }
 
 _MAX_STR = 120

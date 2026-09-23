@@ -1,0 +1,11 @@
+# M66 — dispara o executor one-shot quando a API deixa uma campainha no spool.
+# NÃO INSTALADO pela M66. Ver soprolife-nfse-production-worker.service.
+[Unit]
+Description=SoproLife NFS-e produção — campainha do executor one-shot
+
+[Path]
+DirectoryNotEmpty=/opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15/var/nfse-production-spool
+Unit=soprolife-nfse-production-worker.service
+
+[Install]
+WantedBy=multi-user.target

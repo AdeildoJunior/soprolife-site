@@ -395,10 +395,15 @@ def test_a_placeholder_recipient_blocks_a_production_issuance(
     document = _production_document(db, users, production_settings,
                                     nome="Paciente Exemplo M60")
     fake = fake_production_wire([TransportResponse(201, sefin_success())])
+    # M66 — the same contract now bites one step earlier: at eligibility,
+    # so the fact is blocked in the queue and never reaches "pending".
+    # Dispatch keeps its own, independent check (see below).
+    assert document.state == "blocked"
+    assert "recipient_name_looks_like_placeholder" in document.blocking_reasons
     with pytest.raises(HTTPException) as error:
         nfse.operate(db, document.id, "issue", "m60-placeholder",
                      production_settings, users["gestor"].id)
-    assert error.value.detail["codigo"] == "recipient_name_looks_like_placeholder"
+    assert error.value.detail["codigo"] == "document_not_pending_eligible"
     assert fake.received == []
 
 
@@ -407,10 +412,15 @@ def test_an_invalid_cpf_blocks_a_production_issuance(
     document = _production_document(db, users, production_settings,
                                     cpf="11111111111")
     fake = fake_production_wire([TransportResponse(201, sefin_success())])
+    # M66 — the same contract now bites one step earlier: at eligibility,
+    # so the fact is blocked in the queue and never reaches "pending".
+    # Dispatch keeps its own, independent check (see below).
+    assert document.state == "blocked"
+    assert "recipient_cpf_repeated_digits" in document.blocking_reasons
     with pytest.raises(HTTPException) as error:
         nfse.operate(db, document.id, "issue", "m60-badcpf",
                      production_settings, users["gestor"].id)
-    assert error.value.detail["codigo"] == "recipient_cpf_repeated_digits"
+    assert error.value.detail["codigo"] == "document_not_pending_eligible"
     assert fake.received == []
 
 

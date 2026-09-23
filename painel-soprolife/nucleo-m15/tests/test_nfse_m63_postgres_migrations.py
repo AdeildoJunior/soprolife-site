@@ -38,10 +38,11 @@ from tests.test_nfse_migrations import config, postgres_url  # noqa: F401 — fi
 # The revision the operational database carried before M62, and the head it
 # carries now. Both are facts about production, not choices.
 PRE_M62_OPERATIONAL = 'd6a9f20c3e41'
-OPERATIONAL_HEAD = 'c4e8b1f37a92'
+# M66 moves the head by one additive migration (a new table, no rewrite).
+OPERATIONAL_HEAD = 'e8b3d6a4f190'
 
 FISCAL_MIGRATIONS = ('f6a1d9e28b40', '9c310c422ce2', 'ba3afa480112', 'a58f6c31d9e7',
-                     '3a97d7535a49', 'a7d2c95e4f13', 'c4e8b1f37a92')
+                     '3a97d7535a49', 'a7d2c95e4f13', 'c4e8b1f37a92', 'e8b3d6a4f190')
 
 
 def _current(url):

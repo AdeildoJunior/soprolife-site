@@ -121,8 +121,11 @@ def production_document(db, users, production_settings, production_config):
     """An eligible fiscal document in the PRODUCTION environment, built from
     entirely fictitious data (project safety rule: no real patient ever
     enters this repository)."""
-    person = Person(public_code="PES-M56", nome_completo="Paciente Exemplo M56",
-                    nome_normalizado="paciente exemplo m56")
+    # M66 — production now checks the tomador at ELIGIBILITY (not only at
+    # dispatch), so the fixture carries an identity the M60 contract accepts:
+    # an invented name and a synthetic, check-digit-valid CPF. Never real.
+    person = Person(public_code="PES-M56", nome_completo="Marina Rocha Albuquerque",
+                    nome_normalizado="marina rocha albuquerque", cpf="52998224725")
     db.add(person)
     db.flush()
     exam = SpirometryExam(public_code="ESP-M56", person_id=person.id, status="Realizado",

@@ -2885,3 +2885,68 @@ class FiscalArtifact(Base):
         ),
         CheckConstraint("size_bytes >= 0", name="fiscal_artifact_size_non_negative"),
     )
+
+
+class FiscalIssuanceRequest(Base):
+    """M66 — one human confirmation that ONE production document may be sent.
+
+    Written by the Command Center (gestor/admin, after an explicit second
+    click) and claimed by the one-shot production worker, which is the only
+    process that ever holds the A1. A workflow row, so it is updated as it
+    moves; the evidence of what happened at SEFIN stays in the append-only
+    ``fiscal_attempts``/``fiscal_artifacts``/``audit_logs``.
+
+    See migration e8b3d6a4f190 for the two partial unique indexes: one live
+    request per document, and an ISSUE request claimable at most once per
+    document, ever.
+    """
+    __tablename__ = "fiscal_issuance_requests"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    document_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_documents.id"), index=True)
+    spirometry_exam_id: Mapped[str] = mapped_column(String(36), ForeignKey("spirometry_exams.id"))
+    preparation_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_preparations.id"))
+    preparation_fingerprint: Mapped[str] = mapped_column(String(64))
+    # sha256 of the tomador identity the human saw — never the CPF itself.
+    recipient_fingerprint: Mapped[str] = mapped_column(String(64))
+    amount_confirmed: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    kind: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20))
+    authorized_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    authorized_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    operation_id: Mapped[str | None] = mapped_column(String(36))
+    result_code: Mapped[str | None] = mapped_column(String(60))
+    external_id: Mapped[str | None] = mapped_column(String(100))
+    provider_post_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    provider_get_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True)
+    __table_args__ = (
+        CheckConstraint("kind IN ('issue','reconcile')", name="fiscal_issuance_request_kind"),
+        CheckConstraint(
+            "status IN ('authorized','running','issued','rejected','uncertain','reconciled',"
+            "'refused','expired','interrupted')", name="fiscal_issuance_request_status"),
+        CheckConstraint("amount_confirmed > 0", name="fiscal_issuance_request_amount"),
+        CheckConstraint("provider_post_count <= 1", name="fiscal_issuance_request_one_post"),
+        CheckConstraint("kind = 'issue' OR provider_post_count = 0",
+                        name="fiscal_issuance_request_reconcile_never_posts"),
+    )
+
+
+Index(
+    "uq_fiscal_issuance_request_active",
+    FiscalIssuanceRequest.document_id,
+    unique=True,
+    sqlite_where=FiscalIssuanceRequest.status.in_(["authorized", "running"]),
+    postgresql_where=FiscalIssuanceRequest.status.in_(["authorized", "running"]),
+)
+Index(
+    "uq_fiscal_issuance_request_claimed_issue",
+    FiscalIssuanceRequest.document_id,
+    unique=True,
+    sqlite_where=((FiscalIssuanceRequest.kind == "issue") & FiscalIssuanceRequest.claimed_at.is_not(None)
+                  & (FiscalIssuanceRequest.status != "refused")),
+    postgresql_where=((FiscalIssuanceRequest.kind == "issue") & FiscalIssuanceRequest.claimed_at.is_not(None)
+                      & (FiscalIssuanceRequest.status != "refused")),
+)

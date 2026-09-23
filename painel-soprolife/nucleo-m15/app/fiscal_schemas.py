@@ -65,3 +65,11 @@ class OperationRequest(FiscalInput):
 
 class BatchRequest(OperationRequest):
     document_ids: list[str] = Field(min_length=1, max_length=100)
+
+
+class ProductionIssueConfirmation(OperationRequest):
+    """M66 — the second click. Echoes back exactly what the modal showed; the
+    server refuses unless every field still matches the facts."""
+    preparation_id: str = Field(min_length=36, max_length=36)
+    amount: str = Field(min_length=1, max_length=20, pattern=r'^\d+\.\d{2}$')
+    confirmation: str = Field(min_length=1, max_length=80)

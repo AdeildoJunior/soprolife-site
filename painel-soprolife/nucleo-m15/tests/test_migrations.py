@@ -165,7 +165,9 @@ def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     # imutáveis), é a head atual — o valor esperado aqui é atualizado a cada
     # nova migration; o que a asserção realmente prova é continuar existindo
     # EXATAMENTE uma head (sem ponto de ramificação acidental).
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["c4e8b1f37a92"]
+    # M66 (e8b3d6a4f190, pedidos de emissão de produção confirmados) vem
+    # por cima de M61.
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["e8b3d6a4f190"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(
