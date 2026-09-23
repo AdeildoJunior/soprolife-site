@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from .config import get_settings
 from .services.cpf import mascarar_cpf
 from .services.person_registration import cadastro_pendencias
+from .services.nfse import RECIPIENT_FISCAL_REASONS, production_fact_blockers
 from .services.crm_display import (
     format_crm_full,
     format_crm_number,
@@ -103,7 +104,21 @@ def ser_person(p: m.Person, with_contacts: bool = True) -> dict:
         # cadastro no momento da escolha, e não semanas depois na emissão do
         # laudo. Depende dos contatos, por isso só acompanha quem os carrega.
         data["cadastro_pendencias"] = cadastro_pendencias(p)
+        data["nfse_identidade_pendencias"] = nfse_identidade_pendencias(p)
     return data
+
+
+def nfse_identidade_pendencias(p: m.Person) -> list[str]:
+    """M67 — o que a identidade desta pessoa ainda impede numa NFS-e de
+    produção, calculado pela MESMA regra do Fiscal (production_fact_blockers).
+
+    Só códigos, nunca o CPF: é o que deixa a Central orientar o operador
+    sobre um paciente já cadastrado sem que o número completo saia do
+    servidor. Orientação apenas — evaluate() e o worker continuam decidindo.
+    O município é do exame, não da pessoa, então fica de fora aqui.
+    """
+    return [c for c in production_fact_blockers(p, None)
+            if c in RECIPIENT_FISCAL_REASONS]
 
 
 def ser_consent(c: m.Consent) -> dict:

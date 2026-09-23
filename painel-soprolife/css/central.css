@@ -593,3 +593,206 @@
   .cad-help-bubble::before { left: auto; right: 10px; transform: none; }
   .cad-acao-secundaria-nota { max-width: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════ M67 ════════
+   Prontidão para NFS-e no "Novo atendimento".
+
+   Dois sinais, dois significados — e nenhum depende só de cor:
+     *        (vermelho) obrigatório para SALVAR o formulário;
+     NFS-e    (selo navy/teal, com texto) obrigatório para a NOTA FISCAL da
+              espirometria. O atendimento salva sem ele.
+   O selo só aparece quando o tipo escolhido gera NFS-e da SoproLife.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.cad-sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+/* O rótulo do campo corta o excedente (m15.css: overflow hidden + ellipsis),
+   o que também cortava o balão aberto — do selo e do "?". Só enquanto um
+   balão está aberto o rótulo deixa de cortar; fechado, o ellipsis volta. */
+.m15-field-label:has(.cad-help-bubble:not([hidden])) { overflow: visible; }
+
+/* ---------------------------------------------------------------- selo */
+.cad-nfse-selo-wrap {
+  position: relative;
+  display: none;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+form[data-nfse-modo="soprolife"] .cad-nfse-selo-wrap { display: inline-flex; }
+
+.cad-nfse-selo {
+  position: relative;
+  padding: 1px 6px;
+  border: 1px solid rgba(13, 42, 67, .28);
+  border-radius: 4px;
+  background: rgba(13, 42, 67, .05);
+  color: var(--navy, #0d2a43);
+  font-family: inherit;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: .4px;
+  text-transform: none;
+  cursor: help;
+}
+
+/* Alvo de toque maior que o desenho, como no "?" da ajuda contextual. */
+.cad-nfse-selo::after { content: ""; position: absolute; inset: -6px -3px; }
+
+.cad-nfse-selo:hover,
+.cad-nfse-selo[aria-expanded="true"] {
+  border-color: var(--teal-dark, #0f8f83);
+  background: rgba(29, 183, 166, .12);
+  color: var(--teal-dark, #0f8f83);
+}
+
+.cad-nfse-selo:focus-visible {
+  outline: 2px solid var(--teal, #1db7a6);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------- linha fiscal no cartão do tipo */
+.cad-tipos .cad-tipo {
+  grid-template-areas: "radio nome" "radio desc" "radio nfse";
+  align-content: start;
+}
+
+.cad-tipo-nfse {
+  grid-area: nfse;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--navy, #0d2a43);
+}
+
+.cad-tipo-nfse::before {
+  content: "NFS-e";
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  border: 1px solid rgba(13, 42, 67, .28);
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .4px;
+}
+
+.cad-tipo-nfse-nao-emite { color: var(--muted, #64798b); font-weight: 500; }
+.cad-tipo-nfse-nao-emite::before { content: "Sem NFS-e"; border-style: dashed; }
+
+/* ------------------------------------------------------ painel de prontidão */
+.cad-nfse-prontidao {
+  margin-top: 4px;
+  border: 1px solid var(--border, #d7e2ea);
+  border-left: 4px solid #e8c266;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fffdf6;
+}
+
+.cad-nfse-prontidao.is-ok {
+  border-left-color: var(--teal, #1db7a6);
+  background: #f7fdfc;
+}
+
+.cad-nfse-prontidao.is-pastore {
+  border-left-color: var(--border, #b8c7d3);
+  background: var(--soft, #f5f9fb);
+}
+
+.cad-nfse-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.cad-nfse-titulo {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy, #0d2a43);
+}
+
+.cad-nfse-estado {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: #fff4d6;
+  border: 1px solid #e8c266;
+  color: #8a5a00;
+}
+
+.is-ok > .cad-nfse-topo .cad-nfse-estado {
+  background: rgba(29, 183, 166, .12);
+  border-color: var(--teal, #1db7a6);
+  color: var(--teal-dark, #0f8f83);
+}
+
+.is-pastore > .cad-nfse-topo .cad-nfse-estado {
+  background: #fff;
+  border-color: var(--border, #b8c7d3);
+  color: var(--navy, #0d2a43);
+  border-radius: 8px;
+  white-space: normal;
+}
+
+.cad-nfse-lista {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 6px 16px;
+}
+
+.cad-nfse-item {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-content: start;
+  gap: 0 6px;
+  font-size: 12.5px;
+  color: var(--navy, #0d2a43);
+}
+
+.cad-nfse-marca {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  background: #c98a00;
+}
+
+.cad-nfse-item.is-ok .cad-nfse-marca { background: var(--teal, #1db7a6); }
+.cad-nfse-item.is-ok .cad-nfse-rotulo { color: var(--muted, #64798b); }
+.cad-nfse-item.is-pendente .cad-nfse-rotulo { font-weight: 700; }
+
+.cad-nfse-faltas {
+  grid-column: 2;
+  margin: 2px 0 0;
+  padding-left: 14px;
+  font-size: 11.5px;
+  color: #8a5a00;
+}
+
+.cad-nfse-nota {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--muted, #64798b);
+}
+
+@media (max-width: 560px) {
+  .cad-nfse-lista { grid-template-columns: 1fr; }
+}

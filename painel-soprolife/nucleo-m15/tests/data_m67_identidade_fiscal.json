@@ -1,0 +1,91 @@
+{
+  "_sobre": "M67 — casos compartilhados entre o backend (recipient_identity.py, via tests/test_m67_nfse_prontidao_cadastro.py) e a tela (js/nfse-prontidao.js, via scripts/test-m67-nfse-prontidao.js). Se um lado mudar a regra, o teste do outro lado quebra. Dados fictícios: o CPF válido é o sintético 123.456.789-09.",
+  "nomes": [
+    [
+      "Marina Costa Ribeiro",
+      null
+    ],
+    [
+      "Élodie Ümlaut",
+      null
+    ],
+    [
+      "Carla Testa",
+      null
+    ],
+    [
+      "José Mockford",
+      null
+    ],
+    [
+      "",
+      "recipient_name_missing"
+    ],
+    [
+      "   ",
+      "recipient_name_missing"
+    ],
+    [
+      "Marina",
+      "recipient_name_not_a_full_name"
+    ],
+    [
+      "Ana B",
+      "recipient_name_not_a_full_name"
+    ],
+    [
+      "Paciente Teste",
+      "recipient_name_looks_like_placeholder"
+    ],
+    [
+      "João Exemplo Silva",
+      "recipient_name_looks_like_placeholder"
+    ],
+    [
+      "Fulano de Tal",
+      "recipient_name_looks_like_placeholder"
+    ],
+    [
+      "Paciente 001",
+      "recipient_name_looks_like_placeholder"
+    ],
+    [
+      "Ana Xxx",
+      "recipient_name_looks_like_placeholder"
+    ],
+    [
+      "Rafael Sintético",
+      "recipient_name_looks_like_placeholder"
+    ],
+    [
+      "Marina Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Costa Ribeiro",
+      "recipient_name_too_long"
+    ]
+  ],
+  "cpfs": [
+    [
+      "12345678909",
+      null
+    ],
+    [
+      "",
+      "recipient_cpf_missing"
+    ],
+    [
+      "123456789",
+      "recipient_cpf_malformed"
+    ],
+    [
+      "11111111111",
+      "recipient_cpf_repeated_digits"
+    ],
+    [
+      "00000000000",
+      "recipient_cpf_repeated_digits"
+    ],
+    [
+      "12345678900",
+      "recipient_cpf_check_digits_invalid"
+    ]
+  ]
+}

@@ -58,6 +58,15 @@
      "Um paciente, um exame e uma consulta — criados juntos ou nenhum."],
   ];
 
+  /* M67 — o que cada tipo significa para a NFS-e, dito no próprio cartão.
+   * Consulta pura não tem linha: a emissão de NFS-e cobre hoje só a
+   * espirometria, e prometer ou negar algo sobre a consulta seria inventar. */
+  const NFSE_POR_TIPO = {
+    espirometria_soprolife: ["emite", "NFS-e da espirometria pela SoproLife"],
+    espirometria_consulta_soprolife: ["emite", "NFS-e da espirometria pela SoproLife"],
+    espirometria_pastore: ["nao-emite", "Sem NFS-e por exame — entra no fechamento da Pastore"],
+  };
+
   const TIPOS_COM_ESPIROMETRIA = [
     "espirometria_soprolife", "espirometria_pastore",
     "espirometria_consulta_soprolife",
@@ -193,8 +202,9 @@
     const campo = input.closest(".m15-field");
     box.hidden = !mostrar;
     box.textContent = mostrar ? CPF_ERRO_INCOMPLETO : "";
-    if (mostrar) input.setAttribute("aria-describedby", box.id);
-    else input.removeAttribute("aria-describedby");
+    // Soma/retira só o próprio id: o campo pode estar descrito também pelo
+    // selo "NFS-e" (M67), e sobrescrever o atributo apagaria essa descrição.
+    descricaoAria(input, box.id, !!mostrar);
     // Classe própria, e não `cad-campo-pendente`: aquela é âmbar e significa
     // "o servidor apontou um campo faltante". Aqui o dado está errado agora,
     // na tela, e o operador consegue corrigir sem enviar nada.
@@ -318,16 +328,51 @@
     bolha.hidden = !aberto;
   }
 
+  // Soma ou retira UM id de aria-describedby sem apagar os outros.
+  function descricaoAria(el, id, ligar) {
+    const ids = (el.getAttribute("aria-describedby") || "").split(/\s+/)
+      .filter((x) => x && x !== id);
+    if (ligar) ids.push(id);
+    if (ids.length) el.setAttribute("aria-describedby", ids.join(" "));
+    else el.removeAttribute("aria-describedby");
+  }
+
+  /* M67 — selo "NFS-e": requisito da NOTA FISCAL, não do formulário.
+   *
+   * O asterisco vermelho continua significando uma coisa só: "sem isto o
+   * formulário não salva". O selo diz outra: "sem isto o atendimento salva,
+   * mas a NFS-e da espirometria não sai". Por isso é um componente próprio,
+   * com texto (não só cor), no mesmo contrato acessível da ajuda contextual
+   * (botão real + role="tooltip"), e só aparece quando o tipo escolhido gera
+   * NFS-e da SoproLife — o CSS o esconde fora de [data-nfse-modo="soprolife"].
+   */
+  const NFSE_SELO_TEXTO = "Obrigatório para emissão da NFS-e da SoproLife.";
+
+  function nfseSelo() {
+    ajudaSeq += 1;
+    const id = "cadNfse-" + ajudaSeq;
+    return {
+      id,
+      html: `<span class="cad-nfse-selo-wrap" data-cad-help>
+        <button type="button" class="cad-nfse-selo" data-cad-help-toggle
+          aria-describedby="${esc(id)}" aria-expanded="false"
+          aria-label="Obrigatório para NFS-e" title="${esc(NFSE_SELO_TEXTO)}">NFS-e</button>
+        <span class="cad-help-bubble" role="tooltip" id="${esc(id)}" hidden>${esc(NFSE_SELO_TEXTO)}</span>
+      </span>`,
+    };
+  }
+
   // Campos no MESMO sistema visual do núcleo (m15-form / grid de 12 colunas)
   function fld(label, inner, opt) {
-    let span = 3, help = "", req = false, ajuda = "";
+    let span = 3, help = "", req = false, ajuda = "", nfse = false;
     if (typeof opt === "number") span = opt;
     else if (opt && typeof opt === "object") {
       span = opt.span || 3; help = opt.help || ""; req = !!opt.req;
-      ajuda = opt.ajuda || "";
+      ajuda = opt.ajuda || ""; nfse = !!opt.nfse;
     }
     const cls = "m15-field " + (span >= 12 ? "m15-form-full" : "m15-span-" + span);
-    return `<label class="${cls}"><span class="m15-field-label" title="${esc(label)}">${esc(label)}${req ? ' <b class="cad-req" title="Campo obrigatório">*</b>' : ""}${ajudaTip(ajuda, label)}</span>${inner}` +
+    const selo = nfse ? nfseSelo() : null;
+    return `<label class="${cls}"${selo ? ` data-nfse-desc="${esc(selo.id)}"` : ""}><span class="m15-field-label" title="${esc(label)}">${esc(label)}${req ? ' <b class="cad-req" title="Campo obrigatório">*</b>' : ""}${selo ? selo.html : ""}${ajudaTip(ajuda, label)}</span>${inner}` +
       (help ? `<span class="m15-field-help">${esc(help)}</span>` : "") + "</label>";
   }
 
@@ -583,12 +628,12 @@
           Paciente novo — preencha abaixo, ou busque acima se ele já tem cadastro
         </p>
         <div class="m15-form cad-subgrid">
-          ${fld("Nome completo", inp(prefix + "_nome", "", 'minlength="2" autocomplete="off"'), { span: 6, req: true })}
+          ${fld("Nome completo", inp(prefix + "_nome", "", 'minlength="2" autocomplete="off"'), { span: 6, req: true, nfse: !!opts.nfse })}
           ${fld("WhatsApp", inp(prefix + "_fone", "", 'type="tel" placeholder="(21) 99999-9999" autocomplete="off"'), 3)}
           ${fld("Nascimento", dateInp(prefix + "_nasc", ""), 3)}
           ${fld("E-mail (opcional)", inp(prefix + "_email", "", 'type="email" autocomplete="off"'), 4)}
           ${fld("CPF", inp(prefix + "_cpf", "", 'inputmode="numeric" placeholder="000.000.000-00" autocomplete="off"'),
-            { span: 4, ajuda: "A CFM 2.381/2024 pede o CPF no laudo. Sem ele o laudo sai, mas fica marcado como pendente para entrega oficial. Deixe em branco se não houver CPF." })}
+            { span: 4, nfse: !!opts.nfse, ajuda: "A CFM 2.381/2024 pede o CPF no laudo. Sem ele o laudo sai, mas fica marcado como pendente para entrega oficial. Deixe em branco se não houver CPF." })}
           ${fld("Sexo", sel(prefix + "_sexo",
             [["", "não informado"], ["feminino", "feminino"], ["masculino", "masculino"],
              ["outro", "outro"]], ""),
@@ -1037,7 +1082,7 @@
         const link = document.createElement("link");
         link.id = id;
         link.rel = "stylesheet";
-        link.href = href + "?v=2026081201";
+        link.href = href + "?v=2026092301";
         document.head.appendChild(link);
       }
     });
@@ -1303,22 +1348,25 @@
   }
 
   function blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg, municipios) {
+    // M67 — selo NFS-e só na variante SoproLife: Pastore não gera NFS-e por
+    // exame, então os mesmos campos lá não carregam requisito fiscal.
+    const nfse = !ehPastore;
     const commonStart = `
       <h4 class="cad-bloco-titulo">Espirometria</h4>
       ${ehPastore ? '<div class="cad-pastore-aviso" id="cadAtPastoreAviso"></div>' : ""}
       <div class="m15-form cad-subgrid">
         ${fld("Data do exame", dateInp("esp_data", "", { parcial: true }),
-          { span: 3, help: HELP_PARCIAL, req: true })}
+          { span: 3, help: HELP_PARCIAL, req: true, nfse })}
         ${fld("Status", sel("esp_status",
           (window.SoproStatus
             ? window.SoproStatus.opcoesEspirometria(STATUS_EXAME)
-            : STATUS_EXAME), "Realizado"), 3)}
+            : STATUS_EXAME), "Realizado"), { span: 3, nfse })}
         ${fld("Broncodilatador", sel("esp_bd",
           [["", "não informado"], ["false", "sem broncodilatador"],
-           ["true", "com broncodilatador"]], "false"), 3)}
+           ["true", "com broncodilatador"]], "false"), { span: 3, nfse })}
         ${fld("Município onde o exame foi realizado", sel("esp_municipio",
           [["", "não informado"]].concat((municipios || []).map((m) => [m.codigo, m.rotulo])), ""),
-          { span: 4, ajuda: "Onde o exame foi FISICAMENTE realizado — necessário para a " +
+          { span: 4, nfse, ajuda: "Onde o exame foi FISICAMENTE realizado — necessário para a " +
             "emissão fiscal da NFS-e. Deixe em branco se não souber; nada é assumido." })}`;
     const commonEnd = `
         ${fld("Técnico / responsável", inp("esp_responsavel", "Adeildo", 'list="cadResp"'), 4)}
@@ -1354,16 +1402,16 @@
       return commonStart + `
         ${fld("Modalidade", sel("esp_modalidade",
           [["", "selecione…"]].concat(modalidades.map((m) => [m.valor, m.rotulo])), ""),
-          { span: 4, ajuda: ajudaModalidade })}
+          { span: 4, nfse, ajuda: ajudaModalidade })}
         ${fld("Local do atendimento", inp("esp_local", "", 'list="cadLocais" disabled placeholder="escolha a modalidade primeiro"'),
           { span: 4, ajuda: "Onde especificamente o exame aconteceu — o NOME do lugar, não uma categoria. A modalidade já diz o tipo." })}
         ${fld("Origem", inp("esp_origem", "", 'list="cadOrigens"'),
           { span: 4, ajuda: "Como o paciente chegou até a SoproLife (Google, indicação, empresa…). Não é o lugar do exame." })}
         ${fld("Valor da espirometria (R$)", inp("esp_valor", valorPadrao,
           'inputmode="decimal" placeholder="220,00"'),
-          { span: 4, ajuda: "Nasce com o valor de tabela e pode ser alterado. Apagando o campo, nenhum lançamento financeiro é criado — nada é inferido." })}
+          { span: 4, nfse, ajuda: "Nasce com o valor de tabela e pode ser alterado. Apagando o campo, nenhum lançamento financeiro é criado — nada é inferido. É este valor, bruto, que vai na NFS-e." })}
         ${fld("Status do pagamento", sel("esp_pgto_status",
-          ["Recebido", "Pendente", "Parcial", "Cortesia"], "Recebido"), 4)}
+          ["Recebido", "Pendente", "Parcial", "Cortesia"], "Recebido"), { span: 4, nfse })}
         ${fld("Data de recebimento", dateInp("esp_pgto_data", ""), 4)}
         ${fld("Forma de pagamento", sel("esp_pgto_forma",
           [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"], "Pix"), 4)}
@@ -1440,6 +1488,101 @@
       </div>`;
   }
 
+  /* M67 — Prontidão para NFS-e.
+   *
+   * Orientação local do cadastro: NÃO emite, NÃO prepara, NÃO chama rota
+   * fiscal e NÃO impede o salvamento. As regras vêm de js/nfse-prontidao.js,
+   * que espelha o backend; quem decide continua sendo nfse.evaluate(),
+   * production_fact_blockers() e o worker, no Fiscal. A estrutura é montada
+   * uma vez e só o texto muda: recriar a região aria-live a cada tecla faria
+   * o leitor de tela anunciar a mesma frase de novo, ou nada. */
+  function prontidaoNfseHtml() {
+    return `
+      <section class="m15-form-full cad-nfse-prontidao" id="cadAtNfse"
+        aria-labelledby="cadAtNfseTitulo" hidden>
+        <div class="cad-nfse-topo">
+          <h4 class="cad-nfse-titulo" id="cadAtNfseTitulo">Prontidão para NFS-e</h4>
+          <span class="cad-nfse-estado" id="cadAtNfseEstado" aria-live="polite"></span>
+        </div>
+        <ul class="cad-nfse-lista" id="cadAtNfseLista"></ul>
+        <p class="cad-nfse-nota" id="cadAtNfseNota"></p>
+      </section>`;
+  }
+
+  const NFSE_NOTA_SOPROLIFE =
+    "Orientação do cadastro: nada é emitido aqui, e o atendimento pode ser salvo " +
+    "mesmo incompleto. A conferência final acontece no Fiscal.";
+  const NFSE_NOTA_PASTORE =
+    "O exame entra no fechamento mensal da parceria. Nenhum dado fiscal do " +
+    "paciente é exigido neste cadastro.";
+
+  function nfseRegras() { return window.SoproNfseProntidao || null; }
+
+  // Paciente já cadastrado: a identidade fiscal é julgada pelo SERVIDOR
+  // (nfse_identidade_pendencias ← production_fact_blockers). O fallback só
+  // existe para um servidor anterior à M67 e afirma apenas o que dá para
+  // afirmar sem ver o CPF.
+  function pendenciasIdentidadeExistente(p) {
+    if (Array.isArray(p.nfse_identidade_pendencias)) return p.nfse_identidade_pendencias;
+    const out = [];
+    const regras = nfseRegras();
+    const nome = regras && regras.problemaNome(p.nome_completo);
+    if (nome) out.push(nome);
+    if (!p.tem_cpf) out.push("recipient_cpf_missing");
+    return out;
+  }
+
+  function rascunhoNfse(form, tipo, pessoaExistente) {
+    const pessoa = pessoaExistente
+      ? { existente: true, pendenciasServidor: pendenciasIdentidadeExistente(pessoaExistente) }
+      : { existente: false, nome: val(form, "cadAtP_nome"), cpf: cpfDigitos(val(form, "cadAtP_cpf")) };
+    return {
+      tipo,
+      pessoa,
+      exame: {
+        data: val(form, "esp_data"),
+        status: val(form, "esp_status"),
+        broncodilatador: val(form, "esp_bd"),
+        municipio: val(form, "esp_municipio"),
+        modalidade: val(form, "esp_modalidade"),
+      },
+      financeiro: {
+        valor: parseMoneyBR(val(form, "esp_valor")),
+        status: val(form, "esp_pgto_status"),
+      },
+    };
+  }
+
+  function renderProntidaoNfse(box, r) {
+    const estado = box.querySelector("#cadAtNfseEstado");
+    const lista = box.querySelector("#cadAtNfseLista");
+    const nota = box.querySelector("#cadAtNfseNota");
+    if (r.modo === "nao_aplicavel") {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    const classeEstado = r.modo === "pastore" ? "is-pastore" : r.completo ? "is-ok" : "is-pendente";
+    box.className = "m15-form-full cad-nfse-prontidao " + classeEstado;
+    if (estado.textContent !== r.titulo) estado.textContent = r.titulo;
+    if (r.modo === "pastore") {
+      lista.hidden = true;
+      lista.innerHTML = "";
+      nota.textContent = NFSE_NOTA_PASTORE;
+      return;
+    }
+    lista.hidden = false;
+    // Marca + texto, nunca só cor: ✓/! são decorativos, o "completo" /
+    // "pendente" é o que o leitor de tela e o daltônico recebem.
+    lista.innerHTML = r.itens.map((i) => `
+      <li class="cad-nfse-item ${i.ok ? "is-ok" : "is-pendente"}" data-nfse-item="${esc(i.chave)}">
+        <span class="cad-nfse-marca" aria-hidden="true">${i.ok ? "✓" : "!"}</span>
+        <span class="cad-nfse-rotulo">${esc(i.rotulo)}<span class="cad-sr-only">: ${i.ok ? "completo" : "pendente"}</span></span>
+        ${i.faltas.length ? `<ul class="cad-nfse-faltas">${i.faltas.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}
+      </li>`).join("");
+    nota.textContent = NFSE_NOTA_SOPROLIFE;
+  }
+
   LOADERS.atendimento = function (bodyEl) {
     const pre = state.prefill || {};
     return Promise.all([resolvePastore(), resolveConfigAtendimento(), resolveMunicipiosAtendimento()])
@@ -1459,7 +1602,7 @@
 
             <div class="m15-form-full cad-passo">
               <h4 class="cad-passo-titulo"><span class="cad-passo-num">1</span> Paciente</h4>
-              ${personPickerHtml("cadAtP")}
+              ${personPickerHtml("cadAtP", { nfse: true })}
             </div>
 
             <div class="m15-form-full cad-passo" id="cadAtPasso2">
@@ -1470,6 +1613,7 @@
                     <input type="radio" name="tipo" value="${esc(t[0])}"${t[0] === tipoInicial ? " checked" : ""}>
                     <span class="cad-tipo-nome">${esc(t[1])}</span>
                     <span class="cad-tipo-desc">${esc(t[2])}</span>
+                    ${NFSE_POR_TIPO[t[0]] ? `<span class="cad-tipo-nfse cad-tipo-nfse-${esc(NFSE_POR_TIPO[t[0]][0])}">${esc(NFSE_POR_TIPO[t[0]][1])}</span>` : ""}
                   </label>`).join("")}
               </div>
             </div>
@@ -1479,6 +1623,8 @@
               ${blocoEspirometriaHtml(pastore, tipoInicial === TIPO_PASTORE, cfg, municipios)}
               ${blocoConsultaHtml()}
             </div>
+
+            ${prontidaoNfseHtml()}
 
             ${submitBtn("Salvar atendimento")}
           </form>
@@ -1571,6 +1717,7 @@
           wireAjuda(blocoEsp);
           wireModalidade();
         }
+        atualizarProntidaoNfse();
         if (ehPastore) {
           const pastoreAviso = bodyEl.querySelector("#cadAtPastoreAviso");
           if (pastore.erro) {
@@ -1587,6 +1734,39 @@
           }
         }
       }
+
+      /* M67 — recalcula a prontidão a partir do que está na tela. Só lê o
+       * formulário e o paciente escolhido; nenhuma chamada de rede. */
+      const boxNfse = bodyEl.querySelector("#cadAtNfse");
+      const municipiosSuportados = (municipios || []).map((m) => m.codigo);
+
+      function atualizarProntidaoNfse() {
+        const regras = nfseRegras();
+        const r = regras
+          ? regras.avaliar(rascunhoNfse(form, tipoAtual(), picker.selecionada()),
+            { municipios: municipiosSuportados, hoje: regras.hojeSaoPaulo() })
+          : { modo: "nao_aplicavel" };
+        form.setAttribute("data-nfse-modo", r.modo);
+        // O selo só descreve o campo quando está visível; fora do modo
+        // SoproLife ele some e a descrição acessível sai junto.
+        form.querySelectorAll("label[data-nfse-desc]").forEach((l) => {
+          const alvo = l.querySelector("input:not([type=hidden]), select");
+          if (alvo) descricaoAria(alvo, l.getAttribute("data-nfse-desc"), r.modo === "soprolife");
+        });
+        if (boxNfse) renderProntidaoNfse(boxNfse, r);
+      }
+
+      // O calendário grava a data num portador escondido sem disparar
+      // evento; adiar para o fim da tarefa garante ler o valor já gravado.
+      let nfsePendente = false;
+      function agendarProntidaoNfse() {
+        if (nfsePendente) return;
+        nfsePendente = true;
+        setTimeout(() => { nfsePendente = false; atualizarProntidaoNfse(); }, 0);
+      }
+      ["input", "change", "click", "focusout"].forEach((ev) => {
+        form.addEventListener(ev, agendarProntidaoNfse);
+      });
 
       function wireModalidade() {
         const modSel = form.elements.esp_modalidade;
