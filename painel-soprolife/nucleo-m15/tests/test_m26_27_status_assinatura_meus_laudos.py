@@ -127,10 +127,11 @@ def test_b_pdf_assinado_aceito_tira_o_aguardando_das_tres_telas(
     assert document_id not in _ids_pendentes(pendentes)
     assert pendentes["total"] == 0
 
-    linha = _linha_meus(client, case)
-    assert linha is not None, (
-        "assinado mas não entregue continua na fila ativa da médica"
-    )
+    # M26.28 — com o PDF assinado aceito o trabalho da médica terminou: o
+    # laudo sai da fila ATIVA e é em Históricos que ele carrega o estado.
+    assert _linha_meus(client, case) is None
+    linha = _linha_meus(client, case, somente_superados="true")
+    assert linha is not None
     # O dado gravado não muda — é isso que exige a derivação.
     assert linha["status"] == "liberado"
     assert linha["estado_entrega"] == "pronto_para_entrega", (
@@ -252,4 +253,5 @@ def test_mesma_regra_da_fila_de_entrega(client, auth, case, db):
         documento, reports._assinado_mais_recente(db, document_id)
     )
     db.commit()
-    assert _linha_meus(client, case)["estado_entrega"] == esperado
+    linha = _linha_meus(client, case, incluir_superados="true")
+    assert linha["estado_entrega"] == esperado
