@@ -69,6 +69,34 @@ MANUAL_NOTES = [
         "service_date": date(2026, 9, 15),
         "broncodilatador": True,
     },
+    # M64 — three more notes issued by hand in production, reported by the
+    # operator WITH the exam each one belongs to. The public code identifies
+    # the fact; value and service date must still agree with the database, or
+    # the note is refused rather than attached.
+    {
+        "label": "C",
+        "public_code": "ESP-000039",
+        "access_key": "33045572263544026000110000000000000426099130462655",
+        "amount": Decimal("230.00"),
+        "service_date": date(2026, 8, 28),
+        "broncodilatador": None,     # not reported; not checked
+    },
+    {
+        "label": "D",
+        "public_code": "ESP-000046",
+        "access_key": "33045572263544026000110000000000000526092817158327",
+        "amount": Decimal("290.00"),
+        "service_date": date(2026, 9, 9),
+        "broncodilatador": None,
+    },
+    {
+        "label": "E",
+        "public_code": "ESP-000053",
+        "access_key": "33045572263544026000110000000000000826099736433520",
+        "amount": Decimal("279.00"),
+        "service_date": date(2026, 9, 19),
+        "broncodilatador": None,
+    },
 ]
 
 
@@ -82,13 +110,19 @@ def find_candidates(db, note) -> list[SpirometryExam]:
     Deliberately conjunctive and deliberately narrow: value, service date and
     bronchodilator together. Anything looser would start matching facts the
     operator did not mean.
+
+    M64 — when the operator names the exam (``public_code``), that exam is the
+    only candidate, and it must STILL agree on service date and value. The
+    code says which fact the operator means; the database has to confirm it.
+    ``broncodilatador`` is checked only when it was reported.
     """
-    exams = db.scalars(
-        select(SpirometryExam).where(
-            SpirometryExam.status.in_(PERFORMED),
-            SpirometryExam.data_exame == note["service_date"],
-            SpirometryExam.broncodilatador.is_(bool(note["broncodilatador"])),
-        )).all()
+    criteria = [SpirometryExam.status.in_(PERFORMED),
+                SpirometryExam.data_exame == note["service_date"]]
+    if note.get("public_code"):
+        criteria.append(SpirometryExam.public_code == note["public_code"])
+    if note.get("broncodilatador") is not None:
+        criteria.append(SpirometryExam.broncodilatador.is_(bool(note["broncodilatador"])))
+    exams = db.scalars(select(SpirometryExam).where(*criteria)).all()
 
     matched = []
     for exam in exams:
@@ -133,6 +167,7 @@ def main() -> int:
                 "amount": str(note["amount"]),
                 "service_date": str(note["service_date"]),
                 "broncodilatador": note["broncodilatador"],
+                "public_code": note.get("public_code"),
             }
 
             existing = already_imported(db, key)
