@@ -57,7 +57,10 @@ ProtectControlGroups=yes
 ProtectKernelModules=yes
 ProtectKernelTunables=yes
 ProtectKernelLogs=yes
-ProtectClock=yes
+# M66.1 — o worker precisa consultar adjtimex(modes=0) para provar NTP.
+# O processo permanece sem CAP_SYS_TIME (CapabilityBoundingSet vazio), portanto
+# pode consultar o estado do relógio, mas não pode alterá-lo.
+ProtectClock=no
 ProtectHostname=yes
 ProtectProc=invisible
 ProcSubset=pid
