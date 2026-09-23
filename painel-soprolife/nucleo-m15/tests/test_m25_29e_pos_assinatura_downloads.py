@@ -600,7 +600,9 @@ def test_assets_alterados_tem_cache_busting_atual():
     anterior. A M26.26 (erro de renderização deixa de se passar por "catálogo
     não carregou") alterou report-workflow.js e .css e subiu os dois para
     `2026092201`, mas não trouxe o pino junto — o teste falhava no próprio
-    commit implantado (d0fc9de). Acompanhado na integração M63.
+    commit implantado (d0fc9de). Acompanhado na integração M63. A M26.27
+    ("Meus laudos" com PDF assinado já aceito) subiu os dois para
+    `2026092202`, também sem trazer o pino — acompanhado na M64.
     """
 
     import re
@@ -609,6 +611,6 @@ def test_assets_alterados_tem_cache_busting_atual():
         re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
     )
     assert versoes, "os assets precisam continuar versionados"
-    assert versoes == {"2026092201"}, (
+    assert versoes == {"2026092202"}, (
         "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
     )

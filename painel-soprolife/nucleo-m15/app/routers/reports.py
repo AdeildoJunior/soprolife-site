@@ -1217,6 +1217,7 @@ def _technical_report_row(
     person: Person | None = None,
     has_corrective_successor: bool = False,
     is_delivered: bool = False,
+    estado_entrega: str | None = None,
 ) -> dict:
     data = {
         # M25.15 — `patient` é a referência humana principal da linha; os
@@ -1259,6 +1260,18 @@ def _technical_report_row(
         # em aberto" de "já resolvido, só não foi arquivado".
         "has_corrective_successor": has_corrective_successor,
         "is_delivered": is_delivered,
+        # M26.27 — onde o documento está no percurso até o paciente, pela
+        # MESMA regra da fila de entrega (`_estado_de_entrega`). `status`
+        # fica `liberado` para sempre depois da conclusão — receber o PDF
+        # assinado não o altera —, então sozinho ele não distingue
+        # "aguardando assinatura" de "assinado recebido". Era isso que
+        # deixava "Meus laudos" dizendo "aguardando assinatura qualificada"
+        # enquanto a central (vazia) e a administração ("Pronto para
+        # entrega") já contavam a história certa.
+        "estado_entrega": estado_entrega,
+        "estado_entrega_rotulo": (
+            FILA_ROTULOS.get(estado_entrega) if estado_entrega else None
+        ),
         # M25.24 — carimbo do encerramento operacional do EXAME. `None` na
         # fila ativa. Presente, a linha tem de aparecer marcada como
         # histórico: uma lista que junta encerrado e pendente sem etiqueta
@@ -2336,6 +2349,7 @@ def list_report_documents_operational(
             location=_queue_location(db, document, exam),
             has_corrective_successor=bool(superado),
             is_delivered=bool(entregue),
+            estado_entrega=_estado_de_entrega_do_documento(db, document),
         )
         for document, exam, assignment, person, superado, entregue in rows
     ]
@@ -2621,6 +2635,7 @@ def list_my_report_queue(
             person=person,
             has_corrective_successor=bool(superado),
             is_delivered=bool(entregue),
+            estado_entrega=_estado_de_entrega_do_documento(db, document),
         )
         for document, exam, assignment, person, superado, entregue in rows
     ]
@@ -2661,6 +2676,9 @@ def get_report_document(
             ),
             "assignment": ser_report_assignment(assignment),
             "physician": ser_physician_profile(profile),
+            # M26.27 — o cabeçalho da bancada rotulava pelo `status` e
+            # repetia "aguardando assinatura" num laudo já assinado.
+            **_estado_de_entrega_payload(db, document),
             # M25.7 — a tela da médica precisa saber se a assinatura
             # qualificada existe neste ambiente. Só o BOOLEANO: o diagnóstico
             # completo é admin-only, e nem ele expõe valores.
@@ -2702,6 +2720,7 @@ def get_report_document(
         assignment,
         person=db.get(Person, exam.person_id),
         location=_queue_location(db, document, exam),
+        estado_entrega=_estado_de_entrega_do_documento(db, document),
     )
 
 
@@ -4709,6 +4728,25 @@ def _assinado_mais_recente(
         .order_by(ExternalSignedDocument.received_at.desc())
         .limit(1)
     ).scalar_one_or_none()
+
+
+def _estado_de_entrega_do_documento(
+    db: Session, document: ReportDocument
+) -> str:
+    """M26.27 — o estado de entrega de UM documento, pela regra da fila.
+
+    Não é uma regra nova: é a composição exata que `list_delivery_queue`
+    faz linha a linha. Toda tela que precisa dizer se um laudo concluído
+    ainda aguarda assinatura pergunta aqui, para que "Meus laudos", a
+    bancada, o acompanhamento e a fila de entrega nunca discordem.
+    """
+
+    return _estado_de_entrega(document, _assinado_mais_recente(db, document.id))
+
+
+def _estado_de_entrega_payload(db: Session, document: ReportDocument) -> dict:
+    estado = _estado_de_entrega_do_documento(db, document)
+    return {"estado_entrega": estado, "estado_entrega_rotulo": FILA_ROTULOS[estado]}
 
 
 @router.get("/assinatura-externa/fila")

@@ -743,6 +743,16 @@ def test_seguindo_o_modo_de_alto_contraste_a_faixa_sobrevive():
 )
 def test_cada_fila_pinta_o_cartao_pela_familia(funcao, dominio):
     corpo = _corpo_da_funcao(WORKFLOW_JS, funcao)
+    # M26.27 — "Meus laudos" e o acompanhamento pintam pelo estado ATUAL:
+    # `laudo` até a assinatura voltar, `entrega` depois. O helper escolhe o
+    # domínio, mas a cor continua saindo do mesmo `statusCardClass`.
+    if dominio == "laudo" and "currentStatusCardClass(" in corpo:
+        helper = _corpo_da_funcao(WORKFLOW_JS, "currentStatusCardClass")
+        assert "statusCardClass(stage.domain, stage.value)" in helper
+        etapa = _corpo_da_funcao(WORKFLOW_JS, "currentStage")
+        assert 'domain: "laudo"' in etapa and 'domain: "entrega"' in etapa
+        assert "currentStatusChip(" in corpo, funcao
+        return
     assert "statusCardClass(" in corpo, funcao
     assert f'statusCardClass("{dominio}"' in corpo, (funcao, dominio)
     assert "statusChip(" in corpo, funcao

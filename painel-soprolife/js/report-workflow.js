@@ -799,6 +799,43 @@
     return `report-status-card ${familyClass(domain, value)}`;
   }
 
+  // M26.27 — o estado ATUAL de um laudo, para os cartões que antes olhavam
+  // só `status`. Depois da conclusão `status` fica `liberado` para sempre:
+  // receber o PDF assinado não o altera. Por isso "Meus laudos" continuava
+  // dizendo "Concluído — aguardando assinatura qualificada" num laudo que a
+  // central já não listava e que a administração via "Pronto para entrega".
+  //
+  // O navegador NÃO decide nada aqui: `estado_entrega`/`estado_entrega_rotulo`
+  // vêm do servidor, derivados pela mesma função da fila de entrega
+  // (`_estado_de_entrega`). Só se o laudo está concluído E o servidor diz
+  // que ele já passou da etapa de assinatura é que o cartão troca de
+  // domínio — e aí usa o rótulo e a família da própria fila de entrega.
+  function currentStage(item) {
+    const status = item && item.status;
+    const entrega = item && item.estado_entrega;
+    if (status === "liberado" && entrega
+        && entrega !== "aguardando_assinatura" && item.estado_entrega_rotulo) {
+      return {
+        domain: "entrega", value: entrega, label: item.estado_entrega_rotulo,
+      };
+    }
+    return { domain: "laudo", value: status, label: statusLabel(status) };
+  }
+
+  function signatureReceived(item) {
+    return currentStage(item).domain === "entrega";
+  }
+
+  function currentStatusChip(item) {
+    const stage = currentStage(item);
+    return statusChip(stage.domain, stage.value, stage.label);
+  }
+
+  function currentStatusCardClass(item) {
+    const stage = currentStage(item);
+    return statusCardClass(stage.domain, stage.value);
+  }
+
   // ------------------------------------------------ identidade (M25.15)
   //
   // A partir da M25.15 a referência humana das telas AUTENTICADAS de laudo é
@@ -1175,7 +1212,7 @@
     const items = lista.length
       ? lista.map((item) => `
           <button type="button" class="report-queue-item ${
-            statusCardClass("laudo", item.status)
+            currentStatusCardClass(item)
           }${
             item.document_id === state.selectedDocumentId ? " is-selected" : ""
           }" data-report-open="${esc(item.document_id)}"
@@ -1195,7 +1232,7 @@
                   o topo e os códigos descem para a última linha, sem sumir. */""}
             <strong class="report-item-name">${esc(patientName(item))}</strong>
             <span>${contextLine(item)}</span>
-            ${statusChip("laudo", item.status, statusLabel(item.status))}
+            ${currentStatusChip(item)}
             ${codeTrail(item)}
             ${/* M26.12 — enquanto a corretiva ainda não foi trabalhada
                   (`atribuido`), "corrigido" (particípio, tempo passado) lê
@@ -1654,7 +1691,17 @@
   // ficava com o mesmo painel de documentos de sempre e tinha que descobrir
   // sozinha, em outra seção, que o arquivo assinável estava lá. O botão do
   // próximo passo passa a morar onde ela acabou de clicar.
-  function renderConcludedAction() {
+  function renderConcludedAction(detail) {
+    // M26.27 — com o PDF assinado já recebido, "baixe o PDF final para
+    // assinatura" mandava a médica refazer um passo que ela já fez.
+    if (signatureReceived(detail)) {
+      return `
+      <div class="report-concluded" role="status">
+        <p class="report-concluded-title">✓ PDF assinado recebido</p>
+        <p>O arquivo foi associado a este laudo. Seu trabalho neste exame
+          terminou.</p>
+      </div>`;
+    }
     const native = latestNativeVersion();
     const assinavel = native && native.kind !== "laudo_previa";
     return `
@@ -1673,7 +1720,7 @@
   }
 
   function renderReleaseAction(detail) {
-    if (detail.status === "liberado") return renderConcludedAction();
+    if (detail.status === "liberado") return renderConcludedAction(detail);
     if (detail.status !== "em_elaboracao" || !state.previewVersionId) return "";
     if (state.confirmRelease) {
       return `
@@ -2027,7 +2074,7 @@
             } · ${esc(detail.public_code)}</p>
           </div>
           <div class="report-status-badges">
-            ${statusChip("laudo", detail.status, statusLabel(detail.status))}
+            ${currentStatusChip(detail)}
             ${hasAddendum
               ? `<span class="report-status-chip report-adendo-flag">Com adendo</span>${
                   helpTip("adendo")
@@ -2749,13 +2796,13 @@
     const rows = state.operational.length
       ? state.operational.map((item) => `
           <button type="button" class="report-operation-row ${
-            statusCardClass("laudo", item.status)
+            currentStatusCardClass(item)
           }${
             item.document_id === state.selectedOperationalId ? " is-selected" : ""
           }" data-report-operational="${esc(item.document_id)}">
             <strong class="report-item-name">${esc(patientName(item))}</strong>
             <span>${contextLine(item)}</span>
-            ${statusChip("laudo", item.status, statusLabel(item.status))}
+            ${currentStatusChip(item)}
             ${codeTrail(item)}
           </button>`).join("")
       : `<div class="report-empty">Nenhum documento no fluxo.</div>`;
