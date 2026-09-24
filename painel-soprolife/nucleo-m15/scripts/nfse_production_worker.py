@@ -670,9 +670,13 @@ def self_check() -> int:
     margin = evaluate_certificate_margin(
         summary, min_days_remaining=settings.nfse_production_certificate_min_days)
     clock = clock_module.read_clock_status()
+    # M69 — the same permission rule the real run applies; before M69 the
+    # self-check passed while every real run refused on it.
+    permissions_ok = "restricted_certificate_path_permissions_too_open" not in readiness.blockers
     report = {
-        "self_check": "ok" if (margin.valid and clock.synchronized) else "attention",
+        "self_check": "ok" if (margin.valid and clock.synchronized and permissions_ok) else "attention",
         "certificate_readable": readiness.certificate_syntactically_valid is True,
+        "certificate_permissions_ok": permissions_ok,
         "certificate_subject": getattr(summary, "subject_common_name", None),
         "certificate_not_after": str(getattr(summary, "not_after", None)),
         "certificate_days_remaining": margin.days_remaining,
@@ -681,7 +685,7 @@ def self_check() -> int:
         "network_used": False,
     }
     print(json.dumps(report, ensure_ascii=False))
-    return 0 if report["certificate_readable"] else 2
+    return 0 if report["certificate_readable"] and permissions_ok else 2
 
 
 def main(argv=None) -> int:

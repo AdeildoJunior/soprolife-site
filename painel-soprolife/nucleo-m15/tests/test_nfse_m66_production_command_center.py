@@ -773,3 +773,86 @@ def test_the_self_check_opens_the_certificate_and_sends_nothing(worker, engine, 
     assert worker["sefin"]["requests"] == []
     with sessionmaker(bind=engine)() as session:
         assert session.scalar(select(func.count()).select_from(FiscalIssuanceRequest)) == 0
+
+
+# ------------------------------------------------------------------ M69
+
+def _systemd_shaped(worker_creds: Path, monkeypatch):
+    """Turn the fixture's credentials into what systemd 255 really hands the
+    worker (measured on the VPS): root:root 0440 + ACL user:<uid>:r, on a
+    read-only tmpfs at /run/credentials/<unit>. Owner/ACL/mount need root, so
+    those three lookups return the measured values."""
+    from app.services.nfse_national import readiness
+    for item in worker_creds.iterdir():
+        item.chmod(0o440)
+    def acl(path):
+        perm = 5 if Path(path) == worker_creds else 4
+        return [(1, perm, 0xFFFFFFFF), (2, perm, os.geteuid()), (4, 0, 0xFFFFFFFF),
+                (16, perm, 0xFFFFFFFF), (32, 0, 0xFFFFFFFF)]
+    monkeypatch.setattr(readiness, "_CREDENTIALS_ROOT", str(worker_creds.parent))
+    monkeypatch.setattr(readiness, "_CREDENTIAL_OWNER_UID", os.getuid())
+    monkeypatch.setattr(readiness, "_read_posix_acl", acl)
+    monkeypatch.setattr(readiness, "_mountinfo_entry",
+                        lambda p: ("tmpfs", {"ro", "nosuid", "nodev", "noexec"})
+                        if p == str(worker_creds) else None)
+
+
+def test_m69_a_permission_refusal_sends_nothing_and_a_new_human_confirmation_can_issue(
+        worker, monkeypatch):
+    creds = Path(os.environ["CREDENTIALS_DIRECTORY"])
+    for item in creds.iterdir():            # the VPS mode, WITHOUT the systemd shape
+        item.chmod(0o440)
+    first = worker["confirm"]()
+    report = worker["run"](first["id"])
+    assert report["refused"] == "restricted_certificate_path_permissions_too_open"
+    assert worker["sefin"]["requests"] == []
+    row = _request_row(worker, first["id"])
+    assert row.status == "refused" and row.provider_post_count == 0 and row.provider_get_count == 0
+    with worker["maker"]() as session:
+        assert _count(session, FiscalAttempt, FiscalAttempt.document_id == row.document_id) == 0
+        doc = session.get(FiscalDocument, row.document_id)
+        assert (doc.state, doc.eligibility) == ("pending", "eligible")
+    # The same request never runs again, even once the cause is fixed.
+    _systemd_shaped(creds, monkeypatch)
+    worker["run"](first["id"])
+    assert worker["sefin"]["requests"] == []
+    assert _request_row(worker, first["id"]).status == "refused"
+    # Only a NEW human confirmation produces a new request, and it issues once.
+    second = worker["confirm"](key="m66-worker-0002")
+    assert second["id"] != first["id"]
+    worker["sefin"]["queue"] = [(201, envelope())]
+    report = worker["run"](second["id"])
+    assert _methods(worker["sefin"]) == ["POST"]
+    assert report["status"] == "issued" and report["provider_post_count"] == 1
+    assert _request_row(worker, first["id"]).status == "refused"   # history kept
+
+
+def test_m69_the_self_check_accepts_the_real_systemd_credential(worker, engine, monkeypatch, capsys):
+    from app import db as app_db
+    monkeypatch.setattr(app_db, "get_sessionmaker",
+                        lambda: sessionmaker(bind=engine, expire_on_commit=False))
+    _systemd_shaped(Path(os.environ["CREDENTIALS_DIRECTORY"]), monkeypatch)
+    assert worker["module"].main(["--self-check"]) == 0
+    report = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert report["self_check"] == "ok"
+    assert report["certificate_readable"] is True
+    assert report["certificate_permissions_ok"] is True
+    assert report["certificate_margin_ok"] is True
+    assert report["clock_synchronized"] is True
+    assert report["network_used"] is False
+    assert worker["sefin"]["requests"] == []
+
+
+def test_m69_the_self_check_reports_what_the_real_run_would_refuse(worker, engine, monkeypatch,
+                                                                  capsys):
+    from app import db as app_db
+    monkeypatch.setattr(app_db, "get_sessionmaker",
+                        lambda: sessionmaker(bind=engine, expire_on_commit=False))
+    for item in Path(os.environ["CREDENTIALS_DIRECTORY"]).iterdir():
+        item.chmod(0o440)
+    assert worker["module"].main(["--self-check"]) == 2
+    report = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert report["self_check"] == "attention"
+    assert report["certificate_permissions_ok"] is False
+    assert report["network_used"] is False
+    assert worker["sefin"]["requests"] == []

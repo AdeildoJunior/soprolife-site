@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import os
 import stat
+import struct
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -165,9 +166,106 @@ def _permissions_blocker(path: str | os.PathLike) -> str | None:
         mode = stat.S_IMODE(os.stat(path).st_mode)
     except OSError:
         return None
-    if mode & 0o077:
+    if mode & 0o077 and not _is_private_systemd_credential(path):
         return "restricted_certificate_path_permissions_too_open"
     return None
+
+
+# M69 — systemd (>= 250) hands a LoadCredential[Encrypted]= file to a unit
+# with User= as root:root 0400 plus a POSIX ACL `user:<unit uid>:r--` on a
+# read-only tmpfs mounted at /run/credentials/<unit>. With an ACL present the
+# group bits of st_mode show the ACL MASK, so the file stats as 0440 although
+# the root group has no access at all (measured on the VPS, systemd 255:
+# group_obj::0, other::0). The exception below recognises exactly that shape
+# and nothing else; any conventional file keeps the plain `mode & 0o077` rule.
+_CREDENTIALS_ROOT = "/run/credentials"
+_CREDENTIAL_OWNER_UID = 0
+_CREDENTIAL_FILESYSTEMS = frozenset({"tmpfs", "ramfs"})
+_ACL_USER_OBJ, _ACL_USER, _ACL_GROUP_OBJ, _ACL_GROUP, _ACL_MASK, _ACL_OTHER = 1, 2, 4, 8, 16, 32
+_ACL_READ, _ACL_EXECUTE = 4, 1
+
+
+def _read_posix_acl(path: str) -> list[tuple[int, int, int]] | None:
+    """(tag, perm, id) entries of the access ACL, or None if there is none."""
+    try:
+        raw = os.getxattr(path, "system.posix_acl_access", follow_symlinks=False)
+    except OSError:
+        return None
+    return _parse_posix_acl(raw)
+
+
+def _parse_posix_acl(raw: bytes) -> list[tuple[int, int, int]] | None:
+    # Kernel xattr layout: u32 version (2), then u16 tag, u16 perm, u32 id.
+    if len(raw) < 4 or (len(raw) - 4) % 8 or struct.unpack("<I", raw[:4])[0] != 2:
+        return None
+    return [struct.unpack("<HHI", raw[i:i + 8]) for i in range(4, len(raw), 8)]
+
+
+def _mountinfo_entry(mount_point: str) -> tuple[str, set[str]] | None:
+    """(fstype, per-mount options) of the topmost mount exactly at mount_point."""
+    found = None
+    try:
+        with open("/proc/self/mountinfo", encoding="utf-8") as fh:
+            for line in fh:
+                pre, sep, post = line.partition(" - ")
+                fields = pre.split()
+                if not sep or len(fields) < 6:
+                    continue
+                point = fields[4].replace("\\040", " ").replace("\\011", "\t").replace("\\134", "\\")
+                if point == mount_point:
+                    found = (post.split()[0], set(fields[5].split(",")))
+    except OSError:
+        return None
+    return found
+
+
+def _acl_is_private(entries: list[tuple[int, int, int]] | None, allowed: int) -> bool:
+    """Only the owner (root) and THIS process's uid may have any access."""
+    if not entries:
+        return False
+    tags = {tag for tag, _perm, _id in entries}
+    if not {_ACL_USER_OBJ, _ACL_GROUP_OBJ, _ACL_OTHER} <= tags:
+        return False
+    for tag, perm, ident in entries:
+        if tag in (_ACL_GROUP_OBJ, _ACL_OTHER) and perm:
+            return False
+        if tag == _ACL_GROUP:
+            return False
+        if tag == _ACL_USER and ident != os.geteuid():
+            return False
+        if tag in (_ACL_USER_OBJ, _ACL_USER, _ACL_MASK) and perm & ~allowed:
+            return False
+    return True
+
+
+def _is_private_systemd_credential(path: str | os.PathLike) -> bool:
+    creds = os.environ.get("CREDENTIALS_DIRECTORY", "")
+    root = _CREDENTIALS_ROOT
+    if (not creds or os.path.normpath(creds) != creds
+            or os.path.dirname(creds) != root or not os.path.basename(creds)
+            or os.path.basename(creds) in (".", "..")):
+        return False
+    path = os.fspath(path)
+    if os.path.dirname(path) != creds or os.path.basename(path) in ("", ".", ".."):
+        return False
+    try:
+        dir_st = os.lstat(creds)
+        file_st = os.lstat(path)
+    except OSError:
+        return False
+    if not stat.S_ISDIR(dir_st.st_mode) or not stat.S_ISREG(file_st.st_mode):
+        return False  # a symlink (either level) never gets the exception
+    if dir_st.st_uid != _CREDENTIAL_OWNER_UID or file_st.st_uid != _CREDENTIAL_OWNER_UID:
+        return False
+    if stat.S_IMODE(dir_st.st_mode) & 0o027 or stat.S_IMODE(file_st.st_mode) & 0o237:
+        return False  # no write for anyone, nothing for "other" at all
+    if file_st.st_dev != dir_st.st_dev:
+        return False
+    mount = _mountinfo_entry(creds)
+    if mount is None or mount[0] not in _CREDENTIAL_FILESYSTEMS or "ro" not in mount[1]:
+        return False
+    return (_acl_is_private(_read_posix_acl(creds), _ACL_READ | _ACL_EXECUTE)
+            and _acl_is_private(_read_posix_acl(path), _ACL_READ))
 
 
 def _fiscal_policy_summary(db: Session, environment: str) -> tuple[bool, dict]:
