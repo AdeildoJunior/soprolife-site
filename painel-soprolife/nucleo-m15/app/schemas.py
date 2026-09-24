@@ -132,6 +132,23 @@ class PersonCreate(StrictModel):
     observacao: str | None = Field(default=None, max_length=4000)
     contatos: list[ContactIn] = []
     consentimento_whatsapp: Literal["concedido", "revogado", "desconhecido"] | None = None
+    # M68 — comprovante opaco devolvido por POST /pessoas/identificacao-assistida
+    # quando o SERPRO confirmou CPF + nascimento. Só serve para registrar na
+    # auditoria SE o nome veio confirmado e SE foi editado; nunca é gravado.
+    identificacao_oficial: str | None = Field(default=None, max_length=200)
+
+
+class PersonCpfLookup(StrictModel):
+    """M68 — busca EXATA por CPF, sempre no corpo POST (nunca na URL)."""
+
+    cpf: str = Field(min_length=1, max_length=20)
+
+
+class IdentificacaoAssistidaIn(StrictModel):
+    """M68 — par da Consulta CPF v3, no corpo POST (nunca na URL)."""
+
+    cpf: str = Field(min_length=1, max_length=20)
+    data_nascimento: date
 
 
 class PersonUpdate(StrictModel):

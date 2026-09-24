@@ -129,6 +129,11 @@ ALLOWED_KEYS = {
     # nunca CPF, nunca senha, nunca corpo de resposta.
     "issuance_request_id", "operation_id", "provider_post_count",
     "provider_get_count", "second_post_attempted",
+    # M68 — identificação assistida (Consulta CPF v3 / SERPRO). Só códigos
+    # de um vocabulário fechado: se houve consulta externa, o resultado
+    # técnico e o que o operador fez com o nome confirmado. Nunca CPF,
+    # nascimento, nome devolvido ou token.
+    "consulta_serpro_realizada", "identificacao_oficial",
 }
 
 _MAX_STR = 120

@@ -628,18 +628,7 @@
           Paciente novo — preencha abaixo, ou busque acima se ele já tem cadastro
         </p>
         <div class="m15-form cad-subgrid">
-          ${fld("Nome completo", inp(prefix + "_nome", "", 'minlength="2" autocomplete="off"'), { span: 6, req: true, nfse: !!opts.nfse })}
-          ${fld("WhatsApp", inp(prefix + "_fone", "", 'type="tel" placeholder="(21) 99999-9999" autocomplete="off"'), 3)}
-          ${fld("Nascimento", dateInp(prefix + "_nasc", ""), 3)}
-          ${fld("E-mail (opcional)", inp(prefix + "_email", "", 'type="email" autocomplete="off"'), 4)}
-          ${fld("CPF", inp(prefix + "_cpf", "", 'inputmode="numeric" placeholder="000.000.000-00" autocomplete="off"'),
-            { span: 4, nfse: !!opts.nfse, ajuda: "A CFM 2.381/2024 pede o CPF no laudo. Sem ele o laudo sai, mas fica marcado como pendente para entrega oficial. Deixe em branco se não houver CPF." })}
-          ${fld("Sexo", sel(prefix + "_sexo",
-            [["", "não informado"], ["feminino", "feminino"], ["masculino", "masculino"],
-             ["outro", "outro"]], ""),
-            { span: 4, ajuda: "Entra na identificação impressa do laudo." })}
-          ${fld("Consentimento WhatsApp", sel(prefix + "_consent",
-            [["", "não informado"], "concedido", "desconhecido", "revogado"], "concedido"), 4)}
+          ${camposPessoaNova(prefix, opts)}
         </div>
         <div class="cad-guardian" id="${prefix}GuardianBox" hidden>
           <p class="cad-picker-nova-titulo">Paciente menor de idade — responsável legal</p>
@@ -660,6 +649,47 @@
         <div class="cad-dup-aviso" id="${prefix}DupAviso" hidden></div>
       </div>`}
     </div>`;
+  }
+
+  /* Campos do paciente novo. Cada campo é escrito UMA vez; o que muda entre
+   * os fluxos é só a ordem.
+   *
+   * M68 — no "Novo atendimento" (opts.identificacao) a identificação vem
+   * primeiro: CPF e Nascimento juntos, porque formam a chave da Consulta CPF
+   * v3, e o Nome logo depois, porque pode ser preenchido por ela. O Lead
+   * mantém a ordem de antes: lead raramente chega com CPF.
+   *
+   * Nascimento NÃO recebe o selo NFS-e: ele serve à consulta oficial, não à
+   * nota. Os dois conceitos ficam visualmente separados. */
+  function camposPessoaNova(prefix, opts) {
+    const ident = !!opts.identificacao;
+    const campo = {
+      consent: `${fld("Consentimento WhatsApp", sel(prefix + "_consent",
+        [["", "não informado"], "concedido", "desconhecido", "revogado"], "concedido"), ident ? 3 : 4)}`,
+      nome: `${fld("Nome completo", inp(prefix + "_nome", "", 'minlength="2" autocomplete="off"'), { span: 6, req: true, nfse: !!opts.nfse })}`,
+      fone: `${fld("WhatsApp", inp(prefix + "_fone", "", 'type="tel" placeholder="(21) 99999-9999" autocomplete="off"'), 3)}`,
+      nasc: `${fld("Nascimento", dateInp(prefix + "_nasc", ""),
+        ident ? { span: 6, ajuda: "Junto com o CPF, permite confirmar o nome no cadastro oficial da Receita Federal. Não é exigido para a nota fiscal." } : 3)}`,
+      email: `${fld("E-mail (opcional)", inp(prefix + "_email", "", 'type="email" autocomplete="off"'), ident ? 3 : 4)}`,
+      cpf: `${fld("CPF", inp(prefix + "_cpf", "", 'inputmode="numeric" placeholder="000.000.000-00" autocomplete="off"'),
+        { span: ident ? 6 : 4, nfse: !!opts.nfse, ajuda: "A CFM 2.381/2024 pede o CPF no laudo. Sem ele o laudo sai, mas fica marcado como pendente para entrega oficial. Deixe em branco se não houver CPF." })}`,
+      sexo: `${fld("Sexo", sel(prefix + "_sexo",
+        [["", "não informado"], ["feminino", "feminino"], ["masculino", "masculino"],
+         ["outro", "outro"]], ""),
+        { span: ident ? 3 : 4, ajuda: "Entra na identificação impressa do laudo." })}`,
+    };
+    if (!ident) {
+      return campo.nome + campo.fone + campo.nasc + campo.email + campo.cpf + campo.sexo + campo.consent;
+    }
+    return `
+          <div class="m15-span-6 cad-ident-chave" role="group" aria-describedby="${prefix}IdentNota">
+            <div class="cad-ident-grid">${campo.cpf}${campo.nasc}</div>
+            <p class="cad-ident-nota" id="${prefix}IdentNota">Usados para consulta oficial de identificação</p>
+          </div>
+          ${campo.nome}
+          <div class="m15-form-full cad-ident-status" id="${prefix}IdentStatus" role="status" aria-live="polite" hidden></div>
+          <div class="m15-form-full cad-cpf-existente" id="${prefix}CpfExistente" hidden></div>
+          ${campo.fone}${campo.email}${campo.sexo}${campo.consent}`;
   }
 
   function renderCandidates(listEl, itens, onPick) {
@@ -703,6 +733,161 @@
     });
   }
 
+  /* M68 — desenha o estado do controlador de identificação assistida
+   * (js/identificacao-assistida.js) e cuida do campo Nome.
+   *
+   * Regra do nome: só escrevemos nele se estiver vazio ou ainda com o valor
+   * que NÓS escrevemos. O que o operador digitou nunca é apagado; editar o
+   * nome confirmado é permitido e fica sinalizado. Nada é salvo aqui — quem
+   * persiste continua sendo "Salvar atendimento". */
+  function wireIdentificacao(root, prefix, novaBox, hooks) {
+    const campo = (n) => root.querySelector(`[name="${prefix}_${n}"]`);
+    const statusEl = root.querySelector("#" + prefix + "IdentStatus");
+    const existenteEl = root.querySelector("#" + prefix + "CpfExistente");
+    if (!statusEl || !existenteEl) return null;
+    let autofill = null;   // último nome escrito pela consulta oficial
+
+    function escreverNome(valor) {
+      const el = campo("nome");
+      if (!el) return;
+      el.value = valor;
+      // A prontidão NFS-e (M67) escuta "input" no formulário.
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function status(html, tom) {
+      if (!html) {
+        statusEl.hidden = true;
+        statusEl.innerHTML = "";
+        statusEl.removeAttribute("data-tom");
+        return;
+      }
+      statusEl.hidden = false;
+      statusEl.setAttribute("data-tom", tom);
+      statusEl.innerHTML = html;
+    }
+
+    function atualizarAlterado() {
+      const alt = statusEl.querySelector("[data-ident-alterado]");
+      const nome = campo("nome");
+      if (alt && nome) alt.hidden = !ctl.nomeAlterado(nome.value);
+    }
+
+    function desenharExistente(p) {
+      existenteEl.hidden = false;
+      existenteEl.innerHTML =
+        `<div class="cad-cpf-existente-texto"><strong>Paciente já cadastrado</strong>` +
+        `<span>${esc(p.public_code)} · ${esc(p.nome_completo)}` +
+        `${p.data_nascimento ? " · nasc. " + fmtDate(p.data_nascimento) : ""}</span></div>` +
+        `<button type="button" class="m15-btn cad-btn-mini" data-usar-existente>Usar este paciente</button>`;
+      const btn = existenteEl.querySelector("[data-usar-existente]");
+      btn.addEventListener("click", () => {
+        btn.disabled = true;
+        hooks.usarExistente(p).catch((err) => {
+          btn.disabled = false;
+          toast("Erro: " + (err.message || err), "erro");
+        });
+      });
+      status("");
+    }
+
+    function desenhar(e) {
+      // Saindo da confirmação: o nome que escrevemos era do par anterior.
+      if (e.fase !== "confirmado" && autofill !== null) {
+        const nome = campo("nome");
+        if (nome && nome.value === autofill) escreverNome("");
+        autofill = null;
+      }
+      if (e.fase === "existente") { desenharExistente(e.pessoa); return; }
+      existenteEl.hidden = true;
+      existenteEl.innerHTML = "";
+      switch (e.fase) {
+        case "vazio": case "digitando": case "pendente": case "cancelado":
+          status("");
+          return;
+        case "verificando": case "consultando":
+          status(`<span class="cad-ident-spinner" aria-hidden="true"></span>${esc(e.mensagem)}`, "progresso");
+          return;
+        case "aguardando_nascimento": case "nao_configurada":
+          status(esc(e.mensagem), "info");
+          return;
+        case "cpf_invalido":
+          status(esc(e.mensagem), "erro");
+          return;
+        case "confirmado": {
+          const nome = campo("nome");
+          const atual = nome ? nome.value.trim() : "";
+          const preencher = !atual || atual === autofill;
+          if (preencher) { escreverNome(e.nomeOficial); autofill = e.nomeOficial; }
+          const sit = e.situacao && e.situacao.descricao
+            ? `<span class="cad-ident-linha">Situação cadastral: ${esc(e.situacao.descricao)}</span>` : "";
+          const social = e.nomeSocial
+            ? `<span class="cad-ident-linha">Nome social no cadastro oficial: <strong>${esc(e.nomeSocial)}</strong> ` +
+              `(informação separada — o nome civil acima não foi substituído)</span>` : "";
+          const usar = preencher ? "" :
+            `<span class="cad-ident-linha">Nome oficial: <strong>${esc(e.nomeOficial)}</strong> ` +
+            `<button type="button" class="m15-btn m15-btn-sec cad-btn-mini" data-usar-oficial>Usar nome oficial</button></span>`;
+          status(
+            `<span class="cad-ident-ok">${esc(e.mensagem)}</span>${sit}${social}${usar}` +
+            `<span class="cad-ident-linha cad-ident-alterado" data-ident-alterado hidden>` +
+            `${esc(window.SoproIdentificacaoAssistida.MENSAGENS.nome_alterado)}</span>`,
+            "ok");
+          const btnUsar = statusEl.querySelector("[data-usar-oficial]");
+          if (btnUsar) {
+            btnUsar.addEventListener("click", () => {
+              escreverNome(e.nomeOficial);
+              autofill = e.nomeOficial;
+              btnUsar.parentElement.remove();
+              atualizarAlterado();
+            });
+          }
+          atualizarAlterado();
+          return;
+        }
+        default:
+          // nao_confere, dados_recusados, protegido, indisponivel, erro_local:
+          // aviso, nunca bloqueio — o cadastro manual segue livre.
+          status(esc(e.mensagem), "aviso");
+      }
+    }
+
+    const ctl = window.SoproIdentificacaoAssistida.criar({ api, aoEstado: desenhar });
+
+    // Mesma técnica da prontidão NFS-e: o calendário grava a data sem
+    // disparar evento, então lemos o par no fim da tarefa de qualquer evento
+    // do formulário. O controlador ignora tudo que não mude o par.
+    let pendente = false;
+    function verificar() {
+      if (pendente) return;
+      pendente = true;
+      setTimeout(() => {
+        pendente = false;
+        if (novaBox.hidden) return;
+        const cpf = campo("cpf"), nasc = campo("nasc");
+        if (cpf && nasc) ctl.atualizar(cpf.value, nasc.value);
+      }, 0);
+    }
+    ["input", "change", "click", "focusout"].forEach((ev) => root.addEventListener(ev, verificar));
+    const nomeEl = campo("nome");
+    if (nomeEl) nomeEl.addEventListener("input", atualizarAlterado);
+
+    return {
+      cancelar: () => ctl.cancelar(),
+      reset: () => {
+        ctl.reset();
+        autofill = null;
+        existenteEl.hidden = true;
+        existenteEl.innerHTML = "";
+        status("");
+      },
+      comprovante: () => {
+        const cpf = campo("cpf"), nasc = campo("nasc");
+        return cpf && nasc ? ctl.comprovantePara(cpf.value, nasc.value) : null;
+      },
+      mostrarExistente: (p) => desenharExistente(p),
+    };
+  }
+
   function wirePersonPicker(root, prefix, opts) {
     opts = opts || {};
     const picker = {
@@ -715,6 +900,8 @@
     const resultados = root.querySelector("#" + prefix + "Resultados");
     const selecionada = root.querySelector("#" + prefix + "Selecionada");
     const novaBox = root.querySelector("#" + prefix + "NovaBox");
+    // M68 — CPF → nascimento → nome oficial; só no fluxo que pediu.
+    let ident = null;
 
     function notifyChange() {
       if (opts.onChange) opts.onChange();
@@ -757,6 +944,8 @@
     }
 
     function showSelected(p) {
+      // Escolher alguém existente encerra qualquer consulta pendente.
+      if (ident) ident.cancelar();
       picker.selected = p;
       if (novaBox) novaBox.hidden = true;
       resultados.hidden = true;
@@ -766,6 +955,7 @@
         picker.selected = null;
         selecionada.hidden = true;
         if (novaBox) novaBox.hidden = false;
+        if (ident) ident.reset();
         q.value = "";
         q.focus();
         notifyChange();
@@ -861,6 +1051,15 @@
       buscar.click();
     }
 
+    // O HTML decide: só o formulário montado com { identificacao: true } tem
+    // o bloco de status, e só ele ganha a consulta.
+    if (novaBox && window.SoproIdentificacaoAssistida &&
+        root.querySelector("#" + prefix + "IdentStatus")) {
+      ident = wireIdentificacao(root, prefix, novaBox, {
+        usarExistente: (p) => api("/pessoas/" + encodeURIComponent(p.id)).then(showSelected),
+      });
+    }
+
     if (novaBox) {
       const fone = root.querySelector(`[name="${prefix}_fone"]`);
       if (fone) phoneMask(fone);
@@ -909,6 +1108,13 @@
       if (gBox) gBox.hidden = true;
       const cpfEl = root.querySelector(`[name="${prefix}_cpf"]`);
       if (cpfEl) cpfMostrarErro(cpfEl, false);
+      if (ident) ident.reset();
+    };
+
+    /* 409 cpf_ja_cadastrado do servidor (corrida, ou consulta que não chegou
+     * a rodar): mostra o MESMO aviso de "Paciente já cadastrado". */
+    picker.mostrarCpfExistente = function (pessoa) {
+      if (ident && pessoa) ident.mostrarExistente(pessoa);
     };
 
     picker.selecionada = function () { return picker.selected; };
@@ -949,6 +1155,9 @@
       setIf(payload, "cpf", cpfDigitos(leia("cpf")));
       setIf(payload, "sexo", leia("sexo"));
       setIf(payload, "consentimento_whatsapp", leia("consent"));
+      // Comprovante opaco da confirmação oficial (vale só para o par na tela):
+      // o servidor registra "confirmado" ou "nome alterado", sem PII.
+      if (ident) setIf(payload, "identificacao_oficial", ident.comprovante() || "");
       return payload;
     };
 
@@ -1082,7 +1291,7 @@
         const link = document.createElement("link");
         link.id = id;
         link.rel = "stylesheet";
-        link.href = href + "?v=2026092301";
+        link.href = href + "?v=2026092401";
         document.head.appendChild(link);
       }
     });
@@ -1602,7 +1811,7 @@
 
             <div class="m15-form-full cad-passo">
               <h4 class="cad-passo-titulo"><span class="cad-passo-num">1</span> Paciente</h4>
-              ${personPickerHtml("cadAtP", { nfse: true })}
+              ${personPickerHtml("cadAtP", { nfse: true, identificacao: true })}
             </div>
 
             <div class="m15-form-full cad-passo" id="cadAtPasso2">
@@ -1816,6 +2025,9 @@
           aplicarModo();
           if (m15() && m15().refresh) m15().refresh();
         }).catch((err) => {
+          if (err && err.code === "cpf_ja_cadastrado" && err.detalhe) {
+            picker.mostrarCpfExistente(err.detalhe.pessoa);
+          }
           toast("Erro: " + (err.message || err), "erro");
         }).then(() => { btnSoPessoa.disabled = false; });
       });
@@ -1860,6 +2072,9 @@
           const cands = err && err.detalhe && err.detalhe.candidatos;
           if (err && err.code === "possivel_duplicado" && cands) {
             picker.mostrarDuplicados(cands);
+          }
+          if (err && err.code === "cpf_ja_cadastrado" && err.detalhe) {
+            picker.mostrarCpfExistente(err.detalhe.pessoa);
           }
           throw err;
         });

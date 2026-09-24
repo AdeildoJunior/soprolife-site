@@ -239,7 +239,7 @@ caso("selo fica escondido fora do modo SoproLife (CSS)",
 caso("variante Pastore do bloco não carrega selo (nfse = !ehPastore)",
      /const nfse = !ehPastore;/.test(centralCodigo));
 caso("Lead não herda o selo (só o Novo atendimento pede { nfse: true })",
-     /personPickerHtml\("cadAtP", \{ nfse: true \}\)/.test(centralCodigo) &&
+     /personPickerHtml\("cadAtP", \{ nfse: true(, identificacao: true)? \}\)/.test(centralCodigo) &&
      /personPickerHtml\("cadLeadP"\)/.test(centralCodigo));
 caso("cartão do tipo Pastore diz que não gera NFS-e por exame",
      /espirometria_pastore: \["nao-emite", "Sem NFS-e por exame/.test(centralCodigo));

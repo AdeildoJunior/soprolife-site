@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import field_validator, model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -289,6 +289,60 @@ class Settings(BaseSettings):
     integraicp_credential_lifetime_seconds: int = 300
     # Janela total do clearance: da solicitação até a autorização no app.
     integraicp_clearance_lifetime_seconds: int = 600
+
+    # ------------------------------------ M68 — Consulta CPF v3 (SERPRO)
+    #
+    # Assistência de digitação no cadastro: CPF + nascimento → nome oficial.
+    # Fail-closed: sem `enabled=True` E as duas credenciais, nada sai do
+    # servidor e a tela segue no preenchimento manual. Não há variável de
+    # URL: o endereço de produção é constante em `services/serpro_cpf.py`
+    # (mesmo desenho do NFS-e de produção), e a versão de demonstração nunca
+    # é alcançável por configuração. Credenciais NUNCA compartilhadas com o
+    # A1 fiscal — são integrações independentes.
+    serpro_cpf_enabled: bool = False
+    serpro_cpf_consumer_key: SecretStr | None = None
+    serpro_cpf_consumer_secret: SecretStr | None = None
+    # Timeout finito e curto: é o operador esperando na frente do paciente.
+    serpro_cpf_timeout_seconds: float = 8.0
+    # Anti-custo: consultas EXTERNAS por usuário numa janela deslizante.
+    serpro_cpf_max_consultas_por_usuario: int = 30
+    serpro_cpf_janela_minutos: int = 10
+
+    @field_validator("serpro_cpf_timeout_seconds")
+    @classmethod
+    def _serpro_timeout_finito(cls, v: float) -> float:
+        if not 1.0 <= v <= 20.0:
+            raise ValueError("M15_SERPRO_CPF_TIMEOUT_SECONDS deve ficar entre 1 e 20.")
+        return v
+
+    @field_validator("serpro_cpf_max_consultas_por_usuario")
+    @classmethod
+    def _serpro_limite_em_faixa(cls, v: int) -> int:
+        if not 1 <= v <= 200:
+            raise ValueError("M15_SERPRO_CPF_MAX_CONSULTAS_POR_USUARIO deve ficar entre 1 e 200.")
+        return v
+
+    @field_validator("serpro_cpf_janela_minutos")
+    @classmethod
+    def _serpro_janela_em_faixa(cls, v: int) -> int:
+        if not 1 <= v <= 120:
+            raise ValueError("M15_SERPRO_CPF_JANELA_MINUTOS deve ficar entre 1 e 120.")
+        return v
+
+    def serpro_cpf_ready(self) -> bool:
+        """Consulta utilizável de verdade — sem isso, nenhuma chamada sai.
+
+        `enabled=True` sem as duas credenciais é configuração incompleta, e
+        incompleta é tratada como desligada (mesmo critério da IntegraICP).
+        """
+
+        return bool(
+            self.serpro_cpf_enabled
+            and self.serpro_cpf_consumer_key
+            and self.serpro_cpf_consumer_key.get_secret_value().strip()
+            and self.serpro_cpf_consumer_secret
+            and self.serpro_cpf_consumer_secret.get_secret_value().strip()
+        )
 
     @field_validator("integraicp_base_url", "integraicp_callback_url")
     @classmethod

@@ -1,5 +1,7 @@
 """Pessoas: cadastro canônico único, contatos, consentimentos, aliases legados."""
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,6 +24,8 @@ from ..schemas import (
     ConsentIn,
     ContactIn,
     DuplicateCheck,
+    IdentificacaoAssistidaIn,
+    PersonCpfLookup,
     PersonCreate,
     PersonRelationshipCreate,
     PersonRelationshipDeactivate,
@@ -36,7 +40,19 @@ from ..security import (
     require_role,
 )
 from ..serializers import ser_consent, ser_person, ser_person_relationship
+from ..config import get_settings
+from ..services.identificacao_assistida import (
+    avaliar_comprovante,
+    cache_consultas,
+    chave_do_par,
+    emitir_comprovante,
+    get_consulta_cpf_provider,
+    limite_consultas,
+    pessoa_minima,
+    pessoa_por_cpf,
+)
 from ..services.identity import find_person_candidates, register_candidates
+from ..services.serpro_cpf import SerproCpfClient
 from ..services.person_registration import build_person
 from ..services.relationships import RelationshipError, create_relationship
 
@@ -196,6 +212,174 @@ def _cpf_ou_422(valor: str | None) -> str | None:
         ) from None
 
 
+def cpf_obrigatorio_ou_422(valor: str | None) -> str:
+    """Como `_cpf_ou_422`, mas vazio também é recusado: aqui o CPF é a chave."""
+
+    cpf = _cpf_ou_422(valor)
+    if cpf is None:
+        raise HTTPException(
+            status_code=422,
+            detail={"codigo": "cpf_obrigatorio", "mensagem": "Informe o CPF."},
+        )
+    return cpf
+
+
+def recusar_cpf_ja_cadastrado(db: Session, cpf_bruto: str | None) -> None:
+    """M68 — CPF igual não é "possível duplicado", é o MESMO paciente.
+
+    Não há confirmação que destrave: o 409 devolve o cadastro existente (só o
+    mínimo) para a tela oferecer "Usar este paciente". A unicidade da coluna
+    já impediria a gravação; isto transforma o conflito genérico numa
+    resposta que a tela sabe explicar.
+    """
+
+    cpf = _cpf_ou_422(cpf_bruto)
+    if cpf is None:
+        return
+    existente = pessoa_por_cpf(db, cpf)
+    if existente is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "codigo": "cpf_ja_cadastrado",
+                "mensagem": "Paciente já cadastrado com este CPF. Use o cadastro existente.",
+                "pessoa": pessoa_minima(existente),
+            },
+        )
+
+
+def registrar_identificacao_oficial(
+    db: Session, request: Request, user: User, person: Person, dados
+) -> None:
+    """Registra SE o nome veio confirmado pelo SERPRO e SE foi editado.
+
+    Só um código de vocabulário fechado vai para a auditoria — nunca CPF,
+    nascimento ou nome. Sem comprovante, nada é registrado.
+    """
+
+    codigo = avaliar_comprovante(
+        getattr(dados, "identificacao_oficial", None),
+        person.cpf, person.data_nascimento, person.nome_completo,
+    )
+    if codigo is None:
+        return
+    audit(db, "pessoa.identificacao_oficial", "people", person.id, user.id,
+          request.state.request_id, {"identificacao_oficial": codigo})
+
+
+@router.post("/busca-cpf")
+def search_person_by_cpf(
+    payload: PersonCpfLookup,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    """M68 — busca EXATA por CPF no corpo POST: nunca parcial, nunca na URL.
+
+    Não reaproveita a heurística de telefone de `/pessoas/busca` (11 dígitos
+    parecem celular). Devolve só o mínimo para "Paciente já cadastrado".
+    """
+
+    cpf = cpf_obrigatorio_ou_422(payload.cpf)
+    existente = pessoa_por_cpf(db, cpf)
+    return {
+        "encontrada": existente is not None,
+        "pessoa": pessoa_minima(existente) if existente is not None else None,
+    }
+
+
+_MENSAGENS_IDENTIFICACAO = {
+    "confere": "Nome confirmado na Receita Federal via SERPRO.",
+    "nao_confere": "CPF e data de nascimento não conferem no cadastro oficial.",
+    "dados_recusados": (
+        "O cadastro oficial recusou a consulta. Confira CPF e nascimento, "
+        "ou preencha o nome manualmente."
+    ),
+    "protegido": (
+        "O cadastro oficial não disponibiliza os dados deste CPF. "
+        "Preencha o nome manualmente."
+    ),
+    "indisponivel": (
+        "Não foi possível consultar o cadastro oficial agora. Você pode "
+        "preencher o nome manualmente e continuar."
+    ),
+    "nao_configurada": "Consulta oficial indisponível — preencha o nome manualmente.",
+}
+
+
+@router.post("/identificacao-assistida")
+def assisted_identification(
+    payload: IdentificacaoAssistidaIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_OPERACIONAL)),
+    provider: SerproCpfClient | None = Depends(get_consulta_cpf_provider),
+):
+    """M68 — CPF + nascimento → nome oficial (Consulta CPF v3 / SERPRO).
+
+    Assistência de digitação, nunca autoridade: toda falha devolve 200 com um
+    `resultado` que a tela traduz em "preencha manualmente". Nada é gravado
+    além de um código de resultado na auditoria quando HÁ consulta externa.
+    """
+
+    cpf = cpf_obrigatorio_ou_422(payload.cpf)
+    nascimento = payload.data_nascimento
+    if nascimento.year < 1900 or nascimento > date.today():
+        raise HTTPException(
+            status_code=422,
+            detail={"codigo": "nascimento_invalido",
+                    "mensagem": "Informe uma data de nascimento válida."},
+        )
+
+    existente = pessoa_por_cpf(db, cpf)
+    if existente is not None:
+        return {
+            "resultado": "cpf_ja_cadastrado",
+            "mensagem": "Paciente já cadastrado.",
+            "pessoa": pessoa_minima(existente),
+        }
+
+    if provider is None:
+        return {"resultado": "nao_configurada",
+                "mensagem": _MENSAGENS_IDENTIFICACAO["nao_configurada"]}
+
+    chave = chave_do_par(cpf, nascimento)
+    consulta = cache_consultas.obter(chave)
+    if consulta is None:
+        settings = get_settings()
+        if not limite_consultas.permitir(
+            user.id,
+            settings.serpro_cpf_max_consultas_por_usuario,
+            settings.serpro_cpf_janela_minutos * 60,
+        ):
+            raise HTTPException(
+                status_code=429,
+                detail={"codigo": "limite_consultas",
+                        "mensagem": "Muitas consultas ao cadastro oficial em pouco "
+                                    "tempo. Preencha o nome manualmente."},
+            )
+        consulta = provider.consultar(cpf, nascimento)
+        cache_consultas.guardar(chave, consulta)
+        audit(db, "pessoa.identificacao_assistida", "people", None, user.id,
+              request.state.request_id,
+              {"consulta_serpro_realizada": True, "resultado": consulta.resultado})
+        db.commit()
+
+    resposta = {
+        "resultado": consulta.resultado,
+        "mensagem": _MENSAGENS_IDENTIFICACAO[consulta.resultado],
+    }
+    if consulta.resultado == "confere":
+        resposta.update({
+            "nome_oficial": consulta.nome,
+            "nome_social": consulta.nome_social,
+            "situacao": {"codigo": consulta.situacao_codigo,
+                         "descricao": consulta.situacao_descricao},
+            "parcial": consulta.parcial,
+            "comprovante": emitir_comprovante(cpf, nascimento, consulta.nome),
+        })
+    return resposta
+
+
 @router.post("", status_code=201)
 def create_person(
     payload: PersonCreate,
@@ -207,6 +391,7 @@ def create_person(
     # MESMA usada pelo fluxo atômico pessoa+atendimento. Duas cópias divergem:
     # uma ganharia o campo novo e a outra criaria pessoa sem ele.
     _cpf_ou_422(payload.cpf)  # recusa cedo, com mensagem de campo
+    recusar_cpf_ja_cadastrado(db, payload.cpf)
     person = build_person(
         db,
         nome_completo=payload.nome_completo,
@@ -226,6 +411,7 @@ def create_person(
         db, person.nome_normalizado, [p for p in phones if p], exclude_person_id=person.id
     )
     registered = register_candidates(db, person, candidates, origem="api")
+    registrar_identificacao_oficial(db, request, user, person, payload)
     audit(db, "pessoa.criada", "people", person.id, user.id, request.state.request_id,
           {"public_code": person.public_code, "candidatos_identidade": len(registered)})
     db.commit()

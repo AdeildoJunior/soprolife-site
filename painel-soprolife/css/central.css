@@ -796,3 +796,94 @@ form[data-nfse-modo="soprolife"] .cad-nfse-selo-wrap { display: inline-flex; }
 @media (max-width: 560px) {
   .cad-nfse-lista { grid-template-columns: 1fr; }
 }
+
+/* ------------------------------------------- M68 — identificação assistida
+ * CPF e Nascimento num só grupo: juntos formam a chave da consulta oficial.
+ * O grupo é visualmente separado do selo NFS-e (que só CPF e Nome têm). */
+.cad-ident-chave {
+  border: 1px solid var(--border, #d7e2ea);
+  border-radius: 10px;
+  padding: 8px 10px 6px;
+  background: var(--soft, #f5f9fb);
+  min-width: 0;
+}
+
+.cad-ident-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px 12px;
+}
+
+.cad-ident-grid > .m15-field { grid-column: auto; min-width: 0; }
+
+.cad-ident-nota {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: var(--muted, #64798b);
+}
+
+.cad-ident-status {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-left: 4px solid var(--teal, #1db7a6);
+  background: rgba(29, 183, 166, .06);
+  font-size: 12.5px;
+  color: var(--navy, #0d2a43);
+}
+
+.cad-ident-status[hidden], .cad-cpf-existente[hidden] { display: none; }
+.cad-ident-status[data-tom="progresso"] { flex-direction: row; align-items: center; gap: 8px; }
+.cad-ident-status[data-tom="aviso"] {
+  border-left-color: var(--warning, #e7a93f);
+  background: rgba(231, 169, 63, .1);
+}
+.cad-ident-status[data-tom="erro"] {
+  border-left-color: var(--danger, #d9534f);
+  background: rgba(217, 83, 79, .08);
+}
+.cad-ident-ok { font-weight: 700; color: var(--teal-dark, #0f8f83); }
+.cad-ident-linha { display: block; }
+.cad-ident-linha .m15-btn { margin-left: 6px; vertical-align: middle; }
+.cad-ident-alterado { color: #8a5a00; }
+.cad-ident-alterado[hidden] { display: none; }
+
+.cad-ident-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(29, 183, 166, .3);
+  border-top-color: var(--teal, #1db7a6);
+  animation: cad-ident-gira .8s linear infinite;
+  flex: none;
+}
+
+@keyframes cad-ident-gira { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .cad-ident-spinner { animation: none; }
+}
+
+.cad-cpf-existente {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--warning, #e7a93f);
+  border-left: 4px solid var(--warning, #e7a93f);
+  border-radius: 10px;
+  background: rgba(231, 169, 63, .1);
+  font-size: 12.5px;
+}
+
+.cad-cpf-existente-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cad-cpf-existente-texto span { overflow-wrap: anywhere; }
+
+@media (max-width: 420px) {
+  .cad-ident-grid { grid-template-columns: minmax(0, 1fr); }
+  .cad-cpf-existente .m15-btn { width: 100%; }
+}

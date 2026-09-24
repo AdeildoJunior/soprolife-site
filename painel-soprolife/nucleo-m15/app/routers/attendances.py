@@ -55,6 +55,7 @@ from ..services.followup import (
     sync_followup_for_origin,
 )
 from ..services.cpf import CPFInvalidoError
+from .people import recusar_cpf_ja_cadastrado, registrar_identificacao_oficial
 from ..services.identity import find_person_candidates
 from ..services.idempotency import idempotent_create
 from ..services.person_registration import build_person, cadastro_pendencias
@@ -260,6 +261,8 @@ def create_attendance_with_new_person(
 
     try:
         def resolver(_db: Session) -> Person:
+            # M68 — CPF igual é o mesmo paciente: nenhuma confirmação destrava.
+            recusar_cpf_ja_cadastrado(_db, payload.pessoa.cpf)
             candidatos = _candidatos_de_identidade(_db, payload.pessoa)
             if candidatos and not payload.confirmar_duplicado:
                 raise HTTPException(
@@ -273,7 +276,7 @@ def create_attendance_with_new_person(
                         "candidatos": candidatos,
                     },
                 )
-            return build_person(
+            pessoa = build_person(
                 _db,
                 nome_completo=payload.pessoa.nome_completo,
                 cpf=payload.pessoa.cpf,
@@ -284,6 +287,8 @@ def create_attendance_with_new_person(
                 consentimento_whatsapp=payload.pessoa.consentimento_whatsapp,
                 registrado_por=user.id,
             )
+            registrar_identificacao_oficial(_db, request, user, pessoa, payload.pessoa)
+            return pessoa
 
         resultado = _create_attendance(payload, resolver, request, db, user)
         resultado["pessoa_criada"] = True
