@@ -2061,6 +2061,18 @@
     const native = latestNativeVersion();
     const hasAddendum = Boolean(native && native.kind === "laudo_adendo");
     const maxPages = original ? original.page_count : 1;
+    const previewPane = `
+            <article class="report-preview-pane">
+              <h4>${current && current.kind !== "original"
+                ? kindLabel(current.kind) : "Laudo SoproLife"} ${
+                helpTip("laudo-soprolife")
+              }</h4>
+              ${renderPdfFrame(
+                "generated",
+                "PDF gerado para comparação",
+                current && current.kind !== "original" ? current : null
+              )}
+            </article>`;
     return `
       <section class="report-panel report-clinical-panel" aria-labelledby="reportDetailHeading">
         <div class="report-panel-heading">
@@ -2112,7 +2124,12 @@
 
         ${renderExamAndLocation(detail)}
 
-        ${/* M25.12 — a bancada clínica.
+        ${/* M26.29 — ordem clínica: EXAME TÉCNICO primeiro, depois a
+              interpretação. É a ordem do DOM (teclado e leitor de tela) e a
+              da tela em todas as larguras: coluna da esquerda lado a lado,
+              topo da pilha no celular.
+
+              M25.12 — a bancada clínica.
               O exame técnico da MIR e o trabalho sobre o laudo passaram a
               ficar lado a lado: antes, os dois PDFs ocupavam a largura toda e
               as siglas de conclusão ficavam ABAIXO deles, então escolher a
@@ -2130,19 +2147,15 @@
             ${renderPdfFrame("original", "PDF original", original)}
           </article>
           <div class="report-work-pane">
-            <article class="report-preview-pane">
-              <h4>${current && current.kind !== "original"
-                ? kindLabel(current.kind) : "Laudo SoproLife"} ${
-                helpTip("laudo-soprolife")
-              }</h4>
-              ${renderPdfFrame(
-                "generated",
-                "PDF gerado para comparação",
-                current && current.kind !== "original" ? current : null
-              )}
-            </article>
+            ${/* M26.29 — durante a elaboração a prévia do laudo gerado vem
+                  DEPOIS da ação: ela é o resultado do trabalho, não o
+                  começo dele. Antes dele, ela era um visualizador vazio
+                  entre o exame técnico e as conclusões. Fora da elaboração
+                  não há formulário, e o laudo gerado volta a ser o topo. */""}
+            ${editable ? "" : previewPane}
             ${renderNativeReportForm(detail)}
             ${renderReleaseAction(detail)}
+            ${editable ? previewPane : ""}
           </div>
         </div>
 
@@ -2423,18 +2436,14 @@
   // a entrega é operação da empresa. Um texto que sugerisse que ela manda o
   // resultado ao paciente atribuiria a ela uma tarefa que não é dela.
   //
-  // Nasce ABERTO para quem ainda não trabalhou aqui e recolhido para quem já
-  // conhece o fluxo. Quem lauda todo dia não precisa de seis passos ocupando
-  // o topo da tela; quem chega pela primeira vez não deveria ter de
-  // descobrir que existe um bloco recolhido.
+  // M26.29 — nasce SEMPRE recolhido: só o título e a seta. Até aqui ele
+  // abria sozinho quando a fila não tinha laudo além de "pendente de laudo"
+  // — que, depois da M26.28, é o estado normal de quem acabou de receber
+  // exames novos. Seis passos abertos no topo toda vez que a fila zera.
   //
-  // "Já conhece" é DERIVADO da própria fila, e não guardado no navegador:
-  // nada deste fluxo pode ser gravado em armazenamento do navegador — é
-  // trava de privacidade do M24A, verificada por
-  // `scripts/test-m24a-report-workflow.js`, e ela vale mais do que a
-  // conveniência de lembrar a preferência entre recargas. Se existe ao
-  // menos um laudo que já saiu de "pendente de laudo", esta médica já
-  // percorreu o caminho pelo menos uma vez.
+  // A escolha dela vale só nesta sessão e não vai para o navegador: nada
+  // deste fluxo pode ser gravado em armazenamento do navegador — trava de
+  // privacidade do M24A, verificada por `scripts/test-m24a-report-workflow.js`.
   const HOW_IT_WORKS_STEPS = [
     ["Abrir o exame", "Em “Meus laudos”, escolha o paciente. O PDF do equipamento abre ao lado do laudo."],
     ["Interpretar e concluir", "Escolha a conclusão, revise o texto e gere a prévia. Concluir fecha o laudo para edição."],
@@ -2444,21 +2453,11 @@
     ["Entrega", "A SoproLife cuida da etapa administrativa de entrega ao paciente."],
   ];
 
-  function howItWorksSeen() {
-    // Qualquer laudo além de "pendente de laudo" significa que esta médica
-    // já abriu, laudou ou concluiu alguma coisa aqui dentro.
-    return (state.queue || []).some(
-      (item) => item && item.status && item.status !== "atribuido"
-    );
-  }
-
-  // Enquanto a médica não mexer no bloco nesta sessão, vale o que a fila
-  // sugere. Depois que ela abre ou fecha, vale a escolha dela — senão a
-  // próxima renderização (que acontece a cada carga de fila) desfaria o que
-  // ela acabou de fazer.
+  // Depois que ela abre ou fecha, vale a escolha dela — senão a próxima
+  // renderização (que acontece a cada carga de fila) desfaria o que ela
+  // acabou de fazer.
   function howItWorksOpen() {
-    if (state.howItWorksOpen !== null) return state.howItWorksOpen;
-    return !howItWorksSeen();
+    return state.howItWorksOpen === true;
   }
 
   function renderHowItWorks() {

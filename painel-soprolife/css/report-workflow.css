@@ -3541,15 +3541,11 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
  * MOBILE — a bancada num telefone.
  * ===================================================================== */
 
-@media (max-width: 1100px) {
-  /* Empilhada, a ordem do DOM colocava o visualizador do exame técnico
-     ANTES de tudo que se opera: a médica descia uma tela inteira de PDF
-     para chegar às conclusões. Invertido, ela cai direto na área de
-     trabalho, e o traçado continua logo abaixo, à distância de um polegar.
-     Nada saiu do DOM, e no desktop as duas colunas seguem como estavam. */
-  .report-clinical-split .report-work-pane { order: 1; }
-  .report-clinical-split .report-source-pane { order: 2; }
-}
+/* M26.29 — a inversão `order` que a M26.25 aplicava abaixo de 1100px saiu:
+   empilhada, a bancada segue a ordem do DOM — exame técnico primeiro,
+   conclusões logo abaixo. O que impede a tela enorme de antes não é mais
+   esconder o exame embaixo, é o visualizador de 38vh (abaixo) e a prévia
+   do laudo gerado ter ido para depois da ação. */
 
 @media (max-width: 720px) {
   /* Cabeçalhos menores. O nome do paciente continua sendo o maior texto

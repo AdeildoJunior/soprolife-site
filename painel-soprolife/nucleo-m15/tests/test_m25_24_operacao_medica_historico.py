@@ -912,7 +912,7 @@ def test_o_icone_de_ajuda_do_status_fica_fora_do_label():
     assert trecho.index("</label>") < trecho.index('helpTip("status-filtro")')
 
 
-def test_como_funciona_tem_os_seis_passos_e_nasce_recolhido_depois(client):
+def test_como_funciona_tem_os_seis_passos_e_nasce_recolhido(client):
     assert "function renderHowItWorks(" in WORKFLOW_JS
     assert "HOW_IT_WORKS_STEPS" in WORKFLOW_JS
     passos = WORKFLOW_JS.split("const HOW_IT_WORKS_STEPS = [", 1)[1].split(
@@ -922,7 +922,15 @@ def test_como_funciona_tem_os_seis_passos_e_nasce_recolhido_depois(client):
     # A médica NÃO envia o resultado ao paciente: ela responde pelo ato
     # médico e pela assinatura; a entrega é operação da empresa.
     assert "A SoproLife cuida da etapa administrativa de entrega" in WORKFLOW_JS
-    assert "howItWorksSeen()" in WORKFLOW_JS
+    # M26.29 — nasce SEMPRE recolhido. A regra antiga ("aberto enquanto a
+    # fila só tem pendentes de laudo") abria o bloco sozinho justamente no
+    # estado normal da fila depois da M26.28. Só a escolha da médica, nesta
+    # sessão, o deixa aberto.
+    assert "howItWorksSeen" not in WORKFLOW_JS
+    corpo = WORKFLOW_JS.split("function howItWorksOpen() {", 1)[1].split(
+        "\n  }", 1
+    )[0]
+    assert corpo.strip() == "return state.howItWorksOpen === true;"
 
 
 def test_como_funciona_nasce_em_largura_inteira_no_shell():
