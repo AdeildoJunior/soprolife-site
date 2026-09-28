@@ -167,7 +167,7 @@
       });
       home.appendChild(selectHome); info.appendChild(home);
       info.appendChild(el('p', 'sl-map-address-note', 'Unidade Zona Norte · Shopping Nova América. Sala e ponto de encontro confirmados no agendamento.'));
-      info.appendChild(el('p', 'sl-map-address-note', 'Maclin / Norte Shopping · segundas-feiras, das 13h às 17h. Agendamento pela SoproLife no WhatsApp.'));
+      info.appendChild(el('p', 'sl-map-address-note', 'Unidade Norte Shopping · Cachambi · segundas-feiras, das 13h às 17h.'));
     }
     status = el('p', 'sl-map-selection-status'); status.setAttribute('role', 'status');
     info.appendChild(status);

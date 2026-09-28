@@ -40,10 +40,10 @@ const results = { layouts: [], interactions: [], errors: [], tiles: [] };
     const zonaNorte=await page.evaluate(()=>SL_BOOKING.byId('zona-norte'));
     assert.deepEqual(zonaNorte.coords,{lat:-22.8781638,lng:-43.2719105});
     assert(zonaNorte.address.includes('Shopping Nova América') && zonaNorte.address.includes('Pastor Martin Luther King Jr., 126'));
-    const maclin=await page.evaluate(()=>SL_BOOKING.byId('maclin-norte-shopping'));
-    assert.deepEqual(maclin.coords,{lat:-22.8860277,lng:-43.2832627});
-    assert(maclin.address.includes('Dom Hélder Câmara, 5200') && maclin.address.includes('Torre do Norte Shopping'));
-    assert.equal(maclin.bookingMethod,'soprolife_whatsapp');
+    const norteShopping=await page.evaluate(()=>SL_BOOKING.byId('norte-shopping'));
+    assert.deepEqual(norteShopping.coords,{lat:-22.8860277,lng:-43.2832627});
+    assert(norteShopping.address.includes('Dom Hélder Câmara, 5200') && norteShopping.address.includes('20771-004'));
+    assert.equal(norteShopping.bookingMethod,'soprolife_whatsapp');
    }
    const filter=await page.locator(mini+' .leaflet-tile-pane').evaluate(e=>getComputedStyle(e).filter);
    assert(filter.includes('saturate(0.65)'));
