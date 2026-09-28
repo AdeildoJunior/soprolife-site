@@ -105,8 +105,36 @@ const report = { layouts: [], functional: [], errors: [], maps: [] };
    assert.equal(await p.locator('.sl-slot-btn').count(),9);
    assert(await p.locator('.sl-ipanema-panel').isVisible());
   }
-  report.functional.push({route, result:'8 horários abertos, seleção, WhatsApp completo, tipo, unidades, domingo e agenda Pastore preservada'});
+  // Maclin / Norte Shopping: só segundas, 13h–17h, e sempre pelo WhatsApp da SoproLife.
+  // Vindo de Ipanema (terça 15/09) volta para a 1ª segunda; na domiciliar a data anterior já é segunda (21/09).
+  await p.selectOption('#sl-booking-unit','Maclin / Norte Shopping');
+  const maclinDate = route === '/espirometria-domiciliar-rio-de-janeiro/' ? '2026-09-21' : '2026-09-14';
+  assert.equal(await p.locator('#sl-booking-date').inputValue(),maclinDate);
+  assert.deepEqual(await p.locator('.sl-slot-btn').allTextContents(), ['13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30','17:00']);
+  assert(await p.locator('.sl-ipanema-panel').isHidden());
+  await p.locator('.sl-slot-btn').last().click();
+  const maclin = new URL(await p.locator('.sl-booking-confirm').getAttribute('href'));
+  assert.equal(maclin.hostname,'api.whatsapp.com');
+  assert.equal(maclin.searchParams.get('phone'),'5521998901775');
+  for (const text of ['Maclin / Norte Shopping','Av. Dom Hélder Câmara, 5200',maclinDate.split('-').reverse().join('/'),'17:00']) assert(maclin.searchParams.get('text').includes(text));
+  await p.evaluate(()=>{const d=document.querySelector('#sl-booking-date');d.value='2026-09-15';d.dispatchEvent(new Event('change'));});
+  assert.equal(await p.locator('#sl-booking-date').inputValue(),'2026-09-21');
+  report.functional.push({route, result:'8 horários abertos, seleção, WhatsApp completo, tipo, unidades, domingo, agenda Pastore preservada e Maclin às segundas'});
  }
+ // Landing Zona Norte: começa no Nova América; a Maclin troca o mapa e segue pela SoproLife.
+ await p.goto(base+'/espirometria-zona-norte-rio-de-janeiro/');
+ await p.waitForSelector('.sl-slot-btn'); await p.waitForTimeout(400);
+ assert.equal(await p.locator('#sl-booking-unit').inputValue(),'Unidade Zona Norte — Shopping Nova América');
+ assert.equal(await p.locator('.sl-slot-btn').count(),8);
+ await p.selectOption('#sl-booking-unit','Maclin / Norte Shopping');
+ assert.equal(await p.locator('.sl-slot-btn').count(),9);
+ assert((await p.locator('#sl-zn-map-frame').getAttribute('src')).includes('Dom%20H%C3%A9lder'));
+ assert((await p.locator('#sl-zn-map-name').textContent()).includes('Maclin / Norte Shopping'));
+ await p.locator('.sl-slot-btn').first().click();
+ assert.equal(new URL(await p.locator('.sl-booking-confirm').getAttribute('href')).searchParams.get('phone'),'5521998901775');
+ await p.selectOption('#sl-booking-unit','Unidade Zona Norte — Shopping Nova América');
+ assert((await p.locator('#sl-zn-map-frame').getAttribute('src')).includes('Nova%20Am%C3%A9rica'));
+ report.functional.push({route:'/espirometria-zona-norte-rio-de-janeiro/', result:'Nova América padrão, Maclin com 9 horários, mapa acompanha a unidade, WhatsApp SoproLife'});
  // Calendário civil sob relógios reais simulados; o contexto do visitante está em Tóquio.
  for (const [instant, expected] of [
   ['2026-09-13T01:30:00Z','2026-09-14'], // ainda sábado em São Paulo
@@ -134,7 +162,7 @@ const report = { layouts: [], functional: [], errors: [], maps: [] };
    markers:e.querySelectorAll('.leaflet-marker-icon').length,
    tiles:[...e.querySelectorAll('.leaflet-tile')].every(x=>x.src.startsWith('https://tile.openstreetmap.org/'))
   }));
-  assert(map.tiles); assert(map.attribution.includes('OpenStreetMap')); assert.equal(map.markers,route.includes('ipanema')?1:3);
+  assert(map.tiles); assert(map.attribution.includes('OpenStreetMap')); assert.equal(map.markers,route.includes('ipanema')?1:4);
   await p.keyboard.press('Escape'); assert.equal(await p.locator('.sl-map-modal.is-open').count(),0);
   report.maps.push({route,...map});
  }

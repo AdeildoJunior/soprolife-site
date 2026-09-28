@@ -12,6 +12,9 @@
      referência de agenda (SOPROLIFE_SCHEDULE). Não existem listas paralelas.
    - Pastore Ipanema tem agenda própria (terça e sábado, 8h–12h, 30 em 30 min),
      representando a agenda habitual — nunca disponibilidade em tempo real.
+   - Maclin / Norte Shopping tem agenda própria (segunda, 13h–17h, 30 em 30
+     min), mas o agendamento é SEMPRE pela central da SoproLife no WhatsApp —
+     nunca pelo contato direto da clínica.
    - Nenhum dado pessoal do paciente é enviado ao Analytics.
    ========================================================================== */
 (function (window, document) {
@@ -61,6 +64,11 @@
      ========================================================================== */
   var COORD_PASTORE_IPANEMA = { lat: -22.983686, lng: -43.198411 };
 
+  /* Centro do Norte Shopping (Cachambi), onde fica a Torre do Norte Shopping:
+     https://www.openstreetmap.org/way/95018706 — conferir o pin no Google Maps
+     antes do deploy. */
+  var COORD_MACLIN_NORTE_SHOPPING = { lat: -22.8860277, lng: -43.2832627 };
+
   /* ---------------------------------------------------------------------- *
    * 2. Agendas                                                             *
    * ---------------------------------------------------------------------- */
@@ -89,6 +97,17 @@
     hoursLabel: 'das 8h às 12h',
     headline: 'Espirometria em Ipanema às terças-feiras e aos sábados, das 8h às 12h.',
     note: 'Disponibilidade sujeita à confirmação no sistema oficial de agendamento da Pastore.'
+  };
+
+  /* Agenda da Maclin / Norte Shopping: segundas-feiras, 13h–17h. */
+  var MACLIN_SCHEDULE = {
+    id: 'maclin-norte-shopping',
+    weekdays: [1],
+    slots: ['13:00', '13:30', '14:00', '14:30', '15:00', '15:30',
+            '16:00', '16:30', '17:00'],
+    daysLabel: 'segundas-feiras',
+    hoursLabel: 'das 13h às 17h',
+    note: 'Horários sujeitos a confirmação pelo WhatsApp da SoproLife.'
   };
 
   /* ---------------------------------------------------------------------- *
@@ -134,6 +153,20 @@
       addressNote: 'Sala e ponto de encontro confirmados no agendamento.',
       mapSummary: 'Unidade Zona Norte · Shopping Nova América',
       mapTag: 'Shopping Nova América · sala confirmada no agendamento',
+      partner: false
+    },
+    {
+      /* Agendamento pela central da SoproLife (WhatsApp), nunca pela Maclin. */
+      id: 'maclin-norte-shopping',
+      value: 'Maclin / Norte Shopping',
+      label: 'Maclin / Norte Shopping — Zona Norte',
+      shortName: 'Maclin / Norte Shopping',
+      bookingMethod: 'soprolife_whatsapp',
+      schedule: MACLIN_SCHEDULE,
+      coords: COORD_MACLIN_NORTE_SHOPPING,
+      address: 'Av. Dom Hélder Câmara, 5200, sala 901/902 — Torre do Norte Shopping — Cachambi, Rio de Janeiro - RJ',
+      mapSummary: 'Torre do Norte Shopping · Cachambi · segundas, 13h–17h',
+      mapTag: 'Torre do Norte Shopping · sala 901/902',
       partner: false
     },
     {
@@ -344,6 +377,7 @@
     LOCATIONS: LOCATIONS,
     SOPROLIFE_SCHEDULE: SOPROLIFE_SCHEDULE,
     PASTORE_SCHEDULE: PASTORE_SCHEDULE,
+    MACLIN_SCHEDULE: MACLIN_SCHEDULE,
     PASTORE_BOOKING_URL: PASTORE_BOOKING_URL,
     PASTORE_ROUTE_URL: PASTORE_ROUTE_URL,
     PASTORE_WHATSAPP_TEXT: PASTORE_WHATSAPP_TEXT,
@@ -651,7 +685,7 @@
         noteEl.classList.remove('is-warning');
         noteEl.textContent = location.partner
           ? 'Agenda habitual da unidade. ' + PASTORE_SCHEDULE.note
-          : SOPROLIFE_SCHEDULE.note;
+          : location.schedule.note;
       }
     }
 

@@ -32,7 +32,7 @@ const results = { layouts: [], interactions: [], errors: [], tiles: [] };
    await page.goto(base+route);
    const refuse=page.getByRole('button',{name:'Recusar',exact:true});if(await refuse.isVisible())await refuse.click();
    await page.locator(mini).scrollIntoViewIfNeeded(); await loaded(mini); await within(mini);
-   assert.equal(await page.locator(mini+' .sl-calm-marker').count(),ip?1:3);
+   assert.equal(await page.locator(mini+' .sl-calm-marker').count(),ip?1:4);
    if(!ip) {
     const barra=await page.evaluate(()=>SL_BOOKING.byId('barra'));
     assert.deepEqual(barra.coords,{lat:-23.0029554,lng:-43.3176673});
@@ -40,6 +40,10 @@ const results = { layouts: [], interactions: [], errors: [], tiles: [] };
     const zonaNorte=await page.evaluate(()=>SL_BOOKING.byId('zona-norte'));
     assert.deepEqual(zonaNorte.coords,{lat:-22.8781638,lng:-43.2719105});
     assert(zonaNorte.address.includes('Shopping Nova América') && zonaNorte.address.includes('Pastor Martin Luther King Jr., 126'));
+    const maclin=await page.evaluate(()=>SL_BOOKING.byId('maclin-norte-shopping'));
+    assert.deepEqual(maclin.coords,{lat:-22.8860277,lng:-43.2832627});
+    assert(maclin.address.includes('Dom Hélder Câmara, 5200') && maclin.address.includes('Torre do Norte Shopping'));
+    assert.equal(maclin.bookingMethod,'soprolife_whatsapp');
    }
    const filter=await page.locator(mini+' .leaflet-tile-pane').evaluate(e=>getComputedStyle(e).filter);
    assert(filter.includes('saturate(0.65)'));
