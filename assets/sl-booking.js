@@ -517,7 +517,7 @@
     dateEl.value = nextOpenDate(currentLocation(), minIso, maxIso);
 
     slotsWrap.setAttribute('role', 'group');
-    slotsWrap.setAttribute('aria-label', 'Horários disponíveis');
+    slotsWrap.setAttribute('aria-label', 'Horários de preferência, sujeitos a confirmação');
 
     /* O painel da unidade parceira só é criado se a página oferecer Ipanema. */
     var offersIpanema = hasLocation(unitEl, 'pastore-ipanema');

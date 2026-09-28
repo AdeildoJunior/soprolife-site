@@ -1,3912 +1,641 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head> <meta charset="UTF-8" /> <title>Espirometria no Rio de Janeiro | Onde fazer no RJ – Sopro Life</title> <meta name="viewport" content="width=device-width, initial-scale=1" /> <link rel="canonical" href="https://soprolife.com.br/espirometria-rio-de-janeiro/"> <meta name="description" content="Espirometria no Rio de Janeiro com atendimento na Barra da Tijuca, Zona Norte, Zona Sul e também em domicílio. Exame simples ou com broncodilatador, com laudo por pneumologista.">
-<style> :root{ /* Paleta baseada na sua logo (navy + teal) */ --sl-primary: #0b2239; /* navy */ --sl-primary-dark: #081829; /* navy +1 */ --sl-accent: #1eb5ab; /* teal vivo */ --sl-bg-soft: #f2fbfb; --sl-bg-strong: #e3f6f6; --sl-text-dark: #0b2239; --sl-text-soft: #476172; --sl-radius-lg: 18px; --sl-radius-sm: 10px; --sl-shadow-soft: 0 14px 35px rgba(0,0,0,0.08); --sl-shadow-light: 0 8px 20px rgba(0,0,0,0.05); --sl-green: #08a94f; } *{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,Arial,sans-serif;color:var(--sl-text-dark);background:#fff} a{color:inherit;text-decoration:none} /* Header com logo alinhada à esquerda */ .sl-header{border-bottom:1px solid rgba(11,34,57,0.06);background:#fff;position:sticky;top:0;z-index:20} .sl-wrap{max-width:1280px;margin:0 auto;padding:0 16px} .sl-header-in{display:flex;align-items:center;gap:14px;padding:10px 0} .sl-brand{display:flex;align-items:center} .sl-brand img{height:68px;width:auto;display:block} .sl-page{min-height:100vh;background:radial-gradient(circle at top left,#ebfbff 0,#ffffff 55%);padding-bottom:60px} .sl-container{max-width:1280px;margin:0 auto;padding:0 16px} /* HERO */ .sl-hero{padding:24px 0 36px} .sl-breadcrumb{display:none!important;font-size:.8rem;color:var(--sl-text-soft);margin-bottom:8px} .sl-hero-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:32px;align-items:center} .sl-hero-kicker{font-size:.85rem;text-transform:uppercase;letter-spacing:.12em;color:var(--sl-primary-dark);font-weight:600;margin-bottom:8px} .sl-hero-title{font-size:2.35rem;line-height:1.15;margin:0 0 10px} .sl-hero-title span{color:var(--sl-accent)} .sl-hero-subtitle{margin:0 0 18px;color:var(--sl-text-soft);font-size:1rem} .sl-hero-list{list-style:none;padding:0;margin:0 0 22px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 18px;font-size:.92rem;color:var(--sl-text-soft)} .sl-hero-list li::before{content:"•";color:var(--sl-accent);font-weight:700;margin-right:6px} .sl-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:999px;cursor:pointer;font-weight:600;letter-spacing:.02em;transition:transform .15s,box-shadow .15s;background:#f5f9f9} .sl-btn-primary{padding:11px 22px;background:linear-gradient(135deg,var(--sl-accent),#18a197);color:#fff;box-shadow:var(--sl-shadow-soft)} .sl-btn-primary:hover{transform:translateY(-1px);box-shadow:0 18px 40px rgba(0,0,0,.16)} .sl-btn-outline{padding:9px 18px;border:1px solid rgba(30,181,171,.28);color:var(--sl-primary-dark);background:rgba(255,255,255,.8);backdrop-filter:blur(8px)} .sl-btn-outline:hover{background:#fff;box-shadow:var(--sl-shadow-light)} .sl-hero-note{font-size:.82rem;color:var(--sl-text-soft);margin-top:6px} .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border-radius:999px;background:rgba(30,181,171,.08);font-size:.8rem;margin-top:10px;color:var(--sl-text-soft)} .sl-dot{width:8px;height:8px;border-radius:999px;background:#23c552} /* Card lateral */ .sl-hero-card{background:#fff;border-radius:24px;box-shadow:var(--sl-shadow-soft);padding:22px 20px 18px;border:1px solid rgba(0,0,0,.02)} .sl-hero-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:10px} .sl-hero-card-title{font-size:1.05rem;font-weight:600} .sl-tag{font-size:.75rem;padding:4px 10px;border-radius:999px;background:var(--sl-bg-strong);color:var(--sl-primary-dark);font-weight:700;letter-spacing:.06em;text-transform:uppercase} .sl-hero-card-badge{font-size:.83rem;color:var(--sl-text-soft);margin-bottom:10px} .sl-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px} .sl-mode-pill{border-radius:999px;border:1px dashed rgba(30,181,171,.35);padding:6px 8px;font-size:.77rem;text-align:center;color:var(--sl-text-soft)} .sl-card-divider{margin:12px 0;height:1px;background:linear-gradient(90deg,transparent,#e1f1f4,transparent)} .sl-hero-mini-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;font-size:.78rem;color:var(--sl-text-soft)} .sl-hero-mini-grid strong{font-size:.86rem;color:var(--sl-text-dark)} .sl-hero-card-footer{margin-top:10px;font-size:.8rem;color:var(--sl-text-soft)} /* Seções */ .sl-section{padding:26px 0} .sl-section-header{margin-bottom:18px} .sl-section-kicker{font-size:.78rem;text-transform:uppercase;letter-spacing:.15em;color:var(--sl-primary-dark);margin-bottom:4px;font-weight:600} .sl-section-title{font-size:1.5rem;margin:0 0 6px} .sl-section-subtitle{margin:0;color:var(--sl-text-soft);font-size:.95rem;max-width:640px} .sl-two-column{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:28px;align-items:flex-start} .sl-text-block p{margin:0 0 10px;font-size:.96rem;color:var(--sl-text-soft)} .sl-bullet-list{padding-left:1.1rem;margin:8px 0 0;font-size:.93rem;color:var(--sl-text-soft)} .sl-bullet-list li{margin-bottom:4px} .sl-highlight-box{background:var(--sl-bg-soft);border-radius:var(--sl-radius-lg);padding:16px 18px;box-shadow:var(--sl-shadow-light);font-size:.9rem} .sl-highlight-box strong{color:var(--sl-primary-dark)} /* Tabs */ .sl-tabs{margin-top:10px;background:#fff;border-radius:22px;box-shadow:var(--sl-shadow-soft);padding:16px 16px 18px} .sl-tab-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px} .sl-tab-button{border-radius:999px;border:1px solid transparent;padding:7px 14px;font-size:.83rem;cursor:pointer;background:#f5f9f9;color:var(--sl-text-soft);transition:background-color .15s,color .15s,border-color .15s} .sl-tab-button[aria-selected="true"]{background:linear-gradient(135deg,var(--sl-accent),#18a197);color:#fff;border-color:transparent} .sl-tab-panel{display:none;font-size:.9rem;color:var(--sl-text-soft)} .sl-tab-panel.is-active{display:block} .sl-tagline{font-size:.8rem;text-transform:uppercase;letter-spacing:.18em;color:var(--sl-text-soft);margin-bottom:8px} /* Cartões de preparo */ .sl-card-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px} .sl-card{background:#fff;border-radius:var(--sl-radius-lg);padding:14px 16px 16px;box-shadow:var(--sl-shadow-light);font-size:.9rem} .sl-card h3{margin:0 0 6px;font-size:1rem} .sl-pill-label{display:inline-block;font-size:.72rem;text-transform:uppercase;letter-spacing:.16em;color:var(--sl-primary-dark);margin-bottom:4px} .sl-card ul{margin:4px 0 0;padding-left:1.1rem;color:var(--sl-text-soft)} .sl-card ul li{margin-bottom:4px} /* CTA */ .sl-cta-section{padding:32px 0 10px} .sl-cta-box{border-radius:24px;background:linear-gradient(120deg,var(--sl-primary-dark),#0f8f86);color:#fff;padding:18px 20px;box-shadow:var(--sl-shadow-soft);display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;align-items:center} .sl-cta-title{margin:0 0 4px;font-size:1.4rem} .sl-cta-sub{margin:0 0 10px;font-size:.93rem;opacity:.92} .sl-cta-contacts{font-size:.9rem;line-height:1.4} .sl-cta-contacts strong{font-size:1.02rem} .sl-cta-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;align-items:center} .sl-cta-small{font-size:.8rem;opacity:.88} /* Barra fixa WhatsApp */ .sl-whatsapp-bar{position:fixed;left:0;right:0;bottom:0;background:var(--sl-green);color:#fff;font-size:.94rem;z-index:999;box-shadow:0 -4px 16px rgba(0,0,0,.16)} .sl-whatsapp-bar a{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px} .sl-whatsapp-bar strong{font-weight:600} /* Responsivo */ @media (max-width:900px){ .sl-hero-grid,.sl-two-column,.sl-card-grid,.sl-cta-box{grid-template-columns:minmax(0,1fr)} .sl-cta-actions{justify-content:flex-start} } @media (max-width:720px){ .sl-hero{padding-top:14px} .sl-hero-title{font-size:1.9rem} .sl-hero-grid{gap:22px} .sl-hero-list{grid-template-columns:minmax(0,1fr)} .sl-modes{grid-template-columns:minmax(0,1fr)} .sl-page{padding-bottom:70px} } /* ===== Rodapé: Links úteis + redes sociais ===== */
-.sl-links-footer{ padding: 18px 0 40px; margin-bottom: 64px; border-top: 1px solid rgba(0,0,0,0.03); font-size: 0.88rem; color: var(--sl-text-soft); background: linear-gradient(135deg, var(--sl-bg-soft), var(--sl-bg-strong));
-} .sl-links-footer-grid{ display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1.4fr); gap: 24px;
-} .sl-links-footer h3{ margin: 0 0 6px; font-size: 1rem; color: var(--sl-text-dark);
-} .sl-links-list,
-.sl-social-list{ list-style: none; padding-left: 0; margin: 4px 0 0;
-} .sl-links-list li + li,
-.sl-social-list li + li{ margin-top: 3px;
-} .sl-links-list a{ color: inherit; text-decoration: none;
-} .sl-links-list a:hover{ color: var(--sl-primary); text-decoration: underline;
-} /* Redes sociais */
-.sl-social-list a{ display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: inherit;
-} .sl-social-icon{ width: 26px; height: 26px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem; background: #eef4f5;
-} /* Cores básicas das redes */
-.sl-social-icon--ig{ background: radial-gradient(circle at 30% 30%, #ffdd55, #ff543e 45%, #c837ab 70%); color:#fff;
-}
-.sl-social-icon--li{ background:#0a66c2; color:#fff; }
-.sl-social-icon--yt{ background:#ff0000; color:#fff; } @media (max-width: 900px){ .sl-links-footer-grid{ grid-template-columns: minmax(0,1fr); }
-} /* ===== Navegação principal no topo ===== */
-/* Ajustes extras nav Sopro Life */
-.sl-main-nav{ font-size:1rem; } /* ~16px */
-.sl-nav-link{ font-size:1rem; } /* garante 16px também nos links */
-/* esconde a logo antiga do topo */ .sl-header-in{ display:flex; align-items:center; justify-content:space-between; gap:32px; padding:10px 0;
-}
-.sl-main-nav{ display:flex; align-items:center; gap:20px; margin-left:32px; font-size:.95rem; flex:1;
-}
-.sl-nav-link{ position:relative; color:var(--sl-text-soft); text-decoration:none; padding:6px 0; white-space:nowrap;
-}
-.sl-nav-link:hover{ color:var(--sl-primary);
-}
-.sl-nav-link::after{ content:""; position:absolute; left:0; bottom:-3px; width:0; height:2px; border-radius:999px; background:var(--sl-accent); transition:width .2s;
-}
-.sl-nav-link:hover::after{ width:100%;
-}
-.sl-nav-cta{ display:inline-flex; align-items:center; justify-content:center; padding:8px 18px; border-radius:999px; background:var(--wa-green,#25D366); color:#fff; font-size:.9rem; font-weight:600; text-decoration:none; box-shadow:0 10px 20px rgba(0,0,0,0.12);
-}
-.sl-nav-cta:hover{ filter:brightness(0.96);
-}
-@media (max-width:960px){ .sl-main-nav{ display:none; } .sl-nav-cta{ margin-left:auto; }
-} /* ===== Menu: submenu em "Contato" ===== */
-.sl-has-sub{position:relative}
-.sl-has-sub>.sl-nav-link{display:inline-flex;align-items:center;gap:6px}
-.sl-submenu{ position:absolute; top:100%; left:0; min-width:260px; background:#fff; border:1px solid rgba(0,0,0,.06); border-radius:12px; padding:8px; box-shadow:0 12px 30px rgba(0,0,0,.08); opacity:0; transform:translateY(6px); pointer-events:none; transition:opacity .16s ease,transform .16s ease; z-index:40;
-}
-.sl-has-sub:hover .sl-submenu,
-.sl-has-sub:focus-within .sl-submenu{ opacity:1; transform:translateY(0); pointer-events:auto;
-}
-.sl-submenu a{ display:flex; align-items:center; gap:8px; padding:10px 12px; border-radius:10px; text-decoration:none; color:var(--sl-text-dark);
-}
-.sl-submenu a:hover{ background:rgba(2,179,154,.08); color:var(--sl-primary);
-}
-@media (max-width:960px){ .sl-submenu{ position:static; border:0; box-shadow:none; padding:0; opacity:1; transform:none; }
-} /* sl-nav-size */
-.sl-main-nav{font-size:1rem}
-.sl-mode-pill{cursor:pointer} /* Pills de modos de atendimento com cor do botão principal */
-.sl-hero-card .sl-modes{ gap:10px;
-}
-.sl-hero-card .sl-mode-pill{ display:inline-block; padding:9px 16px; border-radius:999px; border:1px solid transparent; background:linear-gradient(135deg,var(--sl-accent),#18a197); color:#fff; font-size:.8rem; text-align:center; text-decoration:none; box-shadow:var(--sl-shadow-soft);
-}
-.sl-hero-card .sl-mode-pill:hover{ filter:brightness(0.97);
-} /* ===== Mini-bloco: Atendimento no Rio de Janeiro ===== */
-.sl-local-mini{ margin: 18px 0 6px; padding: 14px 16px; border: 1px solid rgba(11,34,57,0.10); border-radius: 16px; background: linear-gradient(180deg, rgba(13, 159, 150, 0.06), rgba(11,34,57,0.02));
-}
-.sl-local-mini h3{ margin: 0 0 6px; font-size: 1.05rem; color: var(--sl-primary);
-}
-.sl-local-mini p{ margin: 0; color: rgba(11,34,57,0.85); line-height: 1.45;
-}
-.sl-local-mini .sl-local-tags{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;
-}
-.sl-local-mini .sl-tag{ display:inline-flex; align-items:center; padding: 6px 10px; border-radius: 999px; background: #fff; border: 1px solid rgba(11,34,57,0.10); font-size: 0.92rem; color: rgba(11,34,57,0.88);
-}
-/* SOPRO:RJ_LINK_ZONA_SUL_STYLE_V1 — destaque do bloco de Ipanema / Zona Sul */
-.sl-local-mini{ border-left: 5px solid var(--sl-accent); }
-.sl-local-mini .sl-local-kicker{ display:inline-block; margin-bottom:6px; padding:4px 10px; border-radius:999px; background:var(--sl-primary); color:#fff; font-size:.68rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase;
-}
-.sl-local-mini .sl-tag:hover{ border-color: rgba(30,181,171,.45); }
-.sl-local-mini .sl-tag--primary{ background: linear-gradient(135deg, var(--sl-accent), #18a197); border-color: transparent; color: #fff; font-weight: 700;
-}
-.sl-local-mini .sl-local-address{ display:block; margin-top:8px; font-style:normal; font-size:.92rem; color: rgba(11,34,57,0.9);
-}
-.sl-local-mini .sl-local-address strong{ color: var(--sl-primary); }
-</style>
-<style>/* SL WA COLORS */ .sl-whatsapp-pill{display:inline-flex;align-items:center;gap:10px;padding:6px 12px;border-radius:999px;background:rgba(37,211,102,.12);color:var(--sl-text-soft);box-shadow:none} .sl-whatsapp-pill:hover{background:rgba(37,211,102,.18)} .sl-whatsapp-pill .sl-dot{background:#25D366} .sl-wa-ico{width:18px;height:18px;margin-left:10px;flex:0 0 auto} .sl-wa-ico circle{fill:#25D366 !important} .sl-wa-ico path{fill:#fff !important} @media (max-width:720px){.sl-wa-ico{width:16px;height:16px;margin-left:8px}}</style>
-<style id="sl-wa-override">
-/* WhatsApp brand */
-:root{ --wa-green:#25D366; --wa-dark:#075E54; }
-.sl-whatsapp-pill[data-sl="wa"]{ display:inline-flex; align-items:center; gap:10px; padding:6px 12px; border-radius:999px; background: var(--wa-green) !important; color:#fff !important; box-shadow:none;
-}
-.sl-whatsapp-pill[data-sl="wa"] .sl-dot{ background:#fff !important }
-.sl-whatsapp-pill[data-sl="wa"]::after{ content:""; width:18px; height:18px; margin-left:10px; flex:0 0 auto; background-repeat:no-repeat; background-size:contain; background-position:center; /* telefone branco em SVG inline */ background-image:url("data:image/svg+xml;utf8,<svg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'><path fill='%23FFFFFF' d='M6.62 10.79a15.05 15.05 0 006.59 6.59l2.2-2.2a1 1 0 011.05-.24c1.15.38 2.39.59 3.54.59a1 1 0 011 1V20a1 1 0 01-1 1C10.29 21 3 13.71 3 4a1 1 0 011-1h3.47a1 1 0 011 1c0 1.15.2 2.39.59 3.54a1 1 0 01-.25 1.05l-2.19 2.2z'/></svg>");
-}
-.sl-whatsapp-pill[data-sl="wa"]:hover{ filter:brightness(0.96); }
-@media (max-width:720px){ .sl-whatsapp-pill[data-sl="wa"]::after{ width:16px; height:16px; margin-left:8px; }
-}
-</style>
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "WebPage",
-      "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#webpage",
-      "url": "https://soprolife.com.br/espirometria-rio-de-janeiro/",
-      "name": "Espirometria no Rio de Janeiro | Onde fazer no RJ – Sopro Life",
-      "description": "Espirometria no Rio de Janeiro com atendimento na Barra da Tijuca, Zona Norte, Zona Sul e também em domicílio. Exame simples ou com broncodilatador, com laudo por pneumologista.",
-      "inLanguage": "pt-BR",
-      "isPartOf": {
-        "@id": "https://soprolife.com.br/#website"
-      },
-      "mainEntity": {
-        "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#service"
-      }
-    },
-    {
-      "@type": "MedicalBusiness",
-      "@id": "https://soprolife.com.br/#organization",
-      "name": "Sopro Life",
-      "url": "https://soprolife.com.br/",
-      "logo": {
-        "@type": "ImageObject",
-        "url": "https://soprolife.com.br/img/soprolife-logo-quadrado.png",
-        "width": 1200,
-        "height": 1200,
-        "caption": "Sopro Life"
-      },
-      "telephone": "+55 21 99890-1775",
-      "email": "contato@soprolife.com.br",
-      "areaServed": {
-        "@type": "AdministrativeArea",
-        "name": "Rio de Janeiro - RJ"
-      }
-    },
-    {
-      "@type": "Service",
-      "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#service",
-      "name": "Espirometria no Rio de Janeiro",
-      "serviceType": "Espirometria / Prova de Função Respiratória",
-      "description": "Serviço de espirometria no Rio de Janeiro, com opções de atendimento na Barra da Tijuca, Zona Norte, Zona Sul e também em domicílio. Realizamos espirometria simples ou com broncodilatador, com laudo por pneumologista e agendamento pelo WhatsApp.",
-      "provider": {
-        "@id": "https://soprolife.com.br/#organization"
-      },
-      "areaServed": [
-        {
-          "@type": "City",
-          "name": "Rio de Janeiro"
-        },
-        {
-          "@type": "AdministrativeArea",
-          "name": "Rio de Janeiro - RJ"
-        },
-        {
-          "@type": "Place",
-          "name": "Barra da Tijuca"
-        },
-        {
-          "@type": "Place",
-          "name": "Zona Norte do Rio de Janeiro"
-        },
-        {
-          "@type": "Place",
-          "name": "Zona Sul do Rio de Janeiro"
-        },
-        {
-          "@type": "Place",
-          "name": "Ipanema"
-        }
-      ],
-      "availableChannel": {
-        "@type": "ServiceChannel",
-        "serviceUrl": "https://api.whatsapp.com/send?phone=5521998901775"
-      },
-      "mainEntityOfPage": {
-        "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#webpage"
-      },
-      "subjectOf": {
-        "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#procedure"
-      }
-    },
-    {
-      "@type": "DiagnosticProcedure",
-      "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#procedure",
-      "name": "Espirometria",
-      "alternateName": "Prova de Função Respiratória",
-      "description": "Exame de função pulmonar usado para avaliar volumes e fluxos respiratórios.",
-      "bodyLocation": "Pulmões e vias respiratórias",
-      "procedureType": "https://schema.org/NoninvasiveProcedure",
-      "relevantSpecialty": "https://schema.org/Pulmonary",
-      "mainEntityOfPage": {
-        "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/#webpage"
-      }
-    }
-  ]
-}
-</script>
-<!-- SOPRO:TESTIMONIALS_CSS_START -->
-<style>
-  .sl-testimonials{padding:48px 0}
-  .sl-tframe{
-    border:2px solid rgba(0,128,128,.35);
-    border-radius:18px;
-    background:#fff;
-    box-shadow:0 14px 34px rgba(0,0,0,.10);
-    padding:18px 16px 16px;
-  }
-  .sl-thead{text-align:center;margin:6px 0 14px}
-  .sl-tkicker{font-weight:700;letter-spacing:.12em;font-size:.78rem;opacity:.75}
-  .sl-ttitle{font-size:clamp(1.35rem,2.2vw,1.9rem);margin:.35rem 0 .25rem}
-  .sl-tsub{margin:0 auto;max-width:56ch;opacity:.75}
-
-  .sl-tcarousel{position:relative}
-  /* Em vez de absolute+min-height: sobrepõe as páginas via grid */
-  .sl-ttrack{
-    display:grid;
-    padding:6px 4px;
-    overflow:hidden;
-  }
-
-  .sl-tpage{
-    grid-row:1; grid-column:1;   /* todas no mesmo “slot” */
-    display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:12px;
-    opacity:0;
-    pointer-events:none;
-    animation: slCycle 25s infinite;
-    align-items:start; /* evita “esticar” os cards */
-  }
-  .sl-tpage[data-page="1"]{animation-delay:0s}
-  .sl-tpage[data-page="2"]{animation-delay:5s}
-  .sl-tpage[data-page="3"]{animation-delay:10s}
-  .sl-tpage[data-page="4"]{animation-delay:15s}
-  .sl-tpage[data-page="5"]{animation-delay:20s}
-
-  @keyframes slCycle{
-    0%{opacity:1;transform:none}
-    18%{opacity:1;transform:none}
-    20%{opacity:0;transform:translateY(2px)}
-    100%{opacity:0;transform:translateY(2px)}
-  }
-
-  .sl-tcard{
-    border:1px solid rgba(0,128,128,.25);
-    border-radius:14px;
-    padding:12px 12px 10px;
-    background:#fff;
-    box-shadow:0 10px 22px rgba(0,0,0,.06);
-  }
-  .sl-tcard__head{display:flex;gap:10px;align-items:center;margin-bottom:10px}
-  .sl-tcard__avatar{
-    width:34px;height:34px;border-radius:10px;
-    display:grid;place-items:center;
-    background:rgba(0,0,0,.06);font-size:16px
-  }
-  .sl-tcard__name{font-weight:700;line-height:1.1}
-  .sl-tcard__stars{font-size:.95rem;letter-spacing:.08em;opacity:.9}
-  .sl-tcard__text{margin:0;opacity:.9}
-
-  .sl-tdots{display:flex;justify-content:center;gap:8px;margin-top:12px}
-  .sl-tdot{width:7px;height:7px;border-radius:999px;background:rgba(0,0,0,.20);opacity:.35}
-  .sl-tdot--1{animation: slDot 25s infinite; animation-delay:0s}
-  .sl-tdot--2{animation: slDot 25s infinite; animation-delay:5s}
-  .sl-tdot--3{animation: slDot 25s infinite; animation-delay:10s}
-  .sl-tdot--4{animation: slDot 25s infinite; animation-delay:15s}
-  .sl-tdot--5{animation: slDot 25s infinite; animation-delay:20s}
-
-  @keyframes slDot{
-    0%{opacity:1;background:rgba(0,0,0,.55)}
-    18%{opacity:1;background:rgba(0,0,0,.55)}
-    20%{opacity:.35;background:rgba(0,0,0,.20)}
-    100%{opacity:.35;background:rgba(0,0,0,.20)}
-  }
-
-  @media (max-width:980px){
-    .sl-testimonials{padding:32px 0}
-    .sl-ttrack{padding:4px 2px}
-    .sl-tpage{grid-template-columns:1fr;gap:10px}
-    .sl-tcard{padding:10px 10px 8px;border-radius:12px}
-    .sl-tcard__head{margin-bottom:8px}
-    .sl-tcard__avatar{width:32px;height:32px;border-radius:10px;font-size:15px}
-    .sl-tcard__name{font-size:1.05rem}
-    .sl-tcard__text{font-size:.95rem;line-height:1.25}
-  }
-</style>
-
-<style>
-/* SOPRO:ARROWS_FORCE_START */
-/* Cria "corredor" para as setas não ficarem em cima dos cards */
-#depoimentos .sl-tcarousel{ padding:0 56px !important; }
-
-/* Setas nas bordas do frame (fora dos cards) */
-#depoimentos .sl-tarrow--left{ left:16px !important; }
-#depoimentos .sl-tarrow--right{ right:16px !important; }
-
-/* No mobile: esconde as setas (swipe + dots já resolvem) */
-@media (max-width:980px){
-  #depoimentos .sl-tarrow{ display:none !important; }
-}
-/* SOPRO:ARROWS_FORCE_END */
-</style>
-
-<style id="soprolife-typography-standard-v1">
-/* SoproLife Typography Standard v1 — padronização final de fontes e hierarquia */
-
-:root{
-  --sl-font-main: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --sl-type-title: #0b2239;
-  --sl-type-muted: #5f7485;
-  --sl-type-accent: #0f8f86;
-}
-
-/* Fonte base igual em todas as páginas */
-html,
-body{
-  font-family: var(--sl-font-main) !important;
-  font-size: 16px !important;
-  line-height: 1.5 !important;
-  color: var(--sl-type-title) !important;
-  -webkit-font-smoothing: antialiased !important;
-  text-rendering: optimizeLegibility !important;
-}
-
-/* Menu */
-.sl-main-nav,
-.sl-nav-link{
-  font-size: .95rem !important;
-  line-height: 1.2 !important;
-  font-weight: 650 !important;
-  letter-spacing: -.01em !important;
-}
-
-.sl-nav-cta{
-  font-size: .9rem !important;
-  line-height: 1.1 !important;
-  font-weight: 800 !important;
-}
-
-/* Kicker / chapéu das seções */
-.sl-hero-kicker,
-.sl-page-hero-kicker,
-.sl-section-kicker,
-.sl-kicker,
-.sl-tagline,
-.sl-pill-label,
-.sl-tkicker,
-.sl-espiro-kicker{
-  font-size: .74rem !important;
-  line-height: 1.2 !important;
-  letter-spacing: .14em !important;
-  text-transform: uppercase !important;
-  font-weight: 850 !important;
-  color: var(--sl-type-accent) !important;
-}
-
-/* Títulos principais de páginas */
-.sl-hero-title,
-.sl-page-hero-title,
-.sl-espiro-title{
-  font-size: clamp(2.1rem, 4vw, 3.45rem) !important;
-  line-height: 1.04 !important;
-  letter-spacing: -.045em !important;
-  font-weight: 850 !important;
-  color: var(--sl-type-title) !important;
-}
-
-.sl-hero-title span,
-.sl-page-hero-title span,
-.sl-espiro-title span{
-  color: #1eb5ab !important;
-}
-
-/* Subtítulos principais */
-.sl-hero-subtitle,
-.sl-page-hero-lead,
-.sl-espiro-subtitle,
-.sl-hero .lead{
-  font-size: clamp(1rem, 1.2vw, 1.12rem) !important;
-  line-height: 1.62 !important;
-  font-weight: 450 !important;
-  color: var(--sl-type-muted) !important;
-  letter-spacing: -.005em !important;
-}
-
-/* Observações/pílulas abaixo do hero */
-.sl-page-hero-note,
-.sl-espiro-note,
-.sl-hero-note,
-.sl-whatsapp-pill{
-  font-size: .88rem !important;
-  line-height: 1.35 !important;
-  font-weight: 500 !important;
-  color: var(--sl-type-muted) !important;
-}
-
-/* Títulos de seção */
-.sl-section-title,
-.sl-ttitle,
-.sl-cta-title,
-.sl-section h2{
-  font-size: clamp(1.55rem, 2.15vw, 2.15rem) !important;
-  line-height: 1.12 !important;
-  letter-spacing: -.035em !important;
-  font-weight: 820 !important;
-  color: var(--sl-type-title) !important;
-}
-
-/* Subtítulos de seção */
-.sl-section-subtitle,
-.sl-tsub{
-  font-size: .98rem !important;
-  line-height: 1.6 !important;
-  font-weight: 450 !important;
-  color: var(--sl-type-muted) !important;
-}
-
-/* Títulos de cards */
-.sl-card h3,
-.sl-highlight strong,
-.sl-highlight-box strong,
-.sl-hero-card-title,
-.sl-espiro-card-title,
-.sl-tcard__name,
-.sl-tabs h3,
-.sl-tab-panel h3{
-  font-size: 1.03rem !important;
-  line-height: 1.22 !important;
-  letter-spacing: -.015em !important;
-  font-weight: 800 !important;
-  color: var(--sl-type-title) !important;
-}
-
-/* Texto comum em cards e blocos */
-.sl-card,
-.sl-card p,
-.sl-highlight,
-.sl-highlight p,
-.sl-highlight-box,
-.sl-highlight-box p,
-.sl-text-block p,
-.sl-tab-panel,
-.sl-tab-panel p,
-.sl-hero-card-badge,
-.sl-hero-card-footer,
-.sl-tcard__text{
-  font-size: .95rem !important;
-  line-height: 1.62 !important;
-  font-weight: 450 !important;
-  color: var(--sl-type-muted) !important;
-}
-
-/* Listas */
-.sl-bullets li,
-.sl-bullet-list li,
-.sl-card ul li,
-.sl-highlight ul li,
-.sl-highlight-box ul li,
-.sl-tab-panel ul li,
-.sl-hero-list li,
-.sl-espiro-card-list li{
-  font-size: .94rem !important;
-  line-height: 1.52 !important;
-  font-weight: 500 !important;
-  color: var(--sl-type-muted) !important;
-}
-
-/* Botões */
-.sl-btn,
-.sl-btn-primary,
-.sl-btn-outline,
-.sl-btn.primary,
-.sl-btn.outline,
-.sl-espiro-btn,
-.sl-mode-pill,
-.sl-tab-button{
-  font-size: .9rem !important;
-  line-height: 1.1 !important;
-  font-weight: 800 !important;
-  letter-spacing: -.005em !important;
-}
-
-/* CTA final */
-.sl-cta,
-.sl-cta-box{
-  font-size: .96rem !important;
-}
-
-.sl-cta h2,
-.sl-cta-box h2{
-  font-size: clamp(1.45rem, 2vw, 2rem) !important;
-  line-height: 1.14 !important;
-  letter-spacing: -.03em !important;
-  font-weight: 850 !important;
-}
-
-/* Rodapé e links úteis */
-.sl-links-footer h3{
-  font-size: 1.05rem !important;
-  line-height: 1.2 !important;
-  font-weight: 800 !important;
-}
-
-.sl-links-footer a,
-.sl-social-list a,
-.sl-links-list a{
-  font-size: .94rem !important;
-  line-height: 1.45 !important;
-  font-weight: 500 !important;
-}
-
-/* Barra/botão de WhatsApp */
-.sl-whatsapp-bar a{
-  font-size: .88rem !important;
-  line-height: 1.25 !important;
-  font-weight: 500 !important;
-}
-
-.sl-whatsapp-bar strong{
-  font-weight: 850 !important;
-}
-
-/* Ajuste mobile */
-@media (max-width: 720px){
-  html,
-  body{
-    font-size: 15.5px !important;
-  }
-
-  .sl-hero-title,
-  .sl-page-hero-title,
-  .sl-espiro-title{
-    font-size: clamp(2rem, 8vw, 2.75rem) !important;
-  }
-
-  .sl-section-title,
-  .sl-ttitle,
-  .sl-section h2{
-    font-size: clamp(1.4rem, 6vw, 1.85rem) !important;
-  }
-
-  .sl-main-nav,
-  .sl-nav-link{
-    font-size: .92rem !important;
-  }
-}
-</style>
-
-
-<style id="soprolife-typography-soften-v2">
-/* SoproLife Typography Soften v2 — reduz peso excessivo da fonte */
-
-/* Títulos principais: fortes, mas mais elegantes */
-.sl-hero-title,
-.sl-page-hero-title,
-.sl-espiro-title{
-  font-weight: 760 !important;
-  letter-spacing: -.04em !important;
-}
-
-/* Kicker/chapeuzinho: continua marcante, mas menos duro */
-.sl-hero-kicker,
-.sl-page-hero-kicker,
-.sl-section-kicker,
-.sl-kicker,
-.sl-tagline,
-.sl-pill-label,
-.sl-tkicker,
-.sl-espiro-kicker{
-  font-weight: 760 !important;
-  letter-spacing: .13em !important;
-}
-
-/* Títulos de seção */
-.sl-section-title,
-.sl-ttitle,
-.sl-cta-title,
-.sl-section h2{
-  font-weight: 720 !important;
-  letter-spacing: -.03em !important;
-}
-
-/* Títulos de cards */
-.sl-card h3,
-.sl-highlight strong,
-.sl-highlight-box strong,
-.sl-hero-card-title,
-.sl-espiro-card-title,
-.sl-tcard__name,
-.sl-tabs h3,
-.sl-tab-panel h3{
-  font-weight: 700 !important;
-}
-
-/* Menu e CTA: menos “negrito de propaganda” */
-.sl-main-nav,
-.sl-nav-link{
-  font-weight: 560 !important;
-}
-
-.sl-nav-cta,
-.sl-btn,
-.sl-btn-primary,
-.sl-btn-outline,
-.sl-btn.primary,
-.sl-btn.outline,
-.sl-espiro-btn,
-.sl-mode-pill,
-.sl-tab-button{
-  font-weight: 700 !important;
-}
-
-/* Textos comuns com leitura mais leve */
-.sl-card,
-.sl-card p,
-.sl-highlight,
-.sl-highlight p,
-.sl-highlight-box,
-.sl-highlight-box p,
-.sl-text-block p,
-.sl-tab-panel,
-.sl-tab-panel p,
-.sl-hero-card-badge,
-.sl-hero-card-footer,
-.sl-tcard__text,
-.sl-section-subtitle,
-.sl-tsub,
-.sl-hero-subtitle,
-.sl-page-hero-lead{
-  font-weight: 400 !important;
-}
-
-/* Listas: reduz peso, mantém legibilidade */
-.sl-bullets li,
-.sl-bullet-list li,
-.sl-card ul li,
-.sl-highlight ul li,
-.sl-highlight-box ul li,
-.sl-tab-panel ul li,
-.sl-hero-list li,
-.sl-espiro-card-list li{
-  font-weight: 430 !important;
-}
-
-/* Barra/botão de WhatsApp */
-.sl-whatsapp-bar strong{
-  font-weight: 700 !important;
-}
-</style>
-
-
-<style id="soprolife-instagram-header-v1">
-/* Ícone discreto do Instagram no header */
-
-.sl-header-social{
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 38px !important;
-  height: 38px !important;
-  border-radius: 999px !important;
-  color: #0b2239 !important;
-  background: rgba(255,255,255,.72) !important;
-  border: 1px solid rgba(11,34,57,.08) !important;
-  text-decoration: none !important;
-  transition: background .16s ease, color .16s ease, border-color .16s ease, transform .16s ease;
-  margin-left: 4px !important;
-  margin-right: 4px !important;
-}
-
-.sl-header-social:hover{
-  color: #1eb5ab !important;
-  background: rgba(30,181,171,.08) !important;
-  border-color: rgba(30,181,171,.22) !important;
-  transform: translateY(-1px);
-}
-
-.sl-header-social svg{
-  width: 19px !important;
-  height: 19px !important;
-  display: block !important;
-}
-
-@media (max-width: 960px){
-  .sl-header-social{
-    display: inline-flex !important;
-    width: 36px !important;
-    height: 36px !important;
-    margin-left: auto !important;
-    margin-right: 8px !important;
-  }
-}
-</style>
-
-
-<style id="soprolife-mobile-header-cta-fix-v1">
-/* Corrige header no mobile: logo + Instagram + CTA sem cortar */
-
-@media (max-width: 720px){
-  .sl-header-in{
-    gap: 8px !important;
-    padding-left: 10px !important;
-    padding-right: 10px !important;
-    min-height: 74px !important;
-  }
-
-  .sl-brand{
-    flex: 0 1 auto !important;
-    min-width: 0 !important;
-  }
-
-  .sl-brand img{
-    max-height: 56px !important;
-    max-width: 168px !important;
-    width: auto !important;
-    object-fit: contain !important;
-  }
-
-  .sl-header-social{
-    width: 36px !important;
-    height: 36px !important;
-    min-width: 36px !important;
-    margin-left: 4px !important;
-    margin-right: 4px !important;
-    flex: 0 0 36px !important;
-  }
-
-  .sl-nav-cta{
-    flex: 0 0 auto !important;
-    max-width: 118px !important;
-    min-width: 96px !important;
-    padding: 10px 12px !important;
-    font-size: 0 !important;
-    line-height: 1 !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-  }
-
-  .sl-nav-cta::before{
-    content: "WhatsApp" !important;
-    font-size: .88rem !important;
-    line-height: 1 !important;
-    font-weight: 800 !important;
-  }
-}
-
-/* Em telas muito estreitas, compacta mais um pouco */
-@media (max-width: 380px){
-  .sl-brand img{
-    max-width: 150px !important;
-  }
-
-  .sl-header-social{
-    width: 34px !important;
-    height: 34px !important;
-    min-width: 34px !important;
-    flex-basis: 34px !important;
-  }
-
-  .sl-nav-cta{
-    min-width: 88px !important;
-    max-width: 104px !important;
-    padding-left: 10px !important;
-    padding-right: 10px !important;
-  }
-
-  .sl-nav-cta::before{
-    font-size: .84rem !important;
-  }
-}
-</style>
-
-
-<style id="soprolife-instagram-mobile-android-fix-v1">
-/* Sopro Life: no mobile, Instagram fica junto do WhatsApp, não colado na logo */
-@media (max-width: 960px) {
-  .sl-header-in {
-    display: flex !important;
-    align-items: center !important;
-  }
-
-  .sl-main-nav {
-    display: none !important;
-  }
-
-  .sl-header-instagram {
-    margin-left: auto !important;
-    margin-right: 8px !important;
-    flex: 0 0 42px !important;
-    width: 42px !important;
-    height: 42px !important;
-  }
-
-  .sl-nav-cta {
-    margin-left: 0 !important;
-    flex: 0 0 auto !important;
-  }
-}
-
-@media (max-width: 380px) {
-  .sl-header-instagram {
-    flex-basis: 38px !important;
-    width: 38px !important;
-    height: 38px !important;
-    margin-right: 6px !important;
-  }
-
-  .sl-nav-cta {
-    min-width: 88px !important;
-    max-width: 104px !important;
-    padding-left: 10px !important;
-    padding-right: 10px !important;
-  }
-}
-</style>
-
-<style id="soprolife-local-header-standard-v1">
-/* Padroniza apenas o header desta landing local com as páginas internas */
-.sl-header{
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 40 !important;
-  background: rgba(255,255,255,.96) !important;
-  border-bottom: 1px solid rgba(11,34,57,.08) !important;
-  box-shadow: 0 8px 24px rgba(15,35,52,.035) !important;
-  backdrop-filter: saturate(1.1) blur(6px) !important;
-}
-
-.sl-header .sl-wrap,
-.sl-header-in{
-  max-width: 1120px !important;
-}
-
-.sl-header-in{
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 22px !important;
-  min-height: 76px !important;
-  padding-top: 8px !important;
-  padding-bottom: 8px !important;
-}
-
-.sl-brand{
-  display: inline-flex !important;
-  align-items: center !important;
-  text-decoration: none !important;
-}
-
-.sl-brand img{
-  max-height: 58px !important;
-  width: auto !important;
-  display: block !important;
-}
-
-.sl-main-nav{
-  display: flex !important;
-  align-items: center !important;
-  gap: 18px !important;
-  margin-left: 24px !important;
-  flex: 1 !important;
-  font-size: .95rem !important;
-}
-
-.sl-nav-link{
-  display: inline-flex !important;
-  align-items: center !important;
-  position: relative !important;
-  color: #5f7485 !important;
-  text-decoration: none !important;
-  font-size: .95rem !important;
-  line-height: 1.2 !important;
-  font-weight: 650 !important;
-  letter-spacing: -.01em !important;
-  white-space: nowrap !important;
-  padding: 7px 0 !important;
-}
-
-.sl-nav-link:hover{
-  color: #0b2239 !important;
-}
-
-.sl-nav-link::after{
-  content: "" !important;
-  position: absolute !important;
-  left: 0 !important;
-  bottom: 0 !important;
-  width: 0 !important;
-  height: 2px !important;
-  border-radius: 999px !important;
-  background: #1eb5ab !important;
-  transition: width .2s ease !important;
-}
-
-.sl-nav-link:hover::after{
-  width: 100% !important;
-}
-
-.sl-nav-cta{
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border-radius: 999px !important;
-  background: #25D366 !important;
-  color: #fff !important;
-  padding: 9px 18px !important;
-  font-size: .9rem !important;
-  line-height: 1.1 !important;
-  font-weight: 800 !important;
-  text-decoration: none !important;
-  box-shadow: 0 8px 18px rgba(37,211,102,.18) !important;
-  white-space: nowrap !important;
-}
-
-.sl-has-sub{
-  position: relative !important;
-}
-
-.sl-has-sub > .sl-nav-link{
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-}
-
-.sl-submenu{
-  position: absolute !important;
-  top: 100% !important;
-  left: 0 !important;
-  min-width: 260px !important;
-  background: #fff !important;
-  border: 1px solid rgba(11,34,57,.08) !important;
-  border-radius: 14px !important;
-  padding: 8px !important;
-  box-shadow: 0 16px 34px rgba(15,35,52,.10) !important;
-  opacity: 0 !important;
-  transform: translateY(8px) !important;
-  pointer-events: none !important;
-  transition: opacity .16s ease, transform .16s ease !important;
-  z-index: 50 !important;
-}
-
-.sl-has-sub:hover .sl-submenu,
-.sl-has-sub:focus-within .sl-submenu{
-  opacity: 1 !important;
-  transform: translateY(0) !important;
-  pointer-events: auto !important;
-}
-
-.sl-submenu-link,
-.sl-submenu a{
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  padding: 10px 12px !important;
-  border-radius: 10px !important;
-  color: #0b2239 !important;
-  text-decoration: none !important;
-}
-
-.sl-submenu a:hover{
-  background: rgba(2,179,154,.08) !important;
-  color: #0b2239 !important;
-}
-
-@media (max-width: 960px){
-  .sl-main-nav{
-    display: none !important;
-  }
-
-  .sl-header-in{
-    min-height: 70px !important;
-  }
-
-  .sl-brand img{
-    max-height: 52px !important;
-  }
-}
-
-@media (max-width: 720px){
-  .sl-header-in{
-    gap: 8px !important;
-    padding-left: 10px !important;
-    padding-right: 10px !important;
-    min-height: 74px !important;
-  }
-
-  .sl-brand img{
-    max-height: 56px !important;
-    max-width: 168px !important;
-  }
-
-  .sl-nav-cta{
-    padding: 10px 12px !important;
-  }
-}
-</style>
-
-
-
-
-
-<!-- SOPRO:RJ_HOME_BOOKING_DEPS_START -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
-<style id="soprolife-agendamento-fix-v1">
-/* Corrige leitura e posicionamento da seção Agendamento */
-
-/* Quando clicar no menu, a seção não fica escondida atrás do header */
-.sl-booking-section#agendamento{
-  scroll-margin-top: 150px !important;
-}
-
-/* Mantém ajustes do CTA antigo agora em #contato */
-.sl-cta-section#contato{
-  padding-top: 72px !important;
-  padding-bottom: 72px !important;
-}
-
-/* Corrige contraste do CTA escuro */
-/* SOPRO:FIX_CONTRASTE_CTA_ESCURO — o mesmo tratamento de #contato passa a
-   valer para qualquer .sl-cta-box. O bloco #agendamento-antigo ficou oculto
-   dentro de um <style> quebrado desde 2026-02-08; ao voltar a ser exibido,
-   o título herdava o navy de .sl-cta-title e ficava ilegível sobre o
-   gradiente escuro. */
-.sl-cta-box{
-  color: #fff !important;
-}
-.sl-cta-box .sl-cta-title,
-.sl-cta-box h2,
-.sl-cta-box h3{
-  color: #fff !important;
-  opacity: 1 !important;
-}
-.sl-cta-box .sl-cta-sub,
-.sl-cta-box .sl-cta-contacts,
-.sl-cta-box .sl-cta-small{
-  color: rgba(255,255,255,.92) !important;
-}
-.sl-cta-box .sl-cta-contacts strong{
-  color: #fff !important;
-}
-
-#contato .sl-cta-box,
-.sl-cta-section#contato .sl-cta-box{
-  color: #fff !important;
-}
-
-/* SOPRO:FIX_RODAPE_ALINHAMENTO
-   O rodapé "Links úteis" fica fora de .sl-container e, sem o
-   /assets/sl-v3.css (carregado só na home), nascia coladinho na borda.
-   Recebe aqui as mesmas medidas de .sl-container desta página. */
-.sl-links-footer-grid{
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0 16px;
-}
-
-#contato .sl-cta-title,
-#contato h2,
-.sl-cta-section#contato h2{
-  color: #fff !important;
-  opacity: 1 !important;
-}
-
-#contato .sl-cta-sub,
-#contato .sl-cta-contacts,
-#contato .sl-cta-small{
-  color: rgba(255,255,255,.92) !important;
-}
-
-#contato .sl-cta-contacts strong{
-  color: #fff !important;
-}
-
-/* Botão dentro do CTA */
-#contato .sl-btn-primary{
-  background: #25D366 !important;
-  color: #fff !important;
-  box-shadow: 0 12px 24px rgba(37,211,102,.20) !important;
-}
-
-/* Android/mobile: evita encavalamento e melhora leitura */
-@media (max-width: 720px){
-  .sl-booking-section#agendamento{
-    scroll-margin-top: 120px !important;
-  }
-
-  .sl-cta-section#contato{
-    padding-top: 56px !important;
-    padding-bottom: 96px !important;
-  }
-
-  #contato .sl-cta-box{
-    grid-template-columns: 1fr !important;
-    gap: 18px !important;
-    padding: 24px 20px !important;
-  }
-
-  #contato .sl-cta-actions{
-    justify-content: flex-start !important;
-  }
-
-  #contato .sl-btn-primary{
-    width: 100% !important;
-    text-align: center !important;
-  }
-}
-</style>
-<style id="soprolife-map-modal-side-polish-v1">
-/* Sopro Life: no mobile, Instagram fica junto do WhatsApp, não colado na logo */
-@media (max-width: 960px) {
-  .sl-header-in {
-    display: flex !important;
-    align-items: center !important;
-  }
-
-  .sl-main-nav {
-    display: none !important;
-  }
-
-  .sl-header-instagram {
-    margin-left: auto !important;
-    margin-right: 8px !important;
-    flex: 0 0 42px !important;
-    width: 42px !important;
-    height: 42px !important;
-  }
-
-  .sl-nav-cta {
-    margin-left: 0 !important;
-    flex: 0 0 auto !important;
-  }
-}
-
-@media (max-width: 380px) {
-  .sl-header-instagram {
-    flex-basis: 38px !important;
-    width: 38px !important;
-    height: 38px !important;
-    margin-right: 6px !important;
-  }
-
-  .sl-nav-cta {
-    min-width: 88px !important;
-    max-width: 104px !important;
-    padding-left: 10px !important;
-    padding-right: 10px !important;
-  }
-}
-
-
-/* ===== Agendamento compacto (Etapa 1) ===== */
-.sl-booking-section{padding:28px 0 24px}
-.sl-booking-section > .sl-container{
-  padding-left:0 !important;
-  padding-right:0 !important;
-}
-.sl-booking-align{
-  max-width: 760px;
-  margin: 0;
-}
-.sl-booking-card{
-  background:linear-gradient(180deg,#ffffff 0%, #fbfeff 100%);
-  border-radius:20px;
-  box-shadow:0 14px 28px rgba(8,24,41,.07);
-  padding:20px;
-  border:1px solid rgba(11,34,57,.08);
-}
-.sl-booking-head{margin-bottom:14px;padding:0 0 4px}
-.sl-booking-kicker{
-  display:inline-block;
-  margin-bottom:6px;
-  padding:4px 10px;
-  border-radius:999px;
-  font-size:.72rem;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  font-weight:700;
-  color:#106f68;
-  background:rgba(30,181,171,.1);
-}
-.sl-booking-title{
-  margin:0 0 6px;
-  font-size:1.48rem;
-  color:var(--sl-primary-dark) !important;
-  line-height:1.18;
-  font-weight:700;
-  letter-spacing:-.01em;
-}
-.sl-booking-sub{margin:0;color:#355a73;font-size:.93rem;max-width:52ch;line-height:1.5}
-.sl-booking-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
-.sl-booking-controls{
-  display:grid;
-  gap:14px;
-  background:linear-gradient(180deg,#ffffff 0%, #fcfeff 100%);
-  border:1px solid rgba(11,34,57,.1);
-  border-radius:16px;
-  padding:16px;
-  box-shadow:0 8px 18px rgba(8,24,41,.05);
-}
-.sl-booking-field label{
-  display:block;
-  font-size:.72rem;
-  font-weight:700;
-  letter-spacing:.11em;
-  text-transform:uppercase;
-  color:#2b526a;
-  margin-bottom:7px
-}
-.sl-booking-field select,.sl-booking-field input{
-  width:100%;
-  min-height:44px;
-  padding:10px 12px;
-  border-radius:12px;
-  border:1px solid rgba(11,34,57,.16);
-  background:#f9fdff;
-  color:#12354d;
-  font-size:.93rem;
-  font-family:inherit;
-  transition:border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
-}
-
-.sl-booking-field select:hover,.sl-booking-field input:hover{
-  border-color:rgba(11,34,57,.24);
-}
-.sl-booking-field select:focus,.sl-booking-field input:focus{
-  outline:none;
-  border-color:rgba(30,181,171,.72);
-  box-shadow:0 0 0 3px rgba(30,181,171,.16);
-  background:#fff;
-}
-.sl-booking-slots-title{font-size:.75rem;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:#2d586f;margin:4px 0 8px}
-.sl-booking-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.sl-slot-btn{
-  min-height:42px;
-  border-radius:11px;
-  border:1px solid rgba(30,181,171,.44);
-  background:linear-gradient(180deg,rgba(30,181,171,.18) 0%, rgba(30,181,171,.1) 100%);
-  color:#0f334a;
-  padding:9px 8px;
-  font-size:.87rem;
-  font-weight:700;
-  cursor:pointer;
-  transition:transform .12s,filter .12s,box-shadow .12s,border-color .12s;
-}
-.sl-slot-btn:hover{transform:translateY(-1px);filter:brightness(.98);border-color:rgba(30,181,171,.65);box-shadow:0 8px 16px rgba(11,34,57,.12)}
-.sl-slot-btn[disabled]{background:#edf2f6;color:#8395a6;border-color:#d3dee6;cursor:not-allowed;transform:none;box-shadow:none;opacity:.96}
-.sl-booking-note{margin:4px 0 0;font-size:.78rem;color:#587086;line-height:1.35}
-.sl-units-placeholder{
-  background:#fbfdff;
-  border:1px solid rgba(11,34,57,.13);
-  border-radius:16px;
-  padding:13px;
-  box-shadow:0 8px 18px rgba(8,24,41,.045);
-}
-.sl-units-placeholder h3{margin:0 0 6px;font-size:1rem;color:var(--sl-primary-dark)}
-.sl-units-placeholder p{margin:0 0 8px;color:#34596f;font-size:.9rem;line-height:1.4}
-.sl-unit-list{list-style:none;padding:0;margin:0 0 10px;display:grid;gap:7px}
-.sl-unit-list li{
-  background:#ffffff;
-  border:1px solid rgba(11,34,57,.11);
-  border-radius:10px;
-  padding:6px 9px;
-  font-size:.88rem;
-  color:#123247;
-  box-shadow:0 4px 10px rgba(8,24,41,.04);
-}
-.sl-unit-list span{display:block;font-size:.79rem;color:#456479;margin-top:2px;line-height:1.35}
-.sl-btn-disabled{display:inline-flex;align-items:center;justify-content:center;pointer-events:none;opacity:.85}
-.sl-booking-section .sl-booking-card,
-.sl-booking-section .sl-units-placeholder,
-.sl-booking-section .sl-booking-controls{
-  backdrop-filter: blur(1.5px);
-}
-
-/* ===== Modal de mapa (Etapa 2) ===== */
-.sl-map-mini,
-.sl-mini-map{
-  margin:0;
-  width:100%;
-  height:570px;
-  min-height:570px;
-  border-radius:12px;
-  border:1px solid rgba(11,34,57,.12);
-  overflow:hidden;
-  cursor:pointer;
-  position:relative;
-}
-.sl-mini-map-trigger{
-  outline:none;
-}
-.sl-mini-map-trigger::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  z-index:2;
-  background:rgba(224,248,245,.58);
-  opacity:0;
-  transition:opacity .18s ease;
-  pointer-events:none;
-}
-.sl-mini-map-target{
-  position:absolute;
-  left:50%;
-  top:50%;
-  width:36px;
-  height:36px;
-  transform:translate(-50%,-50%) scale(.94);
-  opacity:0;
-  z-index:403;
-  pointer-events:none;
-  transition:opacity .18s ease,transform .18s ease;
-}
-.sl-mini-map-target span{
-  position:absolute;
-  width:10px;
-  height:10px;
-  border-color:#0b8f86;
-  border-style:solid;
-}
-.sl-mini-map-target span:nth-child(1){
-  top:0;
-  left:0;
-  border-width:2px 0 0 2px;
-}
-.sl-mini-map-target span:nth-child(2){
-  top:0;
-  right:0;
-  border-width:2px 2px 0 0;
-}
-.sl-mini-map-target span:nth-child(3){
-  bottom:0;
-  left:0;
-  border-width:0 0 2px 2px;
-}
-.sl-mini-map-target span:nth-child(4){
-  bottom:0;
-  right:0;
-  border-width:0 2px 2px 0;
-}
-.sl-mini-map-trigger:hover::before,
-.sl-mini-map-trigger:focus-visible::before{
-  opacity:1;
-}
-.sl-mini-map-trigger:hover .sl-mini-map-target,
-.sl-mini-map-trigger:focus-visible .sl-mini-map-target{
-  opacity:1;
-  transform:translate(-50%,-50%) scale(1);
-}
-.sl-mini-map-trigger:focus-visible{
-  outline:2px solid #1eb5ab;
-  outline-offset:3px;
-}
-.sl-map-open-btn{
-  position:absolute;
-  top:10px;
-  left:10px;
-  z-index:401;
-  border-radius:999px;
-  padding:6px 10px;
-  font-size:.78rem;
-  background:rgba(11,34,57,.84);
-  color:#fff;
-  border:1px solid rgba(255,255,255,.35);
-}
-.sl-map-mini:hover .sl-map-open-btn{background:rgba(11,34,57,.92)}
-.sl-units-placeholder{
-  --sl-map-lift:126px;
-  --sl-map-extra-height:102px;
-  width:264px;
-  max-width:264px;
-  margin-top:calc(var(--sl-map-lift) * -1);
-  padding:0;
-  border:0;
-  box-shadow:none;
-  background:transparent;
-}
-
-
-.sl-map-modal{
-  position:fixed;
-  inset:0;
-  display:none;
-  align-items:center;
-  justify-content:center;
-  z-index:1200;
-}
-.sl-map-modal.is-open{display:flex}
-.sl-map-modal__backdrop{
-  position:absolute;
-  inset:0;
-  background:rgba(8,24,41,.54);
-}
-.sl-map-modal__dialog{
-  position:relative;
-  z-index:1;
-  width:min(1280px, calc(100vw - 84px));
-  height:min(640px, calc(100vh - 104px));
-  max-height:none;
-  background:#fff;
-  border-radius:16px;
-  box-shadow:0 14px 34px rgba(8,24,41,.2);
-  border:1px solid rgba(11,34,57,.12);
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
-}
-.sl-map-modal__header{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding:12px 14px;
-  border-bottom:1px solid rgba(11,34,57,.08);
-}
-.sl-map-modal__title{
-  margin:0;
-  font-size:1.04rem;
-  color:var(--sl-primary-dark);
-}
-.sl-map-modal__body{
-  flex:1;
-  height:100%;
-  min-height:0;
-  padding:10px;
-  overflow:hidden;
-  display:grid;
-  grid-template-columns:330px minmax(0,1fr);
-  gap:10px;
-}
-#sl-units-map,
-#sl-units-map-mini{
-  width:100%;
-  height:100%;
-  border:0;
-  display:block;
-}
-#sl-units-map{
-  min-height:0;
-  border-radius:12px;
-  border:1px solid rgba(11,34,57,.12);
-}
-.sl-map-panel-info{
-  border:1px solid rgba(11,34,57,.1);
-  border-radius:12px;
-  background:#f9fcff;
-  padding:12px;
-  color:#2d526a;
-  font-size:.88rem;
-  height:100%;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-.sl-map-modal__info{
-  height:100%;
-  overflow:auto;
-}
-.sl-map-modal__map-wrap{
-  height:100%;
-  min-height:0;
-}
-
-.sl-map-panel-sub{margin:0;color:#46687f;font-size:.85rem;line-height:1.4}
-.sl-map-unit-cards{display:grid;gap:8px}
-.sl-map-unit-card{
-  background:#fff;
-  border:1px solid rgba(11,34,57,.12);
-  border-radius:10px;
-  padding:8px 10px;
-  font-size:.86rem;
-  font-weight:600;
-  color:#143950;
-}
-.sl-map-panel-info h4{
-  margin:0 0 6px;
-  font-size:1rem;
-  color:var(--sl-primary-dark);
-}
-.sl-map-panel-info ul{
-  margin:0 0 6px 18px;
-  padding:0;
-}
-.sl-map-panel-note{
-  font-size:.78rem;
-  color:#567188;
-  margin-top:auto;
-}
-
-.sl-map-pin{
-  width:20px;
-  height:20px;
-  display:block;
-  border-radius:50% 50% 50% 0;
-  background:linear-gradient(150deg,#1eb5ab 0%, #13958d 100%);
-  border:2px solid #0b2239;
-  transform:rotate(-45deg);
-  box-shadow:0 2px 8px rgba(11,34,57,.28);
-  position:relative;
-}
-.sl-map-pin::after{
-  content:"";
-  position:absolute;
-  width:7px;
-  height:7px;
-  border-radius:999px;
-  background:#fff;
-  top:5px;
-  left:5px;
-}
-@media (max-width:720px){
-  .sl-units-placeholder{
-    --sl-map-lift:0px;
-    width:100%;
-    max-width:none;
-    margin-top:0;
-  }
-  .sl-map-modal__dialog{
-    width:calc(100vw - 14px);
-    height:92dvh;
-    border-radius:12px;
-  }
-  .sl-map-modal__header{padding:10px 12px}
-  .sl-map-modal__body{
-    padding:10px;
-    grid-template-columns:1fr;
-    grid-auto-rows:auto 1fr;
-    overflow:auto;
-  }
-  #sl-units-map{height:58dvh;min-height:300px}
-  .sl-map-mini,
-  .sl-mini-map{height:260px;min-height:260px}
-   .sl-mini-map-target{opacity:.28;transform:translate(-50%,-50%) scale(1);}
-  .sl-map-open-btn{
-    top:8px;
-    right:8px;
-    font-size:.76rem;
-    padding:5px 9px;
-  }
-}
-
-#agendamento .sl-map-mini .leaflet-tile-pane,
-#agendamento .sl-mini-map .leaflet-tile-pane,
-#sl-map-modal .leaflet-tile-pane{
-  filter:saturate(1.18) contrast(1.04) brightness(1.02);
-}
-@media (max-width:960px){
-  .sl-booking-grid{grid-template-columns:minmax(0,1fr)}
-  .sl-units-placeholder{order:2}
-}
-@media (max-width:720px){
-  .sl-booking-card{padding:14px}
-  .sl-booking-title{font-size:1.32rem}
-  .sl-booking-slots{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .sl-booking-head{margin-bottom:10px}
-}
-@media (max-width:430px){
-  .sl-booking-slots{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .sl-slot-btn{padding:10px 8px}
-}
-
-/* SOPRO:MAP_MODAL_SIDE_POLISH_V1 */
-/* Lapidação visual do painel esquerdo do modal do mapa */
-.sl-map-modal-side,
-.sl-map-modal-panel,
-.sl-map-modal-info,
-.sl-map-modal-copy {
-  background:
-    linear-gradient(180deg, rgba(30,181,171,.12), rgba(255,255,255,.96) 42%),
-    #f7fcfd !important;
-  border: 1px solid rgba(30,181,171,.24) !important;
-  border-radius: 16px !important;
-  box-shadow: 0 14px 28px rgba(8,24,41,.08) !important;
-}
-
-.sl-map-modal-side h3,
-.sl-map-modal-panel h3,
-.sl-map-modal-info h3,
-.sl-map-modal-copy h3 {
-  color: #0b2239 !important;
-  font-weight: 800 !important;
-  letter-spacing: -.01em !important;
-  margin-bottom: 10px !important;
-}
-
-.sl-map-modal-side p,
-.sl-map-modal-panel p,
-.sl-map-modal-info p,
-.sl-map-modal-copy p {
-  color: #34596f !important;
-  line-height: 1.45 !important;
-  font-weight: 500 !important;
-}
-
-.sl-map-modal-side button,
-.sl-map-modal-panel button,
-.sl-map-modal-info button,
-.sl-map-modal-copy button,
-.sl-map-unit-btn,
-.sl-map-modal-unit,
-.sl-map-location-card {
-  width: 100% !important;
-  display: block !important;
-  background: linear-gradient(180deg, rgba(224,252,250,.98), rgba(210,248,245,.92)) !important;
-  border: 1px solid rgba(30,181,171,.42) !important;
-  border-radius: 12px !important;
-  color: #0b3348 !important;
-  font-weight: 800 !important;
-  text-align: left !important;
-  padding: 11px 13px !important;
-  margin: 8px 0 !important;
-  box-shadow: 0 7px 14px rgba(8,24,41,.055) !important;
-  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease !important;
-}
-
-.sl-map-modal-side button:hover,
-.sl-map-modal-panel button:hover,
-.sl-map-modal-info button:hover,
-.sl-map-modal-copy button:hover,
-.sl-map-unit-btn:hover,
-.sl-map-modal-unit:hover,
-.sl-map-location-card:hover {
-  transform: translateY(-1px) !important;
-  border-color: rgba(30,181,171,.74) !important;
-  background: linear-gradient(180deg, rgba(202,248,245,1), rgba(182,241,238,.95)) !important;
-  box-shadow: 0 10px 20px rgba(8,24,41,.09) !important;
-}
-
-.sl-map-modal-side button::before,
-.sl-map-modal-panel button::before,
-.sl-map-modal-info button::before,
-.sl-map-modal-copy button::before,
-.sl-map-unit-btn::before,
-.sl-map-modal-unit::before,
-.sl-map-location-card::before {
-  content: "";
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 8px;
-  border-radius: 999px;
-  background: #1eb5ab;
-  box-shadow: 0 0 0 4px rgba(30,181,171,.15);
-  vertical-align: 1px;
-}
-
-.sl-map-modal-side button strong,
-.sl-map-modal-panel button strong,
-.sl-map-modal-info button strong,
-.sl-map-modal-copy button strong,
-.sl-map-unit-btn strong,
-.sl-map-modal-unit strong,
-.sl-map-location-card strong {
-  color: #0b2239 !important;
-  font-weight: 800 !important;
-}
-
-.sl-map-modal-side p:last-child,
-.sl-map-modal-panel p:last-child,
-.sl-map-modal-info p:last-child,
-.sl-map-modal-copy p:last-child {
-  margin-top: 12px !important;
-  padding: 12px 13px !important;
-  border-radius: 12px !important;
-  background: rgba(255,255,255,.72) !important;
-  border-left: 4px solid rgba(30,181,171,.68) !important;
-  color: #34596f !important;
-}
-
-/* Evita que o painel fique com aparência vazia demais */
-.sl-map-modal-side,
-.sl-map-modal-panel,
-.sl-map-modal-info,
-.sl-map-modal-copy {
-  padding: 18px !important;
-}
-</style>
-<style id="sopro-modal-side-hotfix-v2">
-/* SOPRO:MAP_MODAL_SIDE_HOTFIX_V2 */
-/* Ajuste visual forte e específico do painel esquerdo do modal do mapa */
-
-.sl-map-modal-side{
-  background:
-    radial-gradient(circle at top left, rgba(30,181,171,.22), transparent 44%),
-    linear-gradient(180deg, #effdfc 0%, #f8ffff 48%, #ffffff 100%) !important;
-  border: 1px solid rgba(30,181,171,.38) !important;
-  border-radius: 18px !important;
-  padding: 18px !important;
-  box-shadow: 0 16px 34px rgba(8,24,41,.10) !important;
-}
-
-.sl-map-modal-side h3{
-  color: #0b2239 !important;
-  font-size: 1.02rem !important;
-  font-weight: 850 !important;
-  letter-spacing: -.01em !important;
-  margin: 0 0 12px !important;
-}
-
-.sl-map-modal-side p{
-  color: #315a70 !important;
-  font-size: .94rem !important;
-  line-height: 1.45 !important;
-  font-weight: 550 !important;
-  margin: 0 0 13px !important;
-}
-
-.sl-map-unit-card{
-  position: relative !important;
-  display: flex !important;
-  align-items: center !important;
-  width: 100% !important;
-  min-height: 46px !important;
-  margin: 9px 0 !important;
-  padding: 11px 13px 11px 34px !important;
-  border-radius: 13px !important;
-  border: 1px solid rgba(30,181,171,.48) !important;
-  border-left: 5px solid #1eb5ab !important;
-  background: linear-gradient(180deg, #dffcf9 0%, #c9f5f1 100%) !important;
-  color: #0b3348 !important;
-  font-weight: 850 !important;
-  box-shadow: 0 8px 18px rgba(8,24,41,.075) !important;
-  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease, background .14s ease !important;
-}
-
-.sl-map-unit-card::before{
-  content: "" !important;
-  position: absolute !important;
-  left: 14px !important;
-  top: 50% !important;
-  width: 8px !important;
-  height: 8px !important;
-  transform: translateY(-50%) !important;
-  border-radius: 999px !important;
-  background: #0f8f86 !important;
-  box-shadow: 0 0 0 5px rgba(30,181,171,.18) !important;
-}
-
-.sl-map-unit-card:hover{
-  transform: translateY(-1px) !important;
-  border-color: rgba(15,143,134,.82) !important;
-  background: linear-gradient(180deg, #c9f8f4 0%, #b3eee9 100%) !important;
-  box-shadow: 0 12px 24px rgba(8,24,41,.12) !important;
-}
-
-.sl-map-modal-side p:last-child{
-  margin-top: 14px !important;
-  padding: 12px 13px !important;
-  border-radius: 13px !important;
-  color: #244e64 !important;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.96), rgba(235,252,250,.96)) !important;
-  border: 1px solid rgba(30,181,171,.28) !important;
-  border-left: 5px solid #1eb5ab !important;
-  box-shadow: 0 6px 14px rgba(8,24,41,.055) !important;
-}
-
-.sl-map-modal-title,
-.sl-map-modal h2,
-.sl-map-modal h3{
-  color: #0b2239 !important;
-}
-</style>
-<style id="sopro-map-unit-whatsapp-style">
-/* SOPRO:MAP_UNIT_WHATSAPP_STYLE */
-.sl-map-unit-card{
-  cursor:pointer !important;
-  justify-content:space-between !important;
-  gap:10px !important;
-}
-
-.sl-map-unit-card::after{
-  content:"WhatsApp";
-  margin-left:auto;
-  padding:3px 8px;
-  border-radius:999px;
-  background:#25D366;
-  color:#ffffff;
-  font-size:.68rem;
-  font-weight:800;
-  letter-spacing:.02em;
-  box-shadow:0 4px 10px rgba(37,211,102,.22);
-}
-
-.sl-map-unit-card:focus-visible{
-  outline:3px solid rgba(30,181,171,.32) !important;
-  outline-offset:3px !important;
-}
-</style>
-<style id="sopro-flatpickr-ptbr-style">
-/* SOPRO:FLATPICKR_PTBR_STYLE */
-.flatpickr-calendar{
-  border-radius:18px !important;
-  border:1px solid rgba(30,181,171,.26) !important;
-  box-shadow:0 18px 42px rgba(8,24,41,.16) !important;
-  font-family:inherit !important;
-  overflow:hidden !important;
-}
-.flatpickr-months{
-  background:#ffffff !important;
-}
-.flatpickr-current-month,
-.flatpickr-current-month .flatpickr-monthDropdown-months,
-.flatpickr-current-month input.cur-year{
-  color:#0b2239 !important;
-  font-weight:800 !important;
-}
-.flatpickr-weekday{
-  color:#0b8f86 !important;
-  font-weight:800 !important;
-}
-.flatpickr-day{
-  border-radius:10px !important;
-  color:#16384f !important;
-}
-.flatpickr-day.today{
-  border-color:#1eb5ab !important;
-}
-.flatpickr-day.selected,
-.flatpickr-day.startRange,
-.flatpickr-day.endRange{
-  background:#1eb5ab !important;
-  border-color:#1eb5ab !important;
-  color:white !important;
-}
-.flatpickr-day:hover{
-  background:rgba(30,181,171,.13) !important;
-  border-color:rgba(30,181,171,.28) !important;
-}
-.flatpickr-day.disabled,
-.flatpickr-day.disabled:hover{
-  color:#b6c4ce !important;
-  background:#f1f5f7 !important;
-}
-.flatpickr-calendar .flatpickr-prev-month,
-.flatpickr-calendar .flatpickr-next-month{
-  color:#0b2239 !important;
-  fill:#0b2239 !important;
-}
-</style>
-<style id="sopro-map-tile-filter">
-/* SOPRO:MAP_TILE_FILTER_V1 */
-/* Mantém o mapa limpo, mas puxa discretamente para a paleta SoproLife */
-.sl-mini-map .leaflet-tile,
-.sl-map-modal-map .leaflet-tile,
-#sl-mini-map .leaflet-tile,
-#sl-map-modal-map .leaflet-tile{
-  filter: saturate(1.08) contrast(.98) brightness(1.03) hue-rotate(-4deg);
-}
-
-/* Mantém pins e controles sem filtro */
-.sl-mini-map .leaflet-marker-icon,
-.sl-map-modal-map .leaflet-marker-icon,
-#sl-mini-map .leaflet-marker-icon,
-#sl-map-modal-map .leaflet-marker-icon,
-.sl-mini-map .leaflet-control,
-.sl-map-modal-map .leaflet-control,
-#sl-mini-map .leaflet-control,
-#sl-map-modal-map .leaflet-control{
-  filter:none !important;
-}
-</style>
-<style id="sopro-booking-mobile-relocate-style">
-/* SOPRO:BOOKING_MOBILE_RELOCATE_STYLE */
-#sl-booking-desktop-anchor{
-  display:none;
-}
-
-.sl-booking-mobile-anchor:empty{
-  display:none;
-}
-
-@media (max-width: 820px){
-  .sl-booking-mobile-anchor{
-    display:block;
-    margin:18px 0 16px;
-  }
-
-  .sl-booking-mobile-anchor .sl-booking-section{
-    padding:16px 0 18px !important;
-  }
-
-  .sl-booking-mobile-anchor .sl-booking-section > .sl-container{
-    max-width:100% !important;
-    padding-left:0 !important;
-    padding-right:0 !important;
-  }
-
-  .sl-booking-mobile-anchor .sl-booking-align{
-    max-width:100% !important;
-    margin:0 !important;
-  }
-
-  .sl-booking-mobile-anchor .sl-booking-card{
-    width:100% !important;
-  }
-
-  .sl-booking-mobile-anchor .sl-booking-grid{
-    grid-template-columns:1fr !important;
-    gap:14px !important;
-  }
-
-  .sl-booking-mobile-anchor .sl-booking-head{
-    margin-bottom:12px !important;
-  }
-}
-</style>
-
-<style id="sopro-rj-home-parity-fix">
-/* SOPRO:RJ_HOME_PARITY_FIX_V1 */
-
-/* Mini-mapa da página RJ deve abrir o modal, não ser manipulado como mapa pequeno */
-#sl-mini-map,
-.sl-mini-map{
-  cursor:pointer !important;
-}
-
-/* Esconde + e - apenas no mini-mapa para não cobrir "Ampliar mapa" */
-#sl-mini-map .leaflet-control-zoom,
-.sl-mini-map .leaflet-control-zoom{
-  display:none !important;
-}
-
-/* Evita o Leaflet capturar clique no mini-mapa. O clique abre o modal. */
-#sl-mini-map .leaflet-pane,
-#sl-mini-map .leaflet-control-container,
-#sl-mini-map .leaflet-marker-pane,
-#sl-mini-map .leaflet-tile-pane,
-.sl-mini-map .leaflet-pane,
-.sl-mini-map .leaflet-control-container,
-.sl-mini-map .leaflet-marker-pane,
-.sl-mini-map .leaflet-tile-pane{
-  pointer-events:none !important;
-}
-
-/* No mapa ampliado, os controles continuam funcionando */
-#sl-map-modal-map .leaflet-pane,
-#sl-map-modal-map .leaflet-control-container,
-#sl-map-modal-map .leaflet-marker-pane,
-#sl-map-modal-map .leaflet-tile-pane,
-.sl-map-modal-map .leaflet-pane,
-.sl-map-modal-map .leaflet-control-container,
-.sl-map-modal-map .leaflet-marker-pane,
-.sl-map-modal-map .leaflet-tile-pane{
-  pointer-events:auto !important;
-}
-</style>
-
-<!-- SOPRO:RJ_HOME_BOOKING_DEPS_END -->
-  <!-- SOPRO:FAVICON_START -->
-  <!-- SOPRO:FAVICON_RESPIRO_V1 — ver comentário em /index.html -->
-  <link rel="icon" type="image/png" sizes="512x512" href="/img/soprolife-icone-quadrado-512.png?v=20260728">
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260522b">
-  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png?v=20260522b">
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260522b">
-  <link rel="shortcut icon" href="/favicon.ico?v=20260522b">
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20260522b">
-  <link rel="manifest" href="/site.webmanifest?v=20260522b">
-  <meta name="theme-color" content="#0b3348">
-  <!-- SOPRO:FAVICON_END -->
-
-  <!-- SOPRO:OG_V1 -->
-  <meta property="og:type" content="website">
-  <meta property="og:locale" content="pt_BR">
-  <meta property="og:site_name" content="Sopro Life">
-  <meta property="og:title" content="Espirometria no Rio de Janeiro | Onde fazer no RJ – Sopro Life">
-  <meta property="og:description" content="Onde fazer espirometria (teste do sopro) no Rio de Janeiro? Exame de função pulmonar com ou sem broncodilatador e laudo por pneumologista. Agende pelo WhatsApp.">
-  <meta property="og:url" content="https://soprolife.com.br/espirometria-rio-de-janeiro/">
-  <meta property="og:image" content="https://soprolife.com.br/img/soprolife-og.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Espirometria no Rio de Janeiro | Onde fazer no RJ – Sopro Life">
-  <meta name="twitter:description" content="Onde fazer espirometria (teste do sopro) no Rio de Janeiro? Exame de função pulmonar com ou sem broncodilatador e laudo por pneumologista. Agende pelo WhatsApp.">
-  <meta name="twitter:image" content="https://soprolife.com.br/img/soprolife-og.png">
-
-<style id="sopro-rj-map-pastore-ipanema-style">
-/* SOPRO:RJ_MAP_PASTORE_IPANEMA_STYLE_V1
-   Mesmo cartão de unidade parceira já usado na home (/index.html). */
-.sl-map-unit-card__text{display:flex;flex-direction:column;gap:2px;min-width:0}
-.sl-map-unit-card__name{font-weight:850;line-height:1.25}
-.sl-map-unit-card__tag{font-size:.7rem;font-weight:600;color:#3a6076;opacity:.9;line-height:1.3}
-
-.sl-map-partner-card{
-  margin:4px 0 12px;
-  padding:12px 13px;
-  border-radius:13px;
-  border:1px solid rgba(11,34,57,.14);
-  border-left:5px solid #1eb5ab;
-  background:linear-gradient(180deg,#ffffff 0%,#f3f8fb 100%);
-  box-shadow:0 8px 18px rgba(8,24,41,.075);
-}
-.sl-map-partner-card__head{
-  display:flex;align-items:center;justify-content:space-between;
-  gap:8px;flex-wrap:wrap;margin-bottom:5px;
-}
-.sl-map-partner-card__name{font-weight:850;font-size:.9rem;color:#0b3348;line-height:1.25}
-.sl-map-partner-card__badge{
-  flex:0 0 auto;padding:3px 8px;border-radius:999px;
-  background:#0b2239;color:#fff;font-size:.66rem;font-weight:800;letter-spacing:.02em;
-}
-.sl-map-partner-card__address{font-style:normal;font-size:.82rem;color:#315a70;line-height:1.4}
-.sl-map-partner-card__hours{margin:6px 0 10px;font-size:.79rem;color:#46687f;line-height:1.4}
-.sl-map-partner-card__hours span{display:block;font-size:.74rem;opacity:.85}
-.sl-map-partner-card__actions{display:flex;flex-wrap:wrap;gap:6px}
-.sl-map-partner-btn{
-  display:inline-flex;align-items:center;justify-content:center;
-  padding:7px 12px;border-radius:999px;font-size:.76rem;font-weight:800;
-  text-decoration:none;transition:transform .14s ease,box-shadow .14s ease,background .14s ease;
-}
-.sl-map-partner-btn--ghost{border:1px solid rgba(30,181,171,.5);color:#0b3348;background:#fff}
-.sl-map-partner-btn--ghost:hover{background:#eafaf8;transform:translateY(-1px)}
-.sl-map-partner-btn--solid{
-  border:1px solid transparent;background:linear-gradient(135deg,#1eb5ab,#18a197);
-  color:#fff;box-shadow:0 6px 14px rgba(30,181,171,.26);
-}
-.sl-map-partner-btn--solid:hover{transform:translateY(-1px);box-shadow:0 10px 20px rgba(30,181,171,.32)}
-.sl-map-partner-btn:focus-visible{outline:3px solid rgba(30,181,171,.32);outline-offset:3px}
-
-@media (max-width:520px){
-  .sl-map-partner-card__actions{flex-direction:column}
-  .sl-map-partner-btn{width:100%}
-}
-</style>
-
-<!-- SOPRO:MENU_UNIFORME_FIX_START -->
-<style>
-  header nav a,
-  header nav a:visited,
-  .sl-nav a,
-  .sl-nav a:visited,
-  .sl-nav-link,
-  .sl-nav-link:visited {
-    color:#536a7d !important;
-    text-decoration:none !important;
-    font-weight:800 !important;
-  }
-
-  header nav a:hover,
-  .sl-nav a:hover,
-  .sl-nav-link:hover {
-    color:#07857d !important;
-  }
-
-  header nav a[href="/telemedicina/"],
-  header nav a[href="/telemedicina/"]:visited,
-  .sl-nav a[href="/telemedicina/"],
-  .sl-nav a[href="/telemedicina/"]:visited {
-    color:#536a7d !important;
-  }
-
-  header nav a[href="/telemedicina/"]:hover,
-  .sl-nav a[href="/telemedicina/"]:hover {
-    color:#07857d !important;
-  }
-</style>
-<!-- SOPRO:MENU_UNIFORME_FIX_END -->
-
-
-<!-- SOPRO:TELEMED_MOBILE_STRIP_START -->
-<style>
-  .sl-telemed-mobile-strip {
-    display:none;
-  }
-
-  @media (max-width:760px) {
-    .sl-telemed-mobile-strip {
-      display:block;
-      background:linear-gradient(90deg,#effdfb,#ffffff);
-      border-bottom:1px solid rgba(30,181,171,.18);
-      padding:10px 14px;
-    }
-
-    .sl-telemed-mobile-strip a {
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
-      width:100%;
-      border:1px solid rgba(30,181,171,.25);
-      background:#ffffff;
-      border-radius:16px;
-      padding:12px 14px;
-      color:#0b3348 !important;
-      text-decoration:none !important;
-      font-weight:900;
-      box-shadow:0 12px 24px rgba(8,24,41,.05);
-    }
-
-    .sl-telemed-mobile-strip span {
-      display:block;
-      color:#07857d;
-      font-size:.78rem;
-      font-weight:850;
-      margin-top:2px;
-    }
-
-    .sl-telemed-mobile-strip b {
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      min-width:34px;
-      height:34px;
-      border-radius:999px;
-      background:#eafffd;
-      color:#07857d;
-      border:1px solid rgba(30,181,171,.25);
-    }
-  }
-</style>
-<!-- SOPRO:TELEMED_MOBILE_STRIP_END -->
-
-  <link rel="stylesheet" href="/assets/sopro-visual-system-v3.css?v=visual-v3">
-
-
-<style id="sopro-desktop-menu-standard-v1">
-/* === SOPRO: menu superior desktop padronizado === */
-@media (min-width: 961px) {
-  header nav a,
-  .sl-header nav a,
-  .sl-nav a,
-  .sl-main-nav a,
-  .sl-nav-link {
-    color: #536a7d !important;
-    font-weight: 600 !important;
-    font-size: 0.95rem !important;
-    letter-spacing: 0 !important;
-    text-decoration: none !important;
-  }
-
-  header nav a:hover,
-  .sl-header nav a:hover,
-  .sl-nav a:hover,
-  .sl-main-nav a:hover,
-  .sl-nav-link:hover {
-    color: #0f8f87 !important;
-    font-weight: 600 !important;
-  }
-
-  header nav a[aria-current="page"],
-  header nav a.active,
-  .sl-header nav a[aria-current="page"],
-  .sl-header nav a.active,
-  .sl-nav a[aria-current="page"],
-  .sl-nav a.active,
-  .sl-main-nav a[aria-current="page"],
-  .sl-main-nav a.active {
-    color: #536a7d !important;
-    font-weight: 600 !important;
-  }
-
-  /* Mantém o botão verde do WhatsApp destacado, sem ser afetado pelo menu */
-  header a[href*="whatsapp"],
-  header a[href*="wa.me"],
-  header a[href*="api.whatsapp.com"],
-  .sl-whatsapp,
-  .sl-nav-cta {
-    color: #ffffff !important;
-    font-weight: 800 !important;
-  }
-
-  /* Mantém Instagram como ícone, sem herdar texto do menu */
-  header a[href*="instagram.com"] {
-    color: #c13584 !important;
-    font-weight: 600 !important;
-  }
-}
-</style>
-
-  <!-- SOPRO:ANALYTICS_START -->
-  <script src="/assets/analytics.js"></script>
-  <!-- SOPRO:ANALYTICS_END -->
-
-<!-- SOPRO:SL_BOOKING_SHARED_CSS -->
-<link rel="stylesheet" href="/assets/sl-booking.css">
-
-<style id="sopro-crosslink-barra-style">
-.sl-barra-crosslink{
-  max-width:1180px;
-  margin:18px auto 34px;
-  padding:16px 20px;
-  border:1px solid rgba(11,34,57,.12);
-  border-radius:14px;
-  background:#f5fbfa;
-  color:#496171;
-  font-size:.92rem;
-  line-height:1.55;
-}
-.sl-barra-crosslink strong{
-  display:block;
-  margin-bottom:3px;
-  color:#0b2239;
-}
-.sl-barra-crosslink span{
-  display:inline;
-}
-.sl-barra-crosslink a{
-  display:inline-block;
-  margin-left:6px;
-  color:#087f79;
-  font-weight:700;
-  text-decoration:none;
-}
-.sl-barra-crosslink a:hover{
-  text-decoration:underline;
-}
-@media(max-width:700px){
-  .sl-barra-crosslink{
-    margin:16px 16px 28px;
-  }
-  .sl-barra-crosslink a{
-    display:block;
-    margin:7px 0 0;
-  }
-}
-</style>
-
-
-<style id="sopro-seo-intent-rj">
-/* SOPRO:SEO_INTENT_ESPIROMETRIA_RJ_V1 */
-
-.sl-seo-intent{
-  padding:30px 0 18px;
-}
-
-.sl-seo-intent-head{
-  max-width:820px;
-  margin-bottom:22px;
-}
-
-.sl-seo-intent-kicker{
-  display:block;
-  margin-bottom:6px;
-  font-size:.76rem;
-  font-weight:750;
-  letter-spacing:.13em;
-  text-transform:uppercase;
-  color:#087f79;
-}
-
-.sl-seo-intent h2{
-  margin:0 0 10px;
-  color:#0b2239;
-  font-size:clamp(1.6rem,2.5vw,2.15rem);
-  line-height:1.18;
-  letter-spacing:-.025em;
-}
-
-.sl-seo-intent-head p{
-  margin:0;
-  color:#536b79;
-  line-height:1.7;
-}
-
-.sl-seo-intent-grid{
-  display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:18px;
-}
-
-.sl-seo-intent-card{
-  background:#fff;
-  border:1px solid rgba(11,34,57,.11);
-  border-radius:18px;
-  padding:24px;
-  box-shadow:0 8px 24px rgba(11,34,57,.045);
-}
-
-.sl-seo-intent-card h3{
-  margin:0 0 10px;
-  color:#0b2239;
-  font-size:1.18rem;
-}
-
-.sl-seo-intent-card p{
-  margin:0 0 13px;
-  color:#536b79;
-  line-height:1.65;
-}
-
-.sl-seo-intent-card ul{
-  margin:0 0 16px;
-  padding-left:20px;
-  color:#536b79;
-  line-height:1.65;
-}
-
-.sl-seo-intent-card a{
-  color:#087f79;
-  font-weight:700;
-  text-decoration:none;
-}
-
-.sl-seo-intent-card a:hover{
-  text-decoration:underline;
-}
-
-.sl-seo-place-links{
-  display:flex;
-  flex-wrap:wrap;
-  gap:8px;
-  margin-top:14px;
-}
-
-.sl-seo-place-links a{
-  display:inline-flex;
-  align-items:center;
-  padding:7px 11px;
-  border-radius:999px;
-  border:1px solid #cfe3df;
-  background:#f3faf8;
-  font-size:.84rem;
-}
-
-@media(max-width:760px){
-  .sl-seo-intent-grid{
-    grid-template-columns:1fr;
-  }
-
-  .sl-seo-intent{
-    padding-top:22px;
-  }
-}
-</style>
-
-<style id="sopro-rio-home-parity-v1">
-/* SOPRO:RIO_MODERN_HOME_PARITY_V1 */
-
-/* Remove qualquer componente legado remanescente. */
-.sl-whatsapp-pill{
-  display:none !important;
-}
-
-/* Fundo e ritmo iguais à geração atual do site. */
-body.sl-typo-clean .sl-page{
-  background:
-    linear-gradient(
-      180deg,
-      #f4fbfb 0%,
-      #ffffff 46%,
-      #f7fbfc 100%
-    );
-}
-
-/* HERO */
-.sl-hero-v3--rj{
-  padding-top:clamp(42px,5vw,58px);
-  padding-bottom:clamp(28px,4vw,44px);
-}
-
-/* AGENDA LOGO ABAIXO DO HERO */
-body.sl-typo-clean
-.sl-booking-section#agendamento{
-  padding-top:clamp(20px,3vw,34px) !important;
-}
-
-/*
-   O título agora está dentro da coluna da esquerda.
-   Assim o mapa começa exatamente na mesma altura.
-*/
-body.sl-typo-clean
-.sl-booking-section
-.sl-booking-grid{
-  align-items:stretch !important;
-}
-
-body.sl-typo-clean
-.sl-booking-section
-.sl-booking-controls{
-  align-self:start;
-}
-
-body.sl-typo-clean
-.sl-booking-section
-.sl-booking-head{
-  margin:0 0 18px !important;
-}
-
-body.sl-typo-clean
-.sl-booking-section
-.sl-units-placeholder{
-  align-self:stretch !important;
-  min-height:520px;
-}
-
-body.sl-typo-clean
-.sl-booking-section
-#sl-units-map-mini{
-  height:100% !important;
-  min-height:520px !important;
-}
-
-/* Seções antigas passam a conversar visualmente com a home. */
-body.sl-typo-clean .sl-section{
-  padding:
-    clamp(38px,5vw,62px)
-    0;
-}
-
-body.sl-typo-clean .sl-section-header{
-  max-width:820px;
-  margin-bottom:22px;
-}
-
-body.sl-typo-clean .sl-section-title{
-  color:#0b2239;
-  font-size:clamp(1.65rem,2.5vw,2.15rem);
-  line-height:1.15;
-  letter-spacing:-.025em;
-}
-
-body.sl-typo-clean .sl-section-subtitle,
-body.sl-typo-clean .sl-text-block p{
-  color:#536b79;
-  line-height:1.7;
-}
-
-/* Cards da geração antiga ficam mais próximos dos atuais. */
-body.sl-typo-clean .sl-card,
-body.sl-typo-clean .sl-tabs,
-body.sl-typo-clean .sl-highlight-box,
-body.sl-typo-clean .sl-local-mini{
-  border:1px solid rgba(11,34,57,.10);
-  border-radius:18px;
-  box-shadow:0 8px 24px rgba(11,34,57,.045);
-  background:#fff;
-}
-
-/* Evita desalinhamentos residuais de links/botões antigos. */
-body.sl-typo-clean .sl-hero-actions{
-  display:none !important;
-}
-
-@media(max-width:820px){
-
-  .sl-hero-v3--rj{
-    padding-top:30px;
-  }
-
-  body.sl-typo-clean
-  .sl-booking-section
-  .sl-units-placeholder,
-  body.sl-typo-clean
-  .sl-booking-section
-  #sl-units-map-mini{
-    min-height:340px !important;
-    height:340px !important;
-  }
-
-}
-</style>
-
-</head>
-<body class="sl-typo-clean"> <!-- Header com logo encostada à esquerda --> <header class="sl-header">
-<div class="sl-wrap sl-header-in"> <a class="sl-brand" href="/"><img src="/img/logo.png" alt="Sopro Life"></a> <nav class="sl-main-nav" aria-label="Navegação principal"> <a href="/" class="sl-nav-link">Início</a> <a href="/conheca/" class="sl-nav-link">Conheça a Sopro</a> <a href="/servicos/" class="sl-nav-link">Serviços</a> <a href="#agendamento">Agendamento</a>
-        <a href="/telemedicina/">Telemedicina</a> <div class="sl-has-sub"> <a href="/#contato" class="sl-nav-link" aria-haspopup="true" aria-expanded="false">Contato</a> <div class="sl-submenu" role="menu" aria-label="Contato"> <a href="mailto:contato@soprolife.com.br" class="sl-submenu-link" role="menuitem"> ✉ contato@soprolife.com.br </a> </div>
-</div> </nav>
-<a class="sl-header-social sl-header-instagram" href="https://www.instagram.com/soprolife/" target="_blank" rel="noopener" aria-label="Instagram da Sopro Life">
-  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none">
-    <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/>
-    <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/>
-    <circle cx="17.5" cy="6.5" r="1.2" fill="currentColor"/>
-  </svg>
-</a>
-<a class="sl-nav-cta"
-       target="_blank"
-       rel="noopener"
-       href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20da%20SoproLife%20e%20gostaria%20de%20agendar%20uma%20espirometria.">
-      Falar no WhatsApp
-    </a> </div>
-</header>
-<!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_START -->
-<div class="sl-telemed-mobile-strip">
-  <a href="/telemedicina/"
-     aria-label="Acessar Atendimento Médico Online">
-
-    <span class="sl-tms__icon" aria-hidden="true">
-      <svg viewBox="0 0 24 24"
-           fill="none"
-           stroke="currentColor"
-           stroke-width="1.9"
-           stroke-linecap="round"
-           stroke-linejoin="round">
-        <rect x="3" y="6" width="13" height="12" rx="2"/>
-        <path d="M16 10l5-3v10l-5-3z"/>
-      </svg>
-    </span>
-
-    <span class="sl-tms__text">
-      <strong class="sl-tms__title">
-        Atendimento Médico Online
-      </strong>
-      <span class="sl-tms__subtitle">
-        Avaliação e orientação respiratória
-      </span>
-    </span>
-
-    <b class="sl-tms__arrow" aria-hidden="true">
-      <svg viewBox="0 0 24 24"
-           fill="none"
-           stroke="currentColor"
-           stroke-width="2.4"
-           stroke-linecap="round"
-           stroke-linejoin="round">
-        <path d="M5 12h14M13 6l6 6-6 6"/>
-      </svg>
-    </b>
-
-  </a>
-</div>
-<!-- SOPRO:TELEMED_MOBILE_STRIP_HTML_END -->
- <div class="sl-page"> <div class="sl-container"> <!-- HERO --> 
-<!-- SOPRO:RIO_HERO_MODERN_V1 -->
-<section class="sl-hero-v3 sl-hero-v3--rj">
-
-  <div class="sl-hero-v3__wrap">
-
+ <head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1" name="viewport"/>
+  <title>
+   Espirometria no Rio de Janeiro | SoproLife
+  </title>
+  <meta content="Espirometria no Rio de Janeiro, com atendimento em Ipanema, Barra, Zona Norte e em domicílio. Conheça a SoproLife e solicite seu agendamento." name="description"/>
+  <link href="https://soprolife.com.br/espirometria-rio-de-janeiro/" rel="canonical"/>
+  <meta content="website" property="og:type"/>
+  <meta content="Espirometria no Rio de Janeiro | SoproLife" property="og:title"/>
+  <meta content="Espirometria no Rio de Janeiro, com atendimento em Ipanema, Barra, Zona Norte e em domicílio. Conheça a SoproLife e solicite seu agendamento." property="og:description"/>
+  <meta content="https://soprolife.com.br/espirometria-rio-de-janeiro/" property="og:url"/>
+  <meta content="https://soprolife.com.br/img/espirometro-sopro-life.jpg" property="og:image"/>
+  <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" integrity="sha384-RkASv+6KfBMW9eknReJIJ6b3UnjKOKC5bOUaNgIY778NFbQ8MtWq9Lr/khUgqtTt" referrerpolicy="no-referrer" rel="stylesheet"/>
+  <link href="/img/soprolife-icone-quadrado-512.png?v=20260728" rel="icon" sizes="512x512" type="image/png"/>
+  <link href="/favicon-32x32.png?v=20260522b" rel="icon" sizes="32x32" type="image/png"/>
+  <link href="/favicon-48x48.png?v=20260522b" rel="icon" sizes="48x48" type="image/png"/>
+  <link href="/favicon-16x16.png?v=20260522b" rel="icon" sizes="16x16" type="image/png"/>
+  <link href="/favicon.ico?v=20260522b" rel="shortcut icon"/>
+  <link href="/apple-touch-icon.png?v=20260522b" rel="apple-touch-icon" sizes="180x180"/>
+  <link href="/site.webmanifest?v=20260522b" rel="manifest"/>
+  <link href="/assets/sl-booking.css" rel="stylesheet"/>
+  <link href="/assets/sl-modern.css?v=m26-11" rel="stylesheet"/>
+  <link href="/assets/sl-maps-calm.css?v=m26-11-mapas" rel="stylesheet"/>
+  <link href="/assets/sl-editorial.css?v=20260928-footer1" rel="stylesheet"/>
+  <script type="application/ld+json">
+   {"@context": "https://schema.org", "@graph": [{"@type": "MedicalClinic", "@id": "https://soprolife.com.br/#clinica", "name": "SoproLife", "legalName": "Sopro Life Diagnósticos e Soluções em Saúde LTDA", "url": "https://soprolife.com.br/", "telephone": "+5521998901775", "image": "https://soprolife.com.br/img/espirometro-sopro-life.jpg", "logo": "https://soprolife.com.br/img/soprolife-logo-quadrado.png", "areaServed": {"@type": "City", "name": "Rio de Janeiro"}, "address": {"@type": "PostalAddress", "streetAddress": "Av. das Américas, 500, Bloco 20, Sala 213 — Barra da Tijuca", "addressLocality": "Rio de Janeiro", "addressRegion": "RJ", "addressCountry": "BR"}}, {"@type": "WebPage", "@id": "https://soprolife.com.br/espirometria-rio-de-janeiro/", "url": "https://soprolife.com.br/espirometria-rio-de-janeiro/", "name": "Espirometria no Rio de Janeiro | SoproLife", "description": "Espirometria no Rio de Janeiro, com atendimento em Ipanema, Barra, Zona Norte e em domicílio. Conheça a SoproLife e solicite seu agendamento.", "inLanguage": "pt-BR", "about": {"@id": "https://soprolife.com.br/#clinica"}}, {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Como é feita a espirometria?", "acceptedAnswer": {"@type": "Answer", "text": "Você sopra em um aparelho seguindo as orientações da equipe. As manobras são repetidas para avaliar a qualidade das medidas. Quando indicado, o exame inclui uma etapa após o uso de broncodilatador."}}, {"@type": "Question", "name": "Preciso suspender meus medicamentos?", "acceptedAnswer": {"@type": "Answer", "text": "Não suspenda medicamentos por conta própria. Informe quais utiliza e confirme com a equipe e com o médico solicitante o preparo adequado para o seu exame."}}, {"@type": "Question", "name": "Qual é o valor do exame?", "acceptedAnswer": {"@type": "Answer", "text": "O orçamento depende do tipo de exame e do local de atendimento. Fale com a equipe pelo WhatsApp para confirmar o valor, as formas de pagamento e o que está incluído."}}, {"@type": "Question", "name": "Escolher um horário no site confirma meu exame?", "acceptedAnswer": {"@type": "Answer", "text": "Não. A seleção registra sua preferência. O atendimento só fica confirmado depois da conversa pelo WhatsApp. Em Ipanema, a confirmação segue a agenda da unidade parceira Pastore."}}, {"@type": "Question", "name": "Como recebo meu resultado?", "acceptedAnswer": {"@type": "Answer", "text": "A equipe informa o prazo e as orientações para acessar seu laudo no agendamento. Você também encontra o acesso ao portal de resultados no menu do site."}}]}]}
+  </script>
+ </head>
+ <body class="sl-editorial ed-home">
+  <header class="sl-header">
+   <div class="sl-header-in">
+    <a aria-label="SoproLife — início" class="sl-brand" href="/">
+     <img alt="SoproLife" height="70" src="/img/logo-tight.png" width="150"/>
+    </a>
+    <nav aria-label="Navegação principal" class="sl-main-nav">
+     <a href="/conheca/">
+      A SoproLife
+     </a>
+     <a href="/espirometria-rio-de-janeiro/">
+      Espirometria
+     </a>
+     <a href="/#onde-atendemos">
+      Onde atendemos
+     </a>
+     <a href="/resultados/">
+      Resultados
+     </a>
+    </nav>
+    <a class="sl-nav-cta" href="/#agendamento">
+     Agendar exame ↗
+    </a>
+   </div>
+  </header>
+  <main id="conteudo">
+   <section class="ed-wrap ed-hero">
     <div>
-
-      <span class="sl-hero-v3__kicker">
-        Espirometria · Rio de Janeiro
-      </span>
-
-      <h1 class="sl-hero-v3__title">
-        Espirometria no
-        <span>Rio de Janeiro</span>
-      </h1>
-
-      <p class="sl-hero-v3__lead">
-        Exame respiratório simples ou com broncodilatador,
-        com laudo por pneumologista e opções de atendimento
-        ambulatorial ou domiciliar.
+     <span class="ed-eyebrow">
+      SoproLife · Espirometria no Rio de Janeiro
+     </span>
+     <h1>
+      Espirometria no
+      <br/>
+      Rio de Janeiro.
+      <br/>
+      <em>
+       Cuidado em cada sopro.
+      </em>
+     </h1>
+     <p class="ed-lead">
+      Exame simples ou com broncodilatador, com orientação em cada etapa. Escolha o local de atendimento e converse com nossa equipe.
+     </p>
+     <div class="ed-actions">
+      <a class="ed-button" href="#agendamento">
+       Agendar meu exame
+       <span aria-hidden="true">
+        ↗
+       </span>
+      </a>
+      <a class="ed-text-link" href="#onde-atendemos">
+       Onde atendemos
+      </a>
+     </div>
+     <p class="ed-caption">
+      Atendimento mediante agendamento.
+      <br/>
+      Converse com a equipe para confirmar preparo, valor e horário.
+     </p>
+    </div>
+    <figure class="ed-photo">
+     <img alt="Espirômetro e materiais utilizados pela SoproLife no atendimento" fetchpriority="high" height="927" src="/img/espirometro-sopro-life.jpg" width="521"/>
+     <figcaption>
+      <strong>
+       Técnica com acolhimento.
+      </strong>
+      Orientação e atenção em cada etapa do seu exame.
+     </figcaption>
+    </figure>
+   </section>
+   <div class="ed-strip">
+    <div class="ed-wrap">
+     <span>
+      Espirometria simples e com broncodilatador
+     </span>
+     <span>
+      Atendimento ambulatorial e domiciliar
+     </span>
+     <span>
+      Rio de Janeiro
+     </span>
+    </div>
+   </div>
+   <section class="ed-section ed-section-white">
+    <div class="ed-wrap">
+     <div class="ed-section-intro">
+      <div>
+       <span class="ed-eyebrow">
+        Entenda seu exame
+       </span>
+       <h2 class="ed-title">
+        Conhecer a respiração
+        <br/>
+        é parte do
+        <em>
+         cuidado.
+        </em>
+       </h2>
+      </div>
+      <p>
+       A espirometria mede volumes e fluxos de ar durante a respiração. Ajuda o médico a investigar alterações respiratórias e a acompanhar condições como asma e DPOC, junto à avaliação clínica.
       </p>
-
-      <div class="sl-cta-row">
-
-        <a class="sl-cta-btn sl-cta-btn--wa"
-           href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pela%20p%C3%A1gina%20de%20espirometria%20no%20Rio%20de%20Janeiro%20e%20gostaria%20de%20agendar%20meu%20exame."
-           target="_blank"
-           rel="noopener">
-
-          <svg viewBox="0 0 24 24"
-               fill="currentColor"
-               width="18"
-               height="18"
-               aria-hidden="true">
-            <path d="M17.6 6.3A7.85 7.85 0 0 0 12 4a7.94 7.94 0 0 0-6.8 12L4 20l4.1-1.1A7.94 7.94 0 0 0 20 12a7.85 7.85 0 0 0-2.4-5.7zM12 18.5a6.6 6.6 0 0 1-3.4-.9l-.2-.1-2.4.6.6-2.3-.2-.3a6.5 6.5 0 0 1 10.1-8 6.5 6.5 0 0 1-4.5 11zm3.6-4.9c-.2-.1-1.2-.6-1.4-.6s-.3 0-.5.2-.5.6-.6.8-.2.1-.4 0a5.4 5.4 0 0 1-1.6-1 6 6 0 0 1-1.1-1.4c-.1-.2 0-.3.1-.4l.3-.4.2-.3v-.3l-.6-1.4c-.2-.3-.3-.3-.4-.3h-.4a.7.7 0 0 0-.5.3 2.2 2.2 0 0 0-.7 1.7 3.9 3.9 0 0 0 .8 2 8.7 8.7 0 0 0 3.5 3.1c1.2.5 1.7.5 2.3.4a2 2 0 0 0 1.3-.9 1.6 1.6 0 0 0 .1-.9c-.1-.1-.2-.2-.4-.3z"/>
-          </svg>
-
-          Falar no WhatsApp
-        </a>
-
-        <a class="sl-cta-btn sl-cta-btn--ghost"
-           href="#agendamento">
-          Ver agendamento
-        </a>
-
-      </div>
-
-      <div class="sl-trust-row">
-
-        <span>
-          <svg viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="2.2">
-            <path d="M20 6L9 17l-5-5"/>
-          </svg>
-          Laudo por pneumologista
-        </span>
-
-        <span>
-          <svg viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="2.2">
-            <path d="M20 6L9 17l-5-5"/>
-          </svg>
-          Atendimento domiciliar
-        </span>
-
-        <span>
-          <svg viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="2.2">
-            <path d="M20 6L9 17l-5-5"/>
-          </svg>
-          Atendimento em diferentes regiões
-        </span>
-
-      </div>
-
+     </div>
+     <div class="ed-pillars">
+      <article class="ed-pillar">
+       <span class="ed-number">
+        01
+       </span>
+       <h3>
+        Espirometria simples
+       </h3>
+       <p>
+        Avalia o ar movimentado durante as manobras, conforme a solicitação do seu médico.
+       </p>
+      </article>
+      <article class="ed-pillar">
+       <span class="ed-number">
+        02
+       </span>
+       <h3>
+        Com broncodilatador
+       </h3>
+       <p>
+        Inclui novas medidas após o uso de broncodilatador para avaliar a resposta à medicação.
+       </p>
+      </article>
+      <article class="ed-pillar">
+       <span class="ed-number">
+        03
+       </span>
+       <h3>
+        Saúde ocupacional
+       </h3>
+       <p>
+        Atendimento para empresas e clínicas, conforme a indicação e os requisitos do programa de saúde ocupacional.
+       </p>
+      </article>
+     </div>
     </div>
-
-
-    <div class="sl-offer-stack"
-         aria-label="Serviços principais">
-
-      <a class="sl-offer sl-offer--primary"
-         href="#agendamento">
-
-        <div class="sl-offer__icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="1.8">
-            <path d="M12 4v8"/>
-            <path d="M8 8c-3 0-5 3-5 7 0 3 2 5 4 5 1.5 0 2-1 2-3v-9"/>
-            <path d="M16 8c3 0 5 3 5 7 0 3-2 5-4 5-1.5 0-2-1-2-3v-9"/>
-          </svg>
-        </div>
-
-        <div class="sl-offer__body">
-          <h3>Agendar Espirometria</h3>
-          <p>
-            Simples ou com broncodilatador —
-            atendimento ambulatorial ou domiciliar.
-          </p>
-        </div>
-
-        <span class="sl-offer__arrow" aria-hidden="true">
-          <svg viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="2.4">
-            <path d="M5 12h14M13 6l6 6-6 6"/>
-          </svg>
-        </span>
-
-      </a>
-
-
-      <a class="sl-offer"
-         href="/telemedicina/">
-
-        <div class="sl-offer__icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="1.8">
-            <rect x="3" y="6" width="13" height="12" rx="2"/>
-            <path d="M16 10l5-3v10l-5-3z"/>
-          </svg>
-        </div>
-
-        <div class="sl-offer__body">
-          <h3>Atendimento Médico Online</h3>
-          <p>
-            Avaliação e orientação respiratória.
-          </p>
-        </div>
-
-        <span class="sl-offer__arrow" aria-hidden="true">
-          <svg viewBox="0 0 24 24"
-               fill="none"
-               stroke="currentColor"
-               stroke-width="2.4">
-            <path d="M5 12h14M13 6l6 6-6 6"/>
-          </svg>
-        </span>
-
-      </a>
-
+   </section>
+   <section class="ed-section" id="onde-atendemos">
+    <div class="ed-wrap">
+     <span class="ed-eyebrow">
+      Perto de você
+     </span>
+     <h2 class="ed-title">
+      Diferentes lugares.
+      <br/>
+      O mesmo
+      <em>
+       cuidado.
+      </em>
+     </h2>
+     <div class="ed-locations">
+      <article class="ed-location">
+       <small>
+        Zona Sul · clínica parceira
+       </small>
+       <h3>
+        Ipanema
+       </h3>
+       <p>
+        Centro Médico Pastore
+        <br/>
+        Rua Teixeira de Melo, 54.
+        <br/>
+        Terças e sábados, das 8h às 12h. Agenda confirmada com a unidade.
+       </p>
+       <a href="/espirometria-ipanema/">
+        Conhecer o atendimento ↗
+       </a>
+      </article>
+      <article class="ed-location">
+       <small>
+        Zona Oeste · sob agendamento
+       </small>
+       <h3>
+        Barra da Tijuca
+       </h3>
+       <p>
+        Shopping Downtown
+        <br/>
+        Av. das Américas, 500.
+        <br/>
+        Bloco 20, sala 213.
+       </p>
+       <a href="/espirometria-barra-da-tijuca/">
+        Conhecer o atendimento ↗
+       </a>
+      </article>
+      <article class="ed-location">
+       <small>
+        Zona Norte · espaço parceiro
+       </small>
+       <h3>
+        Nova América
+       </h3>
+       <p>
+        Shopping Nova América
+        <br/>
+        Av. Pastor Martin Luther King Jr., 126. Sala e ponto de encontro confirmados no agendamento.
+       </p>
+       <a href="/espirometria-zona-norte-rio-de-janeiro/">
+        Conhecer o atendimento ↗
+       </a>
+      </article>
+      <article class="ed-location">
+       <small>
+        No seu endereço
+       </small>
+       <h3>
+        Em domicílio
+       </h3>
+       <p>
+        O exame no conforto de casa. Consulte a cobertura para seu bairro, a disponibilidade e as condições de atendimento.
+       </p>
+       <a href="/espirometria-domiciliar-rio-de-janeiro/">
+        Consultar atendimento domiciliar ↗
+       </a>
+      </article>
+     </div>
     </div>
-
-  </div>
-
-</section>
-
-<div id="sl-booking-desktop-anchor" aria-hidden="true"></div>
-<!-- SOPRO:RIO_BOOKING_TOP_MODERN_V1 -->
-<section class="sl-booking-section" id="agendamento">
-        <div class="sl-container">
-          <div class="sl-booking-align">
-            <div class="sl-booking-card">
-          
-
-          <div class="sl-booking-grid">
-            <div class="sl-booking-controls">
-<div class="sl-booking-head">
-            <span class="sl-booking-kicker">Agendamento rápido</span>
-            <h2 class="sl-booking-title">Agende sua Espirometria</h2>
-            <p class="sl-booking-sub">Escolha o melhor horário e confirme pelo WhatsApp.</p>
-          </div>
-
-              <!-- SOPRO:BOOKING_FIELDS_SHARED_V1
+   </section>
+   <section class="sl-booking-section" id="agendamento">
+    <div class="sl-container">
+     <div class="sl-booking-align">
+      <div class="sl-booking-card">
+       <div class="sl-booking-head">
+        <span class="sl-booking-kicker">
+         Vamos combinar seu atendimento
+        </span>
+        <h2 class="sl-booking-title">
+         Seu exame, no lugar que faz sentido para você.
+        </h2>
+        <p class="sl-booking-sub">
+         Escolha o exame, o local e um horário de preferência. Nossa equipe confirma os detalhes pelo WhatsApp antes do atendimento.
+        </p>
+       </div>
+       <div class="sl-booking-grid">
+        <div class="sl-booking-controls">
+         <!-- SOPRO:BOOKING_FIELDS_SHARED_V1
                    Estilo em /assets/sl-booking.css · lógica em /assets/sl-booking.js.
                    As opções de Localidade são reconciliadas com a configuração
                    central (SL_BOOKING.LOCATIONS) no carregamento da página. -->
-              <div class="sl-booking-field">
-                <label for="sl-booking-service">Tipo de Espirometria</label>
-                <span class="sl-field-wrap sl-field-wrap--select">
-                  <select id="sl-booking-service" class="sl-field-control" name="servico">
-                    <option value="Espirometria simples" selected>Espirometria simples</option>
-                    <option value="Espirometria com broncodilatador">Espirometria com broncodilatador</option>
-                    <option value="Empresas / PCMSO">Empresas / PCMSO</option>
-                  </select>
-                </span>
-              </div>
-
-              <div class="sl-booking-field">
-                <label for="sl-booking-unit">Localidade</label>
-                <span class="sl-field-wrap sl-field-wrap--select">
-                  <select id="sl-booking-unit" class="sl-field-control" name="unidade">
-                    <option value="Atendimento domiciliar" selected>Atendimento domiciliar</option>
-                    <option value="Unidade Barra">Unidade Barra</option>
-                    <option value="Unidade Zona Norte — Shopping Nova América">Unidade Zona Norte — Shopping Nova América</option>
-                    <option value="Centro Médico Pastore — Ipanema">Pastore Ipanema — Unidade parceira</option>
-                  </select>
-                </span>
-              </div>
-
-              <div class="sl-booking-field">
-                <label for="sl-booking-date">Data</label>
-                <span class="sl-field-wrap sl-field-wrap--date">
-                  <input id="sl-booking-date" class="sl-field-control" name="data" type="text" inputmode="none" autocomplete="off" placeholder="dd/mm/aaaa" />
-                </span>
-              </div>
-
-              <div>
-                <div class="sl-booking-slots-title">Horários disponíveis</div>
-                <div class="sl-booking-slots" id="sl-booking-slots"></div>
-                <p class="sl-booking-note">Horários sujeitos a confirmação pelo WhatsApp.</p>
-              </div>
-            </div>
-
-            <aside class="sl-units-placeholder" aria-label="Unidades de atendimento">
-              <div class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" aria-label="Ampliar mapa das unidades" role="button" tabindex="0">
-                <span class="sl-mini-map-target" aria-hidden="true">
-                  <span></span><span></span><span></span><span></span>
-                </span>
-                <button class="sl-btn sl-map-open-btn" type="button" id="sl-open-map-modal" aria-label="Ampliar mapa das unidades">Ampliar mapa</button>
-              </div>
-            </aside>
-            <div class="sl-map-modal" id="sl-map-modal" aria-hidden="true">
-        <div class="sl-map-modal__backdrop" data-map-close="backdrop"></div>
-        <div class="sl-map-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sl-map-modal-title">
-          <div class="sl-map-modal__header">
-            <h3 class="sl-map-modal__title" id="sl-map-modal-title">Unidades de atendimento</h3>
-            <button class="sl-btn sl-btn-outline" type="button" id="sl-close-map-modal">Fechar</button>
+         <div class="sl-booking-field">
+          <label for="sl-booking-service">
+           Tipo de Espirometria
+          </label>
+          <span class="sl-field-wrap sl-field-wrap--select">
+           <select class="sl-field-control" id="sl-booking-service" name="servico">
+            <option selected="" value="Espirometria simples">
+             Espirometria simples
+            </option>
+            <option value="Espirometria com broncodilatador">
+             Espirometria com broncodilatador
+            </option>
+            <option value="Empresas / PCMSO">
+             Empresas / PCMSO
+            </option>
+           </select>
+          </span>
+         </div>
+         <div class="sl-booking-field">
+          <label for="sl-booking-unit">
+           Localidade
+          </label>
+          <span class="sl-field-wrap sl-field-wrap--select">
+           <select class="sl-field-control" id="sl-booking-unit" name="unidade">
+            <option selected="" value="Atendimento domiciliar">
+             Atendimento domiciliar
+            </option>
+            <option value="Unidade Barra">
+             Unidade Barra
+            </option>
+            <option value="Unidade Zona Norte — Shopping Nova América">
+             Unidade Zona Norte — Shopping Nova América
+            </option>
+            <option value="Centro Médico Pastore — Ipanema">
+             Pastore Ipanema — Unidade parceira
+            </option>
+           </select>
+          </span>
+         </div>
+         <div class="sl-booking-field">
+          <label for="sl-booking-date">
+           Data
+          </label>
+          <span class="sl-field-wrap sl-field-wrap--date">
+           <input autocomplete="off" class="sl-field-control" id="sl-booking-date" inputmode="none" name="data" placeholder="dd/mm/aaaa" type="text"/>
+          </span>
+         </div>
+         <div>
+          <div class="sl-booking-slots-title">
+           Qual horário você prefere?
           </div>
-          <div class="sl-map-modal__body">
-            <div class="sl-map-panel-info sl-map-modal__info">
-              <h4>Unidades de atendimento</h4>
-              <p class="sl-map-panel-sub">Na Zona Sul, a unidade parceira é Ipanema. Nas demais, escolha e finalize pelo WhatsApp.</p>
-                            <!-- SOPRO:MAP_PASTORE_IPANEMA_CARD_START
+          <div class="sl-booking-slots" id="sl-booking-slots">
+          </div>
+          <p class="sl-booking-note">
+           Horários sujeitos a confirmação pelo WhatsApp.
+          </p>
+         </div>
+        </div>
+        <aside aria-label="Unidades de atendimento" class="sl-units-placeholder">
+         <div aria-label="Ampliar mapa das unidades" class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" role="button" tabindex="0">
+          <span aria-hidden="true" class="sl-mini-map-target">
+           <span>
+           </span>
+           <span>
+           </span>
+           <span>
+           </span>
+           <span>
+           </span>
+          </span>
+          <button aria-label="Ampliar mapa das unidades" class="sl-btn sl-map-open-btn" id="sl-open-map-modal" type="button">
+           Ampliar mapa
+          </button>
+         </div>
+        </aside>
+       </div>
+      </div>
+     </div>
+    </div>
+   </section>
+   <section class="ed-section ed-care">
+    <div class="ed-wrap ed-section-intro">
+     <div>
+      <span class="ed-eyebrow">
+       A maneira SoproLife de cuidar
+      </span>
+      <h2 class="ed-title">
+       Um exame técnico.
+       <br/>
+       Um atendimento humano.
+      </h2>
+     </div>
+     <div>
+      <p>
+       Escutar, explicar e acompanhar cada etapa. É assim que queremos que você se sinta acolhido para realizar seu exame.
+      </p>
+      <p>
+       Do primeiro contato às orientações para acessar o resultado, você conversa com a nossa equipe.
+      </p>
+      <a class="ed-text-link" href="/conheca/">
+       Conheça a SoproLife ↗
+      </a>
+     </div>
+    </div>
+   </section>
+   <section class="ed-section ed-section-white" id="perguntas-frequentes">
+    <div class="ed-wrap ed-faq">
+     <div>
+      <span class="ed-eyebrow">
+       Antes do seu exame
+      </span>
+      <h2 class="ed-title">
+       Clareza para
+       <br/>
+       se sentir
+       <em>
+        à vontade.
+       </em>
+      </h2>
+      <p class="ed-lead">
+       Sua dúvida também faz parte do cuidado.
+      </p>
+     </div>
+     <div>
+      <details>
+       <summary>
+        Como é feita a espirometria?
+       </summary>
+       <p>
+        Você sopra em um aparelho seguindo as orientações da equipe. As manobras são repetidas para avaliar a qualidade das medidas. Quando indicado, o exame inclui uma etapa após o uso de broncodilatador.
+       </p>
+      </details>
+      <details>
+       <summary>
+        Preciso suspender meus medicamentos?
+       </summary>
+       <p>
+        Não suspenda medicamentos por conta própria. Informe quais utiliza e confirme com a equipe e com o médico solicitante o preparo adequado para o seu exame.
+       </p>
+      </details>
+      <details>
+       <summary>
+        Qual é o valor do exame?
+       </summary>
+       <p>
+        O orçamento depende do tipo de exame e do local de atendimento. Fale com a equipe pelo WhatsApp para confirmar o valor, as formas de pagamento e o que está incluído.
+       </p>
+      </details>
+      <details>
+       <summary>
+        Escolher um horário no site confirma meu exame?
+       </summary>
+       <p>
+        Não. A seleção registra sua preferência. O atendimento só fica confirmado depois da conversa pelo WhatsApp. Em Ipanema, a confirmação segue a agenda da unidade parceira Pastore.
+       </p>
+      </details>
+      <details>
+       <summary>
+        Como recebo meu resultado?
+       </summary>
+       <p>
+        A equipe informa o prazo e as orientações para acessar seu laudo no agendamento. Você também encontra o acesso ao portal de resultados no menu do site.
+       </p>
+      </details>
+     </div>
+    </div>
+   </section>
+   <section class="ed-contact" id="contato">
+    <div class="ed-wrap">
+     <span class="ed-eyebrow">
+      Pode falar com a gente
+     </span>
+     <h2 class="ed-title">
+      Vamos cuidar do seu
+      <br/>
+      próximo passo?
+     </h2>
+     <div class="ed-actions">
+      <a class="ed-button" href="https://api.whatsapp.com/send?phone=5521998901775&amp;text=Ol%C3%A1!%20Quero%20informa%C3%A7%C3%B5es%20sobre%20espirometria." rel="noopener" target="_blank">
+       Conversar pelo WhatsApp
+       <span aria-hidden="true">
+        ↗
+       </span>
+      </a>
+      <a class="ed-text-link" href="/funil/parcerias/">
+       Sou médico ou represento uma clínica ↗
+      </a>
+     </div>
+     <p class="ed-caption">
+      WhatsApp: (21) 99890-1775 · Rio de Janeiro
+     </p>
+    </div>
+   </section>
+  </main>
+  <footer class="ed-footer">
+   <div class="ed-wrap">
+    <div class="ed-footer-top">
+     <div>
+      <strong>
+       SoproLife
+      </strong>
+      <p>
+       Diagnósticos e soluções em saúde.
+       <br/>
+       Cuidado respiratório no Rio de Janeiro.
+      </p>
+      <a href="mailto:contato@soprolife.com.br">
+       contato@soprolife.com.br
+      </a>
+     </div>
+     <nav aria-label="Links do rodapé">
+      <a href="/conheca/">
+       Conheça a SoproLife
+      </a>
+      <a href="/servicos/">
+       Serviços
+      </a>
+      <a href="/espirometria/">
+       Sobre a espirometria
+      </a>
+      <a href="/telemedicina/">
+       Atendimento médico online
+      </a>
+      <a href="/consulta-pneumologista-rio-de-janeiro/">
+       Consulta respiratória
+      </a>
+      <a href="/funil/parcerias/">
+       Parcerias
+      </a>
+      <a href="/resultados/">
+       Acessar resultados
+      </a>
+      <a href="/verificar/">
+       Verificar laudo
+      </a>
+      <a href="https://www.instagram.com/soprolife" rel="noopener" target="_blank">
+       Instagram ↗
+      </a>
+     </nav>
+    </div>
+    <div class="ed-footer-bottom">
+     Sopro Life Diagnósticos e Soluções em Saúde LTDA · Atendimento mediante agendamento.
+     <br/>
+     As informações deste site são educativas e não substituem a avaliação médica.
+    </div>
+   </div>
+  </footer>
+  <div aria-hidden="true" class="sl-map-modal" id="sl-map-modal">
+   <div class="sl-map-modal__backdrop" data-map-close="backdrop">
+   </div>
+   <div aria-labelledby="sl-map-modal-title" aria-modal="true" class="sl-map-modal__dialog" role="dialog">
+    <div class="sl-map-modal__header">
+     <h3 class="sl-map-modal__title" id="sl-map-modal-title">
+      Unidades de atendimento
+     </h3>
+     <button class="sl-btn sl-btn-outline" id="sl-close-map-modal" type="button">
+      Fechar
+     </button>
+    </div>
+    <div class="sl-map-modal__body">
+     <div class="sl-map-panel-info sl-map-modal__info">
+      <h4>
+       Unidades de atendimento
+      </h4>
+      <p class="sl-map-panel-sub">
+       Escolha a unidade e finalize pelo WhatsApp.
+      </p>
+      <!-- SOPRO:MAP_PASTORE_IPANEMA_CARD_START
                    Primeiro cartão da lista: unidade parceira, com endereço real.
                    NÃO usa .sl-map-unit-card de propósito — essa classe tem um
                    clique global que abre o WhatsApp da SoproLife, e em Ipanema
                    quem administra o agendamento é a Pastore. -->
-              <div class="sl-map-partner-card" data-map-location="pastore-ipanema">
-                <div class="sl-map-partner-card__head">
-                  <span class="sl-map-partner-card__name">Centro Médico Pastore — Ipanema</span>
-                  <span class="sl-map-partner-card__badge">Unidade parceira</span>
-                </div>
-                <address class="sl-map-partner-card__address">
-                  Rua Teixeira de Melo, 54 — Ipanema, Rio de Janeiro/RJ<br>
-                  Em frente ao acesso C do metrô General Osório.
-                </address>
-                <p class="sl-map-partner-card__hours">
-                  Espirometria às terças-feiras e aos sábados, das 8h às 12h.
-                  <span>Disponibilidade sujeita à confirmação no sistema oficial de agendamento da Pastore.</span>
-                </p>
-                <div class="sl-map-partner-card__actions">
-                  <a class="sl-map-partner-btn sl-map-partner-btn--ghost"
-                     href="https://www.google.com/maps/dir/?api=1&amp;destination=Rua%20Teixeira%20de%20Melo%2C%2054%2C%20Ipanema%2C%20Rio%20de%20Janeiro%20-%20RJ"
-                     target="_blank" rel="noopener" data-sl-pastore-rota>Como chegar</a>
-                  <a class="sl-map-partner-btn sl-map-partner-btn--wa"
-                     href="https://api.whatsapp.com/send?phone=5521998901775&amp;text=Ol%C3%A1%21%20Vim%20pelo%20site%20da%20SoproLife%20e%20gostaria%20de%20orienta%C3%A7%C3%A3o%20para%20agendar%20uma%20espirometria%20na%20unidade%20Pastore%20Ipanema."
-                     target="_blank" rel="noopener" data-sl-pastore-wa>Falar no WhatsApp</a>
-                  <a class="sl-map-partner-btn sl-map-partner-btn--solid"
-                     href="https://paciente.centromedicopastore.com.br/exams?utm_source=soprolife&amp;utm_medium=referral&amp;utm_campaign=espirometria_ipanema"
-                     target="_blank" rel="noopener" data-sl-pastore-agendar>Agendar na Pastore</a>
-                </div>
-                <a class="sl-map-partner-card__link" href="/espirometria-ipanema/"
-                   data-sl-pastore-conhecer>Conhecer a unidade de Ipanema</a>
-              </div>
-              <!-- SOPRO:MAP_PASTORE_IPANEMA_CARD_END -->
-
-              <div class="sl-map-unit-cards">
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Barra" data-map-location="barra">
-                  <span class="sl-map-unit-card__text">
-                    <span class="sl-map-unit-card__name">Unidade Barra</span>
-                    <span class="sl-map-unit-card__tag">Shopping Downtown · prédio 20, sala 213</span>
-                  </span>
-                </div>
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Unidade Zona Norte — Shopping Nova América" data-map-location="zona-norte">
-                  <span class="sl-map-unit-card__text">
-                    <span class="sl-map-unit-card__name">Unidade Zona Norte — Shopping Nova América</span>
-                    <span class="sl-map-unit-card__tag">Av. Pastor Martin Luther King Jr., 126 · Del Castilho</span>
-                  </span>
-                </div>
-                <div class="sl-map-unit-card" role="button" tabindex="0" data-map-unit="Atendimento domiciliar" data-map-location="domiciliar">
-                  <span class="sl-map-unit-card__text">
-                    <span class="sl-map-unit-card__name">Atendimento domiciliar</span>
-                    <span class="sl-map-unit-card__tag">Endereço combinado pelo WhatsApp</span>
-                  </span>
-                </div>
-              </div>
-              <p class="sl-map-panel-note">Na Unidade Zona Norte, a sala e o ponto de encontro no Shopping Nova América são confirmados no agendamento.</p>
-            </div>
-            <div class="sl-map-modal__map-wrap">
-              <div id="sl-units-map" aria-label="Mapa ampliado das unidades"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-          </div>
-        </div>
-        </div>
-        </div><!-- SOPRO:FIX_CONTAINER_AGENDAMENTO — fecha .sl-container da seção
-                    de agendamento, que estava sem par e deixava .sl-page aberta -->
-      </section>
-
-
-
-
-<section class="sl-section" id="seo-local-espirometria-rj">
-  <div class="sl-section-header">
-    <span class="sl-section-kicker">Rio de Janeiro</span>
-    <h2 class="sl-section-title">Onde fazer espirometria no Rio de Janeiro?</h2>
-    <p class="sl-section-subtitle">A Sopro Life atende pacientes que procuram exame de espirometria no RJ, com agendamento pelo WhatsApp e orientação clara antes da realização do exame.</p>
-  </div>
-  <div class="sl-text-block">
-    <p>A espirometria — também conhecida popularmente como teste do sopro (ou exame do sopro) e, tecnicamente, como prova de função pulmonar, prova de função respiratória ou prova ventilatória — avalia os volumes e fluxos respiratórios e ajuda o médico na investigação e acompanhamento de sintomas e doenças respiratórias.</p>
-    <p>Se você está procurando onde fazer espirometria no Rio de Janeiro, a Sopro Life organiza o atendimento em formato ambulatorial, em clínicas parceiras, empresas ou outras modalidades previamente avaliadas.</p>
-    <p>A SoproLife realiza espirometria em diferentes regiões do Rio de Janeiro, com opções na <strong>Barra da Tijuca</strong>, <strong>Zona Norte</strong>, <strong>Zona Sul</strong> e também <strong>atendimento domiciliar</strong>. Na Zona Sul, a unidade parceira fica em Ipanema. Veja a página de <a href="/espirometria-ipanema/" style="color:#0f8f86;text-decoration:underline;font-weight:700;">espirometria na Zona Sul, com atendimento em Ipanema</a>.</p>
-    <p>O exame de espirometria pode ser simples ou com broncodilatador. Quando indicado, a prova broncodilatadora compara os resultados antes e depois da medicação, auxiliando a interpretação médica.</p>
-    <p>A espirometria costuma ser solicitada para investigar sintomas como tosse persistente, falta de ar, chiado no peito e cansaço aos esforços, e para diagnosticar e acompanhar doenças como asma, DPOC, bronquite e enfisema. Também é usada na avaliação de fumantes e ex-fumantes, no acompanhamento de quem teve sequelas respiratórias e em exames ocupacionais (PCMSO) para trabalhadores expostos a poeiras e produtos químicos.</p>
-  </div>
-
-  <!-- SOPRO:RJ_LINK_IPANEMA_START -->
-  <div class="sl-local-mini">
-    <span class="sl-local-kicker">Novidade · Zona Sul</span>
-    <h3>Espirometria na Zona Sul, com atendimento em Ipanema</h3>
-    <p>A SoproLife realiza espirometria no Rio de Janeiro com opções de atendimento na Barra da Tijuca, Zona Norte, Zona Sul e também em domicílio. Para quem escolhe a Zona Sul, o exame é realizado na unidade parceira Centro Médico Pastore — Ipanema, em frente ao acesso C do metrô General Osório. O exame acontece habitualmente às terças-feiras e aos sábados, das 8h às 12h, com disponibilidade confirmada no agendamento.</p>
-    <address class="sl-local-address"><strong>Centro Médico Pastore — Unidade Ipanema</strong><br>Rua Teixeira de Melo, 54 — Ipanema, Rio de Janeiro/RJ</address>
-    <div class="sl-local-tags">
-      <a class="sl-tag sl-tag--primary" href="/espirometria-ipanema/">Ver espirometria na Zona Sul</a>
-      <a class="sl-tag" href="/espirometria-ipanema/#onde">Endereço e mapa da unidade</a>
-    </div>
-  </div>
-  <!-- SOPRO:RJ_LINK_IPANEMA_END -->
-</section>
- <!-- SOBRE --> <!-- SOPRO:TESTIMONIALS_START -->
-
-
-
-
-
-
-
-
-
-
-<!-- SOPRO:SEO_INTENT_ESPIROMETRIA_RJ_V1 -->
-<section class="sl-seo-intent"
-         aria-labelledby="sl-seo-intent-title">
-
-  <div class="sl-container">
-
-    <div class="sl-seo-intent-head">
-
-      <span class="sl-seo-intent-kicker">
-        Onde fazer o exame
-      </span>
-
-      <h2 id="sl-seo-intent-title">
-        Onde fazer exame de espirometria no Rio de Janeiro (RJ)?
-      </h2>
-
-      <p>
-        Para quem procura onde fazer exame de espirometria no RJ,
-        a Sopro Life oferece opções de atendimento na Barra da Tijuca,
-        Zona Norte, Zona Sul e também atendimento domiciliar.
-      </p>
-
-    </div>
-
-    <div class="sl-seo-intent-grid">
-
-      <article class="sl-seo-intent-card">
-
-        <h3>
-          Espirometria perto de você
-        </h3>
-
-        <p>
-          O exame pode ser realizado de forma ambulatorial em diferentes
-          localidades. Escolha a opção mais conveniente no momento do
-          agendamento.
-        </p>
-
-        <ul>
-          <li>
-            <strong>Barra da Tijuca:</strong>
-            Shopping Downtown, Av. das Américas, 500.
-          </li>
-
-          <li>
-            <strong>Zona Norte:</strong>
-            Shopping Nova América.
-          </li>
-
-          <li>
-            <strong>Ipanema:</strong>
-            unidade parceira Centro Médico Pastore.
-          </li>
-
-          <li>
-            <strong>Domiciliar:</strong>
-            atendimento no endereço combinado.
-          </li>
-        </ul>
-
-        <div class="sl-seo-place-links">
-
-          <a href="/espirometria-barra-da-tijuca/">
-            Barra da Tijuca
-          </a>
-
-          <a href="/espirometria-zona-norte-rio-de-janeiro/">
-            Zona Norte
-          </a>
-
-          <a href="/espirometria-ipanema/">
-            Ipanema
-          </a>
-
-          <a href="/espirometria-domiciliar-rio-de-janeiro/">
-            Domiciliar
-          </a>
-
-        </div>
-
-      </article>
-
-
-      <article class="sl-seo-intent-card">
-
-        <h3>
-          Onde fazer espirometria com prova broncodilatadora no Rio de Janeiro?
-        </h3>
-
-        <p>
-          A Sopro Life realiza espirometria simples e
-          <strong>espirometria com broncodilatador</strong>.
-          Na prova broncodilatadora, são realizadas medidas antes e depois
-          da administração do broncodilatador para avaliar a resposta
-          das vias aéreas.
-        </p>
-
-        <p>
-          A modalidade do exame deve seguir a solicitação e a orientação
-          aplicáveis ao paciente. Se o pedido mencionar
-          <strong>prova broncodilatadora</strong>,
-          informe isso no momento do agendamento.
-        </p>
-
-        <a href="#agendamento">
-          Ver localidades, datas e horários →
+      <div class="sl-map-partner-card" data-map-location="pastore-ipanema">
+       <div class="sl-map-partner-card__head">
+        <span class="sl-map-partner-card__name">
+         Centro Médico Pastore — Ipanema
+        </span>
+        <span class="sl-map-partner-card__badge">
+         Unidade parceira
+        </span>
+       </div>
+       <address class="sl-map-partner-card__address">
+        Rua Teixeira de Melo, 54 — Ipanema, Rio de Janeiro/RJ
+        <br/>
+        Em frente ao acesso C do metrô General Osório.
+       </address>
+       <p class="sl-map-partner-card__hours">
+        Espirometria às terças-feiras e aos sábados, das 8h às 12h.
+        <span>
+         Disponibilidade sujeita à confirmação no sistema oficial de agendamento da Pastore.
+        </span>
+       </p>
+       <div class="sl-map-partner-card__actions">
+        <a class="sl-map-partner-btn sl-map-partner-btn--ghost" data-sl-pastore-rota="" href="https://www.google.com/maps/dir/?api=1&amp;destination=Rua%20Teixeira%20de%20Melo%2C%2054%2C%20Ipanema%2C%20Rio%20de%20Janeiro%20-%20RJ" rel="noopener" target="_blank">
+         Como chegar
         </a>
-
-      </article>
-
-    </div>
-
-  </div>
-
-</section>
-
-
-
-<!-- SOPRO:INTERNAL_LINK_BARRA_RIO_V1 -->
-<div class="sl-barra-crosslink">
-  <strong>Procurando espirometria na Barra da Tijuca?</strong>
-  <span>
-    A Sopro Life atende no Shopping Downtown,
-    na Avenida das Américas.
-  </span>
-  <a href="/espirometria-barra-da-tijuca/">
-    Ver espirometria na Barra da Tijuca →
-  </a>
-</div>
-
-<!-- SOPRO:INTERNAL_LINK_ZONA_NORTE_RIO_V1 -->
-<div class="sl-barra-crosslink">
-  <strong>Procurando espirometria na Zona Norte?</strong>
-  <span>
-    A Sopro Life atende no Shopping Nova América, em Del Castilho.
-  </span>
-  <a href="/espirometria-zona-norte-rio-de-janeiro/">
-    Ver espirometria na Zona Norte →
-  </a>
-</div>
-
-
-<!-- SOPRO:FAQ_SECTION_START -->
-<section class="sl-section" id="perguntas-frequentes" aria-label="Perguntas frequentes sobre espirometria">
-  <div class="sl-container">
-    <div class="sl-section-header">
-      <span class="sl-section-kicker">Tire suas dúvidas</span>
-      <h2 class="sl-section-title">Perguntas frequentes sobre espirometria</h2>
-    </div>
-    <div class="sl-faq-list">
-        <details class="sl-faq-item" style="border:1px solid rgba(11,34,57,.1);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fff">
-          <summary style="cursor:pointer;font-weight:600;color:var(--sl-primary-dark);font-size:1rem">A espirometria precisa de pedido médico?</summary>
-          <p style="margin:10px 0 0;color:var(--sl-text-soft);font-size:.95rem;line-height:1.5">Sim. Para realizar a espirometria na Sopro Life, com ou sem broncodilatador, é necessário apresentar pedido médico. Caso o paciente ainda não tenha a solicitação, é possível agendar uma avaliação médica prévia com a nossa equipe. <a href="/telemedicina/#profissionais" style="color:#0f8f86;text-decoration:underline;font-weight:700;">Agende sua teleconsulta médica aqui</a>.</p>
-        </details>
-        <details class="sl-faq-item" style="border:1px solid rgba(11,34,57,.1);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fff">
-          <summary style="cursor:pointer;font-weight:600;color:var(--sl-primary-dark);font-size:1rem">Quanto tempo dura o exame de espirometria?</summary>
-          <p style="margin:10px 0 0;color:var(--sl-text-soft);font-size:.95rem;line-height:1.5">Em geral, o exame dura de 15 a 30 minutos. Esse tempo pode variar conforme a colaboração do paciente nas manobras respiratórias e conforme a necessidade de realizar a prova com broncodilatador.</p>
-        </details>
-        <details class="sl-faq-item" style="border:1px solid rgba(11,34,57,.1);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fff">
-          <summary style="cursor:pointer;font-weight:600;color:var(--sl-primary-dark);font-size:1rem">A espirometria precisa de acompanhante?</summary>
-          <p style="margin:10px 0 0;color:var(--sl-text-soft);font-size:.95rem;line-height:1.5">Na maioria dos casos, adultos não precisam de acompanhante. Recomendamos acompanhante para crianças, idosos ou pacientes com limitações físicas, para maior conforto e segurança durante o atendimento.</p>
-        </details>
-        <details class="sl-faq-item" style="border:1px solid rgba(11,34,57,.1);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fff">
-          <summary style="cursor:pointer;font-weight:600;color:var(--sl-primary-dark);font-size:1rem">Qual a diferença entre espirometria simples e com broncodilatador?</summary>
-          <p style="margin:10px 0 0;color:var(--sl-text-soft);font-size:.95rem;line-height:1.5">A espirometria simples avalia a função pulmonar sem o uso de medicação durante o exame. Já a espirometria com broncodilatador, também chamada de prova broncodilatadora, compara os resultados antes e depois do uso de um medicamento inalatório, quando indicado, ajudando na avaliação de doenças respiratórias como asma e DPOC.</p>
-        </details>
-        <details class="sl-faq-item" style="border:1px solid rgba(11,34,57,.1);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fff">
-          <summary style="cursor:pointer;font-weight:600;color:var(--sl-primary-dark);font-size:1rem">Como devo me preparar para a espirometria?</summary>
-          <p style="margin:10px 0 0;color:var(--sl-text-soft);font-size:.95rem;line-height:1.5">Evite refeições pesadas nas 2 horas anteriores ao exame, use roupas confortáveis, não fume de 2 a 4 horas antes e leve o pedido médico e a lista das medicações em uso. A suspensão de bombinhas ou medicações inalatórias deve seguir a orientação do médico solicitante.</p>
-        </details>
-        <details class="sl-faq-item" style="border:1px solid rgba(11,34,57,.1);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fff">
-          <summary style="cursor:pointer;font-weight:600;color:var(--sl-primary-dark);font-size:1rem">Onde fazer espirometria no Rio de Janeiro?</summary>
-          <p style="margin:10px 0 0;color:var(--sl-text-soft);font-size:.95rem;line-height:1.5">A Sopro Life realiza espirometria no Rio de Janeiro com opções de atendimento na Barra da Tijuca, Zona Norte, Zona Sul e também em domicílio, conforme disponibilidade. O exame pode ser simples ou com broncodilatador e o agendamento é feito pelo WhatsApp.</p>
-        </details>
-        <!-- SOPRO:RJ_FAQ_ZONA_SUL_START -->
-        <details class="sl-faq-item" style="border:1px solid rgba(11,34,57,.1);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fff">
-          <summary style="cursor:pointer;font-weight:600;color:var(--sl-primary-dark);font-size:1rem">Onde fazer espirometria na Zona Sul do Rio de Janeiro?</summary>
-          <p style="margin:10px 0 0;color:var(--sl-text-soft);font-size:.95rem;line-height:1.5">Na Zona Sul, a Sopro Life realiza a espirometria na unidade parceira Centro Médico Pastore — Ipanema, na Rua Teixeira de Melo, 54, em frente ao acesso C do metrô General Osório. É uma opção prática para quem procura o exame em Ipanema, Copacabana, Leblon, Botafogo, Flamengo, Lagoa, Jardim Botânico e Catete. <a href="/espirometria-ipanema/" style="color:#0f8f86;text-decoration:underline;font-weight:700;">Veja a página da unidade de Ipanema</a>.</p>
-        </details>
-        <!-- SOPRO:RJ_FAQ_ZONA_SUL_END -->
-        <details class="sl-faq-item" style="border:1px solid rgba(11,34,57,.1);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fff">
-          <summary style="cursor:pointer;font-weight:600;color:var(--sl-primary-dark);font-size:1rem">A espirometria é o mesmo que teste do sopro ou prova de função pulmonar?</summary>
-          <p style="margin:10px 0 0;color:var(--sl-text-soft);font-size:.95rem;line-height:1.5">Sim. Espirometria, teste do sopro, prova de função pulmonar, prova de função respiratória e prova ventilatória são nomes para o mesmo exame, que mede os volumes e fluxos de ar dos pulmões. Na Sopro Life, o exame é feito com equipamento portátil e laudo por médico pneumologista.</p>
-        </details>
-    </div>
-  </div>
-</section>
-<!-- SOPRO:FAQ_SECTION_END -->
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "Onde fazer espirometria na Zona Sul do Rio de Janeiro?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Na Zona Sul, a Sopro Life realiza a espirometria na unidade parceira Centro Médico Pastore — Ipanema, na Rua Teixeira de Melo, 54, em frente ao acesso C do metrô General Osório. É uma opção prática para quem procura o exame em Ipanema, Copacabana, Leblon, Botafogo, Flamengo, Lagoa, Jardim Botânico e Catete."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "A espirometria precisa de pedido médico?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Sim. Para realizar a espirometria na Sopro Life, com ou sem broncodilatador, é necessário apresentar pedido médico. Caso o paciente ainda não tenha a solicitação, é possível agendar uma avaliação médica prévia com a nossa equipe."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Quanto tempo dura o exame de espirometria?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Em geral, o exame dura de 15 a 30 minutos. Esse tempo pode variar conforme a colaboração do paciente nas manobras respiratórias e conforme a necessidade de realizar a prova com broncodilatador."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "A espirometria precisa de acompanhante?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Na maioria dos casos, adultos não precisam de acompanhante. Recomendamos acompanhante para crianças, idosos ou pacientes com limitações físicas, para maior conforto e segurança durante o atendimento."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Qual a diferença entre espirometria simples e com broncodilatador?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "A espirometria simples avalia a função pulmonar sem o uso de medicação durante o exame. Já a espirometria com broncodilatador, também chamada de prova broncodilatadora, compara os resultados antes e depois do uso de um medicamento inalatório, quando indicado, ajudando na avaliação de doenças respiratórias como asma e DPOC."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Como devo me preparar para a espirometria?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Evite refeições pesadas nas 2 horas anteriores ao exame, use roupas confortáveis, não fume de 2 a 4 horas antes e leve o pedido médico e a lista das medicações em uso. A suspensão de bombinhas ou medicações inalatórias deve seguir a orientação do médico solicitante."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Onde fazer espirometria no Rio de Janeiro?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "A Sopro Life realiza espirometria no Rio de Janeiro com opções de atendimento na Barra da Tijuca, Zona Norte, Zona Sul e também em domicílio, conforme disponibilidade. O exame pode ser simples ou com broncodilatador e o agendamento é feito pelo WhatsApp."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "A espirometria é o mesmo que teste do sopro ou prova de função pulmonar?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Sim. Espirometria, teste do sopro, prova de função pulmonar, prova de função respiratória e prova ventilatória são nomes para o mesmo exame, que mede os volumes e fluxos de ar dos pulmões. Na Sopro Life, o exame é feito com equipamento portátil e laudo por médico pneumologista."
-      }
-    }
-  ]
-}
-</script>
-
-
-<section id="depoimentos" class="sl-testimonials" aria-label="Opiniões de pacientes">
-  <div class="sl-container sl-container--wide">
-    <div class="sl-tframe">
-      <header class="sl-thead">
-        <div class="sl-tkicker">OPINIÕES</div>
-        <h2 class="sl-ttitle">O que nossos pacientes dizem</h2>
-        <p class="sl-tsub">Passe para o lado para ver mais →</p>
-      </header>
-
-      <div class="sl-tcarousel" aria-label="Carrossel de depoimentos">
-<button class="sl-tarrow sl-tarrow--left" type="button" aria-label="Depoimento anterior">‹</button>
-<button class="sl-tarrow sl-tarrow--right" type="button" aria-label="Próximo depoimento">›</button>
-
-        <div class="sl-ttrack" id="sl-testimonials-track" aria-live="polite">
-        <div class="sl-tpage" data-page="1">
-<article class="sl-tcard" aria-label="Depoimento de Ailton Renner">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Ailton Renner</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Excelente! Consulta direta e personalizada. Problema resolvido!</p>
-</article>
-<article class="sl-tcard" aria-label="Depoimento de Junior">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Junior</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Atendimento perfeito. Gostei muito da atenção dispensada.</p>
-</article>
-<article class="sl-tcard" aria-label="Depoimento de Igor">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Igor</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Ótimo atendimento e explicações. Muito atenciosa.</p>
-</article>
-        </div>
-        <div class="sl-tpage" data-page="2">
-<article class="sl-tcard" aria-label="Depoimento de Mariana Lopes">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Mariana Lopes</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Consulta acolhedora e objetiva. Saí bem mais tranquila.</p>
-</article>
-<article class="sl-tcard" aria-label="Depoimento de Carlos">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Carlos</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Explicação clara e conduta segura. Recomendo.</p>
-</article>
-<article class="sl-tcard" aria-label="Depoimento de Fernanda Almeida">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Fernanda Almeida</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Pontualidade e atenção aos detalhes. Excelente.</p>
-</article>
-        </div>
-        <div class="sl-tpage" data-page="3">
-<article class="sl-tcard" aria-label="Depoimento de Rafael Souza">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Rafael Souza</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Atendimento humano e muito competente.</p>
-</article>
-<article class="sl-tcard" aria-label="Depoimento de Patrícia">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Patrícia</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Consulta completa e sem pressa. Gostei demais.</p>
-</article>
-<article class="sl-tcard" aria-label="Depoimento de Bruno Henrique Lima">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Bruno Henrique Lima</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Profissionalismo e clareza. Tirou todas as dúvidas.</p>
-</article>
-        </div>
-        <div class="sl-tpage" data-page="4">
-<article class="sl-tcard" aria-label="Depoimento de Camila">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Camila</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Me senti ouvida e bem orientada. Nota 10.</p>
-</article>
-<article class="sl-tcard" aria-label="Depoimento de Sérgio Tavares">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Sérgio Tavares</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Diagnóstico bem explicado e plano bem definido.</p>
-</article>
-<article class="sl-tcard" aria-label="Depoimento de Luciana">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Luciana</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Atendimento impecável. Recomendo de olhos fechados.</p>
-</article>
-        </div>
-        <div class="sl-tpage" data-page="5">
-<article class="sl-tcard" aria-label="Depoimento de Diego Silva">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Diego Silva</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Explicação didática e objetiva. Muito bom.</p>
-</article>
-<article class="sl-tcard" aria-label="Depoimento de Ana Beatriz Costa">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Ana Beatriz Costa</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Acompanhamento atencioso e responsável.</p>
-</article>
-<article class="sl-tcard" aria-label="Depoimento de Roberto">
-  <div class="sl-tcard__head">
-    <div class="sl-tcard__avatar" aria-hidden="true">👤</div>
-    <div class="sl-tcard__meta">
-      <div class="sl-tcard__name">Roberto</div>
-      <div class="sl-tcard__stars" aria-label="5 de 5 estrelas">★★★★★</div>
-    </div>
-  </div>
-  <p class="sl-tcard__text">Consulta muito boa, resolveu meu caso com calma.</p>
-</article>
-        </div>
-        </div>
+        <a class="sl-map-partner-btn sl-map-partner-btn--wa" data-sl-pastore-wa="" href="https://api.whatsapp.com/send?phone=5521998901775&amp;text=Ol%C3%A1%21%20Vim%20pelo%20site%20da%20SoproLife%20e%20gostaria%20de%20orienta%C3%A7%C3%A3o%20para%20agendar%20uma%20espirometria%20na%20unidade%20Pastore%20Ipanema." rel="noopener" target="_blank">
+         Falar no WhatsApp
+        </a>
+        <a class="sl-map-partner-btn sl-map-partner-btn--solid" data-sl-pastore-agendar="" href="https://paciente.centromedicopastore.com.br/exams?utm_source=soprolife&amp;utm_medium=referral&amp;utm_campaign=espirometria_ipanema" rel="noopener" target="_blank">
+         Agendar na Pastore
+        </a>
+       </div>
+       <a class="sl-map-partner-card__link" data-sl-pastore-conhecer="" href="/espirometria-ipanema/">
+        Conhecer a unidade de Ipanema
+       </a>
       </div>
-
-      <div class="sl-tdots" id="sl-testimonials-dots" aria-hidden="true">
-      <span class="sl-tdot sl-tdot--1" aria-hidden="true"></span>
-      <span class="sl-tdot sl-tdot--2" aria-hidden="true"></span>
-      <span class="sl-tdot sl-tdot--3" aria-hidden="true"></span>
-      <span class="sl-tdot sl-tdot--4" aria-hidden="true"></span>
-      <span class="sl-tdot sl-tdot--5" aria-hidden="true"></span>
+      <!-- SOPRO:MAP_PASTORE_IPANEMA_CARD_END -->
+      <div class="sl-map-unit-cards">
+       <div class="sl-map-unit-card" data-map-location="barra" data-map-unit="Unidade Barra" role="button" tabindex="0">
+        <span class="sl-map-unit-card__text">
+         <span class="sl-map-unit-card__name">
+          Unidade Barra
+         </span>
+         <span class="sl-map-unit-card__tag">
+          Shopping Downtown · prédio 20, sala 213
+         </span>
+        </span>
+       </div>
+       <div class="sl-map-unit-card" data-map-location="zona-norte" data-map-unit="Unidade Zona Norte — Shopping Nova América" role="button" tabindex="0">
+        <span class="sl-map-unit-card__text">
+         <span class="sl-map-unit-card__name">
+          Unidade Zona Norte — Shopping Nova América
+         </span>
+         <span class="sl-map-unit-card__tag">
+          Av. Pastor Martin Luther King Jr., 126 · Del Castilho
+         </span>
+        </span>
+       </div>
+       <div class="sl-map-unit-card" data-map-location="domiciliar" data-map-unit="Atendimento domiciliar" role="button" tabindex="0">
+        <span class="sl-map-unit-card__text">
+         <span class="sl-map-unit-card__name">
+          Atendimento domiciliar
+         </span>
+         <span class="sl-map-unit-card__tag">
+          Endereço combinado pelo WhatsApp
+         </span>
+        </span>
+       </div>
       </div>
+      <p class="sl-map-panel-note">
+       Na Unidade Zona Norte, a sala e o ponto de encontro no Shopping Nova América são confirmados no agendamento.
+      </p>
+     </div>
+     <div class="sl-map-modal__map-wrap">
+      <div aria-label="Mapa ampliado das unidades" id="sl-units-map">
+      </div>
+     </div>
     </div>
+   </div>
   </div>
-</section>
-<!-- SOPRO:ARROWS_STYLE_START -->
-<style>
-  /* Setas dos depoimentos (injetado) */
-  #depoimentos .sl-tcarousel{position:relative}
-  #depoimentos .sl-tarrow{
-    position:absolute;
-    top:50%;
-    transform:translateY(-50%);
-    width:34px;height:34px;
-    border-radius:999px;
-    border:1px solid rgba(0,128,128,.25);
-    background:rgba(255,255,255,.92);
-    box-shadow:0 10px 22px rgba(0,0,0,.10);
-    display:grid;place-items:center;
-    cursor:pointer;
-    z-index:9999;
-    color:#0b2a3a;
-    font-size:22px;
-    line-height:1;
-  }
-  #depoimentos .sl-tarrow--left{left:16px !important}
-  #depoimentos .sl-tarrow--right{right:16px !important}
-  #depoimentos .sl-tarrow:active{transform:translateY(-50%) scale(.98)}
-  #depoimentos .sl-tarrow:focus{outline:2px solid rgba(0,128,128,.35); outline-offset:2px}
-
-  /* clique: trava a página escolhida sem quebrar o auto */
-  #depoimentos[data-manual] .sl-tpage{animation:none !important;opacity:0 !important;pointer-events:none !important;}
-  #depoimentos[data-manual="1"] .sl-tpage[data-page="1"],
-  #depoimentos[data-manual="2"] .sl-tpage[data-page="2"],
-  #depoimentos[data-manual="3"] .sl-tpage[data-page="3"],
-  #depoimentos[data-manual="4"] .sl-tpage[data-page="4"],
-  #depoimentos[data-manual="5"] .sl-tpage[data-page="5"]{opacity:1 !important;pointer-events:auto !important;}
-
-  #depoimentos[data-manual] .sl-tdot{animation:none !important;opacity:.35 !important;background:rgba(0,0,0,.20) !important;}
-  #depoimentos[data-manual="1"] .sl-tdot--1,
-  #depoimentos[data-manual="2"] .sl-tdot--2,
-  #depoimentos[data-manual="3"] .sl-tdot--3,
-  #depoimentos[data-manual="4"] .sl-tdot--4,
-  #depoimentos[data-manual="5"] .sl-tdot--5{opacity:1 !important;background:rgba(0,0,0,.55) !important;}
-
-  /* no mobile, setas um pouco menores */
-  @media (max-width: 980px){
-    #depoimentos .sl-tarrow{width:30px;height:30px;font-size:20px}
-    #depoimentos .sl-tarrow{display:none}
-  }
-</style>
-<!-- SOPRO:ARROWS_STYLE_END -->
-
-<!-- SOPRO:TESTIMONIALS_END -->
-
-<!-- SOPRO:SOBRE_O_EXAME_RESTAURADO
-     Abertura desta seção foi destruída em 94049af (2026-02-08) e restaurada
-     literalmente a partir de 94049af^. Nada foi reescrito. -->
-<section class="sl-section"> <div class="sl-section-header"> <div class="sl-section-kicker">Sobre o exame</div> <div class="sl-local-mini" aria-label="Atendimento no Rio de Janeiro"> <h3>Atendimento em todo o Rio de Janeiro (RJ)</h3> <p>A SoproLife realiza espirometria com opções de atendimento na Barra da Tijuca, Zona Norte, Zona Sul e também em domicílio em diferentes regiões do Rio de Janeiro, conforme a modalidade e a disponibilidade escolhidas no agendamento.</p> <div class="sl-local-tags" aria-label="Regiões atendidas"> <span class="sl-tag">Centro</span> <span class="sl-tag">Zona Sul</span> <span class="sl-tag">Zona Norte</span> <span class="sl-tag">Tijuca</span> <span class="sl-tag">Barra</span> <span class="sl-tag">Jacarepaguá</span> <span class="sl-tag">Copacabana</span> </div>
-</div> <h2 class="sl-section-title">O que é a espirometria?</h2> <p class="sl-section-subtitle"> A espirometria (prova de função respiratória) avalia como o ar entra e sai dos pulmões. Essencial no diagnóstico e acompanhamento de asma, DPOC, tabagismo, ocupacional e pré-operatório. </p> </div> <div class="sl-two-column"> <div class="sl-text-block"> <p>Durante o exame, o paciente respira por um bocal conectado ao espirômetro. Fazemos manobras guiadas como inspirações profundas e sopros prolongados.</p> <p>As curvas e índices apontam se há obstrução/restrição e se existe resposta a broncodilatadores.</p> <ul class="sl-bullet-list"> <li>Diagnóstico e controle de asma e DPOC;</li> <li>Avaliação de tabagistas e ex-tabagistas;</li> <li>Ocupacional: poeiras/gases (PCMSO);</li> <li>Pré-operatório;</li> <li>Seguimento de doenças pulmonares.</li> </ul> </div> <div class="sl-highlight-box"> <strong>Quem pede o exame?</strong> <p>Pneumologistas, clínicos, cardiologistas, médicos do trabalho e cirurgiões, entre outros.</p> <p>Na Sopro Life, o laudo é objetivo e útil ao médico solicitante, com recomendações quando necessário.</p> </div> </div> </section> <!-- TIPOS --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Modalidades</span> <h2 class="sl-section-title">Tipos de espirometria que realizamos</h2> </div> <div class="sl-tabs" id="tipos-espirometria"> <div class="sl-tab-list" role="tablist"> <button class="sl-tab-button" role="tab" aria-selected="true" data-tab="simples">Espirometria simples</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="bd">Espirometria com broncodilatador</button> <button class="sl-tab-button" role="tab" aria-selected="false" data-tab="ocupacional">Espirometria ocupacional / PCMSO</button> </div> <div class="sl-tab-panel is-active" data-panel="simples" role="tabpanel"> <div class="sl-tagline">Avaliação basal</div> <h3>Espirometria simples</h3> <p>Sem medicação durante o exame. Ótima para investigação inicial e acompanhamento periódico.</p> <ul class="sl-bullet-list"> <li>Mede CVF, VEF1, entre outros;</li> <li>Identifica padrões obstrutivos/restritivos;</li> <li>Permite comparação em seguimentos.</li> </ul> </div> <div class="sl-tab-panel" data-panel="bd" role="tabpanel"> <div class="sl-tagline">Resposta a medicação</div> <h3>Espirometria com broncodilatador</h3> <p>Após a etapa basal, aplica-se broncodilatador e repete-se o teste. Essa etapa também é chamada de prova broncodilatadora e ajuda a avaliar a resposta dos pulmões à medicação.</p> <ul class="sl-bullet-list"> <li>Chave no diagnóstico e controle da asma;</li> <li>Ajuda a diferenciar DPOC de outras obstruções;</li> <li>Orienta ajustes de bombinhas.</li> </ul> </div> <div class="sl-tab-panel" data-panel="ocupacional" role="tabpanel"> <div class="sl-tagline">Saúde do trabalhador</div> <h3>Espirometria ocupacional / PCMSO</h3> <p>Protocolos alinhados às normas para ambientes com poeiras/fumos/vapores. Admissional, periódico e demissional.</p> <ul class="sl-bullet-list"> <li>Registros adequados a auditorias;</li> <li>Campanhas in company mediante programação;</li> <li>Relatórios padronizados.</li> </ul> </div> </div> </section> <!-- PREPARO --> <section class="sl-section"> <div class="sl-section-header"> <span class="sl-section-kicker">Preparo</span> <h2 class="sl-section-title">Como se preparar</h2> <p class="sl-section-subtitle">Uma boa preparação melhora a qualidade do exame. Em dúvida, siga o médico solicitante.</p> </div> <div class="sl-card-grid"> <div class="sl-card"> <div class="sl-pill-label">No dia</div> <h3>Cuidados gerais</h3> <ul> <li>Evite refeições muito pesadas até 2 h antes;</li> <li>Roupas confortáveis (tórax livre);</li> <li>Chegue com alguns minutos de antecedência;</li> <li>Leve solicitação e documentos.</li> </ul> </div> <div class="sl-card"> <div class="sl-pill-label">Medicações/Tabaco</div> <h3>Quando suspender/manter</h3> <ul> <li>Não fume de 2 a 4 h antes;</li> <li>Suspensão de bombinhas depende do seu médico; na dúvida, não suspenda por conta.</li> <li>Leve suas medicações inalatórias.</li> </ul> </div> </div> </section> <!-- CTA --> <section class="sl-cta-section" id="agendamento-antigo"> <div class="sl-cta-box"> <div> <h2 class="sl-cta-title">Pronto para agendar sua espirometria?</h2> <p class="sl-cta-sub">Atendimento por agendamento para garantir tempo adequado e higienização entre exames.</p> <div class="sl-cta-contacts"> <strong>WhatsApp:</strong> (21) 99890-1775<br> <strong>E-mail:</strong> contato@soprolife.com.br<br> <strong>Atendimento:</strong> a combinar conforme parceria e local. </div> </div> <div class="sl-cta-actions"> <a class="sl-btn sl-btn-primary" href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20quero%20agendar%20uma%20espirometria.%20Tipo%3A%20simples%2C%20com%20broncodilatador%2C%20ocupacional%2FPCMSO%20ou%20domiciliar."> Agendar agora pelo WhatsApp </a> <div class="sl-cta-small">Prefere outro canal? Envie um e-mail e retornamos com as opções.</div> </div> </div> </section> </div> </div> <!-- Barra fixa WhatsApp --> <!-- Links úteis / rodapé --> <section class="sl-section sl-links-footer" id="links-rodape"> <div class="sl-links-footer-grid"> <div> <h3>Links úteis</h3> <ul class="sl-links-list"> <li> <a href="https://sbpt.org.br/" target="_blank" rel="noopener"> SBPT — Sociedade Brasileira de Pneumologia e Tisiologia </a> </li> <li> <a href="https://www.gov.br/saude" target="_blank" rel="noopener"> Ministério da Saúde (Brasil) </a> </li> <li> <a href="https://ginasthma.org/" target="_blank" rel="noopener"> GINA — Global Initiative for Asthma </a> </li> <li> <a href="https://goldcopd.org/" target="_blank" rel="noopener"> GOLD — Global Initiative for Chronic Obstructive Lung Disease </a> </li> </ul> </div> <div> <h3>Sopro Life nas redes</h3> <ul class="sl-social-list"> <li> <a href="https://www.instagram.com/soprolife/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--ig">IG</span> <span>Instagram da Sopro Life</span> </a> </li> <li> <a href="https://linkedin.com/" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--li">in</span> <span>LinkedIn da Sopro Life</span> </a> </li> <li> <a href="https://www.youtube.com/@SoproLife" target="_blank" rel="noopener"> <span class="sl-social-icon sl-social-icon--yt">▶</span> <span>Canal da Sopro Life no YouTube</span> </a> </li> </ul> </div> </div> </section> <div class="sl-whatsapp-bar"> <a href="https://api.whatsapp.com/send?phone=5521998901775&text=Ol%C3%A1%21%20Vim%20pelo%20site%20e%20quero%20agendar%20uma%20espirometria.%20Tipo%3A%20simples%2C%20com%20broncodilatador%2C%20ocupacional%2FPCMSO%20ou%20domiciliar." target="_blank" rel="noopener"> <span>🤝</span> <span><strong>Dúvidas?</strong> Fale com o atendimento da Sopro Life pelo WhatsApp.</span> </a> </div> <script>
-// Tabs
-(function(){ var root=document.getElementById("tipos-espirometria"); if(!root) return; var buttons=root.querySelectorAll(".sl-tab-button"); var panels=root.querySelectorAll(".sl-tab-panel"); buttons.forEach(function(btn){ btn.addEventListener("click",function(){ var tab=btn.getAttribute("data-tab"); buttons.forEach(function(b){b.setAttribute("aria-selected",b===btn?"true":"false");}); panels.forEach(function(p){p.classList.toggle("is-active",p.getAttribute("data-panel")===tab);}); }); }); })(); </script>
-<!-- SOPRO:TESTIMONIALS_JS_START -->
-<script>
-// Rotação feita 100% via CSS (25s = 5 páginas x 5s). JS não é necessário aqui.
-</script>
-<!-- SOPRO:TESTIMONIALS_JS_END -->
-<!-- SOPRO:ARROWS_SCRIPT_START -->
-<script>
-(function(){
-  var root = document.getElementById("depoimentos");
-  if(!root) return;
-
-  var pages = root.querySelectorAll(".sl-tpage");
-  if(!pages || !pages.length) return;
-
-  var total = pages.length;
-  var clearTimer = null;
-
-  function currentPage(){
-    var best = 1, bestOp = -1;
-    for(var i=0;i<pages.length;i++){
-      var o = parseFloat(getComputedStyle(pages[i]).opacity || "0");
-      if(o > bestOp){ bestOp = o; best = i+1; }
-    }
-    return best;
-  }
-
-  function setManual(n){
-    n = Math.max(1, Math.min(total, n));
-    root.setAttribute("data-manual", String(n));
-    if(clearTimer) clearTimeout(clearTimer);
-    clearTimer = setTimeout(function(){ root.removeAttribute("data-manual"); }, 12000);
-  }
-
-  function next(){ var c=currentPage(); setManual((c % total) + 1); }
-  function prev(){ var c=currentPage(); setManual(((c + total - 2) % total) + 1); }
-
-  var left  = root.querySelector(".sl-tarrow--left");
-  var right = root.querySelector(".sl-tarrow--right");
-  if(left)  left.addEventListener("click", prev);
-  if(right) right.addEventListener("click", next);
-
-  // swipe simples (combina com “Passe pro lado…”)
-  var sx=0, sy=0;
-  root.addEventListener("touchstart", function(e){
-    if(!e.touches || !e.touches[0]) return;
-    sx = e.touches[0].clientX;
-    sy = e.touches[0].clientY;
-  }, {passive:true});
-  root.addEventListener("touchend", function(e){
-    if(!e.changedTouches || !e.changedTouches[0]) return;
-    var dx = e.changedTouches[0].clientX - sx;
-    var dy = e.changedTouches[0].clientY - sy;
-    if(Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)){
-      if(dx < 0) next(); else prev();
-    }
-  }, {passive:true});
-})();
-</script>
-<!-- SOPRO:ARROWS_SCRIPT_END -->
-
-
-
-
-
-
-
-
-
-
-
-
-
-<!-- SOPRO:RJ_HOME_BOOKING_SCRIPTS_START -->
-
-
-
-<!-- SOPRO:FLATPICKR_DUP_REMOVIDO
-     Este par de tags do flatpickr era o segundo da página e estava sem SRI.
-     A carga válida (com integrity) fica logo antes de /assets/sl-booking.js. -->
-
-
-<!-- SOPRO:RJ_HOME_BOOKING_SCRIPTS_END -->
-
-
-<!-- SOPRO:INSTAGRAM_HEADER_FINAL_START -->
-<style>
-/* Instagram header final: miolo branco, borda rosa e câmera colorida */
-.sl-header-instagram,
-a.sl-header-instagram,
-header .sl-header-instagram,
-.sl-header a.sl-header-instagram {
-  width: 42px !important;
-  height: 42px !important;
-  min-width: 42px !important;
-  min-height: 42px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  border-radius: 999px !important;
-
-  /* Aqui é o ponto principal */
-  background: #ffffff !important;
-  background-color: #ffffff !important;
-  background-image: none !important;
-
-  border: 1.5px solid #f2a8c4 !important;
-  box-shadow: none !important;
-  color: #c13584 !important;
-  transform: none !important;
-}
-
-.sl-header-instagram::before,
-.sl-header-instagram::after,
-a.sl-header-instagram::before,
-a.sl-header-instagram::after {
-  background: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
-}
-
-.sl-header-instagram svg,
-a.sl-header-instagram svg {
-  width: 20px !important;
-  height: 20px !important;
-  background: transparent !important;
-  fill: none !important;
-  stroke: currentColor !important;
-  color: #c13584 !important;
-}
-
-.sl-header-instagram svg *,
-a.sl-header-instagram svg * {
-  fill: none !important;
-  stroke: currentColor !important;
-  stroke-width: 2.1 !important;
-  stroke-linecap: round !important;
-  stroke-linejoin: round !important;
-}
-
-/* Hover simples, sem gradiente estranho */
-.sl-header-instagram:hover,
-a.sl-header-instagram:hover,
-header .sl-header-instagram:hover,
-.sl-header a.sl-header-instagram:hover {
-  background: #ffffff !important;
-  background-color: #ffffff !important;
-  background-image: none !important;
-  border-color: #c13584 !important;
-  color: #c13584 !important;
-  box-shadow: 0 0 0 4px rgba(193, 53, 132, .10) !important;
-  transform: translateY(-1px) !important;
-}
-</style>
-<!-- SOPRO:INSTAGRAM_HEADER_FINAL_END -->
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js" integrity="sha384-5JqMv4L/Xa0hfvtF06qboNdhvuYXUku9ZrhZh3bSk8VXF0A/RuSLHpLsSV9Zqhl6" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/pt.js" integrity="sha384-agbVpcY312cNMSL1b3CUo060bj9FmbwUX8HUCNSE17+jOU/en4yz3w9ro9IWVusF" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<!-- SOPRO:SL_BOOKING_SHARED_JS
-     Configuração e lógica únicas do agendamento (localidades, agendas,
-     validação de data, horários, WhatsApp e analytics) + mapa das unidades.
-     Substituem os antigos blocos inline BOOKING_COMPACT_V1,
-     BOOKING_MAP_MODAL_V1 e FLATPICKR_PTBR_INIT. -->
-<script src="/assets/sl-booking.js"></script>
-<script src="/assets/sl-units-map.js"></script>
-
-<script id="sopro-booking-mobile-relocate">
-/* SOPRO:BOOKING_MOBILE_RELOCATE_V1 */
-(function(){
-  function relocateBookingForMobile(){
-    var booking = document.getElementById('agendamento');
-    var mobileAnchor = document.getElementById('sl-booking-mobile-anchor');
-    var desktopAnchor = document.getElementById('sl-booking-desktop-anchor');
-
-    if(!booking || !mobileAnchor || !desktopAnchor || !desktopAnchor.parentNode) return;
-
-    var isMobile = window.matchMedia('(max-width: 820px)').matches;
-
-    if(isMobile){
-      if(booking.parentNode !== mobileAnchor){
-        mobileAnchor.appendChild(booking);
-      }
-    } else {
-      if(booking.previousElementSibling !== desktopAnchor){
-        desktopAnchor.parentNode.insertBefore(booking, desktopAnchor.nextSibling);
-      }
-    }
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', relocateBookingForMobile);
-  } else {
-    relocateBookingForMobile();
-  }
-
-  window.addEventListener('resize', function(){
-    window.clearTimeout(window.__soproBookingMobileTimer);
-    window.__soproBookingMobileTimer = window.setTimeout(relocateBookingForMobile, 120);
-  });
-})();
-</script>
-
-
-
-
-
-<style id="soprolife-mobile-header-final-v5">
-/* === SOPRO:MOBILE_HEADER_FINAL_V5 === */
-/* Mobile: logo maior + Instagram + WhatsApp. Menu textual escondido. */
-@media (max-width: 960px) {
-
-  html body header nav,
-  html body header .sl-nav,
-  html body header .sl-main-nav,
-  html body .sl-header nav,
-  html body .sl-header .sl-nav,
-  html body .sl-header .sl-main-nav,
-  html body nav[aria-label="Menu principal"] {
-    display: none !important;
-    visibility: hidden !important;
-    height: 0 !important;
-    max-height: 0 !important;
-    overflow: hidden !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  html body header,
-  html body .sl-header,
-  html body header.sl-header {
-    min-height: 98px !important;
-    height: 98px !important;
-    padding: 0 !important;
-    background: #ffffff !important;
-  }
-
-  html body header .sl-container,
-  html body .sl-header .sl-container,
-  html body .sl-header-in,
-  html body .sl-header-inner {
-    width: 100% !important;
-    max-width: none !important;
-    min-height: 98px !important;
-    height: 98px !important;
-    padding: 8px 12px !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    flex-wrap: nowrap !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 7px !important;
-  }
-
-  html body header .sl-logo,
-  html body header .sl-brand,
-  html body .sl-header .sl-logo,
-  html body .sl-header .sl-brand,
-  html body header a[aria-label*="Sopro"],
-  html body header a[href="/"] {
-    flex: 1 1 auto !important;
-    min-width: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-  }
-
-  html body header .sl-logo img,
-  html body header .sl-brand img,
-  html body .sl-header .sl-logo img,
-  html body .sl-header .sl-brand img,
-  html body header img[src*="logo"] {
-    width: clamp(188px, 45vw, 238px) !important;
-    height: auto !important;
-    max-height: 82px !important;
-    object-fit: contain !important;
-    display: block !important;
-  }
-
-  /* Instagram visível e padronizado no mobile */
-  html body header a[href*="instagram.com"],
-  html body .sl-header a[href*="instagram.com"],
-  html body header .sl-header-instagram,
-  html body header .sl-social-link--instagram,
-  html body .sl-header .sl-header-instagram,
-  html body .sl-header .sl-social-link--instagram {
-    display: inline-flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    flex: 0 0 42px !important;
-    width: 42px !important;
-    min-width: 42px !important;
-    max-width: 42px !important;
-    height: 42px !important;
-    min-height: 42px !important;
-    max-height: 42px !important;
-    align-items: center !important;
-    justify-content: center !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border-radius: 999px !important;
-    background: #ffffff !important;
-    border: 1.5px solid #f4b3c7 !important;
-    box-shadow: 0 8px 18px rgba(11, 34, 57, .06) !important;
-    overflow: hidden !important;
-  }
-
-  html body header a[href*="instagram.com"] svg,
-  html body .sl-header a[href*="instagram.com"] svg,
-  html body header .sl-header-instagram svg,
-  html body .sl-header .sl-header-instagram svg {
-    width: 21px !important;
-    height: 21px !important;
-    display: block !important;
-  }
-
-  html body header a[href*="instagram.com"] svg rect,
-  html body header a[href*="instagram.com"] svg circle,
-  html body .sl-header a[href*="instagram.com"] svg rect,
-  html body .sl-header a[href*="instagram.com"] svg circle {
-    fill: none !important;
-    stroke: #c13584 !important;
-    stroke-width: 1.9 !important;
-  }
-
-  /* WhatsApp compacto para caber com logo e Instagram */
-  html body header .sl-whatsapp,
-  html body header .sl-nav-cta,
-  html body .sl-header .sl-whatsapp,
-  html body .sl-header .sl-nav-cta,
-  html body header a[href*="whatsapp"],
-  html body header a[href*="wa.me"],
-  html body header a[href*="api.whatsapp.com"] {
-    flex: 0 0 auto !important;
-    min-width: 126px !important;
-    max-width: 138px !important;
-    height: 46px !important;
-    padding: 0 14px !important;
-    border-radius: 999px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    font-size: 0 !important;
-  }
-
-  html body header .sl-whatsapp svg,
-  html body header .sl-nav-cta svg,
-  html body header a[href*="whatsapp"] svg,
-  html body header a[href*="wa.me"] svg,
-  html body header a[href*="api.whatsapp.com"] svg {
-    display: none !important;
-  }
-
-  html body header .sl-whatsapp::before,
-  html body header .sl-nav-cta::before,
-  html body header a[href*="whatsapp"]::before,
-  html body header a[href*="wa.me"]::before,
-  html body header a[href*="api.whatsapp.com"]::before {
-    content: "WhatsApp" !important;
-    font-size: 1rem !important;
-    line-height: 1 !important;
-    font-weight: 900 !important;
-    color: #ffffff !important;
-  }
-}
-
-@media (max-width: 390px) {
-  html body header,
-  html body .sl-header,
-  html body header.sl-header {
-    min-height: 92px !important;
-    height: 92px !important;
-  }
-
-  html body header .sl-container,
-  html body .sl-header .sl-container,
-  html body .sl-header-in,
-  html body .sl-header-inner {
-    min-height: 92px !important;
-    height: 92px !important;
-    padding: 7px 10px !important;
-    gap: 6px !important;
-  }
-
-  html body header .sl-logo img,
-  html body header .sl-brand img,
-  html body .sl-header .sl-logo img,
-  html body .sl-header .sl-brand img,
-  html body header img[src*="logo"] {
-    width: clamp(168px, 44vw, 206px) !important;
-    height: auto !important;
-    max-height: 76px !important;
-  }
-
-  html body header a[href*="instagram.com"],
-  html body .sl-header a[href*="instagram.com"],
-  html body header .sl-header-instagram,
-  html body .sl-header .sl-header-instagram {
-    flex-basis: 39px !important;
-    width: 39px !important;
-    min-width: 39px !important;
-    max-width: 39px !important;
-    height: 39px !important;
-    min-height: 39px !important;
-    max-height: 39px !important;
-  }
-
-  html body header .sl-whatsapp,
-  html body header .sl-nav-cta,
-  html body .sl-header .sl-whatsapp,
-  html body .sl-header .sl-nav-cta,
-  html body header a[href*="whatsapp"],
-  html body header a[href*="wa.me"],
-  html body header a[href*="api.whatsapp.com"] {
-    min-width: 112px !important;
-    max-width: 124px !important;
-    height: 42px !important;
-    padding: 0 11px !important;
-  }
-
-  html body header .sl-whatsapp::before,
-  html body header .sl-nav-cta::before,
-  html body header a[href*="whatsapp"]::before,
-  html body header a[href*="wa.me"]::before,
-  html body header a[href*="api.whatsapp.com"]::before {
-    font-size: .92rem !important;
-  }
-}
-
-/* Desktop: mantém submenu de contato com e-mail */
-@media (min-width: 961px) {
-  .sl-has-sub,
-  .sl-contact-wrap {
-    position: relative !important;
-    display: inline-flex !important;
-    align-items: center !important;
-  }
-
-  .sl-submenu {
-    display: none !important;
-    position: absolute !important;
-    top: calc(100% + 14px) !important;
-    right: 0 !important;
-    min-width: 245px !important;
-    padding: 10px !important;
-    border-radius: 14px !important;
-    background: #ffffff !important;
-    border: 1px solid rgba(11,34,57,.10) !important;
-    box-shadow: 0 18px 38px rgba(11,34,57,.12) !important;
-    z-index: 9999 !important;
-  }
-
-  .sl-submenu::before {
-    content: "" !important;
-    position: absolute !important;
-    top: -14px !important;
-    left: 0 !important;
-    right: 0 !important;
-    height: 14px !important;
-  }
-
-  .sl-has-sub:hover .sl-submenu,
-  .sl-has-sub:focus-within .sl-submenu,
-  .sl-contact-wrap:hover .sl-submenu,
-  .sl-contact-wrap:focus-within .sl-submenu {
-    display: block !important;
-  }
-
-  .sl-submenu a {
-    display: flex !important;
-    align-items: center !important;
-    gap: 8px !important;
-    padding: 10px 12px !important;
-    border-radius: 10px !important;
-    text-decoration: none !important;
-    color: #0b3348 !important;
-    font-weight: 750 !important;
-    font-size: .9rem !important;
-    white-space: nowrap !important;
-  }
-
-  .sl-submenu a:hover {
-    background: rgba(30,181,171,.10) !important;
-    color: #07857d !important;
-  }
-}
-</style>
-
-
-<script id="soprolife-contact-submenu-final-v5">
-(function(){
-  function ensureContactSubmenu(){
-    var links = document.querySelectorAll('header nav a, .sl-main-nav a, .sl-nav a');
-    links.forEach(function(a){
-      var text = (a.textContent || '').trim().toLowerCase();
-      if(text !== 'contato') return;
-
-      var parent = a.parentElement;
-      if(parent && (parent.classList.contains('sl-has-sub') || parent.classList.contains('sl-contact-wrap'))) return;
-      if(parent && parent.querySelector && parent.querySelector('.sl-submenu')) return;
-
-      var wrap = document.createElement('div');
-      wrap.className = 'sl-contact-wrap sl-has-sub';
-
-      a.classList.add('sl-nav-link');
-      a.setAttribute('href', '/#contato');
-      a.setAttribute('aria-haspopup', 'true');
-
-      var submenu = document.createElement('div');
-      submenu.className = 'sl-submenu';
-      submenu.setAttribute('role', 'menu');
-      submenu.setAttribute('aria-label', 'Contato');
-      submenu.innerHTML = '<a href="mailto:contato@soprolife.com.br" role="menuitem">✉ contato@soprolife.com.br</a>';
-
-      parent.insertBefore(wrap, a);
-      wrap.appendChild(a);
-      wrap.appendChild(submenu);
-    });
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ensureContactSubmenu);
-  } else {
-    ensureContactSubmenu();
-  }
-})();
-</script>
-
-<link rel="stylesheet" href="/assets/sl-modern.css?v=m26-11">
-<link rel="stylesheet" href="/assets/sl-maps-calm.css?v=m26-11-mapas">
-<script src="/assets/sl-modern.js?v=m26-11" defer></script>
+  <script src="/assets/analytics.js">
+  </script>
+  <script crossorigin="anonymous" integrity="sha384-5JqMv4L/Xa0hfvtF06qboNdhvuYXUku9ZrhZh3bSk8VXF0A/RuSLHpLsSV9Zqhl6" referrerpolicy="no-referrer" src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js">
+  </script>
+  <script crossorigin="anonymous" integrity="sha384-agbVpcY312cNMSL1b3CUo060bj9FmbwUX8HUCNSE17+jOU/en4yz3w9ro9IWVusF" referrerpolicy="no-referrer" src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/pt.js">
+  </script>
+  <script src="/assets/sl-booking.js?v=20260928">
+  </script>
+  <script src="/assets/sl-units-map.js">
+  </script>
+  <script defer="" src="/assets/sl-modern.js?v=m26-11">
+  </script>
+ <aside class="ed-contact-bar" aria-label="Fale com a SoproLife"><div class="ed-contact-bar__inner"><p>Como podemos ajudar?</p><a href="https://api.whatsapp.com/send?phone=5521998901775&amp;text=Ol%C3%A1!%20Gostaria%20de%20informa%C3%A7%C3%B5es%20sobre%20o%20atendimento%20da%20SoproLife." target="_blank" rel="noopener">Falar no WhatsApp <span aria-hidden="true">↗</span></a></div></aside>
 </body>
 </html>
