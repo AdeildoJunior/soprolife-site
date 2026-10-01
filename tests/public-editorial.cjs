@@ -57,9 +57,11 @@ const report = { layouts: [], functional: [], errors: [], maps: [] };
     await p.evaluate(() => document.activeElement.blur());
     const name = (route === '/' ? 'home' : 'espirometria') + (width===1440 ? '-desktop' : '-mobile');
     await p.screenshot({ path: out + '/screenshots/' + name + '.png' });
-    await p.locator('#agendamento').scrollIntoViewIfNeeded();
+    // O mapa da home agora é independente da agenda e carrega ao entrar na tela.
+    await p.locator('#sl-units-map-mini').scrollIntoViewIfNeeded();
     await p.waitForSelector('.leaflet-tile-loaded', { timeout: 15000 });
     await p.waitForTimeout(500);
+    await p.locator('#agendamento').scrollIntoViewIfNeeded();
     await p.locator('.sl-slot-btn').first().click();
     await p.locator('.sl-booking-card').screenshot({ path: out + '/screenshots/' + name + '-agenda.png', style: '.sl-header, .sl-whatsapp-bar, .ed-contact-bar { visibility: hidden !important; }' });
     await p.evaluate(() => window.scrollTo(0, 0));

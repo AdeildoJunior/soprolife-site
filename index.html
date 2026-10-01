@@ -24,7 +24,7 @@
   <link href="/assets/sl-booking.css" rel="stylesheet"/>
   <link href="/assets/sl-modern.css?v=m26-11" rel="stylesheet"/>
   <link href="/assets/sl-maps-calm.css?v=m26-11-mapas" rel="stylesheet"/>
-  <link href="/assets/sl-editorial.css?v=20260928-norte-shopping" rel="stylesheet"/>
+  <link href="/assets/sl-editorial.css?v=20260930-mapa-domiciliar" rel="stylesheet"/>
   <script type="application/ld+json">
    {
   "@context": "https://schema.org",
@@ -164,7 +164,7 @@
 }
   </script>
  </head>
- <body class="sl-editorial ed-home">
+ <body class="sl-editorial ed-home ed-home-priority">
   <header class="sl-header">
    <div class="sl-header-in">
     <a aria-label="SoproLife — início" class="sl-brand" href="/">
@@ -217,6 +217,7 @@
       </a>
      </div>
      <p class="ed-caption">
+      <a class="ed-text-link" href="#atendimento-domiciliar">Atendimento em domicílio ↗</a><br/>
       Atendimento mediante agendamento.
       <br/>
       Converse com a equipe para confirmar preparo, valor e horário.
@@ -245,64 +246,53 @@
      </span>
     </div>
    </div>
-   <section class="ed-section ed-section-white">
-    <div class="ed-wrap">
-     <div class="ed-section-intro">
-      <div>
-       <span class="ed-eyebrow">
-        Atenção em cada etapa
-       </span>
-       <h2 class="ed-title">
-        Cuidar começa
-        <br/>
-        com
-        <em>
-         escuta.
-        </em>
-       </h2>
+   <section class="ed-section ed-map-section" id="onde-atendemos" aria-labelledby="ed-map-title">
+    <div class="ed-wrap ed-map-layout">
+     <div>
+      <span class="ed-eyebrow">Perto de você · Rio de Janeiro</span>
+      <h2 class="ed-title" id="ed-map-title">Encontre a unidade<br/>mais perto <em>de você.</em></h2>
+      <p class="ed-lead">Espirometria em Ipanema, Barra da Tijuca e Zona Norte. Veja nossas unidades no mapa e escolha onde prefere ser atendido.</p>
+      <div class="ed-actions">
+       <a class="ed-text-link" href="#nossas-unidades">Ver endereços e horários ↗</a>
+       <a class="ed-text-link" href="#atendimento-domiciliar">Prefiro atendimento em casa ↗</a>
       </div>
-      <p>
-       Fazer espirometria pode ser uma experiência nova. Você recebe orientações para entender o exame e participar de cada etapa.
-      </p>
      </div>
-     <div class="ed-pillars">
-      <article class="ed-pillar">
-       <span class="ed-number">
-        01
-       </span>
-       <h3>
-        Antes de chegar
-       </h3>
-       <p>
-        Ajudamos a organizar o agendamento e esclarecemos as orientações de preparo para o seu exame.
-       </p>
-      </article>
-      <article class="ed-pillar">
-       <span class="ed-number">
-        02
-       </span>
-       <h3>
-        Durante o exame
-       </h3>
-       <p>
-        Explicamos e acompanhamos as manobras, com atenção à sua compreensão e à qualidade das medidas.
-       </p>
-      </article>
-      <article class="ed-pillar">
-       <span class="ed-number">
-        03
-       </span>
-       <h3>
-        Depois do atendimento
-       </h3>
-       <p>
-        Orientamos o acesso ao laudo para que você possa levá-lo ao médico responsável pelo seu acompanhamento.
-       </p>
-      </article>
+        <aside aria-label="Unidades de atendimento" class="sl-units-placeholder">
+         <div aria-label="Ampliar mapa das unidades" class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" role="button" tabindex="0">
+          <span aria-hidden="true" class="sl-mini-map-target">
+           <span>
+           </span>
+           <span>
+           </span>
+           <span>
+           </span>
+           <span>
+           </span>
+          </span>
+          <button aria-label="Ampliar mapa das unidades" class="sl-btn sl-map-open-btn" id="sl-open-map-modal" type="button">
+           Ampliar mapa
+          </button>
+         </div>
+        </aside>
+    </div>
+   </section>
+   <section class="ed-section ed-home-care" id="atendimento-domiciliar" aria-labelledby="ed-home-care-title">
+    <div class="ed-wrap ed-home-care-layout">
+     <div>
+      <span class="ed-eyebrow">Atendimento domiciliar no Rio de Janeiro</span>
+      <h2 class="ed-title" id="ed-home-care-title">O cuidado também<br/>vai até <em>você.</em></h2>
+     </div>
+     <div>
+      <h3>Espirometria no conforto de casa</h3>
+      <p>Realize seu exame de espirometria em domicílio, com orientação da equipe em cada etapa. Consulte a cobertura para seu bairro, a disponibilidade e as condições de atendimento.</p>
+      <div class="ed-actions">
+       <a class="ed-button" href="/espirometria-domiciliar-rio-de-janeiro/">Conhecer o atendimento domiciliar <span aria-hidden="true">↗</span></a>
+      </div>
+      <a class="ed-text-link" href="https://api.whatsapp.com/send?phone=5521998901775&amp;text=Ol%C3%A1!%20Gostaria%20de%20consultar%20o%20atendimento%20de%20espirometria%20em%20domic%C3%ADlio%20para%20meu%20bairro." target="_blank" rel="noopener">Consultar meu bairro pelo WhatsApp ↗</a>
      </div>
     </div>
    </section>
-   <section class="ed-section" id="onde-atendemos">
+   <section class="ed-section" id="nossas-unidades">
     <div class="ed-wrap">
      <span class="ed-eyebrow">
       Perto de você
@@ -483,25 +473,66 @@
           </p>
          </div>
         </div>
-        <aside aria-label="Unidades de atendimento" class="sl-units-placeholder">
-         <div aria-label="Ampliar mapa das unidades" class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" role="button" tabindex="0">
-          <span aria-hidden="true" class="sl-mini-map-target">
-           <span>
-           </span>
-           <span>
-           </span>
-           <span>
-           </span>
-           <span>
-           </span>
-          </span>
-          <button aria-label="Ampliar mapa das unidades" class="sl-btn sl-map-open-btn" id="sl-open-map-modal" type="button">
-           Ampliar mapa
-          </button>
-         </div>
-        </aside>
+
        </div>
       </div>
+     </div>
+    </div>
+   </section>
+   <section class="ed-section ed-section-white">
+    <div class="ed-wrap">
+     <div class="ed-section-intro">
+      <div>
+       <span class="ed-eyebrow">
+        Atenção em cada etapa
+       </span>
+       <h2 class="ed-title">
+        Cuidar começa
+        <br/>
+        com
+        <em>
+         escuta.
+        </em>
+       </h2>
+      </div>
+      <p>
+       Fazer espirometria pode ser uma experiência nova. Você recebe orientações para entender o exame e participar de cada etapa.
+      </p>
+     </div>
+     <div class="ed-pillars">
+      <article class="ed-pillar">
+       <span class="ed-number">
+        01
+       </span>
+       <h3>
+        Antes de chegar
+       </h3>
+       <p>
+        Ajudamos a organizar o agendamento e esclarecemos as orientações de preparo para o seu exame.
+       </p>
+      </article>
+      <article class="ed-pillar">
+       <span class="ed-number">
+        02
+       </span>
+       <h3>
+        Durante o exame
+       </h3>
+       <p>
+        Explicamos e acompanhamos as manobras, com atenção à sua compreensão e à qualidade das medidas.
+       </p>
+      </article>
+      <article class="ed-pillar">
+       <span class="ed-number">
+        03
+       </span>
+       <h3>
+        Depois do atendimento
+       </h3>
+       <p>
+        Orientamos o acesso ao laudo para que você possa levá-lo ao médico responsável pelo seu acompanhamento.
+       </p>
+      </article>
      </div>
     </div>
    </section>

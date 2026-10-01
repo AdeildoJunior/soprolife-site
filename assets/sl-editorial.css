@@ -73,7 +73,7 @@ body.sl-editorial { background:var(--sl-paper)!important; color:var(--sl-ink); f
 .ed-care { background:#173b40; color:#f7f4ee; }
 .ed-care .ed-eyebrow { color:#b2d4c4; }
 .ed-care .ed-title { max-width:470px; }
-.ed-care .ed-section-intro { align-items:center; margin:0; }
+.ed-care .ed-section-intro { align-items:center; margin:0 auto; }
 .ed-care p { color:#d4e1da; font-size:17px; }
 .ed-care a { color:#f7f4ee; }
 .ed-faq { display:grid; grid-template-columns:.75fr 1.25fr; gap:80px; }
@@ -112,6 +112,42 @@ body.sl-editorial { background:var(--sl-paper)!important; color:var(--sl-ink); f
 }
 @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; }.ed-button { transition:none; } }
 /* Contato sempre acessível, com texto e ação lado a lado. */
+/* Home: localização e atendimento em casa logo após a apresentação. */
+.ed-home-priority :is(#onde-atendemos,#nossas-unidades,#atendimento-domiciliar,#agendamento) { scroll-margin-top:110px; }
+.ed-map-section { padding-block:56px; }
+.ed-map-layout { display:grid; grid-template-columns:.85fr 1.15fr; gap:48px; align-items:center; }
+.ed-map-layout .ed-lead { font-size:16px; margin-block:22px 0; }
+.ed-map-layout .ed-actions { margin-bottom:0; gap:6px 24px; }
+.ed-map-layout .sl-units-placeholder { border-radius:2px!important; }
+.ed-map-layout #sl-units-map-mini { height:390px!important; min-height:390px!important; border-radius:2px!important; }
+.ed-home-care { background:#e8ede4; padding-block:54px; }
+.ed-home-care-layout { display:grid; grid-template-columns:.85fr 1.15fr; gap:48px; align-items:center; }
+.ed-home-care h3 { font:400 30px/1.2 var(--sl-serif); margin:0 0 15px; }
+.ed-home-care p { color:#506662; font-size:17px; line-height:1.7; max-width:560px; margin:0; }
+.ed-home-care .ed-actions { margin:22px 0 8px; }
+html body.ed-home-priority #agendamento .sl-booking-grid { grid-template-columns:minmax(0,1fr)!important; }
+.ed-home-priority .sl-booking-controls { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 32px; }
+.ed-home-priority .sl-booking-controls > :not(.sl-booking-field) { grid-column:1 / -1; }
+/* Textos de busca mantidos, com títulos longos e parágrafos mais legíveis. */
+.ed-search-guide .ed-section-intro { align-items:start; }
+.ed-search-guide .ed-pillars { grid-template-columns:1fr; gap:0; }
+.ed-search-guide .ed-pillar { display:grid; grid-template-columns:44px minmax(0,.9fr) minmax(0,1.1fr); gap:28px; align-items:start; padding-block:28px; }
+.ed-search-guide .ed-pillar h3 { margin:0; font-size:29px; line-height:1.25; }
+.ed-search-guide .ed-pillar p { line-height:1.75; }
+@media(max-width:800px) {
+ .ed-map-layout,.ed-home-care-layout { grid-template-columns:1fr; gap:28px; }
+ .ed-map-section,.ed-home-care { padding-block:42px; }
+ .ed-map-layout #sl-units-map-mini { height:320px!important; min-height:320px!important; }
+ .ed-map-layout .ed-lead { max-width:560px; }
+ .ed-home-priority .ed-photo img { height:290px; }
+ .ed-search-guide .ed-pillar { grid-template-columns:36px minmax(0,1fr); gap:12px 20px; }
+ .ed-search-guide .ed-pillar p { grid-column:2; }
+}
+@media(max-width:540px) {
+ .ed-home-priority .sl-booking-controls { grid-template-columns:minmax(0,1fr); }
+ .ed-home-care .ed-button { text-align:center; gap:12px; }
+ .ed-search-guide .ed-pillar h3 { font-size:26px; }
+}
 html { scroll-padding-bottom:100px; }
 body.sl-editorial { padding-bottom:calc(88px + env(safe-area-inset-bottom,0px))!important; }
 .ed-contact-bar { position:fixed; inset:auto 0 0; z-index:900; background:var(--sl-ink); color:#fffefa; padding-bottom:env(safe-area-inset-bottom,0px); box-shadow:0 -2px 16px #173b4012; }
