@@ -1835,7 +1835,7 @@ function crmReportStatCard(key, label, value, hint) {
 
 function crmReportChartPanel({ title, subtitle, canvasId, hasData, emptyMsg }) {
   const body = hasData
-    ? `<canvas id="${canvasId}"></canvas>`
+    ? `<div class="chart-box"><canvas id="${canvasId}"></canvas></div>`
     : `<p class="crm-report-chart-empty">${emptyMsg || "Dado ainda não disponível"}</p>`;
   return `
     <article class="panel">
@@ -5197,7 +5197,7 @@ function renderCustosInvestimentos() {
             <span>Quanto cada um já pagou</span>
           </div>
           ${hasDesembolso
-            ? `<canvas id="ciSociosDesembolsoChart"></canvas>`
+            ? `<div class="chart-box"><canvas id="ciSociosDesembolsoChart"></canvas></div>`
             : `<p class="crm-report-chart-empty">Dado ainda não disponível</p>`}
         </article>
         <article class="panel">
@@ -5206,7 +5206,7 @@ function renderCustosInvestimentos() {
             <span>Pago, pendente atribuído e sem pagador definido</span>
           </div>
           ${hasPagoPendente
-            ? `<canvas id="ciSociosPagoPendenteChart"></canvas>`
+            ? `<div class="chart-box"><canvas id="ciSociosPagoPendenteChart"></canvas></div>`
             : `<p class="crm-report-chart-empty">Dado ainda não disponível</p>`}
         </article>
       </div>

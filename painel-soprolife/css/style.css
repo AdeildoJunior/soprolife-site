@@ -1335,13 +1335,6 @@ td { font-size: .94rem; }
   border-left-color: #0d7a5f;
 }
 
-/* Altura mínima de canvas nos novos grids do overview e leads */
-#leadsEtapaChart,
-#crmEtapaChart,
-#leadsOrigemChart,
-#leadsFunilChart {
-  min-height: 240px;
-}
 
 .badge.recebido {
   background: #e7f8f5;
@@ -7609,11 +7602,6 @@ th {
   align-items: flex-end;
 }
 
-/* Gráficos dos relatórios: altura alinhada entre os pares */
-#crmReportChartsGrid .panel canvas {
-  height: 250px !important;
-  max-height: 250px;
-}
 
 #crmReportStats { margin-top: var(--gap); }
 

@@ -8,11 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css?v=2026091901" />
+  <link rel="stylesheet" href="./css/style.css?v=2026100101" />
   <!-- CRM Pacientes e Acompanhamento (M19): workspace canônico único. -->
   <link rel="stylesheet" href="./css/crm-workspace.css?v=2026072402" />
   <!-- M24C — fila médica atribuída e fluxo clínico autenticado. -->
   <link rel="stylesheet" href="./css/report-workflow.css?v=2026092401" />
+  <link rel="stylesheet" href="./css/command-center-visual.css?v=2026100101" />
   <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
   <script src="./js/vendor/chart.umd.min.js"></script>
 </head>
@@ -420,7 +421,7 @@
               </h3>
               <span>Canal de entrada do contato — não representa a etapa comercial.</span>
             </div>
-            <canvas id="leadsOrigemChart"></canvas>
+            <div class="chart-box"><canvas id="leadsOrigemChart"></canvas></div>
           </article>
 
           <article class="panel">
@@ -430,7 +431,7 @@
               </h3>
               <span>Mostra em que fase cada lead está. Parceiros B2B convertidos entram como Convertido / Parceiro ativo.</span>
             </div>
-            <canvas id="leadsFunilChart"></canvas>
+            <div class="chart-box"><canvas id="leadsFunilChart"></canvas></div>
           </article>
         </div>
 
@@ -508,7 +509,7 @@
                 <h3>Origem do tráfego</h3>
                 <span id="channelsSubtitle">Canais de aquisição</span>
               </div>
-              <canvas id="channelsChart"></canvas>
+              <div class="chart-box"><canvas id="channelsChart"></canvas></div>
               <div id="trafficSourceList" class="mkt-traffic-list" hidden></div>
             </article>
             <article class="panel mkt-trend-panel" id="mktTrendPanel" hidden>
@@ -516,7 +517,7 @@
                 <h3>Impressões — tendência</h3>
                 <span id="mktTrendSubtitle">Search Console · por dia</span>
               </div>
-              <canvas id="mktTrendChart"></canvas>
+              <div class="chart-box chart-box--trend"><canvas id="mktTrendChart"></canvas></div>
             </article>
           </div>
 
@@ -777,7 +778,7 @@
               <h3>Produção por agenda</h3>
               <span>Exames realizados por data</span>
             </div>
-            <div class="parceria-chart-wrap">
+            <div class="parceria-chart-wrap chart-box">
               <canvas id="parceriaProducaoChart"></canvas>
               <p id="parceriaProducaoEmpty" class="crm-empty" hidden>Ainda sem produção registrada — o gráfico será preenchido quando o atendimento começar.</p>
             </div>
@@ -788,7 +789,7 @@
               <h3>Receita x custos x resultado</h3>
               <span>Resultado financeiro por período</span>
             </div>
-            <div class="parceria-chart-wrap">
+            <div class="parceria-chart-wrap chart-box">
               <canvas id="parceriaFinanceiroChart"></canvas>
               <p id="parceriaFinanceiroEmpty" class="crm-empty" hidden>Ainda sem valores financeiros registrados para esta parceria.</p>
             </div>
@@ -974,7 +975,7 @@
   <script src="./js/today-actions.js?v=2026070803"></script>
   <script src="./js/espirometria-financeiro.js?v=2026070902"></script>
   <script src="./js/marketing-freshness.js?v=2026080101"></script>
-  <script src="./js/app.js?v=2026091901"></script>
+  <script src="./js/app.js?v=2026100101"></script>
   <!-- Apresentação canônica de status de atendimento (M20): formatador
        ÚNICO usado por Central, CRM, linha do tempo, listas, filtros e
        inspeção técnica. Sem defer: precisa existir antes dos módulos. -->
