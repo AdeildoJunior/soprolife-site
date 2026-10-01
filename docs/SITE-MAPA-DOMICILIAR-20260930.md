@@ -3,7 +3,7 @@
 Prévia local: http://127.0.0.1:8114/
 Branch: `codex/site-mapa-domiciliar-20260930`.
 Base pública: `origin/main`, commit `8a9566b` (SEO de Claude após redesign e inclusão de Norte Shopping).
-Status: prévia local; não publicada.
+Status: versão aprovada pelo usuário para publicação em 01/10/2026. A data de atualização da home no sitemap foi atualizada; as demais URLs foram preservadas.
 
 ## Versão atual após o retorno do usuário em 01/10
 
