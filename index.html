@@ -24,7 +24,7 @@
   <link href="/assets/sl-booking.css" rel="stylesheet"/>
   <link href="/assets/sl-modern.css?v=m26-11" rel="stylesheet"/>
   <link href="/assets/sl-maps-calm.css?v=m26-11-mapas" rel="stylesheet"/>
-  <link href="/assets/sl-editorial.css?v=20260930-mapa-domiciliar" rel="stylesheet"/>
+  <link href="/assets/sl-editorial.css?v=20261001-agenda-online" rel="stylesheet"/>
   <script type="application/ld+json">
    {
   "@context": "https://schema.org",
@@ -180,6 +180,9 @@
      <a href="/#onde-atendemos">
       Onde atendemos
      </a>
+     <a href="#atendimento-online">
+      Consulta online
+     </a>
      <a href="/resultados/">
       Resultados
      </a>
@@ -212,12 +215,12 @@
         ↗
        </span>
       </a>
-      <a class="ed-text-link" href="#onde-atendemos">
-       Onde atendemos
+      <a class="ed-button ed-button-outline" href="#atendimento-online">
+       Consulta médica online
       </a>
      </div>
      <p class="ed-caption">
-      <a class="ed-text-link" href="#atendimento-domiciliar">Atendimento em domicílio ↗</a><br/>
+      <a class="ed-text-link" href="#onde-atendemos">Ver unidades e horários ↗</a><br/>
       Atendimento mediante agendamento.
       <br/>
       Converse com a equipe para confirmar preparo, valor e horário.
@@ -246,17 +249,88 @@
      </span>
     </div>
    </div>
-   <section class="ed-section ed-map-section" id="onde-atendemos" aria-labelledby="ed-map-title">
-    <div class="ed-wrap ed-map-layout">
-     <div>
-      <span class="ed-eyebrow">Perto de você · Rio de Janeiro</span>
-      <h2 class="ed-title" id="ed-map-title">Encontre a unidade<br/>mais perto <em>de você.</em></h2>
-      <p class="ed-lead">Espirometria em Ipanema, Barra da Tijuca e Zona Norte. Veja nossas unidades no mapa e escolha onde prefere ser atendido.</p>
-      <div class="ed-actions">
-       <a class="ed-text-link" href="#nossas-unidades">Ver endereços e horários ↗</a>
-       <a class="ed-text-link" href="#atendimento-domiciliar">Prefiro atendimento em casa ↗</a>
-      </div>
-     </div>
+   <section class="sl-booking-section" id="agendamento">
+    <div class="sl-container">
+     <div class="sl-booking-align">
+      <div class="sl-booking-card">
+       <div class="sl-booking-head" id="onde-atendemos">
+        <span class="sl-booking-kicker">
+         Vamos combinar seu atendimento
+        </span>
+        <h2 class="sl-booking-title">
+         Seu exame, perto de você.
+        </h2>
+        <p class="sl-booking-sub">
+         Veja as unidades no mapa e escolha o exame, o local e seu horário de preferência. A equipe confirma pelo WhatsApp.
+        </p>
+       </div>
+       <div class="sl-booking-grid">
+        <div class="sl-booking-controls">
+         <!-- SOPRO:BOOKING_FIELDS_SHARED_V1
+                   Estilo em /assets/sl-booking.css · lógica em /assets/sl-booking.js.
+                   As opções de Localidade são reconciliadas com a configuração
+                   central (SL_BOOKING.LOCATIONS) no carregamento da página. -->
+         <div class="sl-booking-field">
+          <label for="sl-booking-service">
+           Tipo de Espirometria
+          </label>
+          <span class="sl-field-wrap sl-field-wrap--select">
+           <select class="sl-field-control" id="sl-booking-service" name="servico">
+            <option selected="" value="Espirometria simples">
+             Espirometria simples
+            </option>
+            <option value="Espirometria com broncodilatador">
+             Espirometria com broncodilatador
+            </option>
+            <option value="Empresas / PCMSO">
+             Empresas / PCMSO
+            </option>
+           </select>
+          </span>
+         </div>
+         <div class="sl-booking-field">
+          <label for="sl-booking-unit">
+           Localidade
+          </label>
+          <span class="sl-field-wrap sl-field-wrap--select">
+           <select class="sl-field-control" id="sl-booking-unit" name="unidade">
+            <option selected="" value="Atendimento domiciliar">
+             Atendimento domiciliar
+            </option>
+            <option value="Unidade Barra">
+             Unidade Barra
+            </option>
+            <option value="Unidade Zona Norte — Shopping Nova América">
+             Unidade Zona Norte — Shopping Nova América
+            </option>
+            <option value="Unidade Norte Shopping">
+             Unidade Norte Shopping — Cachambi
+            </option>
+            <option value="Centro Médico Pastore — Ipanema">
+             Pastore Ipanema — Unidade parceira
+            </option>
+           </select>
+          </span>
+         </div>
+         <div class="sl-booking-field">
+          <label for="sl-booking-date">
+           Data
+          </label>
+          <span class="sl-field-wrap sl-field-wrap--date">
+           <input autocomplete="off" class="sl-field-control" id="sl-booking-date" inputmode="none" name="data" placeholder="dd/mm/aaaa" type="text"/>
+          </span>
+         </div>
+         <div>
+          <div class="sl-booking-slots-title">
+           Qual horário você prefere?
+          </div>
+          <div class="sl-booking-slots" id="sl-booking-slots">
+          </div>
+          <p class="sl-booking-note">
+           Horários sujeitos a confirmação pelo WhatsApp.
+          </p>
+         </div>
+        </div>
         <aside aria-label="Unidades de atendimento" class="sl-units-placeholder">
          <div aria-label="Ampliar mapa das unidades" class="sl-map-mini sl-mini-map sl-mini-map-trigger" id="sl-units-map-mini" role="button" tabindex="0">
           <span aria-hidden="true" class="sl-mini-map-target">
@@ -273,7 +347,28 @@
            Ampliar mapa
           </button>
          </div>
+         <a class="ed-map-addresses" href="#nossas-unidades">Ver endereços e horários das unidades ↗</a>
         </aside>
+       </div>
+      </div>
+     </div>
+    </div>
+   </section>
+   <section class="ed-section ed-online-care" id="atendimento-online" aria-labelledby="ed-online-title">
+    <div class="ed-wrap ed-online-layout">
+     <div>
+      <span class="ed-eyebrow">Telemedicina · SoproLife</span>
+      <h2 class="ed-title" id="ed-online-title">Consulta médica<br/><em>online.</em></h2>
+      <p class="ed-online-caption">Cuidado respiratório, de onde você estiver.</p>
+     </div>
+     <div>
+      <h3>Converse com uma médica pneumologista</h3>
+      <p>Atendimento por vídeo para adultos e idosos, com avaliação dos sintomas, do histórico e dos exames. Receitas e pedidos de exames são enviados digitalmente, quando necessários.</p>
+      <div class="ed-actions">
+       <a class="ed-button" href="/telemedicina/">Conhecer a consulta online <span aria-hidden="true">↗</span></a>
+       <a class="ed-text-link" href="https://api.whatsapp.com/send?phone=5521998901775&amp;text=Ol%C3%A1%21%20Gostaria%20de%20agendar%20uma%20consulta%20m%C3%A9dica%20online%20com%20a%20pneumologista%20da%20SoproLife." target="_blank" rel="noopener">Agendar consulta pelo WhatsApp ↗</a>
+      </div>
+     </div>
     </div>
    </section>
    <section class="ed-section ed-home-care" id="atendimento-domiciliar" aria-labelledby="ed-home-care-title">
@@ -388,94 +483,6 @@
         Consultar atendimento domiciliar ↗
        </a>
       </article>
-     </div>
-    </div>
-   </section>
-   <section class="sl-booking-section" id="agendamento">
-    <div class="sl-container">
-     <div class="sl-booking-align">
-      <div class="sl-booking-card">
-       <div class="sl-booking-head">
-        <span class="sl-booking-kicker">
-         Vamos combinar seu atendimento
-        </span>
-        <h2 class="sl-booking-title">
-         Seu exame, no lugar que faz sentido para você.
-        </h2>
-        <p class="sl-booking-sub">
-         Escolha o exame, o local e um horário de preferência. Nossa equipe confirma os detalhes pelo WhatsApp antes do atendimento.
-        </p>
-       </div>
-       <div class="sl-booking-grid">
-        <div class="sl-booking-controls">
-         <!-- SOPRO:BOOKING_FIELDS_SHARED_V1
-                   Estilo em /assets/sl-booking.css · lógica em /assets/sl-booking.js.
-                   As opções de Localidade são reconciliadas com a configuração
-                   central (SL_BOOKING.LOCATIONS) no carregamento da página. -->
-         <div class="sl-booking-field">
-          <label for="sl-booking-service">
-           Tipo de Espirometria
-          </label>
-          <span class="sl-field-wrap sl-field-wrap--select">
-           <select class="sl-field-control" id="sl-booking-service" name="servico">
-            <option selected="" value="Espirometria simples">
-             Espirometria simples
-            </option>
-            <option value="Espirometria com broncodilatador">
-             Espirometria com broncodilatador
-            </option>
-            <option value="Empresas / PCMSO">
-             Empresas / PCMSO
-            </option>
-           </select>
-          </span>
-         </div>
-         <div class="sl-booking-field">
-          <label for="sl-booking-unit">
-           Localidade
-          </label>
-          <span class="sl-field-wrap sl-field-wrap--select">
-           <select class="sl-field-control" id="sl-booking-unit" name="unidade">
-            <option selected="" value="Atendimento domiciliar">
-             Atendimento domiciliar
-            </option>
-            <option value="Unidade Barra">
-             Unidade Barra
-            </option>
-            <option value="Unidade Zona Norte — Shopping Nova América">
-             Unidade Zona Norte — Shopping Nova América
-            </option>
-            <option value="Unidade Norte Shopping">
-             Unidade Norte Shopping — Cachambi
-            </option>
-            <option value="Centro Médico Pastore — Ipanema">
-             Pastore Ipanema — Unidade parceira
-            </option>
-           </select>
-          </span>
-         </div>
-         <div class="sl-booking-field">
-          <label for="sl-booking-date">
-           Data
-          </label>
-          <span class="sl-field-wrap sl-field-wrap--date">
-           <input autocomplete="off" class="sl-field-control" id="sl-booking-date" inputmode="none" name="data" placeholder="dd/mm/aaaa" type="text"/>
-          </span>
-         </div>
-         <div>
-          <div class="sl-booking-slots-title">
-           Qual horário você prefere?
-          </div>
-          <div class="sl-booking-slots" id="sl-booking-slots">
-          </div>
-          <p class="sl-booking-note">
-           Horários sujeitos a confirmação pelo WhatsApp.
-          </p>
-         </div>
-        </div>
-
-       </div>
-      </div>
      </div>
     </div>
    </section>

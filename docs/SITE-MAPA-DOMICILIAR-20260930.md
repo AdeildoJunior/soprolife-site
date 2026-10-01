@@ -1,34 +1,36 @@
-# Continuidade — mapa e atendimento domiciliar
+# Continuidade — agenda, mapa e consulta médica online
 
 Prévia local: http://127.0.0.1:8114/
 Branch: `codex/site-mapa-domiciliar-20260930`.
-Base: `origin/main`, commit `8a9566b` (SEO de Claude após redesign e inclusão de Norte Shopping).
-Status: implementado e validado localmente; não publicado.
+Base pública: `origin/main`, commit `8a9566b` (SEO de Claude após redesign e inclusão de Norte Shopping).
+Status: prévia local; não publicada.
 
-## Alterações
+## Versão atual após o retorno do usuário em 01/10
 
-- Home: mapa original movido integralmente para uma seção própria após a apresentação e faixa de serviços. O atalho Onde atendemos leva ao mapa; endereços continuam acessíveis pelo atalho Ver endereços e horários.
-- Atendimento domiciliar ganha seção logo após o mapa, link desde a abertura, página explicativa e WhatsApp com mensagem específica.
-- O serviço descrito é espirometria domiciliar, já documentado no site. O usuário foi consultado para esclarecer se também oferece consulta médica presencial em casa; não houve resposta até a conclusão. Não foi inventada uma oferta de consulta domiciliar.
-- Unidades, endereços, horários e configurações de agendamento preservados; formulário reorganizado após remoção do mapa lateral.
-- Foto da home mais compacta no celular para reduzir a distância até o mapa.
-- Página Espirometria RJ: textos recuperados por Claude preservados literalmente. Títulos longos e parágrafos foram organizados em linhas com a tipografia editorial compartilhada.
-- Correção da centralização da seção verde de apresentação nas duas páginas.
-- Nenhum arquivo do painel, informação privada, analytics ou regra operacional alterado.
+- Home: o formulário completo e o mapa voltaram a ficar juntos, no primeiro bloco após a apresentação e a faixa de serviços. No computador ficam lado a lado; no celular, mapa imediatamente após os campos, horários e confirmação, sem outra seção entre eles.
+- Horários com caixas de 52 px, mantendo área de toque e indicação de seleção. Mapa com link para os endereços das unidades.
+- O título do bloco foi encurtado para “Seu exame, perto de você”.
+- O usuário esclareceu que o atendimento a destacar era a consulta médica **online**. Agora há botão na apresentação, link no menu principal e seção própria imediatamente depois da agenda/mapa, antes dos endereços e conteúdos longos.
+- A seção de consulta online aponta para a página de telemedicina e para o WhatsApp com mensagem específica de consulta. Texto baseado na oferta já descrita pelas páginas públicas de telemedicina e consulta respiratória.
+- Espirometria domiciliar continua em seção própria depois da consulta online. Nenhuma oferta de consulta médica presencial em casa foi criada.
+- Endereços, horários, unidades, Norte Shopping, regras Pastore, lógica de agendamento e analytics preservados.
+- Página Espirometria RJ: conteúdo recuperado por Claude preservado literalmente, com títulos e parágrafos longos organizados em linhas editoriais.
+- Fontes, cores e botões seguem a identidade editorial inspirada na referência Isadora. Menu permite quebra de linha para acomodar o link extra em ampliação de 200%.
+- Nenhum arquivo do painel ou informação privada alterado.
 
 ## Validação
 
-- `tests/public-editorial.cjs`: Chromium e Firefox, 11 páginas × 5 larguras × 2 navegadores = 110 combinações; nenhum overflow horizontal ou erro JavaScript.
-- Agendamento, unidades, Norte Shopping, Pastore, datas, WhatsApp, menu, FAQ, mapas, diálogo, Escape e foco passaram.
-- Ajuste do teste de captura: mapa agora é visitado antes da agenda para acionar corretamente seu carregamento por visibilidade.
-- Teste adicional em 1440, 390 e 320 px: posição antecipada do mapa/domiciliar, links da apresentação, abertura do mapa, posição do título abaixo do cabeçalho e conteúdo do link WhatsApp domiciliar.
-- Titles, metadados e JSON-LD das duas páginas comparados com a base e preservados. Texto da página Espirometria RJ idêntico ao da base.
-- JSON-LD válido, nenhum ID duplicado nas duas páginas, destinos locais existentes.
-- `node --check tests/public-editorial.cjs` e `git diff --check` passaram.
-- Capturas desktop/mobile inspecionadas. Nenhuma mensagem enviada nem agendamento real criado.
+O teste `tests/public-editorial.cjs` cobre as 11 páginas em 1440, 1024, 768, 390 e 320 px, além de agenda, datas, Norte Shopping, Pastore, links WhatsApp, menus, FAQ, mapas, diálogo, Escape, foco, ampliação e fallback sem CDN.
 
-Resultados e capturas: `/tmp/soprolife-mapa-20260930/` e `/tmp/soprolife-mapa-20260930-firefox/`.
-Teste adicional: `/tmp/soprolife-home-priority-check.cjs`.
+Rodada final: Chromium e Firefox passaram nas 110 combinações de página/largura, sem overflow horizontal ou erros JavaScript. Os cenários funcionais, ampliação de 200% e fallback sem CDN também passaram.
+
+Foram acrescentadas verificações para evitar a regressão relatada pelo usuário: agenda logo após a apresentação, mapa dentro do mesmo bloco, alinhamento lateral no computador, proximidade no celular e acesso à consulta online desde a apresentação. Capturas adicionais da seção de telemedicina.
+
+Titles, metadados e JSON-LD das duas páginas seguem preservados em relação à base pública. Texto da página Espirometria RJ idêntico ao da base. IDs únicos; `node --check tests/public-editorial.cjs` e `git diff --check` verificados.
+
+Capturas desktop/mobile inspecionadas. Nenhuma mensagem enviada ou agendamento real criado.
+
+Resultados e capturas atuais: `/tmp/soprolife-agenda-online-chromium/` e `/tmp/soprolife-agenda-online-firefox/`.
 
 Para reabrir a prévia se o servidor encerrar:
 

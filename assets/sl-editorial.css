@@ -112,22 +112,33 @@ body.sl-editorial { background:var(--sl-paper)!important; color:var(--sl-ink); f
 }
 @media(prefers-reduced-motion:reduce) { html { scroll-behavior:auto; }.ed-button { transition:none; } }
 /* Contato sempre acessível, com texto e ação lado a lado. */
-/* Home: localização e atendimento em casa logo após a apresentação. */
-.ed-home-priority :is(#onde-atendemos,#nossas-unidades,#atendimento-domiciliar,#agendamento) { scroll-margin-top:110px; }
-.ed-map-section { padding-block:56px; }
-.ed-map-layout { display:grid; grid-template-columns:.85fr 1.15fr; gap:48px; align-items:center; }
-.ed-map-layout .ed-lead { font-size:16px; margin-block:22px 0; }
-.ed-map-layout .ed-actions { margin-bottom:0; gap:6px 24px; }
-.ed-map-layout .sl-units-placeholder { border-radius:2px!important; }
-.ed-map-layout #sl-units-map-mini { height:390px!important; min-height:390px!important; border-radius:2px!important; }
+/* Home: agenda e mapa juntos após a apresentação; telemedicina em seguida. */
+.ed-home-priority :is(#onde-atendemos,#nossas-unidades,#atendimento-domiciliar,#atendimento-online,#agendamento) { scroll-margin-top:110px; }
+.ed-home-priority .sl-main-nav { min-width:0; flex-wrap:wrap; }
+.ed-button-outline { background:transparent; color:var(--sl-forest); }
+.ed-button-outline:hover { background:#e8ede4; }
+.ed-online-care { background:var(--sl-ink); color:var(--sl-paper); padding-block:58px; }
+.ed-online-layout { display:grid; grid-template-columns:.85fr 1.15fr; gap:48px; align-items:center; }
+.ed-online-care .ed-eyebrow,.ed-online-care .ed-title em { color:#b2d4c4; }
+.ed-online-care h3 { font:400 30px/1.2 var(--sl-serif); margin:0 0 15px; }
+.ed-online-care p { color:#d4e1da; font-size:17px; line-height:1.7; margin:0; max-width:560px; }
+.ed-online-care .ed-online-caption { margin-top:20px; }
+.ed-online-care .ed-actions { margin:24px 0 0; gap:12px 24px; }
+.ed-online-care .ed-button { color:var(--sl-ink); background:var(--sl-paper); border-color:var(--sl-paper); }
+.ed-online-care .ed-button:hover { background:#dce9df; }
+.ed-online-care .ed-text-link { color:var(--sl-paper); }
 .ed-home-care { background:#e8ede4; padding-block:54px; }
 .ed-home-care-layout { display:grid; grid-template-columns:.85fr 1.15fr; gap:48px; align-items:center; }
 .ed-home-care h3 { font:400 30px/1.2 var(--sl-serif); margin:0 0 15px; }
 .ed-home-care p { color:#506662; font-size:17px; line-height:1.7; max-width:560px; margin:0; }
 .ed-home-care .ed-actions { margin:22px 0 8px; }
-html body.ed-home-priority #agendamento .sl-booking-grid { grid-template-columns:minmax(0,1fr)!important; }
-.ed-home-priority .sl-booking-controls { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 32px; }
-.ed-home-priority .sl-booking-controls > :not(.sl-booking-field) { grid-column:1 / -1; }
+html body.ed-home-priority #agendamento { padding-block:48px!important; }
+html body.ed-home-priority #agendamento .sl-booking-grid { grid-template-columns:minmax(0,1fr) minmax(0,1.12fr)!important; gap:32px!important; }
+.ed-home-priority .sl-booking-controls { grid-template-columns:minmax(0,1fr); gap:16px; }
+html body.ed-home-priority #agendamento .sl-slot-btn { min-height:52px!important; font-size:15px!important; padding:6px!important; }
+html body.ed-home-priority #agendamento .sl-units-placeholder { border-radius:2px!important; background:var(--sl-paper)!important; }
+html body.ed-home-priority #agendamento #sl-units-map-mini { border-radius:2px!important; min-height:400px!important; }
+.ed-map-addresses { display:flex; align-items:center; min-height:48px; padding:10px 16px; color:var(--sl-forest); font-size:13px; }
 /* Textos de busca mantidos, com títulos longos e parágrafos mais legíveis. */
 .ed-search-guide .ed-section-intro { align-items:start; }
 .ed-search-guide .ed-pillars { grid-template-columns:1fr; gap:0; }
@@ -135,10 +146,11 @@ html body.ed-home-priority #agendamento .sl-booking-grid { grid-template-columns
 .ed-search-guide .ed-pillar h3 { margin:0; font-size:29px; line-height:1.25; }
 .ed-search-guide .ed-pillar p { line-height:1.75; }
 @media(max-width:800px) {
- .ed-map-layout,.ed-home-care-layout { grid-template-columns:1fr; gap:28px; }
- .ed-map-section,.ed-home-care { padding-block:42px; }
- .ed-map-layout #sl-units-map-mini { height:320px!important; min-height:320px!important; }
- .ed-map-layout .ed-lead { max-width:560px; }
+ .ed-online-layout,.ed-home-care-layout { grid-template-columns:1fr; gap:28px; }
+ .ed-online-care,.ed-home-care { padding-block:42px; }
+ html body.ed-home-priority #agendamento { padding-block:32px!important; }
+ html body.ed-home-priority #agendamento .sl-booking-grid { grid-template-columns:minmax(0,1fr)!important; gap:24px!important; }
+ html body.ed-home-priority #agendamento #sl-units-map-mini { height:300px!important; min-height:300px!important; }
  .ed-home-priority .ed-photo img { height:290px; }
  .ed-search-guide .ed-pillar { grid-template-columns:36px minmax(0,1fr); gap:12px 20px; }
  .ed-search-guide .ed-pillar p { grid-column:2; }

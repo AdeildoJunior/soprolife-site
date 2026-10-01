@@ -46,6 +46,23 @@ const report = { layouts: [], functional: [], errors: [], maps: [] };
     offenders: [...document.querySelectorAll('body *')].filter(e => { const r=e.getBoundingClientRect();return r.width>0 && r.right>innerWidth+1 && r.left>=0 && getComputedStyle(e).position!=='fixed' && !e.closest('.leaflet-container,.sl-map-modal,.flatpickr-calendar'); }).slice(0,6).map(e=>e.className) }));
    report.layouts.push({ width, route, ...metrics });
    if (metrics.scroll > width + 1) console.log('OVERFLOW', width, route, metrics);
+   if (route === '/') {
+    const sections = await p.locator('main > section').evaluateAll(nodes => nodes.map(n => n.id));
+    assert.equal(sections[1], 'agendamento', 'Agenda logo após a apresentação');
+    assert.equal(sections[2], 'atendimento-online', 'Consulta online antes das seções longas');
+    assert.equal(await p.locator('#agendamento #sl-units-map-mini').count(), 1, 'Mapa junto dos horários');
+    const controls = await p.locator('.sl-booking-controls').boundingBox();
+    const map = await p.locator('#sl-units-map-mini').boundingBox();
+    if (width > 800) {
+     assert(Math.abs(controls.y - map.y) < 2, 'Mapa e campos alinhados no computador');
+     assert(map.x >= controls.x + controls.width, 'Mapa ao lado dos horários');
+    } else {
+     assert(map.y >= controls.y + controls.height, 'Mapa logo depois dos campos no celular');
+     assert(map.y - (controls.y + controls.height) <= 32, 'Sem seção separando mapa e horários');
+    }
+    assert.equal(await p.locator('.ed-hero a[href="#atendimento-online"]').count(), 1);
+    assert.equal(await p.locator('#atendimento-online a[href="/telemedicina/"]').count(), 1);
+   }
    const menu = p.locator('.sl-menu-toggle');
    if (width <= 1100) assert(await menu.isVisible(), route + ': menu móvel ausente');
    if (await menu.isVisible()) {
@@ -57,7 +74,7 @@ const report = { layouts: [], functional: [], errors: [], maps: [] };
     await p.evaluate(() => document.activeElement.blur());
     const name = (route === '/' ? 'home' : 'espirometria') + (width===1440 ? '-desktop' : '-mobile');
     await p.screenshot({ path: out + '/screenshots/' + name + '.png' });
-    // O mapa da home agora é independente da agenda e carrega ao entrar na tela.
+    // Aciona o carregamento do mapa por visibilidade, inclusive no celular.
     await p.locator('#sl-units-map-mini').scrollIntoViewIfNeeded();
     await p.waitForSelector('.leaflet-tile-loaded', { timeout: 15000 });
     await p.waitForTimeout(500);
@@ -66,6 +83,10 @@ const report = { layouts: [], functional: [], errors: [], maps: [] };
     await p.locator('.sl-booking-card').screenshot({ path: out + '/screenshots/' + name + '-agenda.png', style: '.sl-header, .sl-whatsapp-bar, .ed-contact-bar { visibility: hidden !important; }' });
     await p.evaluate(() => window.scrollTo(0, 0));
     await p.screenshot({ path: out + '/screenshots/' + name + '-completa.png', fullPage: true });
+    if (route === '/') {
+     await p.locator('.ed-hero a[href="#atendimento-online"]').click();
+     await p.locator('#atendimento-online').screenshot({ path: out + '/screenshots/' + name + '-consulta-online.png', style: '.sl-header, .ed-contact-bar { visibility: hidden !important; }' });
+    }
    }
   }
  }
