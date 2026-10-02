@@ -3595,6 +3595,11 @@
       <div class="report-session-strip">
         <span>Sessão: ${esc(currentUser() && currentUser().nome || "usuário autenticado")}</span>
         ${explicit("medico") ? `<span>Papel clínico explícito</span>` : ""}
+        ${explicit("medico") || can("admin") ? `
+          <button type="button" class="m15-btn report-stats-open" data-report-statistics>
+            <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 2v15h15M7 13V9m4 4V5m4 8V7"/></svg>
+            Gráficos dos laudos
+          </button>` : ""}
         <button type="button" class="m15-btn" data-report-logout>Sair</button>
       </div>
       ${blocks.join("")}`;
@@ -5106,6 +5111,11 @@
   }
 
   function handleClick(event) {
+    const statistics = event.target.closest("[data-report-statistics]");
+    if (statistics) {
+      if (window.SoproReportStatistics) window.SoproReportStatistics.open(statistics);
+      return;
+    }
     // M25.24 — a ajuda vem ANTES de tudo. O ícone pode estar dentro de uma
     // linha de laudo ou ao lado de um botão de ação; sem interromper aqui,
     // tocar no "?" abriria o documento ou dispararia um download.

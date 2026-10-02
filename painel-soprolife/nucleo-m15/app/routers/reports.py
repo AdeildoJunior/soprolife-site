@@ -15,7 +15,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import (
     APIRouter,
@@ -1300,6 +1300,37 @@ def _safe_template_payload(
 
 
 # -------------------------------------------------- administração de médicos
+
+
+@router.get("/estatisticas")
+def get_report_statistics(
+    response: Response,
+    inicio: date | None = None,
+    fim: date | None = None,
+    origem: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Visão agregada; médico mantém o recorte das próprias atribuições.
+
+    Administração recebe somente contagens institucionais, nunca conteúdo
+    clínico individual. Os demais papéis não ganham acesso a esta visão.
+    """
+    from ..services.report_statistics import ORIGINS, report_statistics
+
+    profile_id = None
+    if user_has_explicit_role(user, ROLE_MEDICO):
+        profile_id = _require_active_physician(db, user).id
+    elif not user_has_explicit_role(user, ROLE_ADMIN):
+        raise ReportDomainError(403, "estatisticas_nao_autorizadas",
+                                "Esta conta não tem acesso aos gráficos de laudos.")
+    if inicio is not None and fim is not None and inicio > fim:
+        raise ReportDomainError(422, "periodo_invalido", "A data inicial deve anteceder a data final.")
+    if origem is not None and origem not in ORIGINS:
+        raise ReportDomainError(422, "origem_invalida", "Origem inválida.")
+    response.headers["Cache-Control"] = "no-store"
+    return report_statistics(db, physician_profile_id=profile_id,
+                             inicio=inicio, fim=fim, origem=origem)
 
 
 @router.get("/admin/medicos")

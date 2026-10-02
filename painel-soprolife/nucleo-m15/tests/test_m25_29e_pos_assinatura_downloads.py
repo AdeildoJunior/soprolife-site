@@ -606,6 +606,7 @@ def test_assets_alterados_tem_cache_busting_atual():
     ("Meus laudos" mostra só o que ainda depende da médica) subiu para
     `2026092301`, idem. A M26.29 (exame técnico antes das conclusões e
     "Como funciona" recolhido) subiu para `2026092401`, com o pino junto.
+    O botão de indicadores dos laudos subiu os dois para `2026100102`.
     """
 
     import re
@@ -614,6 +615,6 @@ def test_assets_alterados_tem_cache_busting_atual():
         re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
     )
     assert versoes, "os assets precisam continuar versionados"
-    assert versoes == {"2026092401"}, (
+    assert versoes == {"2026100102"}, (
         "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
     )
