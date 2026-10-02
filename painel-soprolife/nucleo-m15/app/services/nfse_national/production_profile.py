@@ -221,3 +221,57 @@ def production_policy(flow: str) -> "PolicyCreate":
 def production_policies() -> list["PolicyCreate"]:
     """Both flows. Readiness requires both, so they are produced together."""
     return [production_policy(flow) for flow in sorted(PRODUCTION_POLICY_VERSIONS)]
+
+
+# ===========================================================================
+# M70 — the PASTORE production policy.
+#
+# Kept OUT of ``PRODUCTION_POLICY_VERSIONS``/``production_policies()`` on
+# purpose: those are the DIRECT/HOME pair that readiness requires, and the
+# M60 apply script writes exactly that pair. PASTORE is an additional flow,
+# written by its own script (``nfse_m70_pastore_policy_apply.py``).
+#
+# Tax parameters: the SAME body as DIRECT/HOME, by construction (a copy of
+# ``_PRODUCTION_TAX_CONFIGURATION``), so the three can never drift apart. It
+# was checked against the real manual NFS-e nº 3 of 18/08/2026 (Pastore
+# exam, R$ 109,50, tomador PF = the patient): operação tributável, Rio de
+# Janeiro, ISS não retido, cTribNac 040201, cTribMun 001, NBS 123019900 —
+# all identical. Only two fields differ, and neither is a tax parameter:
+#
+# - ``amount_basis``: the amount is SoproLife's share as stated by the
+#   partnership rule (read only by ``partner_pricing``), never the
+#   gross price of the exam and never a FinancialEntry;
+# - ``validation_reference``: provenance.
+#
+# The series is NOT a policy field: issuance keeps the automation series
+# 00001 and the durable allocator. The Portal's manual series 70000 (used by
+# nº 3) is never used by automation.
+#
+# ACTIVATION IS PROSPECTIVE. ``effective_from`` is the M70 deploy date, so
+# every Pastore exam performed before it — several of which may already have
+# a manual NFS-e that this database does not know about (nº 3 is one) — stays
+# ``policy_outside_validity`` and can never get a button by this code change.
+# ===========================================================================
+
+PASTORE_PRODUCTION_POLICY_VERSION = "SOPROLIFE-PRODUCTION-PASTORE-v1"
+PASTORE_POLICY_EFFECTIVE_FROM = date(2026, 10, 2)
+PASTORE_AMOUNT_BASIS = "partnership.valor_recebido_por_exame"
+PASTORE_DIFFERS_FROM_DIRECT = frozenset({"amount_basis", "validation_reference"})
+
+
+def pastore_production_policy() -> "PolicyCreate":
+    from ...fiscal_schemas import PolicyCreate
+
+    configuration = dict(_PRODUCTION_TAX_CONFIGURATION)
+    configuration["amount_basis"] = PASTORE_AMOUNT_BASIS
+    configuration["validation_reference"] = "DERIVED-FROM-PRODUCTION-DIRECT-v1.MANUAL-NFSE-3"
+    return PolicyCreate.model_validate({
+        "version": PASTORE_PRODUCTION_POLICY_VERSION,
+        "environment": "production",
+        "flow": "PASTORE",
+        "service": "spirometry",
+        "effective_from": PASTORE_POLICY_EFFECTIVE_FROM,
+        "effective_to": PRODUCTION_POLICY_EFFECTIVE_TO,
+        "validation_state": "validated",
+        "configuration": configuration,
+    })

@@ -119,7 +119,9 @@ def test_alembic_graph_fiscal_after_m26_9(tmp_path, monkeypatch):
     # of THAT, and M61 one more again (c4e8b1f37a92, the 'import' operation) —
     # this now confirms THAT chain, not a fork.
     # M66 one more (e8b3d6a4f190, confirmed production issuance requests).
-    assert script.get_heads() == ['e8b3d6a4f190']
+    # M70 one more (b70c4a2e9d15, Pastore partner-share amount source).
+    assert script.get_heads() == ['b70c4a2e9d15']
+    assert script.get_revision('b70c4a2e9d15').down_revision == 'e8b3d6a4f190'
     assert script.get_revision('e8b3d6a4f190').down_revision == 'c4e8b1f37a92'
     assert script.get_revision('c4e8b1f37a92').down_revision == 'a7d2c95e4f13'
     assert script.get_revision('a7d2c95e4f13').down_revision == '3a97d7535a49'

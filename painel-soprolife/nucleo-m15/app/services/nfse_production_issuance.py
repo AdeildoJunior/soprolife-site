@@ -60,7 +60,9 @@ SPOOL_NAME = re.compile(r'^(?P<id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4
 # Operator-facing labels, the single place the backend names a block. The
 # frontend shows these verbatim; the codes stay the API.
 BLOCK_LABELS = {
-    'blocked_by_partner_model': 'Fluxo de parceria (Pastore) — não é emitido por exame',
+    'blocked_by_partner_model': 'Parceria sem política fiscal — não é emitido por exame',
+    'partner_before_fiscal_activation': 'Pastore anterior à ativação fiscal — conferir nota manual',
+    'blocked_by_partner_rule': 'Regra fiscal da parceria não definida',
     'recipient_fiscal_data_incomplete': 'Dados fiscais do paciente incompletos',
     'missing_service_location': 'Município de prestação não registrado',
     'missing_required_tax_configuration': 'Configuração tributária incompleta',
@@ -70,6 +72,14 @@ BLOCK_LABELS = {
     'pending_clinical_or_identity_data': 'Exame não realizado ou data imprecisa',
     'blocked_other': 'Outro motivo',
 }
+
+FLOW_LABELS = {'DIRECT': 'Direto', 'HOME': 'Domiciliar', 'PASTORE': 'Pastore',
+               'PARTNER': 'Parceria'}
+
+# M70 — what the amount IS, in the modal. For PASTORE it is SoproLife's own
+# share; the gross price and the split are not structured data and are not
+# shown.
+AMOUNT_LABELS = {'PASTORE': 'Valor da NFS-e SoproLife'}
 
 STATUS_LABELS = {
     'ready': 'Pronto para emitir',
@@ -227,7 +237,12 @@ def production_queue(db: Session, settings: Settings, *, limit: int = 200) -> di
         status = _row_status(db, doc, blockers)
         person = db.get(Person, exam.person_id) if exam.person_id else None
         entry_amount = None
-        if evaluation['financial_entry_id']:
+        if evaluation['flow'] == 'PASTORE':
+            # M70 — SoproLife's share from the partnership rule, and only
+            # once it is determined; never the gross price of the exam.
+            if evaluation['amount_snapshot'] is not None:
+                entry_amount = f"{evaluation['amount_snapshot']:.2f}"
+        elif evaluation['financial_entry_id']:
             from ..models import FinancialEntry
             entry = db.get(FinancialEntry, evaluation['financial_entry_id'])
             entry_amount = f'{entry.valor:.2f}' if entry else None
@@ -243,6 +258,9 @@ def production_queue(db: Session, settings: Settings, *, limit: int = 200) -> di
             'service_date': exam.data_exame,
             'modality': exam.modalidade,
             'flow': evaluation['flow'],
+            'flow_label': FLOW_LABELS.get(evaluation['flow'], evaluation['flow']),
+            'amount_source': evaluation.get('amount_source') or (
+                'financial_entry.valor' if evaluation['financial_entry_id'] else None),
             'municipio_ibge': exam.municipio_atendimento_ibge,
             'municipio_name': SUPPORTED_SERVICE_MUNICIPALITIES.get(exam.municipio_atendimento_ibge or ''),
             'amount': entry_amount,
@@ -292,6 +310,10 @@ def confirmation_summary(db: Session, doc: FiscalDocument) -> dict:
         'service_date': prep.service_date if prep else None,
         'competence': prep.competence if prep else None,
         'flow': prep.flow if prep else None,
+        'flow_label': FLOW_LABELS.get(prep.flow, prep.flow) if prep else None,
+        'amount_title': AMOUNT_LABELS.get(prep.flow if prep else None, 'Valor'),
+        'amount_source': (prep.amount_source or ('financial_entry.valor' if prep.financial_entry_id else None))
+        if prep else None,
         'modality': exam.modalidade if exam else None,
         'municipio_ibge': prep.service_municipio_ibge if prep else None,
         'municipio_name': SUPPORTED_SERVICE_MUNICIPALITIES.get((prep.service_municipio_ibge or '') if prep else ''),

@@ -6,7 +6,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Environment = Literal['mock', 'restricted', 'production']
-Flow = Literal['DIRECT', 'HOME', 'PASTORE_A', 'PASTORE_B', 'SPLIT']
+# M70 — 'PASTORE' is the one partner flow with a fiscal model: the NFS-e is
+# SoproLife's own share, taken from the partnership rule. PASTORE_A/B/SPLIT
+# remain vocabulary only.
+Flow = Literal['DIRECT', 'HOME', 'PASTORE', 'PASTORE_A', 'PASTORE_B', 'SPLIT']
 
 
 class FiscalInput(BaseModel):
@@ -25,7 +28,8 @@ class TaxConfiguration(FiscalInput):
     municipality: str | None = Field(None, min_length=1, max_length=40)
     ibs_cbs_treatment: str | None = Field(None, min_length=1, max_length=40)
     # These are explicit policy decisions, not runtime assumptions.
-    amount_basis: Literal['financial_entry.valor'] | None = None
+    amount_basis: Literal['financial_entry.valor',
+                          'partnership.valor_recebido_por_exame'] | None = None
     competence_rule: Literal['service_date'] | None = None
     issuer: Literal['SOPROLIFE'] | None = None
     recipient: Literal['service_person'] | None = None

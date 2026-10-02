@@ -130,6 +130,65 @@ def resolve_valor_por_exame(
     )
 
 
+FISCAL_OK = "ok"
+FISCAL_SEM_REGRA = "sem_regra"
+FISCAL_AMBIGUA = "ambigua"
+
+
+@dataclass(frozen=True)
+class RegraFiscalParceria:
+    """M70 — a regra que define o valor de UMA NFS-e de parceria.
+
+    `situacao` é `ok` só quando há exatamente uma regra inequívoca; nos outros
+    casos `regra` é `None` e o chamador bloqueia. Nunca há valor padrão.
+    """
+
+    situacao: str
+    regra: RegraRecebimento | None = None
+
+
+def resolve_regra_fiscal_por_exame(
+    db: Session, partner: Partner, data_servico: date
+) -> RegraFiscalParceria:
+    """A regra de recebimento vigente NA DATA DO SERVIÇO, para fins fiscais.
+
+    Difere de `resolve_valor_por_exame` de propósito. Aquela serve à previsão
+    mensal do extrato e aceita uma regra que começa dentro do mês; uma nota
+    fiscal é de UM exame, e um exame feito antes de a regra começar não tem
+    regra. Também não escolhe entre empates: duas parcerias vigentes que
+    começam no mesmo dia são ambiguidade, e ambiguidade bloqueia.
+
+    A regra mais recente já iniciada é a que vale. Se ela não diz quanto
+    (`indefinido`), não se volta a uma regra antiga: o gestor mudou o acordo
+    e não cadastrou o novo valor.
+    """
+
+    iniciadas = [
+        p for p in _partnerships_do_parceiro(db, partner)
+        if p.status in STATUS_VIGENTES
+        and p.vigencia_inicio is not None
+        and p.vigencia_inicio <= data_servico
+    ]
+    if not iniciadas:
+        return RegraFiscalParceria(FISCAL_SEM_REGRA)
+    inicio = max(p.vigencia_inicio for p in iniciadas)
+    vigentes = [p for p in iniciadas if p.vigencia_inicio == inicio]
+    if len(vigentes) != 1:
+        return RegraFiscalParceria(FISCAL_AMBIGUA)
+    vigente = vigentes[0]
+    if (vigente.modelo_recebimento != MODELO_VALOR_POR_EXAME
+            or vigente.valor_recebido_por_exame is None
+            or vigente.valor_recebido_por_exame <= 0):
+        return RegraFiscalParceria(FISCAL_SEM_REGRA)
+    return RegraFiscalParceria(FISCAL_OK, RegraRecebimento(
+        modelo=vigente.modelo_recebimento,
+        valor_por_exame=quantize(vigente.valor_recebido_por_exame),
+        vigencia_inicio=vigente.vigencia_inicio,
+        origem="partnership",
+        partnership_id=vigente.id,
+    ))
+
+
 def _fim_do_mes(primeiro: date) -> date:
     if primeiro.month == 12:
         proximo = date(primeiro.year + 1, 1, 1)

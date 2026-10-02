@@ -143,6 +143,82 @@ def production_fact_blockers(person, municipio_ibge) -> list[str]:
     return reasons
 
 
+AMOUNT_BASIS_BY_FLOW = {
+    'DIRECT': 'financial_entry.valor',
+    'HOME': 'financial_entry.valor',
+    'PASTORE': 'partnership.valor_recebido_por_exame',
+}
+PARTNER_SHARE_AMOUNT_SOURCE = 'partnership.valor_recebido_por_exame'
+
+# M70 — why a partner exam is not (yet) a PASTORE invoice. Codes only.
+PARTNER_RULE_REASONS = (
+    'partner_link_missing', 'partner_canonical_ambiguous', 'partner_unit_invalid',
+    'partner_rule_missing', 'partner_rule_ambiguous', 'partner_service_variant_unsupported',
+    'partner_amount_source_conflict',
+)
+
+
+def _pastore_share(db: Session, exam, service_date):
+    """M70 — (flow, share, reasons) for an exam with any partner link.
+
+    The partner is resolved ONCE by the project's canonical rule
+    (``pastore.canonical_pastore``); from there on every comparison is by ID.
+    Nothing here reads the exam's free text, place or notes.
+
+    ``share`` is the amount SoproLife receives for this one exam, from
+    ``partner_pricing.resolve_regra_fiscal_por_exame`` (the partnership rule
+    in force on the SERVICE DATE). It is never the gross price, never a
+    percentage computed here, never a FinancialEntry, and never net of any
+    physician transfer or partner repasse.
+    """
+    from . import partner_pricing
+    from .pastore import canonical_pastore
+    from ..models import PartnerUnit
+
+    if not exam.partner_id or not exam.partner_unit_id:
+        return 'PARTNER', None, ['partner_link_missing']
+    try:
+        pastore = canonical_pastore(db)
+    except HTTPException:
+        return 'PARTNER', None, ['partner_canonical_ambiguous']
+    if exam.partner_id != pastore.id:
+        # Another partner: no fiscal model exists for it.
+        return 'PARTNER', None, []
+    reasons = []
+    unit = db.get(PartnerUnit, exam.partner_unit_id)
+    if unit is None or unit.partner_id != pastore.id or not unit.ativo:
+        reasons.append('partner_unit_invalid')
+    # The only validated case: spirometry WITH bronchodilator (gross R$ 219,
+    # SoproLife R$ 109,50, manual NFS-e nº 3). The rule is per exam and does
+    # not say it covers the other variant, so the other variant is not priced.
+    if exam.broncodilatador is not True:
+        reasons.append('partner_service_variant_unsupported')
+    if service_date is None:
+        return 'PASTORE', None, reasons
+    resolved = partner_pricing.resolve_regra_fiscal_por_exame(db, pastore, service_date)
+    if resolved.situacao == partner_pricing.FISCAL_AMBIGUA:
+        reasons.append('partner_rule_ambiguous')
+    elif resolved.situacao != partner_pricing.FISCAL_OK:
+        reasons.append('partner_rule_missing')
+    if reasons:
+        return 'PASTORE', None, reasons
+    rule = resolved.regra
+    return 'PASTORE', {
+        'amount': rule.valor_por_exame,
+        'partnership_id': rule.partnership_id,
+        'partner_id': pastore.id,
+        'partner_unit_id': unit.id,
+        'rule_effective_from': rule.vigencia_inicio,
+    }, []
+
+
+def pastore_share_now(db: Session, exam) -> dict | None:
+    """The live partner share for one exam, or None. Used by the worker's
+    explicit pre-POST re-check, independently of the fingerprint."""
+    flow, share, reasons = _pastore_share(db, exam, exam.data_exame)
+    return share if flow == 'PASTORE' and not reasons else None
+
+
 def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = True) -> dict:
     """Fiscal eligibility of one exam.
 
@@ -173,8 +249,17 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
         reasons.append('recipient_missing_or_archived')
     # Structured modality + partner IDs only. No clinic-name classification.
     partner_flow = bool(exam.partner_id or exam.partner_unit_id or exam.modalidade == 'clinica_parceira')
-    flow = 'PASTORE' if partner_flow else {'residencial': 'HOME', 'cowork': 'DIRECT'}.get(exam.modalidade, 'UNSUPPORTED')
-    if flow not in {'DIRECT', 'HOME'}:
+    partner_share = None
+    if partner_flow:
+        # M70 — PASTORE is the one partner flow with a fiscal model, and only
+        # when every structured link resolves (see _pastore_share). Any other
+        # partner — or a Pastore exam whose links do not resolve — keeps the
+        # pre-M70 block.
+        flow, partner_share, partner_reasons = _pastore_share(db, exam, service_date)
+        reasons.extend(partner_reasons)
+    else:
+        flow = {'residencial': 'HOME', 'cowork': 'DIRECT'}.get(exam.modalidade, 'UNSUPPORTED')
+    if flow not in {'DIRECT', 'HOME', 'PASTORE'}:
         reasons.append('commercial_flow_unsupported')
     entries = db.scalars(locked(select(FinancialEntry).where(
         FinancialEntry.spirometry_exam_id == exam.id,
@@ -188,15 +273,23 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
         spirometry_exam_id=entry.spirometry_exam_id,
         consultation_id=entry.consultation_id,
     )[0] == CATEGORIA_ESPIROMETRIA]
-    entry = entries[0] if len(entries) == 1 else None
-    if not entries:
-        reasons.append('financial_entry_missing')
-    elif len(entries) != 1:
-        reasons.append('financial_entry_ambiguous')
-    if entry and (entry.consultation_id or entry.partner_referral_id or entry.partner_settlement_id):
-        reasons.append('financial_link_incoherent')
-    if entry and (entry.status != 'Recebido' or entry.moeda != 'BRL' or entry.valor <= 0):
-        reasons.append('financial_revenue_not_received_or_invalid')
+    entry = None
+    if flow == 'PASTORE':
+        # M70 — the amount comes from the partnership rule, never from a
+        # ledger entry. An own-revenue entry on a Pastore exam means two
+        # competing sources for one invoice: block, never pick one.
+        if entries:
+            reasons.append('partner_amount_source_conflict')
+    else:
+        entry = entries[0] if len(entries) == 1 else None
+        if not entries:
+            reasons.append('financial_entry_missing')
+        elif len(entries) != 1:
+            reasons.append('financial_entry_ambiguous')
+        if entry and (entry.consultation_id or entry.partner_referral_id or entry.partner_settlement_id):
+            reasons.append('financial_link_incoherent')
+        if entry and (entry.status != 'Recebido' or entry.moeda != 'BRL' or entry.valor <= 0):
+            reasons.append('financial_revenue_not_received_or_invalid')
     policies = db.scalars(select(FiscalPolicy).where(
         FiscalPolicy.environment == environment, FiscalPolicy.flow == flow,
         FiscalPolicy.service == 'spirometry',
@@ -208,11 +301,22 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
         reasons.append('policy_ambiguous')
     elif not policy:
         reasons.append('policy_incomplete' if valid_dates else 'policy_outside_validity' if policies else 'policy_missing')
+        # M70 — PASTORE activation is prospective. A Pastore exam performed
+        # before the policy starts may already have a manual NFS-e this
+        # database does not know about; say so instead of "no policy".
+        if (flow == 'PASTORE' and not valid_dates and service_date
+                and any(p.effective_from > service_date for p in policies)):
+            reasons.append('partner_before_fiscal_activation')
     if policy:
         try:
             configuration = TaxConfiguration.model_validate(policy.configuration)
             if configuration.missing_fields():
                 reasons.append('policy_incomplete')
+            # M70 — the policy states where the amount comes from, and the
+            # flow must agree with it. A DIRECT policy can never price a
+            # Pastore exam, nor the reverse.
+            elif configuration.amount_basis != AMOUNT_BASIS_BY_FLOW.get(flow):
+                reasons.append('policy_amount_basis_mismatch')
         except ValidationError:
             reasons.append('policy_invalid')
     if environment == 'production':
@@ -221,6 +325,16 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
     if service_date:
         bd ={True: ' com broncodilatador', False: ' sem broncodilatador', None: ''}[exam.broncodilatador]
         description = f'Realização de exame de espirometria{bd} em {service_date:%d/%m/%Y}.'
+    if flow == 'PASTORE':
+        amount = partner_share['amount'] if partner_share and policy and not reasons else None
+        # Only for PASTORE: DIRECT/HOME dicts — and so their fingerprints —
+        # stay byte-identical to pre-M70.
+        extra = dict(amount_source=PARTNER_SHARE_AMOUNT_SOURCE if partner_share else None,
+                     partnership_id=partner_share['partnership_id'] if partner_share else None,
+                     partner_unit_id=partner_share['partner_unit_id'] if partner_share else None)
+    else:
+        amount = entry.valor if entry and policy and not reasons else None
+        extra = {}
     return dict(financial_entry_id=entry.id if entry else None,
                 policy_id=policy.id if policy else None,
                 recipient_person_id=person.id if person else None,
@@ -232,8 +346,8 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
                 # DPS is actually built (preflight.py/dispatch.py), exactly
                 # like `broncodilatador`/service_description.py already is.
                 service_municipio_ibge=exam.municipio_atendimento_ibge,
-                amount_snapshot=entry.valor if entry and policy and not reasons else None,
-                description=description, blocking_reasons=sorted(set(reasons)))
+                amount_snapshot=amount,
+                description=description, blocking_reasons=sorted(set(reasons)), **extra)
 
 
 def prepare(db, exam_id, settings, actor, request_id=None):
@@ -610,6 +724,11 @@ BLOCK_CATEGORIES = [
     # operator sees the real fix ("this flow needs its own model"), not
     # "create a policy" for a flow that structurally cannot have one yet.
     ('blocked_by_partner_model', {'commercial_flow_unsupported'}),
+    # M70 — a Pastore exam performed before the PASTORE policy started. It
+    # may already have a manual NFS-e; it never gets a button by itself.
+    ('partner_before_fiscal_activation', {'partner_before_fiscal_activation'}),
+    # M70 — Pastore, but the partnership rule/links do not price THIS exam.
+    ('blocked_by_partner_rule', set(PARTNER_RULE_REASONS)),
     # M66 — production only (see production_fact_blockers). Shown to the
     # operator as "Dados fiscais do paciente incompletos": the fix is in the
     # patient's registration, never in the fiscal queue.
@@ -677,7 +796,9 @@ def serialize_document(db, doc):
     data = {k: getattr(doc, k) for k in ('id', 'spirometry_exam_id', 'environment',
             'state', 'eligibility', 'blocking_reasons', 'created_at', 'updated_at')}
     data['reconciliation_required'] = doc.state in IN_FLIGHT | {'uncertain'}
-    data['monetary_source'] = 'Financeiro_Lancamentos / financial_entries'
+    data['monetary_source'] = ('Parceria / regra de recebimento (partner_pricing)'
+                               if prep and prep.amount_source == PARTNER_SHARE_AMOUNT_SOURCE
+                               else 'Financeiro_Lancamentos / financial_entries')
     # M58 — the hard-coded False is gone, replaced by the explicit contract
     # M57 said this field needed. It is still False for everything that
     # exists today, but now BECAUSE OF A RULE rather than by fiat: mock
@@ -689,7 +810,8 @@ def serialize_document(db, doc):
     if prep:
         data['preparation'] = {k: getattr(prep, k) for k in (
             'id', 'financial_entry_id', 'policy_id', 'recipient_person_id', 'flow',
-            'service_date', 'competence', 'service_municipio_ibge', 'description', 'created_at')}
+            'service_date', 'competence', 'service_municipio_ibge', 'description', 'created_at',
+            'amount_source', 'partnership_id', 'partner_unit_id')}
         data['preparation']['amount_snapshot'] = str(prep.amount_snapshot) if prep.amount_snapshot is not None else None
         # No CPF/name lookup is needed for a technical fiscal foundation.
     return data

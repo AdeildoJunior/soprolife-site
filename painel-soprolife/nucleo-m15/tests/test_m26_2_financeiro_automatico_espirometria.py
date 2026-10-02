@@ -311,9 +311,18 @@ def test_5_repasse_e_recebimento_nunca_se_misturam(db):
 
     # E o preço de recebimento tem UM leitor só. Concentrar a leitura é o que
     # deixa o override por unidade caber depois sem tocar em mais nada.
+    # M70 — 'partnership.valor_recebido_por_exame' is also a fiscal TAG (the
+    # policy's amount_basis / the preparation's amount_source), a string that
+    # names the source; it reads nothing. Only that exact quoted literal is
+    # ignored, so any real attribute read still fails here.
+    def _sem_rotulo_fiscal(texto):
+        for aspas in ("'", '"'):
+            texto = texto.replace(f"{aspas}partnership.valor_recebido_por_exame{aspas}", "")
+        return texto
+
     leitores = [
         c for c in servidor.rglob("*.py")
-        if ".valor_recebido_por_exame" in c.read_text(encoding="utf-8")
+        if ".valor_recebido_por_exame" in _sem_rotulo_fiscal(c.read_text(encoding="utf-8"))
     ]
     assert [c.name for c in leitores] == ["partner_pricing.py"]
 

@@ -224,11 +224,12 @@ def test_broncodilatador_indefinido_salva_mas_nao_tem_descricao_fiscal(client, a
 
 
 def test_pastore_continua_bloqueado_por_modelo_de_parceria(db):
-    """A tela mostra só a explicação da parceria; o backend continua dizendo
-    PASTORE / commercial_flow_unsupported. Nada aqui mudou."""
+    """A tela mostra só a explicação da parceria. M70 — o backend resolve o
+    fluxo de parceria por IDs em `_pastore_share`; outro parceiro continua
+    `commercial_flow_unsupported`, e a Pastore só é emitível pela regra."""
     import inspect
     fonte = inspect.getsource(nfse.evaluate)
-    assert "'PASTORE' if partner_flow" in fonte
+    assert "_pastore_share(db, exam, service_date)" in fonte
     assert "commercial_flow_unsupported" in fonte
 
 

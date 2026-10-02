@@ -439,7 +439,7 @@ async function main() {
     await settle();
     e = await estado();
     check("9. Pastore: só a explicação da parceria",
-          e.titulo === "Parceria Pastore — NFS-e não emitida por exame pela SoproLife" &&
+          e.titulo === "Parceria Pastore — NFS-e da parcela SoproLife pela fila Fiscal, com broncodilatador, CPF e município" &&
           e.itens === 0 && e.faltas.length === 0, JSON.stringify(e));
     check("9b. Pastore: nenhum selo NFS-e visível (nem Nome/CPF)",
           (await cdp.evaluate("window.__m67.selosVisiveis()")).length === 0);

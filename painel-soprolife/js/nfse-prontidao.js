@@ -78,7 +78,7 @@
     pagamento_nao_recebido: "O pagamento precisa estar como Recebido para ficar elegível à NFS-e",
   };
 
-  var PASTORE_EXPLICACAO = "Parceria Pastore — NFS-e não emitida por exame pela SoproLife";
+  var PASTORE_EXPLICACAO = "Parceria Pastore — NFS-e da parcela SoproLife pela fila Fiscal, com broncodilatador, CPF e município";
 
   function fold(texto) {
     return String(texto).normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();

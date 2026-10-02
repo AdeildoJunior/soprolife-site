@@ -348,7 +348,7 @@
       <td>${action}</td>
       <td>${esc(row.patient_name || "—")}</td>
       <td>${fmtDate(row.service_date)}</td>
-      <td>${esc(row.flow || "—")}</td>
+      <td>${esc(row.flow_label || row.flow || "—")}</td>
       <td>${esc(row.municipio_name || "—")}</td>
       <td class="fin-num">${brl(row.amount)}</td>
       <td><span class="fiscal-chip ${PROD_STATUS_CLASS[row.status] || ""}">${esc(row.status_label || row.status)}</span>
@@ -407,9 +407,9 @@
           <div><dt>Paciente (tomador)</dt><dd>${esc(s.patient_name || "—")}</dd></div>
           <div><dt>CPF</dt><dd>${esc(s.cpf_masked || "ausente")}</dd></div>
           <div><dt>Data do serviço / competência</dt><dd>${fmtDate(s.service_date)} / ${fmtDate(s.competence)}</dd></div>
-          <div><dt>Valor</dt><dd><strong>${esc(s.amount_label || "—")}</strong></dd></div>
+          <div><dt>${esc(s.amount_title || "Valor")}</dt><dd><strong>${esc(s.amount_label || "—")}</strong></dd></div>
           <div><dt>Município de prestação</dt><dd>${esc(s.municipio_name || s.municipio_ibge || "—")}</dd></div>
-          <div><dt>Fluxo</dt><dd>${esc(s.flow || "—")}</dd></div>
+          <div><dt>Fluxo</dt><dd>${esc(s.flow_label || s.flow || "—")}</dd></div>
           <div><dt>Broncodilatador</dt><dd>${s.broncodilatador === true ? "Com" : s.broncodilatador === false ? "Sem" : "Não informado"}</dd></div>
         </dl>
         <p class="fiscal-prod-description"><strong>Descrição do serviço:</strong> ${esc(s.service_description || "—")}</p>

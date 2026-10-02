@@ -2767,8 +2767,21 @@ class FiscalPreparation(Base):
     fingerprint: Mapped[str] = mapped_column(String(64))
     created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # M70 — the second, explicit amount source: the Pastore partnership's
+    # `valor_recebido_por_exame`. NULL on every DIRECT/HOME row (their
+    # source stays `financial_entry_id`), so their fingerprints are unchanged.
+    amount_source: Mapped[str | None] = mapped_column(String(40))
+    partnership_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("partnerships.id"))
+    partner_unit_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("partner_units.id"))
     __table_args__ = (
-        CheckConstraint("amount_snapshot IS NULL OR (financial_entry_id IS NOT NULL AND policy_id IS NOT NULL AND amount_snapshot > 0)", name="fiscal_snapshot_source"),
+        # Exactly one source per amount: the exam's own ledger entry, or the
+        # partnership rule (PASTORE only). See migration b70c4a2e9d15.
+        CheckConstraint(
+            "amount_snapshot IS NULL OR (policy_id IS NOT NULL AND amount_snapshot > 0 AND ("
+            "(financial_entry_id IS NOT NULL AND partnership_id IS NULL) OR "
+            "(financial_entry_id IS NULL AND partnership_id IS NOT NULL AND flow = 'PASTORE' "
+            "AND amount_source = 'partnership.valor_recebido_por_exame')))",
+            name="fiscal_snapshot_source"),
         CheckConstraint("service_municipio_ibge IS NULL OR length(service_municipio_ibge) = 7", name="service_municipio_ibge_sete_digitos"),
     )
 

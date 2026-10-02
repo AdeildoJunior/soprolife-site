@@ -65,7 +65,7 @@ POST_TIMEOUT_SECONDS = 60.0
 MAX_GETS = 2                     # GET /dps/{id} and, only if needed, GET /nfse/{chave}
 CERT_CREDENTIAL = "nfse-a1.pfx"
 PASSWORD_CREDENTIAL = "nfse-a1-password"
-SUPPORTED_FLOWS = ("DIRECT", "HOME")
+SUPPORTED_FLOWS = ("DIRECT", "HOME", "PASTORE")
 
 # The client constructor this process may use, and only from inside the
 # one-shot transport's send(). Tests replace it with a mock-backed one.
@@ -432,6 +432,21 @@ def guards(db, facts: dict, settings) -> tuple[list[str], dict]:
         check("flow_not_supported", prep.flow in SUPPORTED_FLOWS)
         check("amount_mismatch", prep.amount_snapshot is not None
               and Decimal(prep.amount_snapshot) == facts["amount"] and facts["amount"] > 0)
+        if prep.flow == "PASTORE":
+            # M70 — the fingerprint already covers partnership/unit/amount;
+            # these are the same facts re-derived independently from the live
+            # partnership rule, so a change can never slip through one path.
+            share = nfse.pastore_share_now(db, exam) if exam is not None else None
+            check("partner_share_unavailable", share is not None)
+            if share is not None:
+                check("partner_changed", exam.partner_id == share["partner_id"]
+                      and exam.partner_unit_id == prep.partner_unit_id == share["partner_unit_id"])
+                check("partner_rule_changed", prep.partnership_id == share["partnership_id"])
+                check("partner_amount_changed",
+                      Decimal(share["amount"]) == Decimal(prep.amount_snapshot or 0) == facts["amount"])
+            check("partner_amount_source_invalid",
+                  prep.amount_source == nfse.PARTNER_SHARE_AMOUNT_SOURCE
+                  and prep.financial_entry_id is None)
         person = db.get(Person, prep.recipient_person_id) if prep.recipient_person_id else None
         check("recipient_changed", recipient_fingerprint(person) == facts["recipient_fingerprint"])
         check("service_location_changed",

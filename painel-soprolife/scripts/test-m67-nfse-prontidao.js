@@ -164,7 +164,7 @@ caso("8d. clínica parceira → fluxo PASTORE, não suportado",
 const past = av({ tipo: "espirometria_pastore" });
 caso("9. Pastore: nunca 'completo' / 'pronto'", past.modo === "pastore" && past.completo === false);
 caso("9b. Pastore: mostra só a explicação da parceria, sem lista de erros",
-     past.titulo === "Parceria Pastore — NFS-e não emitida por exame pela SoproLife" && past.itens.length === 0);
+     past.titulo === "Parceria Pastore — NFS-e da parcela SoproLife pela fila Fiscal, com broncodilatador, CPF e município" && past.itens.length === 0);
 caso("9c. Pastore mesmo com todos os campos preenchidos continua sem prontidão",
      P.avaliar(Object.assign(completo(), { tipo: "espirometria_pastore" }), CTX).modo === "pastore");
 
