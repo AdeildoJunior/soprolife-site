@@ -9,7 +9,7 @@
 > Sem PII, senhas, tokens, IPs de tailnet ou identificadores privados. Use
 > placeholders (`<VPS_TAILSCALE_IP>`, `<TOKEN>`).
 
-Última atualização: 2026-10-03 (base `1e36d4c`).
+Última atualização: 2026-10-04 (base `140f0e3`).
 
 ---
 
@@ -93,7 +93,7 @@ com cwd `nucleo-m15`, `app.db.get_engine()` e `SET TRANSACTION READ ONLY`.
 | Leads e Agendamentos | Funil; conversão só por `isLeadConvertido()` |
 | Tarefas | Follow-ups com consentimento e "não contatar" |
 | Laudos (`laudos-espirometria`) | Fluxo técnico → médica → assinatura → entrega; estatísticas read-only; entrada visível só com `reports_enabled` |
-| Marketing & SEO | Search Console/GA4 com frescor operacional |
+| Marketing & SEO | Search Console e GA4 na **mesma janela móvel de 60 dias encerrada ontem** (America/Sao_Paulo; `lookbackDays` do config privado, padrão 60, faixa 7–480), frescor operacional, tendência diária de impressões |
 | Financeiro | `FinancialEntry`, conciliação, repasses médicos por competência, gráficos |
 | Fiscal | Fila de produção NFS-e (gestor/admin), modal de confirmação, histórico |
 | Parcerias | Pastore: fechamentos mensais, recebimento, regra de valor por vigência |
@@ -334,7 +334,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 
 | Item | Estado |
 |---|---|
-| `origin/painel-soprolife-v01` / VPS | `1e36d4c` (evolução mensal), worktree limpo, health 200 |
+| `origin/painel-soprolife-v01` / VPS | VPS em `140f0e3` (Marketing 60 dias), worktree limpo, health 200; commits só de docs depois dele não exigem deploy |
 | `origin/main` (site) | `a7d8b03` |
 | Alembic | `b70c4a2e9d15` (M70) |
 | Serviços | `soprolife-m15-api`, `soprolife-painel-loopback` (:8765), `soprolife-portal-resultados`, `soprolife-update-data.timer` (10 min), `soprolife-operational-refresh.timer` (6 h), `soprolife-nfse-production-worker.path` (active) |
@@ -358,6 +358,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 | M66–M69 (set) | `3ce038c`, `dd8c65a`, `13e474a`, `e087615` | Botão no Command Center + worker oneshot, prontidão no cadastro, CPF/SERPRO, guard ACL do A1 |
 | M70 (02/10) | `1a35d4a` | NFS-e Pastore (parcela R$ 109,50), migration `b70c4a2e9d15` |
 | Painel (out) | `498c216`, `6aad6db`, `1e36d4c` | Refino visual, estatísticas de laudos, evolução mensal real |
+| Marketing (04/10) | `140f0e3` | Search Console + GA4 de 28 para 60 dias, subtítulo da tendência pelo período real |
 
 ## 17. Organização do ambiente (registro de 2026-10-03)
 
