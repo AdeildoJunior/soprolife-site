@@ -5,7 +5,7 @@ um certificado real e fazer a primeira chamada de verdade. Esta sessão
 (M28 — fundação de automação offline) **não fez nada disso** — ver o
 relatório final da missão para as declarações explícitas.
 
-Pré-requisito de leitura: `~/soprolife-relatorios/RELATORIO_NFSE_M27_RESTRICTED_20260913_180823.md`
+Pré-requisito de leitura: `~/SoproLife_Programacao/RELATORIOS/CRITICOS/RELATORIO_NFSE_M27_RESTRICTED_20260913_180823.md`
 (fundação do provedor) e o relatório desta missão M28 (arquitetura da automação
 offline: prontidão, preflight, fila, lote, artefatos).
 
