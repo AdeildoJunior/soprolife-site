@@ -146,6 +146,8 @@ run "test-marketing-freshness (painel JS)" node painel-soprolife/scripts/test-ma
 run "test-systemd-units (sintaxe + sem segredo)" python3 painel-soprolife/scripts/test-systemd-units.py
 run "test-command-center proxy cookie/CSRF (M21)" python3 painel-soprolife/scripts/test_command_center_m15_proxy.py
 run "test-marketing credencial durável (M21)" python3 painel-soprolife/scripts/test-marketing-credencial.py
+run "test-marketing janela 60 dias (SC+GA4)" python3 painel-soprolife/scripts/test-marketing-window.py
+run "test-marketing subtítulo da tendência" node painel-soprolife/scripts/test-marketing-trend-subtitle.js
 run "test-m26-20-ipanema-pastore (bloco Pastore Ipanema)" \
   python3 painel-soprolife/scripts/test-m26-20-ipanema-pastore.py
 run "test-m26-20-ipanema-render (painel JS)" \

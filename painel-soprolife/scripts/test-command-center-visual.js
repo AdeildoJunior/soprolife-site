@@ -29,7 +29,7 @@ for (const [engine, launcher] of Object.entries({chromium,firefox})) {
    state.leads=Array.from({length:28},(_,i)=>({etapa:['novo','em_contato','aguardando_retomada','agendado','convertido','nao_respondeu','perdido'][i%7],origem:['Google','Indicação de parceiros','Contato direto','Instagram'][i%4],servico:'Espirometria',data_contato:`${String(1+i%28).padStart(2,'0')}/${String(1+i%(new Date().getMonth()+1)).padStart(2,'0')}/${new Date().getFullYear()}`}));
    state.crm=Array.from({length:12},(_,i)=>({etapa:['Abordada','Em negociação','Reunião agendada','Parceiro ativo'][i%4]}));
    state.marketing={canais:{labels:['Google','Instagram','Indicação','WhatsApp direto','Clínicas'],values:[42,24,16,10,8]}};
-   state.marketingSeo={searchConsole:{byDate:Array.from({length:14},(_,i)=>({date:`2026-09-${String(i+1).padStart(2,'0')}`,impressions:20+i*7}))}};
+   state.marketingSeo={searchConsole:{request:{startDate:'2026-08-05',endDate:'2026-10-03'},byDate:Array.from({length:60},(_,i)=>({date:new Date(Date.UTC(2026,7,5+i)).toISOString().slice(0,10),impressions:i%5?20+i*7:0}))}};
    state.followupSummary={espirometria:{total:12,atrasados:2,hoje:1,proximos7dias:4,futuro:5},consultas:{total:5,hoje:2,futuro:3}};
    setPremiumChartDefaults(); Chart.defaults.animation=false;
    renderCharts(); renderLeadsCharts(); renderMktTrendChart();
@@ -95,6 +95,7 @@ for (const [engine, launcher] of Object.entries({chromium,firefox})) {
   });
   assert.equal(await page.locator('#channelsChart').locator('..').isVisible(),false,'canvas oculto não deixa caixa vazia');
   assert.equal(await page.locator('#trafficSourceList').isVisible(),true);
+  assert.equal(await page.locator('#mktTrendSubtitle').textContent(),'Search Console · 60 dias','subtítulo da tendência segue o período real');
   assert.deepEqual(errors,[],'nenhum erro JavaScript');
   fs.writeFileSync(path.join(out,`${phase}-${engine}-${width}.json`),JSON.stringify(results,null,2));
   console.log(`OK ${engine} ${width}px: ${results.sections.reduce((n,s)=>n+s.charts.length,0)} gráficos, navegação, vazio e proporções`);

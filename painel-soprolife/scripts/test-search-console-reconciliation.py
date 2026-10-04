@@ -152,8 +152,8 @@ def main():
     start, end, inclusive = mkt.canonical_search_console_window(
         today=date(2026, 8, 1), timezone_name="America/Sao_Paulo"
     )
-    assert_equal((start, end, inclusive), (START, END, 28),
-                 "janela canônica tem 28 datas e termina ontem")
+    assert_equal((start, end, inclusive), ("2026-06-02", END, 60),
+                 "janela canônica tem 60 datas e termina ontem")
 
     cfg = {"searchConsoleSiteUrl": SITE_URL, "ga4PropertyId": ""}
     success_result = {

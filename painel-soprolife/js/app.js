@@ -3700,8 +3700,8 @@ function renderMktTrendChart() {
   if (subtitle) {
     const req = state.marketingSeo?.searchConsole?.request;
     const dias = mktInclusiveDateCount(req?.startDate, req?.endDate);
-    subtitle.textContent = dias === 28
-      ? "Search Console · 28 dias"
+    subtitle.textContent = dias
+      ? `Search Console · ${dias} dias`
       : "Search Console · por dia";
   }
   const canvas = document.querySelector("#mktTrendChart");

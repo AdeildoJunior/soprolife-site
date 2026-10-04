@@ -99,7 +99,12 @@ GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
 
 SC_SEARCH_TYPE = "web"
 SC_DATA_STATE = "all"
-SC_LOOKBACK_DAYS = 28
+# Janela móvel única de Search Console E GA4 (o mesmo período nos dois).
+# `lookbackDays` da configuração é respeitado dentro de [MIN, MAX]; o máximo
+# fica abaixo dos ~16 meses que o Search Console retém.
+SC_LOOKBACK_DAYS = 60
+SC_LOOKBACK_MIN_DAYS = 7
+SC_LOOKBACK_MAX_DAYS = 480
 SC_DETAIL_ROW_LIMIT = 25000
 
 # ── M26.20 — demanda que a SoproLife gera para a Pastore Ipanema ────────────
@@ -264,12 +269,36 @@ def _now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def canonical_search_console_window(today=None, timezone_name="America/Sao_Paulo"):
-    """Intervalo canônico de 28 datas, encerrado ontem na timezone configurada.
+def resolve_lookback_days(cfg):
+    """`lookbackDays` da configuração, ou o padrão canônico se ausente.
 
-    `today` é injetável para regressões. O dia corrente nunca entra: dados
-    intradiários podem ainda não existir ou mudar enquanto o snapshot é gerado.
+    Valor presente mas fora de [SC_LOOKBACK_MIN_DAYS, SC_LOOKBACK_MAX_DAYS],
+    não inteiro ou booleano é recusado (ValueError): uma janela errada não pode
+    virar silenciosamente outra.
     """
+    if not isinstance(cfg, dict) or cfg.get("lookbackDays") is None:
+        return SC_LOOKBACK_DAYS
+    valor = cfg["lookbackDays"]
+    if isinstance(valor, bool) or not isinstance(valor, int):
+        raise ValueError("lookbackDays deve ser um inteiro")
+    if not SC_LOOKBACK_MIN_DAYS <= valor <= SC_LOOKBACK_MAX_DAYS:
+        raise ValueError(
+            f"lookbackDays deve estar entre {SC_LOOKBACK_MIN_DAYS} e {SC_LOOKBACK_MAX_DAYS}"
+        )
+    return valor
+
+
+def canonical_search_console_window(today=None, timezone_name="America/Sao_Paulo",
+                                    lookback_days=SC_LOOKBACK_DAYS):
+    """Intervalo canônico de `lookback_days` datas, encerrado ontem na timezone.
+
+    Vale para Search Console e GA4. `today` é injetável para regressões. O dia
+    corrente nunca entra: dados intradiários podem ainda não existir ou mudar
+    enquanto o snapshot é gerado.
+    """
+    if isinstance(lookback_days, bool) or not isinstance(lookback_days, int) \
+            or not SC_LOOKBACK_MIN_DAYS <= lookback_days <= SC_LOOKBACK_MAX_DAYS:
+        raise ValueError("lookback_days fora da faixa permitida")
     if today is None:
         try:
             tz = ZoneInfo(str(timezone_name or "America/Sao_Paulo"))
@@ -282,10 +311,10 @@ def canonical_search_console_window(today=None, timezone_name="America/Sao_Paulo
         raise TypeError("today deve ser date ou datetime")
 
     end = today - timedelta(days=1)
-    start = end - timedelta(days=SC_LOOKBACK_DAYS - 1)
+    start = end - timedelta(days=lookback_days - 1)
     inclusive_days = (end - start).days + 1
-    if inclusive_days != SC_LOOKBACK_DAYS:
-        raise ValueError("janela Search Console deve conter exatamente 28 datas")
+    if inclusive_days != lookback_days:
+        raise ValueError(f"janela deve conter exatamente {lookback_days} datas")
     return start.isoformat(), end.isoformat(), inclusive_days
 
 
@@ -1114,8 +1143,17 @@ def cmd_sync(args, mode):
         return _finalizar({}, periodo_vazio)
 
     top_limit = max(1, int(cfg.get("topLimit", 20)))
+    try:
+        lookback_cfg = resolve_lookback_days(cfg)
+    except ValueError as exc:
+        print(f"AVISO: configuração inválida — {exc}. Snapshot anterior preservado.")
+        return _finalizar({key: {"ok": False, "data": {}, "raw_warnings": [],
+                                 "error_code": "SYNC_FAILED"}
+                           for key, _sid, _nome in _SOURCES_DEF if configuradas.get(key)},
+                          periodo_vazio)
     start_date, end_date, lookback = canonical_search_console_window(
-        timezone_name=cfg.get("timezone", "America/Sao_Paulo")
+        timezone_name=cfg.get("timezone", "America/Sao_Paulo"),
+        lookback_days=lookback_cfg,
     )
     periodo = (start_date, end_date, lookback)
 
