@@ -44,6 +44,10 @@ for (const [engine, launcher] of Object.entries({chromium,firefox})) {
    document.querySelector('#heroSourceLabel').textContent='Validação visual';
   });
   const originalData=await page.evaluate(()=>JSON.stringify(Object.values(state.charts).map(c=>c.data)));
+  const mensal=await page.evaluate(()=>({labels:state.charts.monthly.data.labels,n:(new Date().getFullYear()-2026)*12+new Date().getMonth()-4+1}));
+  assert.equal(mensal.labels[0],'Mai','evolução mensal começa em Mai/2026');
+  assert.equal(mensal.labels.length,mensal.n,'evolução mensal vai até o mês corrente, sem meses futuros');
+  assert(!['Jan','Fev','Mar','Abr'].some(m=>mensal.labels.includes(m)),'Jan–Abr/2026 fora da evolução mensal');
   const results={engine,width,sections:[],errors};
   for(const section of ['overview','leads','marketing','crm','parcerias-pastore','custos-investimentos']) {
    await page.evaluate(section=>{document.querySelectorAll('.section').forEach(e=>e.classList.toggle('active',e.id===section));resizeCharts()},section);

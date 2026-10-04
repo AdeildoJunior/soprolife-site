@@ -3744,14 +3744,18 @@ function renderMktTrendChart() {
 // ── Evolução mensal (Painel Geral) ───────────────────────────────────────────
 // Série REAL, derivada de state.leads — a mesma base dos cards "Agendados" e
 // do funil de leads. Não existe data própria de agendamento no banco: o lead
-// carrega apenas a etapa ATUAL. Por isso cada lead entra no mês do seu
+// carrega apenas a etapa ATUAL, e a auditoria guarda só os NOMES dos campos
+// alterados (nunca o valor da etapa), então não há histórico. Por isso cada lead entra no mês do seu
 // primeiro contato (data_contato) e conta como agendamento quando está hoje
 // na etapa "Agendado", exatamente o número de countLeadEtapa("Agendado") — não
 // podem existir dois valores diferentes de agendamento na mesma tela.
 //
-// Eixo X: janeiro até o mês corrente do ano corrente. Meses já ocorridos sem
-// registro aparecem como 0; meses futuros não são desenhados.
+// Eixo X: de maio/2026 (início da operação da SoproLife) até o mês corrente,
+// inclusive, avançando sozinho na virada do mês e do ano. Meses já ocorridos
+// sem registro aparecem como 0; meses futuros e anteriores ao início não são
+// desenhados. Meses fora do ano de início levam o ano curto ("Jan/27").
 const MESES_CURTOS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const EVOLUCAO_INICIO = { ano: 2026, mes: 4 }; // 01/05/2026 — mês 0-based
 
 // Tolerante aos dois vocabulários de etapa que chegam ao painel: o canônico do
 // PostgreSQL ("agendado") e o rótulo histórico da planilha ("Agendado").
@@ -3760,29 +3764,44 @@ function isLeadAgendado(item) {
 }
 
 function buildEvolucaoMensal(leads, hoje = new Date()) {
-  const ano = hoje.getFullYear();
-  const mesAtual = hoje.getMonth();
-  const labels = MESES_CURTOS.slice(0, mesAtual + 1);
-  const serieLeads = labels.map(() => 0);
-  const serieAgendamentos = labels.map(() => 0);
+  const inicio = EVOLUCAO_INICIO.ano * 12 + EVOLUCAO_INICIO.mes;
+  const fim = hoje.getFullYear() * 12 + hoje.getMonth();
+  const meses = [];
+  for (let i = inicio; i <= fim; i += 1) {
+    const ano = Math.floor(i / 12);
+    const mes = i % 12;
+    meses.push({
+      ano,
+      mes,
+      label: ano === EVOLUCAO_INICIO.ano ? MESES_CURTOS[mes] : `${MESES_CURTOS[mes]}/${String(ano).slice(-2)}`,
+    });
+  }
+  const serieLeads = meses.map(() => 0);
+  const serieAgendamentos = meses.map(() => 0);
 
   (Array.isArray(leads) ? leads : []).forEach((item) => {
     const d = parseLeadDate(item.data_contato || item.data_primeiro_contato);
-    if (!d || d.getFullYear() !== ano) return;
-    const mes = d.getMonth();
-    if (mes > mesAtual) return;
-    serieLeads[mes] += 1;
-    if (isLeadAgendado(item)) serieAgendamentos[mes] += 1;
+    if (!d) return;
+    const pos = d.getFullYear() * 12 + d.getMonth() - inicio;
+    if (pos < 0 || pos >= meses.length) return;
+    serieLeads[pos] += 1;
+    if (isLeadAgendado(item)) serieAgendamentos[pos] += 1;
   });
 
-  return { ano, labels, leads: serieLeads, agendamentos: serieAgendamentos };
+  return {
+    inicio: EVOLUCAO_INICIO,
+    meses,
+    labels: meses.map((m) => m.label),
+    leads: serieLeads,
+    agendamentos: serieAgendamentos,
+  };
 }
 
 function renderCharts() {
   const monthlyCanvas = document.querySelector("#monthlyChart");
   const mensal = buildEvolucaoMensal(state.leads);
   const monthlySubtitle = document.querySelector("#monthlyChartSubtitle");
-  if (monthlySubtitle) monthlySubtitle.textContent = `Leads x agendamentos · ${mensal.ano}`;
+  if (monthlySubtitle) monthlySubtitle.textContent = "Leads x agendamentos · desde mai/2026";
   createChart("monthly", "#monthlyChart", {
     type: "line",
     data: {
@@ -3811,7 +3830,10 @@ function renderCharts() {
         legend: { labels: { boxWidth: 10, usePointStyle: true, pointStyleWidth: 10, padding: 16 } },
         tooltip: {
           callbacks: {
-            title: (ctx) => `${ctx[0].label}/${mensal.ano}`,
+            title: (ctx) => {
+              const m = mensal.meses[ctx[0].dataIndex];
+              return `${MESES_CURTOS[m.mes]}/${m.ano}`;
+            },
             label: (ctx) => ctx.datasetIndex === 0
               ? ` ${ctx.raw} lead(s) no mês`
               : ` ${ctx.raw} na etapa Agendado (contato no mês)`
