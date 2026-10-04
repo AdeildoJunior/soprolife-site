@@ -25,8 +25,8 @@ for (const [engine, launcher] of Object.entries({chromium,firefox})) {
   await page.addScriptTag({content:fs.readFileSync(path.join(root,'js/vendor/chart.umd.min.js'),'utf8')});
   await page.addScriptTag({content:fs.readFileSync(path.join(root,'js/app.js'),'utf8')});
   await page.evaluate(()=>{
-   state.resumo={cards:[],evolucaoSemanal:{labels:['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],leads:[2,4,3,5,6,1,2],agendamentos:[1,2,1,3,2,0,1]},funilClinicas:{labels:['Abordadas','Responderam','Reunião','Proposta','Piloto'],values:[27,6,3,2,1]}};
-   state.leads=Array.from({length:28},(_,i)=>({etapa:['novo','em_contato','aguardando_retomada','agendado','convertido','nao_respondeu','perdido'][i%7],origem:['Google','Indicação de parceiros','Contato direto','Instagram'][i%4],servico:'Espirometria'}));
+   state.resumo={cards:[],funilClinicas:{labels:['Abordadas','Responderam','Reunião','Proposta','Piloto'],values:[27,6,3,2,1]}};
+   state.leads=Array.from({length:28},(_,i)=>({etapa:['novo','em_contato','aguardando_retomada','agendado','convertido','nao_respondeu','perdido'][i%7],origem:['Google','Indicação de parceiros','Contato direto','Instagram'][i%4],servico:'Espirometria',data_contato:`${String(1+i%28).padStart(2,'0')}/${String(1+i%(new Date().getMonth()+1)).padStart(2,'0')}/${new Date().getFullYear()}`}));
    state.crm=Array.from({length:12},(_,i)=>({etapa:['Abordada','Em negociação','Reunião agendada','Parceiro ativo'][i%4]}));
    state.marketing={canais:{labels:['Google','Instagram','Indicação','WhatsApp direto','Clínicas'],values:[42,24,16,10,8]}};
    state.marketingSeo={searchConsole:{byDate:Array.from({length:14},(_,i)=>({date:`2026-09-${String(i+1).padStart(2,'0')}`,impressions:20+i*7}))}};
