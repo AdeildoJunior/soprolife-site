@@ -84,6 +84,20 @@ etapa_segredos() {
   titulo "segredos e EnvironmentFiles"
   [[ -f "$ENV_INTERNO" ]] || fail "EnvironmentFile interno ausente: $ENV_INTERNO"
 
+  # Estado PARCIAL é armadilha, não ponto de partida. Se sobrou alguma
+  # M15_PORTAL_* no arquivo interno mas a chave de derivação não está lá, o
+  # bloco abaixo geraria uma chave NOVA — e todo link já entregue a paciente
+  # morreria calado, sem revogação nenhuma. Nesse caso o certo é restaurar as
+  # linhas originais de um backup, não deixar o script "consertar".
+  if grep -q '^M15_PORTAL_' "$ENV_INTERNO" \
+     && ! grep -q '^M15_PORTAL_TOKEN_KEY=' "$ENV_INTERNO"; then
+    echo "Variáveis presentes: $(grep -oE '^M15_PORTAL_[A-Z0-9_]+' "$ENV_INTERNO" | sort | tr '\n' ' ')" >&2
+    fail "estado parcial em $ENV_INTERNO: há M15_PORTAL_* sem M15_PORTAL_TOKEN_KEY.
+  Restaure a chave ORIGINAL a partir de um backup do próprio arquivo
+  (ex.: $ENV_INTERNO.bak-*, ou m15.env.before do deploy da API).
+  Gerar uma chave nova aqui invalidaria todo link de resultado já entregue."
+  fi
+
   if grep -q '^M15_PORTAL_TOKEN_KEY=' "$ENV_INTERNO"; then
     echo "M15_PORTAL_TOKEN_KEY já existe no serviço interno — preservado."
   else

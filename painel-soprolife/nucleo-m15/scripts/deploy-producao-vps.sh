@@ -305,6 +305,25 @@ if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NA
   sudo -u postgres createdb --owner="$DB_ROLE" "$DB_NAME"
 fi
 
+# --------------------------------------------------------------------------
+# M26.4 — o portal de resultados vive em variáveis que ESTE script não gera.
+#
+# Quem as acrescenta a este mesmo EnvironmentFile é
+# `deploy-portal-resultados.sh` (etapa `segredos`): M15_PORTAL_ENABLED,
+# M15_PORTAL_PUBLIC_BASE_URL e M15_PORTAL_TOKEN_KEY. Como o arquivo é
+# reescrito do zero logo abaixo, cada deploy da API apagava as três — e
+# "Gerar acesso ao resultado" passava a responder `portal_desabilitado` sem
+# que ninguém tivesse desligado nada.
+#
+# A chave de derivação é a parte grave: regerá-la invalida TODO link já
+# entregue a paciente. Então as linhas são COPIADAS do arquivo em uso, nunca
+# geradas aqui — e nunca ecoadas: do log sai só o NOME de cada variável.
+preservar_portal() {
+  sudo test -f "$ENV_FILE" || return 0
+  sudo grep -E '^M15_PORTAL_[A-Z0-9_]+=' "$ENV_FILE" || true
+}
+PORTAL_PRESERVADO="$(preservar_portal | cut -d= -f1 | sort | tr '\n' ' ')"
+
 TEMP_ENV="$(mktemp /tmp/soprolife-m15-env.XXXXXX)"
 chmod 0600 "$TEMP_ENV"
 {
@@ -327,9 +346,19 @@ chmod 0600 "$TEMP_ENV"
   if [[ "$REPORTS_TARGET_MODE" == "pilot" && "$REPORTS_GO_LIVE_MODE" == "true" ]]; then
     printf 'M15_REPORTS_STORAGE_DIR=%s\n' "${M15_REPORTS_STORAGE_DIR-}"
   fi
+  # Lido do arquivo ANTIGO, que ainda está no lugar neste ponto.
+  preservar_portal
 } >"$TEMP_ENV"
 sudo install -d -o root -g soprolife -m 0750 /opt/soprolife/secrets
 sudo install -o root -g soprolife -m 0640 "$TEMP_ENV" "$ENV_FILE"
+if [[ -n "$PORTAL_PRESERVADO" ]]; then
+  echo "Portal de resultados: variáveis preservadas -> $PORTAL_PRESERVADO"
+else
+  echo "Portal de resultados: nenhuma variável M15_PORTAL_* no EnvironmentFile"
+  echo "       anterior. Se o portal deveria estar ligado, restaure as linhas a"
+  echo "       partir do backup (m15.env.before) — NÃO regere a chave de"
+  echo "       derivação: isso mataria todo link já entregue a paciente."
+fi
 DB_PASSWORD=""
 AUTH_SECRET=""
 rm -f -- "$TEMP_ENV"
