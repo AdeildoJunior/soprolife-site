@@ -3,6 +3,11 @@
 Uma linha por documento vigente. Prévia, PDF externo e versões anteriores
 não viram novos resultados; só a última versão nativa publicada fornece os
 códigos escolhidos pela médica. Nenhum identificador sai na resposta.
+
+M26.20 — a fatia "Personalizado" ganhou detalhamento. O texto da conclusão
+personalizada é lido para classificar (`custom_conclusion_groups`) e nunca
+devolvido: a resposta carrega rótulo, critério e contagem, jamais a redação
+da médica.
 """
 from collections import Counter
 from datetime import date, datetime, timezone
@@ -11,7 +16,8 @@ from sqlalchemy import exists, select
 from sqlalchemy.orm import Session, aliased
 
 from ..models import Person, ReportAssignment, ReportDocument, ReportDocumentVersion, SpirometryExam
-from .report_conclusions import CONCLUSION_OPTIONS, BRONCHODILATOR_OPTIONS
+from . import custom_conclusion_groups as custom_groups
+from .report_conclusions import CONCLUSION_CUSTOM_CODE, CONCLUSION_OPTIONS, BRONCHODILATOR_OPTIONS
 
 ORIGINS = {
     "pastore": "Pastore", "coworking": "Consultório / coworking",
@@ -50,7 +56,10 @@ def report_statistics(db: Session, *, physician_profile_id: str | None = None,
                SpirometryExam.data_exame_dia_assumido,
                Person.sexo, Person.data_nascimento,
                ReportDocumentVersion.conclusion_code_snapshot,
-               ReportDocumentVersion.bronchodilator_code_snapshot)
+               ReportDocumentVersion.bronchodilator_code_snapshot,
+               # M26.20 — lido só para classificar em memória; o texto nunca
+               # entra na resposta nem em log algum.
+               ReportDocumentVersion.conclusion_text_snapshot)
         .select_from(ReportDocument)
         .join(SpirometryExam, SpirometryExam.id == ReportDocument.spirometry_exam_id)
         .join(Person, Person.id == SpirometryExam.person_id)
@@ -82,10 +91,15 @@ def report_statistics(db: Session, *, physician_profile_id: str | None = None,
     bd_labels = {x.code: x.short_label for x in BRONCHODILATOR_OPTIONS}
     bd_labels["nao_informado"] = "Não registrado"
     groups, codes, bd, sexes, ages, origins, months = (Counter() for _ in range(7))
+    custom = Counter()
     total = concluded = classified = no_date = 0
-    # Consulta única sem LIMIT da fila operacional (200). Campos mínimos;
-    # nenhum nome, CPF, contato, PDF ou texto livre é lido.
-    for origin, status, day, precision, assumed, sex, birth, code, bd_code in db.execute(statement):
+    # Consulta única sem LIMIT da fila operacional (200). Campos mínimos:
+    # nenhum nome, CPF, contato ou PDF é lido. O único texto livre lido é a
+    # conclusão personalizada, e ela não sai daqui — é consumida em memória
+    # por `custom_conclusion_groups.classify` e descartada; a resposta leva
+    # apenas rótulo de categoria e contagem.
+    for (origin, status, day, precision, assumed, sex, birth, code, bd_code,
+         custom_text) in db.execute(statement):
         total += 1
         exact = day is not None and precision in (None, "dia") and not assumed
         if exact:
@@ -106,6 +120,11 @@ def report_statistics(db: Session, *, physician_profile_id: str | None = None,
                 classified += 1
                 groups[conclusions[code].group] += 1
                 codes[code] += 1
+                # Uma categoria por laudo: o texto cai em exatamente um
+                # balde, nunca em dois, para que a soma reconcilie com a
+                # fatia "Personalizado" do gráfico de resultados.
+                if code == CONCLUSION_CUSTOM_CODE:
+                    custom[custom_groups.classify(custom_text)] += 1
             else:
                 groups["nao_catalogado"] += 1
                 codes["nao_catalogado"] += 1
@@ -134,6 +153,7 @@ def report_statistics(db: Session, *, physician_profile_id: str | None = None,
         "conclusoes": _series(codes, {**{x.code: x.short_label for x in CONCLUSION_OPTIONS},
                                       "nao_catalogado": GROUPS["nao_catalogado"]}),
         "broncodilatador": _series(bd, bd_labels),
+        "personalizados": custom_groups.payload(custom, total=groups["personalizado"]),
         "sexo": _series(sexes, {"feminino": "Feminino", "masculino": "Masculino",
                                  "outro": "Outro", "nao_informado": "Não informado"}),
         "faixa_etaria": _series(ages, {x: x for x in AGES}),

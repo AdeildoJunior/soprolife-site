@@ -1,88 +1,292 @@
-/* Somente a visão de indicadores; nenhum seletor muda o editor clínico. */
-.report-stats-open { display: inline-flex; align-items: center; gap: 8px; color: #087d73; border-color: #b9ddd8; background: #f2fbf9; }
+/* Somente a visão de indicadores; nenhum seletor muda o editor clínico.
+
+   M26.20 — a grade era `repeat(2, 1fr)` com cards de altura livre: o card do
+   gráfico curto encolhia, o vizinho de tabela aberta crescia, e a linha
+   ficava desalinhada. Agora cada card é uma coluna flex de altura total da
+   faixa (`align-items: stretch`), a tabela mora dentro dele com rolagem
+   PRÓPRIA, e nada vaza para o card ao lado. */
+
+.report-stats-open { display: inline-flex; align-items: center; gap: 8px; color: #0a7a70; border-color: #b9ddd8; background: #f2fbf9; }
+
 .report-statistics {
-  width: min(1240px, calc(100vw - 40px));
+  /* `min()` com dvw e um piso de margem: em telas estreitas o diálogo nunca
+     fica mais largo que a viewport (origem do scroll horizontal da página). */
+  width: min(1340px, calc(100dvw - 40px));
   max-width: none;
-  max-height: calc(100dvh - 40px);
+  max-height: min(940px, calc(100dvh - 40px));
   padding: 0;
-  border: 1px solid #dce5ed;
-  border-radius: 20px;
-  background: #f4f7fb;
-  color: #132b43;
-  box-shadow: 0 24px 100px rgba(8, 27, 48, .24);
+  border: 0;
+  border-radius: 22px;
+  background: #f3f6fa;
+  color: #15314c;
+  box-shadow: 0 30px 110px rgba(8, 27, 48, .28), 0 1px 0 rgba(255,255,255,.6) inset;
   font-family: var(--font-sans, system-ui, sans-serif);
+  overflow: hidden;
 }
 .report-statistics[open] { display: flex; flex-direction: column; }
-.report-statistics::backdrop { background: rgba(9, 27, 46, .62); backdrop-filter: blur(3px); }
+.report-statistics::backdrop { background: rgba(9, 27, 46, .64); backdrop-filter: blur(4px); }
 .report-statistics * { box-sizing: border-box; }
+.report-statistics :is(h2, h3, p, table) { overflow-wrap: anywhere; }
+
+/* ----------------------------------------------------------- cabeçalho fixo */
 .report-statistics .rs-top {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 24px; padding: 26px 30px;
-  background: linear-gradient(115deg, #0c1f3d, #143e51); color: #fff;
-  flex: 0 0 auto;
+  gap: 20px; padding: 24px 30px;
+  background: linear-gradient(118deg, #0a1c37 0%, #11364a 58%, #0f4a4d 100%);
+  color: #fff; flex: 0 0 auto; position: relative;
 }
-.report-statistics .rs-eyebrow { margin: 0 0 8px; color: #8fd9ce; font-size: 10px; font-weight: 800; letter-spacing: .16em; }
+.report-statistics .rs-top::after {
+  content: ""; position: absolute; inset: auto 0 0; height: 1px;
+  background: linear-gradient(90deg, rgba(92,188,175,.9), rgba(92,188,175,0));
+}
+.report-statistics .rs-top-text { min-width: 0; }
+.report-statistics .rs-eyebrow { margin: 0 0 7px; color: #7fd3c6; font-size: 10px; font-weight: 800; letter-spacing: .17em; }
 .report-statistics h2 { margin: 0; font-size: 25px; font-weight: 800; letter-spacing: -.035em; }
-.report-statistics .rs-top p:last-child { margin: 7px 0 0; color: #becfde; font-size: 13px; }
+.report-statistics .rs-top-text p:last-child { margin: 7px 0 0; color: #bdd0df; font-size: 13px; line-height: 1.5; }
+
 .report-statistics button, .report-statistics input, .report-statistics select { font: inherit; }
-.report-statistics button { min-height: 42px; padding: 10px 16px; border: 1px solid #d3dfe9; border-radius: 9px; background: #fff; color: #183552; font-size: 12px; font-weight: 700; cursor: pointer; }
-.report-statistics button:hover { background: #eaf4f3; }
-.report-statistics button:disabled { opacity: .55; cursor: wait; }
-.report-statistics .rs-close { display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.22); color: #fff; flex-shrink: 0; }
-.report-statistics .rs-close:hover { background: rgba(255,255,255,.18); }
-.report-statistics .rs-close span { font-size: 22px; line-height: 1; }
-.report-statistics .rs-body { padding: 24px 30px 28px; overflow-y: auto; min-height: 0; }
-.report-statistics .rs-context { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 18px; font-size: 12px; color: #5d7287; }
-.report-statistics #rsScope { font-weight: 700; color: #087d73; }
-.report-statistics .rs-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 18px; border: 1px solid #dfe7ef; border-radius: 12px; background: #fff; }
-.report-statistics .rs-filters label { display: grid; gap: 7px; flex: 1 1 155px; font-size: 11px; color: #566d82; font-weight: 700; min-width: 0; }
-.report-statistics input, .report-statistics select { width: 100%; min-width: 0; height: 42px; padding: 8px 10px; border: 1px solid #d3dfe9; border-radius: 8px; background: #f9fbfd; color: #183552; font-size: 13px; }
-.report-statistics button[type="submit"] { background: #0c1f3d; color: white; border-color: #0c1f3d; }
-.report-statistics :is(button, input, select, summary):focus-visible { outline: 3px solid #16a596; outline-offset: 3px; }
-.report-statistics .rs-message { font-size: 12px; color: #5d7287; margin: 12px 2px 20px; min-height: 18px; }
-.report-statistics .rs-kpis { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 14px; margin-bottom: 22px; }
-.report-statistics .rs-kpis article { background: #fff; padding: 19px; border: 1px solid #dfe7ef; border-radius: 12px; min-width: 0; }
-.report-statistics .rs-kpis article:first-child { background: #eaf7f4; border-color: #cce8e1; }
-.report-statistics .rs-kpis span { display: block; font-size: 11px; color: #566d82; font-weight: 700; }
-.report-statistics .rs-kpis strong { display: block; margin: 8px 0 6px; font-size: 31px; font-weight: 800; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
-.report-statistics .rs-kpis small { display: block; color: #6b7e90; font-size: 10px; line-height: 1.5; }
-.report-statistics .rs-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; align-items: start; }
-.report-statistics .rs-chart-card { min-width: 0; padding: 22px; border: 1px solid #dfe7ef; border-radius: 14px; background: #fff; box-shadow: 0 3px 12px rgba(12,31,61,.025); }
-.report-statistics .rs-chart-card header { margin-bottom: 18px; }
-.report-statistics .rs-chart-card h3 { margin: 0 0 6px; font-size: 15px; font-weight: 800; letter-spacing: -.02em; }
-.report-statistics .rs-chart-card header p { margin: 0; font-size: 11px; line-height: 1.5; color: #657b90; }
-.report-statistics .rs-chart { position: relative; width: 100%; min-width: 0; height: 260px; }
-.report-statistics .rs-chart canvas { display: block; min-height: 0; max-height: none; max-width: 100%; }
-.report-statistics .rs-data { border-top: 1px solid #eef2f6; margin-top: 16px; padding-top: 12px; }
-.report-statistics summary { color: #527084; font-size: 11px; font-weight: 600; cursor: pointer; padding: 5px 0; }
-.report-statistics .rs-breakdown { margin-top: 20px; padding: 15px 20px; background: #fff; border: 1px solid #dfe7ef; border-radius: 12px; }
-.report-statistics .rs-breakdown summary { font-size: 13px; color: #183552; }
-.report-statistics table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 12px; }
-.report-statistics caption { text-align: left; padding: 8px 0; font-weight: 700; }
-.report-statistics th, .report-statistics td { padding: 10px 8px; border-bottom: 1px solid #edf1f6; text-align: left; white-space: normal; overflow-wrap: anywhere; }
-.report-statistics th { color: #526c83; font-weight: 600; text-transform: none; letter-spacing: 0; }
-.report-statistics td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-.report-statistics .rs-method { margin: 20px 2px 0; color: #60778b; font-size: 11px; line-height: 1.75; }
-.report-statistics .rs-loading, .report-statistics .rs-no-results { padding: 50px 22px; text-align: center; background: #fff; border: 1px solid #dfe7ef; border-radius: 14px; color: #566d82; font-size: 14px; }
-.report-statistics .rs-no-results h3 { color: #183552; }
-.report-statistics .rs-empty { height: 100%; margin: 0; display: grid; place-items: center; text-align: center; font-size: 12px; color: #60778b; }
-@media (max-width: 850px) {
-  .report-statistics .rs-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .report-statistics .rs-grid { grid-template-columns: minmax(0,1fr); }
+.report-statistics button {
+  min-height: 44px; padding: 11px 18px; border: 1px solid #d4e0ea; border-radius: 10px;
+  background: #fff; color: #173450; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, transform .16s ease;
 }
-@media (max-width: 540px) {
-  .report-statistics { width: calc(100vw - 12px); max-height: calc(100dvh - 12px); border-radius: 14px; }
-  .report-statistics .rs-top { padding: 20px 16px; gap: 12px; }
-  .report-statistics h2 { font-size: 21px; }
-  .report-statistics .rs-top p:last-child { font-size: 11px; }
-  .report-statistics .rs-close { padding: 8px 10px; gap: 8px; }
-  .report-statistics .rs-body { padding: 18px 14px; }
-  .report-statistics .rs-filters { gap: 10px; padding: 14px; }
-  .report-statistics .rs-filters label { flex-basis: 120px; }
-  .report-statistics .rs-filters label:last-of-type { flex-basis: 100%; }
-  .report-statistics .rs-kpis { gap: 10px; }
-  .report-statistics .rs-kpis article { padding: 15px 12px; }
-  .report-statistics .rs-kpis strong { font-size: 27px; }
-  .report-statistics .rs-chart-card { padding: 17px 12px; }
-  .report-statistics .rs-chart { height: 280px; }
+.report-statistics button:hover { background: #eef7f6; border-color: #bfdfd9; }
+.report-statistics button:active { transform: translateY(1px); }
+.report-statistics button:disabled { opacity: .55; cursor: wait; transform: none; }
+.report-statistics .rs-close {
+  display: inline-flex; align-items: center; gap: 10px; flex: 0 0 auto;
+  background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.24); color: #fff;
+}
+.report-statistics .rs-close:hover { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.34); }
+.report-statistics .rs-close span[aria-hidden] { font-size: 21px; line-height: 1; }
+
+/* ------------------------------------------------------- corpo com rolagem */
+.report-statistics .rs-body {
+  padding: 22px 30px 30px; overflow-y: auto; overflow-x: hidden;
+  min-height: 0; flex: 1 1 auto; overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.report-statistics .rs-context {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px;
+  margin-bottom: 16px; font-size: 12px; color: #5d7287;
+}
+.report-statistics #rsScope { font-weight: 700; color: #0a7a70; }
+
+/* Uma única faixa de filtros, acima de tudo que ela recorta. */
+.report-statistics .rs-filters {
+  display: flex; flex-wrap: wrap; align-items: end; gap: 12px;
+  padding: 16px 18px; border-radius: 14px; background: #fff;
+  box-shadow: 0 1px 2px rgba(16,39,63,.06), 0 8px 24px rgba(16,39,63,.045);
+}
+.report-statistics .rs-filters label { display: grid; gap: 7px; flex: 1 1 160px; font-size: 11px; color: #56708a; font-weight: 700; min-width: 0; }
+.report-statistics .rs-filter-actions { display: flex; gap: 10px; flex: 0 0 auto; }
+.report-statistics input, .report-statistics select {
+  width: 100%; min-width: 0; height: 44px; padding: 9px 11px;
+  border: 1px solid #d6e2ec; border-radius: 10px; background: #f8fbfd;
+  color: #173450; font-size: 13px;
+}
+.report-statistics button[type="submit"] { background: #0c2140; color: #fff; border-color: #0c2140; }
+.report-statistics button[type="submit"]:hover:not(:disabled) { background: #123057; border-color: #123057; }
+.report-statistics :is(button, input, select, summary):focus-visible { outline: 3px solid #0d8d80; outline-offset: 3px; border-radius: 10px; }
+.report-statistics .rs-message { font-size: 12px; color: #5d7287; margin: 14px 2px 18px; min-height: 18px; }
+
+/* ------------------------------------------------------------------- KPIs */
+.report-statistics .rs-kpis {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(188px, 1fr));
+  gap: 14px; margin-bottom: 20px;
+}
+.report-statistics .rs-kpis article {
+  position: relative; min-width: 0; padding: 18px 18px 17px; border-radius: 14px;
+  background: #fff; box-shadow: 0 1px 2px rgba(16,39,63,.06), 0 8px 22px rgba(16,39,63,.04);
+  overflow: hidden;
+}
+.report-statistics .rs-kpis article::before {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: #dbe5ee;
+}
+.report-statistics .rs-kpis .rs-kpi--accent::before { background: linear-gradient(180deg, #0d8d80, #0a6f65); }
+.report-statistics .rs-kpis span { display: block; font-size: 11px; color: #56708a; font-weight: 700; letter-spacing: .01em; }
+.report-statistics .rs-kpis strong {
+  display: block; margin: 9px 0 6px; font-size: 32px; font-weight: 800;
+  letter-spacing: -.045em; line-height: 1;
+}
+.report-statistics .rs-kpis small { display: block; color: #6b7e90; font-size: 10.5px; line-height: 1.55; }
+
+/* ------------------------------------------------------------ grade de cards
+   `align-items: stretch` + card em coluna flex: todos os cards de uma faixa
+   têm a mesma altura e o <details> fica ancorado no pé de cada um. */
+.report-statistics .rs-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px; align-items: stretch;
+}
+.report-statistics .rs-chart-card {
+  display: flex; flex-direction: column; min-width: 0; padding: 20px 20px 16px;
+  border-radius: 16px; background: #fff;
+  box-shadow: 0 1px 2px rgba(16,39,63,.06), 0 10px 28px rgba(16,39,63,.045);
+}
+.report-statistics .rs-chart-card--span { grid-column: 1 / -1; }
+.report-statistics .rs-chart-card header { margin-bottom: 16px; min-width: 0; }
+.report-statistics .rs-chart-card h3 { margin: 0 0 5px; font-size: 15.5px; font-weight: 800; letter-spacing: -.022em; color: #12304b; }
+.report-statistics .rs-chart-card header p { margin: 0; font-size: 11.5px; line-height: 1.55; color: #64788c; }
+/* Altura explícita que JÁ inclui a faixa de rótulos do eixo: o canvas não
+   empurra a tabela nem gera uma segunda barra de rolagem dentro do card. */
+.report-statistics .rs-chart { position: relative; width: 100%; min-width: 0; height: 268px; flex: 0 0 auto; }
+.report-statistics .rs-chart-card--tall .rs-chart { height: 330px; }
+.report-statistics .rs-chart canvas { display: block; min-height: 0; max-width: 100%; }
+
+/* ------------------------------------------------------ tabelas dentro do card */
+.report-statistics .rs-data { margin-top: auto; padding-top: 12px; border-top: 1px solid #eef3f7; }
+.report-statistics summary {
+  color: #4a6b85; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  padding: 9px 4px; list-style: none; display: flex; align-items: center; gap: 7px;
+  /* Alvo de toque real: 44px de altura, não a linha de texto de 17px. */
+  min-height: 44px; border-radius: 8px;
+}
+.report-statistics summary::-webkit-details-marker { display: none; }
+.report-statistics summary::before {
+  content: ""; width: 7px; height: 7px; flex: 0 0 auto;
+  border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor;
+  transform: rotate(-45deg); transition: transform .18s ease;
+}
+.report-statistics details[open] > summary::before { transform: rotate(45deg); }
+.report-statistics summary:hover { color: #0a7a70; }
+/* A tabela expandida rola DENTRO do próprio card, nos dois eixos. */
+.report-statistics .rs-table-wrap {
+  max-height: 268px; overflow: auto; overscroll-behavior: contain;
+  margin-top: 4px; border-radius: 10px; background: #fbfcfe;
+}
+.report-statistics .rs-breakdown {
+  margin-top: 18px; padding: 14px 20px; background: #fff; border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(16,39,63,.06), 0 10px 28px rgba(16,39,63,.04);
+}
+.report-statistics .rs-breakdown summary { font-size: 13px; color: #12304b; }
+.report-statistics .rs-breakdown .rs-table-wrap { max-height: 420px; }
+/* CAUSA-RAIZ do defeito relatado: `css/style.css` impõe `table { min-width:
+   860px }` a TODA tabela do painel (serve às tabelas largas de operação, mas
+   aqui forçava 860px dentro de um card de ~590px, e a tabela vazava). Dentro
+   do modal de indicadores a tabela acompanha o card, ponto. */
+.report-statistics table { width: 100%; min-width: 0; border-collapse: collapse; font-size: 12px; table-layout: auto; }
+.report-statistics caption { text-align: left; padding: 10px 10px 8px; font-weight: 700; color: #3c566d; font-size: 11.5px; }
+/* `style.css` deixa todo `th` em CAIXA ALTA com letter-spacing. Dentro do
+   modal só o cabeçalho da tabela usa esse tratamento; o rótulo da linha é
+   texto corrido. Sem este reset, "Redução de CVF e VEF1" virava grito. */
+.report-statistics th { text-transform: none; letter-spacing: 0; }
+.report-statistics thead th {
+  position: sticky; top: 0; z-index: 1; background: #f4f7fa !important;
+  color: #51697f !important; font-size: 10.5px !important; font-weight: 800 !important;
+  letter-spacing: .04em; text-transform: uppercase;
+  /* `overflow-wrap: anywhere` (herdado da regra de célula) picava "Laudos"
+     em "LA/UD/OS". Aqui a quebra só acontece entre palavras: "Laudos" fica
+     inteiro e "Critério de agrupamento" quebra no espaço, sem forçar uma
+     largura mínima que estouraria o card. */
+  overflow-wrap: normal; word-break: normal; hyphens: none;
+}
+/* `css/style.css` (bloco "Tabelas premium v3") aplica `!important` a TODA
+   `th` e `td` do painel: padding, borda, cor, tamanho e peso de fonte. Essas
+   medidas foram desenhadas para as tabelas largas de operação e, dentro de um
+   card de 400px, descolavam a tabela do resto do modal. Só um `!important`
+   derruba outro — por isso ele aparece aqui, e só nestas propriedades. */
+.report-statistics th, .report-statistics td {
+  padding: 10px !important; border-bottom: 1px solid #eef3f7 !important;
+  text-align: left; white-space: normal; overflow-wrap: anywhere;
+  vertical-align: top; background: transparent;
+}
+.report-statistics tbody th {
+  color: #2b4b67 !important; font-weight: 600 !important; font-size: 12px !important;
+}
+.report-statistics td { color: #42607a !important; font-size: 12px !important; }
+.report-statistics tbody tr:last-child :is(th, td) { border-bottom: 0 !important; }
+.report-statistics :is(td, th) + td:not(.rs-criterion) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.report-statistics .rs-criterion { color: #64788c; font-size: 11px; line-height: 1.55; min-width: 130px; text-align: left; }
+.report-statistics tfoot th, .report-statistics tfoot td {
+  background: #f4f7fa !important; font-weight: 800 !important; color: #12304b !important; border-bottom: 0 !important;
+}
+.report-statistics .rs-criterion-note { margin: 10px 10px 4px; font-size: 10.5px; line-height: 1.6; color: #72869a; }
+
+.report-statistics .rs-method { margin: 20px 2px 0; color: #62798d; font-size: 11px; line-height: 1.8; }
+.report-statistics .rs-loading, .report-statistics .rs-no-results {
+  padding: 54px 24px; text-align: center; background: #fff; border-radius: 16px;
+  color: #56708a; font-size: 14px; box-shadow: 0 1px 2px rgba(16,39,63,.06);
+}
+.report-statistics .rs-no-results h3 { color: #12304b; }
+.report-statistics .rs-empty { height: 100%; margin: 0; display: grid; place-items: center; text-align: center; font-size: 12px; color: #62798d; padding: 12px; }
+
+/* --------------------------------------------------------------- animações
+   Discretas e curtas; zeradas por completo em prefers-reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .report-statistics[open] { animation: rs-in .26s cubic-bezier(.2,.8,.3,1); }
+  .report-statistics .rs-kpis article, .report-statistics .rs-chart-card { animation: rs-rise .3s cubic-bezier(.2,.8,.3,1) both; }
+  .report-statistics .rs-chart-card:nth-child(2) { animation-delay: .04s; }
+  .report-statistics .rs-chart-card:nth-child(3) { animation-delay: .07s; }
+  .report-statistics .rs-chart-card:nth-child(n+4) { animation-delay: .1s; }
+}
+@keyframes rs-in { from { opacity: 0; transform: translateY(10px) scale(.994); } }
+@keyframes rs-rise { from { opacity: 0; transform: translateY(7px); } }
+
+/* -------------------------------------------------------------- tablet/mobile */
+@media (max-width: 960px) {
+  .report-statistics { width: min(1340px, calc(100dvw - 24px)); max-height: calc(100dvh - 24px); }
+  .report-statistics .rs-grid { grid-template-columns: minmax(0, 1fr); }
+  .report-statistics .rs-chart-card--span { grid-column: auto; }
+  .report-statistics .rs-body { padding: 20px 22px 24px; }
+  .report-statistics .rs-top { padding: 22px 22px; }
+}
+@media (max-width: 620px) {
+  .report-statistics {
+    width: 100dvw; max-width: 100dvw; max-height: 100dvh; height: 100dvh;
+    margin: 0; border-radius: 0;
+  }
+  .report-statistics .rs-top { padding: 16px 16px 15px; gap: 12px; }
+  .report-statistics h2 { font-size: 20px; }
+  .report-statistics .rs-eyebrow { font-size: 9.5px; letter-spacing: .14em; }
+  .report-statistics .rs-top-text p:last-child { font-size: 11.5px; }
+  .report-statistics .rs-close { padding: 10px 12px; gap: 0; }
+  /* No celular o rótulo sai e sobra o × — alvo de toque de 44px mantido. */
+  .report-statistics .rs-close-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .report-statistics .rs-body { padding: 16px 14px 24px; }
+  .report-statistics .rs-context { font-size: 11.5px; margin-bottom: 14px; }
+  .report-statistics .rs-filters { padding: 14px; gap: 10px; border-radius: 12px; }
+  .report-statistics .rs-filters label { flex: 1 1 calc(50% - 5px); font-size: 10.5px; }
+  .report-statistics .rs-filters label:nth-of-type(3) { flex-basis: 100%; }
+  .report-statistics .rs-filter-actions { width: 100%; }
+  .report-statistics .rs-filter-actions button { flex: 1 1 0; }
+  .report-statistics .rs-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .report-statistics .rs-kpis article { padding: 14px 13px; border-radius: 12px; }
+  .report-statistics .rs-kpis strong { font-size: 25px; margin: 7px 0 5px; }
+  .report-statistics .rs-kpis span { font-size: 10.5px; }
+  .report-statistics .rs-kpis small { font-size: 10px; }
+  .report-statistics .rs-grid { gap: 12px; }
+  .report-statistics .rs-chart-card { padding: 16px 13px 12px; border-radius: 13px; }
+  .report-statistics .rs-chart-card h3 { font-size: 14.5px; }
+  .report-statistics .rs-chart-card header { margin-bottom: 13px; }
+  .report-statistics .rs-chart { height: 250px; }
+  .report-statistics .rs-chart-card--tall .rs-chart { height: 320px; }
+  .report-statistics .rs-table-wrap { max-height: 240px; }
+  .report-statistics :is(th, td) { padding: 9px 8px !important; }
+  /* A tabela do detalhamento tem 4 colunas e simplesmente não cabe em 331px
+     de card. Em vez de rolagem lateral dentro do card, a linha vira um bloco:
+     categoria + números na primeira linha, critério ocupando a largura toda
+     na segunda. O cabeçalho sai da vista mas continua lá para leitor de tela,
+     e o número ganha rótulo inline para não ficar órfão. */
+  .report-statistics #rsCustom-data thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+  }
+  .report-statistics #rsCustom-data :is(tbody, tfoot) tr {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: baseline; column-gap: 10px;
+    padding: 11px 10px 12px; border-bottom: 1px solid #eef3f7;
+  }
+  .report-statistics #rsCustom-data tfoot tr { border-bottom: 0; border-radius: 0 0 10px 10px; }
+  .report-statistics #rsCustom-data :is(th, td) { padding: 0 !important; border-bottom: 0 !important; }
+  .report-statistics #rsCustom-data tbody td:nth-of-type(1)::after { content: " laudo(s)"; color: #8396a8; font-weight: 400; }
+  .report-statistics #rsCustom-data .rs-criterion { grid-column: 1 / -1; margin-top: 6px; min-width: 0; }
+  .report-statistics #rsCustom-data caption { padding-bottom: 6px; }
+  .report-statistics .rs-criterion { min-width: 120px; }
+  .report-statistics .rs-breakdown { padding: 12px 14px; }
+  .report-statistics .rs-method { font-size: 10.5px; line-height: 1.75; }
+}
+@media (max-width: 380px) {
+  .report-statistics .rs-kpis { grid-template-columns: minmax(0, 1fr); }
+  .report-statistics .rs-filters label { flex-basis: 100%; }
+  .report-statistics .rs-chart { height: 230px; }
+  .report-statistics .rs-chart-card--tall .rs-chart { height: 310px; }
 }

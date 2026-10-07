@@ -17,6 +17,20 @@ const sample = {
   resultados:series({'Normal':10,'Obstrutivo':4,'Sugestivo de restritivo':2,'Personalizado':2}),
   conclusoes:series({'Normal':10,'DVO Leve':3,'DVO Moderado':1,'DVR sug. Leve':2,'Personalizado':2}),
   broncodilatador:series({'RBD+':3,'RBD−':10,'BD não realizado':4,'Não registrado':1}),
+  personalizados:{total:2, ignorado_na_classificacao:['volumes pulmonares / complementar — conduta sugerida, não achado'],
+   categorias:[
+    {chave:'reducao_cvf_vef1',rotulo:'Redução de CVF e VEF1',quantidade:1,percentual:50.0,
+     descricao:'Quantidade de laudos em que essa conclusão foi explicitamente registrada pela médica. O texto cita redução e nomeia os dois parâmetros.',
+     criterio:'Termo de redução + CVF + VEF1 no texto da conclusão.'},
+    {chave:'reducao_cvf',rotulo:'Redução isolada de CVF',quantidade:1,percentual:50.0,
+     descricao:'Quantidade de laudos em que essa conclusão foi explicitamente registrada pela médica. O texto cita redução de CVF e não menciona VEF1.',
+     criterio:'Termo de redução + CVF, sem VEF1 no texto da conclusão.'},
+    {chave:'reducao_vef1',rotulo:'Redução isolada de VEF1',quantidade:0,percentual:0.0,
+     descricao:'Quantidade de laudos em que essa conclusão foi explicitamente registrada pela médica. O texto cita redução de VEF1 e não menciona CVF.',
+     criterio:'Termo de redução + VEF1, sem CVF no texto da conclusão.'},
+    {chave:'nao_classificavel',rotulo:'Não classificável com segurança',quantidade:0,percentual:0.0,
+     descricao:'Laudos cujo texto não corresponde explicitamente a nenhuma categoria acima. Nenhuma classificação é atribuída a eles.',
+     criterio:'Nenhuma correspondência explícita, ou presença de negação.'}]},
   faixa_etaria:series({'Até 17 anos':2,'18–39 anos':3,'40–59 anos':6,'60–79 anos':7,'80 anos ou mais':2}),
   sexo:series({'Feminino':12,'Masculino':8}),
   origens:series({'Consultório / coworking':11,'Domiciliar':9}),
@@ -50,7 +64,7 @@ for(const [engine, launcher] of Object.entries({chromium,firefox})) {
      const data=structuredClone(window.sample),u=new URL(url,'https://sintetico.test');
      data.filtros={inicio:u.searchParams.get('inicio'),fim:u.searchParams.get('fim'),origem:u.searchParams.get('origem')};
      data.escopo=window.testRole==='medico' ? 'meus_laudos' : 'institucional';
-     if(window.reply==='empty') data.totais={laudos:0,com_conclusao:0,normais:0,sem_conclusao_publicada:0,sem_data_completa:0};
+     if(window.reply==='empty') {data.totais={laudos:0,com_conclusao:0,normais:0,sem_conclusao_publicada:0,sem_data_completa:0};data.personalizados={total:0,ignorado_na_classificacao:[],categorias:[]};}
      return data;
     },
    };
@@ -62,7 +76,7 @@ for(const [engine, launcher] of Object.entries({chromium,firefox})) {
   await page.waitForSelector('#rsEvolution');
   await page.waitForTimeout(150);
   assert.equal(await page.locator('.rs-kpis article').count(),4);
-  assert.equal(await page.locator('.rs-chart canvas').count(),6);
+  assert.equal(await page.locator('.rs-chart canvas').count(),7);
   const bounds=await page.evaluate(()=>({
    overflow:document.querySelector('.rs-body').scrollWidth>document.querySelector('.rs-body').clientWidth+1,
    charts:[...document.querySelectorAll('.rs-chart canvas')].map(c=>{const r=c.getBoundingClientRect(),p=c.parentElement.getBoundingClientRect(),chart=Chart.getChart(c);return{ratio:Math.abs(r.width/r.height-chart.width/chart.height),spill:r.bottom>p.bottom+1}}),
@@ -124,7 +138,7 @@ for(const [engine, launcher] of Object.entries({chromium,firefox})) {
   }
   assert.equal(await page.evaluate(()=>window.calls.every(x=>x.method==='GET')),true);
   assert.deepEqual(errors,[]);
-  console.log(`OK ${engine} ${width}px: botão real, 6 gráficos, filtros, vazio/erro, Escape, edição e logout`);
+  console.log(`OK ${engine} ${width}px: botão real, 7 gráficos, filtros, vazio/erro, Escape, edição e logout`);
   await page.close();
  }
  await browser.close();
