@@ -94,8 +94,8 @@ Card novo: **"Detalhamento dos laudos personalizados"**, rosca colorida.
 
 ## 4. Categorias encontradas nos dados reais
 
-Auditoria em produção (consulta somente-leitura, 07/10/2026). **38 laudos
-efetivos**; distribuição por código de conclusão:
+Auditoria em produção (consulta somente-leitura, 07/10/2026). **37 laudos
+efetivos**, todos com conclusão publicada; distribuição por código:
 
 | Código | Laudos |
 |---|---|
@@ -219,20 +219,71 @@ branco do card. A paleta anterior **falhava** em luminosidade e croma.
 
 ---
 
+### Falhas pré-existentes do quality gate
+
+O gate acusa 2 falhas, **as mesmas num worktree limpo do `673b0e6`** — não
+foram introduzidas aqui:
+
+- `test-m21-auth-crm-nav`: "scripts de Marketing usam cache-buster da
+  reconciliação";
+- `test-m25-26-fluxo-espirometria`: "a correção só oferece os campos realmente
+  pendentes" e "após salvar, as pendências são RELIDAS do servidor".
+
+Suíte backend completa: **3068 passed, 47 skipped, 0 falhas** (16min25s).
+
+---
+
 ## 7. HEAD oficial
 
-(preenchido na integração)
+`7993bea` em `origin/painel-soprolife-v01` — integração **fast-forward**
+(`673b0e6..7993bea`), sem merge commit.
+Branch de trabalho: `origin/claude-m26-20-graficos-laudos`, mesmo commit.
 
 ## 8. HEAD produção
 
-(preenchido no deploy)
+`7993bea` em `/opt/soprolife/soprolife-site` (`git merge --ff-only`).
+`soprolife-m15-api` reiniciado e `active`.
+`/opt/soprolife/secrets/m15.env` **intacto** — `52ea81cbba2efda6` antes e
+depois (a armadilha da M26.4, em que o deploy apagava `M15_PORTAL_*`, foi
+conferida explicitamente).
 
 ## 9. Health
 
-(preenchido no smoke)
+```
+GET http://127.0.0.1:8015/api/v1/health → HTTP 200
+{"status":"ok","versao":"0.1.0","ambiente":"prod","banco":"ok",
+ "agora_local":"2026-10-07T02:16:53-03:00"}
+```
+
+- `GET /api/v1/laudos/estatisticas` sem token → **401** (RBAC preservado).
+- `css/report-statistics.css?v=2026100701` → 200.
+- `js/report-statistics.js?v=2026100701` → 401, que é o **portão esperado**
+  dos `.js` do painel (conhecido desde a M26.10), não uma falha do deploy.
+
+**Smoke somente-leitura contra os dados reais, já em produção:**
+
+```
+laudos vigentes: 37
+fatia "Personalizado" do gráfico de resultados: 8
+detalhe.total: 8
+  Redução de CVF e VEF1 .......... 7  (87,5%)
+  Redução isolada de CVF ......... 1  (12,5%)
+  Redução isolada de VEF1 ........ 0  (0%)
+  Não classificável com segurança  0  (0%)
+soma das categorias: 8 — reconcilia com a fatia e com o total: True
+texto clínico na resposta: False
+```
+
+Nenhuma escrita: o smoke e a auditoria usaram apenas leitura.
 
 ## 10. Caminho do relatório e screenshots
 
-- **Relatório (canônico, versionado):**
+- **Relatório (canônico, versionado no Git):**
   `docs/archive/reports/RELATORIO_M26_20_GRAFICOS_LAUDOS_20261007.md`
-- **Screenshots sintéticos:** gerados pelos harnesses; caminho na seção final.
+  Ler sem checkout:
+  `git -C ~/soprolife-site show origin/painel-soprolife-v01:docs/archive/reports/RELATORIO_M26_20_GRAFICOS_LAUDOS_20261007.md`
+- **Screenshots sintéticos** (4 por combinação: topo, tabelas abertas,
+  tooltip, fim da rolagem — 2 engines × 7 larguras = 56 imagens):
+  `/tmp/claude-1000/-home-fedorasurf-soprolife-site/20727a23-c096-4e65-a892-6f083b925064/scratchpad/shots-final/`
+  Regeneráveis a qualquer momento, sem dado real:
+  `cd painel-soprolife && STATISTICS_SHOTS=<dir> node scripts/test-m26-20-graficos-laudos.js`
