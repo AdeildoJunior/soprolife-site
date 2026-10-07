@@ -284,6 +284,7 @@ Nenhuma escrita: o smoke e a auditoria usaram apenas leitura.
   `git -C ~/soprolife-site show origin/painel-soprolife-v01:docs/archive/reports/RELATORIO_M26_20_GRAFICOS_LAUDOS_20261007.md`
 - **Screenshots sintéticos** (4 por combinação: topo, tabelas abertas,
   tooltip, fim da rolagem — 2 engines × 7 larguras = 56 imagens):
-  `/tmp/claude-1000/-home-fedorasurf-soprolife-site/20727a23-c096-4e65-a892-6f083b925064/scratchpad/shots-final/`
+  `~/SoproLife_Programacao/RELATORIOS/screenshots-m26-20-20261007/` (22 PNG,
+  4,0 MB — as 7 larguras em topo, tabelas abertas e tooltip)
   Regeneráveis a qualquer momento, sem dado real:
   `cd painel-soprolife && STATISTICS_SHOTS=<dir> node scripts/test-m26-20-graficos-laudos.js`
