@@ -334,7 +334,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 
 | Item | Estado |
 |---|---|
-| `origin/painel-soprolife-v01` / VPS | VPS em `140f0e3` (Marketing 60 dias), worktree limpo, health 200; commits só de docs depois dele não exigem deploy |
+| `origin/painel-soprolife-v01` / VPS | VPS em `ffeaded` (M26.30 — ordenação dos Termos de busca), worktree limpo, health 200; commits só de docs depois dele não exigem deploy |
 | `origin/main` (site) | `a7d8b03` |
 | Alembic | `b70c4a2e9d15` (M70) |
 | Serviços | `soprolife-m15-api`, `soprolife-painel-loopback` (:8765), `soprolife-portal-resultados`, `soprolife-update-data.timer` (10 min), `soprolife-operational-refresh.timer` (6 h), `soprolife-nfse-production-worker.path` (active) |
