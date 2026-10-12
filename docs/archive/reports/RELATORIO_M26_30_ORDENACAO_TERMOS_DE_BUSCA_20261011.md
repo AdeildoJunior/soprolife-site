@@ -224,14 +224,16 @@ arquivo, e ler o link desse arquivo enquanto a sessão segue viva.
 1. **`test-m21-auth-crm-nav`** continua reprovando pelo cache-buster fixado em
    `v=2026080101`. Vale uma missão curta para decidir se a asserção fixa a
    versão da reconciliação ou só exige a presença do cache-buster.
-2. **Conferência visual com os números de produção.** Os dados reais do Search
-   Console não existem nesta máquina: os dois snapshots locais
-   (`painel-soprolife/data/marketing-seo.local.json` e
+2. ~~**Conferência visual com os números de produção.**~~ **FECHADA em
+   11/10/2026** — o usuário abriu Marketing & SEO no navegador, com os dados
+   reais da conta, e confirmou que a lista ordena corretamente. Fica o
+   registro de como a missão foi conferida *antes* disso, porque os dados
+   reais do Search Console **não existem nesta máquina**: os dois snapshots
+   locais (`painel-soprolife/data/marketing-seo.local.json` e
    `~/.config/soprolife/painel/marketing-seo.json`) têm `topQueries` vazio
-   (`sources.searchConsole: false` — sem ADC local). A conferência usou o
-   **formato real** do leitor e o volume real (107 consultas), não os valores
-   reais. Abrir Marketing & SEO → "Termos de busca" no navegador e confirmar
-   que abre com **Impressões ↓** e que o primeiro termo é o de maior impressão.
+   (`sources.searchConsole: false` — sem ADC local). A conferência automatizada
+   usou o **formato real** do leitor e o volume real (107 consultas), não os
+   valores reais.
 
 ## 9. Caminho do relatório e screenshots
 
