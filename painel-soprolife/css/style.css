@@ -3430,6 +3430,146 @@ td { font-size: .94rem; }
   border-color: var(--teal);
 }
 
+/* ── Ordenar "Termos de busca" (M26.30) ──────────────────────────────────────
+   Ocupa a linha inteira do cabeçalho (flex 0 0 100%) em vez de disputar espaço
+   com o título e o subtítulo: a coluna de listas do Marketing é a estreita do
+   grid 2fr/1fr e quatro chips lado a lado espremeriam o h3.
+   O [hidden] da marcação já é neutralizado pelo `[hidden]{display:none
+   !important}` global — por isso o display aqui pode ser flex. */
+.mkt-sort {
+  flex: 0 0 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.mkt-sort-label {
+  font-size: .68rem;
+  color: var(--muted);
+}
+
+.mkt-sort-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mkt-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: var(--radius-pill);
+  padding: 2px 9px;
+  font-size: .68rem;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--ease-fast), border-color var(--ease-fast),
+              color var(--ease-fast);
+}
+
+.mkt-sort-btn:hover {
+  background: var(--teal-pale);
+  border-color: var(--teal);
+  color: var(--teal-dark);
+}
+
+.mkt-sort-btn:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+/* Ordenação ativa: preenchimento + borda teal, não só a seta. */
+.mkt-sort-btn.is-active {
+  background: var(--teal-soft);
+  border-color: var(--teal);
+  color: var(--teal-dark);
+  font-weight: 700;
+}
+
+/* `.panel-header span` impõe .75rem a qualquer span do cabeçalho; a seta tem
+   de repetir o tamanho do rótulo para não sair maior que o próprio botão. */
+.mkt-sort-btn .mkt-sort-arrow {
+  font-size: .68rem;
+  line-height: 1;
+  color: inherit;
+}
+
+.mkt-sort-btn .mkt-sort-arrow:empty {
+  display: none;
+}
+
+/* Fallback compacto: fica fora do caminho enquanto os chips couberem. */
+.mkt-sort-select,
+.mkt-sort-dir {
+  display: none;
+}
+
+/* Ordenando por Posição a linha ganha um 4º chip. Como `.mkt-mini-chips` não
+   encolhe, na coluna estreita os chips comiam o termo inteiro — restava
+   "e…" ou nada. Só aqui, e só nesse modo, os chips cedem espaço e quebram
+   para a 2ª linha; o resto das mini-listas do Marketing fica como está. */
+#seoList.is-sorted-by-position .mkt-mini-term {
+  flex: 1 1 12ch;
+  min-width: 12ch;
+}
+
+#seoList.is-sorted-by-position .mkt-mini-chips {
+  flex-shrink: 1;
+}
+
+/* Tela estreita: os quatro chips passariam a duas linhas no cabeçalho, então
+   viram um select + um botão de sentido (o select não expressa asc/desc). */
+@media (max-width: 560px) {
+  .mkt-sort-group {
+    display: none;
+  }
+
+  .mkt-sort-select {
+    display: inline-block;
+    max-width: 100%;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--teal-dark);
+    border-radius: var(--radius-pill);
+    padding: 4px 10px;
+    font-size: .72rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* Alvo de toque: o chip de 22px do desktop é pequeno demais para o dedo. */
+  .mkt-sort-dir {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    border: 1px solid var(--teal);
+    background: var(--teal-soft);
+    color: var(--teal-dark);
+    border-radius: var(--radius-pill);
+    font-size: .78rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .mkt-sort-select:focus-visible,
+  .mkt-sort-dir:focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 1px;
+  }
+}
+
 /* ── Grid inferior: SC pages + funil ──────────────────────────────────────
    auto-fit: quando o painel do funil está oculto (GA4 sem dados), o painel
    de páginas ocupa a largura inteira em vez de deixar meia linha vazia. */

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css?v=2026100101" />
+  <link rel="stylesheet" href="./css/style.css?v=2026101101" />
   <!-- CRM Pacientes e Acompanhamento (M19): workspace canônico único. -->
   <link rel="stylesheet" href="./css/crm-workspace.css?v=2026072402" />
   <!-- M24C — fila médica atribuída e fluxo clínico autenticado. -->
@@ -527,6 +527,30 @@
               <div class="panel-header">
                 <h3>Termos de busca</h3>
                 <span id="seoListSubtitle">Modelo para Search Console</span>
+                <!-- M26.30 — ordenação APENAS de apresentação. Reordena a lista
+                     que o Search Console já devolveu no snapshot; não pede dado
+                     novo, não altera o snapshot e não mexe no período/filtros.
+                     Só aparece quando há consultas reais (o modelo
+                     demonstrativo não traz CTR, então ordenar por CTR ali
+                     seria inventar métrica). -->
+                <div class="mkt-sort" id="seoSort" hidden>
+                  <span class="mkt-sort-label" id="seoSortLabel">Ordenar por:</span>
+                  <div class="mkt-sort-group" role="group" aria-labelledby="seoSortLabel">
+                    <button type="button" class="mkt-sort-btn" data-mkt-sort="impressions">Impressões<span class="mkt-sort-arrow" aria-hidden="true"></span></button>
+                    <button type="button" class="mkt-sort-btn" data-mkt-sort="clicks">Cliques<span class="mkt-sort-arrow" aria-hidden="true"></span></button>
+                    <button type="button" class="mkt-sort-btn" data-mkt-sort="ctr">CTR<span class="mkt-sort-arrow" aria-hidden="true"></span></button>
+                    <button type="button" class="mkt-sort-btn" data-mkt-sort="avgPosition">Posição<span class="mkt-sort-arrow" aria-hidden="true"></span></button>
+                  </div>
+                  <!-- Fallback compacto: em tela estreita os quatro botões não
+                       caberiam no cabeçalho sem quebrar em duas linhas. -->
+                  <select class="mkt-sort-select" id="seoSortSelect" aria-labelledby="seoSortLabel">
+                    <option value="impressions">Impressões</option>
+                    <option value="clicks">Cliques</option>
+                    <option value="ctr">CTR</option>
+                    <option value="avgPosition">Posição</option>
+                  </select>
+                  <button type="button" class="mkt-sort-dir" id="seoSortDir"></button>
+                </div>
               </div>
               <div id="seoList" class="mkt-mini-list"></div>
               <button class="mkt-more-btn" id="seoMoreBtn" hidden>Ver mais ↓</button>
@@ -976,7 +1000,7 @@
   <script src="./js/today-actions.js?v=2026070803"></script>
   <script src="./js/espirometria-financeiro.js?v=2026070902"></script>
   <script src="./js/marketing-freshness.js?v=2026080101"></script>
-  <script src="./js/app.js?v=2026100403"></script>
+  <script src="./js/app.js?v=2026101101"></script>
   <!-- Apresentação canônica de status de atendimento (M20): formatador
        ÚNICO usado por Central, CRM, linha do tempo, listas, filtros e
        inspeção técnica. Sem defer: precisa existir antes dos módulos. -->

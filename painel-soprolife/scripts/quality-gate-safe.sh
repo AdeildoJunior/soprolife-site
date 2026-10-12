@@ -62,6 +62,7 @@ run "node --check test-m25-18-download-e2e.js" node --check painel-soprolife/scr
 run "node --check test-m24a-browser-e2e.js"  node --check painel-soprolife/scripts/test-m24a-browser-e2e.js
 run "node --check test-m25-26-fluxo-espirometria.js" node --check painel-soprolife/scripts/test-m25-26-fluxo-espirometria.js
 run "node --check test-m26-20-ipanema-render.js" node --check painel-soprolife/scripts/test-m26-20-ipanema-render.js
+run "node --check test-m26-30-ordenacao-termos-busca.js" node --check painel-soprolife/scripts/test-m26-30-ordenacao-termos-busca.js
 
 secao "2/10 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
@@ -152,6 +153,8 @@ run "test-m26-20-ipanema-pastore (bloco Pastore Ipanema)" \
   python3 painel-soprolife/scripts/test-m26-20-ipanema-pastore.py
 run "test-m26-20-ipanema-render (painel JS)" \
   node painel-soprolife/scripts/test-m26-20-ipanema-render.js
+run "test-m26-30-ordenacao-termos-busca (painel JS)" \
+  node painel-soprolife/scripts/test-m26-30-ordenacao-termos-busca.js
 run "bash -n soprolife-operational-refresh"  bash -n painel-soprolife/scripts/soprolife-operational-refresh.sh
 run "bash -n install-operational-refresh"    bash -n painel-soprolife/scripts/install-operational-refresh.sh
 run "bash -n uninstall-operational-refresh"  bash -n painel-soprolife/scripts/uninstall-operational-refresh.sh

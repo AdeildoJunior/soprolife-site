@@ -31,6 +31,10 @@ const state = {
   crmContatosB2B: [],
   followupClinicasSummary: null,
   crmReportFilters: null,
+  // M26.30 — ordenação da lista "Termos de busca" (só apresentação).
+  // Padrão de abertura: impressões, maior primeiro.
+  mktSeoSort: { key: "impressions", dir: "desc" },
+  mktSeoExpandido: false,
   parceriaPastore: null,
   auditoria: null,
   saudeOperacional: null,
@@ -3390,46 +3394,220 @@ function mktMiniRow(labelHtml, chips, barVal, barMax, tip) {
   </div>`;
 }
 
+// ─── Termos de busca — ordenação de APRESENTAÇÃO (M26.30) ───────────────────
+// O Search Console devolve as consultas na ordem dele (cliques primeiro).
+// Para análise SEO a medida de visibilidade é a impressão: é ela que revela o
+// termo muito exibido e pouco clicado. Então o painel abre em impressões ↓.
+//
+// Isto reordena APENAS o que já veio no snapshot: nada é pedido à API, o
+// snapshot não é alterado (a lista é copiada antes de ordenar) e período,
+// filtros e KPIs continuam exatamente como estavam.
+const MKT_SEO_SORTS = {
+  impressions: { rotulo: "Impressões", dirPadrao: "desc" },
+  clicks:      { rotulo: "Cliques",    dirPadrao: "desc" },
+  ctr:         { rotulo: "CTR",        dirPadrao: "desc" },
+  // Posição menor é melhor: 1 é o primeiro resultado do Google.
+  avgPosition: { rotulo: "Posição",    dirPadrao: "asc"  },
+};
+
+// Desempate pedido pelo negócio: impressões → cliques → CTR (e posição por
+// último). Vale para qualquer critério primário; apenas o primário obedece ao
+// sentido escolhido pelo operador — o desempate é sempre "melhor primeiro",
+// senão inverter o sentido embaralharia a cauda longa de empates.
+const MKT_SEO_DESEMPATE = ["impressions", "clicks", "ctr", "avgPosition"];
+
+function mktSeoValor(q, chave) {
+  const v = Number(q?.[chave]);
+  return Number.isFinite(v) ? v : null;
+}
+
+function mktSeoSortAtual() {
+  const atual = state.mktSeoSort;
+  const key = MKT_SEO_SORTS[atual?.key] ? atual.key : "impressions";
+  const dir = atual?.dir === "asc" || atual?.dir === "desc"
+    ? atual.dir
+    : MKT_SEO_SORTS[key].dirPadrao;
+  return { key, dir };
+}
+
+function mktSeoOrdenar(queries, chave, dir) {
+  const primaria = MKT_SEO_SORTS[chave] ? chave : "impressions";
+  const ordem = [primaria, ...MKT_SEO_DESEMPATE.filter((k) => k !== primaria)];
+  const inverter = dir !== MKT_SEO_SORTS[primaria].dirPadrao;
+  return [...queries].sort((a, b) => {
+    for (const k of ordem) {
+      const va = mktSeoValor(a, k);
+      const vb = mktSeoValor(b, k);
+      if (va === null || vb === null) {
+        // Métrica ausente nunca passa à frente de quem tem dado, em nenhum
+        // dos dois sentidos — e não inverte com o botão.
+        if (va === vb) continue;
+        return va === null ? 1 : -1;
+      }
+      if (va === vb) continue;
+      const melhorPrimeiro = k === "avgPosition" ? va - vb : vb - va;
+      return (k === primaria && inverter) ? -melhorPrimeiro : melhorPrimeiro;
+    }
+    // Empate nas quatro métricas é a cauda longa real (1 impressão, 0 clique):
+    // a ordem alfabética mantém a lista estável entre renderizações.
+    return String(a.query || "").localeCompare(String(b.query || ""), "pt-BR");
+  });
+}
+
+function mktSeoAplicarSort(chave) {
+  if (!MKT_SEO_SORTS[chave]) return;
+  const atual = mktSeoSortAtual();
+  // Clicar no critério já ativo inverte o sentido — é assim que asc/desc
+  // existe no desktop sem acrescentar mais um controle ao cabeçalho.
+  const dir = chave === atual.key
+    ? (atual.dir === "desc" ? "asc" : "desc")
+    : MKT_SEO_SORTS[chave].dirPadrao;
+  state.mktSeoSort = { key: chave, dir };
+  renderMktSeoList();
+}
+
+function mktSeoInverterSort() {
+  const atual = mktSeoSortAtual();
+  state.mktSeoSort = { key: atual.key, dir: atual.dir === "desc" ? "asc" : "desc" };
+  renderMktSeoList();
+}
+
+function mktSeoRenderControles() {
+  const box = document.querySelector("#seoSort");
+  if (!box) return;
+  box.hidden = false;
+
+  const { key, dir } = mktSeoSortAtual();
+  const seta = dir === "desc" ? "↓" : "↑";
+
+  (box.querySelectorAll(".mkt-sort-btn") || []).forEach((botao) => {
+    const chave = botao.dataset.mktSort;
+    if (!MKT_SEO_SORTS[chave]) return;
+    const ativo = chave === key;
+    botao.classList.toggle("is-active", ativo);
+    botao.setAttribute("aria-pressed", ativo ? "true" : "false");
+    const flecha = botao.querySelector(".mkt-sort-arrow");
+    if (flecha) flecha.textContent = ativo ? seta : "";
+    botao.title = ativo
+      ? `Ordenado por ${MKT_SEO_SORTS[chave].rotulo} — clique para inverter`
+      : `Ordenar por ${MKT_SEO_SORTS[chave].rotulo}`;
+    if (!botao.dataset.mktSortBound) {
+      botao.dataset.mktSortBound = "1";
+      botao.addEventListener("click", () => mktSeoAplicarSort(chave));
+    }
+  });
+
+  const select = box.querySelector("#seoSortSelect");
+  if (select) {
+    select.value = key;
+    if (!select.dataset.mktSortBound) {
+      select.dataset.mktSortBound = "1";
+      // O select não expressa sentido: ele só troca de critério (voltando ao
+      // padrão daquele critério) e o botão de seta ao lado faz a inversão.
+      select.addEventListener("change", () => {
+        const escolhida = select.value;
+        if (!MKT_SEO_SORTS[escolhida]) {
+          // Valor fora do contrato: nada é reordenado e o select volta a
+          // mostrar a ordenação que está de fato em vigor.
+          mktSeoRenderControles();
+          return;
+        }
+        state.mktSeoSort = {
+          key: escolhida, dir: MKT_SEO_SORTS[escolhida].dirPadrao,
+        };
+        renderMktSeoList();
+      });
+    }
+  }
+
+  const botaoDir = box.querySelector("#seoSortDir");
+  if (botaoDir) {
+    botaoDir.textContent = seta;
+    const dica = dir === "desc"
+      ? "Maior primeiro — clique para inverter"
+      : "Menor primeiro — clique para inverter";
+    botaoDir.title = dica;
+    botaoDir.setAttribute("aria-label", dica);
+    if (!botaoDir.dataset.mktSortBound) {
+      botaoDir.dataset.mktSortBound = "1";
+      botaoDir.addEventListener("click", mktSeoInverterSort);
+    }
+  }
+}
+
 function renderMktSeoList() {
   const queries = state.marketingSeo?.searchConsole?.topQueries;
   const list    = document.querySelector("#seoList");
   const sub     = document.querySelector("#seoListSubtitle");
   const btn     = document.querySelector("#seoMoreBtn");
+  const box     = document.querySelector("#seoSort");
   if (!list) return;
 
-  if (!queries?.length) { renderSeoList(); return; }
+  if (!queries?.length) {
+    // Sem consultas reais a lista cai no modelo demonstrativo, que não traz
+    // CTR — oferecer "ordenar por CTR" ali seria prometer métrica inexistente.
+    if (box) box.hidden = true;
+    renderSeoList();
+    return;
+  }
 
   if (sub) sub.textContent = "Search Console · dados reais";
 
-  const maxImpr = Math.max(...queries.map((q) => q.impressions), 1);
+  const { key, dir } = mktSeoSortAtual();
+  const ordenadas = mktSeoOrdenar(queries, key, dir);
+
+  // A barra acompanha a métrica ordenada: presa às impressões, uma lista
+  // ordenada por cliques pareceria fora de ordem. Posição não tem comprimento
+  // que signifique algo, então nela a barra volta às impressões.
+  const chaveBarra = key === "avgPosition" ? "impressions" : key;
+  const maxBarra = ordenadas.reduce(
+    (max, q) => Math.max(max, mktSeoValor(q, chaveBarra) ?? 0), 0,
+  ) || 1;
 
   function buildRows(items) {
-    return items.map((q) => mktMiniRow(
-      escapeHtml(q.query),
-      [
+    return items.map((q) => {
+      const chips = [
         `${q.impressions.toLocaleString("pt-BR")} impr.`,
         `${q.clicks} cliques`,
         `<span class="tt" data-tip="Click Through Rate — percentual de cliques em relação às impressões.">CTR</span> ${(q.ctr * 100).toFixed(1)}%`,
-      ],
-      q.impressions, maxImpr
-    )).join("");
+      ];
+      // Ordenar por um número que a linha não mostra deixaria a lista
+      // inexplicável — a posição aparece só quando é o critério ativo.
+      if (key === "avgPosition") {
+        const pos = mktSeoValor(q, "avgPosition");
+        chips.push(`pos. ${pos === null ? "N/D" : pos.toLocaleString("pt-BR", {
+          minimumFractionDigits: 1, maximumFractionDigits: 1,
+        })}`);
+      }
+      return mktMiniRow(
+        escapeHtml(q.query), chips,
+        mktSeoValor(q, chaveBarra) ?? 0, maxBarra,
+      );
+    }).join("");
   }
 
-  const top5 = queries.slice(0, 5);
-  const rest  = queries.slice(5);
+  // Com o 4º chip a linha fica apertada na coluna estreita do Marketing; a
+  // classe deixa o CSS proteger a largura mínima do termo só nesse caso.
+  list.classList.toggle("is-sorted-by-position", key === "avgPosition");
 
-  list.innerHTML = buildRows(top5);
+  const top5 = ordenadas.slice(0, 5);
+  const rest = ordenadas.slice(5);
 
-  if (rest.length > 0 && btn) {
-    btn.hidden = false;
-    btn.textContent = `Ver mais ${rest.length} termos ↓`;
-    let expanded = false;
-    btn.onclick = () => {
-      expanded = !expanded;
-      list.innerHTML = expanded ? buildRows(top5) + buildRows(rest) : buildRows(top5);
-      btn.textContent = expanded ? "Recolher ↑" : `Ver mais ${rest.length} termos ↓`;
-    };
+  // "Ver mais" guardado no state: trocar a ordenação não recolhe a lista que
+  // o operador acabou de abrir.
+  function pintar() {
+    const aberto = Boolean(state.mktSeoExpandido) && rest.length > 0;
+    list.innerHTML = aberto ? buildRows(ordenadas) : buildRows(top5);
+    if (!btn) return;
+    btn.hidden = rest.length === 0;
+    btn.textContent = aberto ? "Recolher ↑" : `Ver mais ${rest.length} termos ↓`;
   }
+
+  if (btn) {
+    btn.onclick = () => { state.mktSeoExpandido = !state.mktSeoExpandido; pintar(); };
+  }
+  pintar();
+  mktSeoRenderControles();
 }
 
 function renderMktPages() {
