@@ -92,7 +92,7 @@ const ABAS = ['resumo', 'recorrentes', 'equipamentos', 'parcelamentos', 'socios'
       const norm = (t) => t.replace(/\u00a0/g, ' ');
       const achatado = norm(texto);
       const precisa = [
-        'R$ 2.540,00',    // Adeildo desembolsado
+        'R$ 8.324,64',    // Adeildo desembolsado (com MIR e seringa confirmados na M26.21A)
         'R$ 10.536,12',   // Faustino desembolsado
         'R$ 1.500,00',    // Koko pago Adeildo / pendente
         'R$ 6.500,00',    // Koko pago Faustino
@@ -103,7 +103,9 @@ const ABAS = ['resumo', 'recorrentes', 'equipamentos', 'parcelamentos', 'socios'
         'R$ 50,06',       // impostos
         'R$ 130,00',      // Mais Laudo
         'R$ 1.573,80',    // compromisso mensal Adeildo
-        'aguardando confirmação',
+        'R$ 4.985,84',    // MIR: 4 parcelas confirmadas
+        'R$ 798,80',      // seringa: 4 parcelas confirmadas
+        'R$ 8.676,96',    // saldo pendente de Adeildo após a confirmação
       ];
       if (process.env.M26_21_DEBUG) console.log(`[dbg] ${engine} ${width} texto=${texto.length} :: ${texto.slice(0,300)}`);
       for (const t of precisa) {
@@ -134,6 +136,20 @@ const ABAS = ['resumo', 'recorrentes', 'equipamentos', 'parcelamentos', 'socios'
             `${engine} ${width}: "${nome}" exibiu mensal R$ 0,00 em vez de "variável" — ${l.trim()}`);
           checks += 1;
         }
+      }
+      // Nenhuma PARCELA pode mais aparecer com o status "aguardando confirmação":
+      // a M26.21A confirmou as 4 vencidas de cada parcelamento do cartão. A frase
+      // segue legítima na nota de política, que vale para as parcelas futuras —
+      // por isso a checagem olha as linhas do histórico, não a aba inteira.
+      const linhasParcela = await page.evaluate(() => {
+        document.querySelectorAll('.ci-pane').forEach((p) => p.toggleAttribute('hidden', p.id !== 'ci-parcelamentos'));
+        return [...document.querySelectorAll('#ci-parcelamentos tbody tr')].map((tr) => tr.innerText);
+      });
+      assert(linhasParcela.length > 0, `${engine} ${width}: histórico de parcelas vazio`);
+      for (const l of linhasParcela) {
+        assert(!l.includes('aguardando confirmação'),
+          `${engine} ${width}: parcela ainda em "aguardando confirmação" — ${l.replace(/\s+/g, ' ').trim()}`);
+        checks += 1;
       }
       assert.equal(errors.length, 0, `${engine} ${width}: erro de JS — ${errors.join(' | ')}`);
       checks += 1;

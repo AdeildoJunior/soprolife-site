@@ -117,21 +117,38 @@ def main():
         check(it["dia_vencimento_fatura"] == 10, "%s: fatura do cartao vence dia 10" % pid)
         check(p["valor_parcela"] == vp, "%s: parcela R$ %.2f" % (pid, vp))
         check(p["parcelas_total"] == n, "%s: %d parcelas" % (pid, n))
-        check(p["parcelas_pagas"] == 0,
-              "%s: NENHUMA parcela marcada paga sem confirmacao financeira" % pid)
-        check(p["parcelas_aguardando_confirmacao"] == 4,
-              "%s: 4 parcelas vencidas (jul..out/2026) aguardando confirmacao" % pid)
-        check(p["total_pago"] == 0, "%s: total pago R$ 0,00 (nada confirmado)" % pid)
-        check(p["saldo_restante"] == round(n * vp, 2),
-              "%s: saldo restante = todas as parcelas" % pid)
+        # M26.21A — o socio confirmou que as faturas do cartao sao pagas
+        # automaticamente no dia 10, entao as 4 vencidas (jul..out/2026) passaram
+        # a 'pago'. As 6 futuras seguem 'pendente' e NAO viram pagas por ter
+        # chegado o dia 10 — a trava segue valendo para elas.
+        check(p["parcelas_pagas"] == 4,
+              "%s: 4 parcelas pagas (confirmadas pelo socio na M26.21A)" % pid)
+        check(p["parcelas_aguardando_confirmacao"] == 0,
+              "%s: nenhuma parcela segue aguardando confirmacao" % pid)
+        check(p["total_pago"] == round(4 * vp, 2),
+              "%s: total pago = 4 x %.2f" % (pid, vp))
+        check(p["saldo_restante"] == round((n - 4) * vp, 2),
+              "%s: saldo restante = 6 parcelas futuras" % pid)
+        futuras = [h for h in p["historico"] if h["status"] == "pendente"]
+        check(len(futuras) == 6, "%s: 6 parcelas futuras intactas" % pid)
+        check(all(h["data_pagamento"] is None for h in futuras),
+              "%s: parcela futura sem data de pagamento fabricada" % pid)
+        pagas = [h for h in p["historico"] if h["status"] == "pago"]
+        check(all(h["data_pagamento"] == h["vencimento"] for h in pagas),
+              "%s: data de pagamento = vencimento (fatura no dia 10)" % pid)
+        check(sorted(h["competencia"] for h in pagas)
+              == ["ago/2026", "jul/2026", "out/2026", "set/2026"],
+              "%s: competencias pagas = jul..out/2026, preservadas" % pid)
         check(p["proxima_competencia"] == "nov/2026", "%s: proxima competencia nov/2026" % pid)
         check(p["proximo_vencimento"] == "2026-11-10", "%s: proximo vencimento 10/11/2026" % pid)
         check(all(h["vencimento"].endswith("-10") for h in p["historico"]),
               "%s: todo vencimento no dia 10" % pid)
-        check(all(h["status"] != "pago" for h in p["historico"]),
-              "%s: historico sem nenhuma parcela 'paga' fabricada" % pid)
-        check(rat[pid]["pendente_adeildo"] == round(n * vp, 2),
-              "%s: saldo atribuido a Adeildo" % pid)
+        check(rat[pid]["pago_adeildo"] == round(4 * vp, 2),
+              "%s: pago por Adeildo = 4 x %.2f" % (pid, vp))
+        check(rat[pid]["pago_faustino"] == 0,
+              "%s: Faustino nao pagou nada deste item" % pid)
+        check(rat[pid]["pendente_adeildo"] == round((n - 4) * vp, 2),
+              "%s: saldo atribuido a Adeildo = 6 parcelas" % pid)
 
     print("\n== recorrentes: Workspace, Tailscale, Hostinger ==")
     for rid, mensal in (("ws-001", 32.72), ("ts-001", 42.00), ("vps-001", 52.92)):
@@ -154,8 +171,9 @@ def main():
           "CREMERJ: nao reatribuido a Adeildo")
 
     print("\n== totais por socio ==")
-    check(soc[A]["total_desembolsado"] == 2540.00,
-          "Adeildo: total desembolsado R$ 2.540,00 (contabilidade 1.040 + Koko 1.500)")
+    check(soc[A]["total_desembolsado"] == 8324.64,
+          "Adeildo: total desembolsado R$ 8.324,64 (contabilidade 1.040 + Koko 1.500 "
+          "+ MIR 4.985,84 + seringa 798,80)")
     check(soc[F]["total_desembolsado"] == 10536.12,
           "Faustino: total desembolsado R$ 10.536,12")
     check(round(soc[A]["total_desembolsado"] + soc[F]["total_desembolsado"], 2)
@@ -167,8 +185,8 @@ def main():
           "Faustino: sem compromisso mensal fixo individual")
     check(summ["compromisso_mensal_compartilhado"] == 760.00,
           "compromisso compartilhado R$ 760,00 (contabilidade 260 + Koko 500)")
-    check(soc[A]["saldo_pendente_atribuido"] == 14461.60,
-          "Adeildo: saldo pendente atribuido R$ 14.461,60 (MIR + seringa)")
+    check(soc[A]["saldo_pendente_atribuido"] == 8676.96,
+          "Adeildo: saldo pendente atribuido R$ 8.676,96 (6 parcelas de MIR + 6 da seringa)")
     check(soc[F]["saldo_pendente_atribuido"] == 0.0,
           "Faustino: sem saldo pendente atribuido")
     check(summ["pendente_sem_pagador"] == 1500.00, "pendente sem pagador R$ 1.500,00")
@@ -234,6 +252,26 @@ def main():
         break
     check(set(aud.get("itens_antes", [])) <= set(aud.get("itens_depois", [])),
           "auditoria: nenhum item do cadastro anterior desapareceu")
+
+    print("\n== auditoria complementar M26.21A ==")
+    comps = aud.get("complementos") or []
+    check(len(comps) >= 1, "auditoria: complemento registrado")
+    c21a = next((x for x in comps if x.get("missao") == "M26.21A"), None)
+    check(c21a is not None, "auditoria: complemento M26.21A presente")
+    if c21a:
+        check(c21a["parcelas_atualizadas"] == 8,
+              "M26.21A: 8 parcelas atualizadas (4 MIR + 4 seringa)")
+        check(c21a["total_adicional_confirmado"] == 5784.64,
+              "M26.21A: total adicional R$ 5.784,64")
+        check("confirmacao explicita do socio" in c21a["origem"],
+              "M26.21A: origem = confirmacao explicita do socio")
+        check(bool(c21a["usuario"]) and bool(c21a["registrado_em"]),
+              "M26.21A: usuario e data/hora registrados")
+        check(round(sum(r["valor"] for r in c21a["registros"]), 2) == 5784.64,
+              "M26.21A: registros somam o total adicional")
+        check(all(r["status_antes"] == "vencido_aguardando_confirmacao"
+                  and r["status"] == "pago" for r in c21a["registros"]),
+              "M26.21A: cada registro guarda o status anterior e o novo")
 
     print("\n== seguranca do resumo publico ==")
     blob = json.dumps(summ, ensure_ascii=False).lower()

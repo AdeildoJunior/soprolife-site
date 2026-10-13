@@ -290,3 +290,102 @@ conteúdo em disco na VPS está provado pelas 165 verificações executadas lá.
 4. Resolver a divergência de R$ 0,01 do MIR com a fatura real.
 5. Decidir sobre os 107 arquivos `root` no repositório da VPS.
 6. Resolver a numeração duplicada de "M26.21".
+
+---
+
+# Adendo M26.21A — confirmação das faturas do cartão de Adeildo (2026-10-13)
+
+**Origem:** confirmação explícita do sócio — todas as faturas do cartão pessoal
+foram pagas automaticamente no dia 10.
+
+A M26.21 deixou de propósito as parcelas já vencidas em
+`vencido_aguardando_confirmacao`, porque o calendário era automático e a
+conciliação não. Essa confirmação é exatamente o dado que faltava, e por isso as
+parcelas vencidas passaram a `pago` — não por ter chegado o dia 10, mas porque o
+débito foi confirmado.
+
+## Parcelas atualizadas (8)
+
+| Item | Parcela | Competência | Vencimento | Valor | Status anterior → novo |
+|---|---|---|---|---|---|
+| MIR / Spirobank II Smart | 1/10 | jul/2026 | 10/07/2026 | R$ 1.246,46 | aguardando confirmação → **pago** |
+| MIR / Spirobank II Smart | 2/10 | ago/2026 | 10/08/2026 | R$ 1.246,46 | aguardando confirmação → **pago** |
+| MIR / Spirobank II Smart | 3/10 | set/2026 | 10/09/2026 | R$ 1.246,46 | aguardando confirmação → **pago** |
+| MIR / Spirobank II Smart | 4/10 | out/2026 | 10/10/2026 | R$ 1.246,46 | aguardando confirmação → **pago** |
+| Seringa MIR 3L | 1/10 | jul/2026 | 10/07/2026 | R$ 199,70 | aguardando confirmação → **pago** |
+| Seringa MIR 3L | 2/10 | ago/2026 | 10/08/2026 | R$ 199,70 | aguardando confirmação → **pago** |
+| Seringa MIR 3L | 3/10 | set/2026 | 10/09/2026 | R$ 199,70 | aguardando confirmação → **pago** |
+| Seringa MIR 3L | 4/10 | out/2026 | 10/10/2026 | R$ 199,70 | aguardando confirmação → **pago** |
+
+Pagador de todas: **Adeildo**. A data de pagamento registrada é o **próprio
+vencimento**, porque o fato confirmado é "a fatura é debitada no dia 10" — não se
+inventou outra data. Competência e vencimento ficaram **intocados**.
+
+| | MIR | Seringa | Total |
+|---|---|---|---|
+| Parcelas confirmadas | 4 | 4 | 8 |
+| Total adicional | R$ 4.985,84 | R$ 798,80 | **R$ 5.784,64** |
+
+## Efeito nos agregados (recalculados, não digitados)
+
+| | antes (M26.21) | depois (M26.21A) |
+|---|---|---|
+| **Adeildo — total desembolsado** | R$ 2.540,00 | **R$ 8.324,64** |
+| Adeildo — saldo pendente atribuído | R$ 14.461,60 | **R$ 8.676,96** |
+| Faustino — total desembolsado | R$ 10.536,12 | R$ 10.536,12 (inalterado) |
+| Total desembolsado confirmado | R$ 13.076,12 | **R$ 18.860,76** |
+| MIR — parcela atual / pago / saldo | 0/10 · R$ 0,00 · R$ 12.464,60 | **4/10 · R$ 4.985,84 · R$ 7.478,76** |
+| Seringa — parcela atual / pago / saldo | 0/10 · R$ 0,00 · R$ 1.997,00 | **4/10 · R$ 798,80 · R$ 1.198,20** |
+| Pendências de cadastro | 4 | **3** |
+
+Compromisso mensal de Adeildo (R$ 1.573,80), bonificação do Koko (R$ 500,00),
+pendente sem pagador (R$ 1.500,00) e custo mensal atual (R$ 2.333,80) seguem
+inalterados.
+
+## O que NÃO mudou
+
+- **Parcelas futuras intocadas:** as 6 restantes de cada parcelamento seguem
+  `pendente`, sem data de pagamento. A trava continua valendo para elas — não
+  viram pagas por chegar o dia 10.
+- Workspace, Tailscale e Hostinger **não foram tocados** (seguem com desembolso
+  não confirmado, exibindo "—").
+- Koko, CREMERJ, contabilidade, impostos e Mais Laudo verificados **byte a byte**
+  como intocados.
+- Nenhum movimento criado ou removido: a contagem por item é idêntica
+  (MIR 10, seringa 10, Koko 20, contabilidade 10, impostos 3, Mais Laudo 6,
+  CREMERJ 1). Nenhuma duplicidade.
+- Nenhum valor de parcela alterado.
+
+A pendência `pend-004` ("confirmar na fatura quais parcelas foram debitadas")
+foi **fechada**, porque era exatamente este dado. O fechamento está registrado
+na auditoria; as outras três pendências permanecem.
+
+## Auditoria
+
+O bloco `auditoria` da M26.21 permanece **intacto** (verificado por teste). A
+confirmação entrou em `auditoria.complementos[]` como missão **M26.21A**, com
+origem, usuário responsável, data/hora, total adicional, as pendências fechadas
+e, para cada uma das 8 parcelas, o **status anterior e o novo**.
+
+Backup antes da escrita: `custos-investimentos.local.json.bak-m26-21a`
+(local e na VPS).
+
+## Testes
+
+| Suíte | Resultado |
+|---|---|
+| `m26-21a-confirmar-faturas-cartao.py` (dry-run) | 0 erros · travas de quantidade, competência e valor |
+| `test-custos-socios-m26-21.py` | **191/191** (eram 165) — local e na VPS |
+| `test-custos-socios-visual-m26-21.js` | **1356/1356** — chromium + firefox, 6 larguras, 6 abas |
+| `pii_guard.py --self-test` | 60/60 |
+| `check-access.sh` | OK, sem PII |
+| `test-command-center-visual.js` | OK |
+
+O teste visual passou a provar que **nenhuma linha do histórico de parcelas**
+exibe "aguardando confirmação" — checagem feita nas linhas da tabela, não na aba
+inteira, porque a frase segue legítima na nota de política que vale para as
+parcelas futuras.
+
+O script é **idempotente por construção**: ele só atua sobre parcelas em
+`vencido_aguardando_confirmacao` e aborta se a quantidade, as competências ou a
+soma não baterem exatamente com o fato informado.
