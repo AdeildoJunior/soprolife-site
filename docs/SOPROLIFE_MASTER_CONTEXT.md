@@ -221,6 +221,29 @@ sem ele, cai na data do serviço).
 - Correção monetária = novo lançamento auditável; nunca sobrescrever valor.
 - Competência exibida usa `today_local()` (fuso de Brasília), nunca UTC.
 
+### 8.1 Custos & Investimentos / rateio dos sócios (M26.21)
+
+- Fonte: `painel-soprolife/data-private/custos-investimentos.local.json` —
+  **livro-caixa único por item** (`movimentos`), gitignored, fora do PostgreSQL.
+- O resumo que o painel lê (`data/custos-investimentos-summary.local.json`) é
+  **gerado**, nunca editado à mão:
+  `python3 painel-soprolife/scripts/generate-custos-investimentos.py`.
+  Todo agregado (totais, rateio por sócio, rateio por item, parcelamentos) é
+  **derivado** dos movimentos. Mudou um movimento ⇒ rodar o gerador.
+- Status de movimento: `pago` (saída de caixa confirmada), `pendente`,
+  `vencido_aguardando_confirmacao` (o vencimento passou e **ninguém confirmou o
+  débito** — nunca "pago" por ter chegado o dia do vencimento) e
+  `baixada_por_desconto` (posição liquidada **sem** saída de caixa).
+- `responsavel` = quem administra o item; **quem pagou** vem do `pagador` de
+  cada movimento. Nunca inferir pagador do responsável nem de texto livre.
+- Bonificação/desconto **não é pagamento**: vai para
+  `desconto_ou_baixa_sem_saida_caixa`, derivado do `valor_nominal` dos
+  movimentos `baixada_por_desconto` (cuja saída de caixa é 0,00).
+- Item com `historico_confirmado: false` emite `null` em `pago` **e** em
+  `pendente` — o painel mostra "—". `R$ 0,00` só quando o zero é fato confirmado.
+- Os dois `.local.json` são gitignored: o deploy do Git **não** os atualiza. Na
+  VPS, rodar o reconciliador/gerador lá (ambos versionados) depois do pull.
+
 ## 9. Laudos
 
 - **Fluxo:** técnico registra exame + PDF MIR → atribuição à médica → médica
