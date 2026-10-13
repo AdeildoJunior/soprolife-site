@@ -5197,22 +5197,46 @@ function renderCustosInvestimentos() {
   }
 
   const safeLabel = document.querySelector("#ciSafeLabel");
-  if (safeLabel) safeLabel.textContent = "Dados locais — jun/2026";
+  if (safeLabel) safeLabel.textContent = `Dados locais — ${ci.competencia_referencia || "—"}`;
+
+  // M26.21 — todo card é derivado do resumo gerado a partir do livro-caixa.
+  // Nenhum rótulo cita item por nome fixo: as dicas são montadas a partir dos
+  // próprios itens, para não mentir quando o cadastro mudar.
+  const nomesPorCategoria = (cat) => ci.itens.filter((it) => it.categoria === cat).map((it) => it.nome);
+  const dicaEquip = nomesPorCategoria("Equipamento").join(" · ") || "nenhum item";
+  const dicaRecorrente = ci.itens
+    .filter((it) => it.valor_mensal && it.categoria !== "Equipamento")
+    .map((it) => it.nome).join(" · ") || "nenhum item";
 
   statsContainer.innerHTML = [
     { key: "custosMensais",             label: "Custo mensal atual",        value: fmtBRL(ci.total_mensal_atual),              hint: "recorrentes + infraestrutura + parcelas",     extraClass: "accent-teal"   },
-    { key: "investimentosEquipamentos", label: "Investido em equipamentos", value: fmtBRL(ci.total_investido_equipamentos),     hint: "Spirobank, Seringa e Koko",                   extraClass: "accent-navy"   },
+    { key: "ciDesembolsadoTotal",       label: "Desembolsado confirmado",   value: fmtBRL(ci.total_desembolsado_confirmado),   hint: "saída de caixa já confirmada pelos sócios",   extraClass: "accent-teal"   },
+    { key: "investimentosEquipamentos", label: "Investido em equipamentos", value: fmtBRL(ci.total_investido_equipamentos),     hint: dicaEquip,                                     extraClass: "accent-navy"   },
     { key: "ciParcelasMensais",         label: "Parcelas mensais",          value: fmtBRL(ci.parcelas_mensais_equipamentos),    hint: "Equipamentos parcelados ativos",              extraClass: "accent-navy"   },
-    { key: "ciRecorrentesInfra",        label: "Recorrentes + infra/mês",   value: fmtBRL(ci.total_mensal_recorrente),          hint: "Workspace · Tailscale · Hostinger",           extraClass: "accent-teal"   },
-    { key: "ciItensCadastrados",        label: "Itens cadastrados",         value: String(ci.itens_ativos),                    hint: "Adeildo e Faustino",                          extraClass: "accent-teal"   },
-    { key: "ciPendenciasCadastro",      label: "Pendências de cadastro",    value: String(ci.pendencias_cadastro),             hint: "Regularização + parcelas Koko sem pagador",   extraClass: "accent-warn"   },
+    { key: "ciRecorrentesInfra",        label: "Recorrentes + infra/mês",   value: fmtBRL(ci.total_mensal_recorrente),          hint: dicaRecorrente,                                extraClass: "accent-teal"   },
+    { key: "ciBonificacao",             label: "Bonificação / desconto",    value: fmtBRL(ci.total_bonificacao_sem_caixa),     hint: "baixa sem saída de caixa — não é pagamento",  extraClass: "accent-navy"   },
+    { key: "ciItensCadastrados",        label: "Itens cadastrados",         value: String(ci.itens_ativos),                    hint: "no controle de custos",                       extraClass: "accent-teal"   },
+    { key: "ciPendenciasCadastro",      label: "Pendências de cadastro",    value: String(ci.pendencias_cadastro),             hint: "itens aguardando dado ou confirmação",        extraClass: "accent-warn"   },
   ].map((c) => statCardHtml("ci-stat-card", c)).join("");
+
+  // M26.21 — rótulos legíveis para os status do livro-caixa. "vencido
+  // aguardando confirmação" é deliberadamente distinto de "pago": o
+  // vencimento passou, mas ninguém confirmou o débito.
+  const STATUS_LABEL = {
+    pago: "pago",
+    pendente: "pendente",
+    vencido_aguardando_confirmacao: "aguardando confirmação",
+    baixada_por_desconto: "baixa por bonificação",
+    ativo: "ativo",
+    parcelado: "parcelado",
+  };
 
   function statusBadge(status) {
     const cls = status === "ativo" || status === "pago" ? "ci-badge-ativo"
               : status === "parcelado" ? "ci-badge-parcelado"
+              : status === "baixada_por_desconto" ? "ci-badge-equipamento"
               : "ci-badge-pendente";
-    return `<span class="ci-badge ${cls}">${escapeHtml(status)}</span>`;
+    return `<span class="ci-badge ${cls}">${escapeHtml(STATUS_LABEL[status] || status)}</span>`;
   }
 
   function catBadge(cat) {
@@ -5222,10 +5246,11 @@ function renderCustosInvestimentos() {
 
   function buildResumoPane() {
     const rows = ci.itens.map((it) => {
+      // M26.21 — progresso e saldo vêm DERIVADOS do livro-caixa, não de
+      // (total − pagas) × parcela: parcela bonificada liquida a posição sem
+      // saída de caixa, e parcela vencida sem confirmação continua no saldo.
       const parcProgress = it.parcelas_total != null ? `${it.parcelas_pagas}/${it.parcelas_total}` : "—";
-      const saldo = it.parcelas_total != null
-        ? fmtBRL((it.parcelas_total - it.parcelas_pagas) * it.valor_mensal)
-        : "—";
+      const saldo = it.saldo_restante != null ? fmtBRL(it.saldo_restante) : "—";
       const totalFmt = it.valor_total != null ? fmtBRL(it.valor_total) : "—";
       return `
         <tr>
@@ -5233,7 +5258,9 @@ function renderCustosInvestimentos() {
           <td>${catBadge(it.categoria)}</td>
           <td>${escapeHtml(it.responsavel)}</td>
           <td>${totalFmt}</td>
-          <td><strong>${fmtBRL(it.valor_mensal)}</strong></td>
+          <td>${it.valor_mensal != null
+                ? `<strong>${fmtBRL(it.valor_mensal)}</strong>`
+                : `<span style="color:var(--muted)">variável</span>`}</td>
           <td style="font-variant-numeric:tabular-nums">${parcProgress}</td>
           <td>${saldo}</td>
           <td>${escapeHtml(it.inicio)}</td>
@@ -5297,20 +5324,29 @@ function renderCustosInvestimentos() {
   }
 
   function buildRecorrentesPane() {
-    const itens = ci.itens.filter((it) => it.categoria === "Recorrente" || it.categoria === "Infraestrutura");
-    const total = itens.reduce((s, it) => s + it.valor_mensal, 0);
+    // M26.21 — passa a incluir Tributo e Serviço (impostos e Mais Laudo), que
+    // são custos correntes de valor variável: antes ficavam fora desta aba.
+    const CATS = ["Recorrente", "Infraestrutura", "Tributo", "Serviço"];
+    const itens = ci.itens.filter((it) => CATS.includes(it.categoria));
+    const total = itens.reduce((s, it) => s + (it.valor_mensal || 0), 0);
 
     const rows = itens.map((it) => {
-      const isHist = it.id === "ws-001";
+      // A nota de "histórico a revisar" vem do próprio dado
+      // (historico_confirmado), não de um id fixo no código.
+      const mensalFmt = it.valor_mensal != null
+        ? `<strong>${fmtBRL(it.valor_mensal)}/mês</strong>`
+        : `<span style="color:var(--muted)">variável</span>`;
       return `
         <tr>
           <td>
             <strong>${escapeHtml(it.nome)}</strong>
-            ${isHist ? `<div class="ci-hist-note">Pagamentos históricos desde dez/2025 — número de parcelas a revisar</div>` : ""}
+            ${it.historico_confirmado === false
+              ? `<div class="ci-hist-note">Desembolso histórico não confirmado — o painel mostra “—”, não R$ 0,00</div>`
+              : ""}
           </td>
           <td>${catBadge(it.categoria)}</td>
           <td>${escapeHtml(it.responsavel)}</td>
-          <td><strong>${fmtBRL(it.valor_mensal)}/mês</strong></td>
+          <td>${mensalFmt}</td>
           <td>${escapeHtml(it.inicio)}</td>
           <td>${statusBadge(it.status)}</td>
         </tr>
@@ -5340,9 +5376,9 @@ function renderCustosInvestimentos() {
         </div>
       </article>
       <div class="finance-real-note" style="margin-top:.75rem">
-        Google Workspace: ativo desde dez/2025. O número exato de meses históricos pode ser ajustado a qualquer momento sem travar o sistema.
-        Tailscale: US$ 8/mês convertido e arredondado para R$ 42,00 para controle interno.
-        Hostinger VPS: plano anual de 12 meses — vencimento em jun/2027.
+        “Variável” = custo sem valor mensal fixo (recolhido por competência). Itens marcados como
+        desembolso não confirmado entram no compromisso mensal, mas não no total desembolsado —
+        em vez de um valor inventado, o painel mostra “—”.
       </div>
     `;
   }
@@ -5350,13 +5386,13 @@ function renderCustosInvestimentos() {
   function buildEquipamentosPane() {
     const equips = ci.itens.filter((it) => it.categoria === "Equipamento");
     const totalInv = equips.reduce((s, it) => s + (it.valor_total || 0), 0);
-    const totalParc = equips.reduce((s, it) => s + it.valor_mensal, 0);
+    const totalParc = equips.reduce((s, it) => s + (it.valor_mensal || 0), 0);
 
     const rows = equips.map((it) => {
       const parcPagas = it.parcelas_pagas || 0;
-      const parcTotal = it.parcelas_total || 10;
+      const parcTotal = it.parcelas_total || 0;
       const pct = parcTotal > 0 ? Math.round((parcPagas / parcTotal) * 100) : 0;
-      const saldo = fmtBRL((parcTotal - parcPagas) * it.valor_mensal);
+      const saldo = it.saldo_restante != null ? fmtBRL(it.saldo_restante) : "—";
       return `
         <tr>
           <td><strong>${escapeHtml(it.nome)}</strong><br><small style="color:var(--muted);font-size:.76rem">${escapeHtml(it.obs_curta || "")}</small></td>
@@ -5376,15 +5412,14 @@ function renderCustosInvestimentos() {
       `;
     }).join("");
 
-    const koko = equips.find((it) => it.id === "koko-001");
-    const kokoSaldo = koko && koko.parcelas_total != null
-      ? (koko.parcelas_total - koko.parcelas_pagas) * koko.valor_mensal
-      : null;
+    // M26.21 — nada de item fixo no código: os cards somam o que está no dado.
+    const saldoEquip = equips.reduce((s, it) => s + (it.saldo_restante || 0), 0);
+    const aguardando = equips.reduce((s, it) => s + (it.parcelas_aguardando_confirmacao || 0), 0);
 
     const equipStats = [
-      { key: "ciEquipTotalInvestido", extraClass: "accent-navy", label: "Total investido (equipamentos)", value: fmtBRL(totalInv), hint: "Spirobank, Seringa e Koko" },
-      { key: "ciEquipParcelaMensal",  extraClass: "accent-teal", label: "Parcela mensal total",           value: fmtBRL(totalParc), hint: "Equipamentos parcelados ativos" },
-      { key: "ciEquipPendente",       extraClass: "accent-warn", label: "Saldo pendente — Koko", value: kokoSaldo != null ? fmtBRL(kokoSaldo) : "Pendente", hint: kokoSaldo != null ? "6 parcelas sem data definida" : "Parcelas a cadastrar — Faustino" },
+      { key: "ciEquipTotalInvestido", extraClass: "accent-navy", label: "Total investido (equipamentos)", value: fmtBRL(totalInv),    hint: equips.map((it) => it.nome).join(" · ") || "nenhum item" },
+      { key: "ciEquipParcelaMensal",  extraClass: "accent-teal", label: "Parcela mensal total",           value: fmtBRL(totalParc),   hint: "Equipamentos parcelados ativos" },
+      { key: "ciEquipPendente",       extraClass: "accent-warn", label: "Saldo pendente",                 value: fmtBRL(saldoEquip),  hint: aguardando > 0 ? `${aguardando} parcela(s) aguardando confirmação financeira` : "posições ainda em aberto" },
     ];
 
     return `
@@ -5477,6 +5512,11 @@ function renderCustosInvestimentos() {
             <span>Compromisso mensal</span>
             <strong>${fmtBRL(s.compromisso_mensal)}</strong>
           </div>
+          ${ci.compromisso_mensal_compartilhado > 0 ? `
+          <div class="ci-socio-stat">
+            <span>+ compromisso compartilhado</span>
+            <strong>${fmtBRL(ci.compromisso_mensal_compartilhado)}</strong>
+          </div>` : ""}
           <div class="ci-socio-stat">
             <span>Saldo pendente atribuído</span>
             <strong>${fmtBRL(s.saldo_pendente_atribuido)}</strong>
@@ -5490,6 +5530,11 @@ function renderCustosInvestimentos() {
             <span>Itens vinculados</span>
             <strong>${s.itens_vinculados ?? "—"}</strong>
           </div>
+          ${s.itens_sem_historico_confirmado > 0 ? `
+          <div class="ci-socio-stat">
+            <span>Histórico não confirmado</span>
+            <strong>${s.itens_sem_historico_confirmado} item(ns)</strong>
+          </div>` : ""}
         </article>
       `;
     };
@@ -5498,31 +5543,40 @@ function renderCustosInvestimentos() {
     // C) Tabela detalhada por item, lida direto de rateio_itens — nunca
     // inferida do campo "responsavel". "—" quando o valor é desconhecido;
     // R$ 0,00 só quando o zero é um fato confirmado (ex.: 0/10 parcelas pagas).
-    const fmtOrDash = (v, suffix) => (v == null ? "—" : `${fmtBRL(v)}${suffix || ""}`);
+    const fmtOrDash = (v) => (v == null ? "—" : fmtBRL(v));
     const itemRows = itens.map((it) => {
-      const isMensal = it.tipo_valor === "mensal";
+      // M26.21 — "Pago" é ACUMULADO (soma dos movimentos pagos), por isso o
+      // sufixo "/mês" saiu: o valor mensal tem coluna própria. Antes, um item
+      // recorrente mostrava um mês como se fosse o total desembolsado.
       const totalFmt = it.valor_total != null ? fmtBRL(it.valor_total) : "—";
-      const pagoAFmt = fmtOrDash(it.pago_adeildo, isMensal ? "/mês" : "");
-      const pagoFFmt = fmtOrDash(it.pago_faustino, isMensal ? "/mês" : "");
+      const mensalFmt = it.valor_mensal != null
+        ? `${fmtBRL(it.valor_mensal)}/mês`
+        : (it.tipo_valor === "variavel" ? "variável" : "—");
 
+      const semDado = it.pendente_adeildo == null && it.pendente_faustino == null && it.pendente_sem_pagador == null;
       let saldoFmt = "—";
-      if (!isMensal) {
-        const semDado = it.pendente_adeildo == null && it.pendente_faustino == null && !it.pendente_sem_pagador;
-        if (!semDado) {
-          const total = (it.pendente_adeildo || 0) + (it.pendente_faustino || 0) + (it.pendente_sem_pagador || 0);
-          saldoFmt = fmtBRL(total);
-          if (it.pendente_sem_pagador > 0) {
-            saldoFmt += ` <small style="color:var(--warn,#b5730a)">(sem pagador: ${fmtBRL(it.pendente_sem_pagador)})</small>`;
-          }
+      if (!semDado) {
+        const total = (it.pendente_adeildo || 0) + (it.pendente_faustino || 0) + (it.pendente_sem_pagador || 0);
+        saldoFmt = fmtBRL(total);
+        if (it.pendente_sem_pagador > 0) {
+          saldoFmt += ` <small style="color:var(--warn,#b5730a)">(sem pagador: ${fmtBRL(it.pendente_sem_pagador)})</small>`;
         }
       }
+
+      // Bonificação/desconto nunca entra nas colunas de "pago": é baixa sem
+      // saída de caixa e tem coluna própria.
+      const bonifFmt = it.desconto_ou_baixa_sem_saida_caixa > 0
+        ? fmtBRL(it.desconto_ou_baixa_sem_saida_caixa)
+        : `<span style="color:var(--muted)">—</span>`;
 
       return `
         <tr>
           <td><strong>${escapeHtml(it.item)}</strong></td>
           <td>${totalFmt}</td>
-          <td>${pagoAFmt}</td>
-          <td>${pagoFFmt}</td>
+          <td><small style="color:var(--muted)">${escapeHtml(mensalFmt)}</small></td>
+          <td>${fmtOrDash(it.pago_adeildo)}</td>
+          <td>${fmtOrDash(it.pago_faustino)}</td>
+          <td>${bonifFmt}</td>
           <td>${saldoFmt}</td>
           <td><small style="color:var(--muted);font-size:.78rem">${escapeHtml(it.observacao_curta || "")}</small></td>
         </tr>
@@ -5541,8 +5595,10 @@ function renderCustosInvestimentos() {
               <tr>
                 <th>Item</th>
                 <th>Valor total</th>
+                <th>Mensal</th>
                 <th>Pago Adeildo</th>
                 <th>Pago Faustino</th>
+                <th>Bonificação</th>
                 <th>Saldo restante</th>
                 <th>Observação</th>
               </tr>
@@ -5553,7 +5609,18 @@ function renderCustosInvestimentos() {
       </article>
     `;
 
-    return `${chartsHtml}${cardsHtml}${itemTableHtml}`;
+    const notaHtml = `
+      <div class="finance-real-note" style="margin-top:.75rem">
+        “Pago” é o acumulado de saída de caixa confirmada, somado movimento a movimento —
+        nunca inferido pelo responsável do item. “—” significa dado não confirmado, não R$ 0,00.
+        “Bonificação” é baixa sem saída de caixa e por isso não entra em nenhuma coluna de pago.
+        ${ci.pendente_sem_pagador > 0
+          ? `Há ${fmtBRL(ci.pendente_sem_pagador)} em aberto sem pagador definido — não atribuído a nenhum sócio.`
+          : ""}
+      </div>
+    `;
+
+    return `${chartsHtml}${cardsHtml}${itemTableHtml}${notaHtml}`;
   }
 
   function renderCiSociosCharts() {
@@ -5649,28 +5716,132 @@ function renderCustosInvestimentos() {
     }
   }
 
+  // M26.21 — acompanhamento de parcelamento (MIR, seringa e Koko): parcela
+  // atual/total, valor, próxima competência e vencimento, responsável, total
+  // pago e saldo. O calendário é automatizado; a CONCILIAÇÃO não: parcela com
+  // vencimento no passado e sem confirmação financeira aparece como
+  // "aguardando confirmação", nunca como paga.
+  function buildParcelamentosPane() {
+    const parcs = Array.isArray(ci.parcelamentos) ? ci.parcelamentos : [];
+    if (parcs.length === 0) {
+      return `<p class="crm-report-chart-empty">Nenhum parcelamento cadastrado.</p>`;
+    }
+
+    const fmtData = (iso) => {
+      if (!iso) return "—";
+      const [a, m, d] = iso.split("-");
+      return `${d}/${m}/${a}`;
+    };
+
+    return parcs.map((p) => {
+      const linhas = (p.historico || []).map((h) => `
+        <tr>
+          <td style="font-variant-numeric:tabular-nums"><strong>${escapeHtml(h.ref)}</strong></td>
+          <td>${escapeHtml(h.competencia || "—")}</td>
+          <td>${fmtData(h.vencimento)}</td>
+          <td>${fmtData(h.data_pagamento)}</td>
+          <td>${h.status === "baixada_por_desconto"
+                ? `${fmtBRL(h.valor)} <small style="color:var(--muted)">(nominal ${fmtBRL(h.valor_nominal)})</small>`
+                : fmtBRL(h.valor)}</td>
+          <td>${escapeHtml(h.pagador || "—")}</td>
+          <td>${statusBadge(h.status)}</td>
+        </tr>
+      `).join("");
+
+      const resumoItens = [
+        ["Responsável", escapeHtml(p.responsavel || "—")],
+        ["Forma de pagamento", escapeHtml(p.forma_pagamento || "—")],
+        ["Parcela atual / total", `${escapeHtml(p.parcela_atual)} liquidada(s)`],
+        ["Valor da parcela", fmtBRL(p.valor_parcela)],
+        ["Próxima competência", escapeHtml(p.proxima_competencia || "sem data definida")],
+        ["Próximo vencimento", p.dia_vencimento
+          ? `${fmtData(p.proximo_vencimento)} (dia ${p.dia_vencimento})`
+          : fmtData(p.proximo_vencimento)],
+        ["Mais antiga em aberto", p.mais_antiga_em_aberto_competencia
+          ? `${escapeHtml(p.mais_antiga_em_aberto_ref)} · ${escapeHtml(p.mais_antiga_em_aberto_competencia)}`
+          : "sem data definida"],
+        ["Total já pago", fmtBRL(p.total_pago)],
+        ["Saldo restante", fmtBRL(p.saldo_restante)],
+      ];
+      if (p.bonificacao) resumoItens.push(["Bonificação / desconto", fmtBRL(p.bonificacao)]);
+      if (p.parcelas_aguardando_confirmacao) {
+        resumoItens.push(["Aguardando confirmação", `${p.parcelas_aguardando_confirmacao} parcela(s)`]);
+      }
+
+      return `
+        <article class="panel" style="margin-bottom:1rem">
+          <div class="panel-header">
+            <h3>${escapeHtml(p.item)}</h3>
+            <span>${fmtBRL(p.valor_total)} · ${p.parcelas_total}×</span>
+          </div>
+          <div class="ci-table-inner">
+            ${resumoItens.map(([k, v]) => `
+              <div class="ci-socio-stat"><span>${k}</span><strong>${v}</strong></div>
+            `).join("")}
+          </div>
+          ${p.divergencia_arredondamento ? `
+          <div class="finance-real-note" style="margin:0 1.25rem .75rem">
+            A soma das parcelas difere do valor total cadastrado em
+            ${fmtBRL(Math.abs(p.divergencia_arredondamento))} por arredondamento. A divergência
+            fica registrada em vez de ser fechada com um valor inventado.
+          </div>` : ""}
+          <div class="table-wrap">
+            <table class="ci-table">
+              <thead>
+                <tr>
+                  <th>Parcela</th>
+                  <th>Competência</th>
+                  <th>Vencimento</th>
+                  <th>Pagamento</th>
+                  <th>Valor</th>
+                  <th>Pagador</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>${linhas}</tbody>
+            </table>
+          </div>
+        </article>
+      `;
+    }).join("") + `
+      <div class="finance-real-note">
+        O calendário e os cálculos são automáticos; a conciliação não é.
+        Nenhuma parcela é marcada como paga só porque o dia do vencimento chegou —
+        sem confirmação financeira real, ela fica em “aguardando confirmação”
+        e continua contando no saldo restante.
+      </div>
+    `;
+  }
+
   function buildPendenciasPane() {
-    const alertCards = ci.alertas.map((alerta, i) => `
+    const alertas = ci.alertas || [];
+    const alertCards = alertas.map((alerta, i) => `
       <div class="ci-pending-card">
         <div class="ci-pending-icon">⚠️</div>
         <div class="ci-pending-body">
-          <strong>Pendência ${i + 1} de ${ci.pendencias_cadastro}</strong>
+          <strong>Alerta ${i + 1} de ${alertas.length}</strong>
           <p>${escapeHtml(alerta)}</p>
         </div>
       </div>
     `).join("");
 
-    return `
-      <div class="ci-pending-list">
-        ${alertCards}
+    // M26.21 — as pendências deixam de ser cartões fixos no código e passam a
+    // vir de ci.pendencias, para não contradizerem o dado quando ele mudar.
+    const pendCards = (ci.pendencias || []).map((p) => `
         <div class="ci-pending-card" style="border-left-color:var(--muted)">
           <div class="ci-pending-icon">📋</div>
           <div class="ci-pending-body">
-            <strong>Regularização / Documentos da empresa</strong>
-            <p>CREMERJ PJ já registrado (pago em 11/03/2026). Pendente cadastrar: alvará, CNES, licenciamento sanitário, contador, custos de abertura e outros documentos.</p>
-            <div class="ci-pending-meta">Responsável: Adeildo · Status: aguardando levantamento completo dos custos</div>
+            <strong>${escapeHtml(p.item)}</strong>
+            <p>${escapeHtml(p.descricao)}</p>
+            <div class="ci-pending-meta">Responsável: ${escapeHtml(p.responsavel)} · Status: ${escapeHtml(p.status)} · Prioridade: ${escapeHtml(p.prioridade)}</div>
           </div>
         </div>
+    `).join("");
+
+    return `
+      <div class="ci-pending-list">
+        ${alertCards}
+        ${pendCards}
         <div class="ci-pending-card" style="border-left-color:var(--navy)">
           <div class="ci-pending-icon">ℹ️</div>
           <div class="ci-pending-body">
@@ -5683,11 +5854,12 @@ function renderCustosInvestimentos() {
   }
 
   const panes = {
-    resumo:       buildResumoPane(),
-    recorrentes:  buildRecorrentesPane(),
-    equipamentos: buildEquipamentosPane(),
-    socios:       buildSociosPane(),
-    pendencias:   buildPendenciasPane(),
+    resumo:        buildResumoPane(),
+    recorrentes:   buildRecorrentesPane(),
+    equipamentos:  buildEquipamentosPane(),
+    parcelamentos: buildParcelamentosPane(),
+    socios:        buildSociosPane(),
+    pendencias:    buildPendenciasPane(),
   };
 
   Object.entries(panes).forEach(([key, html]) => {

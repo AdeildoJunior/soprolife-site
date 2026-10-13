@@ -210,6 +210,15 @@ def _norm_rules(rules) -> dict:
         # _SCAN_TERMO_CLINICO. Telefone, CPF, e-mail, token e detector de
         # nome continuam valendo.
         "busca":         {str(f).lower() for f in rules.get("campos_busca_agregada", [])},
+        # Nomes PROPRIOS de fornecedor/produto que por azar contem um token
+        # clinico — "Mais Laudo" e a razao social do servico de laudo
+        # terceirizado, nao texto clinico sobre alguem (M26.21). A dispensa e
+        # a mais estreita possivel: match EXATO do valor inteiro (nao
+        # substring) e dispensa APENAS o scan de termo clinico. Telefone, CPF,
+        # e-mail, token, URL de planilha e o detector de nome continuam
+        # valendo, em qualquer campo.
+        "fornecedores":  {_strip_accents(str(f)).strip().lower()
+                          for f in rules.get("nomes_proprios_permitidos", [])},
     }
 
 
@@ -246,7 +255,10 @@ def validate_summary(payload, rules=None, context="") -> list:
         elif _is_safe_value(text):
             return
 
-        dispensa_clinico = key_lower in r["busca"]
+        dispensa_clinico = (
+            key_lower in r["busca"]
+            or _strip_accents(text).strip().lower() in r["fornecedores"]
+        )
         for label, rx in _CONTENT_SCANS:
             # Termo de busca agregado do Search Console é palavra-chave de
             # SEO, não texto clínico sobre alguém: "precisa de pedido
@@ -409,8 +421,12 @@ _FILE_RULESETS = {
         # projeto); responsavel = membro da equipe; nota = texto curto curado
         # pelos sócios que cita nomes de EQUIPAMENTO ("Espirômetro Koko") —
         # isento do detector de nome, mas scans de telefone/CPF/pix valem.
-        "campos_institucionais": ["nome", "item", "categoria", "responsavel", "alertas", "nota"],
-        "chaves_permitidas_excecao": ["obs_curta", "observacao_curta", "nota"],
+        "campos_institucionais": ["nome", "item", "categoria", "responsavel", "alertas", "nota",
+                                  "forma_pagamento", "pagador", "status", "competencia",
+                                  "prioridade", "generator", "modelo", "type"],
+        "chaves_permitidas_excecao": ["obs_curta", "observacao_curta", "nota", "descricao"],
+        # Razao social do servico de laudo terceirizado (M26.21) — match exato.
+        "nomes_proprios_permitidos": ["Mais Laudo"],
     },
 }
 
@@ -488,6 +504,32 @@ def _self_test() -> int:
         ("script.google em valor falha",           _clone_with("campo_x", "https://script.google.com/macros/x"), base_rules, False),
         ("nome composto fora de campo institucional falha", _clone_with("campo_x", "encaminhado por Joao Carvalho"), base_rules, False),
         ("termo clinico livre falha",              _clone_with("campo_x", "paciente trouxe pedido medico"), base_rules, False),
+
+        # M26.21 — dispensa de nome proprio de fornecedor: a MAIS ESTREITA
+        # possivel (match exato do valor inteiro, so o scan de termo clinico).
+        # Precisa das DUAS coisas: campo institucional (dispensa o detector de
+        # nome, pois "Mais Laudo" tem 2 palavras capitalizadas) E a excecao de
+        # fornecedor (dispensa o scan de termo clinico). Uma so nao basta.
+        ("M26.21: fornecedor permitido, em campo institucional, passa",
+         _clone_with("nome_clinica", "Mais Laudo"),
+         {**base_rules, "nomes_proprios_permitidos": ["Mais Laudo"]}, True),
+        ("M26.21: sem declarar a excecao, o fornecedor volta a falhar",
+         _clone_with("nome_clinica", "Mais Laudo"), base_rules, False),
+        ("M26.21: a excecao sozinha nao dispensa o detector de nome",
+         _clone_with("campo_x", "Mais Laudo"),
+         {**base_rules, "nomes_proprios_permitidos": ["Mais Laudo"]}, False),
+        ("M26.21: a dispensa NAO vale como substring numa frase",
+         _clone_with("campo_x", "Mais Laudo emitiu o laudo do paciente"),
+         {**base_rules, "nomes_proprios_permitidos": ["Mais Laudo"]}, False),
+        ("M26.21: a dispensa NAO libera telefone no mesmo campo",
+         _clone_with("campo_x", "(21) 99999-8888"),
+         {**base_rules, "nomes_proprios_permitidos": ["Mais Laudo"]}, False),
+        ("M26.21: a dispensa NAO libera o detector de nome fora de campo institucional",
+         _clone_with("campo_x", "Joao Carvalho"),
+         {**base_rules, "nomes_proprios_permitidos": ["Mais Laudo"]}, False),
+        ("M26.21: a dispensa NAO libera outro termo clinico",
+         _clone_with("campo_x", "resultado de exame"),
+         {**base_rules, "nomes_proprios_permitidos": ["Mais Laudo"]}, False),
         ("id tecnico passa",                       _clone_with("campo_x", "AUD-0001"),               base_rules, True),
         ("timestamp ISO com fuso passa",           _clone_with("campo_x", "2026-07-07T09:00:00+00:00"), base_rules, True),
         ("chave pix em valor falha",               _clone_with("campo_x", "pagar na chave pix do consultorio"), base_rules, False),
