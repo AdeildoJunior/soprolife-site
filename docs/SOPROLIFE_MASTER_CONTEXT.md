@@ -188,7 +188,9 @@ sem rede e exige ≥ 30 dias de validade.
 **Anti-duplicidade:** notas emitidas fora do sistema entram por
 `register_external_issuance` (`scripts/nfse_m61_import_manual_nfse.py`, status
 `import/external_manual`) e nunca ganham botão. NFS-e históricas já protegidas:
-5 manuais importadas + 3 emitidas pela automação (8 `issued` em 02/10/2026).
+5 manuais importadas + 3 emitidas pela automação (8 `issued` em 02/10/2026);
+em 12/10/2026, 12 documentos de produção `issued` e nenhum `pending` (a nº 15 de
+ESP-000063 importada pelo M71).
 **Exceção M71 (nota manual depois de recusa pré-envio):** se o botão já criou o
 documento de produção e o worker recusou **antes** da fronteira, a importação
 reaproveita esse documento `pending` (mesmo id, sem segundo documento) — só se
@@ -344,7 +346,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 
 | Item | Estado |
 |---|---|
-| `origin/painel-soprolife-v01` / VPS | VPS em `ffeaded` (M26.30 — ordenação dos Termos de busca), worktree limpo, health 200; commits só de docs depois dele não exigem deploy |
+| `origin/painel-soprolife-v01` / VPS | VPS em `65c0092` (M71 — importação da NFS-e manual nº 15 sobre pending nunca enviado), worktree limpo, health 200; commits só de docs depois dele não exigem deploy |
 | `origin/main` (site) | `a7d8b03` |
 | Alembic | `b70c4a2e9d15` (M70) |
 | Serviços | `soprolife-m15-api`, `soprolife-painel-loopback` (:8765), `soprolife-portal-resultados`, `soprolife-update-data.timer` (10 min), `soprolife-operational-refresh.timer` (6 h), `soprolife-nfse-production-worker.path` (active) |
@@ -367,7 +369,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 | M64–M65 (23/09) | `55c7bb7`, `d280aad` | Primeira NFS-e real de produção (1 POST, série 00001 nº 1) |
 | M66–M69 (set) | `3ce038c`, `dd8c65a`, `13e474a`, `e087615` | Botão no Command Center + worker oneshot, prontidão no cadastro, CPF/SERPRO, guard ACL do A1 |
 | M70 (02/10) | `1a35d4a` | NFS-e Pastore (parcela R$ 109,50), migration `b70c4a2e9d15` |
-| M71 (12/10) | `fix(nfse)` desta missão | Importação da NFS-e manual nº 15 (ESP-000063) sobre documento `pending` provadamente nunca enviado |
+| M71 (12/10) | `65c0092` | Importação da NFS-e manual nº 15 (ESP-000063) sobre documento `pending` provadamente nunca enviado |
 | Painel (out) | `498c216`, `6aad6db`, `1e36d4c` | Refino visual, estatísticas de laudos, evolução mensal real |
 | Marketing (04/10) | `140f0e3` | Search Console + GA4 de 28 para 60 dias, subtítulo da tendência pelo período real |
 
