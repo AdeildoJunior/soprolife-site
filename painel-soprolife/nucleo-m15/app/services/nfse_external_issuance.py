@@ -53,11 +53,29 @@ already imported against a different exam, a non-production environment. The
 same key against the same exam is idempotent, so a re-run after an
 interruption is safe.
 
+M71 — A MANUAL NOTE AFTER A PRE-SEND REFUSAL
+
+The button can create a production document, have every confirmation refused
+by the worker BEFORE the provider boundary (e.g. an A1 too close to expiry),
+and the team then issues the note by hand. The exam already holds a
+production document, so the rule above would refuse the import — and the
+document would stay ``pending``, one click away from a duplicate.
+
+That one case, and only that one, may reuse the existing document. It must
+be provably never sent (``never_sent_blockers``): pending, no attempt, no
+artifact, no DPS number, every request terminal as ``refused``/``expired``
+with zero POST and zero GET, no doorbell left in the spool, no post-intent
+in the worker's runtime directory. The old preparations and refused requests
+stay as they are; the import adds its own preparation and attempt and moves
+the document to ``issued``. Anything short of that proof is refused.
+
 This module never calls a provider, never builds a DPS, never opens a socket.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -65,8 +83,8 @@ from sqlalchemy.orm import Session
 
 from ..audit import audit
 from ..ids import new_uuid
-from ..models import (FiscalAttempt, FiscalDocument, FiscalPreparation,
-                      SpirometryExam, utcnow)
+from ..models import (DpsNumberAllocation, FiscalArtifact, FiscalAttempt, FiscalDocument,
+                      FiscalIssuanceRequest, FiscalPreparation, SpirometryExam, utcnow)
 from .idempotency import payload_fingerprint
 from .nfse_national.identifiers import NFSE_ACCESS_KEY_PATTERN
 
@@ -75,6 +93,9 @@ from .nfse_national.identifiers import NFSE_ACCESS_KEY_PATTERN
 IMPORT_OPERATION = "import"
 EXTERNAL_PROVIDER = "external_manual"
 PRODUCTION_ENVIRONMENT = "production"
+# M71 — the only request outcomes that prove the worker never crossed the
+# provider boundary. 'interrupted' is deliberately absent: it counts as sent.
+NEVER_SENT_REQUEST_STATUSES = ("refused", "expired")
 
 
 def fail(code: str, status: int = 409):
@@ -130,8 +151,78 @@ def production_document_for(db: Session, spirometry_exam_id: str) -> FiscalDocum
     ).first()
 
 
+def _path_exists(path: Path) -> bool | None:
+    """True/False, or None when it cannot be known (permission, I/O)."""
+    try:
+        os.stat(path)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return None
+    return True
+
+
+def never_sent_blockers(db: Session, document: FiscalDocument, *,
+                        spool_dir: Path | str | None,
+                        runtime_dir: Path | str | None) -> list[str]:
+    """Why ``document`` cannot be proven never sent. Empty means: a production
+    document prepared by the button and never handed to the provider, so a
+    manual NFS-e may be attached to it (M71). Read-only.
+
+    Fail closed: a worker directory that is not configured or cannot be read
+    is a blocker, because the absence of evidence there is not proof.
+    """
+    blockers: list[str] = []
+    if document.environment != PRODUCTION_ENVIRONMENT:
+        blockers.append("document_not_production")
+    if document.state != "pending":
+        blockers.append("document_not_pending")
+    if db.scalar(select(FiscalAttempt.id).where(
+            FiscalAttempt.document_id == document.id).limit(1)) is not None:
+        blockers.append("document_has_attempt")
+    if db.scalar(select(FiscalArtifact.id).where(
+            FiscalArtifact.document_id == document.id).limit(1)) is not None:
+        blockers.append("document_has_artifact")
+    if db.get(DpsNumberAllocation, document.id) is not None:
+        blockers.append("document_has_dps_number")
+
+    requests = db.scalars(select(FiscalIssuanceRequest).where(
+        FiscalIssuanceRequest.document_id == document.id)).all()
+    for row in requests:
+        if row.status not in NEVER_SENT_REQUEST_STATUSES:
+            blockers.append(f"request_{row.status}")
+        if row.kind != "issue":
+            blockers.append("request_reconcile")
+        if (row.provider_post_count or 0) != 0:
+            blockers.append("request_post_count")
+        if (row.provider_get_count or 0) != 0:
+            blockers.append("request_get_count")
+        if row.operation_id is not None or row.external_id is not None:
+            blockers.append("request_reached_operation")
+
+    if spool_dir is None or runtime_dir is None:
+        blockers.append("worker_dirs_not_configured")
+    else:
+        spool, runtime = Path(spool_dir), Path(runtime_dir)
+        if _path_exists(spool) is not True or _path_exists(runtime) is not True:
+            blockers.append("worker_dirs_unreadable")
+        else:
+            for row in requests:
+                for kind in ("issue", "reconcile"):
+                    found = _path_exists(spool / f"{row.id}.{kind}")
+                    if found is not False:
+                        blockers.append("doorbell_present" if found else "spool_unreadable")
+                found = _path_exists(runtime / row.id / "post-intent.json")
+                if found is not False:
+                    blockers.append("post_intent_present" if found else "runtime_unreadable")
+    # Stable, de-duplicated, in first-seen order.
+    return list(dict.fromkeys(blockers))
+
+
 def register_external_issuance(db: Session, issuance: ExternalIssuance, actor: str,
-                               request_id: str | None = None) -> FiscalDocument:
+                               request_id: str | None = None, *,
+                               spool_dir: Path | str | None = None,
+                               runtime_dir: Path | str | None = None) -> FiscalDocument:
     """Record an externally issued production NFS-e against its exam.
 
     Idempotent for the same (exam, key). Refuses every ambiguity rather than
@@ -153,26 +244,41 @@ def register_external_issuance(db: Session, issuance: ExternalIssuance, actor: s
         return db.get(FiscalDocument, existing_import.document_id)
 
     document = production_document_for(db, issuance.spirometry_exam_id)
-    if document is not None:
+    reused = document is not None
+    if reused:
         # An exam may hold only one production document. If it already has one
         # and it is not this import, something else created it and a human has
-        # to look — never overwrite.
-        fail("production_document_already_exists_for_exam")
+        # to look — never overwrite. The single exception (M71) is a document
+        # PROVEN never sent; the row is locked so a concurrent confirmation
+        # (authorize_issue locks it too) cannot slip in between.
+        if document.state != "pending":
+            fail("production_document_already_exists_for_exam")
+        document = db.scalars(select(FiscalDocument).where(
+            FiscalDocument.id == document.id).with_for_update()).one()
+        if never_sent_blockers(db, document, spool_dir=spool_dir, runtime_dir=runtime_dir):
+            fail("pending_document_not_provably_unsent")
 
     now = utcnow()
-    document = FiscalDocument(
-        id=new_uuid(), spirometry_exam_id=issuance.spirometry_exam_id,
-        environment=PRODUCTION_ENVIRONMENT,
-        # Terminal success from the start: there is nothing to attempt. This is
-        # also what makes nfse.operate() refuse a later 'issue'.
-        state="issued",
-        eligibility="eligible", blocking_reasons=[], created_by=actor,
-        idempotency_key=payload_fingerprint({"external_import": access_key}),
-        idempotency_fingerprint=payload_fingerprint(
-            {"exam": issuance.spirometry_exam_id, "key": access_key}),
-    )
-    db.add(document)
-    db.flush()
+    if reused:
+        prior_requests = len(db.scalars(select(FiscalIssuanceRequest.id).where(
+            FiscalIssuanceRequest.document_id == document.id)).all())
+        document.state = "issued"
+        db.flush()
+    else:
+        prior_requests = 0
+        document = FiscalDocument(
+            id=new_uuid(), spirometry_exam_id=issuance.spirometry_exam_id,
+            environment=PRODUCTION_ENVIRONMENT,
+            # Terminal success from the start: there is nothing to attempt. This is
+            # also what makes nfse.operate() refuse a later 'issue'.
+            state="issued",
+            eligibility="eligible", blocking_reasons=[], created_by=actor,
+            idempotency_key=payload_fingerprint({"external_import": access_key}),
+            idempotency_fingerprint=payload_fingerprint(
+                {"exam": issuance.spirometry_exam_id, "key": access_key}),
+        )
+        db.add(document)
+        db.flush()
 
     # A preparation is required by the attempt's FK. It records WHAT was
     # invoiced as far as we know it, and is explicitly marked as reconstructed
@@ -209,6 +315,8 @@ def register_external_issuance(db: Session, issuance: ExternalIssuance, actor: s
               "operation": IMPORT_OPERATION,
               "nfse_xml_present": False,
               "fiscal_validity_claimed": False,
+              "reused_pending_document": reused,
+              "prior_refused_requests": prior_requests,
           })
     db.commit()
     return document

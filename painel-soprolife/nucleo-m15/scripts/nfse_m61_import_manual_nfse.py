@@ -47,7 +47,7 @@ from sqlalchemy import select                                      # noqa: E402
 
 from app.models import FinancialEntry, FiscalDocument, SpirometryExam   # noqa: E402
 from app.services.nfse_external_issuance import (                 # noqa: E402
-    ExternalIssuance, PRODUCTION_ENVIRONMENT, already_imported,
+    ExternalIssuance, PRODUCTION_ENVIRONMENT, already_imported, never_sent_blockers,
     normalize_access_key, register_external_issuance)
 
 PERFORMED = {"Realizado", "Laudo Liberado"}
@@ -97,6 +97,22 @@ MANUAL_NOTES = [
         "service_date": date(2026, 9, 19),
         "broncodilatador": None,
     },
+    # M71 — issued by hand on the portal after the button's three confirmations
+    # were refused by the worker BEFORE the provider (certificate margin; zero
+    # POST, zero GET). The exam therefore already holds a production document,
+    # pending and never sent; the service proves that before reusing it.
+    # Manual DPS nº 9, série 70000 — the portal's series, never the
+    # automation's 00001 allocator, which this import does not touch.
+    # ``issued_on`` is the real emission date, distinct from the service date.
+    {
+        "label": "F",
+        "public_code": "ESP-000063",
+        "access_key": "33045572263544026000110000000000001526108703991057",
+        "amount": Decimal("219.00"),
+        "service_date": date(2026, 10, 9),
+        "issued_on": date(2026, 10, 10),
+        "broncodilatador": True,
+    },
 ]
 
 
@@ -139,6 +155,12 @@ def find_candidates(db, note) -> list[SpirometryExam]:
     return matched
 
 
+def issued_on(note) -> str:
+    """The emission date when the operator reported it (M71); otherwise the
+    service date, as A–E were recorded — not rewritten without evidence."""
+    return str(note.get("issued_on") or note["service_date"])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
@@ -153,7 +175,12 @@ def main() -> int:
         print("ERRO: --actor é obrigatório com --apply.", file=sys.stderr)
         return 2
 
+    from app.config import get_settings
     from app.db import get_sessionmaker
+
+    settings = get_settings()
+    worker_dirs = {"spool_dir": settings.nfse_production_worker_spool_dir,
+                   "runtime_dir": settings.nfse_production_worker_runtime_dir}
 
     results = []
     ambiguous = False
@@ -166,6 +193,7 @@ def main() -> int:
                 "access_key": key,
                 "amount": str(note["amount"]),
                 "service_date": str(note["service_date"]),
+                "issued_on": issued_on(note),
                 "broncodilatador": note["broncodilatador"],
                 "public_code": note.get("public_code"),
             }
@@ -191,21 +219,27 @@ def main() -> int:
                 FiscalDocument.spirometry_exam_id == exam.id,
                 FiscalDocument.environment == PRODUCTION_ENVIRONMENT).limit(1)).first()
             if blocking is not None:
-                entry.update(status="exam_already_has_production_document",
-                             state=blocking.state)
-                ambiguous = True
-                results.append(entry)
-                continue
+                # M71 — a pending document proven never sent may receive the
+                # import; the service re-checks under a row lock on --apply.
+                reasons = never_sent_blockers(db, blocking, **worker_dirs)
+                if reasons:
+                    entry.update(status="exam_already_has_production_document",
+                                 state=blocking.state, blockers=reasons)
+                    ambiguous = True
+                    results.append(entry)
+                    continue
+                entry.update(existing_document_id=blocking.id, state=blocking.state)
 
             if not args.apply:
-                entry["status"] = "would_link"
+                entry["status"] = ("would_link_existing_pending_document"
+                                   if blocking is not None else "would_link")
                 results.append(entry)
                 continue
 
             document = register_external_issuance(
                 db, ExternalIssuance(spirometry_exam_id=exam.id, access_key=key,
-                                     issued_on=str(note["service_date"])),
-                args.actor)
+                                     issued_on=issued_on(note)),
+                args.actor, **worker_dirs)
             entry.update(status="linked", document_id=document.id, state=document.state)
             results.append(entry)
 

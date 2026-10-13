@@ -123,6 +123,9 @@ ALLOWED_KEYS = {
     # apanhou-a.
     "external_id", "issued_on", "operation", "environment",
     "nfse_xml_present", "fiscal_validity_claimed",
+    # M71 — a importação reaproveitou um documento pending provadamente nunca
+    # enviado, e quantos pedidos recusados ele já tinha. Booleano e inteiro.
+    "reused_pending_document", "prior_refused_requests",
     # M66 — emissão de produção pelo Centro de Comando: o pedido confirmado
     # por um humano, o id da operação no provedor e a contagem de chamadas
     # (a prova de "exatamente um POST"). Identificadores técnicos e inteiros;

@@ -141,7 +141,7 @@ Front-end: `index.html` + `js/*.js` com cache-buster `?v=AAAAMMDDNN` —
   `sha256(token)`; papel PostgreSQL `soprolife_portal` com GRANT por coluna.
 - **QR/verificação pública** do laudo e nomes de download determinísticos.
 
-## 7. NFS-e (M27–M70)
+## 7. NFS-e (M27–M71)
 
 **Arquitetura.** `FiscalDocument` (um por exame/ambiente — `uq_fiscal_exam_environment`)
 → `FiscalPreparation` (snapshot imutável com fingerprint, valor, tomador,
@@ -189,6 +189,16 @@ sem rede e exige ≥ 30 dias de validade.
 `register_external_issuance` (`scripts/nfse_m61_import_manual_nfse.py`, status
 `import/external_manual`) e nunca ganham botão. NFS-e históricas já protegidas:
 5 manuais importadas + 3 emitidas pela automação (8 `issued` em 02/10/2026).
+**Exceção M71 (nota manual depois de recusa pré-envio):** se o botão já criou o
+documento de produção e o worker recusou **antes** da fronteira, a importação
+reaproveita esse documento `pending` (mesmo id, sem segundo documento) — só se
+`never_sent_blockers` provar que nunca saiu: zero attempt/artifact/número de DPS,
+todo pedido `kind=issue` em `refused`/`expired` com 0 POST e 0 GET, sem
+`operation_id`/`external_id`, sem campainha no spool nem `post-intent.json` no
+runtime do worker (diretório ilegível ou não configurado = recusa). Os pedidos
+recusados ficam intactos; entra uma `FiscalPreparation` `EXTERNAL` nova + a
+attempt `import`. O M61 aceita `issued_on` por nota (data real de emissão;
+sem ele, cai na data do serviço).
 **Nunca emitir no cadastro** — o cadastro só mostra prontidão (M67).
 
 ## 8. Financeiro
@@ -357,6 +367,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 | M64–M65 (23/09) | `55c7bb7`, `d280aad` | Primeira NFS-e real de produção (1 POST, série 00001 nº 1) |
 | M66–M69 (set) | `3ce038c`, `dd8c65a`, `13e474a`, `e087615` | Botão no Command Center + worker oneshot, prontidão no cadastro, CPF/SERPRO, guard ACL do A1 |
 | M70 (02/10) | `1a35d4a` | NFS-e Pastore (parcela R$ 109,50), migration `b70c4a2e9d15` |
+| M71 (12/10) | `fix(nfse)` desta missão | Importação da NFS-e manual nº 15 (ESP-000063) sobre documento `pending` provadamente nunca enviado |
 | Painel (out) | `498c216`, `6aad6db`, `1e36d4c` | Refino visual, estatísticas de laudos, evolução mensal real |
 | Marketing (04/10) | `140f0e3` | Search Console + GA4 de 28 para 60 dias, subtítulo da tendência pelo período real |
 
