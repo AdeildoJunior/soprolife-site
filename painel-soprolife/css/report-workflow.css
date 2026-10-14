@@ -2900,6 +2900,19 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   min-height: 40px;
 }
 
+/* M26.31 — a mensagem do convite aparece COMO VAI SAIR, com as quebras de
+   linha que o WhatsApp vai mostrar. `pre-line` (e não `pre`) preserva os
+   parágrafos sem congelar a largura: o texto continua quebrando sozinho na
+   tela estreita, que é onde o cartão da fila tem menos espaço. */
+.report-instagram-message {
+  margin: 0;
+  max-width: 48ch;
+  white-space: pre-line;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--navy, #0b1f36);
+}
+
 .report-result-sem-telefone {
   align-self: center;
   font-size: 0.8rem;

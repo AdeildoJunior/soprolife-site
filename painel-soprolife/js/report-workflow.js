@@ -441,6 +441,12 @@
     // do navegador de todo mundo que abre a tela, e a tela abre sozinha.
     resultAccess: null,
     resultBusy: false,
+    // M26.31 — o convite do Instagram de UM laudo, no mesmo contrato do
+    // bloco acima: o telefone do paciente não viaja na fila, desce do
+    // servidor só quando alguém clica NESTE laudo, e a abertura do WhatsApp
+    // acontece no gesto seguinte, com a mensagem à vista.
+    instagramInvite: null,
+    instagramBusy: false,
     deliveryFilter: "",
     deliveryBusy: false,
     // M26.12 — "Retornar para laudadora": qual linha tem o formulário de
@@ -3100,6 +3106,7 @@
             "entrega", item.estado, item.estado_rotulo, "report-delivery-state"
           )}
           ${renderResultAccess(item)}
+          ${renderInstagramInvite(item)}
           ${assinado ? `
             <span class="report-delivery-note">
               ${/* Discreto e honesto, nesta ordem: primeiro o que o sistema
@@ -3305,7 +3312,76 @@
     return `<button type="button" class="m15-btn"
       data-result-open="${esc(item.document_id)}">
       ${aberto ? "Ocultar link e QR" : "Link, QR e WhatsApp"}
-    </button>`;
+    </button>
+    ${renderInstagramInviteAction(item)}`;
+  }
+
+  // ------------------------------- M26.31 — convite para seguir o Instagram
+  //
+  // Ao lado de "Link, QR e WhatsApp", e com exatamente o mesmo gesto de dois
+  // tempos: o primeiro clique pede ao servidor a mensagem e o `wa.me` DESTE
+  // paciente; o segundo abre o WhatsApp. Dois tempos não são cerimônia:
+  //
+  //   - o número do paciente continua fora da fila (uma linha por laudo com
+  //     telefone embutido entregaria a lista de contatos inteira a qualquer
+  //     tela aberta), então ele precisa de uma chamada por laudo;
+  //   - `window.open` depois de um `await` perde a ativação do clique e o
+  //     navegador trata a janela como pop-up — o convite morreria sem aviso;
+  //   - e quem envia lê a mensagem antes de abrir a conversa, que é a mesma
+  //     regra do envio do resultado: o sistema prepara, a pessoa envia.
+  //
+  // O convite NÃO leva o link do resultado e não mexe em `sent_at`: "Enviado"
+  // continua querendo dizer que o RESULTADO foi enviado.
+  function renderInstagramInviteAction(item) {
+    const aberto = state.instagramInvite
+      && state.instagramInvite.documentId === item.document_id;
+    return `<button type="button" class="m15-btn"
+      data-instagram-open="${esc(item.document_id)}"${
+        state.instagramBusy ? " disabled" : ""
+      }>${aberto ? "Ocultar convite" : "Instagram"}</button>`;
+  }
+
+  function renderInstagramInvite(item) {
+    const alvo = state.instagramInvite;
+    if (!alvo || alvo.documentId !== item.document_id) return "";
+    if (!alvo.dados) {
+      return `<div class="report-result-panel"><p class="report-help">Carregando…</p></div>`;
+    }
+    const zap = alvo.dados.whatsapp || {};
+    return `
+      <div class="report-result-panel report-instagram-panel">
+        <p class="report-instagram-message">${esc(alvo.dados.mensagem)}</p>
+        <div class="report-result-actions">
+          ${zap.disponivel
+            ? `<button type="button" class="m15-btn m15-btn-primary"
+                 data-instagram-send="${esc(item.document_id)}">
+                 Abrir WhatsApp
+               </button>`
+            : `<span class="report-result-sem-telefone">${
+                 esc(zap.motivo || "WhatsApp indisponível")
+               }</span>`}
+          <button type="button" class="m15-btn"
+            data-instagram-close="1">Fechar</button>
+        </div>
+      </div>`;
+  }
+
+  async function carregarConviteInstagram(documentId) {
+    state.instagramBusy = true;
+    state.instagramInvite = { documentId, dados: null };
+    render();
+    try {
+      const dados = await client().api(
+        `/laudos/${encodeURIComponent(documentId)}/convite-instagram`
+      );
+      state.instagramInvite = { documentId, dados };
+    } catch (error) {
+      state.instagramInvite = null;
+      announce(readableError(error), "erro");
+    } finally {
+      state.instagramBusy = false;
+      render();
+    }
   }
 
   async function carregarAcessoResultado(documentId, { criar = false, regenerar = false } = {}) {
@@ -5281,6 +5357,33 @@
         // auditável por uma que a Meta derruba.
         window.open(zap.url, "_blank", "noopener,noreferrer");
         marcarEnvio(alvo, "whatsapp_manual");
+      }
+      return;
+    }
+    // ---------------------------------------------------------- M26.31
+    if (button.matches("[data-instagram-open]")) {
+      const alvo = button.getAttribute("data-instagram-open");
+      if (state.instagramInvite && state.instagramInvite.documentId === alvo) {
+        state.instagramInvite = null;
+        render();
+      } else {
+        carregarConviteInstagram(alvo);
+      }
+      return;
+    }
+    if (button.matches("[data-instagram-close]")) {
+      state.instagramInvite = null;
+      render();
+      return;
+    }
+    if (button.matches("[data-instagram-send]")) {
+      const dados = state.instagramInvite && state.instagramInvite.dados;
+      const zap = dados && dados.whatsapp;
+      if (zap && zap.disponivel && zap.url) {
+        // A URL já está em memória desde o clique anterior, então esta
+        // abertura é SÍNCRONA — é o que mantém a ativação do gesto e evita
+        // o bloqueio de pop-up. Quem aperta ENVIAR continua sendo a pessoa.
+        window.open(zap.url, "_blank", "noopener,noreferrer");
       }
       return;
     }

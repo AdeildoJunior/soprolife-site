@@ -38,9 +38,11 @@ from ..models import (
     PatientResultAccess,
     Person,
     ReportDocument,
+    SpirometryExam,
     User,
 )
 from ..security import ROLE_OPERACIONAL, require_role
+from ..services import followup
 from ..services import patient_results as prs
 from ..services.qrcode_svg import to_svg
 
@@ -302,3 +304,97 @@ def marcar_enviado(
     )
     db.commit()
     return resumo_do_acesso(acesso)
+
+
+# ---------------------------------------------- M26.31 — convite Instagram
+
+
+MOTIVO_NAO_CONTATAR = "Paciente pediu para não ser contatado"
+MOTIVO_CONSENTIMENTO_REVOGADO = "Consentimento de WhatsApp revogado"
+
+
+def _whatsapp_do_convite(db: Session, pessoa: Person) -> dict:
+    """A quem o convite pode ir — e, quando não pode, por quê.
+
+    Ordem deliberada: as duas RECUSAS do paciente vêm antes da existência do
+    telefone. Um cadastro com `nao_contatar` e número válido não é "pronto
+    para enviar"; dizer "Telefone não cadastrado" ali seria mentir sobre o
+    motivo. Esta mensagem é de relacionamento, não a entrega de um laudo:
+    quem pediu silêncio, ou revogou o consentimento, fica de fora.
+    """
+
+    if pessoa.nao_contatar:
+        return {"disponivel": False, "motivo": MOTIVO_NAO_CONTATAR}
+    if followup.whatsapp_consent_status(db, pessoa.id) == "revogado":
+        return {"disponivel": False, "motivo": MOTIVO_CONSENTIMENTO_REVOGADO}
+    contato = prs.patient_phone(db, pessoa)
+    if contato is None:
+        return {"disponivel": False, "motivo": MOTIVO_SEM_TELEFONE}
+    return {
+        "disponivel": True,
+        "url": prs.whatsapp_url(
+            contato.valor_normalizado, prs.build_instagram_message(pessoa)
+        ),
+    }
+
+
+@router.get("/{document_id}/convite-instagram")
+def ver_convite_instagram(
+    document_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    operador: User = Depends(require_role(ROLE_OPERACIONAL)),
+) -> dict:
+    """O convite para seguir o Instagram, pronto para o WhatsApp do paciente.
+
+    NÃO é entrega de resultado: não deriva token, não cria nem altera
+    `patient_result_accesses` e não registra envio — `sent_at` continua
+    significando exatamente "o operador abriu o envio DO RESULTADO". O que
+    esta rota reaproveita é o telefone discável do cadastro e o mesmo
+    `wa.me` do painel, para que não nasça um segundo jeito de montar
+    mensagem de paciente.
+
+    O número não entra na fila (ver `_patient_reference`): sai daqui, para
+    UM laudo, com clique explícito e auditado — a mesma regra do link do
+    resultado.
+    """
+
+    documento = _documento(db, document_id)
+    exame = db.get(SpirometryExam, documento.spirometry_exam_id)
+    pessoa = (
+        db.get(Person, exame.person_id)
+        if exame is not None and exame.person_id
+        else None
+    )
+    if pessoa is None:
+        raise ReportDomainError(
+            404,
+            "laudo_sem_paciente",
+            "Este laudo não tem paciente vinculado.",
+        )
+    if pessoa.arquivado:
+        raise ReportDomainError(
+            409,
+            "paciente_arquivado",
+            "Este cadastro está arquivado e não recebe mensagens.",
+        )
+    zap = _whatsapp_do_convite(db, pessoa)
+    audit(
+        db,
+        "convite_instagram_exibido",
+        entidade="report_documents",
+        entidade_id=documento.id,
+        user_id=operador.id,
+        request_id=resolve_request_id(request.headers.get("X-Request-ID")),
+        detalhes={
+            "report_code": documento.public_code,
+            "canal": "whatsapp_manual",
+            "status": "disponivel" if zap["disponivel"] else "indisponivel",
+        },
+    )
+    db.commit()
+    return {
+        "instagram_url": prs.INSTAGRAM_URL,
+        "mensagem": prs.build_instagram_message(pessoa),
+        "whatsapp": zap,
+    }

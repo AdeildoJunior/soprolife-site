@@ -751,6 +751,41 @@ def patient_phone(db: Session, pessoa) -> PersonContact | None:
     return (whatsapp or principais or contatos)[0]
 
 
+# ------------------------------------------------ M26.31 — convite Instagram
+#
+# O endereço do perfil oficial vive AQUI, uma vez. Ele já aparece no site
+# público, mas lá é MARKUP de página (header, rodapé, `sameAs` do JSON-LD) —
+# marcação não é fonte de configuração para o painel, e o site público está
+# fora do alcance desta tela. O que não existia era um ponto no núcleo que
+# soubesse o perfil; a alternativa seria a URL solta no JavaScript da tela de
+# laudos, onde ninguém a encontraria para trocar. Mudou o perfil: muda esta
+# linha, e a mensagem inteira acompanha.
+INSTAGRAM_URL = "https://www.instagram.com/soprolife"
+
+MENSAGEM_INSTAGRAM = (
+    "Olá, {primeiro_nome}. 😊\n\n"
+    "Aproveite para seguir a SoproLife no Instagram e acompanhar novidades, "
+    "orientações e conteúdos sobre saúde respiratória:\n"
+    "{instagram}\n\n"
+    "SoproLife Diagnósticos e Soluções em Saúde"
+)
+
+
+def build_instagram_message(pessoa) -> str:
+    """O convite pronto: primeiro nome, o perfil e nada mais.
+
+    Deliberadamente NÃO carrega o link do resultado. São duas conversas
+    diferentes, e juntá-las faria o token do paciente viajar numa mensagem
+    de relacionamento — que é a mensagem com mais chance de ser reencaminhada
+    para o grupo da família.
+    """
+
+    return MENSAGEM_INSTAGRAM.format(
+        primeiro_nome=_primeiro_nome(pessoa.nome_completo),
+        instagram=INSTAGRAM_URL,
+    )
+
+
 def whatsapp_url(telefone_normalizado: str, mensagem: str) -> str:
     """`wa.me` com a mensagem pronta — o operador só aperta ENVIAR.
 
