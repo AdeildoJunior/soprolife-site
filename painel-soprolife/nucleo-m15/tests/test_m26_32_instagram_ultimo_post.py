@@ -671,7 +671,7 @@ def test_a_mensagem_com_publicacao_e_a_do_enunciado(client, auth, caso, monkeypa
     _com_publicacao(monkeypatch)
     corpo = _convite(client, auth, caso["document_id"]).json()
     assert corpo["mensagem"] == (
-        "Olá, TESTE. 😊\n\n"
+        "Olá, TESTE.\n\n"
         "Acompanhe a SoproLife diariamente no Instagram para receber "
         "informações, orientações e conteúdos sobre saúde respiratória.\n\n"
         "Veja nossa publicação mais recente:\n"

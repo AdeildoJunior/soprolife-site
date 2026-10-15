@@ -763,7 +763,7 @@ def patient_phone(db: Session, pessoa) -> PersonContact | None:
 INSTAGRAM_URL = "https://www.instagram.com/soprolife"
 
 MENSAGEM_INSTAGRAM = (
-    "Olá, {primeiro_nome}. 😊\n\n"
+    "Olá, {primeiro_nome}.\n\n"
     "Acompanhe a SoproLife diariamente no Instagram para receber "
     "informações, orientações e conteúdos sobre saúde respiratória:\n"
     "{instagram}\n\n"
@@ -782,7 +782,7 @@ MENSAGEM_INSTAGRAM = (
 #     havendo duas URLs, a prévia tende a sair da primeira, e a primeira
 #     tem de ser a publicação.
 MENSAGEM_INSTAGRAM_PUBLICACAO = (
-    "Olá, {primeiro_nome}. 😊\n\n"
+    "Olá, {primeiro_nome}.\n\n"
     "Acompanhe a SoproLife diariamente no Instagram para receber "
     "informações, orientações e conteúdos sobre saúde respiratória.\n\n"
     "Veja nossa publicação mais recente:\n"
