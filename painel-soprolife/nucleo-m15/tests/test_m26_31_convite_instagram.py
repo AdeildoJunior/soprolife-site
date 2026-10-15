@@ -114,7 +114,10 @@ def test_convite_vai_pelo_mesmo_canal_com_a_mensagem_pronta(client, auth, caso):
 
     texto = corpo["mensagem"]
     assert texto.startswith("Olá, TESTE.")  # primeiro nome do cadastro
-    assert "seguir a SoproLife no Instagram" in texto
+    # M26.32 reescreveu a frase do convite ("acompanhe diariamente"),
+    # mas o contrato desta milestone é o mesmo: convite ao Instagram,
+    # com um endereço só, no corpo da mensagem.
+    assert "Acompanhe a SoproLife diariamente no Instagram" in texto
     assert "https://www.instagram.com/soprolife" in texto
     assert texto.rstrip().endswith("SoproLife Diagnósticos e Soluções em Saúde")
 
@@ -213,7 +216,7 @@ def test_sem_telefone_o_convite_nao_quebra(client, auth, db):
         "disponivel": False, "motivo": "Telefone não cadastrado"
     }
     # A mensagem continua pronta: dá para copiar da tela.
-    assert "seguir a SoproLife no Instagram" in corpo["mensagem"]
+    assert "Acompanhe a SoproLife diariamente" in corpo["mensagem"]
 
 
 def test_quem_pediu_para_nao_ser_contatado_nao_recebe(client, auth, db, caso):

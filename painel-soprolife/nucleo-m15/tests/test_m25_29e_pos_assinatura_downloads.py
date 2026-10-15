@@ -607,6 +607,11 @@ def test_assets_alterados_tem_cache_busting_atual():
     `2026092301`, idem. A M26.29 (exame técnico antes das conclusões e
     "Como funciona" recolhido) subiu para `2026092401`, com o pino junto.
     O botão de indicadores dos laudos subiu os dois para `2026100102`.
+    A M26.31 (convite de Instagram) subiu os dois para `2026101401` e de
+    novo não trouxe o pino: este teste já falhava no commit implantado
+    (68533ff). A M26.32 (publicação mais recente no convite) altera o CSS,
+    sobe os dois para `2026101402` e traz o pino junto, fechando a
+    divergência.
     """
 
     import re
@@ -615,6 +620,6 @@ def test_assets_alterados_tem_cache_busting_atual():
         re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
     )
     assert versoes, "os assets precisam continuar versionados"
-    assert versoes == {"2026100102"}, (
+    assert versoes == {"2026101402"}, (
         "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
     )

@@ -764,15 +764,42 @@ INSTAGRAM_URL = "https://www.instagram.com/soprolife"
 
 MENSAGEM_INSTAGRAM = (
     "Olá, {primeiro_nome}. 😊\n\n"
-    "Aproveite para seguir a SoproLife no Instagram e acompanhar novidades, "
-    "orientações e conteúdos sobre saúde respiratória:\n"
+    "Acompanhe a SoproLife diariamente no Instagram para receber "
+    "informações, orientações e conteúdos sobre saúde respiratória:\n"
     "{instagram}\n\n"
     "SoproLife Diagnósticos e Soluções em Saúde"
 )
 
+# M26.32 — a mesma mensagem quando há publicação recente para mostrar.
+#
+# Duas escolhas de formatação que FAVORECEM a prévia, sem prometê-la: quem
+# decide se renderiza o cartão é o WhatsApp (e o que o Instagram serve a
+# ele), não nós. Não existe aqui, e não deve existir, prévia própria.
+#
+#   - o permalink ocupa uma linha sozinho — URL isolada é a forma que o
+#     WhatsApp reconhece melhor; colada a texto, costuma virar só link azul;
+#   - o @ do perfil fecha a mensagem como TEXTO, não como segunda URL —
+#     havendo duas URLs, a prévia tende a sair da primeira, e a primeira
+#     tem de ser a publicação.
+MENSAGEM_INSTAGRAM_PUBLICACAO = (
+    "Olá, {primeiro_nome}. 😊\n\n"
+    "Acompanhe a SoproLife diariamente no Instagram para receber "
+    "informações, orientações e conteúdos sobre saúde respiratória.\n\n"
+    "Veja nossa publicação mais recente:\n"
+    "{publicacao}\n\n"
+    "Siga @soprolife para acompanhar as próximas publicações.\n\n"
+    "SoproLife Diagnósticos e Soluções em Saúde"
+)
 
-def build_instagram_message(pessoa) -> str:
-    """O convite pronto: primeiro nome, o perfil e nada mais.
+
+def build_instagram_message(pessoa, publicacao: str | None = None) -> str:
+    """O convite pronto: primeiro nome, o convite e um endereço só.
+
+    `publicacao` é o permalink da última publicação, quando a integração
+    oficial da Meta conseguiu obtê-lo. Ausente — porque não há credencial,
+    porque a Meta não respondeu ou porque a conta não tem publicação — a
+    mensagem é a do perfil, que é exatamente a M26.31. O padrão é `None` de
+    propósito: nenhum chamador é obrigado a saber que a integração existe.
 
     Deliberadamente NÃO carrega o link do resultado. São duas conversas
     diferentes, e juntá-las faria o token do paciente viajar numa mensagem
@@ -780,8 +807,13 @@ def build_instagram_message(pessoa) -> str:
     para o grupo da família.
     """
 
+    primeiro_nome = _primeiro_nome(pessoa.nome_completo)
+    if publicacao:
+        return MENSAGEM_INSTAGRAM_PUBLICACAO.format(
+            primeiro_nome=primeiro_nome, publicacao=publicacao
+        )
     return MENSAGEM_INSTAGRAM.format(
-        primeiro_nome=_primeiro_nome(pessoa.nome_completo),
+        primeiro_nome=primeiro_nome,
         instagram=INSTAGRAM_URL,
     )
 

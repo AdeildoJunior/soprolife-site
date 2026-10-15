@@ -2908,6 +2908,15 @@ details.report-admin-shell[open] { padding-bottom: 14px; }
   margin: 0;
   max-width: 48ch;
   white-space: pre-line;
+  /* M26.32 — a mensagem passou a conter o permalink da publicação: uma
+     palavra só de 43 caracteres (`/reel/` + o código de 11 do Instagram),
+     que nenhuma quebra natural divide. Medido com Chrome headless: a
+     430px e a 390px ela ainda cabe; a 360px (Android antigo) a linha
+     empurra a fila e a página ganha rolagem horizontal (scrollWidth 361
+     contra 360 de viewport). `anywhere`, e não `break-word`, porque só
+     ele também ENCOLHE a caixa na medida do contêiner — com `break-word`
+     a largura mínima continuaria sendo a da palavra inteira. */
+  overflow-wrap: anywhere;
   font-size: 0.86rem;
   line-height: 1.45;
   color: var(--navy, #0b1f36);

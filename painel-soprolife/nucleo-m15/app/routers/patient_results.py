@@ -43,6 +43,7 @@ from ..models import (
 )
 from ..security import ROLE_OPERACIONAL, require_role
 from ..services import followup
+from ..services import instagram_feed
 from ..services import patient_results as prs
 from ..services.qrcode_svg import to_svg
 
@@ -313,7 +314,7 @@ MOTIVO_NAO_CONTATAR = "Paciente pediu para não ser contatado"
 MOTIVO_CONSENTIMENTO_REVOGADO = "Consentimento de WhatsApp revogado"
 
 
-def _whatsapp_do_convite(db: Session, pessoa: Person) -> dict:
+def _destino_do_convite(db: Session, pessoa: Person) -> dict:
     """A quem o convite pode ir — e, quando não pode, por quê.
 
     Ordem deliberada: as duas RECUSAS do paciente vêm antes da existência do
@@ -321,6 +322,10 @@ def _whatsapp_do_convite(db: Session, pessoa: Person) -> dict:
     para enviar"; dizer "Telefone não cadastrado" ali seria mentir sobre o
     motivo. Esta mensagem é de relacionamento, não a entrega de um laudo:
     quem pediu silêncio, ou revogou o consentimento, fica de fora.
+
+    Esta função decide SOZINHA, sem olhar a mensagem, porque ela roda ANTES
+    de qualquer coisa — inclusive antes de a Meta ser consultada (ver
+    `ver_convite_instagram`).
     """
 
     if pessoa.nao_contatar:
@@ -330,12 +335,7 @@ def _whatsapp_do_convite(db: Session, pessoa: Person) -> dict:
     contato = prs.patient_phone(db, pessoa)
     if contato is None:
         return {"disponivel": False, "motivo": MOTIVO_SEM_TELEFONE}
-    return {
-        "disponivel": True,
-        "url": prs.whatsapp_url(
-            contato.valor_normalizado, prs.build_instagram_message(pessoa)
-        ),
-    }
+    return {"disponivel": True, "telefone": contato.valor_normalizado}
 
 
 @router.get("/{document_id}/convite-instagram")
@@ -378,7 +378,38 @@ def ver_convite_instagram(
             "paciente_arquivado",
             "Este cadastro está arquivado e não recebe mensagens.",
         )
-    zap = _whatsapp_do_convite(db, pessoa)
+    # Primeiro a pergunta que pode encerrar o assunto: ESTE paciente pode
+    # ser contatado? Só depois se procura o que mandar a ele.
+    destino = _destino_do_convite(db, pessoa)
+
+    # M26.32 — a publicação mais recente, quando a integração oficial da
+    # Meta estiver configurada e respondendo. Esta chamada NÃO levanta
+    # exceção e NÃO bloqueia: sem credencial, com a Meta fora do ar ou com
+    # token vencido, `permalink` vem `None` e a mensagem é a do perfil —
+    # o mesmo convite que a M26.31 entrega hoje.
+    #
+    # Ela fica DEPOIS da checagem de destino de propósito. Quem pediu para
+    # não ser contatado, quem revogou o consentimento e quem não tem
+    # telefone discável não geram tráfego para a Meta: não se gasta chamada
+    # externa (nem se registra uso num serviço de terceiro) por causa de
+    # uma mensagem que já se sabe que não vai sair. Nenhum dado do paciente
+    # participa da consulta — ela é sobre a CONTA da clínica —, e manter
+    # essa ordem é o que garante que isso continue verdade mesmo se alguém
+    # um dia quiser "personalizar" o feed.
+    publicacao = (
+        instagram_feed.ultima_publicacao(get_settings())
+        if destino["disponivel"]
+        else instagram_feed.NAO_CONSULTADO
+    )
+    mensagem = prs.build_instagram_message(pessoa, publicacao.permalink)
+    zap = (
+        {
+            "disponivel": True,
+            "url": prs.whatsapp_url(destino["telefone"], mensagem),
+        }
+        if destino["disponivel"]
+        else destino
+    )
     audit(
         db,
         "convite_instagram_exibido",
@@ -390,11 +421,18 @@ def ver_convite_instagram(
             "report_code": documento.public_code,
             "canal": "whatsapp_manual",
             "status": "disponivel" if zap["disponivel"] else "indisponivel",
+            # Qual das três origens montou a mensagem. É o único registro
+            # da integração: estado, nunca credencial.
+            "fonte_instagram": publicacao.fonte,
         },
     )
     db.commit()
+    # A resposta é exatamente a da M26.31: perfil, mensagem e destino. O
+    # estado da integração (`publicacao.fonte`) fica SÓ na trilha acima —
+    # a tela não o usa, e informação interna que ninguém consome numa
+    # resposta HTTP é superfície sem dono.
     return {
         "instagram_url": prs.INSTAGRAM_URL,
-        "mensagem": prs.build_instagram_message(pessoa),
+        "mensagem": mensagem,
         "whatsapp": zap,
     }

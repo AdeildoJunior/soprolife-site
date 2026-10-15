@@ -80,8 +80,10 @@ com cwd `nucleo-m15`, `app.db.get_engine()` e `SET TRANSACTION READ ONLY`.
   local real (não versionada) — não apagar.
 - **Integrações externas legítimas:** SEFIN Nacional (NFS-e), SERPRO Consulta
   CPF v3 (preparada, desligada), Search Console/GA4 (Marketing, venv próprio
-  `/opt/soprolife/venvs/marketing`), IntegraICP/VIDaaS (assinatura). WhatsApp é
+  `/opt/soprolife/venvs/marketing`), IntegraICP/VIDaaS (assinatura), Instagram
+  Graph API (convite ao paciente, preparada e desligada). WhatsApp é
   só link `wa.me` para revisão humana — **não existe** envio automático.
+  Scraping de rede social é proibido: o Instagram só é lido por API oficial.
 
 ## 4. Command Center — módulos
 
@@ -120,6 +122,14 @@ Front-end: `index.html` + `js/*.js` com cache-buster `?v=AAAAMMDDNN` —
 - **SERPRO:** provider `app/services/serpro_cpf.py`, endpoints fixos de produção,
   timeout finito, limite por usuário. **Estado: pronto e desligado**
   (`M15_SERPRO_CPF_ENABLED=false`, sem Consumer Key/Secret contratados).
+- **Convite de Instagram (M26.31/M26.32):** `GET /laudos/{id}/convite-instagram`
+  monta a mensagem de relacionamento e o `wa.me` do paciente. O perfil
+  (`patient_results.INSTAGRAM_URL`) é fonte única; a publicação mais recente vem
+  de `app/services/instagram_feed.py` (Instagram API with Instagram Login, host
+  fixo `graph.instagram.com`, token no cabeçalho, cache de 45 min em memória).
+  Fail-**safe**, não fail-closed: sem credencial, com a Meta fora ou com token
+  vencido o convite cai para o perfil e o operador não vê erro. **Estado: pronto
+  e desligado** (`M15_INSTAGRAM_FEED_ENABLED=false`, sem token).
 - Datas: preservar texto original e precisão (mês/ano com dia assumido marcado).
 - Exames reais nunca são usados em teste, fixture, screenshot ou demo.
 
@@ -352,6 +362,12 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 - **Certificado A1 vence em 2026-11-07.** O worker exige 30 dias de margem:
   renovar e reinstalar os `.cred` **antes de 2026-10-08**, senão a emissão para.
 - **SERPRO:** contratar Consumer Key/Secret e configurar no `m15.env` para ativar.
+- **Instagram (M26.32):** conectar a conta `@soprolife` como profissional a um app
+  Business da Meta e gerar o token de longa duração (escopo
+  `instagram_business_basic`); configurar `M15_INSTAGRAM_ACCESS_TOKEN` +
+  `M15_INSTAGRAM_FEED_ENABLED=true` no `m15.env`. O token vence em 60 dias e
+  precisa de renovação (`/refresh_access_token`) — vencido, o convite volta ao
+  perfil sozinho, sem erro na tela.
 - **Primeiro clique Pastore:** aguarda o primeiro exame Pastore elegível
   (≥ 2026-10-02, com BD, CPF e município) e autorização humana.
 - **NFS-e manual nº 3 (18/08, Pastore):** não importada; conferir o tomador e
@@ -375,6 +391,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 | Serviços | `soprolife-m15-api`, `soprolife-painel-loopback` (:8765), `soprolife-portal-resultados`, `soprolife-update-data.timer` (10 min), `soprolife-operational-refresh.timer` (6 h), `soprolife-nfse-production-worker.path` (active) |
 | A1 | instalado como credential cifrado; vence 2026-11-07 |
 | SERPRO | integrado, desligado (sem credenciais) |
+| Instagram (último post) | integrado, desligado (sem token Meta) — convite usa o perfil |
 | NFS-e | DIRECT/HOME/PASTORE em produção por botão; 8 documentos `issued`; políticas DIRECT, HOME, PASTORE |
 
 ## 16. Histórico arquitetural resumido

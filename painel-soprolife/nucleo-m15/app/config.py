@@ -344,6 +344,86 @@ class Settings(BaseSettings):
             and self.serpro_cpf_consumer_secret.get_secret_value().strip()
         )
 
+    # M26.32 — publicação mais recente do Instagram no convite ao paciente.
+    #
+    # Fail-safe, não fail-closed: sem `enabled=True` E um token, nada sai do
+    # servidor e o convite continua levando o PERFIL — exatamente a M26.31.
+    # Ausência de credencial aqui não é erro de configuração, é o estado
+    # normal do recurso antes de a conta profissional ser conectada.
+    #
+    # Não há variável de URL nem de versão: o host oficial e a versão da
+    # Graph API são constantes em `services/instagram_feed.py` (mesmo
+    # desenho do SERPRO e do NFS-e de produção). Configuração não pode
+    # apontar este cliente para outro servidor.
+    instagram_feed_enabled: bool = False
+    # Token de usuário Instagram de longa duração (60 dias, renovável).
+    # SecretStr: nunca aparece em repr, log, traceback ou resposta HTTP.
+    instagram_access_token: SecretStr | None = None
+    # Opcional. Vazio = `me`, que é o próprio dono do token. Só dígitos:
+    # este valor entra no CAMINHO da URL e não pode virar injeção de rota.
+    instagram_user_id: str | None = None
+    # Curto de propósito: é o operador parado na frente da tela esperando
+    # para enviar uma mensagem de RELACIONAMENTO. A Meta aqui é enriquecimento
+    # de experiência, não dependência do fluxo — 3 s é o teto do que vale a
+    # pena esperar antes de cair no cache ou no perfil. A faixa continua 1–20
+    # para quem precisar afrouxar numa rede ruim, mas o padrão é curto.
+    instagram_feed_timeout_seconds: float = 3.0
+    # Janela do cache. A faixa 30–60 é deliberada: abaixo de 30 o botão
+    # viraria tráfego à Meta, acima de 60 uma publicação do dia demoraria
+    # demais a aparecer.
+    instagram_feed_cache_minutes: int = 45
+
+    @field_validator("instagram_feed_timeout_seconds")
+    @classmethod
+    def _instagram_timeout_finito(cls, v: float) -> float:
+        if not 1.0 <= v <= 20.0:
+            raise ValueError(
+                "M15_INSTAGRAM_FEED_TIMEOUT_SECONDS deve ficar entre 1 e 20."
+            )
+        return v
+
+    @field_validator("instagram_feed_cache_minutes")
+    @classmethod
+    def _instagram_cache_em_faixa(cls, v: int) -> int:
+        if not 30 <= v <= 60:
+            raise ValueError(
+                "M15_INSTAGRAM_FEED_CACHE_MINUTES deve ficar entre 30 e 60."
+            )
+        return v
+
+    @field_validator("instagram_user_id")
+    @classmethod
+    def _instagram_user_id_numerico(cls, value: str | None) -> str | None:
+        """Só dígitos. Este valor é concatenado no caminho da URL da Meta."""
+
+        if value is None:
+            return None
+        normalizado = value.strip()
+        if not normalizado:
+            return None
+        # `isdigit()` sozinho aceita '²' e outros dígitos Unicode, que
+        # passariam para o caminho da URL. Só ASCII 0-9.
+        if not normalizado.isascii() or not normalizado.isdigit() or len(normalizado) > 32:
+            raise ValueError(
+                "M15_INSTAGRAM_USER_ID deve conter apenas dígitos."
+            )
+        return normalizado
+
+    def instagram_feed_ready(self) -> bool:
+        """Consulta utilizável de verdade — sem isso, nenhuma chamada sai.
+
+        `enabled=True` sem token é configuração incompleta, e incompleta é
+        tratada como desligada (mesmo critério do SERPRO e da IntegraICP).
+        A diferença é a consequência: aqui "desligada" não recusa nada, só
+        faz o convite levar o perfil.
+        """
+
+        return bool(
+            self.instagram_feed_enabled
+            and self.instagram_access_token
+            and self.instagram_access_token.get_secret_value().strip()
+        )
+
     @field_validator("integraicp_base_url", "integraicp_callback_url")
     @classmethod
     def _integraicp_https(cls, value: str | None) -> str | None:

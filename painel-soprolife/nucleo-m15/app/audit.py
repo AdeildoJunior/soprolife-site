@@ -76,6 +76,13 @@ ALLOWED_KEYS = {
     # Fechamento de repasse: IDs técnicos, quantidade e valores monetários.
     "quantidade_laudos", "valor_unitario", "total_referencia",
     "valor_pago", "data_pagamento",
+    # M26.32 — de qual das três origens veio a mensagem do convite de
+    # Instagram: `meta`, `cache`, `cache_vencido`, `desligado`,
+    # `indisponivel` ou `sem_publicacao`. É um rótulo de catálogo fechado,
+    # nunca token, id de conta Meta ou corpo de resposta da API. Sem ele a
+    # trilha não distingue "o paciente recebeu a publicação do dia" de "o
+    # paciente recebeu o perfil porque a integração estava fora".
+    "fonte_instagram",
     # M26.12 — "retornar para correção": identificador técnico do documento
     # corretivo aberto pela ação, e um booleano dizendo se foi o admin (e
     # não a própria médica) quem acionou a abertura.
