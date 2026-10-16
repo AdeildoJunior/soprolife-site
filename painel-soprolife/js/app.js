@@ -2483,9 +2483,15 @@ function resolveLeadWhatsApp(item) {
   if (item.whatsapp_url) return item.whatsapp_url;
   const phone = item.telefone_whatsapp || "";
   if (!phone) return "";
-  const digits = String(phone).replace(/\D/g, "");
+  const bruto = String(phone).trim();
+  const digits = bruto.replace(/\D/g, "");
   if (!digits) return "";
-  const country = digits.startsWith("55") ? digits : "55" + digits;
+  /* O "+" é a declaração de que o DDI já está no valor — prefixar 55 ali
+   * produziria "https://wa.me/5516472386290", que não é o telefone de
+   * ninguém. Mesma regra do `normalize_phone` do núcleo. */
+  const ddiExplicito = bruto.startsWith("+") || digits.startsWith("00");
+  const sem00 = digits.startsWith("00") ? digits.slice(2) : digits;
+  const country = ddiExplicito || sem00.startsWith("55") ? sem00 : "55" + sem00;
   return `https://wa.me/${country}`;
 }
 

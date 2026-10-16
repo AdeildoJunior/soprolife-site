@@ -487,12 +487,24 @@ def update_patient_registration(
             continue
         if field == "telefone" and after is not None:
             normalized = normalize_phone(after)
-            if len(normalized) < 10:
+            # Dois pisos, porque são duas afirmações diferentes. Sem DDI
+            # explícito o valor é lido como brasileiro, e dez dígitos é o
+            # mínimo de DDD + número. Com DDI explícito ("+1 647…"), o
+            # painel não conhece o plano de numeração do país e não vai
+            # inventar um: exige apenas que haja número depois do código.
+            # Validar fundo cada plano do mundo bloquearia DDI válido, que é
+            # a falha que este campo acabou de deixar de ter.
+            minimo = 8 if after.strip().startswith(("+", "00")) else 10
+            if len(normalized) < minimo:
                 raise HTTPException(
                     status_code=422,
                     detail={
                         "codigo": "telefone_invalido",
-                        "mensagem": "Informe um telefone com DDD.",
+                        "mensagem": (
+                            "Informe um telefone com DDI e número."
+                            if minimo == 8
+                            else "Informe um telefone com DDD."
+                        ),
                     },
                 )
         else:

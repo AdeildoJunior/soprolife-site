@@ -83,6 +83,10 @@ run "test-m23-1-pastore-datepicker (M23.1)" node painel-soprolife/scripts/test-m
 run "test-m25-26-fluxo-espirometria (M25.26)" node painel-soprolife/scripts/test-m25-26-fluxo-espirometria.js
 run "test-m67-nfse-prontidao (M67)"       node painel-soprolife/scripts/test-m67-nfse-prontidao.js
 run "test-m68-identificacao-assistida (M68)" node painel-soprolife/scripts/test-m68-identificacao-assistida.js
+# Hotfix do telefone internacional: trava a máscara brasileira para fora
+# do DDI +55. A regressão real (+1 647 238-6290 → "(16) 47238-6290")
+# fica barrada no portão, não só na suíte.
+run "test-hotfix-telefone-internacional"  node painel-soprolife/scripts/test-hotfix-telefone-internacional.js
 
 secao "3/10 Sintaxe Python"
 run "py_compile generate-saude-operacional" python3 -m py_compile painel-soprolife/scripts/generate-saude-operacional.py

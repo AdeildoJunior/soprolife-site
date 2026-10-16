@@ -16,15 +16,36 @@ def normalize_name(name: str | None) -> str:
 
 
 def normalize_phone(phone: str | None) -> str:
-    """Só dígitos; prefixa 55 quando parece nacional (10-11 dígitos)."""
+    """Só dígitos; prefixa 55 apenas quando o valor NÃO traz DDI explícito.
+
+    O "55" presumido existe para o caso comum: o operador digita
+    "21 99999-9999" e o painel entende Brasil. Mas presumir SEMPRE corrompia
+    telefone de fora: "+1 647 238-6290" tem onze dígitos como um celular
+    brasileiro, e virava "5516472386290" — um número que não existe em
+    nenhum dos dois países.
+
+    O "+" (e o "00" do discado internacional) é a declaração explícita do
+    operador de que o DDI já está ali. Quando ele aparece, nada é prefixado.
+    Sem ele, a regra brasileira continua idêntica à de antes — nenhum
+    registro legado muda de chave.
+
+    O resultado é também o número discável do `wa.me`: dígitos, DDI
+    incluído, sem "+" nem separador.
+    """
     if not phone:
         return ""
-    digits = re.sub(r"\D", "", phone)
+    bruto = str(phone).strip()
+    digits = re.sub(r"\D", "", bruto)
     if not digits:
         return ""
+    ddi_explicito = bruto.startswith("+") or digits.startswith("00")
     if digits.startswith("00"):
         digits = digits[2:]
-    if len(digits) in (10, 11) and not digits.startswith("55"):
+    if (
+        not ddi_explicito
+        and len(digits) in (10, 11)
+        and not digits.startswith("55")
+    ):
         digits = "55" + digits
     return digits
 

@@ -887,3 +887,31 @@ form[data-nfse-modo="soprolife"] .cad-nfse-selo-wrap { display: inline-flex; }
   .cad-ident-grid { grid-template-columns: minmax(0, 1fr); }
   .cad-cpf-existente .m15-btn { width: 100%; }
 }
+
+/* ------------------------------------------- Telefone com DDI explícito
+ * Dois controles num campo só: o DDI compacto (largura fixa, cabe "+595")
+ * e o número, que fica com todo o resto. `min-width: 0` nos dois porque o
+ * grupo mora dentro de uma coluna de 3/12 da grade — sem isso o input
+ * usaria sua largura intrínseca e estouraria a coluna no desktop.
+ * No mobile estreito o par continua em LINHA: empilhar DDI sobre número
+ * dobraria a altura do campo e separaria visualmente duas metades do mesmo
+ * dado. */
+.cad-fone {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cad-fone-ddi {
+  flex: 0 0 4.6em;
+  width: 4.6em;
+  min-width: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.cad-fone-num {
+  flex: 1 1 auto;
+  min-width: 0;
+}

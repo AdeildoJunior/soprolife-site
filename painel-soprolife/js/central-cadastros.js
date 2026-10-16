@@ -120,18 +120,260 @@
     return isFinite(n) && n > 0 ? n.toFixed(2) : "";
   }
 
-  // Máscara BR de telefone durante a digitação: (21) 99999-9999
-  function phoneMask(input) {
-    input.addEventListener("input", () => {
-      const d = input.value.replace(/\D/g, "").slice(0, 11);
-      let out = d;
-      if (d.length > 2) {
-        out = `(${d.slice(0, 2)}) ${d.slice(2)}`;
-        const rest = d.slice(2);
-        if (rest.length > 5) out = `(${d.slice(0, 2)}) ${rest.slice(0, rest.length - 4)}-${rest.slice(-4)}`;
-      }
-      input.value = out;
+  /* ───────────────────────────── Telefone com DDI explícito ───────────────
+   *
+   * A máscara anterior jogava fora TODO caractere não numérico — o "+" do
+   * DDI incluído — e lia os dois primeiros dígitos restantes como DDD
+   * brasileiro. "+1 647 238-6290" perdia o "+", sobravam onze dígitos
+   * (16472386290) e a tela escrevia "(16) 47238-6290": um telefone do
+   * Canadá reinterpretado como celular de Ribeirão Preto. Não havia escapatória
+   * para o operador, porque o campo era um só e a máscara rodava a cada tecla.
+   *
+   * O conserto tem duas partes. O DDI ganha campo próprio, compacto e
+   * editável, já preenchido com +55 — Brasil continua sendo o DEFAULT, e o
+   * operador brasileiro não digita nada a mais. E a máscara brasileira passa
+   * a ser CONDICIONAL ao DDI +55: qualquer outro DDI deixa o número como o
+   * operador digitou, sem reagrupar, porque reagrupar exigiria conhecer o
+   * plano de numeração do país — foi exatamente essa presunção que gerou o bug.
+   *
+   * O campo original continua existindo, com o MESMO `name`: ele vira o
+   * portador do valor canônico (E.164 — "+16472386290"). Todo consumidor que
+   * já lia `[name="..._fone"].value` continua lendo igual, sem saber que
+   * agora há dois controles visíveis na frente dele.
+   */
+  const DDI_PADRAO = "+55";
+  const DDI_DATALIST_ID = "cadDdiSugestoes";
+
+  /* Sugestões do datalist: DICA de origem, nunca dedução. +1 é o NANP,
+   * compartilhado por EUA, Canadá, Porto Rico e mais territórios — o painel
+   * não conclui nacionalidade a partir de um DDI, e por isso o rótulo do +1
+   * não nomeia um país só. A lista é conveniência: o campo aceita qualquer
+   * DDI digitado, esteja ele aqui ou não. */
+  const DDI_SUGESTOES = [
+    ["+55", "Brasil"],
+    ["+1", "EUA / Canadá / NANP"],
+    ["+351", "Portugal"],
+    ["+34", "Espanha"],
+    ["+54", "Argentina"],
+    ["+598", "Uruguai"],
+    ["+595", "Paraguai"],
+    ["+56", "Chile"],
+    ["+39", "Itália"],
+    ["+44", "Reino Unido"],
+    ["+33", "França"],
+    ["+49", "Alemanha"],
+    ["+41", "Suíça"],
+    ["+81", "Japão"],
+  ];
+
+  /* Comprimento do código de país (ITU-T E.164), para separar "+1 647…" de
+   * "+164 7…" sem adivinhar. A zona 1 e o +7 têm UM dígito; o conjunto
+   * abaixo é a lista FECHADA dos códigos de dois dígitos; todo o resto tem
+   * três. São ~45 entradas estáticas no lugar de uma biblioteca de
+   * numeração — o projeto não tem nenhuma, e este hotfix não é hora de
+   * adotar uma. */
+  const DDI_1_DIGITO = new Set(["1", "7"]);
+  const DDI_2_DIGITOS = new Set([
+    "20", "27", "30", "31", "32", "33", "34", "36", "39", "40", "41", "43",
+    "44", "45", "46", "47", "48", "49", "51", "52", "53", "54", "55", "56",
+    "57", "58", "60", "61", "62", "63", "64", "65", "66", "81", "82", "84",
+    "86", "90", "91", "92", "93", "94", "95", "98",
+  ]);
+
+  function ddiTamanho(digitos) {
+    if (!digitos) return 0;
+    if (DDI_1_DIGITO.has(digitos.slice(0, 1))) return 1;
+    if (DDI_2_DIGITOS.has(digitos.slice(0, 2))) return 2;
+    return 3;
+  }
+
+  function foneDigitos(valor) {
+    return String(valor == null ? "" : valor).replace(/\D/g, "");
+  }
+
+  // DDI exibido: "+" e no máximo 4 dígitos. "" significa SEM DDI (legado).
+  function ddiFormatado(valor) {
+    const d = foneDigitos(valor).slice(0, 4);
+    return d ? "+" + d : "";
+  }
+
+  // A máscara brasileira de sempre — agora restrita ao DDI +55.
+  function foneBrFormatado(valor) {
+    const d = foneDigitos(valor).slice(0, 11);
+    if (d.length <= 2) return d;
+    const rest = d.slice(2);
+    if (rest.length > 5) {
+      return `(${d.slice(0, 2)}) ${rest.slice(0, rest.length - 4)}-${rest.slice(-4)}`;
+    }
+    return `(${d.slice(0, 2)}) ${rest}`;
+  }
+
+  /* Número internacional: preserva o que o operador digitou (dígitos,
+   * espaço, hífen e parênteses) e NÃO reagrupa nada. O "+" é descartado
+   * aqui de propósito — ele mora no campo de DDI, e no meio do número
+   * nunca é DDI válido. */
+  function foneIntlFormatado(valor) {
+    return String(valor == null ? "" : valor).replace(/[^\d\s()-]/g, "").slice(0, 24);
+  }
+
+  // Sem DDI (legado brasileiro) a máscara BR continua valendo.
+  function foneFormatado(ddi, valor) {
+    return !ddi || ddi === DDI_PADRAO
+      ? foneBrFormatado(valor)
+      : foneIntlFormatado(valor);
+  }
+
+  /* Separa um valor armazenado em { ddi, numero }.
+   *
+   * Só existe DDI quando ele está EXPLÍCITO no valor — o "+" ou o "00" do
+   * discado internacional. "21999999999" NÃO ganha DDI aqui: quem decide
+   * exibir +55 ao lado de um legado brasileiro é a tela, e isso não
+   * reescreve o banco (ver `tocado`, em `phoneField`). */
+  function foneSepara(valor) {
+    const bruto = String(valor == null ? "" : valor).trim();
+    if (!bruto) return { ddi: "", numero: "" };
+    if (!/^(\+|00\d)/.test(bruto)) return { ddi: "", numero: bruto };
+    let d = foneDigitos(bruto);
+    if (/^00/.test(bruto)) d = d.replace(/^00/, "");
+    if (!d) return { ddi: "", numero: "" };
+    const n = ddiTamanho(d);
+    return { ddi: "+" + d.slice(0, n), numero: d.slice(n) };
+  }
+
+  /* Valor canônico, compatível com E.164: "+" + DDI + dígitos do número.
+   * Sem DDI devolve só os dígitos — é o formato legado brasileiro, e
+   * preservá-lo evita inventar um "+55" que o operador não pediu. */
+  function foneCompoe(ddi, numero) {
+    const num = foneDigitos(numero);
+    if (!num) return "";
+    const cod = foneDigitos(ddi).slice(0, 4);
+    return cod ? "+" + cod + num : num;
+  }
+
+  // Um datalist por documento, criado na primeira vez que um campo precisa.
+  function garanteDdiDatalist() {
+    if (document.getElementById(DDI_DATALIST_ID)) return;
+    const dl = document.createElement("datalist");
+    dl.id = DDI_DATALIST_ID;
+    DDI_SUGESTOES.forEach(([codigo, pais]) => {
+      const opt = document.createElement("option");
+      opt.value = codigo;
+      opt.label = pais;
+      opt.textContent = pais;
+      dl.appendChild(opt);
     });
+    document.body.appendChild(dl);
+  }
+
+  /* Transforma um input de telefone no par [DDI][número].
+   *
+   * Idempotente: chamar duas vezes no mesmo input não duplica controle. */
+  function phoneField(input) {
+    if (!input || input.getAttribute("data-fone-ddi") === "1") return input;
+    input.setAttribute("data-fone-ddi", "1");
+    garanteDdiDatalist();
+
+    const bruto = input.value || "";
+    const partes = foneSepara(bruto);
+    const ddiInicial = partes.ddi || DDI_PADRAO;
+    const numeroInicial = foneFormatado(partes.ddi, partes.numero);
+
+    const campo = input.closest(".m15-field");
+    const rotuloEl = campo ? campo.querySelector(".m15-field-label") : null;
+    const descricao = ((rotuloEl && rotuloEl.textContent) || "Telefone").trim();
+    const placeholder = input.getAttribute("placeholder") || "(21) 99999-9999";
+
+    const grupo = document.createElement("span");
+    grupo.className = "cad-fone";
+
+    const ddiEl = document.createElement("input");
+    ddiEl.className = "cad-fone-ddi";
+    ddiEl.type = "text";
+    ddiEl.value = ddiInicial;
+    ddiEl.setAttribute("inputmode", "tel");
+    ddiEl.setAttribute("autocomplete", "off");
+    ddiEl.setAttribute("list", DDI_DATALIST_ID);
+    ddiEl.setAttribute("maxlength", "5");
+    ddiEl.setAttribute("aria-label", "Código do país (DDI) — " + descricao);
+    ddiEl.setAttribute("title", "DDI do país. Brasil é +55; troque quando o telefone for de fora.");
+
+    const numEl = document.createElement("input");
+    numEl.className = "cad-fone-num";
+    /* `type="tel"` e não `inputmode="numeric"`: o teclado de telefone do
+     * celular tem o "+", e o operador precisa poder colar um número
+     * internacional completo aqui (a colagem reconfigura o DDI abaixo). */
+    numEl.type = "tel";
+    numEl.value = numeroInicial;
+    numEl.setAttribute("placeholder", placeholder);
+    numEl.setAttribute("autocomplete", input.getAttribute("autocomplete") || "off");
+    numEl.setAttribute("aria-label", descricao);
+
+    input.parentNode.insertBefore(grupo, input);
+    grupo.appendChild(ddiEl);
+    grupo.appendChild(numEl);
+    grupo.appendChild(input);
+    input.type = "hidden";
+    input.removeAttribute("placeholder");
+
+    /* `tocado` = o operador mexeu no telefone nesta tela. Enquanto for
+     * falso, o valor enviado é o do banco byte a byte: abrir a edição de um
+     * paciente antigo não pode reescrever "21999999999" como
+     * "+5521999999999" só porque a tela mostrou "+55" ao lado do número. */
+    let tocado = false;
+
+    function sincroniza() {
+      input.value = tocado ? foneCompoe(ddiEl.value, numEl.value) : bruto;
+    }
+
+    ddiEl.addEventListener("input", () => {
+      tocado = true;
+      const limpo = ddiFormatado(ddiEl.value);
+      if (limpo !== ddiEl.value) ddiEl.value = limpo;
+      /* Trocar o DDI reformata o número que já estava ali: sair do +55
+       * DESFAZ a máscara brasileira em vez de deixar "(64) 7238…" na tela.
+       * A reformatação parte dos DÍGITOS, não do texto exibido — senão os
+       * parênteses e o hífen da máscara anterior sobreviveriam à troca,
+       * porque o formato internacional preserva separadores de propósito. */
+      const refeito = foneFormatado(limpo, foneDigitos(numEl.value));
+      if (refeito !== numEl.value) numEl.value = refeito;
+      sincroniza();
+    });
+
+    numEl.addEventListener("input", () => {
+      tocado = true;
+      const valor = numEl.value;
+      /* Colagem inteligente: um telefone completo com DDI explícito caindo
+       * no campo do número reconfigura o DDI, em vez de o DDI virar DDD. */
+      if (/^\s*(\+|00\d)/.test(valor)) {
+        const p = foneSepara(valor.trim());
+        if (p.ddi) {
+          ddiEl.value = p.ddi;
+          numEl.value = foneFormatado(p.ddi, p.numero);
+          sincroniza();
+          return;
+        }
+      }
+      const limpo = foneFormatado(ddiEl.value, valor);
+      if (limpo !== numEl.value) numEl.value = limpo;
+      sincroniza();
+    });
+
+    /* `form.reset()` devolve o hidden ao valor de origem; os dois controles
+     * visíveis não são governados por ele e precisam voltar junto. O reset
+     * nativo roda depois do evento, daí o salto de tarefa. */
+    if (input.form) {
+      input.form.addEventListener("reset", () => {
+        setTimeout(() => {
+          tocado = false;
+          ddiEl.value = ddiInicial;
+          numEl.value = numeroInicial;
+          input.value = bruto;
+        }, 0);
+      });
+    }
+
+    sincroniza();
+    return input;
   }
 
   /* Máscara de CPF durante a digitação: 000.000.000-00.
@@ -999,7 +1241,7 @@
           <span class="cad-submit-status" id="${prefix}FixStatus" hidden></span>
         </div>`;
       const fixFone = box.querySelector(`[name="${prefix}_editFone"]`);
-      if (fixFone) phoneMask(fixFone);
+      if (fixFone) phoneField(fixFone);
       attachDates(box);
       wireAjuda(box);
       box.querySelector("#" + prefix + "SalvarFix").addEventListener("click", () => {
@@ -1062,11 +1304,11 @@
 
     if (novaBox) {
       const fone = root.querySelector(`[name="${prefix}_fone"]`);
-      if (fone) phoneMask(fone);
+      if (fone) phoneField(fone);
       const cpf = root.querySelector(`[name="${prefix}_cpf"]`);
       if (cpf) cpfMask(cpf);
       const gfone = root.querySelector(`[name="${prefix}_gfone"]`);
-      if (gfone) phoneMask(gfone);
+      if (gfone) phoneField(gfone);
       // menor de idade → revela o bloco de responsável
       const nasc = root.querySelector(`[name="${prefix}_nasc"]`);
       const gBox = root.querySelector("#" + prefix + "GuardianBox");
@@ -2355,7 +2597,7 @@
 
       const form = bodyEl.querySelector("#cadFormB2B");
       markDirtyOn(form);
-      phoneMask(form.elements.telefone);
+      phoneField(form.elements.telefone);
       wireSubmit(form, () => {
         if (!val(form, "partner_id")) throw new Error("Selecione a clínica/parceiro do contato.");
         const payload = {
