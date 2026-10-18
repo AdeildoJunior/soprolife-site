@@ -533,6 +533,14 @@ def update_patient_registration(
     for field, before, after in changes:
         _audit_registration_change(db, request, person, user, field, before, after)
     db.commit()
+    # A tela de correção re-renderiza com ESTA resposta, sem segundo GET (M26.9).
+    # A sessão roda com `expire_on_commit=False`, e um contato NOVO entra por
+    # `db.add(...)` — nunca pela coleção `person.contacts`, que já foi carregada
+    # acima por `_registration_contact`. Sem o refresh, a resposta sai com a
+    # coleção velha: o operador grava o telefone do paciente, o banco guarda, e
+    # a tela continua acusando "falta contato" em `cadastro_pendencias`. O
+    # refresh garante que a resposta do PATCH seja igual à de um GET novo.
+    db.refresh(person)
     return ser_person(person)
 
 

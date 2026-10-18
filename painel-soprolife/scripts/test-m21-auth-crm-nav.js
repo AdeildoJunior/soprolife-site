@@ -295,9 +295,23 @@ caso("a orientação não afirma credencial instalada quando credentialKind é n
      /aval\.credentialKind === "service_account"/.test(appSrc) &&
      /precisam ser\s+criados e instalados no servidor/.test(appSrc) &&
      !/A conta de serviço de leitura já está configurada no servidor/.test(appSrc));
+// A reconciliação do Search Console (a7e0757) exigiu que estes dois scripts
+// chegassem ao navegador com cache-buster novo. Fixar o literal daquela data
+// quebrava o teste a cada bump legítimo de app.js por outra missão — seis
+// desde então, o último em M26.30. O que a reconciliação exige é existir
+// versão datada e não regredir abaixo dela, não permanecer nela.
+const CACHE_BUSTER_RECONCILIACAO = 2026080101;
+const versaoScript = (arquivo) => {
+  const alvo = arquivo.replace(/\./g, "\\.");
+  const m = new RegExp(`/${alvo}\\?v=(\\d{10})`).exec(indexSrc);
+  return m ? Number(m[1]) : 0;
+};
+const vFreshness = versaoScript("marketing-freshness.js");
+const vApp = versaoScript("app.js");
 caso("scripts de Marketing usam cache-buster da reconciliação",
-     /marketing-freshness\.js\?v=2026080101/.test(indexSrc) &&
-     /app\.js\?v=2026080101/.test(indexSrc));
+     vFreshness >= CACHE_BUSTER_RECONCILIACAO &&
+     vApp >= CACHE_BUSTER_RECONCILIACAO,
+     `marketing-freshness.js=${vFreshness} app.js=${vApp}`);
 
 // ───────────── G) unidade systemd e credencial durável ─────────────────────
 console.log();

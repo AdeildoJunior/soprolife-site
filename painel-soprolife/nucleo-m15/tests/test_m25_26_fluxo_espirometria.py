@@ -532,6 +532,58 @@ def test_corrigir_cadastro_zera_as_pendencias(client, auth):
     assert detalhe["sexo"] == "masculino"
 
 
+def test_patch_cadastro_devolve_pendencias_recalculadas(client, auth):
+    """O caminho que o botão percorre DESDE a M26.9: um PATCH só.
+
+    O teste acima guarda o fluxo ANTIGO (vários pedidos + um GET extra para
+    descobrir o estado final). A M26.9 trocou isso por um PATCH único em
+    /pessoas/{id}/cadastro, e `salvarCorrecao` re-renderiza a tela com a
+    RESPOSTA desse PATCH — sem segundo GET. Então a resposta precisa trazer
+    `cadastro_pendencias` já recalculado, ou o operador corrige o cadastro e
+    continua lendo na tela a pendência que acabou de resolver.
+
+    O CPF não entra neste contrato de propósito: `PatientRegistrationUpdate`
+    não o aceita, porque o número completo nunca trafega por aqui (M25.18).
+    Ele segue pendente ao fim deste teste, e é isso que o teste afirma — a
+    correção de CPF tem rota própria.
+    """
+
+    pessoa = _pessoa(client, auth, "Paciente Sintetico M2526 S")
+    antes = client.get(
+        f"{API}/pessoas/{pessoa['id']}", headers=auth("leitura")
+    ).json()
+    assert {"data_nascimento", "sexo", "contato"} <= {
+        p["campo"] for p in antes["cadastro_pendencias"]
+    }
+
+    resp = client.patch(
+        f"{API}/pessoas/{pessoa['id']}/cadastro",
+        json={
+            "data_nascimento": "1975-03-02",
+            "sexo": "masculino",
+            "telefone": FONE_SINTETICO,
+        },
+        headers=auth("admin"),
+    )
+    assert resp.status_code == 200, resp.text
+    corpo = resp.json()
+
+    assert "cadastro_pendencias" in corpo, (
+        "a tela re-renderiza pela resposta: sem este campo ela mostra pendência velha"
+    )
+    assert {p["campo"] for p in corpo["cadastro_pendencias"]} == {"cpf"}, (
+        "só o CPF sobra — os três campos corrigidos saíram da lista na MESMA resposta"
+    )
+
+    # A resposta do PATCH é a mesma que um GET devolveria. É isso que torna o
+    # GET extra redundante, em vez de uma economia arriscada.
+    relido = client.get(
+        f"{API}/pessoas/{pessoa['id']}", headers=auth("leitura")
+    ).json()
+    assert corpo["cadastro_pendencias"] == relido["cadastro_pendencias"]
+    assert corpo["sexo"] == relido["sexo"] == "masculino"
+
+
 def test_cadastro_incompleto_nao_impede_o_atendimento(client, auth):
     """Deliberado: o exame ACONTECEU.
 

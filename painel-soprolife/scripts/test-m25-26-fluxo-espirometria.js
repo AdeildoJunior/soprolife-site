@@ -247,10 +247,47 @@ caso("o \"como corrigir\" do servidor é mostrado junto do erro",
 caso("\"Corrigir cadastro\" edita no lugar, sem trocar de tela",
      /function abrirCorrecao/.test(central) &&
      /id="\$\{prefix\}CorrigirBox"/.test(central));
-caso("a correção só oferece os campos realmente pendentes",
-     /const pend = p\.cadastro_pendencias \|\| \[\];[\s\S]{0,200}?pend\.map/.test(central));
+// A M25.26 original abria SÓ os campos pendentes (`pend.map`). A M26.9
+// (36ef048, "editar cadastros") trocou isso de propósito: "Corrigir
+// cadastro" virou edição cadastral completa, com um PATCH único em
+// /pessoas/{id}/cadastro. Exigir "só os pendentes" hoje desfaria aquela
+// entrega. O que precisa continuar valendo é o ESCOPO da caixa: ela oferece
+// exatamente os cinco campos do contrato `PatientRegistrationUpdate` e
+// nenhum outro — nada de CPF, nada clínico, nada de laudo, exame ou ID.
+// Ler os nomes dos campos (em vez de procurar a ausência de palavras) evita
+// o falso negativo da microcópia, que cita "Laudos" e "exames" justamente
+// para dizer que permanecem intactos.
+const blocoCorrecao = (() => {
+  const ini = central.indexOf("function abrirCorrecao");
+  return ini === -1 ? "" : central.slice(ini, central.indexOf("function salvarCorrecao", ini));
+})();
+const CAMPOS_CORRECAO = ["_editNome", "_editFone", "_editEmail", "_editNasc", "_editSexo"];
+const camposOferecidos = [...blocoCorrecao.matchAll(/\b(?:inp|sel|dateInp)\(prefix \+ "(_\w+)"/g)]
+  .map((m) => m[1]).sort();
+caso("a correção oferece os campos cadastrais do contrato, e nada além",
+     camposOferecidos.join(",") === [...CAMPOS_CORRECAO].sort().join(","),
+     `oferecidos: ${camposOferecidos.join(",") || "nenhum"}`);
+
+// A M25.26 original salvava em VÁRIOS pedidos e por isso relia a pessoa com
+// um GET extra. A M26.9 passou a usar um PATCH único e a re-renderizar com a
+// resposta dele — mas o GET que ela removeu NÃO era redundante: a sessão roda
+// com `expire_on_commit=False` e o contato novo entrava por `db.add(...)`,
+// fora da coleção já carregada, então a resposta saía com `contatos: []` e
+// `contato` ainda pendente. O operador salvava o telefone e o cartão seguia
+// dizendo "Contato: não informado". A Fase 1.2 fechou isso com um
+// `db.refresh(person)` antes de serializar (routers/people.py), provado por
+// `test_patch_cadastro_devolve_pendencias_recalculadas`.
+// Aqui o que se exige é o lado do navegador: a tela se refaz pelo que o
+// SERVIDOR devolveu, nunca pelo objeto que o formulário tinha em mão.
+const blocoSalvarCorrecao = (() => {
+  const ini = central.indexOf("function salvarCorrecao");
+  return ini === -1 ? "" : central.slice(ini, central.indexOf("wireMiniSearch(q,", ini));
+})();
 caso("após salvar, as pendências são RELIDAS do servidor",
-     /\.then\(\(\) => api\("\/pessoas\/" \+ encodeURIComponent\(p\.id\)\)\)/.test(central));
+     /api\("\/pessoas\/" \+ encodeURIComponent\(p\.id\) \+ "\/cadastro"/.test(blocoSalvarCorrecao) &&
+     /method: "PATCH"/.test(blocoSalvarCorrecao) &&
+     /\.then\(\(atualizada\) => \{[\s\S]{0,200}?showSelected\(atualizada\)/.test(blocoSalvarCorrecao) &&
+     !/showSelected\(p\)/.test(blocoSalvarCorrecao));
 caso("corrigir o cadastro não re-renderiza o formulário do atendimento",
      (() => {
        const ini = central.indexOf("function salvarCorrecao");
