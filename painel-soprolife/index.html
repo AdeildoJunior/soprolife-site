@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Painel SoproLife</title>
+  <title>Painel SoproLife · Centro de Comando Life</title>
   <meta name="robots" content="noindex,nofollow" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -15,10 +15,71 @@
   <link rel="stylesheet" href="./css/report-workflow.css?v=2026101402" />
   <link rel="stylesheet" href="./css/command-center-visual.css?v=2026100101" />
   <link rel="stylesheet" href="./css/report-statistics.css?v=2026100701" />
+  <!-- Centro de Comando Life (Fase 1.3): casca multimarcas. Vem por último de
+       propósito — o style.css redefine .app-shell/.sidebar/.main/.topbar em
+       mais de dez pontos, e esta folha precisa da palavra final no que toca. -->
+  <link rel="stylesheet" href="./css/life-command-center.css?v=2026101801" />
   <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
   <script src="./js/vendor/chart.umd.min.js"></script>
 </head>
 <body>
+  <!-- ══ Centro de Comando Life ══════════════════════════════════════════════
+       Barra única acima das três cascas. O contexto ativo é dito de três
+       formas independentes: aria-selected/aria-current na aba, o estado visual
+       preenchido, e a linha "Contexto: …" em texto — nunca só por cor.
+       Life Geral NÃO é marca: é contexto consolidado, e o rótulo
+       "consolidado" × "marca" existe para dizer isso sem depender de
+       explicação. -->
+  <header class="life-masthead" id="lifeMasthead">
+    <div class="life-masthead-inner">
+      <div class="life-identity">
+        <span class="life-mark" aria-hidden="true">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 9h3l1.8-4.2L9 13l2.2-6 1.6 2.2h2.7"/></svg>
+        </span>
+        <div class="life-identity-text">
+          <strong>Centro de Comando Life</strong>
+          <span class="life-context-label" id="lifeContextoRotulo" role="status" aria-live="polite">Contexto: <b>SoproLife</b> · operação ativa</span>
+        </div>
+      </div>
+
+      <nav class="life-switcher" aria-label="Contexto do Centro de Comando Life">
+        <div class="life-switcher-track" role="tablist" aria-label="Contexto ativo">
+          <button type="button" role="tab" class="life-tab" id="lifeTabLifeGeral"
+                  data-life-context="life_geral" data-life-kind="contexto"
+                  aria-controls="lifePanelLifeGeral" aria-selected="false" aria-current="false" tabindex="-1">
+            <span class="life-tab-dot" aria-hidden="true"></span>
+            <span class="life-tab-text">
+              <span class="life-tab-label">Life Geral</span>
+              <span class="life-tab-kind">consolidado</span>
+            </span>
+          </button>
+          <button type="button" role="tab" class="life-tab" id="lifeTabSoproLife"
+                  data-life-context="soprolife" data-life-kind="marca"
+                  aria-controls="lifePanelSoproLife" aria-selected="true" aria-current="true" tabindex="0">
+            <span class="life-tab-dot" aria-hidden="true"></span>
+            <span class="life-tab-text">
+              <span class="life-tab-label">SoproLife</span>
+              <span class="life-tab-kind">marca</span>
+            </span>
+          </button>
+          <button type="button" role="tab" class="life-tab" id="lifeTabEegLife"
+                  data-life-context="eeglife" data-life-kind="marca"
+                  aria-controls="lifePanelEegLife" aria-selected="false" aria-current="false" tabindex="-1">
+            <span class="life-tab-dot" aria-hidden="true"></span>
+            <span class="life-tab-text">
+              <span class="life-tab-label">EEGLife</span>
+              <span class="life-tab-kind">marca</span>
+            </span>
+          </button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Contexto SOPROLIFE — o painel operacional existente, intacto. A casca
+       só o envolve: nenhum módulo, rota, ação ou identidade visual mudou. -->
+  <div class="life-contexto" id="lifePanelSoproLife" data-life-panel="soprolife"
+       role="tabpanel" aria-labelledby="lifeTabSoproLife">
   <div class="app-shell">
     <aside class="sidebar">
       <div class="brand">
@@ -991,6 +1052,183 @@
 
     </main>
   </div>
+  </div><!-- /lifePanelSoproLife -->
+
+  <!-- ══ Contexto EEGLIFE — casca visual ═════════════════════════════════════
+       Estrutura real do painel futuro, sem operação simulada. A sidebar e o
+       painel de implantação são RENDERIZADOS a partir de `MODULOS_EEG` em
+       js/life-command-center.js: um mapa de módulos, não uma segunda sidebar
+       escrita à mão. É o formato que a Fase 2 deve herdar.
+
+       Nenhum módulo tem backend nesta fase, então clicar em qualquer um abre
+       "Estrutura em implantação" — e, deliberadamente, NÃO chama o servidor.
+       Não há aqui paciente, lead, laudo, receita nem métrica da SoproLife com
+       aparência de EEG. -->
+  <div class="life-contexto" id="lifePanelEegLife" data-life-panel="eeglife"
+       role="tabpanel" aria-labelledby="lifeTabEegLife" hidden>
+    <div class="eeg-shell">
+      <aside class="eeg-sidebar">
+        <div class="eeg-brand">
+          <span class="eeg-brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 9h2.4l1.3-3.4L7 12.4l1.7-5.1 1.4 3.3 1.2-2.1 1 1.5H17"/></svg>
+          </span>
+          <div class="eeg-brand-text">
+            <strong>EEGLife</strong>
+            <span>Eletroencefalografia</span>
+          </div>
+        </div>
+
+        <nav class="eeg-nav-list" id="eegNavList" aria-label="Módulos previstos da EEGLife"></nav>
+
+        <p class="eeg-sidebar-note">
+          Estrutura de navegação proposta. Nenhum módulo está ligado a dados
+          nesta fase.
+        </p>
+      </aside>
+
+      <main class="eeg-main">
+        <div class="eeg-topbar">
+          <div>
+            <p class="eeg-eyebrow">EEGLife · marca</p>
+            <h2 id="eegModuloTitulo">Painel Geral</h2>
+            <p id="eegModuloResumo">Visão consolidada da operação de EEG, quando houver operação para consolidar.</p>
+          </div>
+          <span class="eeg-selo">Estrutura em implantação</span>
+        </div>
+
+        <div class="eeg-card">
+          <div class="eeg-implantacao">
+            <div>
+              <h3>Estrutura em implantação</h3>
+              <p>
+                Este módulo já tem lugar definido na arquitetura do Centro de
+                Comando Life, mas ainda não tem backend próprio. Enquanto não
+                tiver, esta tela não mostra número algum — nem estimado, nem
+                emprestado da SoproLife.
+              </p>
+              <p>
+                A operação de eletroencefalografia é uma marca distinta, com
+                exame, laudo, parceiros e fiscal próprios. Reaproveitar os
+                dados da espirometria aqui daria a impressão de uma operação
+                que ainda não começou.
+              </p>
+            </div>
+            <div class="eeg-previsto">
+              <strong>O que este módulo vai receber</strong>
+              <ul>
+                <li>Modelo de dados próprio da marca, separado da espirometria.</li>
+                <li>Segregação real no servidor, não apenas na tela.</li>
+                <li>Indicadores calculados a partir da operação de EEG.</li>
+                <li>Permissão por marca e por capacidade clínica.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="eeg-aviso">
+            <p>
+              <b>Nenhum dado é consultado nesta casca.</b> Abrir qualquer
+              módulo da EEGLife não dispara leitura no servidor, e por isso
+              nada que você vê aqui vem da operação SoproLife.
+            </p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div><!-- /lifePanelEegLife -->
+
+  <!-- ══ Contexto LIFE GERAL — consolidado, não marca ════════════════════════
+       Visão institucional neutra: diz o estado de cada marca em palavras e
+       oferece a entrada para cada uma. Não existe um único número aqui, e isso
+       é a regra, não a falta de tempo: somar os indicadores da SoproLife e
+       chamar o resultado de "Life" afirmaria um consolidado que ainda não
+       existe, e trataria a ausência de EEG como zero operacional. -->
+  <div class="life-contexto" id="lifePanelLifeGeral" data-life-panel="life_geral"
+       role="tabpanel" aria-labelledby="lifeTabLifeGeral" hidden>
+    <div class="lg-shell">
+      <div class="lg-inner">
+        <div class="lg-head">
+          <p class="lg-eyebrow">Contexto consolidado</p>
+          <h2>Life Geral</h2>
+          <p>
+            Life Geral não é uma marca: é a visão consolidada do Centro de
+            Comando Life sobre as marcas operacionais. As marcas são
+            <b>SoproLife</b> e <b>EEGLife</b>.
+          </p>
+        </div>
+
+        <div class="lg-marcas">
+          <article class="lg-marca" data-life-marca="soprolife">
+            <div class="lg-marca-topo">
+              <div>
+                <h3 class="lg-marca-nome">SoproLife</h3>
+                <span class="lg-marca-tipo">Marca · espirometria</span>
+              </div>
+              <span class="lg-estado" data-estado="ativa">Operação ativa</span>
+            </div>
+            <p>
+              Operação funcional hoje: cadastro, CRM, laudos, financeiro,
+              fiscal e marketing em uso real.
+            </p>
+            <ul class="lg-marca-modulos">
+              <li>Cadastros</li><li>CRM</li><li>Laudos</li>
+              <li>Financeiro</li><li>Fiscal</li><li>Marketing</li>
+            </ul>
+            <button type="button" class="lg-entrar" data-life-entrar="soprolife">
+              Entrar em SoproLife
+            </button>
+          </article>
+
+          <article class="lg-marca" data-life-marca="eeglife">
+            <div class="lg-marca-topo">
+              <div>
+                <h3 class="lg-marca-nome">EEGLife</h3>
+                <span class="lg-marca-tipo">Marca · eletroencefalografia</span>
+              </div>
+              <span class="lg-estado" data-estado="implantacao">Estrutura em implantação</span>
+            </div>
+            <p>
+              Casca de navegação definida. Ainda sem modelo de dados, sem
+              operação registrada e sem indicadores — por isso nada aqui é
+              apresentado como número.
+            </p>
+            <ul class="lg-marca-modulos">
+              <li>Estrutura prevista</li><li>Sem backend</li><li>Sem dados</li>
+            </ul>
+            <button type="button" class="lg-entrar" data-life-entrar="eeglife">
+              Entrar em EEGLife
+            </button>
+          </article>
+        </div>
+
+        <section class="lg-consolidado">
+          <h3>Indicadores consolidados</h3>
+          <p>
+            Indicadores consolidados serão disponibilizados após a ativação do
+            modelo multimarcas.
+          </p>
+          <div class="lg-aguardando">
+            <p>
+              Nenhum valor é exibido aqui de propósito. Somar hoje os
+              indicadores da SoproLife e chamá-los de consolidado apresentaria
+              uma marca como se fosse o grupo, e leria a ausência de dados de
+              EEG como zero operacional — que é diferente de zero.
+            </p>
+          </div>
+          <ul class="lg-arquitetura">
+            <li><b>Identidade compartilhada.</b> Um mesmo paciente pode ser atendido pelas duas marcas; consolidar exige decidir o que fica visível para quem.</li>
+            <li><b>Origem por marca.</b> Cada exame, laudo e lançamento precisa dizer a que marca pertence antes de qualquer soma.</li>
+            <li><b>Custos compartilhados.</b> Parte da estrutura serve as duas marcas e precisa de rateio declarado, não estimado.</li>
+            <li><b>Permissão por marca.</b> Acesso por marca e por capacidade clínica, decidido no servidor — nunca pela preferência de interface.</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </div><!-- /lifePanelLifeGeral -->
+
+  <!-- Casca do Centro de Comando Life: decide qual contexto aparece e adia a
+       carga de dados do SoproLife até que o contexto SoproLife seja entrado.
+       Precisa vir ANTES de app.js, que consulta window.LifeCommandCenter. -->
+  <script src="./js/life-command-center.js?v=2026101801"></script>
 
   <!-- M25.23 — precisa vir ANTES de app.js: é ele que resolve o papel real no
        servidor e REMOVE do DOM (não esconde) tudo que estiver fora dele. -->
@@ -1002,7 +1240,7 @@
   <script src="./js/today-actions.js?v=2026070803"></script>
   <script src="./js/espirometria-financeiro.js?v=2026070902"></script>
   <script src="./js/marketing-freshness.js?v=2026080101"></script>
-  <script src="./js/app.js?v=2026101101"></script>
+  <script src="./js/app.js?v=2026101801"></script>
   <!-- Apresentação canônica de status de atendimento (M20): formatador
        ÚNICO usado por Central, CRM, linha do tempo, listas, filtros e
        inspeção técnica. Sem defer: precisa existir antes dos módulos. -->

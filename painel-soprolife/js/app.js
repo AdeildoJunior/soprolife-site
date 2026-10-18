@@ -4401,9 +4401,37 @@ function updateLeadsFilterTip(el) {
     console.warn("Gate de boot ausente — painel administrativo não iniciado.");
     return;
   }
+
+  // Fase 1.3 — o painel SoproLife é UM dos contextos do Centro de Comando
+  // Life. `init()` lê todos os data/*.json da SoproLife, então ele passa a
+  // esperar a ENTRADA no contexto SoproLife, em vez de rodar no carregamento.
+  //
+  // É isso que faz a casca EEGLife não disparar carregamento de dado
+  // SoproLife: quem abre o painel já em EEGLife (preferência salva) não lê
+  // nada da espirometria, e portanto não há como esse dado aparecer com
+  // rótulo de EEG. Entrar em SoproLife depois carrega na hora, uma única vez.
+  let painelIniciado = false;
+  function entrarEmSoproLife() {
+    if (!painelIniciado) {
+      painelIniciado = true;
+      init();
+      return;
+    }
+    // Reentrada: os gráficos foram medidos com o painel oculto (largura zero)
+    // e precisam de nova medida agora que ele está visível.
+    resizeCharts();
+  }
+
   gate.pronto.then((identidade) => {
     if (!identidade || gate.somenteClinico) return;
-    init();
+    const life = window.LifeCommandCenter;
+    if (life && typeof life.onContext === "function") {
+      life.onContext("soprolife", entrarEmSoproLife);
+    } else {
+      // Sem a casca carregada, o painel SoproLife é o único contexto — é o
+      // comportamento de antes da Fase 1.3, preservado de propósito.
+      entrarEmSoproLife();
+    }
   });
 })();
 

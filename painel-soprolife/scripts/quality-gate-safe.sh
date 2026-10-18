@@ -51,6 +51,8 @@ run "node --check js/nfse-prontidao.js"      node --check painel-soprolife/js/nf
 run "node --check test-m67-browser-e2e.js"   node --check painel-soprolife/scripts/test-m67-browser-e2e.js
 run "node --check js/identificacao-assistida.js" node --check painel-soprolife/js/identificacao-assistida.js
 run "node --check test-m68-browser-e2e.js"   node --check painel-soprolife/scripts/test-m68-browser-e2e.js
+run "node --check life-command-center.js"    node --check painel-soprolife/js/life-command-center.js
+run "node --check test-fase1-3-life-browser-e2e.js" node --check painel-soprolife/scripts/test-fase1-3-life-browser-e2e.js
 run "node --check js/financeiro-conciliacao.js" node --check painel-soprolife/js/financeiro-conciliacao.js
 run "node --check js/pastore-settlement.js" node --check painel-soprolife/js/pastore-settlement.js
 run "node --check js/crm-workspace.js"       node --check painel-soprolife/js/crm-workspace.js
@@ -151,6 +153,7 @@ run "test-marketing-freshness (painel JS)" node painel-soprolife/scripts/test-ma
 run "test-systemd-units (sintaxe + sem segredo)" python3 painel-soprolife/scripts/test-systemd-units.py
 run "test-command-center proxy cookie/CSRF (M21)" python3 painel-soprolife/scripts/test_command_center_m15_proxy.py
 run "test-safe-launchers (local protegido/legado recusado)" python3 painel-soprolife/scripts/test-safe-launchers.py
+run "test-fase1-3 casca multimarcas Life (3 contextos)" node painel-soprolife/scripts/test-fase1-3-life-command-center.js
 run "test-marketing credencial durável (M21)" python3 painel-soprolife/scripts/test-marketing-credencial.py
 run "test-marketing janela 60 dias (SC+GA4)" python3 painel-soprolife/scripts/test-marketing-window.py
 run "test-marketing subtítulo da tendência" node painel-soprolife/scripts/test-marketing-trend-subtitle.js
