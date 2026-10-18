@@ -1,5 +1,8 @@
 # M4 — Central de Ações Operacionais
 
+> Inicialização atual: somente servidor autenticado, API local e dados sintéticos.
+> Não usar servidor estático genérico; ver [README](../README.md).
+
 ## Objetivo
 
 Transformar os alertas da Saúde Operacional (M3) em uma área prática de
@@ -42,7 +45,7 @@ segurança."; JSON/PII/auditoria/fontes → ações próprias; desconhecido →
 node painel-soprolife/scripts/test-operational-actions.js   # 22 casos
 node --check painel-soprolife/js/operational-actions.js
 node --check painel-soprolife/js/app.js
-python3 -m http.server 8765   # → /painel-soprolife/ → Automações
+bash painel-soprolife/scripts/start-local.sh   # → /painel-soprolife/ → Automações
 ```
 
 Cobertura dos testes: sem alertas → `[]`; níveis atenção/crítico; ação

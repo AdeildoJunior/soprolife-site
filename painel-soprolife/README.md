@@ -1,67 +1,74 @@
-# Painel SoproLife
+# Painel SoproLife — base do Centro de Comando Life
 
-Dashboard operacional da SoproLife.
+O painel existente combina frontend HTML/CSS/JS, servidor autenticado/proxy e
+núcleo M15 (FastAPI + PostgreSQL). Não é somente um protótipo estático.
+A fundação multimarcas é documental; não cria operação EEG nem seletor.
 
-## Fase atual
+Arquitetura futura e matriz de módulos:
+[Centro de Comando Life](../docs/CENTRO_COMANDO_LIFE_ARCHITECTURE.md).
+Estado operacional e invariantes: [contexto mestre](../docs/SOPROLIFE_MASTER_CONTEXT.md).
 
-Versão 0.1 — protótipo visual estático com dados fictícios/anônimos.
+## Fonte de dados e módulos
 
-## Objetivo
+PostgreSQL é a fonte operacional canônica desde M23. Sheets/Apps Script são
+legado de migração/forense; não são fallback ou destino de escrita normal.
+O painel reúne cadastros, CRM, leads/agendamentos, financeiro, parcerias,
+laudos respiratórios, fiscal e indicadores. Marketing usa Search Console/GA4.
+A existência de código de integração não comprova credenciais ou ativação.
 
-Acompanhar:
-- visão geral da operação;
-- CRM de clínicas;
-- leads e agendamentos;
-- marketing e SEO;
-- futuras integrações com planilhas, Search Console, Instagram, WhatsApp e CRM.
+Há componentes históricos/demonstrativos. A aba Tarefas ainda lê conteúdo
+estático; Custos & Investimentos tem livro-caixa JSON privado e resumo gerado.
+Não confundir esses estados com migração completa de todos os módulos ao banco.
 
-## Como rodar localmente
+## Desenvolvimento local seguro
 
-A partir da raiz do repositório, suba o servidor do painel. Ele mantém os
-arquivos estáticos e os proxies Apps Script/M15:
+Trabalhar em worktree exclusivo da branch do painel, baseado no HEAD oficial
+após fetch. Não trocar o checkout principal nem copiar dados privados para
+um worktree de desenvolvimento. Usar dados sintéticos.
+
+O backend precisa de ambiente de desenvolvimento isolado, sem configuração de
+produção; consultar o [README do M15](nucleo-m15/README.md). Não criar usuário,
+seed ou schema em banco real para testar a interface.
+
+Com a API local preparada, executar na raiz do worktree:
 
 ```bash
-python3 painel-soprolife/scripts/command-center-local-server.py
+bash painel-soprolife/scripts/start-local.sh
 ```
 
-Depois acesse:
+Abrir `http://127.0.0.1:8765/painel-soprolife/`. O launcher força loopback e
+chama `scripts/command-center-local-server.py`, preservando o portão de sessão
+original. Sem API/sessão válida, o painel continua fechado. Se o servidor
+oficial estiver ausente, a abertura é recusada; não existe fallback estático.
+A API fica em `127.0.0.1:8015`, acessada pelo proxy `/painel-soprolife/api/m15`.
 
-```text
-http://127.0.0.1:8765/painel-soprolife/
-```
+**Não usar `python3 -m http.server`, `file://` ou servidor estático genérico.**
+Eles não executam autenticação, bloqueio de diretórios privados ou proxy M15.
+`start-tailscale.sh` é legado desabilitado: só explica a recusa e retorna erro.
+Para operação remota, usar o HTTPS privado já provisionado, com o servidor
+oficial e Tailscale. Este guia não autoriza configurar rede ou fazer deploy.
+Dados clínicos reais exigem HTTPS; HTTP loopback destina-se a desenvolvimento.
 
-> Evite abrir o `index.html` diretamente via `file://`, porque o painel carrega os JSONs com `fetch()`.
-> `python3 -m http.server` ainda serve as telas antigas, mas não oferece o proxy
-> M15. A feature flag M15 permanece desligada por padrão.
+`data/m15-config.json` contém as flags versionadas atuais. Flags de interface
+não substituem controles do backend e não devem ser ativadas incidentalmente.
 
-## Núcleo M15 em produção futura
-
-Fluxo: navegador → `/painel-soprolife/api/m15` na porta 8765 → FastAPI em
-`127.0.0.1:8015` → PostgreSQL 16 local. A API não é publicada no IP Tailscale.
-O kit foi preparado, mas não executado. Veja
-`docs/m15-2-proxy-seguro-deploy-vps.md` e `docs/m15-2-primeiro-usuario.md`.
-
-## Testes rápidos
-
-Valide a sintaxe do JavaScript:
+## Verificações offline
 
 ```bash
 node --check painel-soprolife/js/app.js
+python3 -B painel-soprolife/scripts/test-safe-launchers.py
+python3 -B painel-soprolife/scripts/test-panel-access-gate.py
+python3 -B painel-soprolife/scripts/test_command_center_m15_proxy.py
+bash painel-soprolife/scripts/quality-gate-safe.sh
 ```
 
-Valide todos os JSONs do painel:
-
-```bash
-for f in painel-soprolife/data/*.json; do python3 -m json.tool "$f" >/dev/null || exit 1; echo "OK $f"; done
-```
-
-Verifique se a rota do painel responde:
-
-```bash
-curl -I http://127.0.0.1:8765/painel-soprolife/
-```
+O quality gate inclui testes sintéticos e pode gerar um resumo de saúde local
+ignorado pelo Git: executá-lo em worktree isolado. Registrar falhas herdadas
+sem anunciar que o gate passou. Nenhum teste substitui homologação de produção.
 
 ## Segurança
 
-Não inserir dados reais de pacientes nesta fase.
-Não armazenar CPF, telefone real de paciente, pedido médico ou dados clínicos identificáveis nos arquivos do painel.
+Não versionar dados pessoais/clínicos, credenciais, bancos, backups ou artefatos
+fiscais. Manter arquivos privados e configurações fora da pasta servida sempre
+que possível; `.gitignore` não é controle de acesso HTTP. Consulte
+[SECURITY.md](SECURITY.md) e [CONFIG_LOCAL.md](CONFIG_LOCAL.md).

@@ -1,5 +1,8 @@
 # M9 — Briefing Diário Real
 
+> Inicialização atual: somente servidor autenticado, API local e dados sintéticos.
+> Não usar servidor estático genérico; ver [README](../README.md).
+
 ## Objetivo
 
 Transformar o briefing v0 do esqueleto M8 em briefing diário REAL:
@@ -38,7 +41,7 @@ nenhum envio de mensagem — o briefing é leitura.
 ```bash
 node painel-soprolife/scripts/test-daily-briefing.js   # 26 casos
 bash painel-soprolife/scripts/quality-gate-safe.sh     # inclui M9
-python3 -m http.server 8765   # → Painel Geral → Cérebro Operacional
+bash painel-soprolife/scripts/start-local.sh   # → Painel Geral → Cérebro Operacional
 ```
 
 ## Próximos passos (M10)

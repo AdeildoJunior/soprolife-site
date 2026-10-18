@@ -2,6 +2,21 @@
 
 Este painel é destinado ao controle interno da SoproLife.
 
+## Acesso e inicialização atuais
+
+Usar somente `scripts/command-center-local-server.py`, diretamente ou pelo
+`start-local.sh` (loopback), e as units oficiais já provisionadas. O launcher
+local recusa ausência do proxy; `start-tailscale.sh` é mantido como recusa do
+antigo servidor estático. Nunca servir o painel com `python3 -m http.server`.
+O isolamento Tailscale não substitui sessão, permissões, CSRF ou HTTPS clínico.
+
+O gate estático bloqueia fontes privadas/código e protege snapshots por
+sessão/papel. `.gitignore` impede versionamento acidental, não exposição HTTP.
+A API aplica RBAC; ocultar um botão não é autorização. Papel administrativo
+não concede autoria médica. As decisões futuras de escopo por marca e
+capacidade clínica estão na [arquitetura Life](../docs/CENTRO_COMANDO_LIFE_ARCHITECTURE.md);
+esta fase não altera permissões reais nem a semântica de autenticação.
+
 ## Regra principal
 
 Não inserir dados reais de pacientes no repositório.
@@ -31,10 +46,12 @@ Apenas:
   `teleconsultasRealizadas`, `followupsPendentes`, `lembretesWhatsAppPendentes`,
   `recorrenciasAtivas`, `consultasPrevistas`).
 
-Esses indicadores de CRM/atendimento são totais numéricos calculados pelo Apps Script
-a partir das abas privadas. Nunca contêm nome, telefone, CPF ou dado clínico individual.
+Esses indicadores de CRM/atendimento são totais numéricos gerados pelo
+exportador M15 a partir do PostgreSQL. O cálculo via Apps Script e abas
+privadas pertence ao fluxo histórico desativado. Nunca contêm nome, telefone,
+CPF ou dado clínico individual.
 O script `check-access.sh` valida que os valores são números e que nenhum dado sensível
-chegou ao JSON público.
+chegou ao snapshot protegido.
 
 ## Dados privados
 

@@ -1,5 +1,8 @@
 # M5 — Próximas Ações Comerciais B2B/PCMSO
 
+> Inicialização atual: somente servidor autenticado, API local e dados sintéticos.
+> Não usar servidor estático genérico; ver [README](../README.md).
+
 ## Objetivo
 
 Painel de priorização comercial no Painel Geral: quem precisa de
@@ -40,7 +43,7 @@ duas vezes; convertidos/perdidos não geram ação de prospecção.
 ```bash
 node painel-soprolife/scripts/test-b2b-actions.js    # 27 casos
 node --check painel-soprolife/js/b2b-actions.js
-python3 -m http.server 8765   # → /painel-soprolife/ → fim do Painel Geral
+bash painel-soprolife/scripts/start-local.sh   # → /painel-soprolife/ → fim do Painel Geral
 ```
 
 ## Limitações

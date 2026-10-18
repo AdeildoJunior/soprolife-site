@@ -150,6 +150,7 @@ run "test-freshness-contract (Python)"     python3 painel-soprolife/scripts/test
 run "test-marketing-freshness (painel JS)" node painel-soprolife/scripts/test-marketing-freshness.js
 run "test-systemd-units (sintaxe + sem segredo)" python3 painel-soprolife/scripts/test-systemd-units.py
 run "test-command-center proxy cookie/CSRF (M21)" python3 painel-soprolife/scripts/test_command_center_m15_proxy.py
+run "test-safe-launchers (local protegido/legado recusado)" python3 painel-soprolife/scripts/test-safe-launchers.py
 run "test-marketing credencial durável (M21)" python3 painel-soprolife/scripts/test-marketing-credencial.py
 run "test-marketing janela 60 dias (SC+GA4)" python3 painel-soprolife/scripts/test-marketing-window.py
 run "test-marketing subtítulo da tendência" node painel-soprolife/scripts/test-marketing-trend-subtitle.js

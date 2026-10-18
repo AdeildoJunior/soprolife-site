@@ -1,5 +1,8 @@
 # M3 — Alertas Operacionais / Saúde Operacional
 
+> Inicialização atual: somente servidor autenticado, API local e dados sintéticos.
+> Não usar servidor estático genérico; ver [README](../README.md).
+
 ## Objetivo
 
 Dar ao operador (não técnico) uma resposta imediata para "a operação do
@@ -38,7 +41,7 @@ por padrão.
 ## Como testar localmente
 
 ```bash
-python3 -m http.server 8765          # na raiz do repo
+bash painel-soprolife/scripts/start-local.sh          # na raiz do repo
 # abrir http://127.0.0.1:8765/painel-soprolife/ → seção Automações
 node --check painel-soprolife/js/app.js
 python3 -m json.tool painel-soprolife/data/saude-operacional.json

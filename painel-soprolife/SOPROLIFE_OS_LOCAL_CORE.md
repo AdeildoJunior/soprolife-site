@@ -1,8 +1,23 @@
 # SoproLife OS Local Core
 
-Documento de arquitetura do núcleo local do Painel SoproLife.
+## Estado vigente e leitura do histórico
 
-Versão: 0.1 — rascunho de arquitetura (dados fictícios, sem backend real).
+O núcleo atual é M15/FastAPI + PostgreSQL, com sessão, RBAC e proxy autenticado.
+A fonte operacional é PostgreSQL desde M23; Sheets/Apps Script não são runtime.
+Custos & Investimentos permanece como exceção em livro-caixa JSON privado.
+
+A evolução para duas marcas e a visão consolidada está documentada em
+[Centro de Comando Life](../docs/CENTRO_COMANDO_LIFE_ARCHITECTURE.md).
+Para iniciar o painel, siga exclusivamente o [README atual](README.md).
+Não executar servidor estático genérico nem o antigo launcher Tailscale.
+
+## Rascunho histórico v0.1 — não é instrução operacional vigente
+
+O restante deste documento preserva o desenho inicial. Menções a backend
+futuro, ausência de login, planilhas como fonte, conectores não implementados,
+servidor estático e alternativas de hospedagem são históricas e superadas.
+Não autorizam reativação de legado, publicação ou alteração da arquitetura
+atual. Estado atual: [contexto mestre](../docs/SOPROLIFE_MASTER_CONTEXT.md).
 
 ---
 
@@ -98,7 +113,7 @@ painel-soprolife/scripts/
 ├── import-summary-csv.sh       (importa resumo via CSV)
 ├── check-access.sh             (verifica segurança de acesso)
 ├── start-local.sh              (sobe servidor local)
-└── start-tailscale.sh          (sobe via Tailscale)
+└── start-tailscale.sh          (legado; atualmente recusa execução)
 ```
 
 Regra: scripts são versionados. Não devem conter URL, ID, token ou senha embutidos.
@@ -248,9 +263,10 @@ painel-soprolife/scripts/update-local-data.sh
 
 ## Como evoluir para backend privado com login
 
-### Estágio 1 (atual): painel estático local
+### Estágio 1 (histórico): painel estático local
 
-- HTML/CSS/JS servido por `python3 -m http.server`;
+- No protótipo histórico, HTML/CSS/JS era servido por servidor estático;
+  esse caminho é proibido para o painel atual;
 - dados locais atualizados manualmente via scripts;
 - acesso via `localhost` ou Tailscale;
 - sem autenticação (proteção pelo isolamento de rede).

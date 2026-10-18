@@ -271,5 +271,5 @@ echo
 echo "Para abrir localmente:"
 echo "painel-soprolife/scripts/start-local.sh"
 echo
-echo "Para abrir via Tailscale:"
-echo "painel-soprolife/scripts/start-tailscale.sh"
+echo "Para acesso remoto, use o HTTPS privado já provisionado (Tailscale)."
+echo "Não use o antigo launcher estático; consulte painel-soprolife/README.md."

@@ -13,6 +13,20 @@
 
 ---
 
+## Fundação Centro de Comando Life (decisão de 18/10/2026)
+
+Consultar [CENTRO_COMANDO_LIFE_ARCHITECTURE.md](CENTRO_COMANDO_LIFE_ARCHITECTURE.md)
+para a evolução futura. Uma pessoa jurídica, duas marcas (`soprolife`,
+`eeglife`); `life_geral` é somente visão consolidada, nunca marca de registro.
+Paciente corporativo compartilhado, autorização clínica por capacidade e
+operação, razão financeiro compartilhado e consolidação por entidades/eventos.
+Nenhuma segregação multimarcas, migração, permissão ou tela EEG foi ativada.
+
+Inicialização: `start-local.sh` exige o proxy autenticado em loopback;
+`start-tailscale.sh` recusa o servidor estático antigo. Usar o acesso HTTPS
+privado já provisionado para operação remota. A fase não muda serviços na VPS.
+As seções históricas abaixo não atestam o estado atual do ambiente remoto.
+
 ## 1. O que é a SoproLife
 
 - **Empresa:** SoproLife Diagnósticos e Soluções em Saúde LTDA, Rio de Janeiro.
