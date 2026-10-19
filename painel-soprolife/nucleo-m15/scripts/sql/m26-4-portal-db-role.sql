@@ -120,3 +120,18 @@ GRANT SELECT (id, professional_name, crm_number, crm_state, crm_display, rqe)
 -- Um objeto criado no futuro não ganha permissão retroativa.
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   REVOKE ALL ON TABLES FROM soprolife_portal;
+
+-- BEGIN FASE2A_EEG_PORTAL_GRANTS
+-- Depois das migrations EEG. Executar como administrador do PostgreSQL.
+-- Só leitura das referências necessárias ao PDF final. Nenhum GRANT do bruto.
+\set ON_ERROR_STOP on
+GRANT SELECT ON eeg_result_accesses TO soprolife_portal;
+GRANT UPDATE (status, sent_at, first_access_at, last_access_at,
+              last_download_at, download_count, failed_attempts, locked_until)
+  ON eeg_result_accesses TO soprolife_portal;
+GRANT SELECT, INSERT ON eeg_result_sessions TO soprolife_portal;
+GRANT UPDATE (revoked_at) ON eeg_result_sessions TO soprolife_portal;
+GRANT SELECT (id, person_id, status) ON eeg_enrollments TO soprolife_portal;
+GRANT SELECT (id, enrollment_id, status, realizado_em) ON eeg_exams TO soprolife_portal;
+GRANT SELECT (id, exam_id, versao, storage_path, sha256, size_bytes, page_count, status)
+  ON eeg_report_documents TO soprolife_portal;

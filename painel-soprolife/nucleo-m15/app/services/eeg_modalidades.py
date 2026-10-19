@@ -50,7 +50,7 @@ MODALIDADES: tuple[ModalidadeEeg, ...] = (
         codigo="vigilia",
         nome="EEG de vigília",
         tambem_chamado="EEG de rotina, EEG basal, EEG convencional",
-        duracao_minutos_aproximada=30,
+        duracao_minutos_aproximada=None,
         preparo="Cabelo limpo e seco, sem creme ou gel. Alimentação normal.",
         ativo=True,
     ),
@@ -69,8 +69,8 @@ MODALIDADES: tuple[ModalidadeEeg, ...] = (
         codigo="prolongado-30-60",
         nome="EEG prolongado de 30 minutos a 1 hora",
         tambem_chamado=None,
-        duracao_minutos_aproximada=60,
-        preparo="Conforme o pedido médico; pode envolver privação de sono.",
+        duracao_minutos_aproximada=None,
+        preparo="Conforme o pedido médico. Privação de sono somente com orientação médica expressa.",
         ativo=True,
     ),
     ModalidadeEeg(
@@ -78,7 +78,7 @@ MODALIDADES: tuple[ModalidadeEeg, ...] = (
         nome="EEG prolongado de 2 horas",
         tambem_chamado=None,
         duracao_minutos_aproximada=120,
-        preparo="Conforme o pedido médico; pode envolver privação de sono.",
+        preparo="Conforme o pedido médico. Privação de sono somente com orientação médica expressa.",
         ativo=True,
     ),
     ModalidadeEeg(

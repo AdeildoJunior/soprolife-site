@@ -24,11 +24,29 @@ papel `admin` da sessão; demais papéis, inclusive `medico`, ficam na
 SoproLife.
 Paciente corporativo compartilhado, autorização clínica por capacidade e
 operação, razão financeiro compartilhado e consolidação por entidades/eventos.
-Nenhuma segregação multimarcas, migração, permissão ou tela EEG foi ativada.
+Fase 2A: `eeg_enrollments` vincula a pessoa corporativa; `eeg_exams`,
+`eeg_technical_files`, `eeg_report_dispatches`, `eeg_report_documents` formam o
+fluxo próprio EEG. Central, agenda, realização, referência técnica, envio manual
+para empresa/médico e recebimento/publicação do PDF possuem interface operacional.
+Todas as rotas `/eeg/*` exigem `admin` no servidor; o CRM SoproLife não resolve
+códigos EEG/LEG. Laudos respiratórios e regras comerciais existentes são preservados.
+
+Migrations aditivas `c3f0a7b12e45` e `e2a0b6c719af`: sem classificação histórica,
+sem backfill, downgrade só com tabelas EEG vazias. O portal usa acessos/sessões
+EEG próprios, nascimento, expiração, revogação e releitura validada do PDF final.
+A página própria vive em `/p/v1/eeg/`; configurar `M15_PORTAL_EEG_PUBLIC_BASE_URL`
+na API interna com a URL HTTPS dessa página. Aplicar os grants mínimos de
+`scripts/sql/m26-4-portal-db-role.sql` (bloco Fase 2A) após o upgrade. Substituir o PDF revoga o
+link anterior. Esta fase não afirma verificação criptográfica de assinatura.
+
+Traçado bruto permanece no equipamento/plataforma externa; só metadados e
+referência no painel. PDF final fica no filesystem privado `eeg/laudos/`.
+Financeiro, Fiscal, repasses e Marketing EEG seguem fora do escopo.
+Estado de deploy e evidências: relatório da Fase 2A em Downloads (fora do Git).
 
 Inicialização: `start-local.sh` exige o proxy autenticado em loopback;
 `start-tailscale.sh` recusa o servidor estático antigo. Usar o acesso HTTPS
-privado já provisionado para operação remota. A fase não muda serviços na VPS.
+privado já provisionado para operação remota. A fundação da Fase 1 não alterou serviços na VPS.
 As seções históricas abaixo não atestam o estado atual do ambiente remoto.
 
 ## 1. O que é a SoproLife

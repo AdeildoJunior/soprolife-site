@@ -306,7 +306,9 @@ def test_modalidades_sao_as_sete_reais(client, auth):
     # Onde a duração não está declarada em número na fonte, fica nula — não
     # se inventa minuto.
     por_codigo = {m["codigo"]: m for m in itens}
-    assert por_codigo["vigilia"]["duracao_minutos_aproximada"] == 30
+    assert por_codigo["vigilia"]["duracao_minutos_aproximada"] is None
+    assert por_codigo["prolongado-30-60"]["duracao_minutos_aproximada"] is None
+    assert por_codigo["prolongado-2h"]["duracao_minutos_aproximada"] == 120
     assert por_codigo["mapeamento"]["duracao_minutos_aproximada"] is None
 
 
@@ -411,9 +413,9 @@ def test_disponibilizar_sem_laudo_e_recusado(client, auth):
     client.post(f"{API}/eeg/exames/{exame['id']}/envio-laudo",
                 json={"destino_tipo": "medico", "destino_nome": "Dr. Sintetico",
                       "metodo": "outro"}, headers=auth("admin"))
-    _status(client, auth, exame["id"], "laudo_recebido")
-    resp = _status(client, auth, exame["id"], "laudo_disponivel", espera=409)
-    assert _codigo(resp) == "laudo_ausente"
+    resp = _status(client, auth, exame["id"], "laudo_recebido", espera=409)
+    assert _codigo(resp) == "evento_exige_registro"
+    _status(client, auth, exame["id"], "laudo_disponivel", espera=409)
 
 
 def test_maquina_de_estados_recusa_pulo_direto():
@@ -429,7 +431,8 @@ def test_maquina_de_estados_recusa_pulo_direto():
 def test_arquivo_tecnico_guarda_metadados_e_nunca_blob(client, auth, db):
     pessoa = _pessoa_sopro(client, auth, "Paciente Sintetico F2A Tecnico")
     vinculo = _vincular(client, auth, pessoa["id"])
-    exame = _exame(client, auth, vinculo["id"])
+    exame = _exame(client, auth, vinculo["id"], agendado_para="2026-11-06T09:00:00+00:00")
+    _status(client, auth, exame["id"], "realizado")
 
     resp = client.post(
         f"{API}/eeg/exames/{exame['id']}/arquivo-tecnico",
@@ -454,7 +457,8 @@ def test_arquivo_tecnico_aceita_so_a_origem_quando_falta_o_resto(client, auth):
     """Não exigir metadado que o operador ainda não tem evita número inventado."""
     pessoa = _pessoa_sopro(client, auth, "Paciente Sintetico F2A Minimo")
     vinculo = _vincular(client, auth, pessoa["id"])
-    exame = _exame(client, auth, vinculo["id"])
+    exame = _exame(client, auth, vinculo["id"], agendado_para="2026-11-06T09:00:00+00:00")
+    _status(client, auth, exame["id"], "realizado")
     resp = client.post(f"{API}/eeg/exames/{exame['id']}/arquivo-tecnico",
                        json={"armazenamento_origem": "equipamento"},
                        headers=auth("admin"))

@@ -731,6 +731,9 @@ def test_18_e_23_superficie_publica_tem_exatamente_estas_rotas(portal):
     }
     assert rotas == {
         ("/p/v1/health", ("GET",)),
+        ("/p/v1/eeg/", ("GET",)),
+        ("/p/v1/eeg/site.js", ("GET",)),
+        ("/p/v1/eeg/documentos/{acesso_id}", ("GET",)),
         ("/p/v1/acesso", ("POST",)),
         ("/p/v1/documentos", ("GET",)),
         ("/p/v1/sair", ("POST",)),

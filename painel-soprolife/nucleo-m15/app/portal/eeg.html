@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EEGLife — Resultados de exames</title>
+
+<!-- M26.4 — resultado de exame não se indexa, não se arquiva e não se
+     resume em buscador. O cabeçalho HTTP equivalente (X-Robots-Tag) sai da
+     API pública, onde os PDFs não teriam como carregar uma meta tag. -->
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<meta name="referrer" content="no-referrer">
+<meta name="description" content="Área de consulta de resultados da EEGLife.">
+
+<!-- Sem Google Analytics, sem pixel da Meta, sem tag manager, sem fonte
+     externa, sem CDN. Esta página é lida por pacientes esperando um exame;
+     não há métrica de marketing que justifique um terceiro observando isso.
+     A CSP do servidor restringe scripts e conexões à própria origem. -->
+
+<style>
+  :root {
+    --navy: #0b2a3d;
+    --navy-claro: #12405c;
+    --teal: #0f8a8a;
+    --teal-escuro: #0b6d6d;
+    --tinta: #16232b;
+    --suave: #5b6b76;
+    --linha: #dde5ea;
+    --fundo: #f4f7f9;
+    --branco: #ffffff;
+    --erro: #a4302a;
+    --erro-fundo: #fdf1f0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--fundo);
+    color: var(--tinta);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--navy);
+    color: #eaf3f7;
+    padding: 22px 20px;
+    text-align: center;
+  }
+  header .marca {
+    font-size: 20px; font-weight: 700; letter-spacing: .02em;
+  }
+  header .marca span { color: #7fd3d3; }
+  header p { margin: 4px 0 0; font-size: 14px; color: #b9d2de; }
+
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 22px 18px 40px;
+  }
+  .cartao {
+    background: var(--branco);
+    border: 1px solid var(--linha);
+    border-radius: 14px;
+    padding: 22px 20px;
+    box-shadow: 0 1px 2px rgba(11, 42, 61, .05), 0 8px 24px rgba(11, 42, 61, .05);
+  }
+  h1 { font-size: 21px; margin: 0 0 6px; color: var(--navy); }
+  .apoio { margin: 0 0 20px; color: var(--suave); font-size: 15px; }
+
+  label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 7px; }
+  input[type="text"] {
+    width: 100%;
+    font-size: 18px;
+    padding: 14px 14px;
+    border: 1px solid #c3d0d8;
+    border-radius: 10px;
+    background: #fbfdfe;
+    color: var(--tinta);
+    letter-spacing: .04em;
+  }
+  input[type="text"]:focus {
+    outline: 3px solid rgba(15, 138, 138, .28);
+    border-color: var(--teal);
+  }
+  .dica { margin: 8px 0 0; font-size: 13px; color: var(--suave); }
+
+  button {
+    font: inherit;
+    cursor: pointer;
+    border: 0;
+    border-radius: 10px;
+  }
+  .principal {
+    width: 100%;
+    margin-top: 18px;
+    background: var(--teal);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 700;
+    padding: 16px;
+    min-height: 54px;
+  }
+  .principal:hover { background: var(--teal-escuro); }
+  .principal[disabled] { background: #9db6bb; cursor: progress; }
+
+  .baixar {
+    display: block;
+    width: 100%;
+    text-align: center;
+    text-decoration: none;
+    background: var(--navy);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 700;
+    padding: 18px 16px;
+    border-radius: 12px;
+    margin-top: 12px;
+    min-height: 58px;
+  }
+  .baixar.secundario { background: var(--navy-claro); }
+  .baixar:hover { filter: brightness(1.08); }
+  .baixar small { display: block; font-weight: 500; font-size: 13px; opacity: .82; margin-top: 3px; }
+
+  .aviso {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--erro-fundo);
+    border: 1px solid #f0cfcc;
+    color: var(--erro);
+    font-size: 15px;
+  }
+  .identificacao { border-top: 1px solid var(--linha); margin-top: 4px; padding-top: 16px; }
+  .identificacao .nome { font-size: 19px; font-weight: 700; color: var(--navy); }
+  .linha-dado { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; padding: 5px 0; }
+  .linha-dado dt { color: var(--suave); margin: 0; }
+  .linha-dado dd { margin: 0; font-weight: 600; }
+  .selo {
+    display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 700;
+    color: #0b6d6d; background: #e5f4f4; border: 1px solid #b9e0e0;
+    padding: 5px 11px; border-radius: 999px;
+  }
+  .orientacao {
+    margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--linha);
+    font-size: 14px; color: var(--suave);
+  }
+  footer {
+    text-align: center; padding: 20px 18px 28px;
+    font-size: 13px; color: var(--suave);
+  }
+  .oculto { display: none !important; }
+  @media (max-width: 380px) {
+    main { padding: 16px 12px 32px; }
+    .cartao { padding: 18px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="marca">EEG<span>Life</span></div>
+  <p>Resultados de exames</p>
+</header>
+
+<main>
+  <!-- ANTES da autenticação a página não sabe de ninguém: não há nome, nem
+       iniciais, nem data, nem contagem de documentos. A resposta do servidor
+       para token inexistente e para data errada é a mesma, então também não
+       há nada a deduzir daqui. -->
+  <section id="etapaEntrada" class="cartao">
+    <h1>Consulte seu resultado</h1>
+    <p class="apoio">Para sua segurança, confirme sua data de nascimento.</p>
+
+    <form id="formEntrada" novalidate>
+      <label for="nascimento">Data de nascimento</label>
+      <input id="nascimento" name="nascimento" type="text"
+             inputmode="numeric" autocomplete="bday"
+             placeholder="DD/MM/AAAA" maxlength="10"
+             aria-describedby="dicaNascimento">
+      <p class="dica" id="dicaNascimento">Exemplo: 09/04/1978</p>
+      <button class="principal" type="submit" id="botaoEntrar">
+        Acessar resultado
+      </button>
+    </form>
+
+    <div id="avisoEntrada" class="aviso oculto" role="alert"></div>
+  </section>
+
+  <section id="etapaResultado" class="cartao oculto" aria-live="polite">
+    <div class="identificacao">
+      <div class="nome" id="pacienteNome"></div>
+      <dl>
+        <div class="linha-dado"><dt>Tipo</dt><dd id="exameTipo">EEG</dd></div>
+        <div class="linha-dado"><dt>Data do exame</dt><dd id="exameData">—</dd></div>
+      </dl>
+      <span class="selo">Resultado disponível</span>
+    </div>
+
+    <a class="baixar" id="linkLaudo" href="#" rel="noreferrer">
+      BAIXAR LAUDO PDF FINAL
+      <small>PDF final recebido do laudador</small>
+    </a>
+
+    <p class="orientacao">
+      Em caso de dúvida sobre o resultado, converse com seu médico.
+    </p>
+  </section>
+
+  <section id="etapaMensagem" class="cartao oculto" role="alert">
+    <h1 id="mensagemTitulo">Acesso indisponível</h1>
+    <p class="apoio" id="mensagemTexto"></p>
+  </section>
+</main>
+
+<footer>
+  EEGLife · Resultado de EEG
+</footer>
+
+<script src="/p/v1/eeg/site.js"></script>
+</body>
+</html>

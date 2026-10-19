@@ -3192,3 +3192,109 @@ class EegReportDocument(Base, TimestampMixin):
         CheckConstraint("versao >= 1", name="eeg_laudo_versao_positiva"),
         CheckConstraint("size_bytes > 0", name="eeg_laudo_tamanho_positivo"),
     )
+
+
+# Portal EEG separado do domínio respiratório.
+class EegResultAccess(Base):
+    """Acesso ao PDF final EEG; identidade corporativa, sem traçado bruto."""
+
+    __tablename__ = "eeg_result_accesses"
+    id: Mapped[str] = mapped_column(
+        String(UUID_LEN), primary_key=True, default=new_uuid
+    )
+    person_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("people.id", name="fk_era_person"), nullable=False
+    )
+    exam_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("eeg_exams.id", name="fk_era_exam"), nullable=False
+    )
+    document_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("eeg_report_documents.id", name="fk_era_doc"),
+        nullable=False, unique=True,
+    )
+    token_sha256: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    generation: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default=RESULTADO_DISPONIVEL, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    # Timestamps OBJETIVOS. Nenhum deles afirma que alguém LEU o laudo:
+    # dizem que foi disponibilizado, que o operador abriu o envio, que a
+    # página foi autenticada e que um PDF saiu.
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    first_access_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    last_access_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    last_download_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    download_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_motivo: Mapped[str | None] = mapped_column(String(120))
+    revoked_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id", name="fk_era_revoked_by")
+    )
+    # Nulo quando o acesso nasceu do gatilho automático — que é o caminho
+    # normal. Preenchido quando um administrador gerou o acesso à mão para
+    # um laudo histórico.
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id", name="fk_era_created_by")
+    )
+    failed_attempts: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {RESULTADO_STATUS_VALUES!r}",
+            name="resultado_status_valido",
+        ),
+        CheckConstraint("generation >= 1", name="resultado_generation_positiva"),
+        CheckConstraint("failed_attempts >= 0", name="resultado_tentativas"),
+        CheckConstraint("download_count >= 0", name="resultado_downloads"),
+        # Revogado é tudo-ou-nada: quando e por quê andam juntos. Meia
+        # evidência de revogação não explica nada meses depois.
+        CheckConstraint(
+            "(status <> 'revogado' AND revoked_at IS NULL) OR "
+            "(status = 'revogado' AND revoked_at IS NOT NULL "
+            "AND revoked_motivo IS NOT NULL)",
+            name="resultado_revogacao_coerente",
+        ),
+    )
+
+
+class EegResultSession(Base):
+    """Acesso ao PDF final EEG; identidade corporativa, sem traçado bruto."""
+
+    __tablename__ = "eeg_result_sessions"
+    id: Mapped[str] = mapped_column(
+        String(UUID_LEN), primary_key=True, default=new_uuid
+    )
+    access_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("eeg_result_accesses.id", name="fk_ers_access"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -40,7 +40,10 @@ PREFIXES = {
 # para quem, quando". Ele não é protagonista em nenhuma tela (M25.20 §19) —
 # quem identifica o lote para a médica é o nome dela, a data e a quantidade.
 # Listá-lo no dicionário prometeria uma busca por BAT-000001 que não existe.
-INTERNAL_CODE_TABLES = frozenset({"external_signature_batches"})
+# Os códigos EEG são apresentados e consultados SOMENTE na operação EEG,
+# protegida por require_eeg_access. O resolvedor geral do CRM SoproLife não
+# consulta o domínio clínico EEG, nem para administradores.
+INTERNAL_CODE_TABLES = frozenset({"external_signature_batches", "eeg_exams", "eeg_report_documents"})
 
 # Dicionário de apresentação (M19 §14): rótulo humano ao lado do código
 # técnico, idêntico em todas as telas. NUNCA renumera nem reusa código —

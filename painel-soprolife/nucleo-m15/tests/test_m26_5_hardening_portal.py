@@ -319,9 +319,7 @@ def test_validar_reprova_portal_sem_cabecalhos(render_com_tls):
     """A validação existe para RECUSAR; vê-la só aprovar não prova nada."""
 
     estragado = render_com_tls.replace(
-        '    add_header Content-Security-Policy "default-src \'none\'; frame-ancestors '
-        "'none'; base-uri 'none'; form-action 'none'\" always;\n",
-        "",
+        '    add_header Content-Security-Policy $soprolife_portal_csp always;\n', ""
     )
     assert estragado != render_com_tls, "a substituição não pegou — teste seria vácuo"
     problemas = vhost.validar(estragado, VHOST_NOME)
@@ -383,6 +381,11 @@ def test_borda_e_aplicacao_nao_divergem():
     """
 
     do_nginx = _add_headers_do_server(FONTE_VHOST.read_text(encoding="utf-8"))
+    source = FONTE_VHOST.read_text(encoding='utf-8')
+    assert 'add_header Content-Security-Policy $soprolife_portal_csp always;' in source
+    csp_default = re.search(r'default "(default-src [^"\n]+)";', source)
+    assert csp_default is not None
+    do_nginx["Content-Security-Policy"] = csp_default.group(1)
     for chave, valor in CABECALHOS_SEGUROS.items():
         assert chave in do_nginx, f"o vhost não declara {chave}"
         assert do_nginx[chave] == valor, f"{chave} diverge entre nginx e aplicação"
@@ -633,3 +636,10 @@ def test_toda_etapa_do_script_esta_documentada(deploy):
 def test_a_documentacao_nao_promete_um_placeholder():
     texto = DOC.read_text(encoding="utf-8")
     assert "<IPv4 público desta VPS>" not in texto
+
+
+def test_csp_html_eeg_e_estrita_nas_demais_respostas(render_com_tls):
+    assert "map $uri $soprolife_portal_csp" in render_com_tls
+    assert 'default "default-src \'none\'; frame-ancestors \'none\'; base-uri \'none\'; form-action \'none\'";' in render_com_tls
+    assert '/p/v1/eeg/ "default-src \'none\'; script-src \'self\';' in render_com_tls
+    assert 'add_header Content-Security-Policy $soprolife_portal_csp always;' in render_com_tls

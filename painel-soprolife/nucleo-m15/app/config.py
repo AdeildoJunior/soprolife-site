@@ -249,6 +249,7 @@ class Settings(BaseSettings):
     # FRAGMENTO (`#t=`), que o navegador nunca envia ao servidor — nem no
     # Referer, nem em log de acesso, nem em proxy.
     portal_public_base_url: str | None = None
+    portal_eeg_public_base_url: str | None = None
     portal_api_host: str = "127.0.0.1"
     portal_api_port: int = 8016
     portal_token_key: str | None = None

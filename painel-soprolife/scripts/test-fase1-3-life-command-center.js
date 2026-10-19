@@ -435,9 +435,9 @@ console.log("L) Fase 2A: operação real da EEGLife, com autorização no servid
 
 caso("os módulos vivos leem as rotas /eeg do núcleo",
      /MODULOS_VIVOS = \{[\s\S]{0,260}?cadastros:[\s\S]{0,260}?exames:[\s\S]{0,260}?laudos:/.test(eegOperacao) &&
-     /api\("\/eeg\/pessoas/.test(eegOperacao) &&
-     /api\("\/eeg\/exames"\)/.test(eegOperacao) &&
-     /api\("\/eeg\/laudos"\)/.test(eegOperacao));
+     /todos\("\/eeg\/pessoas/.test(eegOperacao) &&
+     /todos\("\/eeg\/exames"\)/.test(eegOperacao) &&
+     /todos\("\/eeg\/laudos"\)/.test(eegOperacao));
 caso("a casca entrega o módulo à operação real quando ela existe",
      /window\.SoproEegOperacao/.test(shellCodigo) &&
      /operacao\.montar\(id, secao\)/.test(shellCodigo));
@@ -458,7 +458,8 @@ caso("a Central EEG consulta o vínculo, nunca a tabela de pessoas inteira",
 caso("o frontend não decide autorização",
      !/papeis_efetivos|require_|ROLE_/.test(eegOperacaoCodigo));
 caso("o traçado não trafega nem é exibido no navegador",
-     !/<canvas|FileReader|URL\.createObjectURL/.test(eegOperacaoCodigo) &&
+     !/<canvas|FileReader/.test(eegOperacaoCodigo) &&
+     !/arquivo-tecnico[^;]{0,100}FormData/.test(eegOperacaoCodigo) &&
      /não é exibido nem armazenado aqui/.test(eegOperacao));
 caso("o registro do arquivo técnico é só metadado (sem coluna de blob)",
      /class EegTechnicalFile/.test(eegModelsCodigo) &&

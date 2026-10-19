@@ -557,3 +557,15 @@ body[data-life-ativo="eeglife"] { --life-accent: linear-gradient(90deg, var(--ee
   cursor: text;
   opacity: 1;
 }
+
+.eeg-dialog { width: min(640px, calc(100vw - 32px)); max-height: 90vh; overflow: auto; padding: 24px; border: 1px solid var(--border, #dce4eb); border-radius: 16px; color: var(--text, #193149); background: var(--surface, #fff); box-shadow: 0 24px 80px #102b4650; }
+.eeg-dialog::backdrop { background: #102b4670; }
+.eeg-form { display: grid; gap: 16px; }
+.eeg-form label { display: grid; gap: 6px; font-weight: 600; }
+.eeg-dialog input, .eeg-dialog select { box-sizing: border-box; width: 100%; padding: 10px; border: 1px solid #b9c9d6; border-radius: 8px; font: inherit; }
+.eeg-dialog button, .eeg-toolbar button, [data-eeg-exame] { padding: 9px 14px; border: 1px solid #9bb4c4; border-radius: 8px; background: #eff7fa; color: #17394b; font: inherit; cursor: pointer; }
+.eeg-dialog button:focus-visible, .eeg-dialog input:focus-visible, .eeg-dialog select:focus-visible { outline: 3px solid #087e9a; outline-offset: 2px; }
+.eeg-dialog button:disabled { opacity: .55; cursor: wait; }
+.eeg-toolbar { flex-wrap: wrap; gap: 8px; }
+.eeg-dialog [role="alert"] { overflow-wrap: anywhere; color: #923d23; }
+[data-eeg-candidatos] { display: grid; gap: 10px; }

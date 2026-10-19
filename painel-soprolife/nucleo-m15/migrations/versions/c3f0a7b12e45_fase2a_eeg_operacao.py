@@ -29,9 +29,9 @@ REVERSIBILIDADE
 ---------------
 `downgrade()` derruba as cinco tabelas e remove as duas sequências. Como nada
 existente foi alterado, o downgrade devolve o schema ao estado anterior sem
-perder dado algum de SoproLife. Os dados de EEG criados entre upgrade e
-downgrade seriam perdidos — o que é esperado ao reverter a criação da
-operação, e está dito aqui para que ninguém descubra isso em produção.
+perder dado algum de SoproLife. O downgrade recusa tabelas com dados EEG: evidências operacionais não
+podem ser apagadas para reverter código. Em produção, reverter somente o
+código e preservar o schema aditivo.
 
 Revision ID: c3f0a7b12e45
 Revises: b70c4a2e9d15
@@ -66,7 +66,6 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['criado_por'], ['users.id'],
                                 name=op.f('fk_eeg_enrollments_criado_por_users')),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_eeg_enrollments')),
-        sa.UniqueConstraint('person_id', name=op.f('uq_eeg_enrollments_person_id')),
         sa.CheckConstraint("status IN ('ativo','arquivado')",
                            name=op.f('ck_eeg_enrollments_eeg_enrollment_status_valido')),
     )
@@ -204,7 +203,7 @@ def upgrade() -> None:
                                 name=op.f('fk_eeg_report_documents_recebido_por_users')),
         sa.PrimaryKeyConstraint('id', name=op.f('pk_eeg_report_documents')),
         sa.UniqueConstraint('public_code', name=op.f('uq_eeg_report_documents_public_code')),
-        sa.UniqueConstraint('exam_id', 'versao', name=op.f('uq_eeg_report_documents_eeg_laudo_versao_unica')),
+        sa.UniqueConstraint('exam_id', 'versao', name='eeg_laudo_versao_unica'),
         sa.CheckConstraint("status IN ('recebido','vigente','substituido')",
                            name=op.f('ck_eeg_report_documents_eeg_laudo_status_valido')),
         sa.CheckConstraint("versao >= 1", name=op.f('ck_eeg_report_documents_eeg_laudo_versao_positiva')),
@@ -226,6 +225,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
+    for table in ('eeg_report_documents', 'eeg_report_dispatches',
+                  'eeg_technical_files', 'eeg_exams', 'eeg_enrollments'):
+        if bind.execute(sa.text(f"SELECT 1 FROM {table} LIMIT 1")).first():
+            raise RuntimeError("Downgrade recusado: preservar dados operacionais EEG.")
     for prefixo in NOVOS_PREFIXOS:
         bind.execute(
             sa.text("DELETE FROM code_sequences WHERE prefix = :p"), {'p': prefixo}

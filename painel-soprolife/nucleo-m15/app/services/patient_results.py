@@ -56,6 +56,9 @@ from ..models import (
     RESULTADO_ENVIADO,
     RESULTADO_MAX_TENTATIVAS,
     RESULTADO_REVOGADO,
+    EegResultAccess,
+    EegResultSession,
+    EegExam,
     ExternalSignedDocument,
     PatientResultAccess,
     PatientResultSession,
@@ -343,7 +346,7 @@ def revoke(
     audit(
         db,
         "resultado_acesso_revogado",
-        entidade="patient_result_accesses",
+        entidade=acesso.__tablename__,
         entidade_id=acesso.id,
         user_id=user_id,
         request_id=request_id,
@@ -400,11 +403,10 @@ def find_by_token(db: Session, token: str) -> PatientResultAccess | None:
 
     if not token or len(token) > 200:
         return None
-    return db.execute(
-        select(PatientResultAccess).where(
-            PatientResultAccess.token_sha256 == token_digest(token)
-        )
-    ).scalar_one_or_none()
+    model = EegResultAccess if token.startswith("eeg_") else PatientResultAccess
+    return db.execute(select(model).where(
+        model.token_sha256 == token_digest(token)
+    )).scalar_one_or_none()
 
 
 def check_birthdate(pessoa: "PacientePortal", valor: date) -> bool:
@@ -459,7 +461,8 @@ def create_session(db: Session, acesso: PatientResultAccess) -> tuple[str, Patie
 
     settings = get_settings()
     segredo = secrets.token_urlsafe(32)
-    sessao = PatientResultSession(
+    model = EegResultSession if isinstance(acesso, EegResultAccess) else PatientResultSession
+    sessao = model(
         access_id=acesso.id,
         token_hash=hashlib.sha256(segredo.encode()).hexdigest(),
         created_at=agora(),
@@ -476,7 +479,9 @@ def load_session(
 ) -> tuple[PatientResultSession, PatientResultAccess] | None:
     """Fail-closed em cada porta: sessão, acesso, revogação e prazo."""
 
-    sessao = db.get(PatientResultSession, sessao_id)
+    eeg = sessao_id.startswith("eeg:")
+    model = EegResultSession if eeg else PatientResultSession
+    sessao = db.get(model, sessao_id[4:] if eeg else sessao_id)
     if sessao is None or sessao.revoked_at is not None:
         return None
     if not hmac.compare_digest(
@@ -486,19 +491,24 @@ def load_session(
     limite = _como_utc(sessao.expires_at)
     if limite is None or limite <= agora():
         return None
-    acesso = db.get(PatientResultAccess, sessao.access_id)
+    acesso = db.get(EegResultAccess if eeg else PatientResultAccess, sessao.access_id)
     if acesso is None or acesso.status == RESULTADO_REVOGADO:
         return None
     if is_expired(acesso):
         return None
+    if eeg:
+        from .eeg_results import valid_document
+        if valid_document(db, acesso) is None:
+            return None
     return sessao, acesso
 
 
 def revoke_sessions(db: Session, acesso: PatientResultAccess) -> int:
+    model = EegResultSession if isinstance(acesso, EegResultAccess) else PatientResultSession
     vivas = db.execute(
-        select(PatientResultSession).where(
-            PatientResultSession.access_id == acesso.id,
-            PatientResultSession.revoked_at.is_(None),
+        select(model).where(
+            model.access_id == acesso.id,
+            model.revoked_at.is_(None),
         )
     ).scalars().all()
     momento = agora()
@@ -585,6 +595,9 @@ def signed_version(
 ) -> VersaoPortal | None:
     """EXATAMENTE a versão apontada pelo acesso. Nunca "o último PDF"."""
 
+    if isinstance(acesso, EegResultAccess):
+        from .eeg_results import valid_document
+        return valid_document(db, acesso)
     linha = db.execute(
         select(*_COLUNAS_VERSAO).where(
             ReportDocumentVersion.id == acesso.report_document_version_id
@@ -611,6 +624,8 @@ def technical_version(
     exame entre.
     """
 
+    if isinstance(acesso, EegResultAccess):
+        return None
     linha = db.execute(
         select(*_COLUNAS_VERSAO)
         .where(

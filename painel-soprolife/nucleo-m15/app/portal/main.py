@@ -139,7 +139,14 @@ def create_portal_app() -> FastAPI:
                 request.url.path,
             )
             resposta = erro_interno(request)
-        return resposta_publica(request, resposta)
+        resposta = resposta_publica(request, resposta)
+        if request.url.path == "/p/v1/eeg/":
+            resposta.headers["Content-Security-Policy"] = (
+                "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; "
+                "connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; "
+                "base-uri 'none'; form-action 'none'"
+            )
+        return resposta
 
     # Rede de segurança para o que escapar da fronteira — uma exceção na
     # própria fronteira, por exemplo. Sobrepõe o handler genérico que o

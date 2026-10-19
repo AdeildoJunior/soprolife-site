@@ -1,4 +1,4 @@
-"""As SEIS coisas que a superfície pública sabe fazer.
+"""Superfície pública de resultados, sem busca ou cadastro operacional.
 
 1. validar o acesso (token do link + data de nascimento);
 2. conferir o segundo fator;
@@ -8,6 +8,8 @@
 6. confirmar que um código impresso no laudo corresponde a um documento
    real e liberado (M26.19) — sem sessão nenhuma, e sem devolver paciente,
    exame nem conteúdo clínico.
+7. Fase 2A: página EEG e PDF final, vinculados ao acesso autenticado;
+   nenhum traçado bruto e nenhum endpoint administrativo EEG.
 
 Não existe rota de busca, de listagem, de paciente, de usuário nem de
 qualquer outra coisa — e o teste
@@ -32,7 +34,8 @@ Regras de conversa com quem está do outro lado:
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field, field_validator
@@ -130,8 +133,18 @@ class PedidoDeAcesso(BaseModel):
 
 def _pessoa_e_exame(db: Session, acesso):
     pessoa = prs.load_patient(db, acesso.person_id)
-    exame = prs.load_exam(db, acesso.spirometry_exam_id)
-    if pessoa is None or exame is None:
+    if isinstance(acesso, prs.EegResultAccess):
+        from sqlalchemy import select
+        row = db.execute(select(prs.EegExam.id, prs.EegExam.realizado_em).where(
+            prs.EegExam.id == acesso.exam_id)).first()
+        momento = row.realizado_em if row else None
+        if momento and momento.tzinfo is None:
+            momento = momento.replace(tzinfo=timezone.utc)
+        dia = momento.astimezone(ZoneInfo(get_settings().display_timezone)).date() if momento else None
+        exame = prs.ExamePortal(row.id, dia) if row else None
+    else:
+        exame = prs.load_exam(db, acesso.spirometry_exam_id)
+    if pessoa is None or pessoa.arquivado or exame is None:
         raise _invalido()
     return pessoa, exame
 
@@ -147,28 +160,19 @@ def _corpo_do_resultado(db: Session, acesso) -> dict:
     pessoa, exame = _pessoa_e_exame(db, acesso)
     assinado = prs.signed_version(db, acesso)
     tecnico = prs.technical_version(db, acesso)
+    eeg = isinstance(acesso, prs.EegResultAccess)
+    documentos = [{"chave": "laudo-assinado", "rotulo": "Baixar laudo PDF final" if eeg else "Baixar laudo assinado", "disponivel": assinado is not None}]
+    if eeg:
+        documentos[0]["chave"] = "laudo-final-eeg"
+        documentos[0]["caminho"] = "/p/v1/eeg/documentos/" + acesso.id
+    if not eeg:
+        documentos.append({"chave": "exame-tecnico", "rotulo": "Baixar exame técnico", "disponivel": tecnico is not None})
     return {
         "paciente": {"nome": pessoa.nome_completo},
-        "exame": {
-            "tipo": "Espirometria",
-            "data": exame.data_exame.isoformat() if exame.data_exame else None,
-        },
-        "status": "Resultado disponível",
-        "documentos": [
-            {
-                "chave": "laudo-assinado",
-                "rotulo": "Baixar laudo assinado",
-                "disponivel": assinado is not None,
-            },
-            {
-                "chave": "exame-tecnico",
-                "rotulo": "Baixar exame técnico",
-                "disponivel": tecnico is not None,
-            },
-        ],
-        "orientacao": (
-            "Em caso de dúvida sobre o resultado, converse com seu médico."
-        ),
+        "exame": {"tipo": "EEG" if eeg else "Espirometria",
+                  "data": exame.data_exame.isoformat() if exame.data_exame else None},
+        "status": "Resultado disponível", "documentos": documentos,
+        "orientacao": "Em caso de dúvida sobre o resultado, converse com seu médico.",
     }
 
 
@@ -214,24 +218,26 @@ def abrir_acesso(
         audit(
             db,
             "resultado_portal_tentativa_invalida",
-            entidade="patient_result_accesses",
+            entidade=acesso.__tablename__,
             entidade_id=acesso.id,
             detalhes={"motivo": "segundo_fator", "status": acesso.status},
         )
         db.commit()
         raise _invalido()
 
+    if isinstance(acesso, prs.EegResultAccess) and prs.signed_version(db, acesso) is None:
+        raise _invalido()
     prs.register_success(acesso)
     segredo, sessao = prs.create_session(db, acesso)
     audit(
         db,
         "resultado_portal_autenticado",
-        entidade="patient_result_accesses",
+        entidade=acesso.__tablename__,
         entidade_id=acesso.id,
         detalhes={"status": acesso.status, "canal": "portal"},
     )
     db.commit()
-    definir_cookie(response, montar_cookie(sessao.id, segredo))
+    definir_cookie(response, montar_cookie(("eeg:" if isinstance(acesso, prs.EegResultAccess) else "") + sessao.id, segredo))
     return _corpo_do_resultado(db, acesso)
 
 
@@ -322,7 +328,7 @@ def _entregar(
     audit(
         db,
         "resultado_portal_documento_baixado",
-        entidade="patient_result_accesses",
+        entidade=acesso.__tablename__,
         entidade_id=acesso.id,
         detalhes={"tipo": tipo, "sha256": versao.sha256, "canal": "portal"},
     )
@@ -348,11 +354,13 @@ def baixar_laudo(request: Request, db: Session = Depends(get_db)) -> Response:
 
     _exigir_portal_ligado()
     _sessao, acesso = _sessao_ativa(request, db)
+    if isinstance(acesso, prs.EegResultAccess):
+        raise _laudo_nao_localizado()
     return _entregar(
         db,
         acesso=acesso,
         versao=prs.signed_version(db, acesso),
-        sufixo=SUFIXO_ASSINADO,
+        sufixo="Laudo_EEG" if isinstance(acesso, prs.EegResultAccess) else SUFIXO_ASSINADO,
         tipo="laudo_assinado",
     )
 
@@ -450,3 +458,27 @@ def _exigir_portal_ligado() -> None:
             "portal_desabilitado",
             "O portal de resultados não está disponível no momento.",
         )
+
+
+@router.get("/eeg/")
+def pagina_eeg():
+    from pathlib import Path
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse((Path(__file__).parent / "eeg.html").read_text())
+
+
+@router.get("/eeg/site.js")
+def script_eeg():
+    from pathlib import Path
+    return Response((Path(__file__).parent / "eeg.js").read_text(), media_type="application/javascript")
+
+
+@router.get("/eeg/documentos/{acesso_id}")
+def baixar_pdf_final_eeg(acesso_id: str, request: Request, db: Session = Depends(get_db)):
+    """Acesso da página deve coincidir com a sessão; outra aba não troca o PDF."""
+    _exigir_portal_ligado()
+    _sessao, acesso = _sessao_ativa(request, db)
+    if not isinstance(acesso, prs.EegResultAccess) or acesso.id != acesso_id:
+        raise _invalido()
+    return _entregar(db, acesso=acesso, versao=prs.signed_version(db, acesso),
+                     sufixo="Laudo_EEG", tipo="laudo_final_eeg")

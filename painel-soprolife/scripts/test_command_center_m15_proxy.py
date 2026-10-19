@@ -430,6 +430,22 @@ class ProxyM15Tests(unittest.TestCase):
         self.assertEqual(handler.statuses[-1], 413)
         self.assertEqual(FakeConnection.instances, [])
 
+    def test_eeg_upload_e_download_tem_allowlist_exata(self):
+        ident = "11111111-1111-4111-8111-111111111111"
+        mime = "multipart/form-data; boundary=synthetic-eeg"
+        body = b"x" * (server._M15_MAX_REQUEST_BODY + 1)
+        handler = self.run_m15("POST", f"/painel-soprolife/api/m15/eeg/exames/{ident}/laudo", {"Content-Type": mime}, body)
+        self.assertEqual(handler.statuses[-1], 200)
+        self.assertEqual(FakeConnection.instances[-1].request_args[2], body)
+        self.assertFalse(server._is_report_upload("POST", f"/eeg/exames/{ident}/arquivo-tecnico", mime))
+        self.assertFalse(server._is_report_upload("POST", "/eeg/exames/invalido/laudo", mime))
+        pdf = b"%PDF-synthetic-eeg"
+        FakeConnection.response = FakeResponse(body=pdf, headers={"Content-Type": "application/pdf"})
+        handler = self.run_m15("GET", f"/painel-soprolife/api/m15/eeg/laudos/{ident}/arquivo")
+        self.assertEqual(handler.statuses[-1], 200)
+        self.assertEqual(handler.wfile.getvalue(), pdf)
+        self.assertFalse(server._is_report_content("GET", f"/eeg/exames/{ident}/arquivo-tecnico"))
+
     def test_upload_multipart_de_laudo_tem_limite_dedicado_e_preserva_boundary(self):
         body = b"x" * (server._M15_MAX_REQUEST_BODY + 1)
         content_type = "multipart/form-data; boundary=fronteira-sintetica-m24a"

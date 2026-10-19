@@ -242,7 +242,7 @@ def _safe_request_id(value: str | None) -> str:
 def _is_report_upload(method: str, suffix: str, content_type: str | None) -> bool:
     return (
         method == "POST"
-        and suffix == "/laudos"
+        and (suffix == "/laudos" or re.fullmatch(rf"/eeg/exames/{_UUID}/laudo", suffix))
         and (content_type or "").lower().startswith("multipart/form-data;")
     )
 
@@ -255,6 +255,8 @@ def _tipos_binarios_esperados(method: str, suffix: str) -> frozenset:
     """
 
     if method == "GET":
+        if re.fullmatch(rf"/eeg/laudos/{_UUID}/arquivo", suffix):
+            return _M15_TIPOS_PDF
         if _M15_REPORT_CONTENT_RE.fullmatch(suffix):
             return _M15_TIPOS_PDF
         if _M15_REPORT_DOWNLOAD_RE.fullmatch(suffix):

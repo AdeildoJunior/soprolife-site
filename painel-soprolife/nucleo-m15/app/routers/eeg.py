@@ -41,6 +41,7 @@ from ..models import (
     EegExam,
     EegReportDispatch,
     EegReportDocument,
+    EegResultAccess,
     EegTechnicalFile,
     PartnerUnit,
     Person,
@@ -62,6 +63,8 @@ from ..services import eeg_flow
 from ..services.cpf import CPFInvalidoError, normalizar_cpf
 from ..services.eeg_modalidades import MODALIDADES, modalidade_ativa, obter
 from ..services.eeg_storage import eeg_report_storage_path, atomic_write_new_file
+from ..services.report_storage import read_and_validate_stored_pdf, ReportStorageError
+from ..services import eeg_results, patient_results
 from ..services.identity import find_person_candidates
 from ..services.pdf_validation import InvalidPdfError, validate_pdf_bytes
 from ..services.person_registration import add_contact
@@ -210,6 +213,22 @@ def listar_locais(
     ]}
 
 
+def _candidatos(db, payload):
+    candidatos = find_person_candidates(
+        db, normalize_name(payload.nome_completo),
+        [normalize_phone(payload.telefone)] if payload.telefone else [],
+    )
+    if payload.cpf:
+        try:
+            cpf = normalizar_cpf(payload.cpf)
+        except CPFInvalidoError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        pessoa = db.execute(select(Person).where(Person.cpf == cpf)).scalar_one_or_none()
+        if pessoa and all(p.id != pessoa.id for p, _ in candidatos):
+            candidatos.insert(0, (pessoa, "cpf"))
+    return candidatos
+
+
 # ── Central de Cadastros (escopo EEG) ─────────────────────────────────────
 
 @router.get("/pessoas")
@@ -287,9 +306,7 @@ def verificar_duplicados_eeg(
     oferecer "vincular esta pessoa" em vez de criar uma segunda.
     """
     telefone = normalize_phone(payload.telefone) if payload.telefone else None
-    candidatos = find_person_candidates(
-        db, normalize_name(payload.nome_completo), [telefone] if telefone else []
-    )
+    candidatos = _candidatos(db, payload)
     return {"itens": [
         {"person_id": p.id, "public_code": p.public_code,
          "nome_completo": p.nome_completo, "motivo": motivo,
@@ -316,11 +333,10 @@ def criar_pessoa_eeg(
     operador, e é assim que a pessoa não vira duas por ter mudado de marca.
     """
     nome_normalizado = normalize_name(payload.nome_completo)
-    telefone_normalizado = normalize_phone(payload.telefone) if payload.telefone else None
-    candidatos = find_person_candidates(
-        db, nome_normalizado,
-        [telefone_normalizado] if telefone_normalizado else [],
-    )
+    candidatos = _candidatos(db, payload)
+    if payload.cpf:
+        from .people import recusar_cpf_ja_cadastrado
+        recusar_cpf_ja_cadastrado(db, payload.cpf)
     if candidatos and not payload.confirmar_nova_pessoa:
         raise DomainError(
             409, "pessoa_possivelmente_existente",
@@ -423,7 +439,7 @@ def criar_exame(
     db.flush()
     audit(db, "eeg.exame_criado", "eeg_exams", exam.id,
           user_id=user.id, request_id=getattr(request.state, "request_id", None),
-          detalhes={"modalidade": exam.modalidade_codigo, "status": exam.status,
+          detalhes={"codigo": exam.modalidade_codigo, "status": exam.status,
                     "origem_tipo": exam.origem_tipo})
     db.commit()
     db.refresh(exam)
@@ -439,7 +455,7 @@ def mudar_status(
     user: User = Depends(require_eeg_access),
 ):
     """Transição conferida no servidor. Pulo de etapa é recusado, não corrigido."""
-    exam = db.get(EegExam, exam_id)
+    exam = db.get(EegExam, exam_id, with_for_update=True)
     if not exam:
         raise HTTPException(status_code=404, detail="Exame não encontrado.")
     anterior = exam.status
@@ -447,6 +463,10 @@ def mudar_status(
         eeg_flow.garantir_transicao(anterior, payload.status)
     except eeg_flow.TransicaoInvalidaError as exc:
         raise DomainError(409, "transicao_invalida", str(exc)) from exc
+
+    if payload.status in {eeg_flow.ENVIADO, eeg_flow.LAUDO_RECEBIDO}:
+        raise DomainError(409, "evento_exige_registro",
+                          "Use o registro de envio ou o recebimento do PDF para esta etapa.")
 
     # `laudo_disponivel` exige laudo de verdade: não se entrega ao paciente o
     # que ainda não chegou do laudador.
@@ -470,7 +490,7 @@ def mudar_status(
         exam.observacao = payload.observacao
     audit(db, "eeg.exame_status", "eeg_exams", exam.id,
           user_id=user.id, request_id=getattr(request.state, "request_id", None),
-          detalhes={"de": anterior, "para": payload.status})
+          detalhes={"status_anterior": anterior, "status": payload.status})
     db.commit()
     db.refresh(exam)
     return _ser_exame(db, exam)
@@ -490,7 +510,7 @@ def registrar_arquivo_tecnico(
     MB e monitorização prolongada chega a GB. Fingir que o arquivo chegou ao
     Centro de Comando seria pior do que dizer onde ele está.
     """
-    exam = db.get(EegExam, exam_id)
+    exam = db.get(EegExam, exam_id, with_for_update=True)
     if not exam:
         raise HTTPException(status_code=404, detail="Exame não encontrado.")
     registro = EegTechnicalFile(
@@ -509,11 +529,13 @@ def registrar_arquivo_tecnico(
         observacao=payload.observacao,
         criado_por=user.id,
     )
+    if exam.status not in eeg_flow.EXAME_JA_REALIZADO:
+        raise DomainError(409, "exame_nao_realizado", "Registre a realização antes da referência técnica.")
     db.add(registro)
     db.flush()
     audit(db, "eeg.arquivo_tecnico_registrado", "eeg_technical_files", registro.id,
           user_id=user.id, request_id=getattr(request.state, "request_id", None),
-          detalhes={"exame": exam.public_code,
+          detalhes={"exam_code": exam.public_code,
                     "armazenamento_origem": registro.armazenamento_origem})
     db.commit()
     db.refresh(exam)
@@ -536,7 +558,7 @@ def registrar_envio(
     presumida. O que fica gravado é quem enviou, para onde, por qual meio e
     com qual protocolo externo, se houver.
     """
-    exam = db.get(EegExam, exam_id)
+    exam = db.get(EegExam, exam_id, with_for_update=True)
     if not exam:
         raise HTTPException(status_code=404, detail="Exame não encontrado.")
     if exam.status not in {eeg_flow.REALIZADO, eeg_flow.AGUARDANDO_ENVIO,
@@ -575,8 +597,8 @@ def registrar_envio(
     db.flush()
     audit(db, "eeg.enviado_para_laudo", "eeg_report_dispatches", envio.id,
           user_id=user.id, request_id=getattr(request.state, "request_id", None),
-          detalhes={"exame": exam.public_code, "destino_tipo": envio.destino_tipo,
-                    "metodo": envio.metodo, "reenvio": bool(anteriores)})
+          detalhes={"exam_code": exam.public_code, "tipo": envio.destino_tipo,
+                    "canal": envio.metodo, "reenvio": bool(anteriores)})
     db.commit()
     db.refresh(exam)
     return _ser_exame(db, exam)
@@ -623,7 +645,7 @@ def receber_laudo(
     Nenhuma validação criptográfica é afirmada: este endpoint não verifica
     assinatura digital, e dizer que verifica seria falso.
     """
-    exam = db.get(EegExam, exam_id)
+    exam = db.get(EegExam, exam_id, with_for_update=True)
     if not exam:
         raise HTTPException(status_code=404, detail="Exame não encontrado.")
     if exam.status not in {eeg_flow.ENVIADO, eeg_flow.EM_LAUDO,
@@ -634,12 +656,13 @@ def receber_laudo(
             f"(status atual: {exam.status}).")
 
     settings = get_settings()
-    data = arquivo.file.read()
+    data = arquivo.file.read(settings.reports_max_upload_bytes + 1)
     try:
         validado = validate_pdf_bytes(
             data,
             max_size_bytes=settings.reports_max_upload_bytes,
             declared_content_type=arquivo.content_type,
+            allow_signature_form=True,
         )
     except InvalidPdfError as exc:
         raise DomainError(422, "pdf_invalido", str(exc)) from exc
@@ -649,6 +672,10 @@ def receber_laudo(
     ).scalars().all()
     for anterior in anteriores:
         anterior.status = "substituido"
+        access = db.execute(select(EegResultAccess).where(
+            EegResultAccess.document_id == anterior.id)).scalar_one_or_none()
+        if access and access.status != "revogado":
+            patient_results.revoke(db, access, user_id=user.id, motivo="laudo_substituido")
     versao = max((d.versao for d in anteriores), default=0) + 1
 
     documento = EegReportDocument(
@@ -676,7 +703,7 @@ def receber_laudo(
     exam.laudo_recebido_em = documento.recebido_em
     audit(db, "eeg.laudo_recebido", "eeg_report_documents", documento.id,
           user_id=user.id, request_id=getattr(request.state, "request_id", None),
-          detalhes={"exame": exam.public_code, "versao": versao,
+          detalhes={"exam_code": exam.public_code, "version": versao,
                     "substituiu": bool(anteriores)})
     db.commit()
     db.refresh(exam)
@@ -698,8 +725,14 @@ def baixar_laudo(
     root = settings.resolved_reports_storage_dir()
     caminho = root / documento.storage_path
     try:
-        data = caminho.read_bytes()
-    except OSError as exc:
+        data = read_and_validate_stored_pdf(
+            caminho, root=root, expected_sha256=documento.sha256,
+            expected_size_bytes=documento.size_bytes,
+            expected_page_count=documento.page_count,
+            max_size_bytes=settings.reports_max_upload_bytes,
+            allow_signature_form=True,
+        ).data
+    except (OSError, ReportStorageError, ValueError) as exc:
         raise HTTPException(status_code=404, detail="Arquivo indisponível.") from exc
     audit(db, "eeg.laudo_baixado", "eeg_report_documents", documento.id,
           user_id=user.id, request_id=getattr(request.state, "request_id", None))
@@ -713,3 +746,29 @@ def baixar_laudo(
             "Cache-Control": "no-store",
         },
     )
+
+
+@router.post("/laudos/{documento_id}/acesso-resultado")
+def gerar_acesso_resultado(
+    documento_id: str, request: Request, renovar: bool = False,
+    db: Session = Depends(get_db), user: User = Depends(require_eeg_access),
+):
+    acesso = eeg_results.issue(db, documento_id, user.id, regenerate=renovar)
+    link = eeg_results.public_url(acesso)
+    db.commit()
+    return {"url": link, "status": acesso.status,
+            "expira_em": acesso.expires_at.isoformat()}
+
+
+@router.post("/laudos/{documento_id}/acesso-resultado/revogar")
+def revogar_acesso_resultado(
+    documento_id: str, request: Request,
+    db: Session = Depends(get_db), user: User = Depends(require_eeg_access),
+):
+    acesso = db.execute(select(EegResultAccess).where(
+        EegResultAccess.document_id == documento_id)).scalar_one_or_none()
+    if not acesso:
+        raise HTTPException(status_code=404, detail="Acesso não encontrado.")
+    patient_results.revoke(db, acesso, user_id=user.id, motivo="revogado_admin")
+    db.commit()
+    return {"status": acesso.status}
