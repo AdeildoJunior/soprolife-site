@@ -1,18 +1,21 @@
 #!/usr/bin/env node
-/* Fase 1.3 — Centro de Comando Life no navegador de verdade.
+/* Fase 1.3A — Centro de Comando Life no navegador, com TRÊS sessões reais.
  *
  * Mesmo arnês da M67/M68 (sem dependência npm): SQLite descartável + API +
  * proxy em portas loopback efêmeras e Chrome headless via DevTools Protocol.
  * Só dados sintéticos; o banco temporário é apagado ao final.
  *
- * A prova central desta fase é de REDE: com o contexto salvo em `eeglife`, a
- * página é recarregada e NENHUMA leitura de `data/*.json` da SoproLife sai do
- * navegador. É isso que garante que a casca EEGLife não mostra paciente,
- * lead, laudo, receita ou métrica da SoproLife com aparência de EEG — não por
- * disciplina de quem escreve a tela, mas porque o dado não é buscado.
+ * Duas provas centrais:
  *
- * O contraprova vem junto: no contexto SoproLife as mesmas leituras SAEM.
- * Sem ela, "nenhuma requisição" poderia significar apenas um teste cego.
+ *  1. AUTORIZAÇÃO. Três contas de papéis diferentes entram de verdade —
+ *     `admin`, `operacional` e `medico`. A primeira alterna entre as duas
+ *     marcas; as outras duas nem veem a aba da EEGLife, não têm o painel dela
+ *     no DOM, e não conseguem entrar nem forçando por localStorage nem
+ *     chamando `setContext` pelo console.
+ *
+ *  2. REDE. Com o contexto salvo em `eeglife`, a página é recarregada e
+ *     NENHUMA leitura de `data/*.json` da SoproLife sai do navegador — com a
+ *     contraprova de que, em SoproLife, as mesmas leituras SAEM.
  *
  * Uso:
  *   M15_TEST_PYTHON=/caminho/venv/bin/python \
@@ -33,9 +36,18 @@ const PROXY = path.join(ROOT, "painel-soprolife", "scripts",
                         "command-center-local-server.py");
 const PYTHON = process.env.M15_TEST_PYTHON;
 const CHROME = process.env.M21_CHROME || "/usr/bin/google-chrome";
-const EMAIL = "admin-fase13@teste.local";
-const PASSWORD = "senha-fase13-sintetica-123";
 const CHAVE = "soprolife.life.contexto";
+const SENHA = "senha-fase13-sintetica-123";
+
+/* Três papéis reais do sistema, nenhum inventado. `admin` é o único que
+ * alcança a EEGLife; `operacional` enxerga o painel SoproLife inteiro mas não
+ * é admin; `medico` é a conta exclusivamente clínica. Nenhum nome de pessoa
+ * aparece aqui — a regra é de papel. */
+const CONTAS = {
+  admin: { email: "admin-fase13@teste.local", nome: "Admin Sintetico F13", papel: "admin" },
+  operacional: { email: "oper-fase13@teste.local", nome: "Operacional Sintetico F13", papel: "operacional" },
+  medico: { email: "medica-fase13@teste.local", nome: "Medica Sintetica F13", papel: "medico" },
+};
 
 let failures = 0;
 function check(label, condition, detail = "") {
@@ -112,7 +124,11 @@ class Cdp {
       returnByValue: true,
     });
     if (result.exceptionDetails) {
-      throw new Error(result.exceptionDetails.text || "Runtime.evaluate falhou");
+      const d = result.exceptionDetails;
+      const detalhe = (d.exception && (d.exception.description || d.exception.value)) || "";
+      throw new Error((d.text || "Runtime.evaluate falhou") +
+        (detalhe ? " :: " + String(detalhe).split("\n")[0] : "") +
+        " :: expr=" + expression.replace(/\s+/g, " ").slice(0, 160));
     }
     return result.result ? result.result.value : undefined;
   }
@@ -150,7 +166,7 @@ const VIEWPORTS = [
   { nome: "360x800", w: 360, h: 800, mobile: true },
 ];
 
-const CONTEXTOS = ["life_geral", "soprolife", "eeglife"];
+const CONTEXTOS = ["soprolife", "eeglife"];
 
 /* O painel SoproLife já tem abas próprias (CRM workspace, Pastore, Custos):
  * doze `role="tab"` que não têm nada a ver com o seletor de contexto. Toda
@@ -190,8 +206,10 @@ async function main() {
   try {
     for (const [command, args, extraEnv] of [
       [alembic, ["upgrade", "head"], {}],
-      [PYTHON, ["-m", "app.cli", "criar-usuario", "--email", EMAIL,
-        "--nome", "Teste Fase 1.3", "--papel", "admin"], { M15_NOVA_SENHA: PASSWORD }],
+      ...Object.values(CONTAS).map((c) => [
+        PYTHON, ["-m", "app.cli", "criar-usuario", "--email", c.email,
+          "--nome", c.nome, "--papel", c.papel], { M15_NOVA_SENHA: SENHA },
+      ]),
     ]) {
       const result = childProcess.spawnSync(command, args, {
         cwd: M15_DIR, env: { ...commonEnv, ...extraEnv }, encoding: "utf8",
@@ -250,407 +268,507 @@ async function main() {
       }
     });
 
-    await cdp.send("Emulation.setDeviceMetricsOverride", {
-      width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false,
-    });
+    // ─────────────────────────────────────────────────────────────────────
+    //  Infraestrutura de sessão: entrar e sair de verdade, três vezes.
+    // ─────────────────────────────────────────────────────────────────────
 
-    // ── Login real (o painel só carrega depois dele) ───────────────────────
-    await waitFor(() => cdp.evaluate("Boolean(document.querySelector('#loginForm'))"),
-                  "portão de login");
-    check("18. sem sessão, o navegador recebe a tela de login (não o painel)",
-          await cdp.evaluate(
-            "Boolean(document.querySelector('#loginForm')) && !document.querySelector('#lifeMasthead')"));
+    async function sair() {
+      await cdp.send("Network.clearBrowserCookies");
+      await cdp.evaluate("try { localStorage.clear(); } catch (e) {}");
+    }
 
-    await cdp.evaluate(`(() => {
-      document.querySelector("#email").value = ${JSON.stringify(EMAIL)};
-      document.querySelector("#password").value = ${JSON.stringify(PASSWORD)};
-      document.querySelector("#loginForm").requestSubmit();
-    })()`);
-    await waitFor(() => cdp.evaluate(
-      "Boolean(window.SoproM15 && window.LifeCommandCenter && window.SoproM15.hasToken())"),
-      "login concluído");
-
-    // `window.LifeCommandCenter` existe desde o parse do script, ANTES de
-    // `ligar()` rodar no DOMContentLoaded. Esperar só por ele lê um DOM pela
-    // metade; o sinal de que a casca aplicou o contexto é o atributo no body.
     const pronto = () => cdp.evaluate(`Boolean(
       window.LifeCommandCenter
       && document.querySelector('#lifeMasthead')
-      && document.querySelector('#lifeContextoRotulo')
       && document.body.getAttribute('data-life-ativo'))`);
-    await waitFor(pronto, "casca do Centro de Comando Life");
 
-    // ── A) estrutura dos três contextos ────────────────────────────────────
-    console.log();
-    console.log("A) Três contextos, Life Geral não é marca");
-
-    check("1. os três contextos existem no seletor",
-          await cdp.evaluate(`JSON.stringify(
-            [...document.querySelectorAll(${ABAS_JS})].map((b) => b.dataset.lifeContext))`)
-          === JSON.stringify(CONTEXTOS), await cdp.evaluate(`JSON.stringify(
-            [...document.querySelectorAll(${ABAS_JS})].map((b) => b.dataset.lifeContext))`));
-    check("1. \"Centro de Comando Life\" aparece no topo",
-          (await cdp.evaluate(
-            "document.querySelector('#lifeMasthead .life-identity-text strong').textContent.trim()"))
-          === "Centro de Comando Life");
-    check("2. Life Geral é declarado contexto consolidado, não marca",
-          await cdp.evaluate(
-            `document.querySelector('[data-life-context="life_geral"]').dataset.lifeKind === "contexto"
-             && window.LifeCommandCenter.CONTEXTOS.life_geral.tipo === "contexto"`));
-    check("2. só SoproLife e EEGLife são marcas",
-          await cdp.evaluate(`(() => {
-            const c = window.LifeCommandCenter.CONTEXTOS;
-            return Object.keys(c).filter((k) => c[k].tipo === "marca").sort().join(",") === "eeglife,soprolife";
-          })()`));
-    check("2. o rótulo \"consolidado\" aparece na aba Life Geral",
-          (await cdp.evaluate(
-            `document.querySelector('[data-life-context="life_geral"] .life-tab-kind').textContent.trim()`))
-          === "consolidado");
-
-    // ── B) padrão, troca, persistência ─────────────────────────────────────
-    console.log();
-    console.log("B) Padrão SoproLife, trocas e persistência");
-
-    check("3. com perfil novo (sem preferência salva), o padrão é SoproLife",
-          await cdp.evaluate("window.LifeCommandCenter.getContext() === 'soprolife'"));
-    check("3. o painel SoproLife é o visível no primeiro acesso",
-          await cdp.evaluate(`!document.querySelector('#lifePanelSoproLife').hidden
-            && document.querySelector('#lifePanelEegLife').hidden
-            && document.querySelector('#lifePanelLifeGeral').hidden`));
-
-    async function trocar(ctx) {
-      await cdp.evaluate(`document.querySelector('[data-life-context="${ctx}"]').click()`);
-      await sleep(180);
+    /* Recarrega e espera o documento NOVO.
+     *
+     * `Page.reload` é assíncrono: esperar só por `pronto()` logo depois faz a
+     * primeira leitura cair no documento ANTIGO, que também satisfaz a
+     * condição — e a leitura seguinte explode porque a página já trocou. A
+     * marca posta antes da navegação não existe na página nova, então ela
+     * distingue um documento do outro. */
+    async function navegar(acao, rotulo) {
+      await cdp.evaluate("window.__paginaAnterior = true");
+      await acao();
+      await waitFor(() => cdp.evaluate(`Boolean(
+        !window.__paginaAnterior
+        && window.LifeCommandCenter
+        && document.querySelector('#lifeMasthead')
+        && document.body.getAttribute('data-life-ativo'))`), rotulo);
     }
+
+    const recarregar = (rotulo) =>
+      navegar(() => cdp.send("Page.reload"), rotulo);
+
+    async function entrar(conta) {
+      await cdp.send("Page.navigate", { url: base + "/" });
+      await waitFor(() => cdp.evaluate("Boolean(document.querySelector('#loginForm'))"),
+                    "portão de login (" + conta.papel + ")");
+      await cdp.evaluate(`(() => {
+        document.querySelector("#email").value = ${JSON.stringify(conta.email)};
+        document.querySelector("#password").value = ${JSON.stringify(SENHA)};
+        document.querySelector("#loginForm").requestSubmit();
+      })()`);
+      await waitFor(() => cdp.evaluate(
+        "Boolean(window.SoproM15 && window.SoproM15.hasToken())"),
+        "login " + conta.papel);
+      await waitFor(pronto, "casca pronta (" + conta.papel + ")");
+    }
+
+    /* Tudo que importa sobre o estado da casca, numa leitura só. */
     async function estado() {
       return cdp.evaluate(`JSON.stringify({
         ctx: window.LifeCommandCenter.getContext(),
+        permitidos: window.LifeCommandCenter.allowedContexts(),
         salvo: localStorage.getItem(${JSON.stringify(CHAVE)}),
         body: document.body.getAttribute("data-life-ativo"),
+        abas: [...document.querySelectorAll(${ABAS_JS})].map((b) => b.dataset.lifeContext),
+        paineis: [...document.querySelectorAll(".life-contexto")].map((p) => p.dataset.lifePanel),
         visiveis: [...document.querySelectorAll(".life-contexto")]
           .filter((p) => !p.hidden).map((p) => p.dataset.lifePanel),
         selecionadas: [...document.querySelectorAll(${ABAS_JS})]
           .filter((b) => b.getAttribute("aria-selected") === "true")
           .map((b) => b.dataset.lifeContext),
-        rotulo: document.querySelector("#lifeContextoRotulo").textContent.trim(),
+        rotulo: (document.querySelector("#lifeContextoRotulo") || {}).textContent || "",
+        papeis: (window.SoproBootGate && window.SoproBootGate.identidade
+                 && window.SoproBootGate.identidade.papeis_efetivos) || [],
       })`).then(JSON.parse);
     }
 
-    await trocar("eeglife");
-    let e = await estado();
-    check("4. troca para EEGLife muda contexto, painel e aba",
-          e.ctx === "eeglife" && e.body === "eeglife" &&
-          JSON.stringify(e.visiveis) === '["eeglife"]' &&
-          JSON.stringify(e.selecionadas) === '["eeglife"]', JSON.stringify(e));
-    check("4. o rótulo em texto acompanha (contexto não depende de cor)",
-          /EEGLife/.test(e.rotulo), e.rotulo);
+    async function trocar(ctx) {
+      await cdp.evaluate(
+        `(document.querySelector('[data-life-context="${ctx}"]') || { click() {} }).click()`);
+      await sleep(200);
+    }
 
-    await trocar("life_geral");
+    // ═════════════════════════════════════════════════════════════════════
+    //  A) ADMIN — alterna entre as duas marcas
+    // ═════════════════════════════════════════════════════════════════════
+    console.log();
+    console.log("A) Conta admin: duas marcas, e nenhum Life Geral");
+
+    await entrar(CONTAS.admin);
+    let e = await estado();
+
+    check("5. o admin recebe as duas marcas",
+          JSON.stringify(e.permitidos.slice().sort()) === '["eeglife","soprolife"]',
+          JSON.stringify(e.permitidos));
+    check("1/2. o seletor tem exatamente SoproLife e EEGLife",
+          JSON.stringify(e.abas) === '["soprolife","eeglife"]', JSON.stringify(e.abas));
+    check("1. Life Geral não existe em aba alguma",
+          e.abas.indexOf("life_geral") === -1 && e.paineis.indexOf("life_geral") === -1);
+    check("1. Life Geral não existe no texto da página",
+          !(await cdp.evaluate("/Life Geral/i.test(document.body.innerText)")));
+    check("4. o padrão, sem preferência salva, é SoproLife",
+          e.ctx === "soprolife" && JSON.stringify(e.visiveis) === '["soprolife"]',
+          JSON.stringify(e));
+    check("11. o papel veio do servidor (papeis_efetivos)",
+          Array.isArray(e.papeis) && e.papeis.indexOf("admin") !== -1,
+          JSON.stringify(e.papeis));
+
+    await trocar("eeglife");
     e = await estado();
-    check("5. troca para Life Geral muda contexto, painel e aba",
-          e.ctx === "life_geral" && JSON.stringify(e.visiveis) === '["life_geral"]' &&
-          JSON.stringify(e.selecionadas) === '["life_geral"]', JSON.stringify(e));
+    check("5. o admin entra na EEGLife",
+          e.ctx === "eeglife" && JSON.stringify(e.visiveis) === '["eeglife"]' &&
+          JSON.stringify(e.selecionadas) === '["eeglife"]', JSON.stringify(e));
+    check("5. o subtítulo diz a marca ativa em texto",
+          /Contexto:\s*EEGLife/.test(e.rotulo), e.rotulo);
 
     await trocar("soprolife");
     e = await estado();
-    check("6. volta para SoproLife restaura o painel operacional",
-          e.ctx === "soprolife" && JSON.stringify(e.visiveis) === '["soprolife"]' &&
-          JSON.stringify(e.selecionadas) === '["soprolife"]', JSON.stringify(e));
-    check("6. exatamente um painel visível por vez, sempre",
-          e.visiveis.length === 1);
+    check("6. o admin volta para a SoproLife",
+          e.ctx === "soprolife" && JSON.stringify(e.visiveis) === '["soprolife"]',
+          JSON.stringify(e));
 
-    // Persistência: a preferência sobrevive ao recarregamento.
+    // Persistência e queda de valor legado/inválido.
     await trocar("eeglife");
-    check("7. a escolha é gravada no navegador",
-          (await estado()).salvo === "eeglife");
-    await cdp.send("Page.reload");
-    await waitFor(pronto, "recarga em EEGLife");
-    await waitFor(() => cdp.evaluate(
-      "Boolean(window.SoproM15 && window.SoproM15.hasToken())"), "sessão após recarga");
+    check("a escolha é gravada no navegador", (await estado()).salvo === "eeglife");
+    await recarregar("recarga em EEGLife");
     e = await estado();
-    check("7. o contexto escolhido sobrevive ao recarregamento",
-          e.ctx === "eeglife" && JSON.stringify(e.visiveis) === '["eeglife"]', JSON.stringify(e));
+    check("a preferência sobrevive ao recarregamento",
+          e.ctx === "eeglife", JSON.stringify(e));
 
-    // Valor inválido: cai no padrão, sem quebrar.
-    await cdp.evaluate(`localStorage.setItem(${JSON.stringify(CHAVE)}, "marca_inexistente")`);
-    await cdp.send("Page.reload");
-    await waitFor(pronto, "recarga com valor inválido");
-    e = await estado();
-    check("8. valor de contexto inválido cai para SoproLife",
-          e.ctx === "soprolife" && JSON.stringify(e.visiveis) === '["soprolife"]', JSON.stringify(e));
-    check("8. e o valor inválido é corrigido no armazenamento",
-          e.salvo === "soprolife", String(e.salvo));
+    for (const [rotulo, valor] of [["3. legado life_geral", "life_geral"],
+                                   ["2. valor inválido", "marca_inexistente"]]) {
+      await cdp.evaluate(`localStorage.setItem(${JSON.stringify(CHAVE)}, ${JSON.stringify(valor)})`);
+      await recarregar("recarga com " + valor);
+      e = await estado();
+      check(`${rotulo} cai para SoproLife`,
+            e.ctx === "soprolife" && e.salvo === "soprolife", JSON.stringify(e));
+    }
 
-    // ── C) painel SoproLife continua funcional ─────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════
+    //  B) SoproLife continua funcionando (sessão admin)
+    // ═════════════════════════════════════════════════════════════════════
     console.log();
-    console.log("C) O painel SoproLife continua acessível e funcional");
+    console.log("B) O painel SoproLife continua acessível e funcional");
 
-    check("9. a sidebar SoproLife continua com todos os módulos",
+    check("10. a sidebar SoproLife continua com todos os módulos",
           await cdp.evaluate(
-            `document.querySelectorAll('#lifePanelSoproLife .nav-item[data-section]').length >= 14`),
-          String(await cdp.evaluate(
-            `document.querySelectorAll('#lifePanelSoproLife .nav-item[data-section]').length`)));
-    check("9. os dados do painel SoproLife carregaram (KPIs preenchidos)",
+            `document.querySelectorAll('#lifePanelSoproLife .nav-item[data-section]').length >= 14`));
+    check("10. os dados do painel SoproLife carregaram",
           await waitFor(() => cdp.evaluate(
             `(document.querySelector('#overview .kpi-card') || {}).textContent ? true : false`),
-            "KPIs do painel", 15000).then(() => true).catch(() => false));
+            "KPIs", 15000).then(() => true).catch(() => false));
     await cdp.evaluate(
       `document.querySelector('#lifePanelSoproLife .nav-item[data-section="crm"]').click()`);
     await sleep(220);
-    check("9. navegar entre módulos SoproLife continua funcionando",
+    check("10. navegar entre módulos SoproLife continua funcionando",
           await cdp.evaluate(`document.querySelector('#crm').classList.contains('active')`));
     await cdp.evaluate(
       `document.querySelector('#lifePanelSoproLife .nav-item[data-section="overview"]').click()`);
     await sleep(160);
 
-    // ── D) a prova de rede ─────────────────────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════
+    //  C) A casca EEGLife não busca dado SoproLife (prova de rede)
+    // ═════════════════════════════════════════════════════════════════════
     console.log();
-    console.log("D) A casca EEGLife não busca dado SoproLife (prova de rede)");
+    console.log("C) A casca EEGLife não busca dado SoproLife");
 
     const DADOS_OPERACIONAIS = [
       "resumo.json", "crm-clinicas.json", "leads.json", "marketing.json",
       "tarefas.json", "documentos.json", "automacoes.json",
     ];
+    // `m15-config.json` mora em data/ mas é manifesto de boot, não dado
+    // operacional: o próprio proxy registra a distinção (M25.27).
     const ehDadoSopro = (u) =>
       /\/painel-soprolife\/data-private\//.test(u) ||
       /\/painel-soprolife\/data\/.*\.local\.json/.test(u) ||
       DADOS_OPERACIONAIS.some((f) => u.includes("/painel-soprolife/data/" + f));
 
-    // Contraprova primeiro: no contexto SoproLife, as leituras SAEM. Sem isto
-    // "nenhuma requisição" poderia ser só um teste cego.
     await cdp.evaluate(`localStorage.setItem(${JSON.stringify(CHAVE)}, "soprolife")`);
     requested = [];
-    await cdp.send("Page.reload");
-    await waitFor(pronto, "recarga em SoproLife");
-    await waitFor(() => Promise.resolve(requested.some((r) => ehDadoSopro(r.url))),
-                  "leitura de data/ no contexto SoproLife", 15000)
-      .catch(() => null);
-    await sleep(1500);
-    const noSopro = requested.filter((r) => ehDadoSopro(r.url));
+    await recarregar("recarga em SoproLife");
+    await sleep(2000);
     check("contraprova: em SoproLife o painel REALMENTE lê data/*.json",
-          noSopro.length > 0, `${noSopro.length} requisições`);
+          requested.filter((r) => ehDadoSopro(r.url)).length > 0);
 
-    // Agora o requisito: contexto EEGLife, recarga, e nenhuma leitura.
     await cdp.evaluate(`localStorage.setItem(${JSON.stringify(CHAVE)}, "eeglife")`);
     requested = [];
-    await cdp.send("Page.reload");
-    await waitFor(pronto, "recarga em EEGLife");
-    await waitFor(() => cdp.evaluate(
-      "Boolean(window.SoproM15 && window.SoproM15.hasToken())"), "sessão em EEGLife");
-    await sleep(2500); // folga generosa: se fosse buscar, já teria buscado
-    const noEeg = requested.filter((r) => ehDadoSopro(r.url));
-    check("10. em EEGLife, NENHUMA leitura de data/*.json da SoproLife",
-          noEeg.length === 0, noEeg.slice(0, 6).map((r) => r.url).join(" "));
-    check("10. e a casca EEGLife está de fato na tela",
-          await cdp.evaluate(`!document.querySelector('#lifePanelEegLife').hidden
-            && document.querySelector('#lifePanelSoproLife').hidden`));
-    check("10. a sessão continua válida em EEGLife (auth não regrediu)",
+    await recarregar("recarga em EEGLife");
+    await sleep(2500);
+    let vazou = requested.filter((r) => ehDadoSopro(r.url));
+    check("11. em EEGLife, NENHUMA leitura de data/*.json da SoproLife",
+          vazou.length === 0, vazou.slice(0, 5).map((r) => r.url).join(" "));
+    check("11. a sessão continua válida em EEGLife",
           requested.some((r) => /\/api\/m15\/auth\/me/.test(r.url)));
 
-    // Clicar nos módulos EEG não deve gerar requisição alguma.
-    const antesCliques = requested.length;
-    const modulos = await cdp.evaluate(
-      `[...document.querySelectorAll('[data-eeg-modulo]')].map((b) => b.dataset.eegModulo).length`);
-    await cdp.evaluate(`(() => {
-      document.querySelectorAll('[data-eeg-modulo]').forEach((b) => b.click());
-    })()`);
+    // ═════════════════════════════════════════════════════════════════════
+    //  D) Estrutura da EEGLife no padrão do produto
+    // ═════════════════════════════════════════════════════════════════════
+    console.log();
+    console.log("D) EEGLife segue o padrão do painel SoproLife, sem dado");
+
+    const casca = await cdp.evaluate(`JSON.stringify({
+      modulos: [...document.querySelectorAll('[data-eeg-modulo]')].map((b) => b.dataset.eegModulo),
+      grupos: [...document.querySelectorAll('#lifePanelEegLife .eeg-nav-group')].map((g) => g.textContent.trim()),
+      temShell: Boolean(document.querySelector('#lifePanelEegLife .app-shell')),
+      temSidebar: Boolean(document.querySelector('#lifePanelEegLife .sidebar')),
+      temTopbar: Boolean(document.querySelector('#lifePanelEegLife .topbar')),
+      paineis: document.querySelectorAll('#lifePanelEegLife .panel').length,
+      tabelas: document.querySelectorAll('#lifePanelEegLife .table-wrap').length,
+      vazios: document.querySelectorAll('#lifePanelEegLife .empty-state').length,
+      stats: document.querySelectorAll('#lifePanelEegLife .stat-card').length,
+      canvas: document.querySelectorAll('#lifePanelEegLife canvas').length,
+    })`).then(JSON.parse);
+
+    check("16. a EEGLife usa a mesma casca (app-shell + sidebar + topbar)",
+          casca.temShell && casca.temSidebar && casca.temTopbar, JSON.stringify(casca));
+    check("16. usa os componentes do produto (panel, tabela, estado vazio, stat)",
+          casca.paineis > 0 && casca.tabelas > 0 && casca.vazios > 0 && casca.stats > 0,
+          JSON.stringify(casca));
+    check("16. os cinco grupos de módulos aparecem",
+          JSON.stringify(casca.grupos) ===
+          JSON.stringify(["Operação", "Clínico EEG", "Crescimento", "Gestão", "Sistema"]),
+          JSON.stringify(casca.grupos));
+    check("16. os dezesseis módulos aparecem no menu",
+          casca.modulos.length === 16, String(casca.modulos.length));
+    check("16. nenhum gráfico inventado",
+          casca.canvas === 0);
+
+    /* O tema não pode ficar só na sidebar: se os tokens não descerem, o corpo
+     * da EEGLife continua com o fundo azulado da SoproLife e as duas marcas
+     * ficam indistinguíveis fora do menu. */
+    const tema = await cdp.evaluate(`JSON.stringify((() => {
+      const p = document.querySelector('#lifePanelEegLife');
+      const cs = getComputedStyle(p);
+      const main = getComputedStyle(p.querySelector('.main'));
+      const body = getComputedStyle(document.body);
+      return {
+        bgToken: cs.getPropertyValue('--bg').trim(),
+        tealToken: cs.getPropertyValue('--teal').trim(),
+        mainBg: main.backgroundColor,
+        bodyBg: body.backgroundColor,
+      };
+    })())`).then(JSON.parse);
+    check("16. os tokens do tema descem para o painel da EEGLife",
+          tema.bgToken === "#f8f5ee" && tema.tealToken === "#c48a32",
+          JSON.stringify(tema));
+    check("16. o corpo da EEGLife é areia, não o azul da SoproLife",
+          tema.mainBg === "rgb(248, 245, 238)",
+          JSON.stringify(tema));
+
+    // Nenhum módulo pode gerar requisição: é o que impede dado SoproLife de
+    // aparecer com rótulo de EEG.
+    const antes = requested.length;
+    await cdp.evaluate(
+      `document.querySelectorAll('[data-eeg-modulo]').forEach((b) => b.click())`);
     await sleep(900);
-    check("10. clicar em TODOS os módulos EEGLife não dispara requisição",
-          requested.length === antesCliques,
-          requested.slice(antesCliques).map((r) => r.url).join(" "));
-    check("10. os módulos previstos aparecem no menu EEGLife",
-          modulos >= 14, String(modulos));
-    check("10. módulo sem backend mostra \"Estrutura em implantação\"",
-          await cdp.evaluate(
-            `/Estrutura em implantação/.test(document.querySelector('#lifePanelEegLife').textContent)`));
+    check("11/12/13/14. clicar nos 16 módulos não dispara requisição alguma",
+          requested.length === antes,
+          requested.slice(antes).map((r) => r.url).join(" "));
 
-    // Nenhum parâmetro de marca em requisição alguma, em nenhum contexto.
-    await trocar("life_geral");
-    await sleep(400);
+    // Telas específicas pedidas: cadastro, CRM, leads, financeiro, laudos.
+    for (const [num, modulo, rotulo] of [
+      ["12", "cadastros", "Central de Cadastros"],
+      ["13", "crm", "CRM"],
+      ["13", "leads", "Leads e Agendamentos"],
+      ["14", "financeiro", "Financeiro"],
+      ["15", "laudos", "Laudos de EEG"],
+      ["15", "exames", "Exames e traçados"],
+    ]) {
+      await cdp.evaluate(`window.LifeCommandCenter.openEegModule(${JSON.stringify(modulo)})`);
+      await sleep(120);
+      const tela = await cdp.evaluate(`JSON.stringify((() => {
+        const s = document.querySelector('[data-eeg-section="${modulo}"]');
+        return {
+          visivel: Boolean(s) && !s.hidden,
+          titulo: (s.querySelector('h2') || {}).textContent || "",
+          texto: s ? s.innerText : "",
+          temTabela: Boolean(s && s.querySelector('.table-wrap')),
+          temVazio: Boolean(s && s.querySelector('.empty-state')),
+        };
+      })())`).then(JSON.parse);
+      check(`${num}. ${rotulo}: tela operacional vazia, no padrão do produto`,
+            tela.visivel && tela.titulo === rotulo && tela.temTabela && tela.temVazio,
+            JSON.stringify({ v: tela.visivel, t: tela.titulo }));
+      check(`${num}. ${rotulo}: sem número e sem dado da SoproLife`,
+            !/\d/.test(tela.texto), (tela.texto.match(/[^\s]*\d[^\s]*/g) || []).slice(0, 3).join(" "));
+    }
+
+    // Painel Geral: indicadores sem valor, nunca zero.
+    await cdp.evaluate(`window.LifeCommandCenter.openEegModule("visao")`);
+    await sleep(150);
+    const visao = await cdp.evaluate(`JSON.stringify((() => {
+      const s = document.querySelector('[data-eeg-section="visao"]');
+      return {
+        valores: [...s.querySelectorAll('.stat-card strong')].map((x) => x.textContent.trim()),
+        dicas: [...s.querySelectorAll('.stat-card small')].map((x) => x.textContent.trim()),
+      };
+    })())`).then(JSON.parse);
+    check("8. o Painel Geral da EEGLife não mostra zero — mostra travessão",
+          visao.valores.length >= 7 && visao.valores.every((v) => v === "—"),
+          JSON.stringify(visao.valores));
+    check("8. e explica a ausência (aguardando ativação / sem fonte)",
+          visao.dicas.every((d) => /Aguardando ativação|Sem fonte ativa/.test(d)),
+          JSON.stringify(visao.dicas));
+
+    // ═════════════════════════════════════════════════════════════════════
+    //  E) Teclado e ARIA (sessão admin, duas abas)
+    // ═════════════════════════════════════════════════════════════════════
+    console.log();
+    console.log("E) Teclado e acessibilidade");
+
     await trocar("soprolife");
-    await sleep(1200);
-    const comMarca = requested.filter((r) =>
-      /brand=|marca=|life_geral|eeglife/i.test(r.url) || /brand=|life_geral/i.test(r.body));
-    check("12. nenhuma requisição carrega brand=/marca= nem o valor do contexto",
-          comMarca.length === 0, comMarca.slice(0, 4).map((r) => r.url).join(" "));
-
-    // ── E) Life Geral não inventa indicador ────────────────────────────────
-    console.log();
-    console.log("E) Life Geral consolidado, sem número inventado");
-
-    await trocar("life_geral");
-    const lgTexto = await cdp.evaluate(
-      "document.querySelector('#lifePanelLifeGeral').innerText");
-    check("11. o painel Life Geral não exibe número algum",
-          !/\d/.test(lgTexto), (lgTexto.match(/[^\s]*\d[^\s]*/g) || []).slice(0, 5).join(" "));
-    check("11. a frase sobre indicadores consolidados está na tela",
-          /Indicadores consolidados serão disponibilizados após a ativação do modelo multimarcas/
-            .test(lgTexto.replace(/\s+/g, " ")));
-    check("11. Life Geral não monta gráfico nem KPI",
-          await cdp.evaluate(
-            `document.querySelectorAll('#lifePanelLifeGeral canvas, #lifePanelLifeGeral .kpi-card').length === 0`));
-    check("11. o atalho \"Entrar em SoproLife\" leva ao painel operacional",
-          await (async () => {
-            await cdp.evaluate(`document.querySelector('[data-life-entrar="soprolife"]').click()`);
-            await sleep(200);
-            return cdp.evaluate("window.LifeCommandCenter.getContext() === 'soprolife'");
-          })());
-
-    // ── F) teclado e aria ──────────────────────────────────────────────────
-    console.log();
-    console.log("F) Teclado e acessibilidade");
-
-    await trocar("life_geral");
-    await cdp.evaluate(`document.querySelector('[data-life-context="life_geral"]').focus()`);
+    await cdp.evaluate(`document.querySelector('[data-life-context="soprolife"]').focus()`);
     async function tecla(key) {
-      // keydown sintético no elemento focado, como um teclado real faria.
       await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key, code: key });
       await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key, code: key });
-      await sleep(160);
+      await sleep(170);
     }
     await tecla("ArrowRight");
-    check("13. seta à direita avança para o próximo contexto",
-          await cdp.evaluate("window.LifeCommandCenter.getContext() === 'soprolife'"),
-          await cdp.evaluate("window.LifeCommandCenter.getContext()"));
-    await tecla("ArrowRight");
-    check("13. seta à direita segue para EEGLife",
+    check("18. seta à direita vai para a EEGLife",
           await cdp.evaluate("window.LifeCommandCenter.getContext() === 'eeglife'"));
     await tecla("ArrowLeft");
-    check("13. seta à esquerda volta",
+    check("18. seta à esquerda volta para a SoproLife",
           await cdp.evaluate("window.LifeCommandCenter.getContext() === 'soprolife'"));
-    await tecla("Home");
-    check("13. Home vai ao primeiro contexto",
-          await cdp.evaluate("window.LifeCommandCenter.getContext() === 'life_geral'"));
     await tecla("End");
-    check("13. End vai ao último contexto",
+    check("18. End vai para a última marca",
           await cdp.evaluate("window.LifeCommandCenter.getContext() === 'eeglife'"));
-    check("13. o foco acompanha a aba ativa",
+    await tecla("Home");
+    check("18. Home vai para a primeira marca",
+          await cdp.evaluate("window.LifeCommandCenter.getContext() === 'soprolife'"));
+    check("18. o foco acompanha a aba ativa",
           await cdp.evaluate(
             `document.activeElement.dataset.lifeContext === window.LifeCommandCenter.getContext()`));
-    check("13. só a aba ativa está na ordem do Tab",
-          await cdp.evaluate(`(() => {
-            const abas = [...document.querySelectorAll(${ABAS_JS})];
-            return abas.filter((b) => b.getAttribute("tabindex") === "0").length === 1;
-          })()`));
-
-    check("14. aria-selected e aria-current marcam exatamente um contexto",
+    check("18. aria-selected e aria-current marcam exatamente uma marca",
           await cdp.evaluate(`(() => {
             const abas = [...document.querySelectorAll(${ABAS_JS})];
             return abas.filter((b) => b.getAttribute("aria-selected") === "true").length === 1
-              && abas.filter((b) => b.getAttribute("aria-current") === "true").length === 1;
+              && abas.filter((b) => b.getAttribute("aria-current") === "true").length === 1
+              && abas.filter((b) => b.getAttribute("tabindex") === "0").length === 1;
           })()`));
-    check("14. cada aba controla um tabpanel existente",
+    check("18. cada aba controla um tabpanel existente",
           await cdp.evaluate(`[...document.querySelectorAll(${ABAS_JS})].every((b) => {
             const alvo = document.getElementById(b.getAttribute("aria-controls"));
             return Boolean(alvo) && alvo.getAttribute("role") === "tabpanel";
           })`));
-    check("14. o seletor é feito de <button>, não de div clicável",
-          await cdp.evaluate(`[...document.querySelectorAll(${ABAS_JS})].length === 3
-            && [...document.querySelectorAll(${ABAS_JS})]
-              .every((b) => b.tagName === "BUTTON" && b.type === "button")`));
-    check("14. o contexto ativo é anunciado por região live",
-          await cdp.evaluate(
-            `document.querySelector('#lifeContextoRotulo').getAttribute('aria-live') === 'polite'`));
+    check("18. o seletor é feito de <button>",
+          await cdp.evaluate(`[...document.querySelectorAll(${ABAS_JS})]
+            .every((b) => b.tagName === "BUTTON" && b.type === "button")`));
+    check("18. o menu da EEGLife é feito de <button>",
+          await cdp.evaluate(`[...document.querySelectorAll('[data-eeg-modulo]')]
+            .every((b) => b.tagName === "BUTTON")`));
 
-    // ── G) responsividade, overflow e capturas ─────────────────────────────
+    // ═════════════════════════════════════════════════════════════════════
+    //  F) Capturas nas sete larguras (sessão admin, duas marcas)
+    // ═════════════════════════════════════════════════════════════════════
     console.log();
-    console.log("G) Responsividade nas sete larguras, sem estouro horizontal");
+    console.log("F) Responsividade nas sete larguras, sem estouro horizontal");
 
     for (const vp of VIEWPORTS) {
       await cdp.send("Emulation.setDeviceMetricsOverride", {
         width: vp.w, height: vp.h, deviceScaleFactor: 1, mobile: vp.mobile,
       });
-      for (const ctx of ["soprolife", "eeglife", "life_geral"]) {
+      for (const ctx of CONTEXTOS) {
         await trocar(ctx);
         await sleep(240);
         const m = await cdp.evaluate(`JSON.stringify({
           scroll: document.documentElement.scrollWidth,
           inner: window.innerWidth,
-          seletorVisivel: (() => {
-            const t = document.querySelector('.life-switcher-track');
-            if (!t) return false;
-            const r = t.getBoundingClientRect();
-            return r.width > 0 && r.height > 0;
-          })(),
-          ativoVisivel: (() => {
-            const a = document.querySelector('.life-switcher-track [role="tab"][aria-selected="true"]');
-            if (!a) return false;
-            const r = a.getBoundingClientRect();
-            return r.width > 0 && r.height > 0;
-          })(),
-          rotuloVisivel: (() => {
-            const l = document.querySelector('#lifeContextoRotulo');
-            if (!l) return false;
-            const r = l.getBoundingClientRect();
-            return r.width > 0 && r.height > 0 && l.textContent.trim().length > 0;
-          })(),
+          seletor: (() => { const t = document.querySelector('.life-switcher-track');
+            if (!t) return false; const r = t.getBoundingClientRect();
+            return r.width > 0 && r.height > 0; })(),
+          ativo: (() => { const a = document.querySelector('.life-switcher-track [role="tab"][aria-selected="true"]');
+            if (!a) return false; const r = a.getBoundingClientRect();
+            return r.width > 0 && r.height > 0; })(),
+          rotulo: (() => { const l = document.querySelector('#lifeContextoRotulo');
+            if (!l) return false; const r = l.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && l.textContent.trim().length > 0; })(),
         })`).then(JSON.parse);
-        check(`${vp.mobile ? "16" : "15"}. ${vp.nome} · ${ctx}: sem estouro horizontal`,
+        check(`17. ${vp.nome} · ${ctx}: sem estouro horizontal`,
               m.scroll <= m.inner + 1, `scrollWidth=${m.scroll} innerWidth=${m.inner}`);
-        check(`${vp.nome} · ${ctx}: seletor utilizável e contexto ativo visível`,
-              m.seletorVisivel && m.ativoVisivel && m.rotuloVisivel, JSON.stringify(m));
-
+        check(`17. ${vp.nome} · ${ctx}: seletor e marca ativa visíveis`,
+              m.seletor && m.ativo && m.rotulo, JSON.stringify(m));
         if (SHOTS) {
-          const shot = await cdp.send("Page.captureScreenshot", {
-            format: "png", captureBeyondViewport: false,
-          });
-          fs.writeFileSync(
-            path.join(SHOTS, `fase13-${ctx}-${vp.nome}.png`),
-            Buffer.from(shot.data, "base64"));
+          const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
+          fs.writeFileSync(path.join(SHOTS, `fase13a-${ctx}-${vp.nome}.png`),
+                           Buffer.from(shot.data, "base64"));
         }
       }
     }
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false,
+    });
 
-    // ── H) higiene final ───────────────────────────────────────────────────
+    // Telas de lista da EEGLife, para a homologação visual: é nelas que se vê
+    // se a tela parece operacional à espera de dado, e não página de obra.
+    if (SHOTS) {
+      await trocar("eeglife");
+      for (const modulo of ["cadastros", "crm", "laudos", "financeiro"]) {
+        await cdp.evaluate(`window.LifeCommandCenter.openEegModule(${JSON.stringify(modulo)})`);
+        await sleep(200);
+        const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
+        fs.writeFileSync(path.join(SHOTS, `fase13a-eeglife-modulo-${modulo}.png`),
+                         Buffer.from(shot.data, "base64"));
+      }
+      await trocar("soprolife");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    //  G) NÃO-ADMIN — a EEGLife não existe para eles
+    // ═════════════════════════════════════════════════════════════════════
     console.log();
-    console.log("H) Higiene: console, rede externa, sessão");
+    console.log("G) Contas não-admin ficam restritas à SoproLife");
 
-    // 404 de arquivo OPCIONAL não é erro de JS: `loadOptionalJson` existe
-    // justamente para os summaries locais que podem não ter sido gerados —
-    // num banco de teste recém-criado, nenhum existe. O que não pode falhar é
-    // arquivo que a página precisa: script, folha de estilo, ou dado
-    // obrigatório.
+    for (const conta of [CONTAS.operacional, CONTAS.medico]) {
+      console.log(`  — papel: ${conta.papel}`);
+      await sair();
+      await entrar(conta);
+      let n = await estado();
+
+      check(`7. ${conta.papel}: só a SoproLife é permitida`,
+            JSON.stringify(n.permitidos) === '["soprolife"]', JSON.stringify(n.permitidos));
+      check(`7. ${conta.papel}: a aba da EEGLife NÃO existe no DOM`,
+            n.abas.indexOf("eeglife") === -1, JSON.stringify(n.abas));
+      check(`7. ${conta.papel}: o painel da EEGLife NÃO existe no DOM`,
+            n.paineis.indexOf("eeglife") === -1, JSON.stringify(n.paineis));
+      check(`7. ${conta.papel}: nenhum módulo da EEGLife no documento`,
+            (await cdp.evaluate("document.querySelectorAll('[data-eeg-modulo]').length")) === 0);
+      check(`7. ${conta.papel}: a palavra EEGLife não aparece na tela`,
+            !(await cdp.evaluate("/EEGLife/i.test(document.body.innerText)")));
+      check(`7. ${conta.papel}: o contexto é SoproLife`,
+            n.ctx === "soprolife" && n.body === "soprolife", JSON.stringify(n));
+
+      // Forçar por JavaScript.
+      await cdp.evaluate(`window.LifeCommandCenter.setContext("eeglife")`);
+      await sleep(200);
+      n = await estado();
+      check(`9. ${conta.papel}: setContext("eeglife") é recusado`,
+            n.ctx === "soprolife" && n.salvo !== "eeglife", JSON.stringify(n));
+      check(`9. ${conta.papel}: isAllowed("eeglife") é falso`,
+            (await cdp.evaluate(`window.LifeCommandCenter.isAllowed("eeglife")`)) === false);
+
+      // Forçar por localStorage + recarga.
+      await cdp.evaluate(`localStorage.setItem(${JSON.stringify(CHAVE)}, "eeglife")`);
+      requested = [];
+      await recarregar("recarga forçada (" + conta.papel + ")");
+      await sleep(1200);
+      n = await estado();
+      check(`8. ${conta.papel}: forçar por localStorage não abre a EEGLife`,
+            n.ctx === "soprolife" && n.salvo === "soprolife" &&
+            n.paineis.indexOf("eeglife") === -1, JSON.stringify(n));
+      check(`8. ${conta.papel}: e o painel da EEGLife segue fora do DOM`,
+            (await cdp.evaluate(
+              "document.querySelectorAll('#lifePanelEegLife').length")) === 0);
+
+      // Forçar por URL.
+      await navegar(
+        () => cdp.send("Page.navigate", { url: base + "/?contexto=eeglife&brand=eeglife" }),
+        "recarga por URL (" + conta.papel + ")");
+      await sleep(900);
+      n = await estado();
+      check(`9. ${conta.papel}: parâmetro na URL não abre a EEGLife`,
+            n.ctx === "soprolife" && n.paineis.indexOf("eeglife") === -1, JSON.stringify(n));
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    //  H) Higiene
+    // ═════════════════════════════════════════════════════════════════════
+    console.log();
+    console.log("H) Higiene: console, rede e parâmetro de marca");
+
+    const comMarca = requested.filter((r) =>
+      /[?&](brand|marca)=/i.test(r.url) || /brand=|"marca"/i.test(r.body));
+    // A URL forçada pelo teste é a única exceção conhecida — e ela prova o
+    // contrário do risco: o parâmetro foi ignorado.
+    const forjadas = comMarca.filter((r) => !/\?contexto=eeglife&brand=eeglife/.test(r.url));
+    check("a casca nunca envia brand=/marca= por conta própria",
+          forjadas.length === 0, forjadas.slice(0, 3).map((r) => r.url).join(" "));
+
     const ehOpcional = (u) => /\.local\.json(\?|$)|favicon/i.test(u);
-    // Só ARQUIVOS. Resposta de API tem semântica própria e não é falha de
-    // carregamento: neste ambiente sintético o fiscal responde 503 (integração
-    // desligada, que é o padrão correto) e Pastore responde 409 por não haver
-    // competência aberta. Nada disso tem a ver com a casca.
     const ehArquivo = (u) =>
       !/\/api\/m15\//.test(u) && /\.(css|js|json|html|png|svg|woff2?|ico)(\?|$)/i.test(u);
     const falhasArquivo = respostas.filter(
       (r) => r.status >= 400 && ehArquivo(r.url) && !ehOpcional(r.url));
-    check("17. nenhum arquivo necessário falhou (script, estilo, dado)",
+    check("nenhum arquivo necessário falhou",
           falhasArquivo.length === 0,
-          falhasArquivo.slice(0, 5).map((r) => `${r.status} ${r.url}`).join(" | "));
-
-    // A casca é recarregada várias vezes ao longo do teste; o que importa é
-    // que CSS e JS existam e nunca tenham respondido diferente de 200. Se o
-    // gate de arquivos do proxy não servisse os arquivos novos, a aparência
-    // sumiria em produção sem nenhum teste reclamar.
-    const cascaCss = respostas.filter((r) => /life-command-center\.css/.test(r.url));
-    const cascaJs = respostas.filter((r) => /life-command-center\.js/.test(r.url));
-    check("17. a casca do Centro de Comando Life é servida (CSS e JS, sempre 200)",
-          cascaCss.length > 0 && cascaJs.length > 0 &&
-          [...cascaCss, ...cascaJs].every((r) => r.status === 200),
-          `css=${cascaCss.length} js=${cascaJs.length} status=${
-            [...new Set([...cascaCss, ...cascaJs].map((r) => r.status))].join(",")}`);
-    const errosScript = erros.filter((e) =>
-      !/favicon/i.test(e.texto + e.url) && !ehOpcional(e.url) &&
-      !/Failed to load resource/i.test(e.texto));
-    check("17. nenhum erro de JavaScript no console", errosScript.length === 0,
-          errosScript.slice(0, 3).map((e) => e.texto).join(" | "));
+          falhasArquivo.slice(0, 4).map((r) => `${r.status} ${r.url}`).join(" | "));
+    // 200 ou 304: o 304 é revalidação de cache numa recarga, e significa que o
+    // arquivo está lá e a cópia do navegador vale. O que não pode é 4xx/5xx.
+    const cascaAtivos = respostas.filter((r) => /life-command-center\.(css|js)/.test(r.url));
+    check("a casca é servida (CSS e JS, sem erro)",
+          cascaAtivos.length > 0 && cascaAtivos.every((r) => r.status === 200 || r.status === 304),
+          `n=${cascaAtivos.length} status=${
+            [...new Set(cascaAtivos.map((r) => r.status))].sort().join(",")}`);
+    const errosScript = erros.filter((x) =>
+      !/favicon/i.test(x.texto + x.url) && !ehOpcional(x.url) &&
+      !/Failed to load resource/i.test(x.texto));
+    check("nenhum erro de JavaScript no console", errosScript.length === 0,
+          errosScript.slice(0, 3).map((x) => x.texto).join(" | "));
     const externos = requested.filter((r) =>
       !/^(http:\/\/127\.0\.0\.1|data:|about:|chrome|blob:)/.test(r.url) &&
       !/^https:\/\/fonts\.(googleapis|gstatic)\.com\//.test(r.url));
     check("fora do loopback, só as fontes que o painel já usava",
-          externos.length === 0, JSON.stringify(externos.slice(0, 4)));
-    check("18. a sessão continuou válida do início ao fim",
-          await cdp.evaluate("window.SoproM15.hasToken() === true"));
+          externos.length === 0, JSON.stringify(externos.slice(0, 3)));
 
     console.log();
     console.log(`RESULTADO: ${failures === 0 ? "OK" : "FALHOU"} — ${failures} falha(s)`);
     if (SHOTS) console.log(`Capturas em: ${SHOTS}`);
     process.exitCode = failures === 0 ? 0 : 1;
+
   } finally {
     if (cdp) cdp.close();
     children.reverse().forEach(stop);

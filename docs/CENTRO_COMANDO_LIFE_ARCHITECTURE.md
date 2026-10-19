@@ -18,14 +18,44 @@ CNPJ **63.544.026/0001-10**, que opera duas marcas comerciais:
 | `soprolife` | SoproLife | Espirometria e saúde respiratória |
 | `eeglife` | EEGLife | Eletroencefalografia e neurodiagnósticos |
 
-Contextos futuros da interface: `life_geral`, `soprolife`, `eeglife`.
-O seletor superior será apresentado como **Life Geral | SoproLife | EEGLife**.
+Contextos da interface: `soprolife` e `eeglife` — **as duas marcas, e nada
+mais**. O seletor superior é apresentado como **SoproLife | EEGLife**.
 
-**Life Geral não é uma terceira marca nem uma entidade operacional.**
-`life_geral` é exclusivamente contexto de consulta/consolidação. Nunca será
-valor de marca de paciente, atendimento, lead, exame, laudo, agendamento,
-tarefa ou lançamento. Despesas corporativas usarão um escopo compartilhado
-explícito, distinto de marca e de contexto da interface.
+**Decisão revista em 18/10/2026 (Fase 1.3A): não há contexto "Life Geral".**
+A versão anterior deste documento previa um terceiro contexto consolidado no
+topo. Ele foi REVOGADO depois da homologação visual: o seletor mostra marcas,
+e marcas são duas. `life_geral` não é mais valor válido em lugar nenhum — nem
+no seletor, nem na navegação, nem como tela, nem como preferência persistida,
+nem como padrão.
+
+Isso **não** elimina a consolidação corporativa como conceito. Relatórios e
+painéis consolidados entre as duas marcas poderão existir no futuro, mas como
+recurso administrativo DENTRO de um módulo — nunca como uma terceira marca ou
+um terceiro contexto no topo. Despesas corporativas continuam usando um escopo
+compartilhado explícito, distinto de marca.
+
+### Autorização do contexto (regra provisória da Fase 1.3A)
+
+| Sessão | SoproLife | EEGLife |
+|---|---|---|
+| papéis efetivos contêm `admin` | sim | sim |
+| qualquer outro papel (inclusive `medico`) | sim | **não** |
+
+A decisão vem de `papeis_efetivos` em `GET /auth/me` — servidor, cookie de
+sessão —, a mesma fonte que o `boot-gate.js` usa para podar o DOM por papel.
+`admin` implica gestor/operacional/leitura e **nunca** `medico`
+(`ROLE_IMPLIES`), de modo que uma conta exclusivamente clínica não alcança a
+EEGLife sem que nome de pessoa alguma apareça no código.
+
+Para quem não pode, a aba e o painel inteiro da EEGLife são **removidos do
+DOM**, e `setContext("eeglife")` é recusado — localStorage e console não
+forçam a entrada. O localStorage guarda apenas preferência entre contextos que
+a sessão já pode acessar; ele nunca concede acesso.
+
+**Alcance honesto:** como a EEGLife ainda não tem endpoint próprio, esta é uma
+guarda de interface sobre um sinal do servidor. Ela impede a navegação, não
+substitui autorização de dados. Quando existirem endpoints de EEG, a
+autorização real terá de ser deles — ver §9.
 
 ## 2. Base existente preservada
 
@@ -84,10 +114,11 @@ contra o usuário. O frontend não será a fronteira de segurança.
   lançamento, laudo ou agendamento de outra marca indevidamente.
 - Ausência de contexto em clientes antigos precisará de compatibilidade
   explícita com SoproLife, nunca acesso implícito a todas as marcas.
-- Life Geral consultará apenas marcas autorizadas. Cobertura parcial deverá
-  ser visível; não ampliar privilégios ao selecionar a consolidação.
-- Escritas operacionais exigirão marca concreta; o contexto `life_geral` será
-  recusado como destino. Operações corporativas terão autorização própria.
+- Relatórios consolidados (quando existirem, dentro de módulos
+  administrativos) consultarão apenas marcas autorizadas. Cobertura parcial
+  deverá ser visível; consolidar não amplia privilégio.
+- Escritas operacionais exigirão marca concreta. Operações corporativas terão
+  autorização própria.
 - O gate de arquivos estáticos hoje protege por sessão/papel, não por marca.
   Não basta filtrar a API e deixar snapshots de outras marcas acessíveis por
   URL. Definir entrega autenticada por contexto antes de ativar a segregação.
@@ -110,7 +141,8 @@ Segredos, dados privados, backups e artefatos fiscais ficam fora do Git.
 
 A = corporativo/compartilhado; B = futuramente escopado por marca;
 C = clínico específico SoproLife; D = futuro clínico EEGLife;
-E = consolidado Life Geral. Classes combinadas indicam fronteiras dentro de
+E = relatório consolidado entre marcas (recurso administrativo dentro de um
+módulo, não contexto do topo). Classes combinadas indicam fronteiras dentro de
 um módulo existente, não duplicação do módulo. D é planejado, não existente.
 
 | Módulo atual/futuro | Classe | Fronteira e direção |
@@ -151,8 +183,8 @@ Correções precisam manter histórico auditável; não sobrescrever valores par
 fazer consolidações fecharem. Recebimento, repasse e nota fiscal não são três
 receitas. Preservar regras de Pastore e a idempotência fiscal.
 
-Life Geral consolida **entidades/eventos identificáveis no backend**, não
-`cards(SoproLife) + cards(EEGLife)`. Indicadores expostos podem ser agregados
+Um relatório consolidado entre marcas soma **entidades/eventos identificáveis
+no backend**, não `cards(SoproLife) + cards(EEGLife)`. Indicadores expostos podem ser agregados
 sem transportar identificadores pessoais ao navegador.
 
 | Medida | Regra futura |
@@ -215,9 +247,15 @@ dourado-tinta. Evitar branco sobre dourado em texto pequeno. Os números não
 certificam a acessibilidade da interface futura: validar também foco, estados,
 tamanho, componentes, responsividade e não depender somente de cor.
 
-Life Geral terá tema institucional neutro (superfícies claras/cinzas e texto
-escuro), sem logo ou identidade de terceira marca comercial. Tokens finais
-ficam para aprovação visual futura; nenhum token ou seletor é criado agora.
+A EEGLife usa os **mesmos componentes** do painel SoproLife (`.app-shell`,
+`.sidebar`, `.main`, `.topbar`, `.panel`, `.stat-card`, `.table-wrap`,
+`.empty-state`) e troca apenas a identidade, redefinindo os tokens do `:root`
+dentro de `#lifePanelEegLife`. Muda a cor, não o padrão de produto: as duas
+marcas são irmãs dentro do mesmo Centro de Comando, e não dois produtos
+diferentes.
+
+Relatórios consolidados futuros, se tiverem identidade própria, usarão tema
+institucional neutro — sem logo nem identidade de terceira marca comercial.
 
 ## 8. Estratégia incremental e critérios
 

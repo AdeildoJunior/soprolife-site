@@ -17,7 +17,11 @@
 
 Consultar [CENTRO_COMANDO_LIFE_ARCHITECTURE.md](CENTRO_COMANDO_LIFE_ARCHITECTURE.md)
 para a evolução futura. Uma pessoa jurídica, duas marcas (`soprolife`,
-`eeglife`); `life_geral` é somente visão consolidada, nunca marca de registro.
+`eeglife`) — e **nenhum terceiro contexto**: o "Life Geral" previsto antes foi
+revogado em 18/10/2026, e consolidação entre marcas, quando existir, será
+relatório administrativo dentro de um módulo. Acesso à EEGLife depende do
+papel `admin` da sessão; demais papéis, inclusive `medico`, ficam na
+SoproLife.
 Paciente corporativo compartilhado, autorização clínica por capacidade e
 operação, razão financeiro compartilhado e consolidação por entidades/eventos.
 Nenhuma segregação multimarcas, migração, permissão ou tela EEG foi ativada.
