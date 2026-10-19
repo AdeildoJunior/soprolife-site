@@ -26,6 +26,11 @@ PREFIXES = {
     "report_documents": "LAU",
     # M25.20 — lote de assinatura externa.
     "external_signature_batches": "BAT",
+    # Fase 2A — EEGLife. Códigos próprios: um exame de EEG não é um ESP, e um
+    # laudo de EEG não é um LAU. Misturar as sequências faria o código público
+    # mentir sobre que exame é aquele.
+    "eeg_exams": "EEG",
+    "eeg_report_documents": "LEG",
 }
 
 # Tabelas cujo código público é INTERNO: emitido e auditado normalmente, mas

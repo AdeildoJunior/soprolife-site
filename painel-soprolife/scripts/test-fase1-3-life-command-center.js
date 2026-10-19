@@ -46,6 +46,21 @@ const bootGate = ler("js", "boot-gate.js");
 const securityPy = ler("nucleo-m15", "app", "security.py");
 const authPy = ler("nucleo-m15", "app", "routers", "auth.py");
 const arquitetura = ler("..", "docs", "CENTRO_COMANDO_LIFE_ARCHITECTURE.md");
+const eegOperacao = ler("js", "eeg-operacao.js");
+const eegRouter = ler("nucleo-m15", "app", "routers", "eeg.py");
+const eegModalidades = ler("nucleo-m15", "app", "services", "eeg_modalidades.py");
+const eegModels = ler("nucleo-m15", "app", "models.py");
+
+// Python sem docstring nem comentário. Necessário porque estes arquivos
+// explicam em prosa justamente o que NÃO fazem ("não há coluna de blob",
+// "preço e repasse não são desta fase") — e a explicação derrubaria a
+// checagem que procura a ausência dessas coisas no código.
+const semComentariosPy = (src) => src
+  .replace(/"""[\s\S]*?"""/g, "")
+  .replace(/^\s*#.*$/gm, "")
+  .replace(/\s#.*$/gm, "");
+const eegRouterCodigo = semComentariosPy(eegRouter);
+const eegModelsCodigo = semComentariosPy(eegModels);
 
 // Só o código: os comentários desta casca explicam o que ela NÃO faz ("não
 // envia nada ao backend", "Life Geral foi removido") e derrubariam as
@@ -54,6 +69,7 @@ const semComentariosJs = (src) => src
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/^\s*\/\/.*$/gm, "");
 const shellCodigo = semComentariosJs(shellJs);
+const eegOperacaoCodigo = semComentariosJs(eegOperacao);
 
 function painel(id) {
   const ini = indexHtml.indexOf(`id="${id}"`);
@@ -412,6 +428,57 @@ caso("sem a casca, o painel inicia como antes (sem regressão)",
      /\} else \{[\s\S]{0,260}?entrarEmSoproLife\(\);/.test(appJs));
 caso("init() roda no máximo uma vez",
      /if \(!painelIniciado\) \{[\s\S]{0,120}?painelIniciado = true;[\s\S]{0,60}?init\(\);/.test(appJs));
+
+// ───────────── L) Fase 2A — operação real da EEGLife ─────────────────────
+console.log();
+console.log("L) Fase 2A: operação real da EEGLife, com autorização no servidor");
+
+caso("os módulos vivos leem as rotas /eeg do núcleo",
+     /MODULOS_VIVOS = \{[\s\S]{0,260}?cadastros:[\s\S]{0,260}?exames:[\s\S]{0,260}?laudos:/.test(eegOperacao) &&
+     /api\("\/eeg\/pessoas/.test(eegOperacao) &&
+     /api\("\/eeg\/exames"\)/.test(eegOperacao) &&
+     /api\("\/eeg\/laudos"\)/.test(eegOperacao));
+caso("a casca entrega o módulo à operação real quando ela existe",
+     /window\.SoproEegOperacao/.test(shellCodigo) &&
+     /operacao\.montar\(id, secao\)/.test(shellCodigo));
+// O ponto que não pode afrouxar: autorização é do servidor.
+caso("TODA rota de EEG depende de require_eeg_access",
+     (() => {
+       const rotas = (eegRouter.match(/@router\.(get|post|patch|delete)\(/g) || []).length;
+       const guardas = (eegRouter.match(/require_eeg_access/g) || []).length;
+       // uma ocorrência é o import; as demais são as dependências.
+       return rotas > 0 && guardas >= rotas + 1;
+     })(),
+     `rotas=${(eegRouter.match(/@router\.(get|post|patch|delete)\(/g) || []).length} ` +
+     `guardas=${(eegRouter.match(/require_eeg_access/g) || []).length}`);
+caso("a política de acesso é por papel, sem nome de pessoa",
+     !/\bana\b/i.test(eegRouter) && !/\bana\b/i.test(eegOperacao));
+caso("a Central EEG consulta o vínculo, nunca a tabela de pessoas inteira",
+     /select\(EegEnrollment\)[\s\S]{0,200}?\.join\(Person/.test(eegRouter));
+caso("o frontend não decide autorização",
+     !/papeis_efetivos|require_|ROLE_/.test(eegOperacaoCodigo));
+caso("o traçado não trafega nem é exibido no navegador",
+     !/<canvas|FileReader|URL\.createObjectURL/.test(eegOperacaoCodigo) &&
+     /não é exibido nem armazenado aqui/.test(eegOperacao));
+caso("o registro do arquivo técnico é só metadado (sem coluna de blob)",
+     /class EegTechnicalFile/.test(eegModelsCodigo) &&
+     !/LargeBinary|BYTEA|BLOB/i.test(
+       eegModelsCodigo.slice(eegModelsCodigo.indexOf("class EegTechnicalFile"),
+                             eegModelsCodigo.indexOf("class EegReportDispatch"))));
+caso("o laudo de EEG tem tabela própria, separada do respiratório",
+     /class EegReportDocument/.test(eegModels) &&
+     /eeg_report_documents/.test(eegModels) &&
+     /eeg\/laudos/.test(ler("nucleo-m15", "app", "services", "eeg_storage.py")));
+caso("as sete modalidades reais vêm do conteúdo publicado da EEGLife",
+     /eeglife-site\/src\/content\/modalidades\.mjs/.test(eegModalidades) &&
+     (eegModalidades.match(/codigo="/g) || []).length === 7);
+caso("modalidade sem duração declarada não ganha número inventado",
+     /duracao_minutos_aproximada=None/.test(eegModalidades));
+caso("nenhum preço, repasse ou prazo entrou nesta fase",
+     !/pre[çc]o|valor_|repasse|cobran[çc]a|nfse/i.test(eegRouterCodigo) &&
+     !/pre[çc]o|repasse/i.test(eegOperacaoCodigo) &&
+     !/pre[çc]o|repasse|valor_/i.test(
+       eegModelsCodigo.slice(eegModelsCodigo.indexOf("class EegEnrollment"))));
 
 console.log();
 if (falhas) {

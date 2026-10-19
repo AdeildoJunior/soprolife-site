@@ -362,7 +362,9 @@
       }
     }
     return '<section class="eeg-section" id="eegSec-' + escapar(mod.id) +
-      '" data-eeg-section="' + escapar(mod.id) + '" hidden>' +
+      '" data-eeg-section="' + escapar(mod.id) + '"' +
+      ' data-eeg-titulo="' + escapar(mod.rotulo) + '"' +
+      ' data-eeg-eyebrow="' + escapar(mod.eyebrow || "") + '" hidden>' +
       cabecalho + corpo + "</section>";
   }
 
@@ -417,6 +419,17 @@
     );
     var titulo = document.getElementById("eegTopbarTitulo");
     if (titulo) titulo.textContent = mod.rotulo;
+
+    // Fase 2A — alguns módulos deixaram de ser casca: eles buscam dado real
+    // nas rotas /eeg. Quem sabe disso é `js/eeg-operacao.js`; se ele estiver
+    // presente e assumir o módulo, a estrutura vazia some. Os demais módulos
+    // seguem como estrutura, e é por isso que a troca é opcional em vez de
+    // obrigatória.
+    var secao = document.querySelector('[data-eeg-section="' + id + '"]');
+    var operacao = window.SoproEegOperacao;
+    if (secao && operacao && typeof operacao.montar === "function") {
+      operacao.montar(id, secao);
+    }
   }
 
   /* ── Aplicação do contexto ──────────────────────────────────────────────── */

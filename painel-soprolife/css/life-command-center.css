@@ -515,3 +515,45 @@ body[data-life-ativo="eeglife"] { --life-accent: linear-gradient(90deg, var(--ee
   #lifePanelEegLife .eeg-nav-list { grid-template-columns: minmax(0, 1fr); }
   #lifePanelEegLife .eeg-stats { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ── Fase 2A: telas vivas da EEGLife ─────────────────────────────────────
+   Os módulos com backend usam os MESMOS componentes do produto; só os selos
+   de estado ganham cor própria, para que a fila se leia de relance. */
+
+#lifePanelEegLife .eeg-badge {
+  background: var(--eeg-areia-funda);
+  border: 1px solid rgba(196, 138, 50, .28);
+  color: var(--eeg-dourado-tinta);
+}
+
+/* Estados que pedem ação do operador ficam em dourado cheio; os demais
+   permanecem neutros. Nunca só cor: o texto do selo diz o estado. */
+#lifePanelEegLife .eeg-badge[data-eeg-status="aguardando_envio_laudo"],
+#lifePanelEegLife .eeg-badge[data-eeg-status="laudo_recebido"] {
+  border-color: var(--eeg-dourado);
+  font-weight: 700;
+}
+
+#lifePanelEegLife .eeg-badge[data-eeg-status="laudo_disponivel"] {
+  background: #e5f7f0;
+  border-color: rgba(31, 168, 122, .34);
+  color: #0f7a58;
+}
+
+#lifePanelEegLife .eeg-badge[data-eeg-status="cancelado"] {
+  background: #f4f1ea;
+  border-color: rgba(74, 85, 96, .26);
+  color: var(--eeg-tinta-suave);
+}
+
+#lifePanelEegLife .eeg-badge-pendente {
+  background: #fff8ed;
+  border: 1px solid rgba(231, 169, 63, .4);
+  color: #8a5d12;
+}
+
+/* A busca da Central é viva (não desabilitada como a das telas estruturais). */
+#lifePanelEegLife .eeg-toolbar input:not(:disabled) {
+  cursor: text;
+  opacity: 1;
+}

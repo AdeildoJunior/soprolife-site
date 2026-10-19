@@ -461,6 +461,37 @@ def require_patient_registration_editor(
     return user
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# EEGLife (Fase 2A)
+#
+# A política desta fase é admin-only, e ela vive AQUI — no servidor —, não no
+# seletor de marca, não no localStorage e não no DOM. A casca do Centro de
+# Comando esconde o que o usuário não pode ver; esta dependência é o que de
+# fato recusa, e é ela que vale.
+#
+# `admin` implica gestor/operacional/leitura e NUNCA `medico` (ROLE_IMPLIES),
+# então uma conta exclusivamente clínica da SoproLife não alcança nenhuma rota
+# de EEG. A regra é de PAPEL: nenhum nome de pessoa aparece no código.
+#
+# Quando a autorização granular por marca existir (acesso_eeglife e
+# capacidade_laudo_eeg, na fase seguinte), é esta função que muda — e só ela,
+# porque todas as rotas de EEG dependem dela.
+# ─────────────────────────────────────────────────────────────────────────
+
+def can_access_eeg(user: User) -> bool:
+    """Política provisória da Fase 2A: somente papel efetivo ``admin``."""
+
+    return ROLE_ADMIN in user_effective_roles(user)
+
+
+def require_eeg_access(user: User = Depends(get_current_user)) -> User:
+    if not can_access_eeg(user):
+        raise HTTPException(
+            status_code=403, detail="Permissão insuficiente para a operação EEGLife."
+        )
+    return user
+
+
 def ensure_roles_exist(db: Session) -> None:
     existing = {r.name for r in db.execute(select(Role)).scalars()}
     for name in ALL_ROLES:

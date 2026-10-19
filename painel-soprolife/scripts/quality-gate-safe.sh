@@ -52,6 +52,7 @@ run "node --check test-m67-browser-e2e.js"   node --check painel-soprolife/scrip
 run "node --check js/identificacao-assistida.js" node --check painel-soprolife/js/identificacao-assistida.js
 run "node --check test-m68-browser-e2e.js"   node --check painel-soprolife/scripts/test-m68-browser-e2e.js
 run "node --check life-command-center.js"    node --check painel-soprolife/js/life-command-center.js
+run "node --check eeg-operacao.js"           node --check painel-soprolife/js/eeg-operacao.js
 run "node --check test-fase1-3-life-browser-e2e.js" node --check painel-soprolife/scripts/test-fase1-3-life-browser-e2e.js
 run "node --check js/financeiro-conciliacao.js" node --check painel-soprolife/js/financeiro-conciliacao.js
 run "node --check js/pastore-settlement.js" node --check painel-soprolife/js/pastore-settlement.js
@@ -146,6 +147,7 @@ run "json.tool data-source-mode.json" \
   python3 -m json.tool painel-soprolife/core/contracts/data-source-mode.json
 
 secao "8b/10 M14.3A.1 — contrato de frescor operacional (offline, clock injetado)"
+run "py_compile eeg (modalidades/fluxo/storage)" python3 -m py_compile painel-soprolife/nucleo-m15/app/services/eeg_modalidades.py painel-soprolife/nucleo-m15/app/services/eeg_flow.py painel-soprolife/nucleo-m15/app/services/eeg_storage.py painel-soprolife/nucleo-m15/app/routers/eeg.py
 run "py_compile freshness_contract"        python3 -m py_compile painel-soprolife/scripts/freshness_contract.py
 run "py_compile read-marketing-seo-adc"    python3 -m py_compile painel-soprolife/scripts/read-marketing-seo-adc.py
 run "test-freshness-contract (Python)"     python3 painel-soprolife/scripts/test-freshness-contract.py
@@ -153,7 +155,7 @@ run "test-marketing-freshness (painel JS)" node painel-soprolife/scripts/test-ma
 run "test-systemd-units (sintaxe + sem segredo)" python3 painel-soprolife/scripts/test-systemd-units.py
 run "test-command-center proxy cookie/CSRF (M21)" python3 painel-soprolife/scripts/test_command_center_m15_proxy.py
 run "test-safe-launchers (local protegido/legado recusado)" python3 painel-soprolife/scripts/test-safe-launchers.py
-run "test-fase1-3 casca multimarcas Life (3 contextos)" node painel-soprolife/scripts/test-fase1-3-life-command-center.js
+run "test-fase1-3/2A casca Life + operação EEG" node painel-soprolife/scripts/test-fase1-3-life-command-center.js
 run "test-marketing credencial durável (M21)" python3 painel-soprolife/scripts/test-marketing-credencial.py
 run "test-marketing janela 60 dias (SC+GA4)" python3 painel-soprolife/scripts/test-marketing-window.py
 run "test-marketing subtítulo da tendência" node painel-soprolife/scripts/test-marketing-trend-subtitle.js

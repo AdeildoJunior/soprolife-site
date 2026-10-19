@@ -4,7 +4,7 @@ PCMSO saiu da operação ativa: nenhuma modalidade, funil ou origem PCMSO
 existe na M15. Dados históricos permanecem apenas nas fontes legadas.
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 import re
 import unicodedata
@@ -1329,3 +1329,100 @@ class ExternalValidationRequest(BaseModel):
             return None
         limpo = value.strip()
         return limpo or None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EEGLife — Fase 2A
+#
+# Nenhum destes payloads aceita preço, repasse, prazo ou conteúdo clínico:
+# regra comercial do EEG é fase posterior, e laudo chega pronto de fora.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class EegVinculoCreate(StrictModel):
+    """Vincula uma pessoa JÁ EXISTENTE à operação da EEGLife.
+
+    Não cria pessoa e não altera cadastro: só declara o vínculo. É o caminho
+    de quem já é paciente da SoproLife e passa a fazer EEG — a identidade
+    corporativa continua sendo uma só.
+    """
+
+    person_id: str = Field(min_length=1, max_length=36)
+    origem: str | None = Field(default=None, max_length=40)
+    observacao: str | None = Field(default=None, max_length=500)
+
+
+class EegPessoaCreate(StrictModel):
+    """Cadastra pessoa NOVA já vinculada à EEGLife.
+
+    Se houver correspondência segura com pessoa existente, o servidor recusa e
+    devolve os candidatos: reaproveitar a identidade é decisão do operador, e
+    criar duplicata por engano é o que esta recusa evita.
+    """
+
+    nome_completo: str = Field(min_length=2, max_length=300)
+    cpf: str | None = Field(default=None, max_length=20)
+    data_nascimento: date | None = None
+    sexo: Sexo | None = None
+    telefone: str | None = Field(default=None, max_length=200)
+    email: str | None = Field(default=None, max_length=200, pattern=_EMAIL_RE)
+    origem: str | None = Field(default=None, max_length=40)
+    observacao: str | None = Field(default=None, max_length=500)
+    # Confirmação explícita de que o operador viu os candidatos e mesmo assim
+    # quer uma pessoa nova. Sem isto, correspondência segura bloqueia.
+    confirmar_nova_pessoa: bool = False
+
+
+class EegExameCreate(StrictModel):
+    enrollment_id: str = Field(min_length=1, max_length=36)
+    modalidade_codigo: str = Field(min_length=1, max_length=40)
+    origem_tipo: str = Field(default="direto", max_length=20)
+    partner_unit_id: str | None = Field(default=None, max_length=36)
+    agendado_para: datetime | None = None
+    tecnico_responsavel: str | None = Field(default=None, max_length=200)
+    observacao: str | None = Field(default=None, max_length=500)
+
+
+class EegExameStatusUpdate(StrictModel):
+    status: str = Field(min_length=1, max_length=30)
+    # Quando informado, substitui o "agora" do carimbo. Serve para registrar
+    # um exame que aconteceu ontem, sem inventar horário.
+    ocorrido_em: datetime | None = None
+    observacao: str | None = Field(default=None, max_length=500)
+
+
+class EegArquivoTecnicoCreate(StrictModel):
+    """METADADOS do traçado. Nenhum campo carrega conteúdo de arquivo.
+
+    Tudo é opcional menos a origem: registrar que o traçado existe no
+    equipamento já é informação, e exigir canais/frequência de quem ainda não
+    tem o dado faria o operador inventar número.
+    """
+
+    armazenamento_origem: str = Field(min_length=1, max_length=40)
+    referencia_externa: str | None = Field(default=None, max_length=200)
+    nome_logico: str | None = Field(default=None, max_length=200)
+    formato: str | None = Field(default=None, max_length=40)
+    mime_type: str | None = Field(default=None, max_length=80)
+    tamanho_bytes: int | None = Field(default=None, ge=0)
+    sha256: str | None = Field(default=None, min_length=64, max_length=64)
+    duracao_segundos: int | None = Field(default=None, ge=0)
+    canais: int | None = Field(default=None, ge=1, le=512)
+    frequencia_hz: int | None = Field(default=None, ge=1, le=100000)
+    equipamento: str | None = Field(default=None, max_length=200)
+    observacao: str | None = Field(default=None, max_length=500)
+
+
+class EegEnvioLaudoCreate(StrictModel):
+    """Envio ao laudador — agnóstico de provedor, e manual nesta fase.
+
+    Nenhuma integração é presumida: não há API de terceiro aqui. O que se
+    registra é o que de fato foi feito por uma pessoa.
+    """
+
+    destino_tipo: str = Field(min_length=1, max_length=20)
+    destino_nome: str = Field(min_length=2, max_length=200)
+    metodo: str = Field(min_length=1, max_length=40)
+    protocolo_externo: str | None = Field(default=None, max_length=200)
+    enviado_em: datetime | None = None
+    observacao: str | None = Field(default=None, max_length=500)

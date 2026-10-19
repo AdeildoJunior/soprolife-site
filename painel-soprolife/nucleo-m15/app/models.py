@@ -2963,3 +2963,232 @@ Index(
     postgresql_where=((FiscalIssuanceRequest.kind == "issue") & FiscalIssuanceRequest.claimed_at.is_not(None)
                       & (FiscalIssuanceRequest.status != "refused")),
 )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EEGLife — fundação operacional (Fase 2A)
+#
+# PRINCÍPIO: a PESSOA é corporativa e continua uma só. Nada aqui duplica
+# paciente por causa da marca, e nenhuma tabela existente ganhou coluna de
+# marca. O que a EEGLife tem de próprio é o VÍNCULO operacional e o que
+# nasce dele — exame, arquivo técnico, envio ao laudador e laudo.
+#
+# É por isso que `EegEnrollment` existe: sem ele, a Central da EEGLife teria
+# de listar `people` inteira, que é a base da SoproLife. Com ele, a consulta
+# é por vínculo, e quem nunca fez EEG simplesmente não aparece.
+#
+# Nenhum backfill foi feito: nenhuma pessoa histórica ganhou vínculo EEG.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class EegEnrollment(Base, TimestampMixin):
+    """Vínculo operacional de uma pessoa corporativa com a marca EEGLife.
+
+    Uma linha por pessoa. Criar o vínculo NÃO copia, altera nem duplica a
+    pessoa: só declara que ela passou a existir para a operação de EEG.
+    """
+
+    __tablename__ = "eeg_enrollments"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    person_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("people.id"), nullable=False, unique=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(20), default="ativo", nullable=False)
+    origem: Mapped[str | None] = mapped_column(String(40))
+    observacao: Mapped[str | None] = mapped_column(Text)
+    criado_por: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ativo','arquivado')", name="eeg_enrollment_status_valido"
+        ),
+    )
+
+
+class EegExam(Base, TimestampMixin):
+    """Um exame de EEG, do cadastro à disponibilização do laudo.
+
+    "Realizado" e "laudo concluído" são eventos DIFERENTES e têm colunas
+    diferentes — é a distinção que a espirometria aprendeu a fazer, e que aqui
+    nasce explícita. Cada data só é preenchida pelo evento correspondente;
+    nenhuma é inferida da outra.
+    """
+
+    __tablename__ = "eeg_exams"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    public_code: Mapped[str] = mapped_column(String(12), unique=True, nullable=False)
+    enrollment_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("eeg_enrollments.id"), nullable=False, index=True
+    )
+    modalidade_codigo: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Local/origem. `partner_unit_id` aponta para a unidade CORPORATIVA já
+    # existente (Pastore, coworking) — o parceiro não é duplicado por marca.
+    origem_tipo: Mapped[str] = mapped_column(String(20), default="direto", nullable=False)
+    partner_unit_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("partner_units.id"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(30), default="cadastro", nullable=False, index=True)
+    agendado_para: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    realizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    enviado_para_laudo_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    laudo_recebido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    disponibilizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    tecnico_responsavel: Mapped[str | None] = mapped_column(String(200))
+    observacao: Mapped[str | None] = mapped_column(Text)
+    criado_por: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('cadastro','agendado','confirmado','realizado',"
+            "'aguardando_envio_laudo','enviado_para_laudo','em_laudo',"
+            "'laudo_recebido','laudo_disponivel','cancelado')",
+            name="eeg_exam_status_valido",
+        ),
+        CheckConstraint(
+            "origem_tipo IN ('direto','parceiro')", name="eeg_exam_origem_valida"
+        ),
+        # Origem de parceiro exige unidade; origem direta não a admite. Sem
+        # isto, "parceiro" viraria rótulo sem referência.
+        CheckConstraint(
+            "(origem_tipo = 'parceiro' AND partner_unit_id IS NOT NULL) OR "
+            "(origem_tipo = 'direto' AND partner_unit_id IS NULL)",
+            name="eeg_exam_origem_coerente",
+        ),
+    )
+
+
+class EegTechnicalFile(Base):
+    """METADADOS do traçado — nunca o traçado.
+
+    Decisão desta fase: o arquivo bruto do EEG permanece na fonte técnica
+    externa (equipamento ou plataforma). Esta tabela registra que ele EXISTE e
+    como encontrá-lo; não há coluna de blob, e isso é deliberado.
+
+    Um traçado digital tem dezenas a centenas de MB, monitorização prolongada
+    chega a GB e vídeo-EEG passa disso. Guardar em BYTEA, trafegar em JSON ou
+    versionar no Git seriam três formas diferentes do mesmo erro.
+
+    `storage_provider` e `object_key` nascem vazios: ficam prontos para o
+    object storage privado do futuro, sem que nada seja contratado agora.
+    Nenhuma URL pública permanente é guardada em lugar nenhum.
+    """
+
+    __tablename__ = "eeg_technical_files"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    exam_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("eeg_exams.id"), nullable=False, index=True
+    )
+    armazenamento_origem: Mapped[str] = mapped_column(String(40), nullable=False)
+    referencia_externa: Mapped[str | None] = mapped_column(String(200))
+    nome_logico: Mapped[str | None] = mapped_column(String(200))
+    formato: Mapped[str | None] = mapped_column(String(40))
+    mime_type: Mapped[str | None] = mapped_column(String(80))
+    tamanho_bytes: Mapped[int | None] = mapped_column(Integer)
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    duracao_segundos: Mapped[int | None] = mapped_column(Integer)
+    canais: Mapped[int | None] = mapped_column(Integer)
+    frequencia_hz: Mapped[int | None] = mapped_column(Integer)
+    equipamento: Mapped[str | None] = mapped_column(String(200))
+    # Ponte para o object storage futuro. Vazios nesta fase, por decisão.
+    storage_provider: Mapped[str | None] = mapped_column(String(40))
+    object_key: Mapped[str | None] = mapped_column(String(300))
+    observacao: Mapped[str | None] = mapped_column(Text)
+    criado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    criado_por: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
+    __table_args__ = (
+        CheckConstraint(
+            "armazenamento_origem IN ('equipamento','plataforma_externa',"
+            "'midia_fisica','object_storage','outro')",
+            name="eeg_tecnico_armazenamento_valido",
+        ),
+        CheckConstraint(
+            "tamanho_bytes IS NULL OR tamanho_bytes >= 0",
+            name="eeg_tecnico_tamanho_nao_negativo",
+        ),
+    )
+
+
+class EegReportDispatch(Base):
+    """Envio do exame ao laudador — agnóstico de provedor e manual.
+
+    Dois cenários existem desde já: empresa/plataforma de telelaudo e médico
+    laudador contratado direto. Nenhuma integração é simulada: não há API
+    presumida, não há webhook inventado. O que se registra é o que de fato
+    aconteceu, e quem fez.
+    """
+
+    __tablename__ = "eeg_report_dispatches"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    exam_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("eeg_exams.id"), nullable=False, index=True
+    )
+    destino_tipo: Mapped[str] = mapped_column(String(20), nullable=False)
+    destino_nome: Mapped[str] = mapped_column(String(200), nullable=False)
+    metodo: Mapped[str] = mapped_column(String(40), nullable=False)
+    protocolo_externo: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), default="enviado", nullable=False)
+    observacao: Mapped[str | None] = mapped_column(Text)
+    enviado_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    enviado_por: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
+    __table_args__ = (
+        CheckConstraint(
+            "destino_tipo IN ('empresa','medico')", name="eeg_envio_destino_valido"
+        ),
+        CheckConstraint(
+            "metodo IN ('plataforma_externa','upload_manual_externo','outro')",
+            name="eeg_envio_metodo_valido",
+        ),
+        CheckConstraint(
+            "status IN ('enviado','cancelado','substituido')",
+            name="eeg_envio_status_valido",
+        ),
+    )
+
+
+class EegReportDocument(Base, TimestampMixin):
+    """O laudo de EEG em PDF, versionado — tipo PRÓPRIO.
+
+    Não é `ReportDocument`. O laudo de espirometria tem template, conclusão,
+    broncodilatador, assinatura e um fluxo clínico inteiro que não se aplica
+    aqui: este PDF vem PRONTO de fora, de um laudador externo. Reaproveitar
+    aquela tabela misturaria dois documentos clínicos diferentes e faria o
+    fluxo respiratório carregar um caso que não é dele.
+
+    O arquivo mora no filesystem privado, como os laudos da espirometria —
+    nunca em coluna de banco. `storage_path` é interno e jamais sai numa
+    resposta de API.
+    """
+
+    __tablename__ = "eeg_report_documents"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    public_code: Mapped[str] = mapped_column(String(12), unique=True, nullable=False)
+    exam_id: Mapped[str] = mapped_column(
+        String(UUID_LEN), ForeignKey("eeg_exams.id"), nullable=False, index=True
+    )
+    versao: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(300), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(40), default="application/pdf", nullable=False)
+    origem: Mapped[str] = mapped_column(String(40), default="laudador_externo", nullable=False)
+    medico_laudador: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), default="recebido", nullable=False)
+    recebido_em: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    recebido_por: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
+    disponibilizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    observacao: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        UniqueConstraint("exam_id", "versao", name="eeg_laudo_versao_unica"),
+        CheckConstraint(
+            "status IN ('recebido','vigente','substituido')",
+            name="eeg_laudo_status_valido",
+        ),
+        CheckConstraint("versao >= 1", name="eeg_laudo_versao_positiva"),
+        CheckConstraint("size_bytes > 0", name="eeg_laudo_tamanho_positivo"),
+    )
