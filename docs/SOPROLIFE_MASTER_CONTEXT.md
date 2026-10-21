@@ -475,7 +475,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 | `origin/painel-soprolife-v01` / VPS | VPS em `a51bd74` (M26.35 — botão "Emitir NFS-e" do documento agrupado), worktree limpo, `.git` 100% `soprolife`, health 200 |
 | `origin/main` (site) | `ac0a1a8` |
 | Alembic | `b5e2f7a91c38` (M26.34) |
-| Serviços | `soprolife-m15-api`, `soprolife-painel-loopback` (:8765), `soprolife-portal-resultados`, `soprolife-update-data.timer` (10 min), `soprolife-nfse-production-worker.path` ativos; `soprolife-operational-refresh.timer` **inativo** na conferência de 21/10 (não investigado) |
+| Serviços | `soprolife-m15-api`, `soprolife-painel-loopback` (:8765), `soprolife-portal-resultados`, `soprolife-update-data.timer` (10 min), `soprolife-nfse-production-worker.path` ativos. **`soprolife-operational-refresh.timer` nunca foi instalado** (conferido em 21/10: sem unit, sem `/etc/soprolife/`); as units em `painel-soprolife/systemd/` são "preparado, não instalado" (M14.3A.1) e o frescor de Marketing/SEO já é feito pelo `update-data` (passo 3/6 de `update-local-data.sh`, Search Console e GA4 `ok`). A menção "(6 h)" das versões anteriores deste quadro estava errada |
 | A1 | instalado como credential cifrado; vence 2026-11-07; margem temporária de 2 dias (M72) ⇒ emissão até 2026-11-05 |
 | SERPRO | integrado, desligado (sem credenciais) |
 | Instagram (último post) | integrado, desligado (sem token Meta) — convite usa o perfil |
