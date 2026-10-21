@@ -82,7 +82,7 @@ Botão NFS-e ──► spool ──► soprolife-nfse-production-worker (oneshot
 | Repo local | `~/soprolife-site` (hoje com checkout em `main`; o painel é trabalhado em worktree) |
 | Worktrees | só em `~/soprolife-worktrees/<missao>`, criados de `origin/painel-soprolife-v01` |
 | VPS | Hostinger, Ubuntu 24.04, host `soprolife-painel-01`, acesso **só via Tailscale** (`ssh root@<VPS_TAILSCALE_IP>`; o check do Tailscale expira em ~30 min — peça o clique antes) |
-| Repo na VPS | `/opt/soprolife/soprolife-site` (pull como **root**; `.git/index` é root 0600) |
+| Repo na VPS | `/opt/soprolife/soprolife-site` (pull como **`soprolife`**; `.git` inteiro de `soprolife` desde 21/10/2026 — nunca rodar git como root ali) |
 | Venv da API | `/opt/soprolife/venvs/m15` (exige `PYTHONPATH`/cwd `nucleo-m15`) |
 | Segredos | `/opt/soprolife/secrets/m15.env` (root 0600; nunca impresso) |
 | Banco | PostgreSQL 16 em loopback (SQLite só em dev/teste); tabela de auditoria `audit_logs` (`ts_utc`) |
@@ -187,7 +187,7 @@ Front-end: `index.html` + `js/*.js` com cache-buster `?v=AAAAMMDDNN` —
   `sha256(token)`; papel PostgreSQL `soprolife_portal` com GRANT por coluna.
 - **QR/verificação pública** do laudo e nomes de download determinísticos.
 
-## 7. NFS-e (M27–M71, M26.34)
+## 7. NFS-e (M27–M72, M26.34–M26.35)
 
 **Arquitetura.** `FiscalDocument` → `FiscalPreparation` (snapshot imutável com
 fingerprint, valor, tomador, fonte do valor) → `FiscalIssuanceRequest` (pedido
@@ -267,7 +267,18 @@ sem rede e exige ≥ 30 dias de validade.
 `import/external_manual`) e nunca ganham botão. NFS-e históricas já protegidas:
 5 manuais importadas + 3 emitidas pela automação (8 `issued` em 02/10/2026);
 em 12/10/2026, 12 documentos de produção `issued` e nenhum `pending` (a nº 15 de
-ESP-000063 importada pelo M71).
+ESP-000063 importada pelo M71). Em 21/10/2026: **20 documentos de produção
+`issued`** (19 `single` + 1 `grouped`; 14 emitidos pela automação + 6
+importados), nenhum `pending`, última DPS automática nº 14.
+
+**Primeira NFS-e agrupada (21/10/2026, M26.35):** documento `38aa9324`,
+ESP-000077 + ESP-000078 (R$ 250,00 cada), tomadora terceira pagadora (não é
+paciente de nenhum item), serviço em 20/10/2026, total **R$ 500,00**. Emitida
+por clique humano no cartão do documento agrupado: pedido `bcc3e0a9`,
+**1 POST / 0 GET**, DPS nº 14 série `00001`, artefatos `dps_signed_xml` +
+`nfse_xml`, `fiscal_validity=True`. Os dois exames ficaram com 0 documento
+individual e 1 item cada (ocupação pelo agrupado). Prova de que o agrupado
+usa a mesma rota, o mesmo pedido e o mesmo worker das notas individuais.
 **Exceção M71 (nota manual depois de recusa pré-envio):** se o botão já criou o
 documento de produção e o worker recusou **antes** da fronteira, a importação
 reaproveita esse documento `pending` (mesmo id, sem segundo documento) — só se
@@ -365,7 +376,8 @@ sem ele, cai na data do serviço).
 3. Na VPS (com autorização explícita): conferir HEAD e worktree limpo, health,
    estado do worker/spool; **backup** em `/opt/soprolife/backups/<missao>/`
    (`pg_dump -Fc` + `git bundle`).
-4. `git pull --ff-only origin painel-soprolife-v01` como root.
+4. `git pull --ff-only origin painel-soprolife-v01` como `soprolife`, depois de
+   conferir `find .git ! -user soprolife | wc -l` = 0 e escrita nos diretórios tocados.
 5. Se houver migration: `alembic upgrade head` como `soprolife` com `m15.env`.
 6. **Reiniciar `soprolife-m15-api` só se mudou Python/modelo/migration.**
    Front-end puro **não** precisa de restart (o servidor `:8765` lê do disco),
@@ -426,8 +438,16 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 
 ## 14. Pendências atuais
 
-- **Certificado A1 vence em 2026-11-07.** O worker exige 30 dias de margem:
-  renovar e reinstalar os `.cred` **antes de 2026-10-08**, senão a emissão para.
+- **Certificado A1 vence em 2026-11-07.** A margem do worker foi reduzida para
+  **2 dias, temporariamente** (M72, 14/10/2026: drop-in
+  `certificate-margin.conf` + `/opt/soprolife/secrets/nfse-certificate-margin.env`,
+  fora do `m15.env` de propósito). A emissão **para em 2026-11-05**: renovar o A1
+  e reinstalar os `.cred` antes disso; depois, voltar a margem para 30 dias.
+- **`.git` da VPS com objetos do root:** em 21/10/2026, 640 objetos `root:root`
+  0400 (fetches como root em 19/10) impediram o `git fetch` como `soprolife`;
+  corrigido com `chown -R soprolife:soprolife .git`. Antes de cada deploy,
+  `find .git ! -user soprolife | wc -l` deve dar 0. Git na VPS roda como
+  `soprolife` (§2, §11).
 - **SERPRO:** contratar Consumer Key/Secret e configurar no `m15.env` para ativar.
 - **Instagram (M26.32):** conectar a conta `@soprolife` como profissional a um app
   Business da Meta e gerar o token de longa duração (escopo
@@ -448,18 +468,18 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 - **Backup cifrado (`age`) dos artefatos NFS-e** na VPS: planejado, não implementado.
 - **Local:** worktrees com trabalho não integrado listados em §17.
 
-## 15. Estado atual (2026-10-03)
+## 15. Estado atual (2026-10-21)
 
 | Item | Estado |
 |---|---|
-| `origin/painel-soprolife-v01` / VPS | VPS em `65c0092` (M71 — importação da NFS-e manual nº 15 sobre pending nunca enviado), worktree limpo, health 200; commits só de docs depois dele não exigem deploy |
-| `origin/main` (site) | `a7d8b03` |
-| Alembic | `b70c4a2e9d15` (M70) |
-| Serviços | `soprolife-m15-api`, `soprolife-painel-loopback` (:8765), `soprolife-portal-resultados`, `soprolife-update-data.timer` (10 min), `soprolife-operational-refresh.timer` (6 h), `soprolife-nfse-production-worker.path` (active) |
-| A1 | instalado como credential cifrado; vence 2026-11-07 |
+| `origin/painel-soprolife-v01` / VPS | VPS em `a51bd74` (M26.35 — botão "Emitir NFS-e" do documento agrupado), worktree limpo, `.git` 100% `soprolife`, health 200 |
+| `origin/main` (site) | `ac0a1a8` |
+| Alembic | `b5e2f7a91c38` (M26.34) |
+| Serviços | `soprolife-m15-api`, `soprolife-painel-loopback` (:8765), `soprolife-portal-resultados`, `soprolife-update-data.timer` (10 min), `soprolife-nfse-production-worker.path` ativos; `soprolife-operational-refresh.timer` **inativo** na conferência de 21/10 (não investigado) |
+| A1 | instalado como credential cifrado; vence 2026-11-07; margem temporária de 2 dias (M72) ⇒ emissão até 2026-11-05 |
 | SERPRO | integrado, desligado (sem credenciais) |
 | Instagram (último post) | integrado, desligado (sem token Meta) — convite usa o perfil |
-| NFS-e | DIRECT/HOME/PASTORE em produção por botão; 8 documentos `issued`; políticas DIRECT, HOME, PASTORE |
+| NFS-e | DIRECT/HOME/PASTORE e **agrupada** em produção por botão; 20 documentos `issued` (19 single + 1 grouped), 0 `pending`; última DPS nº 14 |
 
 ## 16. Histórico arquitetural resumido
 
@@ -477,6 +497,9 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 | M66–M69 (set) | `3ce038c`, `dd8c65a`, `13e474a`, `e087615` | Botão no Command Center + worker oneshot, prontidão no cadastro, CPF/SERPRO, guard ACL do A1 |
 | M70 (02/10) | `1a35d4a` | NFS-e Pastore (parcela R$ 109,50), migration `b70c4a2e9d15` |
 | M71 (12/10) | `65c0092` | Importação da NFS-e manual nº 15 (ESP-000063) sobre documento `pending` provadamente nunca enviado |
+| M72 (14/10) | — (só VPS) | Margem do A1 reduzida para 2 dias, temporária, por drop-in fora do Git |
+| M26.34 (21/10) | `c5fb870` | NFS-e agrupada: `kind='grouped'`, `fiscal_document_items`, tomador próprio, total = soma dos itens, migration `b5e2f7a91c38` |
+| M26.35 (21/10) | `a51bd74` | Botão "Emitir NFS-e" no documento agrupado com confirmação dupla, pelo mesmo endpoint/worker; primeira nota agrupada emitida (R$ 500,00, DPS nº 14) |
 | Painel (out) | `498c216`, `6aad6db`, `1e36d4c` | Refino visual, estatísticas de laudos, evolução mensal real |
 | Marketing (04/10) | `140f0e3` | Search Console + GA4 de 28 para 60 dias, subtítulo da tendência pelo período real |
 
