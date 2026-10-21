@@ -9,11 +9,13 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..db import get_db
 from ..fiscal_schemas import (PolicyCreate, PrepareRequest, OperationRequest, BatchRequest,
+                              GroupedPrepareRequest, GroupedRecipientChange,
                               ProductionIssueConfirmation)
 from ..models import FiscalPolicy, FiscalDocument, FiscalAttempt, FiscalPreparation, User
 from ..pagination import PageParams, paginate
 from ..security import ROLE_ADMIN, ROLE_GESTOR, ROLE_LEITURA, require_role
 from ..services import nfse
+from ..services import nfse_grouped as grouped
 from ..services import nfse_production_issuance as production
 from ..services.idempotency import payload_fingerprint
 from ..services.nfse_national import fiscal_config
@@ -310,3 +312,68 @@ def production_reconcile(document_id: str, payload: OperationRequest, request: R
 def production_request(request_id: str, db: Session = Depends(get_db),
                        user: User = Depends(require_role(ROLE_GESTOR))):
     return production.get_request(db, request_id)
+
+
+# ── M26.34 — NFS-e agrupada: vários exames, um tomador ────────────────────
+#
+# Rotas próprias, sob o mesmo papel (gestor/admin) e o mesmo flag do resto do
+# fiscal. Nenhuma delas chama o provedor: a emissão de produção continua
+# passando exclusivamente pela confirmação dupla e pelo worker one-shot.
+
+
+@router.post('/producao/agrupados/previa')
+def grouped_preview(payload: GroupedPrepareRequest, db: Session = Depends(get_db),
+                    settings=Depends(enabled),
+                    user: User = Depends(require_role(ROLE_GESTOR))):
+    """O que a nota agrupada seria AGORA. Só leitura: nada é criado.
+
+    É o que a tela mostra antes do primeiro clique — itens, valores, total e,
+    se houver, por que ainda não dá. Sem `for_update`: um painel que apenas
+    consulta nunca deve segurar linha do banco operacional.
+    """
+    data = grouped.evaluate_group(db, payload.spirometry_exam_ids,
+                                  payload.recipient_person_id,
+                                  settings.nfse_environment, for_update=False)
+    return grouped.serialize_group_preview(db, data)
+
+
+@router.post('/producao/agrupados', status_code=201)
+def grouped_prepare(payload: GroupedPrepareRequest, request: Request,
+                    db: Session = Depends(get_db), settings=Depends(enabled),
+                    user: User = Depends(require_role(ROLE_GESTOR))):
+    doc = grouped.prepare_group(db, payload.spirometry_exam_ids,
+                                payload.recipient_person_id, settings, user.id,
+                                request.state.request_id)
+    return nfse.serialize_document(db, doc)
+
+
+@router.get('/producao/agrupados')
+def grouped_documents(db: Session = Depends(get_db), settings=Depends(enabled),
+                      user: User = Depends(require_role(ROLE_LEITURA))):
+    docs = db.scalars(select(FiscalDocument).where(
+        FiscalDocument.kind == 'grouped',
+        FiscalDocument.environment == settings.nfse_environment,
+    ).order_by(FiscalDocument.created_at.desc())).all()
+    return {'itens': [nfse.serialize_document(db, doc) for doc in docs]}
+
+
+@router.post('/producao/agrupados/{document_id}/repreparar')
+def grouped_reprepare(document_id: str, payload: GroupedPrepareRequest, request: Request,
+                      db: Session = Depends(get_db), settings=Depends(enabled),
+                      user: User = Depends(require_role(ROLE_GESTOR))):
+    doc = grouped.prepare_group(db, payload.spirometry_exam_ids,
+                                payload.recipient_person_id, settings, user.id,
+                                request.state.request_id, document_id=document_id)
+    return nfse.serialize_document(db, doc)
+
+
+@router.patch('/producao/agrupados/{document_id}/tomador')
+def grouped_change_recipient(document_id: str, payload: GroupedRecipientChange,
+                             request: Request, db: Session = Depends(get_db),
+                             settings=Depends(enabled),
+                             user: User = Depends(require_role(ROLE_GESTOR))):
+    """Troca o tomador. NÃO reprepara: a preparação anterior fica stale de
+    propósito, e a emissão exige preparar e conferir de novo."""
+    doc = grouped.set_recipient(db, document_id, payload.recipient_person_id,
+                                settings, user.id, request.state.request_id)
+    return nfse.serialize_document(db, doc)

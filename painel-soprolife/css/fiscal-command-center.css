@@ -221,3 +221,34 @@
 .fiscal-modal .fiscal-wide { grid-column: 1 / -1; }
 .fiscal-modal dd code { word-break: break-all; white-space: normal; }
 .fiscal-production-panel .panel-header .safe-label { white-space: normal; }
+
+/* M26.34 — NFS-e agrupada: composição à mão, tomador próprio, sem emitir. */
+.fiscal-group-panel { border-left: 4px solid var(--teal, #1f8a8a); }
+.fiscal-group-panel .panel-header .safe-label { white-space: normal; }
+.fiscal-group-recipient {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+  margin: 12px 0; padding: 12px; border-radius: 10px;
+  background: var(--surface-muted, #f2f6f9);
+}
+.fiscal-group-recipient label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; font-weight: 700; color: var(--muted, #64798b);
+}
+.fiscal-group-recipient input {
+  min-width: 180px; padding: 8px 10px; font-size: 13px;
+  border: 1px solid var(--line, #d7e2ea); border-radius: 8px;
+  background: var(--card, #fff); color: inherit;
+}
+.fiscal-group-preview { margin: 12px 0; }
+.fiscal-group-preview .fiscal-wide { grid-column: 1 / -1; }
+.fiscal-group-preview tfoot th { font-size: 13px; color: var(--navy, #0d2a43); }
+.fiscal-group-blocks {
+  margin: 10px 0 0; padding: 10px 10px 10px 28px; border-radius: 8px;
+  background: rgba(176, 58, 46, 0.08); color: var(--danger, #b03a2e);
+  font-size: 12px; font-weight: 600;
+}
+.fiscal-group-blocks li { margin: 2px 0; }
+@media (max-width: 640px) {
+  .fiscal-group-recipient { flex-direction: column; align-items: stretch; }
+  .fiscal-group-recipient input { min-width: 0; width: 100%; }
+}

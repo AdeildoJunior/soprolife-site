@@ -6,9 +6,12 @@
  * fiscal nacional versionada (M29 — inspeção sempre livre; criar uma NOVA
  * versão exige papel admin) e o lote "Emitir pendentes" sobre o provedor
  * mock — o único caminho de emissão realmente ligado nesta fundação.
- * Nenhum dado de paciente (CPF, nome completo, endereço) é buscado ou
- * exibido aqui, e NENHUM controle nesta tela liga o portão de rede
- * restrito — isso continua sendo só variável de ambiente do processo.
+ * Sobre dado pessoal: a tela mostra o NOME de quem a nota vai nomear
+ * (paciente na fila de produção desde a M66, tomador escolhido desde a
+ * M26.34) porque é isso que um humano confere antes de autorizar uma
+ * emissão. CPF nunca aparece inteiro — só mascarado, como o backend o
+ * devolve. E NENHUM controle nesta tela liga o portão de rede restrito:
+ * isso continua sendo só variável de ambiente do processo.
  */
 (function () {
   "use strict";
@@ -38,7 +41,25 @@
     nationalConfigs: [], activeNationalConfig: null, configFormOpen: false, configBusy: false, configStatus: null,
     // M66 — produção: fila por exame, um de cada vez, com confirmação dupla.
     production: null, prodModal: null, prodBusy: false, prodPoll: null,
+    // M26.34 — NFS-e agrupada: composição escolhida à mão, tomador próprio.
+    // `preview` é sempre o que o BACKEND respondeu: a tela nunca soma valores
+    // por conta própria, para não existir um total que só a tela conhece.
+    grouping: {
+      selected: new Set(), recipient: null, preview: null, busy: false,
+      status: null, documents: [], lookupBusy: false,
+    },
   };
+
+  // Bloqueios que dizem respeito à identidade fiscal do PACIENTE. Num
+  // documento agrupado quem vai na nota é o tomador escolhido, então um
+  // exame barrado só por estes continua podendo compor um grupo — é a mesma
+  // regra que `nfse.evaluate(recipient_identity=False)` aplica no backend.
+  const PATIENT_IDENTITY_BLOCKERS = new Set([
+    "recipient_cpf_missing", "recipient_cpf_malformed",
+    "recipient_cpf_repeated_digits", "recipient_cpf_check_digits_invalid",
+    "recipient_name_missing", "recipient_name_not_a_full_name",
+    "recipient_name_looks_like_placeholder", "recipient_name_too_long",
+  ]);
 
   const TRIB_ISSQN_LABELS = { 1: "Operação Tributável", 2: "Imunidade", 3: "Exportação de serviço", 4: "Não Incidência" };
   const TP_RET_ISSQN_LABELS = { 1: "Não Retido", 2: "Retido pelo Tomador", 3: "Retido pelo Intermediário" };
@@ -320,6 +341,8 @@
     running: "fiscal-state-issuing", issued: "fiscal-state-issued", imported: "fiscal-state-issued",
     rejected: "fiscal-state-failed", uncertain: "fiscal-state-uncertain", in_progress: "fiscal-state-issuing",
     cancelled: "fiscal-state-cancelled",
+    // M26.34 — o exame já compõe uma nota agrupada: nem pendente nem emitido.
+    grouped: "fiscal-state-issuing",
   };
   const REQUEST_STATUS_LABELS = {
     authorized: "Confirmado — aguardando o executor", running: "Emitindo… (um único envio)",
@@ -378,6 +401,118 @@
           <th class="fin-num">Valor</th><th>Status fiscal</th><th>Motivo</th></tr></thead>
         <tbody>${rows.map((r) => productionRowHtml(r, info.available)).join("")}</tbody>
       </table></div>` : empty("Nenhum exame realizado para avaliar.")}
+    </article>`;
+  }
+
+  // ── M26.34 — NFS-e agrupada ─────────────────────────────────────────────
+
+  function groupableRows() {
+    const rows = (state.production && state.production.itens) || [];
+    return rows.filter((row) => row.status === "ready"
+      || (row.status === "blocked"
+          && (row.blocking_reasons || []).length > 0
+          && (row.blocking_reasons || []).every((r) => PATIENT_IDENTITY_BLOCKERS.has(r))));
+  }
+
+  function groupedPreviewHtml() {
+    const g = state.grouping;
+    if (g.busy) return `<p class="fiscal-live-status" role="status">Conferindo a composição…</p>`;
+    const p = g.preview;
+    if (!p) {
+      return `<p class="fiscal-empty">Escolha dois ou mais exames e o tomador para ver a composição.</p>`;
+    }
+    const itens = (p.itens || []).map((item) => `<tr>
+        <td>${esc(item.position)}</td>
+        <td><strong>${esc(item.exam_code || "—")}</strong></td>
+        <td class="fin-num">${brl(item.amount)}</td>
+      </tr>`).join("");
+    const bloqueios = (p.blocking_labels || []).length
+      ? `<ul class="fiscal-group-blocks">${(p.blocking_labels || [])
+          .map((label) => `<li>${esc(label)}</li>`).join("")}</ul>`
+      : "";
+    return `<div class="fiscal-group-preview">
+      <dl class="fiscal-readiness-grid">
+        <div><dt>Tomadora</dt><dd>${esc((p.recipient && p.recipient.nome) || "—")}</dd></div>
+        <div><dt>CPF</dt><dd><code>${esc((p.recipient && p.recipient.cpf_masked) || "—")}</code></dd></div>
+        <div><dt>Data do serviço</dt><dd>${fmtDate(p.service_date)}</dd></div>
+        <div><dt>Município</dt><dd>${esc(p.municipio_name || p.municipio_ibge || "—")}</dd></div>
+        <div class="fiscal-wide"><dt>Descrição do serviço</dt>
+          <dd>${esc(p.service_description || "—")}</dd></div>
+      </dl>
+      <div class="fiscal-table-wrap"><table class="fiscal-table">
+        <thead><tr><th>#</th><th>Exame</th><th class="fin-num">Valor</th></tr></thead>
+        <tbody>${itens}</tbody>
+        <tfoot><tr><th colspan="2">Total (${esc(p.itens_count || 0)} exame(s))</th>
+          <th class="fin-num">${brl(p.total)}</th></tr></tfoot>
+      </table></div>
+      ${bloqueios}
+    </div>`;
+  }
+
+  function groupedDocumentsHtml() {
+    const docs = state.grouping.documents || [];
+    if (!docs.length) return "";
+    return `<div class="fiscal-table-wrap"><table class="fiscal-table">
+      <thead><tr><th>Documento</th><th>Exames</th><th class="fin-num">Total</th>
+        <th>Estado</th></tr></thead>
+      <tbody>${docs.map((doc) => `<tr class="fiscal-row">
+        <td><code>${short(doc.id)}</code></td>
+        <td>${esc((doc.itens || []).map((i) => i.exam_code).join(" + ") || "—")}</td>
+        <td class="fin-num">${brl(doc.itens_total)}</td>
+        <td><span class="fiscal-chip ${PROD_STATUS_CLASS[doc.state] || ""}">${
+          esc(STATE_LABELS[doc.state] || doc.state)}</span>
+          ${doc.state === "pending"
+            ? '<span class="safe-label">aguardando emissão manual</span>' : ""}</td>
+      </tr>`).join("")}</tbody>
+    </table></div>`;
+  }
+
+  function groupedPanelHtml() {
+    if (!isProduction() || !m15().can("gestor")) return "";
+    const g = state.grouping;
+    const rows = groupableRows();
+    const linhas = rows.map((row) => `<tr class="fiscal-row">
+        <td><input type="checkbox" data-group-select="${esc(row.exam_id)}"
+          ${g.selected.has(row.exam_id) ? "checked" : ""}></td>
+        <td><strong>${esc(row.exam_code)}</strong></td>
+        <td>${esc(row.patient_name || "—")}</td>
+        <td>${fmtDate(row.service_date)}</td>
+        <td>${esc(row.municipio_name || "—")}</td>
+        <td class="fin-num">${brl(row.amount)}</td>
+      </tr>`).join("");
+    const podePreparar = !!(g.preview && g.preview.can_prepare) && !g.busy;
+    return `<article class="panel fiscal-group-panel">
+      <div class="panel-header">
+        <h3>NFS-e agrupada — vários exames, um tomador</h3>
+        <span class="safe-label">Prepara e para. A emissão continua exigindo a
+          confirmação dupla de sempre.</span>
+      </div>
+      <p class="fiscal-prod-counts">${esc(rows.length)} exame(s) disponível(is) para compor ·
+        ${esc(g.selected.size)} selecionado(s)</p>
+      ${rows.length ? `<div class="fiscal-table-wrap"><table class="fiscal-table">
+        <thead><tr><th></th><th>Exame</th><th>Paciente</th><th>Data</th>
+          <th>Município</th><th class="fin-num">Valor</th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table></div>` : empty("Nenhum exame disponível para compor uma nota agrupada.")}
+      <div class="fiscal-group-recipient">
+        <label>CPF do tomador
+          <input type="text" data-group-recipient-cpf inputmode="numeric"
+            autocomplete="off" placeholder="somente dígitos" maxlength="14">
+        </label>
+        <button type="button" data-group-recipient-find ${g.lookupBusy ? "disabled" : ""}>
+          ${g.lookupBusy ? "Procurando…" : "Localizar tomador"}</button>
+        ${g.recipient ? `<span class="fiscal-chip">${esc(g.recipient.nome_completo
+          || g.recipient.nome || "")} · ${esc(g.recipient.public_code || "")}</span>` : ""}
+      </div>
+      ${groupedPreviewHtml()}
+      <div class="fiscal-batch-bar">
+        <button type="button" data-group-preview ${g.busy ? "disabled" : ""}>Conferir composição</button>
+        <button type="button" class="fiscal-emit-btn" data-group-prepare
+          ${podePreparar ? "" : "disabled"}>Preparar documento (não emite)</button>
+      </div>
+      ${g.status ? `<p class="fiscal-live-status${g.status.error ? " is-error" : ""}"
+        role="status">${esc(g.status.message)}</p>` : ""}
+      ${groupedDocumentsHtml()}
     </article>`;
   }
 
@@ -472,8 +607,58 @@
 
   function loadProduction() {
     if (!isProduction() || !m15().can("gestor")) { state.production = null; return Promise.resolve(); }
-    return api("/fiscal/producao/fila").then((data) => { state.production = data; render(); })
-      .catch((err) => { state.production = { itens: [], counts: {}, error: errorMessage(err) }; render(); });
+    return api("/fiscal/producao/fila").then((data) => { state.production = data; })
+      .catch((err) => { state.production = { itens: [], counts: {}, error: errorMessage(err) }; })
+      // Os documentos agrupados vêm no mesmo passo: a tela mostra a fila e o
+      // que já está preparado aguardando emissão manual, nunca uma sem a outra.
+      .then(loadGroupedDocuments)
+      .then(render);
+  }
+
+  function setGroupStatus(message, error) {
+    state.grouping.status = message ? { message: message, error: !!error } : null;
+  }
+
+  function loadGroupedDocuments() {
+    if (!isProduction() || !m15().can("leitura")) return Promise.resolve();
+    return api("/fiscal/producao/agrupados")
+      .then((data) => { state.grouping.documents = (data && data.itens) || []; })
+      .catch(() => { state.grouping.documents = []; });
+  }
+
+  function groupPayload() {
+    const g = state.grouping;
+    return {
+      spirometry_exam_ids: Array.from(g.selected),
+      recipient_person_id: g.recipient ? g.recipient.id : null,
+    };
+  }
+
+  function groupReady() {
+    const g = state.grouping;
+    return g.selected.size >= 2 && !!g.recipient;
+  }
+
+  function refreshGroupPreview() {
+    const g = state.grouping;
+    if (!groupReady()) {
+      g.preview = null;
+      setGroupStatus(g.selected.size < 2
+        ? "Escolha ao menos dois exames."
+        : "Localize o tomador pelo CPF.", false);
+      render();
+      return Promise.resolve();
+    }
+    g.busy = true;
+    setGroupStatus(null);
+    render();
+    // O total vem SEMPRE do backend: a tela não soma valores por conta
+    // própria, para que não exista um total que só ela conheça.
+    return api("/fiscal/producao/agrupados/previa", {
+      method: "POST", body: JSON.stringify(groupPayload()),
+    }).then((data) => { g.preview = data; })
+      .catch((err) => { g.preview = null; setGroupStatus(errorMessage(err), true); })
+      .then(() => { g.busy = false; render(); });
   }
 
   // --------------------------------------------------------------- rendering
@@ -493,6 +678,7 @@
     const eligibleOnScreen = state.documents.filter((d) => d.state === "pending");
     el.innerHTML = `
       ${productionPanelHtml()}
+      ${groupedPanelHtml()}
       ${readinessHtml(state.status)}
       ${nationalConfigHtml()}
       <article class="panel fiscal-queue-panel">
@@ -615,6 +801,59 @@
       return;
     }
 
+    if (event.target.closest("[data-group-recipient-find]")) {
+      const input = document.querySelector(`#${ROOT} [data-group-recipient-cpf]`);
+      const cpf = ((input && input.value) || "").replace(/\D/g, "");
+      if (cpf.length !== 11) { setGroupStatus("Informe os 11 dígitos do CPF.", true); render(); return; }
+      state.grouping.lookupBusy = true;
+      setGroupStatus(null);
+      render();
+      api("/pessoas/busca-cpf", { method: "POST", body: JSON.stringify({ cpf: cpf }) })
+        .then((data) => {
+          if (data && data.encontrada && data.pessoa) {
+            state.grouping.recipient = data.pessoa;
+            setGroupStatus(null);
+          } else {
+            state.grouping.recipient = null;
+            setGroupStatus("Nenhuma pessoa cadastrada com este CPF.", true);
+          }
+        })
+        .catch((err) => { state.grouping.recipient = null; setGroupStatus(errorMessage(err), true); })
+        .then(() => {
+          state.grouping.lookupBusy = false;
+          render();
+          if (state.grouping.recipient) refreshGroupPreview();
+        });
+      return;
+    }
+
+    if (event.target.closest("[data-group-preview]")) { refreshGroupPreview(); return; }
+
+    if (event.target.closest("[data-group-prepare]")) {
+      const g = state.grouping;
+      if (!g.preview || !g.preview.can_prepare || g.busy) return;
+      g.busy = true;
+      setGroupStatus("Preparando o documento…");
+      render();
+      api("/fiscal/producao/agrupados", {
+        method: "POST", body: JSON.stringify(groupPayload()),
+      }).then((doc) => {
+        g.selected = new Set();
+        g.preview = null;
+        g.recipient = null;
+        const input = document.querySelector(`#${ROOT} [data-group-recipient-cpf]`);
+        if (input) input.value = "";
+        setGroupStatus("Documento preparado e aguardando emissão manual: "
+          + short(doc && doc.id) + ". Nada foi enviado à SEFIN.", false);
+      }).catch((err) => { setGroupStatus(errorMessage(err), true); })
+        .then(() => {
+          g.busy = false;
+          return Promise.all([loadGroupedDocuments(), loadProduction()]);
+        })
+        .then(render);
+      return;
+    }
+
     if (event.target.closest("[data-fiscal-config-new]")) {
       state.configFormOpen = true;
       state.configStatus = null;
@@ -669,6 +908,16 @@
   document.addEventListener("change", (event) => {
     const within = event.target.closest && event.target.closest(`#${ROOT}`);
     if (!within) return;
+    const groupBox = event.target.closest("[data-group-select]");
+    if (groupBox) {
+      const examId = groupBox.getAttribute("data-group-select");
+      if (groupBox.checked) state.grouping.selected.add(examId);
+      else state.grouping.selected.delete(examId);
+      state.grouping.preview = null;
+      if (groupReady()) { refreshGroupPreview(); } else { render(); }
+      return;
+    }
+
     const checkbox = event.target.closest("[data-fiscal-select]");
     if (checkbox) {
       const id = checkbox.dataset.fiscalSelect;

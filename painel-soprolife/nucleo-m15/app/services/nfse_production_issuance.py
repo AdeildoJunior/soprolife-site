@@ -45,6 +45,7 @@ from ..models import (FiscalAttempt, FiscalDocument, FiscalIssuanceRequest, Pers
 from . import nfse
 from .idempotency import payload_fingerprint
 from .nfse_external_issuance import IMPORT_OPERATION
+from .nfse_national.document_description import document_service_description
 from .nfse_national.service_description import (ServiceDescriptionUndetermined,
                                                 spirometry_service_description)
 from .nfse_national.service_location import SUPPORTED_SERVICE_MUNICIPALITIES
@@ -92,6 +93,9 @@ STATUS_LABELS = {
     'uncertain': 'Incerta — reconciliar (só consulta)',
     'in_progress': 'Em andamento',
     'cancelled': 'Cancelada',
+    # M26.34 — o exame compõe uma NFS-e agrupada ainda não emitida. Não é
+    # candidato individual: a nota dele existe e é outra.
+    'grouped': 'Em nota agrupada — aguardando emissão',
 }
 
 
@@ -134,8 +138,25 @@ def recipient_fingerprint(person: Person | None) -> str:
 
 
 def _production_document(db: Session, exam_id: str) -> FiscalDocument | None:
-    return db.scalars(select(FiscalDocument).where(
+    """O documento de produção deste exame — single OU agrupado.
+
+    M26.34 — procurar só pela coluna de `fiscal_documents` deixaria de ver os
+    documentos agrupados, cuja coluna é NULL. O efeito seria grave na fila: um
+    exame já dentro de uma nota agrupada apareceria como "pronto para emitir",
+    com botão e tudo, e só a trava de ocupação o pararia — depois do clique.
+    Então a busca passa também por `fiscal_document_items`, que é o registro
+    de ocupação de qualquer natureza de documento.
+    """
+    from ..models import FiscalDocumentItem
+    direto = db.scalars(select(FiscalDocument).where(
         FiscalDocument.spirometry_exam_id == exam_id,
+        FiscalDocument.environment == PRODUCTION)).first()
+    if direto is not None:
+        return direto
+    return db.scalars(select(FiscalDocument).join(
+        FiscalDocumentItem, FiscalDocumentItem.document_id == FiscalDocument.id).where(
+        FiscalDocumentItem.spirometry_exam_id == exam_id,
+        FiscalDocumentItem.environment == PRODUCTION,
         FiscalDocument.environment == PRODUCTION)).first()
 
 
@@ -206,6 +227,11 @@ def serialize_request(row: FiscalIssuanceRequest | None) -> dict | None:
 
 def _row_status(db: Session, doc: FiscalDocument | None, blockers: list[str]) -> str:
     if doc is not None:
+        # M26.34 — um exame dentro de uma nota agrupada não é um candidato
+        # individual: a nota dele existe, é outra, e a fila tem de dizer isso
+        # em vez de oferecer um segundo documento para o mesmo serviço.
+        if getattr(doc, 'kind', 'single') == 'grouped' and doc.state in ('pending', 'blocked'):
+            return 'grouped'
         if doc.state == 'issued':
             return 'imported' if _is_imported(db, doc.id) else 'issued'
         if doc.state in ('issuing', 'reconciling'):
@@ -274,6 +300,8 @@ def production_queue(db: Session, settings: Settings, *, limit: int = 200) -> di
             'fiscal_validity': fiscal_validity(db, doc) if doc else False,
             'external_id': _issued_key(db, doc.id) if doc and doc.state == 'issued' else None,
             'request': serialize_request(last_request),
+            'grouped_document_id': doc.id if doc is not None and getattr(
+                doc, 'kind', 'single') == 'grouped' else None,
             'can_issue': status == 'ready',
             'can_reconcile': status == 'uncertain' or (status == 'in_progress' and request is None),
         })
@@ -287,17 +315,46 @@ def production_queue(db: Session, settings: Settings, *, limit: int = 200) -> di
 
 # ------------------------------------------------------------ confirmation
 
+def _grouped_items_with_codes(db: Session, doc: FiscalDocument):
+    """Os itens do documento com o código público do exame de origem.
+
+    Devolve vazio para um documento `single`: ali o exame é o próprio
+    documento e `exam_code` já é um campo do resumo. O item de ocupação que a
+    M26.34 criou para os documentos single não tem valor por construção e
+    nada acrescentaria à conferência."""
+    if getattr(doc, 'kind', 'single') != 'grouped':
+        return []
+    from ..models import FiscalDocumentItem
+    itens = db.scalars(select(FiscalDocumentItem).where(
+        FiscalDocumentItem.document_id == doc.id
+    ).order_by(FiscalDocumentItem.position)).all()
+    if not itens:
+        return []
+    codigos = {e.id: e.public_code for e in db.scalars(select(SpirometryExam).where(
+        SpirometryExam.id.in_([i.spirometry_exam_id for i in itens]))).all()}
+    return [(item, codigos.get(item.spirometry_exam_id)) for item in itens]
+
+
 def confirmation_summary(db: Session, doc: FiscalDocument) -> dict:
     """Exactly what the confirmation modal shows, and what the second click
     must echo back. Built from the immutable preparation snapshot, never from
     live fields the worker would not use."""
     prep = nfse.latest_preparation(db, doc.id)
-    exam = db.get(SpirometryExam, doc.spirometry_exam_id)
+    exam = db.get(SpirometryExam, doc.spirometry_exam_id) if doc.spirometry_exam_id else None
     person = db.get(Person, prep.recipient_person_id) if prep and prep.recipient_person_id else None
     try:
-        description = spirometry_service_description(exam.broncodilatador if exam else None)
+        description = document_service_description(db, doc)
     except ServiceDescriptionUndetermined:
         description = None
+    # M26.34 — num documento agrupado o que o humano confere são os ITENS:
+    # cada exame com o seu valor, e o total que a soma deles produz. O CPF do
+    # tomador continua mascarado aqui, como já era.
+    itens = [
+        {'position': item.position,
+         'exam_code': codigo,
+         'amount': f'{item.amount:.2f}' if item.amount is not None else None}
+        for item, codigo in _grouped_items_with_codes(db, doc)
+    ]
     amount = prep.amount_snapshot if prep else None
     ready = (doc.environment == PRODUCTION and doc.state == 'pending'
              and doc.eligibility == 'eligible' and amount is not None and description is not None)
@@ -328,6 +385,9 @@ def confirmation_summary(db: Session, doc: FiscalDocument) -> dict:
                         if doc.blocking_reasons else None),
         'confirmation_phrase': confirmation_phrase(amount) if ready else None,
         'can_confirm': ready,
+        'kind': doc.kind,
+        'itens': itens,
+        'itens_count': len(itens),
     }
 
 
@@ -380,9 +440,10 @@ def _create_request(db: Session, settings: Settings, doc: FiscalDocument, prep, 
     except IntegrityError:
         db.rollback()
         nfse.fail('issuance_request_already_active')
-    exam = db.get(SpirometryExam, doc.spirometry_exam_id)
+    exam = db.get(SpirometryExam, doc.spirometry_exam_id) if doc.spirometry_exam_id else None
     nfse.record(db, f'production_{kind}_authorized', 'fiscal_document', doc.id, actor, request_id,
                 issuance_request_id=row.id, exam_code=exam.public_code if exam else None,
+                itens=len(_grouped_items_with_codes(db, doc)) or None,
                 valor_documentado=f'{amount:.2f}', operation=kind, environment=PRODUCTION,
                 status='authorized')
     db.commit()
@@ -429,7 +490,7 @@ def authorize_issue(db: Session, document_id: str, *, preparation_id: str, amoun
         nfse.fail('confirmation_amount_mismatch')
     if confirmation != confirmation_phrase(prep.amount_snapshot):
         nfse.fail('confirmation_phrase_mismatch')
-    current = nfse.evaluate(db, doc.spirometry_exam_id, PRODUCTION)
+    current = nfse.evaluate_for_document(db, doc, PRODUCTION)
     if current['blocking_reasons'] or prep.fingerprint != payload_fingerprint(current):
         nfse.fail('confirmation_stale')
     if db.scalar(select(FiscalAttempt.id).where(FiscalAttempt.document_id == doc.id).limit(1)):

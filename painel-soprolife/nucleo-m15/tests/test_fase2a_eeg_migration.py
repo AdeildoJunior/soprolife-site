@@ -27,14 +27,23 @@ def test_migration_aditiva_reversivel_sem_backfill_e_sem_apagar_evidencia(tmp_pa
     script = ScriptDirectory.from_config(cfg)
     # M26.33 (autorização de entrega de resultado) soma uma migration
     # aditiva no topo; a cadeia EEG abaixo dela segue intacta.
-    assert script.get_heads() == ["a1c7e5d9b204"]
+    # M26.34 (documento fiscal agrupado) soma uma migration no topo; a
+    # cadeia abaixo dela segue intacta.
+    assert script.get_heads() == ["b5e2f7a91c38"]
+    assert script.get_revision("b5e2f7a91c38").down_revision == "a1c7e5d9b204"
     assert script.get_revision("a1c7e5d9b204").down_revision == "e2a0b6c719af"
     assert script.get_revision("e2a0b6c719af").down_revision == "c3f0a7b12e45"
     assert script.get_revision("c3f0a7b12e45").down_revision == "b70c4a2e9d15"
-    command.upgrade(cfg,'head')
-    command.check(cfg)
+    # Sobe até a Fase 2A, não até `head`: o que se prova aqui é que AS
+    # MIGRATIONS EEG não alteram tabela preexistente. A M26.34, bem depois
+    # delas, altera `fiscal_documents` de propósito (documento agrupado) e tem
+    # a sua própria prova de aditividade — medir as duas juntas diria que a
+    # Fase 2A mexeu no que ela nunca tocou.
+    command.upgrade(cfg,'e2a0b6c719af')
     after={t: [x['name'] for x in inspect(engine).get_columns(t)] for t in before}
     assert before==after
+    command.upgrade(cfg,'head')
+    command.check(cfg)
     with engine.connect() as c:
         assert c.execute(text('SELECT count(*) FROM eeg_enrollments')).scalar()==0
         assert c.execute(text('SELECT id FROM people')).scalar()==ident

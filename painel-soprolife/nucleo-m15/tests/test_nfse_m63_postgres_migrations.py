@@ -43,12 +43,14 @@ PRE_M62_OPERATIONAL = 'd6a9f20c3e41'
 # Fase 2A adds the EEG domain and its separate portal, on top of M70.
 # M26.33 moves it once more (result_delivery_authorizations: one new
 # table, nothing rewritten).
-OPERATIONAL_HEAD = 'a1c7e5d9b204'
+# M26.34 moves it once more (grouped fiscal document: one new table, two
+# new columns, a widened CHECK — nothing rewritten).
+OPERATIONAL_HEAD = 'b5e2f7a91c38'
 
 FISCAL_MIGRATIONS = ('f6a1d9e28b40', '9c310c422ce2', 'ba3afa480112', 'a58f6c31d9e7',
                      '3a97d7535a49', 'a7d2c95e4f13', 'c4e8b1f37a92', 'e8b3d6a4f190',
                      'b70c4a2e9d15', 'c3f0a7b12e45', 'e2a0b6c719af',
-                     'a1c7e5d9b204')
+                     'a1c7e5d9b204', 'b5e2f7a91c38')
 
 
 def _current(url):

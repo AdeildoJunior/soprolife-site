@@ -42,6 +42,7 @@ from . import dps_numbering, fiscal_config
 from .config import NationalDpsConfiguration
 from .dps_builder import DpsBuildError, DpsInput, Recipient, build_dps_element, serialize_dps
 from .identifiers import DpsIdComponents, InvalidIdentifierError
+from .document_description import document_service_description
 from .service_description import ServiceDescriptionUndetermined, spirometry_service_description
 from .service_location import (
     ServiceLocationUndetermined,
@@ -138,7 +139,7 @@ def run_offline_preflight(db: Session, document_id: str, settings: Settings, act
     preparation = nfse.latest_preparation(db, doc.id)
     if not preparation:
         return _blocked(doc.id, Stage.PREPARATION, ["preparation_required"])
-    current = nfse.evaluate(db, doc.spirometry_exam_id, doc.environment)
+    current = nfse.evaluate_for_document(db, doc, doc.environment)
     if current["blocking_reasons"] or preparation.fingerprint != payload_fingerprint(current):
         return _blocked(doc.id, Stage.PREPARATION,
                         current["blocking_reasons"] + ["preparation_stale"])
@@ -187,9 +188,10 @@ def run_offline_preflight(db: Session, document_id: str, settings: Settings, act
     # NEVER the mock-era free-text `preparation.description` — it comes only
     # from the structured, exam-level `broncodilatador` attribute (M29,
     # section B), failing closed rather than guessing the variant.
-    exam = db.get(SpirometryExam, doc.spirometry_exam_id)
+    # M26.34 — mesma regra, agora por natureza do documento (ver
+    # nfse_national/document_description.py).
     try:
-        descricao_servico = spirometry_service_description(exam.broncodilatador if exam else None)
+        descricao_servico = document_service_description(db, doc)
     except ServiceDescriptionUndetermined:
         return _blocked(doc.id, Stage.DPS_BUILD, ["service_description_undetermined"])
     # M31 — service LOCATION comes only from the immutable preparation

@@ -170,7 +170,9 @@ def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     # Pastore no preparo fiscal) por cima de M66.
     # M26.33 (a1c7e5d9b204, autorização de entrega de resultado a terceiro)
     # por cima da Fase 2A.
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["a1c7e5d9b204"]
+    # M26.34 (b5e2f7a91c38, documento fiscal agrupado com tomador próprio)
+    # por cima da M26.33.
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["b5e2f7a91c38"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(

@@ -329,7 +329,7 @@ def test_the_head_is_the_m61_revision(tmp_path, monkeypatch):
     cfg.set_main_option("script_location", str(root / "migrations"))
     script = ScriptDirectory.from_config(cfg)
     # M66 sits on top of M61; M61 itself is unchanged.
-    assert script.get_heads() == ["a1c7e5d9b204"]  # M26.33, additive on top of Fase 2A
+    assert script.get_heads() == ["b5e2f7a91c38"]  # M26.34, additive on top of M26.33
     assert script.get_revision("e8b3d6a4f190").down_revision == "c4e8b1f37a92"
     assert script.get_revision("c4e8b1f37a92").down_revision == "a7d2c95e4f13"
 

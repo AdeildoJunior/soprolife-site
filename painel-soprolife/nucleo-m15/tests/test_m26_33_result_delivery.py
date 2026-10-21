@@ -329,8 +329,10 @@ def test_migration_aditiva_reversivel_e_recusa_apagar_autorizacao(
     from alembic.script import ScriptDirectory
 
     script = ScriptDirectory.from_config(cfg)
-    assert script.get_heads() == ["a1c7e5d9b204"]
+    # Esta revisão continua existindo e sobre a mesma base; a head do projeto
+    # segue adiante a cada missão e é afirmada nos testes de migration.
     assert script.get_revision("a1c7e5d9b204").down_revision == "e2a0b6c719af"
+    assert len(script.get_heads()) == 1
 
     command.upgrade(cfg, "e2a0b6c719af")
     engine = create_engine(url)
@@ -341,19 +343,23 @@ def test_migration_aditiva_reversivel_e_recusa_apagar_autorizacao(
         for t in inspect(engine).get_table_names()
     }
 
-    command.upgrade(cfg, "head")
-    command.check(cfg)
+    # Até a M26.33, não até `head`: a prova é sobre ESTA migration. A M26.34
+    # altera `fiscal_documents` de propósito e tem a sua própria prova.
+    command.upgrade(cfg, "a1c7e5d9b204")
     depois = {
         t: [c["name"] for c in inspect(engine).get_columns(t)] for t in antes
     }
     # Aditiva de verdade: nenhuma tabela preexistente mudou de forma.
     assert antes == depois
+    command.upgrade(cfg, "head")
+    command.check(cfg)
     with engine.connect() as conn:
         assert conn.execute(
             text("SELECT count(*) FROM result_delivery_authorizations")
         ).scalar() == 0
 
-    # Vazia, desce e sobe de novo sem drama.
+    # Vazia, desce e sobe de novo sem drama (passando pela M26.34, que
+    # também está vazia neste banco).
     command.downgrade(cfg, "e2a0b6c719af")
     command.upgrade(cfg, "head")
     command.check(cfg)

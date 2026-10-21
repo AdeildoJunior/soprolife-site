@@ -122,7 +122,10 @@ def test_alembic_graph_fiscal_after_m26_9(tmp_path, monkeypatch):
     # M70 one more (b70c4a2e9d15, Pastore partner-share amount source).
     # M26.33 one more (a1c7e5d9b204, result delivery authorizations) — still
     # one head, still no fork.
-    assert script.get_heads() == ['a1c7e5d9b204']
+    # M26.34 one more (b5e2f7a91c38, grouped fiscal document) — still one
+    # head, still no fork.
+    assert script.get_heads() == ['b5e2f7a91c38']
+    assert script.get_revision('b5e2f7a91c38').down_revision == 'a1c7e5d9b204'
     assert script.get_revision('a1c7e5d9b204').down_revision == 'e2a0b6c719af'
     assert script.get_revision('b70c4a2e9d15').down_revision == 'e8b3d6a4f190'
     assert script.get_revision('e8b3d6a4f190').down_revision == 'c4e8b1f37a92'

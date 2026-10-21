@@ -52,6 +52,7 @@ from .signer import LoadedCertificate, SignatureError, load_pkcs12_certificate, 
 from .transport import (HttpxProductionTransport, HttpxRestrictedTransport,
                         NationalTransport)
 from ..nfse_providers import REAL_ENVIRONMENTS
+from .document_description import document_service_description
 from .recipient_identity import RecipientIdentityError, assert_production_recipient
 
 # The environment whose tomador identity is held to the stricter M60
@@ -119,9 +120,10 @@ def _recipient(db: Session, preparation: FiscalPreparation, environment: str) ->
 
 
 def _service_description(db: Session, doc: FiscalDocument) -> str:
-    exam = db.get(SpirometryExam, doc.spirometry_exam_id)
+    # M26.34 — despacha por natureza do documento: um agrupado descreve N
+    # exames e não tem `spirometry_exam_id` para ler.
     try:
-        return spirometry_service_description(exam.broncodilatador if exam else None)
+        return document_service_description(db, doc)
     except ServiceDescriptionUndetermined:
         fail("service_description_undetermined", 409)
 

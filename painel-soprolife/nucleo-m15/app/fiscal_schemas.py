@@ -63,6 +63,31 @@ class PrepareRequest(FiscalInput):
     spirometry_exam_id: str = Field(min_length=36, max_length=36)
 
 
+class GroupedPrepareRequest(FiscalInput):
+    """M26.34 — vários exames e UM tomador escolhido, numa nota só.
+
+    O limite superior existe para que um clique não componha um documento
+    arbitrariamente grande: a conferência humana precisa caber numa tela, e a
+    descrição do serviço num campo de 200 caracteres.
+    """
+
+    spirometry_exam_ids: list[str] = Field(min_length=2, max_length=12)
+    recipient_person_id: str = Field(min_length=36, max_length=36)
+
+    @model_validator(mode='after')
+    def _ids_tecnicos_distintos(self):
+        if len(set(self.spirometry_exam_ids)) != len(self.spirometry_exam_ids):
+            raise ValueError('Exame repetido na composição.')
+        for value in self.spirometry_exam_ids:
+            if len(value) != 36:
+                raise ValueError('Identificador de exame inválido.')
+        return self
+
+
+class GroupedRecipientChange(FiscalInput):
+    recipient_person_id: str = Field(min_length=36, max_length=36)
+
+
 class OperationRequest(FiscalInput):
     idempotency_key: str = Field(min_length=8, max_length=64, pattern=r'^[A-Za-z0-9_.:-]+$')
 

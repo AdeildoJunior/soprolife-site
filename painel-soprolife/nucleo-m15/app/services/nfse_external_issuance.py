@@ -86,6 +86,7 @@ from ..ids import new_uuid
 from ..models import (DpsNumberAllocation, FiscalArtifact, FiscalAttempt, FiscalDocument,
                       FiscalIssuanceRequest, FiscalPreparation, SpirometryExam, utcnow)
 from .idempotency import payload_fingerprint
+from . import nfse
 from .nfse_national.identifiers import NFSE_ACCESS_KEY_PATTERN
 
 # The operation and provider names that say "this came from outside". Neither
@@ -279,6 +280,14 @@ def register_external_issuance(db: Session, issuance: ExternalIssuance, actor: s
         )
         db.add(document)
         db.flush()
+        # M26.34 — claim the exam's occupancy, exactly like nfse.prepare()
+        # does. Without this an exam already inside a GROUPED document would
+        # also get its own imported single document: the old
+        # `uq_fiscal_exam_environment` cannot see a grouped document (its
+        # column is NULL), so nothing at the database level would have
+        # stopped the same service being invoiced twice — once in the group,
+        # once here. Refuses with a code instead of writing the duplicate.
+        nfse.claim_exam_occupancy(db, document, issuance.spirometry_exam_id)
 
     # A preparation is required by the attempt's FK. It records WHAT was
     # invoiced as far as we know it, and is explicitly marked as reconstructed

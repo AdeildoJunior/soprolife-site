@@ -4,6 +4,7 @@ Mutating entry points own their commits: a provider call is never made until a
 started event and its audit record are durably committed. No real adapter exists.
 """
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 import re
 
@@ -17,8 +18,9 @@ from ..config import Settings
 from ..fiscal_schemas import PolicyCreate, TaxConfiguration
 from ..finance_categories import CATEGORIA_ESPIROMETRIA, e_receita_propria_do_componente
 from ..ids import new_uuid
-from ..models import (FiscalPolicy, FiscalDocument, FiscalPreparation, FiscalAttempt,
-                      FiscalArtifact, FinancialEntry, SpirometryExam, Person, utcnow)
+from ..models import (FiscalPolicy, FiscalDocument, FiscalDocumentItem, FiscalPreparation,
+                      FiscalAttempt, FiscalArtifact, FinancialEntry, SpirometryExam,
+                      Person, utcnow)
 from .idempotency import idempotent_create, payload_fingerprint
 from .nfse_national import artifacts as artifact_storage
 from .nfse_national import dispatch as national_dispatch
@@ -149,6 +151,9 @@ AMOUNT_BASIS_BY_FLOW = {
     'PASTORE': 'partnership.valor_recebido_por_exame',
 }
 PARTNER_SHARE_AMOUNT_SOURCE = 'partnership.valor_recebido_por_exame'
+# M26.34 — declarada aqui e reexportada por `nfse_grouped`, para que o
+# serializador não precise importar aquele módulo (que importa este).
+GROUPED_AMOUNT_SOURCE = 'grouped_items.sum'
 
 # M70 — why a partner exam is not (yet) a PASTORE invoice. Codes only.
 PARTNER_RULE_REASONS = (
@@ -219,7 +224,8 @@ def pastore_share_now(db: Session, exam) -> dict | None:
     return share if flow == 'PASTORE' and not reasons else None
 
 
-def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = True) -> dict:
+def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = True,
+             recipient_identity: bool = True) -> dict:
     """Fiscal eligibility of one exam.
 
     ``for_update`` defaults to True and every real preparation path keeps it:
@@ -228,6 +234,16 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
     candidate scanner) pass False. They must never take row locks on the
     operational database, and PostgreSQL refuses SELECT ... FOR UPDATE inside
     a READ ONLY transaction anyway, which is exactly the guarantee they want.
+
+    M26.34 — ``recipient_identity=False`` is passed ONLY by the grouped
+    evaluation. In a grouped document the identity that goes on the invoice
+    is the chosen tomador's, not the patient's, so the patient-identity
+    blockers (``RECIPIENT_FISCAL_REASONS``) do not apply here — and,
+    crucially, must not suppress the exam's amount either: with them in
+    ``reasons`` the amount below comes back None, and the group would be
+    refused for "no amount" while the amount sits right there in the ledger.
+    The patient still has to exist and not be archived; that is a different
+    check and it stays.
     """
     def locked(stmt):
         return stmt.with_for_update() if for_update else stmt
@@ -320,7 +336,10 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
         except ValidationError:
             reasons.append('policy_invalid')
     if environment == 'production':
-        reasons.extend(production_fact_blockers(person, exam.municipio_atendimento_ibge))
+        blockers = production_fact_blockers(person, exam.municipio_atendimento_ibge)
+        if not recipient_identity:
+            blockers = [b for b in blockers if b not in RECIPIENT_FISCAL_REASONS]
+        reasons.extend(blockers)
     description = None
     if service_date:
         bd ={True: ' com broncodilatador', False: ' sem broncodilatador', None: ''}[exam.broncodilatador]
@@ -350,6 +369,54 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
                 description=description, blocking_reasons=sorted(set(reasons)), **extra)
 
 
+def evaluate_for_document(db, doc, environment, *, for_update: bool = True) -> dict:
+    """A reavaliação de UM documento, qualquer que seja a sua natureza.
+
+    M26.34 — todo caminho que antes chamava
+    `evaluate(db, doc.spirometry_exam_id, ...)` passa por aqui, porque um
+    documento agrupado não tem "o" exame e aquela chamada devolveria o
+    resultado de um exame inexistente (None). O fluxo `single` segue na mesma
+    função de sempre, com o mesmo dict e, portanto, o mesmo fingerprint:
+    nenhuma preparação histórica fica stale por causa desta mudança.
+    """
+    if getattr(doc, 'kind', 'single') == 'grouped':
+        from .nfse_grouped import document_exam_ids, evaluate_group
+        return evaluate_group(db, document_exam_ids(db, doc.id),
+                              doc.recipient_person_id, environment,
+                              for_update=for_update, document_id=doc.id)
+    return evaluate(db, doc.spirometry_exam_id, environment, for_update=for_update)
+
+
+def claim_exam_occupancy(db, doc, exam_id: str, *, amount=None,
+                         financial_entry_id=None):
+    """Registra, no banco, que este exame está ocupado por ESTE documento.
+
+    Desde a M26.34 a pergunta "este exame já foi faturado neste ambiente?" é
+    respondida por `fiscal_document_items`, e não mais pela coluna de
+    `fiscal_documents` — que é NULL nos agrupados. Para que a trava valha nos
+    dois sentidos, o fluxo `single` também grava o seu item.
+
+    `amount` fica NULL para `single` de propósito: a verdade monetária
+    daquele documento é o `amount_snapshot` da preparação imutável, e
+    copiá-la para cá criaria um segundo lugar onde ela poderia divergir.
+    """
+    existing = db.scalar(select(FiscalDocumentItem).where(
+        FiscalDocumentItem.spirometry_exam_id == exam_id,
+        FiscalDocumentItem.environment == doc.environment,
+    ))
+    if existing is not None:
+        if existing.document_id != doc.id:
+            fail('exam_already_in_fiscal_document')
+        return existing
+    item = FiscalDocumentItem(
+        document_id=doc.id, environment=doc.environment,
+        spirometry_exam_id=exam_id, financial_entry_id=financial_entry_id,
+        amount=amount, position=1)
+    db.add(item)
+    db.flush()
+    return item
+
+
 def prepare(db, exam_id, settings, actor, request_id=None):
     if not settings.nfse_enabled:
         fail('nfse_disabled', 503)
@@ -370,6 +437,10 @@ def prepare(db, exam_id, settings, actor, request_id=None):
     doc = get_document(db, doc.id, lock=True)
     if doc.state not in {'blocked', 'pending', 'failed'}:
         fail('document_frozen_after_attempt')
+    # M26.34 — a trava universal de ocupação. Recusa, com código próprio, um
+    # exame que já esteja dentro de outro documento fiscal (inclusive de um
+    # agrupado, que a coluna de `fiscal_documents` não vê).
+    claim_exam_occupancy(db, doc, exam_id)
     data = evaluate(db, exam_id, environment)
     fingerprint = payload_fingerprint(data)
     latest = latest_preparation(db, doc.id)
@@ -480,7 +551,7 @@ def operate(db, document_id, operation, key, settings: Settings, actor,
         allowed = {'failed'} if reprocess else {'pending'}
         if doc.state not in allowed or doc.eligibility != 'eligible':
             fail('reconciliation_required' if doc.state in IN_FLIGHT | {'uncertain'} else 'document_not_pending_eligible')
-        current = evaluate(db, doc.spirometry_exam_id, doc.environment)
+        current = evaluate_for_document(db, doc, doc.environment)
         if current['blocking_reasons'] or preparation.fingerprint != payload_fingerprint(current):
             doc.blocking_reasons = sorted(set(current['blocking_reasons'] + ['preparation_stale']))
             doc.eligibility, doc.state = 'blocked', 'blocked'
@@ -794,11 +865,34 @@ def queue_summary(db: Session, environment: str) -> dict:
 def serialize_document(db, doc):
     prep = latest_preparation(db, doc.id)
     data = {k: getattr(doc, k) for k in ('id', 'spirometry_exam_id', 'environment',
-            'state', 'eligibility', 'blocking_reasons', 'created_at', 'updated_at')}
+            'kind', 'recipient_person_id', 'state', 'eligibility', 'blocking_reasons',
+            'created_at', 'updated_at')}
     data['reconciliation_required'] = doc.state in IN_FLIGHT | {'uncertain'}
-    data['monetary_source'] = ('Parceria / regra de recebimento (partner_pricing)'
-                               if prep and prep.amount_source == PARTNER_SHARE_AMOUNT_SOURCE
-                               else 'Financeiro_Lancamentos / financial_entries')
+    # M26.34 — os itens, com o exame de origem e o valor de cada um. Códigos
+    # públicos e identificadores técnicos; nunca nome ou CPF de ninguém.
+    itens = db.scalars(select(FiscalDocumentItem).where(
+        FiscalDocumentItem.document_id == doc.id
+    ).order_by(FiscalDocumentItem.position)).all()
+    exam_codes = {}
+    if itens:
+        exam_codes = {e.id: e.public_code for e in db.scalars(select(SpirometryExam).where(
+            SpirometryExam.id.in_([i.spirometry_exam_id for i in itens]))).all()}
+    data['itens'] = [{
+        'position': i.position,
+        'spirometry_exam_id': i.spirometry_exam_id,
+        'exam_code': exam_codes.get(i.spirometry_exam_id),
+        'financial_entry_id': i.financial_entry_id,
+        'amount': str(i.amount) if i.amount is not None else None,
+    } for i in itens]
+    data['itens_total'] = (
+        str(sum((i.amount for i in itens if i.amount is not None), Decimal('0.00')))
+        if itens and all(i.amount is not None for i in itens) else None)
+    data['monetary_source'] = (
+        'Soma dos itens do documento (fiscal_document_items)'
+        if prep and prep.amount_source == GROUPED_AMOUNT_SOURCE
+        else 'Parceria / regra de recebimento (partner_pricing)'
+        if prep and prep.amount_source == PARTNER_SHARE_AMOUNT_SOURCE
+        else 'Financeiro_Lancamentos / financial_entries')
     # M58 — the hard-coded False is gone, replaced by the explicit contract
     # M57 said this field needed. It is still False for everything that
     # exists today, but now BECAUSE OF A RULE rather than by fiat: mock

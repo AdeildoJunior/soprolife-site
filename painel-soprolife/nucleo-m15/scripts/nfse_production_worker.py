@@ -411,7 +411,11 @@ def guards(db, facts: dict, settings) -> tuple[list[str], dict]:
     doc = db.get(FiscalDocument, facts["document_id"])
     if doc is None:
         return ["document_missing"], {}
-    exam = db.get(SpirometryExam, doc.spirometry_exam_id)
+    # M26.34 — um documento agrupado não tem "o" exame: `spirometry_exam_id`
+    # é NULL e os exames são os itens. `exam` fica None nesse caso, e cada
+    # verificação abaixo que dependia de UM exame ganhou o ramo do grupo.
+    grouped = getattr(doc, "kind", "single") == "grouped"
+    exam = db.get(SpirometryExam, doc.spirometry_exam_id) if doc.spirometry_exam_id else None
     check("document_environment", doc.environment == "production")
     check("document_exam_mismatch", doc.spirometry_exam_id == facts["exam_id"])
     expected: dict = {}
@@ -426,7 +430,10 @@ def guards(db, facts: dict, settings) -> tuple[list[str], dict]:
             return failures + ["preparation_missing"], {}
         check("preparation_changed", prep.id == facts["preparation_id"]
               and prep.fingerprint == facts["preparation_fingerprint"])
-        current = nfse.evaluate(db, doc.spirometry_exam_id, "production", for_update=False)
+        # Mesma revalidação independente de sempre, agora pela natureza do
+        # documento. Com `evaluate(None, ...)` o worker estouraria em
+        # `missing_stable_exam_link` em vez de conferir o que lhe cabe.
+        current = nfse.evaluate_for_document(db, doc, "production", for_update=False)
         check("eligibility_now_blocked", not current["blocking_reasons"])
         check("preparation_stale", prep.fingerprint == payload_fingerprint(current))
         check("flow_not_supported", prep.flow in SUPPORTED_FLOWS)
@@ -449,9 +456,31 @@ def guards(db, facts: dict, settings) -> tuple[list[str], dict]:
                   and prep.financial_entry_id is None)
         person = db.get(Person, prep.recipient_person_id) if prep.recipient_person_id else None
         check("recipient_changed", recipient_fingerprint(person) == facts["recipient_fingerprint"])
-        check("service_location_changed",
-              exam is not None and prep.service_municipio_ibge == exam.municipio_atendimento_ibge
-              and prep.service_municipio_ibge in SUPPORTED_SERVICE_MUNICIPALITIES)
+        if grouped:
+            # O município é um só para todo o grupo (a composição exige isso).
+            # Reconferido aqui a partir dos EXAMES, independentemente do
+            # snapshot, exatamente como o ramo individual faz com o seu exame.
+            from app.models import FiscalDocumentItem
+            itens = db.scalars(select(FiscalDocumentItem).where(
+                FiscalDocumentItem.document_id == doc.id)).all()
+            exames = db.scalars(select(SpirometryExam).where(
+                SpirometryExam.id.in_([i.spirometry_exam_id for i in itens]))).all() if itens else []
+            municipios = {e.municipio_atendimento_ibge for e in exames}
+            check("grouped_items_missing", len(itens) >= 2 and len(exames) == len(itens))
+            check("service_location_changed",
+                  len(municipios) == 1
+                  and prep.service_municipio_ibge in municipios
+                  and prep.service_municipio_ibge in SUPPORTED_SERVICE_MUNICIPALITIES)
+            # O total enviado é a soma dos itens, reconferida aqui a partir
+            # das linhas — não só do snapshot que o pedido carrega.
+            check("grouped_total_mismatch",
+                  all(i.amount is not None for i in itens)
+                  and sum((i.amount for i in itens), Decimal("0.00"))
+                  == Decimal(prep.amount_snapshot or 0))
+        else:
+            check("service_location_changed",
+                  exam is not None and prep.service_municipio_ibge == exam.municipio_atendimento_ibge
+                  and prep.service_municipio_ibge in SUPPORTED_SERVICE_MUNICIPALITIES)
         attempts = db.scalar(select(FiscalAttempt.id).where(
             FiscalAttempt.document_id == doc.id).limit(1))
         check("document_already_attempted", attempts is None)

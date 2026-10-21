@@ -2719,11 +2719,39 @@ class NationalDpsConfigurationVersion(Base):
 
 
 class FiscalDocument(Base, TimestampMixin):
-    """Queue projection only; immutable preparations retain monetary evidence."""
+    """Queue projection only; immutable preparations retain monetary evidence.
+
+    M26.34 — um documento é de uma de DUAS naturezas, e `kind` diz qual:
+
+    - ``single``: UM exame, tomador derivado do paciente daquele exame. É o
+      fluxo que existe desde f6a1d9e28b40 e nada nele muda — `spirometry_exam_id`
+      continua preenchido, `uq_fiscal_exam_environment` continua valendo e
+      `recipient_person_id` fica NULL (derivar do paciente é a regra, não uma
+      escolha a registrar).
+    - ``grouped``: VÁRIOS exames (ver `FiscalDocumentItem`) e um tomador
+      ESCOLHIDO por uma pessoa, que pode não ser paciente de nenhum deles.
+      Aqui `spirometry_exam_id` é NULL por construção: apontar para um dos
+      exames elegeria arbitrariamente um deles como "o" exame da nota.
+
+    O CHECK abaixo torna as duas formas mutuamente exclusivas no banco, de
+    modo que nenhum caminho de código consiga produzir um híbrido — um
+    documento agrupado com exame próprio, ou um documento single com tomador
+    divergente do paciente, seriam ambos defeitos silenciosos de cobrança.
+    """
     __tablename__ = "fiscal_documents"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    spirometry_exam_id: Mapped[str] = mapped_column(String(36), ForeignKey("spirometry_exams.id"))
+    spirometry_exam_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("spirometry_exams.id"), nullable=True)
     environment: Mapped[str] = mapped_column(String(20))
+    kind: Mapped[str] = mapped_column(String(10), default="single", server_default="single")
+    # Tomador fiscal EXPLÍCITO, só para `grouped`. Mutável enquanto o
+    # documento não cruzou a fronteira do provedor (mesmo portão do preparo):
+    # trocar o tomador muda o fingerprint e deixa o preparo stale, que é
+    # exatamente o efeito desejado — a confirmação humana anterior deixa de
+    # valer. `fiscal_documents_identity` continua protegendo exame/ambiente.
+    recipient_person_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("people.id", name="fk_fiscal_documents_recipient_person_id_people"),
+        nullable=True)
     state: Mapped[str] = mapped_column(String(30), default="blocked")
     eligibility: Mapped[str] = mapped_column(String(20), default="blocked")
     blocking_reasons: Mapped[list] = mapped_column(JSON, default=list)
@@ -2733,11 +2761,74 @@ class FiscalDocument(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("spirometry_exam_id", "environment", name="uq_fiscal_exam_environment"),
         CheckConstraint("environment IN ('mock','restricted','production')", name="fiscal_document_environment"),
+        CheckConstraint("kind IN ('single','grouped')", name="fiscal_document_kind"),
+        CheckConstraint(
+            "(kind = 'single' AND spirometry_exam_id IS NOT NULL "
+            "AND recipient_person_id IS NULL) OR "
+            "(kind = 'grouped' AND spirometry_exam_id IS NULL "
+            "AND recipient_person_id IS NOT NULL)",
+            name="fiscal_document_shape"),
         # M57 — 'issued' (a real NFS-e exists at the tax authority) is a
         # DIFFERENT terminal success state from 'simulated' (the mock invented
         # an identifier and nothing was issued anywhere). 'simulated' is kept,
         # narrowed to genuine mock runs; see services/nfse.success_state().
         CheckConstraint("state IN ('blocked','pending','issuing','issued','simulated','failed','uncertain','reconciling','cancelled')", name="fiscal_document_state"),
+    )
+
+
+class FiscalDocumentItem(Base):
+    """M26.34 — UM exame dentro de um documento fiscal, com o seu valor.
+
+    POR QUE A TABELA VALE PARA OS DOIS TIPOS DE DOCUMENTO
+
+    Até aqui "este exame já foi faturado neste ambiente" era respondido por
+    `uq_fiscal_exam_environment` em `fiscal_documents`. Com documentos
+    agrupados essa coluna passa a ser NULL, e aquele índice deixaria de ver os
+    exames agrupados: dois documentos agrupados poderiam cobrar o mesmo exame,
+    ou um agrupado poderia repetir o que um single já cobrou.
+
+    Então a migration cria um item para CADA documento já existente (nenhum
+    valor é inventado — ver abaixo) e `uq_fiscal_item_exam_environment` passa a
+    ser a trava universal: um exame ocupa, no máximo, um documento por
+    ambiente, agrupado ou não. É a razão de `environment` estar desnormalizado
+    aqui: a unicidade tem de ser verificável pelo banco, sem join.
+
+    POR QUE `amount` É OPCIONAL
+
+    Num documento `grouped` o valor do item é a fonte do total, e é
+    obrigatório (garantido no serviço, que recusa preparar sem ele). Num
+    documento `single` a verdade monetária continua onde sempre esteve — no
+    `amount_snapshot` da preparação imutável — e o item existe apenas como
+    registro de ocupação. O backfill, portanto, grava `amount` NULL em vez de
+    copiar um número de volta para outra tabela: evidência fiscal não se
+    duplica, e um valor recopiado seria um segundo lugar onde a verdade
+    poderia divergir.
+    """
+    __tablename__ = "fiscal_document_items"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    document_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("fiscal_documents.id"), index=True, nullable=False)
+    # Cópia do ambiente do documento, só para a trava de unicidade abaixo.
+    environment: Mapped[str] = mapped_column(String(20), nullable=False)
+    spirometry_exam_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("spirometry_exams.id"), nullable=False)
+    financial_entry_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("financial_entries.id"), nullable=True)
+    amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__ = (
+        # A trava universal contra dupla cobrança do mesmo exame.
+        UniqueConstraint("spirometry_exam_id", "environment",
+                         name="uq_fiscal_item_exam_environment"),
+        UniqueConstraint("document_id", "spirometry_exam_id",
+                         name="uq_fiscal_item_document_exam"),
+        UniqueConstraint("document_id", "position", name="uq_fiscal_item_position"),
+        CheckConstraint("amount IS NULL OR amount > 0", name="fiscal_item_amount_positivo"),
+        CheckConstraint("position >= 1", name="fiscal_item_position_positiva"),
+        CheckConstraint("environment IN ('mock','restricted','production')",
+                        name="fiscal_item_environment"),
     )
 
 
@@ -2776,11 +2867,17 @@ class FiscalPreparation(Base):
     __table_args__ = (
         # Exactly one source per amount: the exam's own ledger entry, or the
         # partnership rule (PASTORE only). See migration b70c4a2e9d15.
+        # M26.34 — a TERCEIRA fonte: a soma dos itens de um documento
+        # agrupado. Nem a receita de um exame (não há "o" exame) nem a regra
+        # de parceria; o total é derivado dos itens, com Decimal, e o
+        # `amount_source` declara isso na própria linha.
         CheckConstraint(
             "amount_snapshot IS NULL OR (policy_id IS NOT NULL AND amount_snapshot > 0 AND ("
             "(financial_entry_id IS NOT NULL AND partnership_id IS NULL) OR "
             "(financial_entry_id IS NULL AND partnership_id IS NOT NULL AND flow = 'PASTORE' "
-            "AND amount_source = 'partnership.valor_recebido_por_exame')))",
+            "AND amount_source = 'partnership.valor_recebido_por_exame') OR "
+            "(financial_entry_id IS NULL AND partnership_id IS NULL "
+            "AND amount_source = 'grouped_items.sum')))",
             name="fiscal_snapshot_source"),
         CheckConstraint("service_municipio_ibge IS NULL OR length(service_municipio_ibge) = 7", name="service_municipio_ibge_sete_digitos"),
     )
@@ -2916,7 +3013,10 @@ class FiscalIssuanceRequest(Base):
     __tablename__ = "fiscal_issuance_requests"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     document_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_documents.id"), index=True)
-    spirometry_exam_id: Mapped[str] = mapped_column(String(36), ForeignKey("spirometry_exams.id"))
+    # M26.34 — NULL num pedido de documento agrupado, que não tem "o" exame.
+    # Os exames do pedido são os itens do documento (`FiscalDocumentItem`).
+    spirometry_exam_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("spirometry_exams.id"), nullable=True)
     preparation_id: Mapped[str] = mapped_column(String(36), ForeignKey("fiscal_preparations.id"))
     preparation_fingerprint: Mapped[str] = mapped_column(String(64))
     # sha256 of the tomador identity the human saw — never the CPF itself.

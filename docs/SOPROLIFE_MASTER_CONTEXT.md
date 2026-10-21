@@ -187,14 +187,30 @@ Front-end: `index.html` + `js/*.js` com cache-buster `?v=AAAAMMDDNN` —
   `sha256(token)`; papel PostgreSQL `soprolife_portal` com GRANT por coluna.
 - **QR/verificação pública** do laudo e nomes de download determinísticos.
 
-## 7. NFS-e (M27–M71)
+## 7. NFS-e (M27–M71, M26.34)
 
-**Arquitetura.** `FiscalDocument` (um por exame/ambiente — `uq_fiscal_exam_environment`)
-→ `FiscalPreparation` (snapshot imutável com fingerprint, valor, tomador,
-fonte do valor) → `FiscalIssuanceRequest` (pedido humano, TTL 15 min) →
-`FiscalAttempt` (durável, gravada **antes** da fronteira) → `FiscalArtifact`
-(DPS assinada, NFS-e XML, só caminho+hash no banco). Numeração de DPS
-append-only (`DpsNumberAllocation`).
+**Arquitetura.** `FiscalDocument` → `FiscalPreparation` (snapshot imutável com
+fingerprint, valor, tomador, fonte do valor) → `FiscalIssuanceRequest` (pedido
+humano, TTL 15 min) → `FiscalAttempt` (durável, gravada **antes** da fronteira)
+→ `FiscalArtifact` (DPS assinada, NFS-e XML, só caminho+hash no banco).
+Numeração de DPS append-only (`DpsNumberAllocation`).
+
+**Duas naturezas de documento (M26.34).** `FiscalDocument.kind`:
+- `single` — UM exame, tomador derivado do paciente. `spirometry_exam_id`
+  preenchido, `uq_fiscal_exam_environment` valendo, `recipient_person_id` NULL.
+  É o fluxo de M27–M71, inalterado.
+- `grouped` — VÁRIOS exames (`FiscalDocumentItem`) e tomador **escolhido por
+  humano**, que pode não ser paciente de nenhum deles. `spirometry_exam_id`
+  NULL por construção; `recipient_person_id` obrigatório. Total = **soma dos
+  itens** em `Decimal` (`amount_source='grouped_items.sum'`). CHECK
+  `fiscal_document_shape` torna as duas formas mutuamente exclusivas.
+
+**Ocupação de exame (M26.34).** "Este exame já foi faturado neste ambiente?" é
+respondido por **`uq_fiscal_item_exam_environment`** em `fiscal_document_items`,
+não mais pela coluna de `fiscal_documents` (NULL nos agrupados). Todo caminho
+que cria documento reclama a ocupação — `nfse.prepare`, `prepare_group` e
+`register_external_issuance` —, e a migration criou item de ocupação (valor
+NULL, de propósito) para cada documento histórico.
 
 **Emissão:**
 1. Gestor/admin clica **"Emitir NFS-e"** na aba Fiscal (sem lote em produção;
@@ -228,8 +244,17 @@ sem rede e exige ≥ 30 dias de validade.
   Política `SOPROLIFE-PRODUCTION-PASTORE-v1` **prospectiva desde 2026-10-02**:
   exames anteriores ficam bloqueados ("conferir nota manual"). Nenhum
   `FinancialEntry` é criado e nenhum settlement é alterado.
-- **Tomador = paciente** (CPF válido, nome fiscal completo) em todos os fluxos.
-  Descrição fiscal canônica, sem "Pastore", "50%", "repasse".
+- **Tomador = paciente** (CPF válido, nome fiscal completo) em todo documento
+  `single`. Descrição fiscal canônica, sem "Pastore", "50%", "repasse".
+- **Tomador ≠ paciente** só em documento `grouped`: a identidade fiscal exigida
+  passa a ser a do **tomador** (os bloqueios de identidade do paciente não se
+  aplicam — `evaluate(recipient_identity=False)`), e o paciente segue tendo de
+  existir e não estar arquivado. **PASTORE não agrupa**: ali o valor é repasse
+  de parceria e o tomador é a clínica. Grupo exige coerência de data,
+  município, política, fluxo e broncodilatador; incoerente é **recusado sem
+  escrever nada**, porque o item ocupa o exame. A política fiscal continua
+  declarando `recipient: 'service_person'` — descreve o fluxo individual e não
+  foi alterada; terceiro pagador é decisão humana registrada no documento.
 
 **Anti-duplicidade:** notas emitidas fora do sistema entram por
 `register_external_issuance` (`scripts/nfse_m61_import_manual_nfse.py`, status

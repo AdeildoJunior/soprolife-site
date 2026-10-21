@@ -47,3 +47,44 @@ def spirometry_service_description(broncodilatador: bool | None) -> str:
             "serviço da DPS nacional não pode ser inferida (fail closed)."
         )
     return _DESCRIPTIONS[broncodilatador]
+
+
+_GROUPED_DESCRIPTIONS: dict[bool, str] = {
+    True: (
+        "{count} espirometrias com broncodilatador, com emissão de laudo "
+        f"médico, realizadas pela {ISSUER_LEGAL_NAME}."
+    ),
+    False: (
+        "{count} espirometrias sem broncodilatador, com emissão de laudo "
+        f"médico, realizadas pela {ISSUER_LEGAL_NAME}."
+    ),
+}
+
+
+def grouped_spirometry_service_description(
+    count: int, broncodilatador: bool | None
+) -> str:
+    """M26.34 — a mesma sentença oficial, no plural, para um documento que
+    cobre vários exames.
+
+    Deriva das DUAS sentenças acima palavra por palavra: só o número e a
+    concordância mudam. Nada de novo é redigido aqui, porque a descrição do
+    serviço de uma NFS-e é texto fornecido pela contabilidade, não redação do
+    sistema.
+
+    `broncodilatador` precisa ser um único True/False — o valor que TODOS os
+    exames do grupo compartilham. Um grupo misto não tem descrição correta:
+    "com broncodilatador" mentiria sobre um dos exames e "sem" mentiria sobre
+    o outro. Quem agrupa é responsável por recusar a mistura antes de chegar
+    aqui (ver `services/nfse_grouped.py`), e isto falha fechado se não o fez.
+    """
+    if not isinstance(broncodilatador, bool):
+        raise ServiceDescriptionUndetermined(
+            "o grupo não tem um valor único de broncodilatador; a descrição de "
+            "serviço da DPS nacional não pode ser inferida (fail closed)."
+        )
+    if not isinstance(count, int) or count < 2:
+        raise ServiceDescriptionUndetermined(
+            "um documento agrupado descreve dois ou mais exames."
+        )
+    return _GROUPED_DESCRIPTIONS[broncodilatador].format(count=count)
