@@ -15,6 +15,7 @@ from ..models import (
     Person,
     PersonContact,
     PersonRelationship,
+    ResultDeliveryAuthorization,
     User,
 )
 from ..normalize import normalize_name, normalize_phone
@@ -25,13 +26,15 @@ from ..schemas import (
     ContactIn,
     DuplicateCheck,
     IdentificacaoAssistidaIn,
+    PatientRegistrationUpdate,
     PersonCpfLookup,
     PersonCreate,
     PersonRelationshipCreate,
     PersonRelationshipDeactivate,
     PersonSearch,
     PersonUpdate,
-    PatientRegistrationUpdate,
+    ResultDeliveryAuthorizationCreate,
+    ResultDeliveryAuthorizationDeactivate,
 )
 from ..security import (
     ROLE_LEITURA,
@@ -39,7 +42,12 @@ from ..security import (
     require_patient_registration_editor,
     require_role,
 )
-from ..serializers import ser_consent, ser_person, ser_person_relationship
+from ..serializers import (
+    ser_consent,
+    ser_person,
+    ser_person_relationship,
+    ser_result_delivery_authorization,
+)
 from ..config import get_settings
 from ..services.identificacao_assistida import (
     avaliar_comprovante,
@@ -55,6 +63,11 @@ from ..services.identity import find_person_candidates, register_candidates
 from ..services.serpro_cpf import SerproCpfClient
 from ..services.person_registration import build_person
 from ..services.relationships import RelationshipError, create_relationship
+from ..services.result_delivery import (
+    ResultDeliveryError,
+    create_authorization,
+    list_authorizations,
+)
 
 router = APIRouter(prefix="/pessoas", tags=["pessoas"])
 
@@ -723,3 +736,93 @@ def deactivate_guardian(
         )
         db.commit()
     return ser_person_relationship(relationship)
+
+
+# ── M26.33 — destinatários autorizados do resultado ───────────────────────
+#
+# Rotas separadas das de `responsaveis` de propósito: ali o vínculo é
+# menor–responsável e pode liberar contato em nome do paciente; aqui é só
+# "esta pessoa pode receber o resultado". Confundir as duas coisas numa
+# rota só é exatamente o atalho que esta missão não podia tomar.
+
+
+@router.get("/{person_id}/destinatarios-resultado")
+def list_result_recipients(
+    person_id: str,
+    active: bool | None = None,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_LEITURA)),
+):
+    _get_person(db, person_id)
+    return {
+        "items": [
+            ser_result_delivery_authorization(item)
+            for item in list_authorizations(db, person_id, active=active)
+        ]
+    }
+
+
+@router.post("/{person_id}/destinatarios-resultado", status_code=201)
+def add_result_recipient(
+    person_id: str,
+    payload: ResultDeliveryAuthorizationCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    try:
+        authorization, replay = create_authorization(
+            db,
+            patient_person_id=person_id,
+            recipient_person_id=payload.recipient_person_id,
+            relationship_type=payload.relationship_type,
+            registered_by_user_id=user.id,
+            active=payload.active,
+        )
+    except ResultDeliveryError as exc:
+        status = 404 if exc.code.endswith("_not_found") else 409
+        raise HTTPException(status_code=status, detail={"codigo": exc.code}) from exc
+    if not replay:
+        # Só a relação declarada e a vigência. Nome, CPF e telefone do
+        # destinatário nunca entram na auditoria — os IDs técnicos bastam.
+        audit(
+            db,
+            "pessoa.destinatario_resultado_autorizado",
+            "result_delivery_authorizations",
+            authorization.id,
+            user.id,
+            request.state.request_id,
+            {
+                "relationship_type": authorization.relationship_type,
+                "active": authorization.active,
+            },
+        )
+    db.commit()
+    return {**ser_result_delivery_authorization(authorization), "replay": replay}
+
+
+@router.post("/{person_id}/destinatarios-resultado/{authorization_id}/desativar")
+def deactivate_result_recipient(
+    person_id: str,
+    authorization_id: str,
+    payload: ResultDeliveryAuthorizationDeactivate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    authorization = db.get(ResultDeliveryAuthorization, authorization_id)
+    if authorization is None or authorization.patient_person_id != person_id:
+        raise HTTPException(status_code=404, detail="Autorização não encontrada.")
+    if authorization.active:
+        authorization.active = False
+        audit(
+            db,
+            "pessoa.destinatario_resultado_desativado",
+            "result_delivery_authorizations",
+            authorization.id,
+            user.id,
+            request.state.request_id,
+            {"reason_code": payload.reason_code},
+        )
+        db.commit()
+    return ser_result_delivery_authorization(authorization)

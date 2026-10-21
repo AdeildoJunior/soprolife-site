@@ -19,6 +19,14 @@ ALLOWED_KEYS = {
     "decisao", "contexto", "campo", "marcador", "codigo", "fila", "papel",
     "ativo", "report_version_id", "delivery_mode", "institutional_status",
     "reason_code",
+    # M26.33 — a relação familiar DECLARADA num vínculo entre duas pessoas
+    # (`daughter`, `spouse`, `mother`, `legal_guardian`...). Catálogo fechado
+    # dos contratos `ResultDeliveryRelationshipType`/`RelationshipType`:
+    # nunca nome, nunca CPF, nunca telefone. Sem ela a trilha registra que
+    # alguém foi autorizado a receber um resultado, mas não em que condição
+    # — que é justamente o que se audita. `is_legal_guardian` entra pelo
+    # mesmo motivo: distingue autorização de entrega de representação legal.
+    "relationship_type", "is_legal_guardian",
     # M24C — exclusivamente identificadores técnicos e valores fechados.
     "report_code", "exam_code", "origin_type", "physician_profile_id",
     "assignment_id", "previous_assignment_id", "target_user_id", "fields",

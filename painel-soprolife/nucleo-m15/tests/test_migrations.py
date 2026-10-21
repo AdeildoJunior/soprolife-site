@@ -168,7 +168,9 @@ def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     # M66 (e8b3d6a4f190, pedidos de emissão de produção confirmados) vem
     # por cima de M61; M70 (b70c4a2e9d15, fonte de valor da parceria
     # Pastore no preparo fiscal) por cima de M66.
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["e2a0b6c719af"]
+    # M26.33 (a1c7e5d9b204, autorização de entrega de resultado a terceiro)
+    # por cima da Fase 2A.
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["a1c7e5d9b204"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(

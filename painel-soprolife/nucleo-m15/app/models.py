@@ -3298,3 +3298,85 @@ class EegResultSession(Base):
         DateTime(timezone=True), nullable=False
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# M26.33 — ENTREGA DE RESULTADO A UM TERCEIRO AUTORIZADO
+#
+# O caso concreto: dois exames domiciliares de um casal idoso, pagos pela
+# filha, que é também quem vai receber os dois resultados no WhatsApp dela.
+#
+# POR QUE NÃO `person_relationships`
+#
+# Aquela tabela é o vínculo MENOR–RESPONSÁVEL: as colunas se chamam
+# `minor_person_id`/`guardian_person_id`, o enum do contrato é
+# mother/father/legal_guardian/grandparent/other, e `legal_contact_relationship`
+# usa `is_legal_guardian` para liberar contato em nome de outra pessoa. Uma
+# filha adulta de pacientes adultos não é responsável legal de ninguém, e
+# registrá-la ali inverteria os papéis (a paciente entraria como "menor") e
+# afirmaria uma tutela que não existe. Representação legal exige evidência
+# de tutela/curatela; autorização de entrega não.
+#
+# O QUE ESTA TABELA AFIRMA, E SÓ ISSO
+#
+# "Esta pessoa está autorizada a receber o resultado desta paciente, nesta
+# relação familiar declarada." Não cria atendimento, não cria exame, não
+# transfere contato, não dá acesso ao portal (o link do paciente continua
+# sendo `patient_result_accesses`, que exige laudo liberado) e não autoriza
+# falar em nome do paciente.
+#
+# Não existe coluna "autorizado_para_resultado": a linha É a autorização —
+# um booleano que só pode valer True descreveria a tabela, não o fato. A
+# vigência é `active`, desativada pela API e registrada em `audit_logs`,
+# exatamente como em `person_relationships`.
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class ResultDeliveryAuthorization(Base):
+    """Terceiro explicitamente autorizado a receber o resultado de um paciente."""
+
+    __tablename__ = "result_delivery_authorizations"
+    id: Mapped[str] = mapped_column(
+        String(UUID_LEN), primary_key=True, default=new_uuid
+    )
+    patient_person_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("people.id", name="fk_rda_patient"),
+        index=True,
+        nullable=False,
+    )
+    recipient_person_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("people.id", name="fk_rda_recipient"),
+        index=True,
+        nullable=False,
+    )
+    # Relação declarada do DESTINATÁRIO com o PACIENTE ("daughter" = a
+    # destinatária é filha do paciente). Nunca inclui legal_guardian: uma
+    # representação legal pertence a `person_relationships`, com evidência.
+    relationship_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    registered_by_user_id: Mapped[str] = mapped_column(
+        String(UUID_LEN),
+        ForeignKey("users.id", name="fk_rda_registered_by"),
+        nullable=False,
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "patient_person_id <> recipient_person_id",
+            name="destinatario_distinto_do_paciente",
+        ),
+        CheckConstraint(
+            "relationship_type IN "
+            "('daughter','son','spouse','parent','sibling','other')",
+            name="destinatario_relacao_valida",
+        ),
+        UniqueConstraint(
+            "patient_person_id",
+            "recipient_person_id",
+            name="uq_result_delivery_authorization_par",
+        ),
+    )

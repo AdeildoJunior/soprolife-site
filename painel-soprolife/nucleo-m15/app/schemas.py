@@ -196,6 +196,25 @@ class PersonRelationshipCreate(StrictModel):
     active: bool = True
 
 
+# M26.33 — relação do DESTINATÁRIO com o PACIENTE. Sem `legal_guardian`:
+# representação legal pertence a `PersonRelationshipCreate`, com evidência.
+ResultDeliveryRelationshipType = Literal[
+    "daughter", "son", "spouse", "parent", "sibling", "other"
+]
+
+
+class ResultDeliveryAuthorizationCreate(StrictModel):
+    recipient_person_id: str = Field(min_length=36, max_length=36)
+    relationship_type: ResultDeliveryRelationshipType
+    active: bool = True
+
+
+class ResultDeliveryAuthorizationDeactivate(StrictModel):
+    reason_code: Literal[
+        "authorization_withdrawn", "superseded", "administrative_correction"
+    ]
+
+
 class PersonRelationshipDeactivate(StrictModel):
     reason_code: Literal[
         "relationship_ended", "superseded", "administrative_correction"

@@ -146,6 +146,18 @@ def ser_person_relationship(r: m.PersonRelationship) -> dict:
     }
 
 
+def ser_result_delivery_authorization(a: m.ResultDeliveryAuthorization) -> dict:
+    return {
+        "id": a.id,
+        "patient_person_id": a.patient_person_id,
+        "recipient_person_id": a.recipient_person_id,
+        "relationship_type": a.relationship_type,
+        "active": a.active,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+        "registered_by_user_id": a.registered_by_user_id,
+    }
+
+
 def _date_meta(obj, prefix: str) -> dict:
     return {
         prefix: d(getattr(obj, prefix)),
