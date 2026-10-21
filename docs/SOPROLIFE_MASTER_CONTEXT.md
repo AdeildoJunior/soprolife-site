@@ -214,7 +214,13 @@ NULL, de propósito) para cada documento histórico.
 
 **Emissão:**
 1. Gestor/admin clica **"Emitir NFS-e"** na aba Fiscal (sem lote em produção;
-   endpoints mock/lote respondem 409 em produção).
+   endpoints mock/lote respondem 409 em produção). Para o documento
+   **agrupado (M26.35)** o botão fica no cartão do documento preparado e abre
+   duas confirmações (o que será emitido → a consequência fiscal); depois disso
+   é **o mesmo caminho**: `GET /producao/documentos/{id}/confirmacao`,
+   `POST …/confirmar-emissao`, mesma campainha, mesmo worker. Não existe rota
+   nem provider próprio do agrupado. Na prontidão, "Provedor no processo web:
+   unavailable" é o processo web (nunca tem A1); quem emite é o executor.
 2. Modal mostra dados com CPF mascarado; o segundo botão diz exatamente
    **"Confirmar emissão de R$ X"** — o servidor exige a mesma preparação, valor,
    frase e hash do tomador.

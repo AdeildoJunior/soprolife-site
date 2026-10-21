@@ -252,3 +252,31 @@
   .fiscal-group-recipient { flex-direction: column; align-items: stretch; }
   .fiscal-group-recipient input { min-width: 0; width: 100%; }
 }
+
+/* M26.35 — documento agrupado preparado: cartão com o botão de emissão. */
+.fiscal-group-docs-title { margin: 16px 0 8px; font-size: 13px; color: var(--navy, #0d2a43); }
+.fiscal-group-docs { display: grid; gap: 10px; }
+.fiscal-group-doc {
+  padding: 12px; border: 1px solid var(--border, #d7e2ea); border-radius: 10px;
+  background: var(--card, #fff); min-width: 0;
+}
+.fiscal-group-doc dd { overflow-wrap: anywhere; }
+.fiscal-group-doc-actions {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end;
+  margin-top: 10px;
+}
+.fiscal-group-doc-actions .safe-label { white-space: normal; }
+.fiscal-group-doc-actions .fiscal-emit-btn { min-height: 44px; padding: 10px 18px; font-size: 14px; }
+.fiscal-confirm-lead { margin: 0 0 12px; font-size: 15px; font-weight: 700; line-height: 1.45; color: var(--navy, #0d2a43); }
+@media (max-width: 560px) {
+  .fiscal-group-doc-actions { justify-content: stretch; }
+  .fiscal-group-doc-actions .fiscal-emit-btn { width: 100%; }
+  .fiscal-modal .fiscal-actions button { width: 100%; min-height: 44px; }
+}
+.fiscal-group-items { list-style: none; margin: 12px 0; padding: 0; font-size: 13px; }
+.fiscal-group-items li {
+  display: flex; justify-content: space-between; gap: 12px; padding: 8px 0;
+  border-bottom: 1px solid var(--border, #d7e2ea);
+}
+.fiscal-group-items li span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fiscal-group-items-total { font-weight: 700; color: var(--navy, #0d2a43); border-bottom: 0 !important; }

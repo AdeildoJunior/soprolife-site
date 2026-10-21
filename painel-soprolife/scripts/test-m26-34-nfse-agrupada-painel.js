@@ -12,8 +12,8 @@
 //   • o CPF do tomador aparece mascarado, e o CPF inteiro nunca é renderizado;
 //   • o botão de preparar só habilita quando o backend disse `can_prepare`;
 //   • os motivos de bloqueio são mostrados em português, não em código;
-//   • um documento já preparado aparece como "aguardando emissão manual",
-//     e em lugar nenhum da tela existe botão que emita o agrupado.
+//   • um documento já preparado aparece listado e, sem o resumo de
+//     confirmação do backend, sem botão de emitir (M26.35 cobre o botão).
 //
 // Não usa navegador, rede, credencial nem dado privado.
 // Uso:  node painel-soprolife/scripts/test-m26-34-nfse-agrupada-painel.js
@@ -217,7 +217,9 @@ caso("o código técnico do motivo não vaza para a tela",
 caso("bloqueado, preparar fica desabilitado",
      /data-group-prepare[^>]*disabled/.test(bloqueado));
 
-// ── 5. documento preparado aguarda emissão manual ───────────────────────────
+// ── 5. documento preparado: sem resumo de confirmação, sem botão ───────────
+// (M26.35: o botão "Emitir NFS-e" do agrupado existe, mas só aparece com o
+// resumo do backend dizendo `can_confirm` — coberto em test-m26-35.)
 montarEstado({
   production: { itens: LINHAS, counts: {} },
   grouping: {
@@ -233,11 +235,9 @@ montarEstado({
 const comDoc = api.groupedPanelHtml();
 caso("o documento preparado aparece com os dois exames",
      /ESP-000077 \+ ESP-000078/.test(comDoc));
-caso("e diz que aguarda emissão manual", /aguardando emissão manual/.test(comDoc));
-caso("nenhum botão de emitir o agrupado existe na tela",
-     !/data-group-issue/.test(comDoc) && !/data-group-emit/.test(comDoc));
-caso("a tela inteira não tem botão de emissão do agrupado",
-     !/Emitir NFS-e agrupada/i.test(comDoc));
+caso("o texto antigo de \"emissão manual\" não aparece mais", !/emissão manual/.test(comDoc));
+caso("sem resumo de confirmação do backend, nenhum botão de emitir",
+     !/data-group-issue/.test(comDoc));
 
 console.log(falhas === 0
   ? "\nRESULTADO: todos os casos passaram."

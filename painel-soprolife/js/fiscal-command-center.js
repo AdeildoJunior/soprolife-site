@@ -47,6 +47,9 @@
     grouping: {
       selected: new Set(), recipient: null, preview: null, busy: false,
       status: null, documents: [], lookupBusy: false,
+      // M26.35 — o resumo de confirmação de cada documento agrupado pendente,
+      // por id: é dele que vêm a tomadora (nome) e `can_confirm`.
+      summaries: {},
     },
   };
 
@@ -115,10 +118,16 @@
     const r = block.readiness || {};
     const prod = block.production_readiness || { gates: [] };
     const cert = r.certificate_summary;
+    const prodIssue = status.production_issuance || {};
+    // M26.35 — "unavailable"/"Não" abaixo descrevem o PROCESSO WEB, que por
+    // desenho nunca tem A1 nem rede. Quem emite em produção é o executor
+    // one-shot; sem esta linha a tela parecia dizer que não há emissão.
     const rows = [
       ["Ambiente ativo", esc(status.environment)],
-      ["Provedor em uso", esc(status.provider)],
-      ["Emissão real disponível", status.real_issuance_available ? "Sim" : "Não"],
+      ...(status.environment === "production" ? [["Emissão de produção (executor one-shot)",
+        prodIssue.available ? "Disponível — por botão, com confirmação dupla" : "Executor não configurado"]] : []),
+      ["Provedor no processo web", esc(status.provider)],
+      ["Emissão direta pelo processo web", status.real_issuance_available ? "Sim" : "Não (por desenho)"],
       ["Leiaute restrito", esc(block.layout_version)],
       ["Schema", esc(r.schema_version || "—")],
       ["Portão de rede restrito", block.network_gate_enabled ? "Aberto" : "Fechado (padrão)"],
@@ -449,22 +458,56 @@
     </div>`;
   }
 
+  const ACTIVE_REQUEST = new Set(["authorized", "running"]);
+
+  // "ESP-000077 e ESP-000078", "a, b e c" — como a confirmação lê em voz alta.
+  function joinCodes(codes) {
+    const list = codes.filter(Boolean);
+    if (list.length < 2) return list.join("");
+    return `${list.slice(0, -1).join(", ")} e ${list[list.length - 1]}`;
+  }
+
+  // M26.35 — o pedido de emissão do documento agrupado vem da fila de
+  // produção: cada exame do grupo carrega o último pedido do documento.
+  function groupedRequest(docId) {
+    const rows = (state.production && state.production.itens) || [];
+    const row = rows.find((r) => r.grouped_document_id === docId && r.request);
+    return row ? row.request : null;
+  }
+
   function groupedDocumentsHtml() {
     const docs = state.grouping.documents || [];
     if (!docs.length) return "";
-    return `<div class="fiscal-table-wrap"><table class="fiscal-table">
-      <thead><tr><th>Documento</th><th>Exames</th><th class="fin-num">Total</th>
-        <th>Estado</th></tr></thead>
-      <tbody>${docs.map((doc) => `<tr class="fiscal-row">
-        <td><code>${short(doc.id)}</code></td>
-        <td>${esc((doc.itens || []).map((i) => i.exam_code).join(" + ") || "—")}</td>
-        <td class="fin-num">${brl(doc.itens_total)}</td>
-        <td><span class="fiscal-chip ${PROD_STATUS_CLASS[doc.state] || ""}">${
-          esc(STATE_LABELS[doc.state] || doc.state)}</span>
-          ${doc.state === "pending"
-            ? '<span class="safe-label">aguardando emissão manual</span>' : ""}</td>
-      </tr>`).join("")}</tbody>
-    </table></div>`;
+    const info = (state.status && state.status.production_issuance) || {};
+    return `<h4 class="fiscal-group-docs-title">Documentos agrupados</h4>
+      <div class="fiscal-group-docs">${docs.map((doc) => {
+        const resumo = (state.grouping.summaries || {})[doc.id] || null;
+        const request = groupedRequest(doc.id);
+        const ativo = !!(request && ACTIVE_REQUEST.has(request.status));
+        const podeEmitir = doc.state === "pending" && !!info.available && !ativo
+          && !!(resumo && resumo.can_confirm);
+        let situacao = "";
+        if (ativo) {
+          situacao = `<span class="fiscal-chip fiscal-state-issuing">${esc(REQUEST_STATUS_LABELS[request.status] || request.status)}</span>`;
+        } else if (doc.state === "pending" && !info.available) {
+          situacao = '<span class="safe-label">Executor de produção não configurado: emissão indisponível.</span>';
+        } else if (doc.state === "pending" && resumo && !resumo.can_confirm) {
+          situacao = `<span class="fiscal-chip fiscal-chip-blocked">${esc(resumo.block_label || "Não pode ser emitido agora")}</span>`;
+        }
+        return `<div class="fiscal-group-doc">
+          <dl class="fiscal-readiness-grid">
+            <div><dt>Documento</dt><dd><code>${short(doc.id)}</code></dd></div>
+            <div><dt>Exames</dt><dd>${esc((doc.itens || []).map((i) => i.exam_code).join(" + ") || "—")}</dd></div>
+            <div><dt>Tomadora</dt><dd>${esc((resumo && resumo.patient_name) || "—")}</dd></div>
+            <div><dt>Total</dt><dd><strong>${brl(doc.itens_total)}</strong></dd></div>
+            <div><dt>Estado</dt><dd><span class="fiscal-chip ${PROD_STATUS_CLASS[doc.state] || ""}">${
+              esc(STATE_LABELS[doc.state] || doc.state)}</span></dd></div>
+          </dl>
+          <div class="fiscal-group-doc-actions">${situacao}
+            ${podeEmitir ? `<button type="button" class="fiscal-emit-btn" data-group-issue="${esc(doc.id)}">Emitir NFS-e</button>` : ""}
+          </div>
+        </div>`;
+      }).join("")}</div>`;
   }
 
   function groupedPanelHtml() {
@@ -484,8 +527,8 @@
     return `<article class="panel fiscal-group-panel">
       <div class="panel-header">
         <h3>NFS-e agrupada — vários exames, um tomador</h3>
-        <span class="safe-label">Prepara e para. A emissão continua exigindo a
-          confirmação dupla de sempre.</span>
+        <span class="safe-label">Preparar não emite. A emissão sai pelo mesmo
+          executor das notas individuais, com confirmação dupla.</span>
       </div>
       <p class="fiscal-prod-counts">${esc(rows.length)} exame(s) disponível(is) para compor ·
         ${esc(g.selected.size)} selecionado(s)</p>
@@ -536,6 +579,29 @@
           ${r.fiscal_validity ? `<div><dt>Validade fiscal</dt><dd>Sim</dd></div>` : ""}
         </dl>
         ${FINAL_REQUEST.has(r.status) ? "" : "<p class=\"fiscal-empty\">Aguarde: esta janela atualiza sozinha.</p>"}`;
+    } else if (s && modal.grouped) {
+      // M26.35 — documento agrupado: duas confirmações explícitas antes de
+      // qualquer escrita. A primeira diz O QUE será emitido; a segunda diz
+      // a consequência, e só ela grava o pedido para o executor.
+      const codigos = (s.itens || []).map((i) => i.exam_code);
+      const itens = (s.itens || []).map((i) => `<li><span>${esc(i.position)}. <strong>${esc(i.exam_code || "—")}</strong></span>
+          <span>${brl(i.amount)}</span></li>`).join("");
+      body = !s.can_confirm
+        ? `<p class="fiscal-live-status is-error">Não pode ser emitido: ${esc(s.block_label || (s.blocking_reasons || []).join(", ") || s.state)}</p>`
+        : modal.stage === 2
+          ? `<p class="fiscal-confirm-lead">Esta ação enviará a NFS-e ao provedor fiscal e poderá gerar obrigação fiscal. Confirmar emissão?</p>
+             <p class="safe-label">Uma única NFS-e de <strong>${esc(s.amount_label)}</strong> para ${esc(s.patient_name || "—")} (${esc(joinCodes(codigos))}). O envio é feito uma única vez e não é repetido automaticamente.</p>`
+          : `<p class="fiscal-confirm-lead">Você está prestes a emitir uma única NFS-e de ${esc(s.amount_label)} para ${esc(s.patient_name || "—")} referente aos exames ${esc(joinCodes(codigos))}.</p>
+             <dl class="fiscal-readiness-grid">
+               <div><dt>Tomadora</dt><dd>${esc(s.patient_name || "—")}</dd></div>
+               <div><dt>CPF</dt><dd>${esc(s.cpf_masked || "ausente")}</dd></div>
+               <div><dt>Data do serviço / competência</dt><dd>${fmtDate(s.service_date)} / ${fmtDate(s.competence)}</dd></div>
+               <div><dt>Município de prestação</dt><dd>${esc(s.municipio_name || s.municipio_ibge || "—")}</dd></div>
+             </dl>
+             <ul class="fiscal-group-items">${itens}
+               <li class="fiscal-group-items-total"><span>Total</span><span>${esc(s.amount_label || "—")}</span></li>
+             </ul>
+             <p class="fiscal-prod-description"><strong>Descrição do serviço:</strong> ${esc(s.service_description || "—")}</p>`;
     } else if (s) {
       body = `<dl class="fiscal-readiness-grid">
           <div><dt>Exame</dt><dd>${esc(s.exam_code)}</dd></div>
@@ -553,9 +619,12 @@
           : `<p class="fiscal-live-status is-error">Não pode ser emitido: ${esc(s.block_label || (s.blocking_reasons || []).join(", ") || s.state)}</p>`}`;
     }
     const error = modal.error ? `<p class="fiscal-live-status is-error" role="alert">${esc(modal.error)}</p>` : "";
-    const confirm = s && s.can_confirm && !modal.request && !modal.loading
-      ? `<button type="button" class="fiscal-emit-btn" data-prod-confirm ${state.prodBusy ? "disabled" : ""}>${esc(s.confirmation_phrase)}</button>`
-      : "";
+    let confirm = "";
+    if (s && s.can_confirm && !modal.request && !modal.loading) {
+      confirm = modal.grouped && modal.stage !== 2
+        ? `<button type="button" class="fiscal-emit-btn" data-prod-group-next>Continuar</button>`
+        : `<button type="button" class="fiscal-emit-btn" data-prod-confirm ${state.prodBusy ? "disabled" : ""}>${esc(s.confirmation_phrase)}</button>`;
+    }
     return `<div class="fiscal-modal-backdrop" data-prod-close-backdrop>
       <div class="fiscal-modal" role="dialog" aria-modal="true" aria-labelledby="fiscalProdModalTitle">
         <h3 id="fiscalProdModalTitle">${modal.request ? "Emissão de NFS-e" : "Confirmar emissão de NFS-e"}</h3>
@@ -576,6 +645,7 @@
     document_already_attempted: "Já houve uma tentativa para este exame. Não será enviado de novo.",
     document_already_sent_once: "Este exame já foi enviado uma vez. Só é possível reconciliar.",
     issuance_request_already_active: "Já existe uma confirmação em andamento para este exame.",
+    exam_already_in_fiscal_document: "Este exame já compõe outra NFS-e (agrupada ou individual).",
     production_worker_unavailable: "O executor de produção não está disponível. Nada foi enviado.",
     reconciliation_not_required: "Este documento não precisa de reconciliação.",
   };
@@ -610,7 +680,7 @@
     return api("/fiscal/producao/fila").then((data) => { state.production = data; })
       .catch((err) => { state.production = { itens: [], counts: {}, error: errorMessage(err) }; })
       // Os documentos agrupados vêm no mesmo passo: a tela mostra a fila e o
-      // que já está preparado aguardando emissão manual, nunca uma sem a outra.
+      // que já está preparado aguardando emissão, nunca uma sem a outra.
       .then(loadGroupedDocuments)
       .then(render);
   }
@@ -623,7 +693,19 @@
     if (!isProduction() || !m15().can("leitura")) return Promise.resolve();
     return api("/fiscal/producao/agrupados")
       .then((data) => { state.grouping.documents = (data && data.itens) || []; })
-      .catch(() => { state.grouping.documents = []; });
+      .catch(() => { state.grouping.documents = []; })
+      .then(loadGroupedSummaries);
+  }
+
+  // M26.35 — o resumo de confirmação (gestor/admin) de cada agrupado ainda
+  // pendente. Só leitura: é o mesmo GET que o modal usa.
+  function loadGroupedSummaries() {
+    const pendentes = (state.grouping.documents || []).filter((d) => d.state === "pending");
+    if (!pendentes.length || !m15().can("gestor")) { state.grouping.summaries = {}; return Promise.resolve(); }
+    return Promise.all(pendentes.map((doc) =>
+      api(`/fiscal/producao/documentos/${encodeURIComponent(doc.id)}/confirmacao`)
+        .then((resumo) => [doc.id, resumo]).catch(() => [doc.id, null])))
+      .then((pares) => { state.grouping.summaries = Object.fromEntries(pares); });
   }
 
   function groupPayload() {
@@ -758,15 +840,38 @@
         .catch((err) => { state.prodModal = { error: errorMessage(err) }; render(); });
       return;
     }
+    const groupIssueBtn = event.target.closest("[data-group-issue]");
+    if (groupIssueBtn) {
+      const docId = groupIssueBtn.dataset.groupIssue;
+      state.prodModal = { loading: true, grouped: true };
+      render();
+      api(`/fiscal/producao/documentos/${encodeURIComponent(docId)}/confirmacao`)
+        .then((summary) => {
+          // A chave nasce com o modal: repetir o clique (ou a rede falhar e
+          // o humano tentar de novo) reencontra o MESMO pedido no servidor.
+          state.prodModal = { summary, grouped: true, stage: 1, idemKey: m15().idemKey() };
+          render();
+        })
+        .catch((err) => { state.prodModal = { grouped: true, error: errorMessage(err) }; render(); });
+      return;
+    }
+    if (event.target.closest("[data-prod-group-next]")) {
+      const modal = state.prodModal;
+      if (!modal || !modal.grouped || !modal.summary || !modal.summary.can_confirm) return;
+      modal.stage = 2;
+      render();
+      return;
+    }
     if (event.target.closest("[data-prod-confirm]")) {
       const s = state.prodModal && state.prodModal.summary;
       if (!s || !s.can_confirm || state.prodBusy) return;
+      if (state.prodModal.grouped && state.prodModal.stage !== 2) return;
       state.prodBusy = true;
       render();
       api(`/fiscal/producao/documentos/${encodeURIComponent(s.document_id)}/confirmar-emissao`, {
         method: "POST",
         body: JSON.stringify({ preparation_id: s.preparation_id, amount: s.amount,
-          confirmation: s.confirmation_phrase, idempotency_key: m15().idemKey() }),
+          confirmation: s.confirmation_phrase, idempotency_key: state.prodModal.idemKey || m15().idemKey() }),
       }).then((request) => {
         state.prodBusy = false;
         state.prodModal.request = request;
@@ -843,8 +948,8 @@
         g.recipient = null;
         const input = document.querySelector(`#${ROOT} [data-group-recipient-cpf]`);
         if (input) input.value = "";
-        setGroupStatus("Documento preparado e aguardando emissão manual: "
-          + short(doc && doc.id) + ". Nada foi enviado à SEFIN.", false);
+        setGroupStatus("Documento " + short(doc && doc.id) + " preparado. Nada foi enviado à SEFIN: "
+          + "confira abaixo e use \"Emitir NFS-e\" para emitir.", false);
       }).catch((err) => { setGroupStatus(errorMessage(err), true); })
         .then(() => {
           g.busy = false;
