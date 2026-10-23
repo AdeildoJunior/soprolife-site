@@ -282,8 +282,14 @@ def test_filas_e_detalhe_separam_metadado_operacional_de_identidade(
         # carrega nome, contato, texto clínico nem caminho de arquivo. Vem
         # `None` em toda linha ativa, que é o caso desta fila.
         "encerramento",
+        # M26.36C — carimbo da devolução cancelada: data, e nada além dela.
+        # Mesma natureza dos carimbos acima; é o que deixa a tela NOMEAR a
+        # linha no histórico em vez de adivinhar o motivo. `None` em toda
+        # linha ativa, que é o caso desta fila.
+        "devolucao_cancelada_em",
     }
     assert queue_row["encerramento"] is None
+    assert queue_row["devolucao_cancelada_em"] is None
     # M25.15 — o nome passou a ser a referência humana das DUAS filas
     # autenticadas, e o bloco de identidade é fechado: só nome e código do
     # cadastro. Nascimento, contato e id interno continuam fora da fila.

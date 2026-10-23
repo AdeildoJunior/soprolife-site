@@ -357,7 +357,7 @@ sem ele, cai na data do serviço).
 - **Devolver e desfazer:** "Retornar para laudadora"
   (`/retornar-para-correcao`, M26.12) **não** altera o predecessor — cria um
   documento corretivo novo e revoga o acesso do paciente. Desfazer um clique
-  equivocado é `POST /laudos/{id}/cancelar-devolucao` (admin, M26.36): remove
+  equivocado é `POST /laudos/{id}/cancelar-devolucao` (admin, M26.36):
   **CANCELA** a corretiva — nunca a apaga — e só se ela continuar
   exatamente como nasceu (status `atribuido`, uma única versão `original`,
   sem adendo/assinatura/PDF assinado/acesso/corretiva própria); restaura o
@@ -367,7 +367,12 @@ sem ele, cai na data do serviço).
   (`active=false` + `ended_at`) — a única mutação que
   `m24c_guard_assignment_history` aceita. A corretiva cancelada não aparece
   nas filas de trabalho (entra no par `incluir_superados`/
-  `somente_superados`), **não supera** o predecessor e **não ocupa** a vaga
+  `somente_superados`) — em **todas** elas: `/laudos`, `/laudos/meus`,
+  `/laudos/assinatura-externa/fila` (a "Fila de laudos", com os chips
+  contadores) e `/laudos/estatisticas`. A M26.36 só tinha feito a metade de
+  cima — devolver o PREDECESSOR à fila —, e a corretiva cancelada seguia
+  contada como "Aguardando laudo" na fila de entrega (M26.36C). **Não
+  supera** o predecessor e **não ocupa** a vaga
   do índice único, que passou a ser parcial
   (`uq_report_documents_corretiva_viva WHERE devolucao_cancelada_em IS
   NULL`) — logo uma correção legítima posterior continua possível. A trilha
@@ -540,6 +545,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 | M26.35 (21/10) | `a51bd74` | Botão "Emitir NFS-e" no documento agrupado com confirmação dupla, pelo mesmo endpoint/worker; primeira nota agrupada emitida (R$ 500,00, DPS nº 14) |
 | M26.36 (23/10) | `55cbf83` | `reteste_sem_cobranca` fora do repasse médico; migration `c3f8a1d7e529` |
 | M26.36b (23/10) | — | Desfazer "Retornar para laudadora": a corretiva é CANCELADA (não apagada — gatilhos M24C), índice único parcial, testes contra PostgreSQL real; migration `d7b2c4e86a91` |
+| M26.36C (23/10) | — | A corretiva cancelada sai da fila de ENTREGA e das estatísticas; `devolucao_cancelada_em` no payload da fila; "Históricos operacionais" deixa de dizer "Entregue ao paciente" sobre ela. Sem migration |
 | Painel (out) | `498c216`, `6aad6db`, `1e36d4c` | Refino visual, estatísticas de laudos, evolução mensal real |
 | Marketing (04/10) | `140f0e3` | Search Console + GA4 de 28 para 60 dias, subtítulo da tendência pelo período real |
 

@@ -70,7 +70,12 @@ def report_statistics(db: Session, *, physician_profile_id: str | None = None,
                ~exists().where(
                    successor.corrects_document_id == ReportDocument.id,
                    successor.devolucao_cancelada_em.is_(None),
-               ))
+               ),
+               # M26.36C — e ela própria não é um laudo produzido. Um
+               # documento aberto por engano e cancelado antes da primeira
+               # linha escrita não é produção: contá-lo inflava o total e
+               # criava uma pendência fantasma no acompanhamento.
+               ReportDocument.devolucao_cancelada_em.is_(None))
     )
     if physician_profile_id is not None:
         statement = statement.where(exists().where(

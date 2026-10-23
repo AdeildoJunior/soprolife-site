@@ -1282,6 +1282,11 @@ def _technical_report_row(
         "estado_entrega_rotulo": (
             FILA_ROTULOS.get(estado_entrega) if estado_entrega else None
         ),
+        # M26.36C — carimbo da devolução cancelada. A tela precisa dele
+        # para NOMEAR a linha no histórico: sem o campo, o painel caía no
+        # `else` de "Entregue ao paciente" e afirmava uma entrega que nunca
+        # houve sobre um laudo que nunca foi escrito.
+        "devolucao_cancelada_em": iso(document.devolucao_cancelada_em),
         # M25.24 — carimbo do encerramento operacional do EXAME. `None` na
         # fila ativa. Presente, a linha tem de aparecer marcada como
         # histórico: uma lista que junta encerrado e pendente sem etiqueta
@@ -4875,6 +4880,13 @@ def list_delivery_queue(
         corretiva.corrects_document_id == ReportDocument.id,
         corretiva.devolucao_cancelada_em.is_(None),
     )
+    # M26.36C — e a corretiva cancelada tampouco é entrega pendente. As duas
+    # faces do mesmo cancelamento: a de cima devolve o PREDECESSOR à fila
+    # ativa, esta tira a CORRETIVA dela. Sem a segunda, o laudo aberto por
+    # engano continuava listado como "Aguardando laudo" e, pior, somado no
+    # contador do chip — uma pendência que ninguém podia resolver, porque
+    # laudar o documento cancelado não entrega nada.
+    devolucao_cancelada = ReportDocument.devolucao_cancelada_em.is_not(None)
 
     statement = (
         select(
@@ -4903,7 +4915,12 @@ def list_delivery_queue(
     # contadores. Filtrar depois, em Python, deixaria os superados ocupando
     # vagas das 300 linhas e ainda exigiria recontar à mão.
     if not incluir_superados:
-        statement = statement.where(~tem_corretiva_sucessora)
+        # M26.36C — a corretiva cancelada entra NESTE par, e não num filtro
+        # próprio: `incluir_superados` já significa "traga também o que saiu
+        # da fila de trabalho mas continua no histórico", e é exatamente
+        # isso que ela é. Excluir não é esconder — nada foi apagado, e
+        # `incluir_superados=true` a traz de volta para auditoria.
+        statement = statement.where(~tem_corretiva_sucessora, ~devolucao_cancelada)
 
     linhas = db.execute(
         statement.order_by(ReportDocument.created_at.desc()).limit(300)
@@ -4932,6 +4949,11 @@ def list_delivery_queue(
             "estado_rotulo": FILA_ROTULOS[atual],
             "status_clinico": document.status,
             "has_corrective": bool(superado),
+            # M26.36C — só aparece sob `incluir_superados=true`, e é o que
+            # diz ao auditor POR QUE esta linha saiu da fila. O `estado`
+            # da linha continua sendo o clínico ("aguardando laudo"): o
+            # status do documento cancelado não é reescrito para mentir.
+            "devolucao_cancelada_em": iso(document.devolucao_cancelada_em),
             "released_at": iso(document.released_at),
             "physician_profile_id": (
                 assignment.physician_profile_id if assignment else None

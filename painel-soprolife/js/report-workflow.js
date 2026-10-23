@@ -2735,6 +2735,23 @@
       </details>`;
   }
 
+  // M26.36C — por que esta linha está no histórico, e não na fila.
+  //
+  // Antes havia três textos para dois testes, e o `else` engolia tudo o que
+  // não fosse "superado por corretiva": um laudo CANCELADO (devolução
+  // revertida) caía nele e a tela afirmava "Entregue ao paciente" sobre um
+  // documento que nunca foi escrito, muito menos entregue. O motivo agora é
+  // lido do carimbo que o servidor manda, na ordem em que os fatos
+  // aconteceram, e nenhum ramo é adivinhado.
+  function historyReason(item) {
+    if (item.devolucao_cancelada_em) return "Devolução cancelada";
+    if (item.has_corrective_successor) {
+      return item.is_delivered ? "Corrigido e entregue" : "Superado por corretiva";
+    }
+    if (item.is_delivered) return "Entregue ao paciente";
+    return item.estado_entrega_rotulo || statusLabel(item.status);
+  }
+
   // M26.13 — "Concluído — aguardando assinatura qualificada" persistia para
   // sempre: nem corretiva nem entrega mudam `ReportDocument.status` (fica
   // `liberado` por desenho, M26.12). Um laudo já superado ou já entregue
@@ -2751,11 +2768,7 @@
               <span>${contextLine(item)}</span>
               ${codeTrail(item)}
               <span class="report-closed-reason">${
-                item.has_corrective_successor && item.is_delivered
-                  ? "Corrigido e entregue"
-                  : item.has_corrective_successor
-                    ? "Superado por corretiva"
-                    : "Entregue ao paciente"
+                esc(historyReason(item))
               }</span>
             </div>
           </li>`).join("")
@@ -2787,6 +2800,8 @@
   // (`estado_entrega_rotulo`). E a linha abre o laudo: sair da fila de
   // trabalho não pode virar deixar de ser consultável.
   function myHistoryReason(item) {
+    // M26.36C — mesmo carimbo, mesma precedência que `historyReason`.
+    if (item.devolucao_cancelada_em) return "Devolução cancelada";
     if (item.has_corrective_successor) {
       return item.is_delivered ? "Corrigido e entregue" : "Superado por corretiva";
     }

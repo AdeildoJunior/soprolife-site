@@ -70,6 +70,7 @@ run "node --check test-m25-26-fluxo-espirometria.js" node --check painel-soproli
 run "node --check test-m26-20-ipanema-render.js" node --check painel-soprolife/scripts/test-m26-20-ipanema-render.js
 run "node --check test-m26-30-ordenacao-termos-busca.js" node --check painel-soprolife/scripts/test-m26-30-ordenacao-termos-busca.js
 run "node --check test-m26-34-nfse-agrupada-painel.js" node --check painel-soprolife/scripts/test-m26-34-nfse-agrupada-painel.js
+run "node --check test-m26-36c-corretiva-cancelada-painel.js" node --check painel-soprolife/scripts/test-m26-36c-corretiva-cancelada-painel.js
 
 secao "2/10 Testes JS (M4 e M5)"
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js
@@ -173,6 +174,10 @@ run "test-m26-30-ordenacao-termos-busca (painel JS)" \
 # CPF mascarado e nenhum botão que emita o agrupado.
 run "test-m26-34-nfse-agrupada-painel (painel JS)" \
   node painel-soprolife/scripts/test-m26-34-nfse-agrupada-painel.js
+# M26.36C — a corretiva cuja devolução foi cancelada: fora das filas ativas,
+# contadores vindos do servidor e a linha do histórico nomeada pelo que é.
+run "test-m26-36c-corretiva-cancelada-painel (painel JS)" \
+  node painel-soprolife/scripts/test-m26-36c-corretiva-cancelada-painel.js
 run "bash -n soprolife-operational-refresh"  bash -n painel-soprolife/scripts/soprolife-operational-refresh.sh
 run "bash -n install-operational-refresh"    bash -n painel-soprolife/scripts/install-operational-refresh.sh
 run "bash -n uninstall-operational-refresh"  bash -n painel-soprolife/scripts/uninstall-operational-refresh.sh
