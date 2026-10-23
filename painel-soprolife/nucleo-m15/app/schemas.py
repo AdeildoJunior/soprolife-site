@@ -291,6 +291,9 @@ class ExamUpdate(StrictModel):
     # desvincula (mesma convenção de partner_id/partner_unit_id acima); um
     # código de 7 dígitos válido grava o novo município.
     municipio_atendimento_ibge: str | None = Field(default=None, max_length=7)
+    # M26.36 — ausente = não mexe; `true` declara reteste de controle sem
+    # cobrança (não remunera repasse médico); `false` desfaz a declaração.
+    reteste_sem_cobranca: bool | None = None
 
     @field_validator("municipio_atendimento_ibge")
     @classmethod

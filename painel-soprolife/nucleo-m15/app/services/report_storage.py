@@ -225,6 +225,42 @@ def cleanup_published_file(publication: PublishedReportFile) -> bool:
         os.close(directory_fd)
 
 
+def cleanup_stored_version_file(root: Path, relative: Path) -> bool:
+    """Remove o arquivo de uma versão que deixou de existir no banco.
+
+    `cleanup_published_file` só sabe apagar um arquivo cuja identidade
+    (device, inode) foi capturada na publicação, dentro da mesma operação.
+    Para desfazer uma publicação ANTIGA — o caso da M26.36, em que uma
+    corretiva aberta por engano é cancelada e a linha da versão sai do
+    banco — a identidade precisa ser capturada agora, imediatamente antes
+    da remoção, com as mesmas recusas: nada que não seja arquivo regular
+    dentro da raiz privada é removido.
+
+    Devolve False quando o arquivo já não está lá (idempotente de
+    propósito: o chamador acabou de remover a linha e não deve falhar por
+    causa de uma limpeza anterior).
+    """
+
+    resolved_root = root.resolve(strict=True)
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise ReportCleanupError("Caminho de versão inválido.")
+    path = resolved_root / relative
+    try:
+        current = os.stat(path, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISREG(current.st_mode):
+        raise ReportCleanupError("Versão armazenada não é arquivo regular.")
+    return cleanup_published_file(
+        PublishedReportFile(
+            root=resolved_root,
+            relative_path=relative,
+            device=current.st_dev,
+            inode=current.st_ino,
+        )
+    )
+
+
 def _log_cleanup_failure(error: BaseException) -> None:
     """Log only a stable event and exception class; never paths or PDF metadata."""
 

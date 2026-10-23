@@ -13,6 +13,15 @@ que conta, sempre pela competência da SUA PRÓPRIA `released_at` — nunca a
 da corretiva. Isso significa que corrigir um laudo depois NUNCA move a
 contagem para outro mês nem soma um segundo laudo, mesmo que a competência
 original já tenha repasse registrado/pago.
+
+M26.36 — um RETESTE DE CONTROLE também não é produção remunerada nova.
+Quando um exame é refeito só para conferência, sem cobrar nada do
+paciente (`SpirometryExam.reteste_sem_cobranca`), o seu laudo é um
+documento-raiz legítimo — tem exame próprio, PDF técnico próprio e precisa
+ser laudado normalmente —, mas a SoproLife não faturou nada por ele e
+portanto ele não entra na contagem. A exclusão é por declaração explícita
+do operador no exame, nunca inferida de ausência de receita: um exame sem
+lançamento financeiro pode ser apenas um cadastro financeiro pendente.
 """
 
 from datetime import date, datetime, time, timezone
@@ -34,6 +43,7 @@ from ..models import (
     ReportDocument,
     ReportDocumentVersion,
     ExternalSignedDocument,
+    SpirometryExam,
     User,
 )
 from ..serializers import iso, money, to_local
@@ -81,18 +91,26 @@ def eligible_report_count(
     """Conta cada EXAME uma vez, pelo mês local da conclusão do documento-raiz.
 
     Uma corretiva (`corrects_document_id` preenchido) nunca conta — ela é a
-    mesma produção clínica do original, apenas corrigida.
+    mesma produção clínica do original, apenas corrigida. Um reteste de
+    controle sem cobrança (`reteste_sem_cobranca` no exame) também não
+    conta — ver o docstring do módulo.
     """
 
     start, end = _utc_boundaries(competence)
     return int(
         db.scalar(
-            select(func.count(func.distinct(ReportDocument.id))).where(
+            select(func.count(func.distinct(ReportDocument.id)))
+            .join(
+                SpirometryExam,
+                SpirometryExam.id == ReportDocument.spirometry_exam_id,
+            )
+            .where(
                 ReportDocument.released_physician_profile_id == physician_profile_id,
                 ReportDocument.corrects_document_id.is_(None),
                 ReportDocument.released_at.is_not(None),
                 ReportDocument.released_at >= start,
                 ReportDocument.released_at < end,
+                SpirometryExam.reteste_sem_cobranca.is_not(True),
             )
         )
         or 0
@@ -242,7 +260,12 @@ def physician_production_summary(
 ) -> dict:
     """Produção da médica na competência, na MESMA regra de "laudo efetivo"
     de `eligible_report_count`: 1 exame == no máximo 1 laudo contado, pelo
-    documento-raiz, mesmo que tenha sido corrigido depois.
+    documento-raiz, mesmo que tenha sido corrigido depois, e sem os
+    retestes de controle sem cobrança (M26.36).
+
+    Esta função é o DETALHAMENTO do número que `eligible_report_count`
+    devolve — as duas precisam usar o mesmo predicado, ou a tela de
+    repasses explicaria um total diferente do que será pago.
 
     Resolvido em Python (não numa única query agregada) de propósito: o
     volume por médica/mês é pequeno (dezenas, não milhares) e a lógica de
@@ -254,12 +277,18 @@ def physician_production_summary(
     start, end = _utc_boundaries(competence)
     roots = list(
         db.execute(
-            select(ReportDocument).where(
+            select(ReportDocument)
+            .join(
+                SpirometryExam,
+                SpirometryExam.id == ReportDocument.spirometry_exam_id,
+            )
+            .where(
                 ReportDocument.released_physician_profile_id == physician_profile_id,
                 ReportDocument.corrects_document_id.is_(None),
                 ReportDocument.released_at.is_not(None),
                 ReportDocument.released_at >= start,
                 ReportDocument.released_at < end,
+                SpirometryExam.reteste_sem_cobranca.is_not(True),
             )
         ).scalars()
     )

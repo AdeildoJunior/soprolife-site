@@ -207,6 +207,8 @@ def ser_exam(e: m.SpirometryExam) -> dict:
         "responsavel": e.responsavel,
         "idempotency_key": e.idempotency_key,
         "observacao": e.observacao,
+        # M26.36 — reteste de controle sem cobrança: não remunera repasse.
+        "reteste_sem_cobranca": bool(e.reteste_sem_cobranca),
         **_legacy(e),
         **_stamps(e),
     }

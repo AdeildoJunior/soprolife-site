@@ -362,6 +362,13 @@ def update_exam(
     if payload.observacao is not None:
         exam.observacao = payload.observacao
         changed.append("observacao")
+    # M26.36 — declaração de reteste de controle sem cobrança. Só muda a
+    # elegibilidade a repasse médico (services/medical_transfers.py); não
+    # toca receita, nota fiscal, laudo nem PDF técnico. Fica na trilha
+    # `espirometria.atualizada` como qualquer outro campo editado.
+    if payload.reteste_sem_cobranca is not None:
+        exam.reteste_sem_cobranca = payload.reteste_sem_cobranca
+        changed.append("reteste_sem_cobranca")
     # M25.17 — local de realização. É o cadastro que o laudo passou a ler
     # para derivar origem e unidade, então a coerência é validada AQUI, na
     # escrita, e não só na hora de emitir: descobrir a contradição no

@@ -172,7 +172,9 @@ def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     # por cima da Fase 2A.
     # M26.34 (b5e2f7a91c38, documento fiscal agrupado com tomador próprio)
     # por cima da M26.33.
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["b5e2f7a91c38"]
+    # M26.36 (c3f8a1d7e529, reteste de controle sem cobrança) por cima da
+    # M26.34 — aditiva, uma coluna booleana com server_default false.
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["c3f8a1d7e529"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(

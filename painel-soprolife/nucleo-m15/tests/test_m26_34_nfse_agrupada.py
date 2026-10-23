@@ -799,7 +799,10 @@ def test_migration_e_aditiva_reversivel_e_recusa_apagar_agrupado(tmp_path, monke
     from sqlalchemy import create_engine, inspect, text
 
     script = ScriptDirectory.from_config(cfg)
-    assert script.get_heads() == ["b5e2f7a91c38"]
+    # M26.36 (c3f8a1d7e529, reteste de controle sem cobrança) entra por
+    # cima, aditiva: a cadeia fiscal agrupada abaixo segue intacta.
+    assert script.get_heads() == ["c3f8a1d7e529"]
+    assert script.get_revision("c3f8a1d7e529").down_revision == "b5e2f7a91c38"
     assert script.get_revision("b5e2f7a91c38").down_revision == "a1c7e5d9b204"
 
     command.upgrade(cfg, "a1c7e5d9b204")
@@ -896,10 +899,18 @@ def test_o_backfill_cria_item_de_ocupacao_para_documento_historico(
                        password_hash=hash_password("senha-teste-123"))
         session.add_all([pessoa, usuario])
         session.commit()
-        exame = SpirometryExam(public_code="ESP-934001", person_id=pessoa.id,
-                               status="Realizado", data_exame=SERVICE_DAY,
-                               modalidade="residencial", broncodilatador=True)
-        session.add(exame)
+        # SQL cru pelo MESMO motivo do documento fiscal abaixo: o banco está
+        # na revisão anterior à M26.34 e o modelo ORM de `spirometry_exams`
+        # já conhece `reteste_sem_cobranca` (M26.36), que ainda não existe
+        # ali. Inserir pelo ORM escreveria uma coluna do futuro.
+        exam_id = "22222222-2222-4222-8222-222222222222"
+        session.execute(text(
+            "INSERT INTO spirometry_exams (id, public_code, person_id, status, "
+            "data_exame, data_exame_dia_assumido, modalidade, broncodilatador, "
+            "created_at, updated_at) VALUES (:id, 'ESP-934001', :pessoa, "
+            "'Realizado', :dia, 0, 'residencial', 1, CURRENT_TIMESTAMP, "
+            "CURRENT_TIMESTAMP)"),
+            {"id": exam_id, "pessoa": pessoa.id, "dia": SERVICE_DAY})
         session.commit()
         # SQL cru de propósito: o banco está na revisão ANTERIOR à M26.34 e
         # o modelo ORM já conhece `kind`/`recipient_person_id`, que ainda não
@@ -910,10 +921,9 @@ def test_o_backfill_cria_item_de_ocupacao_para_documento_historico(
             "idempotency_fingerprint, created_at, updated_at) VALUES "
             "(:id, :exame, 'production', 'issued', 'eligible', '[]', :user, "
             "'k-hist', 'f-hist', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"),
-            {"id": "11111111-1111-4111-8111-111111111111", "exame": exame.id,
+            {"id": "11111111-1111-4111-8111-111111111111", "exame": exam_id,
              "user": usuario.id})
         session.commit()
-        exam_id = exame.id
 
     command.upgrade(cfg, "head")
     with engine.connect() as conn:

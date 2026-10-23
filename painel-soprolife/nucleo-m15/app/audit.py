@@ -152,6 +152,11 @@ ALLOWED_KEYS = {
     # técnico e o que o operador fez com o nome confirmado. Nunca CPF,
     # nascimento, nome devolvido ou token.
     "consulta_serpro_realizada", "identificacao_oficial",
+    # M26.36 — ao cancelar uma devolução dada por engano, SE o acesso do
+    # paciente ao resultado voltou a ficar disponível. Booleano puro: o id
+    # do acesso e a nova geração do link já ficam na própria linha
+    # `resultado_acesso_regenerado`, cuja entidade é o acesso.
+    "acesso_resultado_restaurado",
 }
 
 _MAX_STR = 120

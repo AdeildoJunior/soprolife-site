@@ -16,6 +16,7 @@ import hashlib
 import logging
 import re
 from datetime import date, datetime, timezone
+from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -27,7 +28,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from sqlalchemy import exists, func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
@@ -57,6 +58,7 @@ from ..models import (
     Person,
     PhysicianProfile,
     PhysicianSignatureAsset,
+    QualifiedSignatureRequest,
     ReportAddendum,
     ReportAssignment,
     ReportAssignmentEvent,
@@ -189,6 +191,7 @@ from ..services.report_storage import (
     StoredPdf,
     StoredPdfIntegrityError,
     StoredPdfMissingError,
+    cleanup_stored_version_file,
     read_and_validate_stored_pdf,
     version_storage_path,
 )
@@ -261,6 +264,15 @@ STATUS_EM_ELABORACAO = "em_elaboracao"
 STATUS_ASSINATURA_PENDENTE = "assinatura_pendente"
 STATUS_ASSINADO = "assinado"
 STATUS_LAUDO_LIBERADO = "liberado"
+
+# M26.12 — motivo gravado quando devolver o laudo revoga o acesso do
+# paciente ao PDF anterior. É CONSTANTE porque a M26.36 usa exatamente este
+# texto para decidir se o acesso pode voltar ao cancelar a devolução: só se
+# a revogação tiver vindo deste fluxo, nunca de uma revogação deliberada
+# feita por outro motivo.
+MOTIVO_REVOGACAO_DEVOLUCAO = (
+    "Laudo devolvido para correção médica; o PDF anterior foi superado."
+)
 
 ORIGIN_TYPES = frozenset(
     {
@@ -5993,10 +6005,7 @@ def return_report_for_correction(
                 db,
                 acesso,
                 user_id=admin_user.id,
-                motivo=(
-                    "Laudo devolvido para correção médica; "
-                    "o PDF anterior foi superado."
-                ),
+                motivo=MOTIVO_REVOGACAO_DEVOLUCAO,
                 request_id=request_id,
             )
             db.commit()
@@ -6019,6 +6028,258 @@ def return_report_for_correction(
         response["aviso"] = aviso
     return response
 
+
+# M26.36 — "Cancelar devolução": desfazer um clique em "Retornar para
+# laudadora" dado por engano.
+#
+# O CASO REAL. Um exame domiciliar foi laudado, liberado, assinado por fora
+# e ENTREGUE. Dias depois, ao conferir o caso, o operador clicou em
+# "Retornar para laudadora" sem perceber o que a ação significa. O clique
+# não estragou nada do que estava pronto — o predecessor é imutável por
+# desenho (M25.2/M26.12) — mas produziu três efeitos visíveis: um laudo
+# NOVO em branco na fila da médica ("Aguardando laudo"), o exame voltando a
+# parecer pendência, e o acesso do paciente ao PDF revogado.
+#
+# Não havia como desfazer. A corretiva não tem status "cancelada" (e
+# inventar um exigiria mexer no CHECK de estado clínico, nas filas e na
+# guarda de "já possui corretiva"), e deixá-la viva para sempre ocuparia a
+# fila da médica com um trabalho que ninguém pediu — além de BLOQUEAR uma
+# correção legítima futura, porque `uq_report_documents_corrects_document_id`
+# admite uma única corretiva por laudo.
+#
+# O que este endpoint faz é a reversão exata, e só ela: remove o documento
+# corretivo que o clique criou, desde que ele continue EXATAMENTE como
+# nasceu, e devolve o acesso do paciente se tiver sido aquele clique que o
+# revogou. O predecessor não é tocado em nenhuma hipótese — nem status, nem
+# versões, nem PDF técnico, nem laudo assinado, nem código de validação.
+#
+# O QUE NUNCA É APAGADO. A trilha. `laudo_corretivo_aberto` e
+# `laudo_devolvido_para_correcao` continuam no `audit_logs` com o autor e o
+# horário do clique, e esta reversão acrescenta `laudo_devolucao_cancelada`
+# apontando para o documento removido e para o seu código público — que
+# segue consumido em `code_sequences`, nunca reaproveitado. Quem auditar
+# depois vê os três fatos em ordem: devolveu, foi engano, reverteu.
+#
+# FAIL-CLOSED. Qualquer sinal de que a médica começou a trabalhar na
+# corretiva — conteúdo clínico iniciado, versão nova, assinatura pedida,
+# adendo, PDF assinado recebido, acesso de paciente, ou uma corretiva da
+# corretiva — recusa a operação. Nessa altura a devolução deixou de ser um
+# engano sem consequência, e o caminho certo é concluir ou tratar o laudo,
+# não apagá-lo.
+@router.post("/{document_id}/cancelar-devolucao")
+def cancel_report_return(
+    document_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(require_role(ROLE_ADMIN)),
+):
+    # A ordem de travamento é a mesma do caminho de ida (predecessor
+    # primeiro, corretiva depois), então uma devolução e um cancelamento
+    # concorrentes se enfileiram em vez de se cruzarem.
+    alvo = _get_document_or_404(db, document_id)
+    if alvo.corrects_document_id is None:
+        raise ReportDomainError(
+            409,
+            "laudo_nao_e_corretiva",
+            "Este laudo não foi aberto por uma devolução para correção.",
+        )
+    predecessor = _lock_document_or_404(db, alvo.corrects_document_id)
+    corretiva = _lock_document_or_404(db, document_id)
+    if corretiva.corrects_document_id != predecessor.id:
+        raise ReportDomainError(
+            409,
+            "cadeia_de_correcao_mudou",
+            "A cadeia de correção mudou durante a operação.",
+        )
+
+    if (
+        corretiva.status != STATUS_ATRIBUIDO
+        or corretiva.clinical_started_at is not None
+        or corretiva.ready_for_signature_at is not None
+        or corretiva.signed_at is not None
+        or corretiva.released_at is not None
+        or corretiva.signature_status is not None
+        or corretiva.signature_prepared_at is not None
+        or corretiva.validation_code is not None
+    ):
+        raise ReportDomainError(
+            409,
+            "laudo_corretivo_em_andamento",
+            "A laudadora já começou este laudo; a devolução não pode mais "
+            "ser cancelada.",
+        )
+
+    versoes = _all_versions(db, corretiva.id)
+    if len(versoes) != 1 or versoes[0].kind != KIND_ORIGINAL:
+        raise ReportDomainError(
+            409,
+            "laudo_corretivo_com_conteudo",
+            "Este laudo já tem conteúdo próprio; a devolução não pode mais "
+            "ser cancelada.",
+        )
+
+    vinculos = {
+        "adendo": db.scalar(
+            select(func.count())
+            .select_from(ReportAddendum)
+            .where(ReportAddendum.report_document_id == corretiva.id)
+        ),
+        "assinatura_qualificada": db.scalar(
+            select(func.count())
+            .select_from(QualifiedSignatureRequest)
+            .where(
+                QualifiedSignatureRequest.report_document_id == corretiva.id
+            )
+        ),
+        "pdf_assinado": db.scalar(
+            select(func.count())
+            .select_from(ExternalSignedDocument)
+            .where(
+                ExternalSignedDocument.report_document_id == corretiva.id
+            )
+        ),
+        "acesso_do_paciente": db.scalar(
+            select(func.count())
+            .select_from(PatientResultAccess)
+            .where(PatientResultAccess.report_document_id == corretiva.id)
+        ),
+        "corretiva_da_corretiva": db.scalar(
+            select(func.count())
+            .select_from(ReportDocument)
+            .where(ReportDocument.corrects_document_id == corretiva.id)
+        ),
+        "superou_outro_laudo": db.scalar(
+            select(func.count())
+            .select_from(ReportDocument)
+            .where(ReportDocument.superseded_by_id == corretiva.id)
+        ),
+    }
+    impedimentos = sorted(nome for nome, total in vinculos.items() if total)
+    if impedimentos:
+        raise ReportDomainError(
+            409,
+            "laudo_corretivo_com_vinculos",
+            "Este laudo já tem registros ligados a ele; a devolução não "
+            "pode mais ser cancelada.",
+        )
+
+    request_id = _request_id(request)
+    corretiva_reason_code = corretiva.correction_reason_code
+    removido = {
+        "document_id": corretiva.id,
+        "public_code": corretiva.public_code,
+        "reason_code": corretiva.correction_reason_code,
+        "created_by_user_id": corretiva.created_by_user_id,
+        "created_at": iso(corretiva.created_at),
+        "version_id": versoes[0].id,
+        "version_sha256": versoes[0].sha256,
+    }
+    # O caminho a limpar é RECALCULADO a partir dos ids deste documento e
+    # só é aceito se for idêntico ao gravado. Sem esta conferência, uma
+    # linha com `storage_path` apontando para outro lugar faria a limpeza
+    # apagar o arquivo de outro laudo — justamente o PDF que esta reversão
+    # existe para preservar.
+    storage_root = _storage_root(get_settings())
+    relativo = Path(versoes[0].storage_path)
+    canonico = version_storage_path(
+        storage_root,
+        exam_id=corretiva.spirometry_exam_id,
+        document_id=corretiva.id,
+        version_id=versoes[0].id,
+    ).relative_to(storage_root)
+    caminho_confere = relativo == canonico
+
+    # O acesso do paciente só volta se foi ESTE fluxo que o revogou: uma
+    # revogação feita por outro motivo (pedido do paciente, laudo errado
+    # enviado) é um ato deliberado e não pode ser desfeita de carona.
+    acesso = db.execute(
+        select(PatientResultAccess)
+        .where(PatientResultAccess.report_document_id == predecessor.id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    acesso_restaurado = None
+    if (
+        acesso is not None
+        and acesso.status == RESULTADO_REVOGADO
+        and acesso.revoked_motivo == MOTIVO_REVOGACAO_DEVOLUCAO
+    ):
+        prs.regenerate(
+            db, acesso, user_id=admin_user.id, request_id=request_id
+        )
+        acesso_restaurado = acesso.id
+
+    db.execute(
+        delete(ReportAssignmentEvent).where(
+            ReportAssignmentEvent.report_document_id == corretiva.id
+        )
+    )
+    db.execute(
+        delete(ReportAssignment).where(
+            ReportAssignment.report_document_id == corretiva.id
+        )
+    )
+    # `current_version_id` aponta para a versão; zerar antes de remover as
+    # duas linhas evita depender da ordem de flush do ORM.
+    corretiva.current_version_id = None
+    db.flush()
+    db.execute(
+        delete(ReportDocumentVersion).where(
+            ReportDocumentVersion.report_document_id == corretiva.id
+        )
+    )
+    db.execute(
+        delete(ReportDocument).where(ReportDocument.id == corretiva.id)
+    )
+    audit(
+        db,
+        "laudo_devolucao_cancelada",
+        entidade="report_documents",
+        entidade_id=predecessor.id,
+        user_id=admin_user.id,
+        request_id=request_id,
+        # Chaves PLANAS, todas da allowlist de `audit.sanitize_details`:
+        # identificadores técnicos, código público, hash e um booleano. O
+        # autor e o horário do clique revertido já estão na linha
+        # `laudo_corretivo_aberto`, que ninguém apaga.
+        detalhes={
+            "status": predecessor.status,
+            "reason_code": corretiva_reason_code,
+            "corrective_document_id": removido["document_id"],
+            "report_code": removido["public_code"],
+            "report_version_id": removido["version_id"],
+            "document_sha256": removido["version_sha256"],
+            "acesso_resultado_restaurado": acesso_restaurado is not None,
+            "motivo": "reversao_administrativa_de_devolucao_equivocada",
+        },
+    )
+    db.commit()
+
+    # Só depois do commit, e com falha tolerada: o arquivo é uma CÓPIA
+    # byte-a-byte do PDF técnico que continua guardado no predecessor, em
+    # outro caminho. Perder a limpeza deixa um órfão que a reconciliação de
+    # laudos já sabe listar e remover; falhar aqui desfaria uma reversão
+    # correta por causa de um arquivo duplicado.
+    aviso = None
+    if caminho_confere:
+        try:
+            cleanup_stored_version_file(storage_root, relativo)
+        except (ReportStorageError, OSError):
+            caminho_confere = False
+    if not caminho_confere:
+        aviso = (
+            "A devolução foi cancelada, mas o arquivo da cópia técnica do "
+            "laudo removido não pôde ser apagado — rode a reconciliação de "
+            "laudos para limpá-lo."
+        )
+
+    resposta = {
+        "predecessor": ser_report_document(predecessor, include_clinical=True),
+        "corretiva_removida": removido,
+        "acesso_resultado_restaurado": acesso_restaurado,
+    }
+    if aviso:
+        resposta["aviso"] = aviso
+    return resposta
 
 @router.get("/{document_id}/assinatura")
 def get_report_signature_status(

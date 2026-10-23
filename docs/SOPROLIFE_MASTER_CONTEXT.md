@@ -187,6 +187,14 @@ Front-end: `index.html` + `js/*.js` com cache-buster `?v=AAAAMMDDNN` —
   `sha256(token)`; papel PostgreSQL `soprolife_portal` com GRANT por coluna.
 - **QR/verificação pública** do laudo e nomes de download determinísticos.
 
+**Reteste de controle (M26.36).** `spirometry_exams.reteste_sem_cobranca`
+declara que o exame foi refeito só para conferência, sem cobrar nada: exclui
+do repasse médico e de nada mais. Não impede laudar, não altera PDF técnico,
+não tem efeito retroativo (`server_default false`) e nunca é inferido da
+ausência de receita — exame sem `LAN-…` pode ser apenas cadastro pendente.
+Edita-se por `PATCH /espirometrias/{id}` (trilha `espirometria.atualizada`);
+ainda **sem controle na interface**.
+
 ## 7. NFS-e (M27–M72, M26.34–M26.35)
 
 **Arquitetura.** `FiscalDocument` → `FiscalPreparation` (snapshot imutável com
@@ -305,6 +313,10 @@ sem ele, cai na data do serviço).
   `partner_pricing.py`, há teste). `modelo_repasse / percentual_repasse /
   valor_repasse_fixo` = dinheiro que sai. Mudança de valor = **nova vigência**.
 - **Repasses médicos** por competência, baseados em laudos efetivos (M26.9/M26.10).
+  Conta o documento-RAIZ liberado na competência; **não** contam corretivas
+  (M26.13) nem exames marcados `spirometry_exams.reteste_sem_cobranca`
+  (M26.36). `eligible_report_count` e `physician_production_summary` usam o
+  MESMO predicado — divergir faria a tela explicar um total diferente do pago.
 - **Settlements** (`PartnerSettlement`) com sequência por competência.
 - Correção monetária = novo lançamento auditável; nunca sobrescrever valor.
 - Competência exibida usa `today_local()` (fuso de Brasília), nunca UTC.
@@ -342,6 +354,17 @@ sem ele, cai na data do serviço).
   = não superado e sem `_tem_assinado_vigente()`.
 - **Versões:** corretivas criam nova versão; a anterior vira "superada";
   substituir PDF técnico gera versão vigente nova (M26.13–M26.16).
+- **Devolver e desfazer:** "Retornar para laudadora"
+  (`/retornar-para-correcao`, M26.12) **não** altera o predecessor — cria um
+  documento corretivo novo e revoga o acesso do paciente. Desfazer um clique
+  equivocado é `POST /laudos/{id}/cancelar-devolucao` (admin, M26.36): remove
+  a corretiva **só** se ela continuar exatamente como nasceu (status
+  `atribuido`, uma única versão `original`, sem adendo/assinatura/PDF
+  assinado/acesso/corretiva própria) e restaura o acesso **só** se a
+  revogação tiver vindo daquele fluxo (`MOTIVO_REVOGACAO_DEVOLUCAO`). A
+  trilha nunca é apagada: fica `laudo_corretivo_aberto` +
+  `laudo_devolvido_para_correcao` + `laudo_devolucao_cancelada`, e o código
+  público removido segue consumido, nunca reaproveitado.
 - **Downloads:** nomes determinísticos; proxy do painel serve PDF com
   `Content-Disposition` correto.
 - **Permissões:** papel `medico` vê só a própria fila; admin/gestor conferem;
@@ -474,7 +497,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 |---|---|
 | `origin/painel-soprolife-v01` / VPS | VPS em `a51bd74` (M26.35 — botão "Emitir NFS-e" do documento agrupado), worktree limpo, `.git` 100% `soprolife`, health 200 |
 | `origin/main` (site) | `ac0a1a8` |
-| Alembic | `b5e2f7a91c38` (M26.34) |
+| Alembic | `c3f8a1d7e529` (M26.36) |
 | Serviços | `soprolife-m15-api`, `soprolife-painel-loopback` (:8765), `soprolife-portal-resultados`, `soprolife-update-data.timer` (10 min), `soprolife-nfse-production-worker.path` ativos. **`soprolife-operational-refresh.timer` nunca foi instalado** (conferido em 21/10: sem unit, sem `/etc/soprolife/`); as units em `painel-soprolife/systemd/` são "preparado, não instalado" (M14.3A.1) e o frescor de Marketing/SEO já é feito pelo `update-data` (passo 3/6 de `update-local-data.sh`, Search Console e GA4 `ok`). A menção "(6 h)" das versões anteriores deste quadro estava errada |
 | A1 | instalado como credential cifrado; vence 2026-11-07; margem temporária de 2 dias (M72) ⇒ emissão até 2026-11-05 |
 | SERPRO | integrado, desligado (sem credenciais) |
@@ -500,6 +523,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 | M72 (14/10) | — (só VPS) | Margem do A1 reduzida para 2 dias, temporária, por drop-in fora do Git |
 | M26.34 (21/10) | `c5fb870` | NFS-e agrupada: `kind='grouped'`, `fiscal_document_items`, tomador próprio, total = soma dos itens, migration `b5e2f7a91c38` |
 | M26.35 (21/10) | `a51bd74` | Botão "Emitir NFS-e" no documento agrupado com confirmação dupla, pelo mesmo endpoint/worker; primeira nota agrupada emitida (R$ 500,00, DPS nº 14) |
+| M26.36 (23/10) | — | Desfazer "Retornar para laudadora" (`/cancelar-devolucao`, admin, fail-closed) e `reteste_sem_cobranca` fora do repasse; migration `c3f8a1d7e529` |
 | Painel (out) | `498c216`, `6aad6db`, `1e36d4c` | Refino visual, estatísticas de laudos, evolução mensal real |
 | Marketing (04/10) | `140f0e3` | Search Console + GA4 de 28 para 60 dias, subtítulo da tendência pelo período real |
 

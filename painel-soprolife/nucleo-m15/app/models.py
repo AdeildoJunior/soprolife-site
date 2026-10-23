@@ -343,6 +343,21 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
     hora_exame: Mapped[str | None] = mapped_column(String(5))  # HH:MM
     indicacao_clinica: Mapped[str | None] = mapped_column(Text)
     observacao: Mapped[str | None] = mapped_column(Text)
+    # M26.36 — RETESTE DE CONTROLE, sem cobrança e sem repasse.
+    #
+    # Declaração do operador sobre o ATO: este exame foi refeito para
+    # conferência (outro equipamento, questionamento da família, controle
+    # de qualidade), nada foi cobrado do paciente, e por isso ele não
+    # remunera produção médica. É o único campo que `eligible_report_count`
+    # consulta fora de `report_documents` — ver services/medical_transfers.py.
+    #
+    # Mora no EXAME e não no laudo porque a gratuidade é do atendimento:
+    # vale para qualquer documento que nasça dele, inclusive uma corretiva
+    # futura. Não impede laudar, não altera o PDF técnico e não tem efeito
+    # retroativo — `False` é o default, e só muda quem for marcado.
+    reteste_sem_cobranca: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     # M25.24 — ENCERRAMENTO OPERACIONAL do exame.
     #
     # Responde a uma pergunta que `status` não responde e não deveria:
