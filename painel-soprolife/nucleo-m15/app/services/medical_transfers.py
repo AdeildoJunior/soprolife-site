@@ -319,8 +319,12 @@ def physician_production_summary(
     while frontier:
         proximo = list(
             db.execute(
+                # M26.36 — corretiva cancelada não entra na cadeia: o
+                # predecessor segue sendo o vigente, e é dele que saem
+                # assinatura, conclusão e entrega.
                 select(ReportDocument).where(
-                    ReportDocument.corrects_document_id.in_(frontier)
+                    ReportDocument.corrects_document_id.in_(frontier),
+                    ReportDocument.devolucao_cancelada_em.is_(None),
                 )
             ).scalars()
         )

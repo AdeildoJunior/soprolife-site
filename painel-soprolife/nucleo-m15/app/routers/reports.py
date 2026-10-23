@@ -16,7 +16,6 @@ import hashlib
 import logging
 import re
 from datetime import date, datetime, timezone
-from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -191,7 +190,6 @@ from ..services.report_storage import (
     StoredPdf,
     StoredPdfIntegrityError,
     StoredPdfMissingError,
-    cleanup_stored_version_file,
     read_and_validate_stored_pdf,
     version_storage_path,
 )
@@ -2314,13 +2312,18 @@ def list_report_documents_operational(
     _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
     corrective = aliased(ReportDocument)
+    # M26.36 — uma corretiva CANCELADA não supera ninguém: o predecessor
+    # nunca chegou a ser corrigido. Sem este recorte, o clique revertido
+    # continuaria marcando o laudo legítimo como "superado por correção".
     has_corrective_successor = exists().where(
-        corrective.corrects_document_id == ReportDocument.id
+        corrective.corrects_document_id == ReportDocument.id,
+        corrective.devolucao_cancelada_em.is_(None),
     )
     is_delivered = exists().where(
         ExternalSignedDocument.report_document_id == ReportDocument.id,
         ExternalSignedDocument.status == ASSINADO_ENTREGUE,
     )
+    devolucao_cancelada = ReportDocument.devolucao_cancelada_em.is_not(None)
     statement = (
         select(
             ReportDocument,
@@ -2371,13 +2374,18 @@ def list_report_documents_operational(
         statement = statement.where(
             SpirometryExam.encerramento_motivo.is_(None)
         )
+    # M26.36 — a corretiva cuja devolução foi cancelada entra aqui, e não
+    # num filtro próprio: ela é exatamente "documento que não é mais
+    # trabalho a fazer, mas continua no histórico", que é o que este par já
+    # significa. Sem isso, o laudo aberto por engano seguiria na fila ativa
+    # como "Aguardando laudo".
     if somente_superados:
         statement = statement.where(
-            has_corrective_successor | is_delivered
+            has_corrective_successor | is_delivered | devolucao_cancelada
         )
     elif not incluir_superados:
         statement = statement.where(
-            ~has_corrective_successor, ~is_delivered
+            ~has_corrective_successor, ~is_delivered, ~devolucao_cancelada
         )
     rows = db.execute(
         statement.order_by(ReportDocument.created_at.desc()).limit(200)
@@ -2618,8 +2626,12 @@ def list_my_report_queue(
     # assinatura qualificada", como se ainda precisasse de ação. Mesmo par
     # de subqueries de `list_report_documents_operational`.
     corrective = aliased(ReportDocument)
+    # M26.36 — uma corretiva CANCELADA não supera ninguém: o predecessor
+    # nunca chegou a ser corrigido. Sem este recorte, o clique revertido
+    # continuaria marcando o laudo legítimo como "superado por correção".
     has_corrective_successor = exists().where(
-        corrective.corrects_document_id == ReportDocument.id
+        corrective.corrects_document_id == ReportDocument.id,
+        corrective.devolucao_cancelada_em.is_(None),
     )
     is_delivered = exists().where(
         ExternalSignedDocument.report_document_id == ReportDocument.id,
@@ -2637,6 +2649,9 @@ def list_my_report_queue(
         has_corrective_successor
         | _tem_assinado_vigente()
         | (ReportDocument.status == STATUS_ASSINADO)
+        # M26.36 — devolução cancelada: o laudo foi aberto por engano e a
+        # atribuição dela já foi encerrada. Não é trabalho dela.
+        | ReportDocument.devolucao_cancelada_em.is_not(None)
     )
     statement = (
         select(
@@ -3847,8 +3862,10 @@ def _aguardando_assinatura_externa(db: Session, *, profile_id: str):
     # aparecia aqui pronto para assinatura externa. Único ponto de checagem
     # — fecha listar, baixar e receber de volta assinado.
     corrective = aliased(ReportDocument)
+    # M26.36 — corretiva cancelada não supera (ver list_report_documents).
     tem_corretiva_sucessora = exists().where(
-        corrective.corrects_document_id == ReportDocument.id
+        corrective.corrects_document_id == ReportDocument.id,
+        corrective.devolucao_cancelada_em.is_(None),
     )
     return db.execute(
         select(ReportDocument, SpirometryExam, Person)
@@ -4853,8 +4870,10 @@ def list_delivery_queue(
         )
 
     corretiva = aliased(ReportDocument)
+    # M26.36 — corretiva cancelada não supera (ver list_report_documents).
     tem_corretiva_sucessora = exists().where(
-        corretiva.corrects_document_id == ReportDocument.id
+        corretiva.corrects_document_id == ReportDocument.id,
+        corretiva.devolucao_cancelada_em.is_(None),
     )
 
     statement = (
@@ -5811,9 +5830,14 @@ def _open_corrective_document(
             "liberacao_institucional_nao_comprovada",
             "A liberação institucional não possui evidência verificável.",
         )
+    # M26.36 — uma corretiva CANCELADA não ocupa a vaga: o índice único
+    # passou a ser parcial (`WHERE devolucao_cancelada_em IS NULL`), e um
+    # clique revertido não pode impedir a correção legítima que venha
+    # depois.
     existing = db.execute(
         select(ReportDocument).where(
-            ReportDocument.corrects_document_id == predecessor.id
+            ReportDocument.corrects_document_id == predecessor.id,
+            ReportDocument.devolucao_cancelada_em.is_(None),
         )
     ).scalar_one_or_none()
     if existing is not None:
@@ -6040,32 +6064,41 @@ def return_report_for_correction(
 # NOVO em branco na fila da médica ("Aguardando laudo"), o exame voltando a
 # parecer pendência, e o acesso do paciente ao PDF revogado.
 #
-# Não havia como desfazer. A corretiva não tem status "cancelada" (e
-# inventar um exigiria mexer no CHECK de estado clínico, nas filas e na
-# guarda de "já possui corretiva"), e deixá-la viva para sempre ocuparia a
-# fila da médica com um trabalho que ninguém pediu — além de BLOQUEAR uma
-# correção legítima futura, porque `uq_report_documents_corrects_document_id`
-# admite uma única corretiva por laudo.
+# POR QUE CANCELAR, E NÃO APAGAR. A primeira versão disto removia o
+# documento corretivo e as linhas que nasceram com ele. O banco recusou:
+# `report_assignments`, `report_assignment_events` e
+# `report_document_versions` são append-only por gatilho (M24C). O banco
+# estava certo — evidência clínica não se apaga, nem a de um engano. O que
+# a reversão faz é DECLARAR o cancelamento: o documento continua inteiro,
+# com a sua versão e a sua trilha, e sai das filas de trabalho.
 #
-# O que este endpoint faz é a reversão exata, e só ela: remove o documento
-# corretivo que o clique criou, desde que ele continue EXATAMENTE como
-# nasceu, e devolve o acesso do paciente se tiver sido aquele clique que o
-# revogou. O predecessor não é tocado em nenhuma hipótese — nem status, nem
-# versões, nem PDF técnico, nem laudo assinado, nem código de validação.
+# Três efeitos, espelhando os três do clique:
 #
-# O QUE NUNCA É APAGADO. A trilha. `laudo_corretivo_aberto` e
-# `laudo_devolvido_para_correcao` continuam no `audit_logs` com o autor e o
-# horário do clique, e esta reversão acrescenta `laudo_devolucao_cancelada`
-# apontando para o documento removido e para o seu código público — que
-# segue consumido em `code_sequences`, nunca reaproveitado. Quem auditar
-# depois vê os três fatos em ordem: devolveu, foi engano, reverteu.
+#   1. `devolucao_cancelada_em/_por_user_id` marcam o documento. Ele passa a
+#      contar como SUPERADO nas duas filas (operacional e "Meus laudos"),
+#      pelo mesmo par `incluir_superados`/`somente_superados` que já esconde
+#      corretivas substituídas e laudos entregues — nenhum filtro novo.
+#   2. A atribuição ativa é ENCERRADA (`active=false`, `ended_at`), que é a
+#      única mutação que `m24c_guard_assignment_history` permite, e um
+#      evento `corrective_cancelled` é ACRESCENTADO à trilha.
+#   3. O acesso do paciente volta — se, e somente se, foi este fluxo que o
+#      revogou.
+#
+# O índice único passou a ser parcial (`WHERE devolucao_cancelada_em IS
+# NULL`, M26.36b), então cancelar libera a vaga: uma correção legítima do
+# mesmo laudo continua possível depois.
+#
+# O QUE NUNCA É APAGADO. Nada. `laudo_corretivo_aberto` e
+# `laudo_devolvido_para_correcao` seguem em `audit_logs` com o autor e o
+# horário do clique, e esta reversão acrescenta `laudo_devolucao_cancelada`.
+# Quem auditar depois vê os três fatos em ordem: devolveu, foi engano,
+# cancelou.
 #
 # FAIL-CLOSED. Qualquer sinal de que a médica começou a trabalhar na
 # corretiva — conteúdo clínico iniciado, versão nova, assinatura pedida,
 # adendo, PDF assinado recebido, acesso de paciente, ou uma corretiva da
 # corretiva — recusa a operação. Nessa altura a devolução deixou de ser um
-# engano sem consequência, e o caminho certo é concluir ou tratar o laudo,
-# não apagá-lo.
+# engano sem consequência, e o caminho certo é concluir ou tratar o laudo.
 @router.post("/{document_id}/cancelar-devolucao")
 def cancel_report_return(
     document_id: str,
@@ -6090,6 +6123,12 @@ def cancel_report_return(
             409,
             "cadeia_de_correcao_mudou",
             "A cadeia de correção mudou durante a operação.",
+        )
+    if corretiva.devolucao_cancelada_em is not None:
+        raise ReportDomainError(
+            409,
+            "devolucao_ja_cancelada",
+            "Esta devolução já foi cancelada.",
         )
 
     if (
@@ -6118,44 +6157,41 @@ def cancel_report_return(
             "ser cancelada.",
         )
 
-    vinculos = {
-        "adendo": db.scalar(
+    vinculos = (
+        db.scalar(
             select(func.count())
             .select_from(ReportAddendum)
             .where(ReportAddendum.report_document_id == corretiva.id)
         ),
-        "assinatura_qualificada": db.scalar(
+        db.scalar(
             select(func.count())
             .select_from(QualifiedSignatureRequest)
             .where(
                 QualifiedSignatureRequest.report_document_id == corretiva.id
             )
         ),
-        "pdf_assinado": db.scalar(
+        db.scalar(
             select(func.count())
             .select_from(ExternalSignedDocument)
-            .where(
-                ExternalSignedDocument.report_document_id == corretiva.id
-            )
+            .where(ExternalSignedDocument.report_document_id == corretiva.id)
         ),
-        "acesso_do_paciente": db.scalar(
+        db.scalar(
             select(func.count())
             .select_from(PatientResultAccess)
             .where(PatientResultAccess.report_document_id == corretiva.id)
         ),
-        "corretiva_da_corretiva": db.scalar(
+        db.scalar(
             select(func.count())
             .select_from(ReportDocument)
             .where(ReportDocument.corrects_document_id == corretiva.id)
         ),
-        "superou_outro_laudo": db.scalar(
+        db.scalar(
             select(func.count())
             .select_from(ReportDocument)
             .where(ReportDocument.superseded_by_id == corretiva.id)
         ),
-    }
-    impedimentos = sorted(nome for nome, total in vinculos.items() if total)
-    if impedimentos:
+    )
+    if any(vinculos):
         raise ReportDomainError(
             409,
             "laudo_corretivo_com_vinculos",
@@ -6164,30 +6200,7 @@ def cancel_report_return(
         )
 
     request_id = _request_id(request)
-    corretiva_reason_code = corretiva.correction_reason_code
-    removido = {
-        "document_id": corretiva.id,
-        "public_code": corretiva.public_code,
-        "reason_code": corretiva.correction_reason_code,
-        "created_by_user_id": corretiva.created_by_user_id,
-        "created_at": iso(corretiva.created_at),
-        "version_id": versoes[0].id,
-        "version_sha256": versoes[0].sha256,
-    }
-    # O caminho a limpar é RECALCULADO a partir dos ids deste documento e
-    # só é aceito se for idêntico ao gravado. Sem esta conferência, uma
-    # linha com `storage_path` apontando para outro lugar faria a limpeza
-    # apagar o arquivo de outro laudo — justamente o PDF que esta reversão
-    # existe para preservar.
-    storage_root = _storage_root(get_settings())
-    relativo = Path(versoes[0].storage_path)
-    canonico = version_storage_path(
-        storage_root,
-        exam_id=corretiva.spirometry_exam_id,
-        document_id=corretiva.id,
-        version_id=versoes[0].id,
-    ).relative_to(storage_root)
-    caminho_confere = relativo == canonico
+    agora = datetime.now(timezone.utc)
 
     # O acesso do paciente só volta se foi ESTE fluxo que o revogou: uma
     # revogação feita por outro motivo (pedido do paciente, laudo errado
@@ -6208,28 +6221,22 @@ def cancel_report_return(
         )
         acesso_restaurado = acesso.id
 
-    db.execute(
-        delete(ReportAssignmentEvent).where(
-            ReportAssignmentEvent.report_document_id == corretiva.id
-        )
-    )
-    db.execute(
-        delete(ReportAssignment).where(
-            ReportAssignment.report_document_id == corretiva.id
-        )
-    )
-    # `current_version_id` aponta para a versão; zerar antes de remover as
-    # duas linhas evita depender da ordem de flush do ORM.
-    corretiva.current_version_id = None
-    db.flush()
-    db.execute(
-        delete(ReportDocumentVersion).where(
-            ReportDocumentVersion.report_document_id == corretiva.id
-        )
-    )
-    db.execute(
-        delete(ReportDocument).where(ReportDocument.id == corretiva.id)
-    )
+    corretiva.devolucao_cancelada_em = agora
+    corretiva.devolucao_cancelada_por_user_id = admin_user.id
+
+    # Encerrar a atribuição é a ÚNICA mutação que o gatilho
+    # `m24c_guard_assignment_history` aceita: `active` true→false com
+    # `ended_at` preenchido, e mais nada.
+    #
+    # Nenhum evento novo em `report_assignment_events`: `assignment_id` é
+    # ÚNICO ali (um evento por atribuição, o do nascimento dela) e o
+    # vocabulário de `event_type`/`reason_code` é fechado por CHECK. O
+    # cancelamento é registrado onde lhe cabe — em `audit_logs`
+    # (`laudo_devolucao_cancelada`) e nas próprias colunas do documento.
+    atribuicao = _active_assignment(db, corretiva.id, lock=True)
+    if atribuicao is not None:
+        atribuicao.active = False
+        atribuicao.ended_at = agora
     audit(
         db,
         "laudo_devolucao_cancelada",
@@ -6237,49 +6244,32 @@ def cancel_report_return(
         entidade_id=predecessor.id,
         user_id=admin_user.id,
         request_id=request_id,
-        # Chaves PLANAS, todas da allowlist de `audit.sanitize_details`:
-        # identificadores técnicos, código público, hash e um booleano. O
-        # autor e o horário do clique revertido já estão na linha
-        # `laudo_corretivo_aberto`, que ninguém apaga.
+        # Chaves PLANAS, todas da allowlist de `audit.sanitize_details`.
         detalhes={
             "status": predecessor.status,
-            "reason_code": corretiva_reason_code,
-            "corrective_document_id": removido["document_id"],
-            "report_code": removido["public_code"],
-            "report_version_id": removido["version_id"],
-            "document_sha256": removido["version_sha256"],
+            "reason_code": corretiva.correction_reason_code,
+            "corrective_document_id": corretiva.id,
+            "report_code": corretiva.public_code,
+            "report_version_id": versoes[0].id,
+            "document_sha256": versoes[0].sha256,
+            "assignment_id": atribuicao.id if atribuicao else None,
             "acesso_resultado_restaurado": acesso_restaurado is not None,
             "motivo": "reversao_administrativa_de_devolucao_equivocada",
         },
     )
     db.commit()
 
-    # Só depois do commit, e com falha tolerada: o arquivo é uma CÓPIA
-    # byte-a-byte do PDF técnico que continua guardado no predecessor, em
-    # outro caminho. Perder a limpeza deixa um órfão que a reconciliação de
-    # laudos já sabe listar e remover; falhar aqui desfaria uma reversão
-    # correta por causa de um arquivo duplicado.
-    aviso = None
-    if caminho_confere:
-        try:
-            cleanup_stored_version_file(storage_root, relativo)
-        except (ReportStorageError, OSError):
-            caminho_confere = False
-    if not caminho_confere:
-        aviso = (
-            "A devolução foi cancelada, mas o arquivo da cópia técnica do "
-            "laudo removido não pôde ser apagado — rode a reconciliação de "
-            "laudos para limpá-lo."
-        )
-
-    resposta = {
+    return {
         "predecessor": ser_report_document(predecessor, include_clinical=True),
-        "corretiva_removida": removido,
+        "corretiva_cancelada": {
+            "document_id": corretiva.id,
+            "public_code": corretiva.public_code,
+            "devolucao_cancelada_em": iso(corretiva.devolucao_cancelada_em),
+            "atribuicao_encerrada": atribuicao.id if atribuicao else None,
+        },
         "acesso_resultado_restaurado": acesso_restaurado,
     }
-    if aviso:
-        resposta["aviso"] = aviso
-    return resposta
+
 
 @router.get("/{document_id}/assinatura")
 def get_report_signature_status(

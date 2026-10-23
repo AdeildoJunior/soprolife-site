@@ -31,7 +31,8 @@ def test_migration_aditiva_reversivel_sem_backfill_e_sem_apagar_evidencia(tmp_pa
     # cadeia abaixo dela segue intacta.
     # M26.36 (reteste de controle sem cobrança) soma outra no topo, aditiva
     # e reversível, sem backfill — a cadeia abaixo dela segue intacta.
-    assert script.get_heads() == ["c3f8a1d7e529"]
+    assert script.get_heads() == ["d7b2c4e86a91"]
+    assert script.get_revision("d7b2c4e86a91").down_revision == "c3f8a1d7e529"
     assert script.get_revision("c3f8a1d7e529").down_revision == "b5e2f7a91c38"
     assert script.get_revision("b5e2f7a91c38").down_revision == "a1c7e5d9b204"
     assert script.get_revision("a1c7e5d9b204").down_revision == "e2a0b6c719af"

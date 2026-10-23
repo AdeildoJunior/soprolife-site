@@ -685,6 +685,10 @@ def ser_report_document(
         "origin_partner_unit_id": doc.origin_partner_unit_id,
         "current_version_id": doc.current_version_id,
         "superseded_by_id": doc.superseded_by_id,
+        # M26.36 — devolução cancelada: o laudo foi aberto por um clique
+        # equivocado em "Retornar para laudadora" e a reversão o tirou das
+        # filas de trabalho. Fica visível para quem lê o histórico.
+        "devolucao_cancelada_em": iso(doc.devolucao_cancelada_em),
         "corrects_document_id": doc.corrects_document_id,
         # M26.12 — motivo de catálogo fechado da correção, para a médica ver
         # o porquê (não só que é "corrigido"), sem inventar texto livre.

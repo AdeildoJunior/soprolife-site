@@ -304,36 +304,47 @@ def test_cancelar_devolucao_restaura_o_estado_legitimo_anterior(
     resposta = _cancelar(client, auth, corretiva_id, db=db)
     assert resposta.status_code == 200, resposta.text
     corpo = resposta.json()
-    assert corpo["corretiva_removida"]["document_id"] == corretiva_id
-    assert corpo["corretiva_removida"]["public_code"] == corretiva["public_code"]
+    assert corpo["corretiva_cancelada"]["document_id"] == corretiva_id
+    assert corpo["corretiva_cancelada"]["public_code"] == corretiva["public_code"]
 
-    # A corretiva e tudo que nasceu com ela deixaram de existir.
+    # A corretiva CONTINUA EXISTINDO — evidência clínica é append-only
+    # (M24C). O que muda é que ela está declarada cancelada, com quem e
+    # quando, e a atribuição da médica foi encerrada.
     db.expire_all()
-    assert db.get(ReportDocument, corretiva_id) is None
-    assert (
-        db.execute(
-            select(ReportDocumentVersion).where(
-                ReportDocumentVersion.report_document_id == corretiva_id
-            )
-        ).scalars().all()
-        == []
-    )
-    assert (
-        db.execute(
-            select(ReportAssignment).where(
-                ReportAssignment.report_document_id == corretiva_id
-            )
-        ).scalars().all()
-        == []
-    )
-    assert (
-        db.execute(
+    cancelada = db.get(ReportDocument, corretiva_id)
+    assert cancelada is not None
+    assert cancelada.devolucao_cancelada_em is not None
+    assert cancelada.devolucao_cancelada_por_user_id is not None
+    assert cancelada.status == "atribuido"  # o status nem precisa mentir
+
+    # A versão continua lá, intacta.
+    versoes_corretiva = db.execute(
+        select(ReportDocumentVersion).where(
+            ReportDocumentVersion.report_document_id == corretiva_id
+        )
+    ).scalars().all()
+    assert len(versoes_corretiva) == 1
+
+    # A atribuição foi ENCERRADA, não apagada, e o encerramento virou evento.
+    atribuicoes = db.execute(
+        select(ReportAssignment).where(
+            ReportAssignment.report_document_id == corretiva_id
+        )
+    ).scalars().all()
+    assert len(atribuicoes) == 1
+    assert atribuicoes[0].active is False
+    assert atribuicoes[0].ended_at is not None
+    # O evento do nascimento da atribuição continua lá, intocado: é
+    # append-only e `assignment_id` é único, um evento por atribuição.
+    eventos = [
+        e.event_type
+        for e in db.execute(
             select(ReportAssignmentEvent).where(
                 ReportAssignmentEvent.report_document_id == corretiva_id
             )
-        ).scalars().all()
-        == []
-    )
+        ).scalars()
+    ]
+    assert eventos == ["corrective_assigned"]
 
     # O laudo legítimo está EXATAMENTE como estava — inclusive `updated_at`.
     depois = db.get(ReportDocument, document_id)
@@ -369,6 +380,14 @@ def test_cancelar_devolucao_restaura_o_estado_legitimo_anterior(
     linhas = fila.json()
     assert [linha["document_id"] for linha in linhas] == [document_id]
     assert linhas[0]["status"] == "liberado"
+
+    # E a corretiva cancelada continua ACESSÍVEL no histórico — some da
+    # fila de trabalho, não do sistema.
+    historico = client.get(
+        "/api/v1/laudos?somente_superados=true", headers=auth("operacional")
+    )
+    assert historico.status_code == 200, historico.text
+    assert corretiva_id in {l["document_id"] for l in historico.json()}
 
     # A trilha guarda os TRÊS fatos em ordem: devolveu, foi engano, reverteu.
     acoes = [
@@ -740,9 +759,15 @@ def test_paciente_fica_com_os_dois_laudos_concluidos_no_historico(
         )
         .where(SpirometryExam.person_id == pessoa_id)
     ).scalars().all()
-    assert len(documentos) == 2
-    assert {doc.status for doc in documentos} == {"liberado"}
-    assert {doc.corrects_document_id for doc in documentos} == {None}
+    # Três linhas: os DOIS laudos de verdade e a corretiva cancelada, que
+    # continua guardada como evidência do engano — nunca apagada.
+    assert len(documentos) == 3
+    vigentes = [d for d in documentos if d.devolucao_cancelada_em is None]
+    canceladas = [d for d in documentos if d.devolucao_cancelada_em is not None]
+    assert len(canceladas) == 1
+    assert len(vigentes) == 2
+    assert {doc.status for doc in vigentes} == {"liberado"}
+    assert {doc.corrects_document_id for doc in vigentes} == {None}
 
     # E o reteste continua marcado como sem cobrança.
     reteste = db.get(SpirometryExam, exame_reteste["id"])
@@ -796,19 +821,23 @@ def test_corretiva_ja_comecada_pela_medica_nunca_e_removida(
     assert db.get(ReportDocument, corretiva["id"]) is not None
 
 
-def test_cancelamento_e_idempotente_na_segunda_tentativa(client, auth, caso):
-    """Dois cliques no mesmo botão: o segundo não encontra mais o laudo."""
+def test_segundo_clique_no_cancelamento_e_recusado(client, auth, caso):
+    """Dois cliques no mesmo botão: o segundo diz que já foi cancelado."""
 
     corretiva = _devolver(client, auth, caso["document_id"])
     assert _cancelar(client, auth, corretiva["id"]).status_code == 200
     segunda = _cancelar(client, auth, corretiva["id"])
-    assert segunda.status_code == 404, segunda.text
+    assert segunda.status_code == 409, segunda.text
+    assert segunda.json()["erro"]["codigo"] == "devolucao_ja_cancelada"
 
 
 def test_depois_de_cancelar_uma_correcao_legitima_volta_a_ser_possivel(
     client, auth, caso
 ):
-    """A trava de uma corretiva por laudo não fica presa ao engano."""
+    """A trava de uma corretiva por laudo não fica presa ao engano.
+
+    É o índice único PARCIAL da M26.36b que permite isto: a corretiva
+    cancelada continua apontando para o predecessor, mas fora da trava."""
 
     primeira = _devolver(client, auth, caso["document_id"])
     assert _cancelar(client, auth, primeira["id"]).status_code == 200
@@ -821,11 +850,12 @@ def test_depois_de_cancelar_uma_correcao_legitima_volta_a_ser_possivel(
     assert segunda.json()["id"] != primeira["id"]
 
 
-def test_o_arquivo_da_copia_tecnica_sai_e_o_do_original_fica(
+def test_os_dois_arquivos_pdf_continuam_no_disco(
     client, auth, db, caso, tmp_path
 ):
-    """A limpeza remove o arquivo da CÓPIA e nunca o do predecessor: são
-    caminhos diferentes, e o caminho é reconferido antes de apagar."""
+    """A cópia técnica da corretiva NÃO é apagada: a linha da versão
+    continua no banco (append-only), logo o arquivo tem de continuar lá —
+    a reconciliação de laudos acusaria `database_row_missing_file`."""
 
     document_id = caso["document_id"]
     corretiva = _devolver(client, auth, document_id, db)
@@ -847,12 +877,10 @@ def test_o_arquivo_da_copia_tecnica_sai_e_o_do_original_fica(
     original = raiz / versao_original.storage_path
     assert copia != original
     assert copia.exists() and original.exists()
-    # É mesmo uma cópia byte a byte do PDF técnico.
     assert versao_corretiva.sha256 == versao_original.sha256
 
     resposta = _cancelar(client, auth, corretiva["id"], db=db)
     assert resposta.status_code == 200, resposta.text
-    assert "aviso" not in resposta.json()
 
-    assert not copia.exists()
+    assert copia.exists()
     assert original.exists()

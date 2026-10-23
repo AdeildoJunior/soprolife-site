@@ -1565,13 +1565,47 @@ class ReportDocument(Base, TimestampMixin):
     signature_downloaded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )
+    # ---------------------------------------------------------- M26.36b
+    # DEVOLUÇÃO CANCELADA. Uma corretiva aberta por um clique equivocado em
+    # "Retornar para laudadora" não pode ser apagada — evidência clínica é
+    # append-only no banco (M24C) e um engano não é exceção. Ela é
+    # DECLARADA cancelada: sai das filas de trabalho (entra no mesmo
+    # predicado de "superado" que já esconde corretivas substituídas e
+    # laudos entregues), a atribuição da médica é encerrada, e o documento
+    # fica no histórico com quem cancelou e quando.
+    devolucao_cancelada_em: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    devolucao_cancelada_por_user_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("users.id")
+    )
     __table_args__ = (
         CheckConstraint(
             f"status IN {STATUS_LAUDO_VALUES!r}", name="status_valido",
         ),
-        UniqueConstraint(
+        # M26.36b — a trava de "uma corretiva por laudo" vale entre as
+        # corretivas VIVAS. Sem o recorte, o documento cancelado seguiria
+        # ocupando a vaga e o engano bloquearia para sempre uma correção
+        # legítima do mesmo laudo. Continua sendo o banco garantindo a
+        # unicidade sob concorrência — não a aplicação.
+        Index(
+            "uq_report_documents_corretiva_viva",
             "corrects_document_id",
-            name="uq_report_documents_corrects_document_id",
+            unique=True,
+            sqlite_where=text("devolucao_cancelada_em IS NULL"),
+            postgresql_where=text("devolucao_cancelada_em IS NULL"),
+        ),
+        CheckConstraint(
+            "(devolucao_cancelada_em IS NULL AND "
+            "devolucao_cancelada_por_user_id IS NULL) OR "
+            "(devolucao_cancelada_em IS NOT NULL AND "
+            "devolucao_cancelada_por_user_id IS NOT NULL)",
+            name="devolucao_cancelada_com_evidencia",
+        ),
+        CheckConstraint(
+            "devolucao_cancelada_em IS NULL OR "
+            "corrects_document_id IS NOT NULL",
+            name="devolucao_cancelada_so_em_corretiva",
         ),
         CheckConstraint(
             f"origin_type IS NULL OR origin_type IN {REPORT_ORIGIN_VALUES!r}",

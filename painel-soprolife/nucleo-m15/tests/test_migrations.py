@@ -174,7 +174,8 @@ def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     # por cima da M26.33.
     # M26.36 (c3f8a1d7e529, reteste de controle sem cobrança) por cima da
     # M26.34 — aditiva, uma coluna booleana com server_default false.
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["c3f8a1d7e529"]
+    # M26.36b (d7b2c4e86a91, devolução cancelada) por cima da M26.36.
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["d7b2c4e86a91"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(

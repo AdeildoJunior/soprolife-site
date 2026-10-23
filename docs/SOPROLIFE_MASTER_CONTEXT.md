@@ -358,13 +358,28 @@ sem ele, cai na data do serviço).
   (`/retornar-para-correcao`, M26.12) **não** altera o predecessor — cria um
   documento corretivo novo e revoga o acesso do paciente. Desfazer um clique
   equivocado é `POST /laudos/{id}/cancelar-devolucao` (admin, M26.36): remove
-  a corretiva **só** se ela continuar exatamente como nasceu (status
-  `atribuido`, uma única versão `original`, sem adendo/assinatura/PDF
-  assinado/acesso/corretiva própria) e restaura o acesso **só** se a
-  revogação tiver vindo daquele fluxo (`MOTIVO_REVOGACAO_DEVOLUCAO`). A
-  trilha nunca é apagada: fica `laudo_corretivo_aberto` +
-  `laudo_devolvido_para_correcao` + `laudo_devolucao_cancelada`, e o código
-  público removido segue consumido, nunca reaproveitado.
+  **CANCELA** a corretiva — nunca a apaga — e só se ela continuar
+  exatamente como nasceu (status `atribuido`, uma única versão `original`,
+  sem adendo/assinatura/PDF assinado/acesso/corretiva própria); restaura o
+  acesso do paciente **só** se a revogação tiver vindo daquele fluxo
+  (`MOTIVO_REVOGACAO_DEVOLUCAO`). O cancelamento marca
+  `devolucao_cancelada_em/_por_user_id` e ENCERRA a atribuição
+  (`active=false` + `ended_at`) — a única mutação que
+  `m24c_guard_assignment_history` aceita. A corretiva cancelada não aparece
+  nas filas de trabalho (entra no par `incluir_superados`/
+  `somente_superados`), **não supera** o predecessor e **não ocupa** a vaga
+  do índice único, que passou a ser parcial
+  (`uq_report_documents_corretiva_viva WHERE devolucao_cancelada_em IS
+  NULL`) — logo uma correção legítima posterior continua possível. A trilha
+  nunca é apagada: `laudo_corretivo_aberto` + `laudo_devolvido_para_correcao`
+  + `laudo_devolucao_cancelada`.
+- **Evidência clínica é append-only NO BANCO:** gatilhos M24C recusam
+  DELETE/UPDATE em `report_assignment_events`, `report_document_versions`,
+  `report_addenda` e `report_templates`, e em `report_assignments` só
+  permitem `active` true→false com `ended_at`. **A suíte roda em SQLite, que
+  não tem esses gatilhos** — por isso `tests/test_m26_36_postgres_cancelamento.py`
+  existe e roda contra PostgreSQL de verdade (`M15_TEST_POSTGRES_URL`).
+  Qualquer mudança que escreva nessas tabelas precisa de prova lá.
 - **Downloads:** nomes determinísticos; proxy do painel serve PDF com
   `Content-Disposition` correto.
 - **Permissões:** papel `medico` vê só a própria fila; admin/gestor conferem;
@@ -497,7 +512,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 |---|---|
 | `origin/painel-soprolife-v01` / VPS | VPS em `a51bd74` (M26.35 — botão "Emitir NFS-e" do documento agrupado), worktree limpo, `.git` 100% `soprolife`, health 200 |
 | `origin/main` (site) | `ac0a1a8` |
-| Alembic | `c3f8a1d7e529` (M26.36) |
+| Alembic | `d7b2c4e86a91` (M26.36b) |
 | Serviços | `soprolife-m15-api`, `soprolife-painel-loopback` (:8765), `soprolife-portal-resultados`, `soprolife-update-data.timer` (10 min), `soprolife-nfse-production-worker.path` ativos. **`soprolife-operational-refresh.timer` nunca foi instalado** (conferido em 21/10: sem unit, sem `/etc/soprolife/`); as units em `painel-soprolife/systemd/` são "preparado, não instalado" (M14.3A.1) e o frescor de Marketing/SEO já é feito pelo `update-data` (passo 3/6 de `update-local-data.sh`, Search Console e GA4 `ok`). A menção "(6 h)" das versões anteriores deste quadro estava errada |
 | A1 | instalado como credential cifrado; vence 2026-11-07; margem temporária de 2 dias (M72) ⇒ emissão até 2026-11-05 |
 | SERPRO | integrado, desligado (sem credenciais) |
@@ -523,7 +538,8 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
 | M72 (14/10) | — (só VPS) | Margem do A1 reduzida para 2 dias, temporária, por drop-in fora do Git |
 | M26.34 (21/10) | `c5fb870` | NFS-e agrupada: `kind='grouped'`, `fiscal_document_items`, tomador próprio, total = soma dos itens, migration `b5e2f7a91c38` |
 | M26.35 (21/10) | `a51bd74` | Botão "Emitir NFS-e" no documento agrupado com confirmação dupla, pelo mesmo endpoint/worker; primeira nota agrupada emitida (R$ 500,00, DPS nº 14) |
-| M26.36 (23/10) | — | Desfazer "Retornar para laudadora" (`/cancelar-devolucao`, admin, fail-closed) e `reteste_sem_cobranca` fora do repasse; migration `c3f8a1d7e529` |
+| M26.36 (23/10) | `55cbf83` | `reteste_sem_cobranca` fora do repasse médico; migration `c3f8a1d7e529` |
+| M26.36b (23/10) | — | Desfazer "Retornar para laudadora": a corretiva é CANCELADA (não apagada — gatilhos M24C), índice único parcial, testes contra PostgreSQL real; migration `d7b2c4e86a91` |
 | Painel (out) | `498c216`, `6aad6db`, `1e36d4c` | Refino visual, estatísticas de laudos, evolução mensal real |
 | Marketing (04/10) | `140f0e3` | Search Console + GA4 de 28 para 60 dias, subtítulo da tendência pelo período real |
 

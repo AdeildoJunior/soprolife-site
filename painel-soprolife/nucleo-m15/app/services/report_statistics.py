@@ -66,7 +66,11 @@ def report_statistics(db: Session, *, physician_profile_id: str | None = None,
         .outerjoin(ReportDocumentVersion, ReportDocumentVersion.id == latest_published)
         .where(Person.arquivado.is_(False),
                ReportDocument.superseded_by_id.is_(None),
-               ~exists().where(successor.corrects_document_id == ReportDocument.id))
+               # M26.36 — corretiva cancelada não supera o predecessor.
+               ~exists().where(
+                   successor.corrects_document_id == ReportDocument.id,
+                   successor.devolucao_cancelada_em.is_(None),
+               ))
     )
     if physician_profile_id is not None:
         statement = statement.where(exists().where(
