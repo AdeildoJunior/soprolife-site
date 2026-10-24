@@ -321,15 +321,36 @@ sem ele, cai na data do serviço).
 - Correção monetária = novo lançamento auditável; nunca sobrescrever valor.
 - Competência exibida usa `today_local()` (fuso de Brasília), nunca UTC.
 
-### 8.1 Custos & Investimentos / rateio dos sócios (M26.21)
+### 8.1 Custos & Investimentos / rateio dos sócios (M26.21 · marcas na M26.37)
 
 - Fonte: `painel-soprolife/data-private/custos-investimentos.local.json` —
   **livro-caixa único por item** (`movimentos`), gitignored, fora do PostgreSQL.
-- O resumo que o painel lê (`data/custos-investimentos-summary.local.json`) é
-  **gerado**, nunca editado à mão:
+- **Uma marca por arquivo (M26.37).** Cada item declara `marca` e o gerador
+  escreve **um resumo por marca**: `data/custos-investimentos-summary.local.json`
+  (SoproLife, nome inalterado — é o que o `app.js` lê) e
+  `data/custos-investimentos-eeglife.local.json` (EEGLife, lido pelo módulo
+  `custos` de `js/eeg-operacao.js`). Marca é o **escopo do arquivo**, não uma
+  coluna: nenhum ativo pode ser contado duas vezes porque existe em um arquivo
+  só. `marca` ausente lê como `soprolife`; marca desconhecida é **erro duro**
+  (item que some dos dois resumos é pior do que item no lugar errado).
+- Não existe arquivo consolidado: "Life Geral" foi revogado como contexto.
+  Consolidação entre marcas, se voltar, é relatório dentro de um módulo.
+- O resumo é **gerado**, nunca editado à mão:
   `python3 painel-soprolife/scripts/generate-custos-investimentos.py`.
   Todo agregado (totais, rateio por sócio, rateio por item, parcelamentos) é
   **derivado** dos movimentos. Mudou um movimento ⇒ rodar o gerador.
+- **Parcela é posição (`ref`), não movimento.** Item rateado tem uma linha por
+  pagador no mesmo mês; contar movimento diria "0/20" num plano de 10 parcelas.
+  Uma posição só está paga quando **todos** os seus movimentos foram pagos.
+  `planos_por_pagador` expõe o plano de cada sócio (10 × R$ 1.200,00 e
+  10 × R$ 1.229,00 do Nano EEG), já que a parcela combinada não é o que
+  nenhum dos dois paga.
+- `compromisso_mensal` por sócio vem do **livro-caixa** quando toda posição em
+  aberto tem pagador declarado; a regra do `responsavel` é o último recurso, e
+  responsabilidade compartilhada vai para o bucket comum em vez de ser rachada.
+- Categoria `insumo` (M26.37) = consumível do exame. **Não** entra em
+  `total_investido_equipamentos`: filtro de espirometria se gasta, não se
+  imobiliza.
 - Status de movimento: `pago` (saída de caixa confirmada), `pendente`,
   `vencido_aguardando_confirmacao` (o vencimento passou e **ninguém confirmou o
   débito** — nunca "pago" por ter chegado o dia do vencimento) e
@@ -341,8 +362,13 @@ sem ele, cai na data do serviço).
   movimentos `baixada_por_desconto` (cuja saída de caixa é 0,00).
 - Item com `historico_confirmado: false` emite `null` em `pago` **e** em
   `pendente` — o painel mostra "—". `R$ 0,00` só quando o zero é fato confirmado.
-- Os dois `.local.json` são gitignored: o deploy do Git **não** os atualiza. Na
-  VPS, rodar o reconciliador/gerador lá (ambos versionados) depois do pull.
+- Os `.local.json` são gitignored: o deploy do Git **não** os atualiza. Na VPS,
+  enviar o livro-caixa privado e **rodar o gerador lá** depois do pull — ele
+  produz os dois resumos a partir do livro-caixa de produção.
+- Dado sanitário/regulatório de equipamento **não** mora aqui: um registro de
+  11 dígitos corridos tem forma de documento pessoal e `check-access.sh` o
+  recusa até no arquivo privado, corretamente. Vai para o cadastro de
+  equipamento (pendência `pend-007`).
 
 ## 9. Laudos
 
