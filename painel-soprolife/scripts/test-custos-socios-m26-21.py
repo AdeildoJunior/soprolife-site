@@ -5,6 +5,13 @@ M26.21 — testes da reconciliacao de Custos & Investimentos e do rateio.
 Offline, sem rede. Valida o livro-caixa privado E o resumo derivado, item por
 item, contra os fatos informados pelos socios.
 
+Desde a M26.37 o gerador escreve UM RESUMO POR MARCA e este arquivo valida o
+resumo da SoproLife. Por isso as conferencias de cobertura ("um registro por
+item") comparam contra os itens DA SOPROLIFE, nao contra o livro-caixa
+inteiro: item de outra marca nao sair daqui e o comportamento correto, nao uma
+sobra. Os fatos da EEGLife tem teste proprio em
+scripts/test-custos-marcas-m26-37.py.
+
 Uso:
     python3 painel-soprolife/scripts/test-custos-socios-m26-21.py
 """
@@ -36,6 +43,9 @@ def main():
     priv = json.load(open(PRIVATE, encoding="utf-8"))
     summ = json.load(open(SUMMARY, encoding="utf-8"))
     itens = {i["id"]: i for i in priv["itens"]}
+    marca_resumo = summ.get("escopo_marca", "soprolife")
+    da_marca = [i for i in priv["itens"]
+                if (i.get("marca") or "soprolife") == marca_resumo]
     rat = {r["item_id"]: r for r in summ["rateio_itens"]}
     res = {i["id"]: i for i in summ["itens"]}
     soc = {s["nome"]: s for s in summ["rateio_socios"]}
@@ -174,8 +184,9 @@ def main():
     check(soc[A]["total_desembolsado"] == 8324.64,
           "Adeildo: total desembolsado R$ 8.324,64 (contabilidade 1.040 + Koko 1.500 "
           "+ MIR 4.985,84 + seringa 798,80)")
-    check(soc[F]["total_desembolsado"] == 10536.12,
-          "Faustino: total desembolsado R$ 10.536,12")
+    check(soc[F]["total_desembolsado"] == 12091.12,
+          "Faustino: total desembolsado R$ 12.091,12 (10.536,12 da M26.21 + "
+          "1.555,00 dos filtros do KoKo na M26.37)")
     check(round(soc[A]["total_desembolsado"] + soc[F]["total_desembolsado"], 2)
           == summ["total_desembolsado_confirmado"],
           "soma dos socios = total desembolsado confirmado do painel")
@@ -209,10 +220,17 @@ def main():
     print("\n== ausencia de duplicidade ==")
     ids = [i["id"] for i in priv["itens"]]
     check(len(ids) == len(set(ids)), "sem id de item duplicado")
-    check(len(summ["rateio_itens"]) == len(ids), "um registro de rateio por item, sem sobra")
-    check(len(summ["itens"]) == len(ids), "um registro de resumo por item")
+    ids_marca = [i["id"] for i in da_marca]
+    check(len(summ["rateio_itens"]) == len(ids_marca),
+          "um registro de rateio por item da marca %s, sem sobra" % marca_resumo)
+    check(len(summ["itens"]) == len(ids_marca),
+          "um registro de resumo por item da marca %s" % marca_resumo)
     for it in priv["itens"]:
-        refs = [m["ref"] for m in it.get("movimentos", [])]
+        # A identidade de um movimento e (posicao, pagador), nao a posicao
+        # sozinha: num item rateado a MESMA parcela tem uma linha por cartao
+        # (Nano EEG, M26.37). Duas linhas iguais do MESMO pagador na mesma
+        # posicao, isso sim, seria pagamento contado duas vezes.
+        refs = [(m["ref"], m.get("pagador")) for m in it.get("movimentos", [])]
         check(len(refs) == len(set(refs)), "%s: sem movimento duplicado" % it["id"])
         comps = [(m["competencia"], m["valor"], m["pagador"]) for m in it.get("movimentos", [])
                  if m["competencia"] and m["status"] == "pago"]

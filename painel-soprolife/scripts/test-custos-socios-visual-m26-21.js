@@ -93,7 +93,9 @@ const ABAS = ['resumo', 'recorrentes', 'equipamentos', 'parcelamentos', 'socios'
       const achatado = norm(texto);
       const precisa = [
         'R$ 8.324,64',    // Adeildo desembolsado (com MIR e seringa confirmados na M26.21A)
-        'R$ 10.536,12',   // Faustino desembolsado
+        'R$ 12.091,12',   // Faustino desembolsado (10.536,12 + 1.555,00 dos filtros, M26.37)
+        'R$ 20.415,76',   // desembolso confirmado total da SoproLife (M26.37)
+        'R$ 1.555,00',    // 200 filtros do KoKo — insumo, marca SoproLife (M26.37)
         'R$ 1.500,00',    // Koko pago Adeildo / pendente
         'R$ 6.500,00',    // Koko pago Faustino
         'R$ 9.500,00',    // Koko custo efetivo

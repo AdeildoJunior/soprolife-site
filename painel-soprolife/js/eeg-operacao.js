@@ -1,8 +1,10 @@
-/* EEGLife — operação real (Fase 2A).
+/* EEGLife — operação real (Fase 2A; Custos & Investimentos na M26.37).
  *
- * Transforma quatro módulos da casca EEGLife em telas com DADO DE VERDADE,
- * vindo das rotas /eeg do núcleo: Central de Cadastros, Exames e traçados,
- * Laudos de EEG e Agendamentos. Os demais seguem como estrutura vazia.
+ * Transforma cinco módulos da casca EEGLife em telas com DADO DE VERDADE:
+ * Central de Cadastros, Exames e traçados, Laudos de EEG e Agendamentos vêm
+ * das rotas /eeg do núcleo; Custos & Investimentos vem do resumo derivado do
+ * livro-caixa dos sócios, que não mora no PostgreSQL. Os demais seguem como
+ * estrutura vazia.
  *
  * O QUE ESTE ARQUIVO NÃO DECIDE
  * -----------------------------
@@ -31,6 +33,7 @@
     exames: montarExames,
     laudos: montarLaudos,
     leads: montarAgenda,
+    custos: montarCustos,
   };
 
   var cache = { modalidades: null, locais: null };
@@ -269,7 +272,12 @@
    * Devolve true quando esta tela é viva (e assume o conteúdo). */
   function montar(moduloId, secao) {
     var fabrica = MODULOS_VIVOS[moduloId];
-    if (!fabrica || !m15() || typeof m15().api !== "function") return false;
+    if (!fabrica) return false;
+    // Quase todo módulo vivo depende das rotas /eeg; Custos & Investimentos
+    // não (ele lê um resumo local). Exigir `m15().api` dele deixaria a tela
+    // vazia sem nenhuma razão — daí a dispensa ser declarada na função, e não
+    // uma lista de exceções escrita aqui.
+    if (fabrica.semNucleo !== true && (!m15() || typeof m15().api !== "function")) return false;
     secao.setAttribute("data-eeg-vivo", "montado");
     secao.setAttribute("data-eeg-modulo", moduloId);
     try {
@@ -489,6 +497,142 @@
     if (!["cancelado", "laudo_disponivel"].includes(e.status)) acao("Cancelar exame", function () { transicao("cancelado"); });
     d.showModal();
   }
+
+  // ── Custos & Investimentos (escopo EEGLife) ─────────────────────────────
+  //
+  // POR QUE ESTA TELA NÃO FALA COM O NÚCLEO
+  // Custos & Investimentos não está no PostgreSQL: a fonte é o livro-caixa
+  // privado dos sócios, e o painel lê o resumo DERIVADO dele por
+  // scripts/generate-custos-investimentos.py (M26.21).
+  //
+  // POR QUE CUSTO DA SOPROLIFE NÃO PODE APARECER AQUI
+  // Desde a M26.37 o gerador escreve UM RESUMO POR MARCA, e o que esta tela
+  // busca é o resumo da EEGLife — um arquivo que só tem item da EEGLife, não
+  // uma visão filtrada de um arquivo com as duas marcas. O custo da SoproLife
+  // não é escondido aqui: ele não está no arquivo que esta tela pede. É a
+  // mesma ideia do `init()` da casca, onde o dado respiratório não é buscado
+  // em vez de ser buscado e ocultado.
+  //
+  // E o escopo ainda é CONFERIDO antes de desenhar: resumo de outra marca, ou
+  // sem marca declarada, é recusado em vez de exibido com rótulo de EEG.
+  // Fail-closed, como o resto do painel.
+
+  var RESUMO_CUSTOS_EEG = "./data/custos-investimentos-eeglife.local.json";
+
+  /* Moeda montada à mão de propósito: `Intl.NumberFormat('pt-BR')` insere
+   * U+00A0 depois de "R$", e isso já quebrou comparação de texto em teste. */
+  function brl(v) {
+    if (v === null || v === undefined) return "—";
+    return "R$ " + Number(v).toLocaleString("pt-BR",
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function lerResumoCustosEeg() {
+    return fetch(RESUMO_CUSTOS_EEG, { cache: "no-store" }).then(function (r) {
+      if (!r.ok) {
+        throw { codigo: "http_" + r.status,
+                mensagem: "Resumo de custos da EEGLife não encontrado." };
+      }
+      return r.json();
+    }).then(function (d) {
+      if (!d || !d.source || d.source.safeToDisplay !== true) {
+        throw { mensagem: "O resumo de custos não está marcado como seguro para exibição." };
+      }
+      if (d.escopo_marca !== "eeglife") {
+        throw { mensagem: "Resumo recusado: ele não é o resumo da marca EEGLife." };
+      }
+      return d;
+    });
+  }
+
+  function statCard(label, valor, hint) {
+    return '<article class="stat-card"><span>' + esc(label) + "</span>" +
+      "<strong>" + esc(valor) + "</strong>" +
+      "<small>" + esc(hint) + "</small></article>";
+  }
+
+  function renderRateioCustos(d) {
+    var socios = d.rateio_socios || [];
+    if (!socios.length) return "";
+    return '<div class="eeg-stats">' + socios.map(function (s) {
+      // Desembolsado e saldo em aberto são coisas diferentes e aparecem
+      // separados: o compromisso de um sócio existir não significa que ele
+      // já tirou o dinheiro do bolso.
+      return statCard(s.nome,
+        brl(s.saldo_pendente_atribuido),
+        "em aberto · " + brl(s.compromisso_mensal) + "/mês · desembolsado " +
+        brl(s.total_desembolsado));
+    }).join("") + "</div>";
+  }
+
+  function renderPlanosCustos(d) {
+    var parcs = d.parcelamentos || [];
+    if (!parcs.length) return "";
+    return parcs.map(function (p) {
+      var planos = p.planos_por_pagador || [];
+      var linhas = planos.map(function (pl) {
+        return "<tr><td>" + esc(pl.pagador) + "</td><td>" +
+          esc(String(pl.parcelas) + "x") + "</td><td>" + brl(pl.valor_parcela) +
+          "</td><td>" + brl(pl.total) + "</td><td>" +
+          esc(pl.parcelas_pagas + "/" + pl.parcelas) + "</td></tr>";
+      }).join("");
+      if (!linhas) return "";
+      return '<article class="panel"><div class="panel-header"><h3>' +
+        esc(p.item) + "</h3><span>" + esc(p.forma_pagamento) +
+        " · parcela combinada " + brl(p.valor_parcela) + " · " +
+        esc(p.parcela_atual) + " pagas</span></div>" +
+        tabela(["Pagador", "Parcelas", "Valor da parcela", "Total do pagador",
+                "Progresso"], linhas) + "</article>";
+    }).join("");
+  }
+
+  function renderCustosEeg(d) {
+    var itens = d.itens || [];
+    if (!itens.length) {
+      return vazio("Nenhum custo ou investimento da EEGLife cadastrado.");
+    }
+    var linhas = itens.map(function (it) {
+      var parc = it.parcelas_total == null
+        ? "—" : it.parcelas_pagas + "/" + it.parcelas_total;
+      return "<tr><td><strong>" + esc(it.nome) + "</strong>" +
+        (it.obs_curta ? "<br><small>" + esc(it.obs_curta) + "</small>" : "") +
+        "</td><td>" + esc(it.categoria) + "</td><td>" + esc(it.responsavel) +
+        "</td><td>" + brl(it.valor_total) + "</td><td>" +
+        (it.valor_mensal == null ? "—" : brl(it.valor_mensal)) +
+        "</td><td>" + esc(parc) + "</td><td>" + brl(it.saldo_restante) +
+        "</td></tr>";
+    }).join("");
+    return '<div class="eeg-stats">' +
+      statCard("Investido em equipamentos", brl(d.total_investido_equipamentos),
+               "ativo da EEGLife, contado uma vez") +
+      statCard("Parcelas mensais", brl(d.parcelas_mensais_equipamentos),
+               "soma das parcelas em aberto") +
+      statCard("Desembolsado confirmado", brl(d.total_desembolsado_confirmado),
+               "saída de caixa já confirmada") +
+      statCard("Itens cadastrados", String(d.itens_ativos),
+               "no escopo da marca EEGLife") +
+      "</div>" +
+      tabela(["Item", "Categoria", "Responsável", "Total", "Parcela / mês",
+              "Parcelas", "Saldo"], linhas) +
+      renderRateioCustos(d) +
+      renderPlanosCustos(d) +
+      (d.pendencias && d.pendencias.length
+        ? '<p class="eeg-nota">' + esc(d.pendencias.map(function (pd) {
+            return pd.item + ": " + pd.descricao;
+          }).join(" · ")) + "</p>"
+        : "");
+  }
+
+  function montarCustos(secao) {
+    secao.innerHTML = cabecalho(secao) + moldura(
+      "Custos & Investimentos",
+      "Custo e investimento da marca EEGLife, com o rateio entre os sócios.",
+      ""
+    );
+    return carregar(secao, lerResumoCustosEeg(), renderCustosEeg);
+  }
+  /* Não depende das rotas /eeg — ver `montar`. */
+  montarCustos.semNucleo = true;
 
   window.SoproEegOperacao = {
     MODULOS_VIVOS: Object.keys(MODULOS_VIVOS),
