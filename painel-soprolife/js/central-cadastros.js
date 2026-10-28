@@ -21,7 +21,7 @@
   const SECTION_ID = "central-cadastros";
 
   const state = {
-    tab: "lead",
+    tab: "atendimento",
     prefill: null,   // dados pré-carregados por deep-link contextual
     dirty: false,    // formulário com alteração não salva
     booted: false,
@@ -32,11 +32,11 @@
    * o paciente é sempre o primeiro passo do mesmo cadastro — não um cadastro
    * concorrente. O cadastro só de paciente é ação SECUNDÁRIA lá dentro. */
   const TABS = [
-    ["lead", "Lead", "operacional"],
     ["atendimento", "Novo atendimento", "operacional"],
     ["clinica", "Clínica / Parceiro", "operacional"],
     ["contato-b2b", "Contato B2B", "operacional"],
     ["financeiro", "Financeiro", "gestor"],
+    ["lead", "Lead", "operacional"],
   ];
 
   /* Deep-links contextuais antigos continuam funcionando, mas abrem o fluxo
@@ -1533,7 +1533,7 @@
         const link = document.createElement("link");
         link.id = id;
         link.rel = "stylesheet";
-        link.href = href + "?v=2026092401";
+        link.href = href + "?v=2026102801";
         document.head.appendChild(link);
       }
     });
@@ -1565,7 +1565,7 @@
     }
 
     const tabs = visibleTabs();
-    if (!tabs.some((t) => t[0] === state.tab)) state.tab = tabs[0] ? tabs[0][0] : "lead";
+    if (!tabs.some((t) => t[0] === state.tab)) state.tab = tabs[0] ? tabs[0][0] : "atendimento";
     const user = cli.getUser();
     root.innerHTML = `
       <div class="cad-header">
@@ -1590,7 +1590,7 @@
       });
     });
 
-    const loader = LOADERS[state.tab] || LOADERS.lead;
+    const loader = LOADERS[state.tab] || LOADERS.atendimento;
     loader(document.getElementById("cadBody"))
       .then(() => attachDates(root))
       .catch((err) => {
@@ -1802,6 +1802,10 @@
     // M67 — selo NFS-e só na variante SoproLife: Pastore não gera NFS-e por
     // exame, então os mesmos campos lá não carregam requisito fiscal.
     const nfse = !ehPastore;
+    const iniciais = !ehPastore && cfg && cfg.espirometria_soprolife
+      ? cfg.espirometria_soprolife.valores_iniciais || {} : {};
+    const municipioInicial = (municipios || []).find(
+      (m) => m.codigo === iniciais.municipio_atendimento_ibge);
     const commonStart = `
       <h4 class="cad-bloco-titulo">Espirometria</h4>
       ${ehPastore ? '<div class="cad-pastore-aviso" id="cadAtPastoreAviso"></div>' : ""}
@@ -1814,15 +1818,15 @@
             : STATUS_EXAME), "Realizado"), { span: 3, nfse })}
         ${fld("Broncodilatador", sel("esp_bd",
           [["", "não informado"], ["false", "sem broncodilatador"],
-           ["true", "com broncodilatador"]], "false"), { span: 3, nfse })}
+           ["true", "com broncodilatador"]], String(iniciais.broncodilatador === true)), { span: 3, nfse })}
         ${fld("Município onde o exame foi realizado", sel("esp_municipio",
-          [["", "não informado"]].concat((municipios || []).map((m) => [m.codigo, m.rotulo])), ""),
-          { span: 4, nfse, ajuda: "Onde o exame foi FISICAMENTE realizado — necessário para a " +
-            "emissão fiscal da NFS-e. Deixe em branco se não souber; nada é assumido." })}`;
+          [["", "não informado"]].concat((municipios || []).map((m) => [m.codigo, m.rotulo])), municipioInicial ? municipioInicial.codigo : ""),
+          { span: 4, nfse, help: "Confira a cidade onde o exame foi realizado. A sugestão inicial é editável; " +
+            "troque o município quando o atendimento ocorrer em outra cidade." })}`;
     const commonEnd = `
         ${fld("Técnico / responsável", inp("esp_responsavel", "Adeildo", 'list="cadResp"'), 4)}
         ${fld("Próximo acompanhamento", dateInp("esp_followup", ""),
-          { span: 4, help: "Opcional — sem data vale a regra vigente do exame." })}
+          { span: 4, help: "Sugestão: seis meses depois, na primeira segunda-feira. Você pode alterar." })}
         ${fld("Observações do exame", inp("esp_observacao", ""), 12)}
       </div>`;
 
@@ -1852,11 +1856,14 @@
           : "");
       return commonStart + `
         ${fld("Modalidade", sel("esp_modalidade",
-          [["", "selecione…"]].concat(modalidades.map((m) => [m.valor, m.rotulo])), ""),
+          [["", "selecione…"]].concat(modalidades.map((m) => [m.valor, m.rotulo])),
+          modalidades.some((m) => m.valor === iniciais.modalidade) ? iniciais.modalidade : ""),
           { span: 4, nfse, ajuda: ajudaModalidade })}
-        ${fld("Local do atendimento", inp("esp_local", "", 'list="cadLocais" disabled placeholder="escolha a modalidade primeiro"'),
-          { span: 4, ajuda: "Onde especificamente o exame aconteceu — o NOME do lugar, não uma categoria. A modalidade já diz o tipo." })}
-        ${fld("Origem", inp("esp_origem", "", 'list="cadOrigens"'),
+        ${fld("Escolha rápida do local", sel("esp_local_opcao", [["", "selecione um local…"]], ""),
+          { span: 4, help: "Locais já usados pela SoproLife. Escolha Outro para escrever livremente." })}
+        ${fld("Local do atendimento", inp("esp_local", "", 'list="cadLocais" placeholder="escolha um local ou escreva manualmente"'),
+          { span: 4, help: "Nome do lugar, editável. Este texto não determina o município fiscal." })}
+        ${fld("Origem", inp("esp_origem", iniciais.origem || "", 'list="cadOrigens"'),
           { span: 4, ajuda: "Como o paciente chegou até a SoproLife (Google, indicação, empresa…). Não é o lugar do exame." })}
         ${fld("Valor da espirometria (R$)", inp("esp_valor", valorPadrao,
           'inputmode="decimal" placeholder="220,00"'),
@@ -2109,6 +2116,57 @@
       const blocoCon = bodyEl.querySelector("#cadAtBlocoCon");
       const btnSalvar = form.querySelector('button[type="submit"]');
       let renderedPastore = tipoInicial === TIPO_PASTORE;
+      const rascunhosEsp = new Map();
+
+      function sugerirData(nome, iso) {
+        const campo = form.elements[nome];
+        if (!campo || campo.dataset.cadManual === "1") return;
+        campo.value = iso;
+        const display = campo.closest(".m15-date")?.querySelector(".m15-date-input");
+        if (display) display.value = window.SoproM15DatePicker.isoToBr(iso);
+      }
+
+      function atualizarDatasSugeridas() {
+        if (tipoAtual() === TIPO_PASTORE) return;
+        const parsed = window.SoproM15DatePicker?.parseFlex(val(form, "esp_data"));
+        const iso = parsed && parsed.ok && parsed.precisao === "dia" ? parsed.iso : "";
+        sugerirData("esp_pgto_data", val(form, "esp_pgto_status") === "Recebido" ? iso : "");
+        let acompanhamento = "";
+        if (iso) {
+          const [ano, mes, dia] = iso.split("-").map(Number);
+          // Meses calendários com clamp no fim do mês, depois segunda-feira.
+          const ultimoDia = new Date(Date.UTC(ano, mes + 6, 0)).getUTCDate();
+          const data = new Date(Date.UTC(ano, mes - 1 + 6, Math.min(dia, ultimoDia)));
+          data.setUTCDate(data.getUTCDate() + (8 - data.getUTCDay()) % 7);
+          acompanhamento = data.toISOString().slice(0, 10);
+        }
+        sugerirData("esp_followup", acompanhamento);
+      }
+
+      form.addEventListener("m15:date-change", (ev) => {
+        if (["esp_pgto_data", "esp_followup"].includes(ev.target.name)) {
+          ev.target.dataset.cadManual = "1";
+        }
+        if (ev.target.name === "esp_data") atualizarDatasSugeridas();
+        state.dirty = true;
+      });
+      form.addEventListener("change", (ev) => {
+        if (ev.target.name === "esp_pgto_status") atualizarDatasSugeridas();
+      });
+
+      function reiniciarNovoAtendimento() {
+        form.reset();
+        rascunhosEsp.clear();
+        form.querySelectorAll("input, select").forEach((campo) => {
+          delete campo.dataset.cadManual;
+          delete campo.dataset.tocado;
+          const display = campo.closest(".m15-date")?.querySelector(".m15-date-input");
+          if (campo.type === "hidden" && display) {
+            display.value = window.SoproM15DatePicker.isoToBr(campo.value);
+          }
+        });
+        aplicarModalidade();
+      }
 
       function tipoAtual() {
         const marcado = form.querySelector('input[name="tipo"]:checked');
@@ -2130,15 +2188,24 @@
         const escolhida = (cfgEsp.modalidades || [])
           .find((m) => m.valor === modSel.value);
         const dl = bodyEl.querySelector("#cadLocais");
+        const rapido = form.elements.esp_local_opcao;
         if (!escolhida) {
           localEl.disabled = true;
           localEl.placeholder = "escolha a modalidade primeiro";
           if (!localEl.dataset.tocado) localEl.value = "";
           if (dl) dl.innerHTML = "";
+          if (rapido) { rapido.innerHTML = '<option value="">escolha a modalidade primeiro</option>'; rapido.disabled = true; }
           return;
         }
         localEl.disabled = false;
         localEl.placeholder = escolhida.local_rotulo || "Local do atendimento";
+        if (rapido) {
+          rapido.disabled = false;
+          rapido.innerHTML = '<option value="">selecione um local…</option>' +
+            (escolhida.local_sugestoes || []).map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join("") +
+            '<option value="__manual__">Outro / escrever manualmente</option>';
+          rapido.value = (escolhida.local_sugestoes || []).includes(localEl.value) ? localEl.value : "";
+        }
         // Só preenche sozinho o que o operador ainda não tocou — nunca
         // sobrescreve um lugar que ele digitou.
         if (!localEl.dataset.tocado) {
@@ -2158,8 +2225,18 @@
         blocoCon.hidden = !temCon;
         const ehPastore = tipo === TIPO_PASTORE;
         if (temEsp && renderedPastore !== ehPastore) {
+          rascunhosEsp.set(renderedPastore, [...blocoEsp.querySelectorAll("input[name], select[name]")]
+            .map((campo) => ({ nome: campo.name, valor: campo.value,
+              manual: campo.dataset.cadManual, tocado: campo.dataset.tocado })));
           blocoEsp.innerHTML = blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg, municipios);
           renderedPastore = ehPastore;
+          (rascunhosEsp.get(ehPastore) || []).forEach((anterior) => {
+            const campo = form.elements[anterior.nome];
+            if (!campo) return;
+            campo.value = anterior.valor;
+            if (anterior.manual) campo.dataset.cadManual = anterior.manual;
+            if (anterior.tocado) campo.dataset.tocado = anterior.tocado;
+          });
           // attachDates só roda uma vez no carregamento inicial da aba; sem
           // chamar de novo aqui, o "Data do exame" recém-injetado ao trocar
           // para/de Pastore ficava sem o calendário (attachAll é idempotente
@@ -2222,12 +2299,24 @@
       function wireModalidade() {
         const modSel = form.elements.esp_modalidade;
         const localEl = form.elements.esp_local;
+        const rapido = form.elements.esp_local_opcao;
         if (modSel) modSel.addEventListener("change", aplicarModalidade);
         if (localEl) {
           localEl.addEventListener("input", () => {
             localEl.dataset.tocado = localEl.value.trim() ? "1" : "";
+            if (rapido) rapido.value = [...rapido.options].some((o) => o.value === localEl.value)
+              ? localEl.value : "__manual__";
           });
         }
+        if (rapido) rapido.addEventListener("change", () => {
+          if (!rapido.value) return;
+          localEl.dataset.tocado = "1";
+          if (rapido.value === "__manual__") {
+            localEl.focus();
+          } else {
+            localEl.value = rapido.value;
+          }
+        });
         aplicarModalidade();
       }
 
@@ -2262,7 +2351,7 @@
           successBanner(bodyEl,
             `<strong>Pessoa ${esc(pessoa.public_code)} criada</strong> — ` +
             `${esc(pessoa.nome_completo)}. Nenhum exame ou consulta foi criado.`);
-          form.reset();
+          reiniciarNovoAtendimento();
           picker.resetState();
           aplicarModo();
           if (m15() && m15().refresh) m15().refresh();
@@ -2341,7 +2430,7 @@
           `${esc(res.pessoa.nome_completo)} (${esc(res.pessoa.public_code)}).` +
           (lanc ? ` Lançamentos: ${esc(lanc)}.` : " Nenhum lançamento financeiro criado.") +
           avisoPend);
-        form.reset();
+        reiniciarNovoAtendimento();
         picker.resetState();
         aplicarModo();
         loadAtendRecents(bodyEl);
@@ -2833,7 +2922,7 @@
       prefill = Object.assign({}, prefill, { tipo: "espirometria_pastore" });
       tab = "atendimento";
     }
-    state.tab = TABS.some((t) => t[0] === tab) ? tab : "lead";
+    state.tab = TABS.some((t) => t[0] === tab) ? tab : "atendimento";
     state.prefill = prefill;
     activateSection();
     render();
@@ -2848,7 +2937,7 @@
 
     // renderiza quando a seção é aberta pela sidebar/nav-hub
     const navBtn = document.querySelector(`.nav-item[data-section="${SECTION_ID}"]`);
-    if (navBtn) navBtn.addEventListener("click", () => render());
+    if (navBtn) navBtn.addEventListener("click", () => open("atendimento"));
 
     // sessão do núcleo mudou (login/logout) → re-renderiza a Central
     const cli = m15();

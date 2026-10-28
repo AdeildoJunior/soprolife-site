@@ -238,6 +238,10 @@ async function main() {
           " | cookies: " + cookies.join(","));
       });
 
+    await waitFor(() => cdp.evaluate("Boolean(document.querySelector('#cadFormAtend'))"), "aba inicial");
+    check("novo atendimento é a aba inicial, antes de qualquer deep link",
+      await cdp.evaluate("document.querySelector('[data-cad-tab][aria-selected=true]')?.dataset.cadTab === 'atendimento'"));
+
     // Pastore sintética (mesmo preparo da M22) e um paciente existente SEM CPF.
     await cdp.evaluate(`(async () => {
       const api = window.SoproM15.api;
@@ -315,6 +319,88 @@ async function main() {
     // Daqui em diante é só o formulário. O que veio antes é o boot do painel
     // (inclui os GETs somente-leitura do módulo Fiscal já existente).
     const inicioFormulario = requested.length;
+
+    console.log("── Defaults editáveis de Novo atendimento (28/10) ──");
+    await cdp.evaluate("window.confirm = () => true");
+    const valores = () => cdp.evaluate(`(() => {
+      const f = document.querySelector('#cadFormAtend');
+      return Object.fromEntries(['esp_municipio','esp_bd','esp_origem','esp_modalidade',
+        'esp_pgto_data','esp_followup','esp_local'].map(n => [n, f.elements[n]?.value]));
+    })()`);
+    let defaults = await valores();
+    check("município inicial é Rio do catálogo", defaults.esp_municipio === "3304557");
+    check("bronco inicial com broncodilatador", defaults.esp_bd === "true");
+    check("origem SITE e modalidade cowork", defaults.esp_origem === "SITE" && defaults.esp_modalidade === "cowork");
+    check("Lead fica depois de Financeiro", await cdp.evaluate(`(() => {
+      const tabs=[...document.querySelectorAll('[data-cad-tab]')].map(t=>t.dataset.cadTab);
+      return tabs.join(',') === 'atendimento,clinica,contato-b2b,financeiro,lead';
+    })()`));
+    check("locais confirmados e opção manual disponíveis", await cdp.evaluate(`(() => {
+      const opts=[...document.querySelector('[name=esp_local_opcao]').options].map(o=>o.value);
+      return ['NOVA AMERICA','SOPROLIFE DOWNTOWN','MACLIN','ALERGOCARE','__manual__'].every(v=>opts.includes(v));
+    })()`));
+    await cdp.evaluate(`(() => { __m67.set('esp_local_opcao','NOVA AMERICA'); __m67.set('esp_municipio','3303302');
+      __m67.set('esp_bd','false'); })()`);
+    defaults=await valores();
+    check("atalho de local preserva texto e município independente", defaults.esp_local==='NOVA AMERICA' && defaults.esp_municipio==='3303302');
+    check("sem broncodilatador continua selecionável", defaults.esp_bd==='false');
+    await cdp.evaluate(`(() => { __m67.set('esp_local_opcao','__manual__'); __m67.set('esp_local','Espaço de demonstração'); })()`);
+    check("Outro aceita texto livre", (await valores()).esp_local==='Espaço de demonstração');
+    await cdp.evaluate(`__m67.set('esp_data','28/10/2026')`);
+    defaults=await valores();
+    check("recebimento acompanha exame e acompanhamento vai à segunda-feira", defaults.esp_pgto_data==='2026-10-28' && defaults.esp_followup==='2027-05-03',JSON.stringify(defaults));
+    await cdp.evaluate(`__m67.set('esp_data','29/10/2026')`);
+    check("sem edição manual, mudar exame recalcula recebimento", (await valores()).esp_pgto_data==='2026-10-29');
+    await cdp.evaluate(`(() => { __m67.set('esp_pgto_data','30/10/2026'); __m67.set('esp_followup','10/05/2027');
+      __m67.set('esp_data','31/10/2026'); })()`);
+    defaults=await valores();
+    check("datas editadas manualmente não são sobrescritas", defaults.esp_pgto_data==='2026-10-30' && defaults.esp_followup==='2027-05-10');
+    await cdp.evaluate(`(() => { __m67.set('esp_pgto_data',''); __m67.set('esp_followup',''); __m67.set('esp_data','01/11/2026'); })()`);
+    defaults=await valores();
+    check("limpeza manual também é preservada", defaults.esp_pgto_data==='' && defaults.esp_followup==='');
+    await cdp.evaluate("window.SoproCentral.open('atendimento')");
+    await waitFor(() => cdp.evaluate("document.querySelector('#cadFormAtend')?.elements.esp_local.value === ''"), "novo rascunho");
+    await cdp.evaluate(`(() => { __m67.set('esp_pgto_status','Pendente'); __m67.set('esp_data','28/10/2026'); })()`);
+    check("pagamento pendente não recebe data automática", (await valores()).esp_pgto_data==='');
+    await cdp.evaluate(`__m67.set('esp_pgto_status','Recebido')`);
+    check("recebido permite sugerir data, sem registrar pagamento sozinho", (await valores()).esp_pgto_data==='2026-10-28');
+    for (const [data, esperado] of [['31/08/2023','2024-03-04'],['31/08/2024','2025-03-03'],['30/04/2026','2026-11-02']]) {
+      await cdp.evaluate(`__m67.set('esp_data',${JSON.stringify(data)})`);
+      check('seis meses calendários + segunda: '+data,(await valores()).esp_followup===esperado);
+    }
+    await cdp.evaluate(`__m67.set('esp_data','10/2026')`);
+    defaults=await valores();
+    check("data parcial não inventa dia nem recebimento",defaults.esp_followup==='' && defaults.esp_pgto_data==='');
+    await cdp.evaluate(`(() => {
+      __m67.set('esp_data','28/10/2026');
+      const field=document.querySelector('[name=esp_pgto_data]').closest('.m15-date');
+      field.querySelector('.m15-date-btn').click();
+      field.querySelector('[data-day="29"]').click();
+      __m67.set('esp_data','30/10/2026');
+    })()`);
+    check('escolha pelo calendário também trava recebimento manual',(await valores()).esp_pgto_data==='2026-10-29');
+    const antesPastore=await valores();
+    await cdp.evaluate(`__m67.tipo('espirometria_pastore')`);
+    await settle();
+    await cdp.evaluate(`__m67.tipo('espirometria_soprolife')`);
+    await settle();
+    check('voltar de Pastore preserva escolhas e datas do rascunho',JSON.stringify(await valores())===JSON.stringify(antesPastore));
+    await cdp.evaluate(`__m67.set('esp_data','31/10/2026')`);
+    check('voltar de Pastore preserva a marca de edição manual',(await valores()).esp_pgto_data==='2026-10-29');
+    for (const width of [390,768,1440]) {
+      await cdp.send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:width===390});
+      await settle();
+      check('novo atendimento sem overflow em '+width+'px',await cdp.evaluate('document.documentElement.scrollWidth <= innerWidth'));
+      await shot('defaults-'+width,'#centralRoot');
+    }
+    await cdp.evaluate("window.SoproCentral.open('lead')");
+    await waitFor(()=>cdp.evaluate("document.querySelector('[data-cad-tab][aria-selected=true]')?.dataset.cadTab==='lead'"),'deep link Lead');
+    check('deep link Lead continua intencional',true);
+    await cdp.evaluate("document.querySelector('.nav-item[data-section=central-cadastros]').click()");
+    await waitFor(()=>cdp.evaluate("Boolean(document.querySelector('#cadFormAtend'))"),'entrada normal da sidebar');
+    check('sidebar volta a Novo atendimento',await cdp.evaluate("document.querySelector('[data-cad-tab][aria-selected=true]').dataset.cadTab==='atendimento'"));
+    // A bateria M67 histórica abaixo exercita explicitamente o cadastro sem município.
+    await cdp.evaluate("__m67.set('esp_municipio','')");
 
     console.log("── Espirometria SoproLife: selos e estado inicial ──");
     const esperados = ["Nome completo", "CPF", "Data do exame", "Status", "Broncodilatador",

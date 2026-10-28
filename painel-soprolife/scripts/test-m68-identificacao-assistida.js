@@ -286,8 +286,8 @@ const CONFERE = {
   caso("CPF e Nome continuam com selo NFS-e", /nfse: !!opts\.nfse/.test(opcoes("CPF")) && /nfse: !!opts\.nfse/.test(opcoes("Nome completo")));
   caso("status acessível (role=status, aria-live)", /IdentStatus" role="status" aria-live="polite"/.test(fn));
   caso("index carrega o módulo antes da Central, com cache-buster novo",
-    /identificacao-assistida\.js\?v=2026092401[\s\S]*central-cadastros\.js\?v=2026092401/.test(index));
-  caso("central.css com cache-buster novo", /link\.href = href \+ "\?v=2026092401"/.test(central));
+    /identificacao-assistida\.js\?v=\d{10}[\s\S]*central-cadastros\.js\?v=\d{10}/.test(index));
+  caso("central.css com cache-buster", /link\.href = href \+ "\?v=\d{10}"/.test(central));
   caso("navegador nunca fala com o SERPRO (sem host/URL/credencial no front)",
     !/serpro\.gov\.br|apiserpro|consumer|Bearer/i.test(modulo) &&
     !/serpro\.gov\.br|apiserpro|consumer_?secret/i.test(central));

@@ -6,7 +6,7 @@
 // estático usado por test-m25-26-fluxo-espirometria.js — sem headless
 // browser, sem framework novo):
 //   A) formulário de "Novo atendimento" (central-cadastros.js) oferece um
-//      SELECT estruturado, rotulado em português, sem default para Rio;
+//      SELECT estruturado; o novo formulário usa a sugestão do catálogo;
 //   B) a lista de municípios vem do backend — nunca uma segunda lista
 //      hardcoded de Rio/Niterói no frontend;
 //   C) o valor enviado ao servidor é o código IBGE, nunca o nome da cidade;
@@ -50,9 +50,9 @@ caso("o campo é um SELECT (esp_municipio), não uma caixa de texto livre",
      /sel\("esp_municipio",/.test(centralCodigo));
 caso('a opção em branco significa "não informado", não Rio',
      /\[\["", "não informado"\]\]\.concat\(\(municipios \|\| \[\]\)\.map/.test(centralCodigo));
-caso('o SELECT nasce sem valor selecionado (sem default para Rio)',
-     /sel\("esp_municipio",\s*\n\s*\[\["", "não informado"\]\]\.concat\([^)]*\)\), ""\)/.test(centralCodigo) ||
-     /esp_municipio[\s\S]{0,220}\), ""\),/.test(centralCodigo));
+caso('a sugestão inicial precisa existir no catálogo retornado pelo backend',
+     /m\.codigo === iniciais\.municipio_atendimento_ibge/.test(centralCodigo) &&
+     /municipioInicial \? municipioInicial\.codigo : ""/.test(centralCodigo));
 
 // ── B) fonte única — nunca uma segunda lista hardcoded ──────────────────────
 console.log();

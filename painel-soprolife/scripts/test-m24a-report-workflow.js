@@ -71,14 +71,12 @@ check(
 check(
   "assets M24C/M25.2 versionados",
   // Versão de cache-busting: atualizada a cada release que muda o CSS/JS
-  // do fluxo de laudos. O que a asserção prova é que os dois assets
-  // continuam versionados juntos, com o MESMO selo — e não qual selo é.
-  // Fixar o número aqui só obrigava a editar o teste a cada release, sem
-  // provar nada a mais (M25.3).
+  // do fluxo de laudos. CSS/JS podem mudar em releases distintos: ambos
+  // devem ter versão, sem exigir reescrita do asset que não mudou.
   (() => {
     const css = index.match(/report-workflow\.css\?v=(\d{10})/);
     const js = index.match(/report-workflow\.js\?v=(\d{10})/);
-    return Boolean(css && js && css[1] === js[1]);
+    return Boolean(css && js);
   })()
 );
 

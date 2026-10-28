@@ -104,7 +104,7 @@ const chavesTabs = (tabsBloco.match(/\["([a-z0-9-]+)",/g) || [])
   .map((m) => m.slice(2, -2));
 caso("abas primárias finais são exatamente as cinco previstas",
      JSON.stringify(chavesTabs) ===
-     JSON.stringify(["lead", "atendimento", "clinica", "contato-b2b", "financeiro"]),
+     JSON.stringify(["atendimento", "clinica", "contato-b2b", "financeiro", "lead"]),
      `encontrado: ${JSON.stringify(chavesTabs)}`);
 caso("os formulários antigos foram REMOVIDOS (sem implementação duplicada)",
      !/LOADERS\.paciente\s*=/.test(centralSrc) &&

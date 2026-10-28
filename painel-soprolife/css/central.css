@@ -36,7 +36,9 @@
   color: var(--muted, #6d7b8a);
 }
 
-.cad-tabs { margin-bottom: 0; }
+.cad-tabs { margin-bottom: 0; flex-wrap: wrap; }
+.cad-tabs .m15-tab { white-space: normal; }
+.cad-subgrid .m15-field { min-width: 0; }
 
 .cad-microcopy {
   margin: 2px 0 12px;

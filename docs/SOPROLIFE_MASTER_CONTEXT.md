@@ -146,6 +146,17 @@ Front-end: `index.html` + `js/*.js` com cache-buster `?v=AAAAMMDDNN` —
 
 ## 5. Pessoas, pacientes e atendimentos
 
+**Novo atendimento (28/10/2026):** entrada normal na Central abre Atendimento;
+Lead fica depois de Financeiro, preservados deep links explícitos. Somente o
+formulário novo de espirometria SoproLife sugere Rio/RJ (pelo catálogo IBGE),
+com broncodilatador, origem SITE e cowork. Todos editáveis; a API não aplica
+esses defaults a registros históricos ou campos omitidos. Município fica
+visível para conferência; local textual continua independente. Recebimento
+sugere a data exata do exame só com pagamento Recebido; acompanhamento sugere
+seis meses calendários (clamp no fim do mês), depois a primeira segunda-feira.
+Edição/limpeza manual das datas impede nova sugestão. Locais rápidos vêm da
+configuração do atendimento, com alternativa manual; não criam unidades.
+
 - **`Person`**: uma pessoa, muitos exames/consultas. Identidade estável por
   `id` (UUID) + `public_code`. Nome sozinho **nunca** liga registros; telefone é
   só candidato; ambiguidade exige decisão humana registrada.

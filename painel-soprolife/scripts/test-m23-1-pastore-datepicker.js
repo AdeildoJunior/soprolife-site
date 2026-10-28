@@ -86,10 +86,14 @@ const aplicarModoBody = aplicarModoMatch ? aplicarModoMatch[1] : "";
 caso("blocoEsp.innerHTML é reatribuído ao trocar entre SoproLife/Pastore",
      /blocoEsp\.innerHTML = blocoEspirometriaConteudoHtml\([^)]*\);/
        .test(aplicarModoBody));
-caso("attachDates(blocoEsp) é chamado IMEDIATAMENTE depois da reatribuição " +
+caso("attachDates(blocoEsp) é chamado após restaurar o rascunho, antes do wiring " +
      "(correção M23.1 — sem isto o campo novo fica sem calendário)",
-     /blocoEsp\.innerHTML = blocoEspirometriaConteudoHtml\([^)]*\);\s*\n\s*renderedPastore = ehPastore;\s*\n[\s\S]{0,400}?attachDates\(blocoEsp\);/
-       .test(aplicarModoBody));
+     (() => {
+       const render = aplicarModoBody.indexOf("blocoEsp.innerHTML =");
+       const attach = aplicarModoBody.indexOf("attachDates(blocoEsp);", render);
+       const wire = aplicarModoBody.indexOf("wireModalidade();", render);
+       return render !== -1 && attach > render && wire > attach;
+     })());
 
 // ── B) funcional: DOM falso real do m15-datepicker.js ──────────────────────
 console.log();

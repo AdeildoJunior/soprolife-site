@@ -55,6 +55,7 @@ from ..services.followup import (
     sync_followup_for_origin,
 )
 from ..services.cpf import CPFInvalidoError
+from ..services.nfse_national.service_location import SUPPORTED_SERVICE_MUNICIPALITIES
 from .people import recusar_cpf_ja_cadastrado, registrar_identificacao_oficial
 from ..services.identity import find_person_candidates
 from ..services.idempotency import idempotent_create
@@ -185,7 +186,12 @@ MODALIDADES_SOPROLIFE = [
         "ajuda": "Exame realizado em espaço de atendimento da SoproLife.",
         "local_rotulo": "Nome do espaço",
         "local_padrao": "",
-        "local_sugestoes": ["Coworking"],
+        # Locais já usados na operação (conferidos em 28/10/2026).
+        # Sugestões textuais, não novas PartnerUnits nem fonte de município.
+        "local_sugestoes": [
+            "NOVA AMERICA", "SOPROLIFE DOWNTOWN", "SHOPPING DOWNTOWN",
+            "MACLIN", "ALERGOCARE", "Coworking",
+        ],
         "local_obrigatorio": True,
         "exige_unidade": False,
     },
@@ -214,6 +220,16 @@ def attendance_configuration(
     settings = get_settings()
     return {
         "espirometria_soprolife": {
+            # Conveniências de NOVO formulário, nunca defaults de persistência.
+            "valores_iniciais": {
+                "municipio_atendimento_ibge": next(
+                    (code for code in SUPPORTED_SERVICE_MUNICIPALITIES if code == "3304557"),
+                    None,
+                ),
+                "broncodilatador": True,
+                "origem": "SITE",
+                "modalidade": "cowork",
+            },
             "valor_padrao": str(settings.espirometria_soprolife_valor_padrao),
             "valor_padrao_editavel": True,
             "modalidades": MODALIDADES_SOPROLIFE,

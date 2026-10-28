@@ -226,6 +226,7 @@
       if (p.vazio) {
         input.value = "";
         wrapper.className = "m15-date";
+        notifyDateChange();
         return;
       }
       if (p.ok) {
@@ -238,6 +239,15 @@
         // nada é convertido nem descartado silenciosamente.
         input.value = raw;
         wrapper.className = "m15-date m15-date-invalid";
+      }
+      notifyDateChange();
+    }
+
+    // Uma escolha humana precisa ser observável também ao clicar no calendário.
+    // O portador ISO continua igual; preencher defaults por código não emite isto.
+    function notifyDateChange() {
+      if (typeof input.dispatchEvent === "function" && typeof global.CustomEvent === "function") {
+        input.dispatchEvent(new global.CustomEvent("m15:date-change", { bubbles: true }));
       }
     }
 
@@ -359,6 +369,7 @@
       input.value = y + "-" + pad2(m) + "-" + pad2(d);
       display.value = pad2(d) + "/" + pad2(m) + "/" + y;
       wrapper.className = "m15-date";
+      notifyDateChange();
       close(true);
     }
 
@@ -440,6 +451,7 @@
         input.value = "";
         display.value = "";
         wrapper.className = "m15-date";
+        notifyDateChange();
         close(true);
       });
       foot.appendChild(hojeBtn);

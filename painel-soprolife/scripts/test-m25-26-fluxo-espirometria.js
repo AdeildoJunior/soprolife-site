@@ -154,8 +154,8 @@ caso("a lista de categorias concorrente foi removida do campo de local",
 caso("as modalidades vêm do servidor, não de uma lista fixa na tela",
      /cfgEsp\.modalidades/.test(centralCodigo) &&
      /api\("\/atendimentos\/configuracao"\)/.test(centralCodigo));
-caso("o campo de local nasce desabilitado até haver modalidade",
-     /disabled placeholder="escolha a modalidade primeiro"/.test(centralCodigo));
+caso("o campo de local é desabilitado quando nenhuma modalidade foi escolhida",
+     /if \(!escolhida\) \{\s*localEl\.disabled = true/.test(centralCodigo));
 caso("escolher a modalidade habilita e rotula o local",
      /function aplicarModalidade[\s\S]{0,900}?localEl\.disabled = false;[\s\S]{0,200}?escolhida\.local_rotulo/
        .test(centralCodigo));
@@ -225,7 +225,7 @@ caso("abrir a ajuda não re-renderiza o formulário",
      /function setAjudaOpen[\s\S]{0,400}?bolha\.hidden = !aberto/.test(central));
 caso("a ajuda cobre modalidade, local, valor e CPF",
      /ajuda: ajudaModalidade/.test(central) &&
-     /ajuda: "Onde especificamente o exame aconteceu/.test(central) &&
+     /help: "Nome do lugar, editável/.test(central) &&
      /ajuda: "Nasce com o valor de tabela/.test(central) &&
      /ajuda: "A CFM 2\.381\/2024 pede o CPF/.test(central));
 caso("o alvo de toque da ajuda é maior que o círculo desenhado",
