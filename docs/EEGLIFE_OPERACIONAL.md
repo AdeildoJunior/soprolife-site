@@ -161,8 +161,10 @@ uma migration executada no processo de teste silencie o diagnóstico do portal.
 Deploy usa `scripts/deploy-eeglife-operacional-vps.sh`: HEAD/base/schema/owner e
 worker conferidos; backup PostgreSQL pelo script versionado, `pg_restore
 --list` e leitura integral, bundle verificado e hashes; só então fast-forward
-e migrations. Reinicia somente API e proxy alterados. Portal/worker oneshot
-preservados. Nenhum teste escreve paciente em produção.
+e migrations. Reinicia somente processos afetados pelo diff. O portal também é
+recarregado quando muda um módulo compartilhado que ele usa (como `db.py`),
+ou por recarga explícita revisada; o worker continua oneshot e não é iniciado.
+Nenhum teste escreve paciente em produção.
 
 Testes: `test_eeg_operational_complete.py`, `test_eeg_workflow_postgres.py`,
 suítes EEG/corporativas e `test-eeg-operational-browser.mjs` (Chromium/Firefox,
