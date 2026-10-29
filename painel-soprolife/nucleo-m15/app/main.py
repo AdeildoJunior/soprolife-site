@@ -70,9 +70,10 @@ def create_app() -> FastAPI:
     app.include_router(patient_results.router, prefix=prefix)
     app.include_router(reports.router, prefix=prefix)
     # EEGLife (Fase 2A). Todas as rotas exigem require_eeg_access no servidor.
-    from .routers import eeg_fiscal
+    from .routers import eeg_fiscal, eeg_operations
     app.include_router(eeg.router, prefix=prefix)
     app.include_router(eeg_fiscal.router, prefix=prefix)
+    app.include_router(eeg_operations.router, prefix=prefix)
     return app
 
 

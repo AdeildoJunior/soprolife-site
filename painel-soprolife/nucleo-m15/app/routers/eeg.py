@@ -1,20 +1,8 @@
-"""EEGLife — operação (Fase 2A).
+"""EEGLife: People corporativo, atendimento e fluxo clínico próprio.
 
-AUTORIZAÇÃO
------------
-TODA rota deste arquivo depende de `require_eeg_access`. A casca do Centro de
-Comando esconde a marca de quem não pode vê-la, mas quem RECUSA é isto aqui:
-o seletor, o localStorage e o DOM não participam da decisão. Um médico da
-SoproLife recebe 403 em qualquer rota abaixo, inclusive no download do PDF.
-
-ESCOPO DA CONSULTA
-------------------
-A lista padrão parte do vínculo `eeg_enrollments`. A busca corporativa é
-explícita, admin-only e por corpo POST, para vincular uma identidade existente.
-
-O atendimento cria a receita em FinancialEntry, somente com IDs técnicos.
-Valores não são armazenados nas tabelas clínicas. O fiscal está em eeg_fiscal
-e usa o motor corporativo; o cadastro nunca emite nota ou gera laudo.
+RBAC EEG por capacidade no servidor; médico respiratório não herda EEG.
+Busca de identidade usa corpo POST. Razão e motor fiscal são corporativos.
+Importação privada, bancada e gestão complementam estas rotas em eeg_operations.
 """
 
 from __future__ import annotations
@@ -56,9 +44,11 @@ from ..schemas import (
     EegPessoaCreate,
     EegVinculoCreate,
 )
-from ..security import require_eeg_access
+from ..security import (require_eeg_access, require_eeg_operator, require_eeg_technician, require_eeg_finance, user_effective_roles, require_eeg_roles)
 from ..serializers import ser_person
 from ..services import eeg_flow
+from ..services.eeg_workflow import case_for, serialize as serialize_case, require_exam
+from ..models import EegCase, EegProfessional
 from ..services.cpf import CPFInvalidoError, normalizar_cpf
 from ..services.eeg_modalidades import MODALIDADES, modalidade_ativa, obter
 from ..services.eeg_storage import eeg_report_storage_path, atomic_write_new_file
@@ -79,7 +69,9 @@ def _agora() -> datetime:
 
 
 def _iso(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+    if value is None:
+        return None
+    return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).isoformat()
 
 
 # ── Serialização ──────────────────────────────────────────────────────────
@@ -90,8 +82,11 @@ def _ser_modalidade(m) -> dict:
         "nome": m.nome,
         "tambem_chamado": m.tambem_chamado,
         "duracao_minutos_aproximada": m.duracao_minutos_aproximada,
-        "preparo": m.preparo,
+        "preparo": None,
+        "preparo_status": "consultar_aprovacao_por_modalidade",
         "ativo": m.ativo,
+        "ativa_operacionalmente": False,
+        "situacao_tecnica": "validacao_tecnica_pendente" if m.ativo else "inativa",
         "validacao_tecnica": "pendente",
         "aviso_tecnico": "Pendente de validação técnica no Nano/iCelera; cadastro não confirma capacidade.",
     }
@@ -137,7 +132,10 @@ def _ser_exame(db: Session, exam: EegExam) -> dict:
                EegReportDocument.status != "substituido")
         .order_by(EegReportDocument.versao.desc())
     ).scalars().first()
+    financial_status = db.scalar(select(FinancialEntry.status).where(FinancialEntry.eeg_exam_id == exam.id))
     return {
+        "situacao_financeira": financial_status or "Sem receita vinculada",
+        "fluxo": serialize_case(case_for(db, exam.id)),
         "id": exam.id,
         "public_code": exam.public_code,
         "enrollment_id": exam.enrollment_id,
@@ -163,6 +161,8 @@ def _ser_exame(db: Session, exam: EegExam) -> dict:
         "observacao": exam.observacao,
         # Situação do arquivo técnico: nunca o arquivo, nunca um caminho.
         "arquivo_tecnico": {
+            "id": tecnico.id,
+            "privado": bool(tecnico.object_key),
             "registrado": True,
             "armazenamento_origem": tecnico.armazenamento_origem,
             "formato": tecnico.formato,
@@ -199,7 +199,7 @@ def listar_modalidades(_user: User = Depends(require_eeg_access)):
 @router.get("/locais")
 def listar_locais(
     db: Session = Depends(get_db),
-    _user: User = Depends(require_eeg_access),
+    _user: User = Depends(require_eeg_operator),
 ):
     """Unidades parceiras CORPORATIVAS, reaproveitadas sem duplicar empresa.
 
@@ -241,7 +241,7 @@ def listar_pessoas_eeg(
     busca: str | None = Query(default=None, max_length=200),
     db: Session = Depends(get_db),
     params: PageParams = Depends(),
-    _user: User = Depends(require_eeg_access),
+    _user: User = Depends(require_eeg_operator),
 ):
     """Somente quem tem vínculo operacional com a EEGLife.
 
@@ -263,7 +263,7 @@ def listar_pessoas_eeg(
 
 @router.post("/pessoas/busca")
 def buscar_pessoas_eeg(payload: EegPessoaBusca, db: Session = Depends(get_db),
-                       _user: User = Depends(require_eeg_access)):
+                       _user: User = Depends(require_eeg_operator)):
     """Pesquisa explícita no cadastro corporativo; PII só no corpo, nunca URL."""
     stmt = select(Person).where(Person.arquivado.is_(False))
     if not payload.corporativo:
@@ -299,7 +299,7 @@ def vincular_pessoa(
     payload: EegVinculoCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_eeg_access),
+    user: User = Depends(require_eeg_operator),
 ):
     """Vincula pessoa existente à EEGLife — SEM duplicar identidade.
 
@@ -338,7 +338,7 @@ def vincular_pessoa(
 def verificar_duplicados_eeg(
     payload: EegPessoaCreate,
     db: Session = Depends(get_db),
-    _user: User = Depends(require_eeg_access),
+    _user: User = Depends(require_eeg_operator),
 ):
     """Candidatos de identidade ANTES de cadastrar — sem efeito colateral.
 
@@ -363,7 +363,7 @@ def criar_pessoa_eeg(
     payload: EegPessoaCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_eeg_access),
+    user: User = Depends(require_eeg_operator),
 ):
     """Cadastra pessoa NOVA já vinculada à EEGLife.
 
@@ -439,6 +439,10 @@ def listar_exames(
     _user: User = Depends(require_eeg_access),
 ):
     stmt = select(EegExam)
+    roles = user_effective_roles(_user)
+    if not roles & {'admin', 'eeg_operador', 'eeg_tecnico'}:
+        if 'medical_eeg' not in roles: raise HTTPException(403, 'Papel clínico/operacional EEG necessário.')
+        stmt = stmt.join(EegCase, EegCase.exam_id == EegExam.id).join(EegProfessional, EegProfessional.id == EegCase.professional_id).where(EegProfessional.user_id == _user.id, EegProfessional.ativo.is_(True))
     if status:
         stmt = stmt.where(EegExam.status == status)
     stmt = stmt.order_by(EegExam.created_at.desc())
@@ -450,7 +454,7 @@ def criar_exame(
     payload: EegExameCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_eeg_access),
+    user: User = Depends(require_eeg_operator),
 ):
     enrollment = db.get(EegEnrollment, payload.enrollment_id)
     if not enrollment or enrollment.status != "ativo":
@@ -502,7 +506,7 @@ def criar_exame(
 
 @router.post("/atendimentos", status_code=201)
 def novo_atendimento(payload: EegAtendimentoCreate, request: Request,
-                     db: Session = Depends(get_db), user: User = Depends(require_eeg_access)):
+                     db: Session = Depends(get_db), user: User = Depends(require_eeg_operator)):
     identity = payload.model_dump(mode="json", exclude={"idempotency_key"})
     def factory(key, fingerprint):
         exam = criar_exame(payload, request, db, user)
@@ -510,9 +514,15 @@ def novo_atendimento(payload: EegAtendimentoCreate, request: Request,
         exam.municipio_atendimento_ibge = payload.municipio_atendimento_ibge
         exam.origem_canal = payload.origem_canal
         exam.idempotency_key, exam.idempotency_fingerprint = key, fingerprint
-        db.add(FinancialEntry(public_code=allocate_public_code(db, "financial_entries"),
+        from ..services.nfse_national.service_location import SUPPORTED_SERVICE_MUNICIPALITIES
+        if payload.municipio_atendimento_ibge not in SUPPORTED_SERVICE_MUNICIPALITIES:
+            raise DomainError(422,'municipio_invalido','Selecione município do catálogo IBGE operacional.')
+        if payload.reteste_sem_cobranca:
+            db.add(EegCase(exam_id=exam.id, reteste_sem_cobranca=True))
+        else:
+            db.add(FinancialEntry(public_code=allocate_public_code(db, "financial_entries"),
             tipo="receita", categoria="EEG", descricao="Atendimento EEG " + exam.public_code,
-            valor=payload.valor, moeda="BRL", status=payload.pagamento_status,
+            valor=payload.valor, moeda="BRL", status=payload.pagamento_status, forma_pagamento=payload.forma_pagamento, data_recebimento=payload.data_recebimento,
             eeg_exam_id=exam.id, data_competencia=payload.agendado_para.astimezone(ZoneInfo("America/Sao_Paulo")).date()))
         db.flush()
         audit(db, "eeg.atendimento_criado", "eeg_exams", exam.id, user_id=user.id,
@@ -525,16 +535,24 @@ def novo_atendimento(payload: EegAtendimentoCreate, request: Request,
 
 @router.get("/financeiro")
 def financeiro_eeg(db: Session = Depends(get_db), params: PageParams = Depends(),
-                   _user: User = Depends(require_eeg_access)):
+                   _user: User = Depends(require_eeg_finance)):
     from ..serializers import ser_financial_entry
+    def financial_row(entry):
+        e = db.get(EegExam, entry.eeg_exam_id)
+        unit = db.get(PartnerUnit,e.partner_unit_id) if e and e.partner_unit_id else None
+        actor = db.get(User,e.criado_por) if e and e.criado_por else None
+        return {**ser_financial_entry(entry), 'eeg_exam_id':entry.eeg_exam_id,
+            'marca':'eeglife', 'exame':e.public_code if e else None,
+            'origem':e.origem_canal if e else None, 'parceiro':unit.nome if unit else None,
+            'responsavel':actor.nome if actor else None}
     return paginate(db, select(FinancialEntry).where(FinancialEntry.eeg_exam_id.is_not(None))
-        .order_by(FinancialEntry.created_at.desc()), params, lambda e: {
-            **ser_financial_entry(e), "eeg_exam_id": e.eeg_exam_id, "marca": "eeglife"})
+        .order_by(FinancialEntry.created_at.desc()), params, financial_row)
+
 
 
 @router.patch("/financeiro/{entry_id}/pagamento")
 def atualizar_pagamento(entry_id: str, payload: EegPagamentoUpdate, request: Request,
-                        db: Session = Depends(get_db), user: User = Depends(require_eeg_access)):
+                        db: Session = Depends(get_db), user: User = Depends(require_eeg_finance)):
     from ..models import FiscalDocument, FiscalAttempt, FiscalIssuanceRequest
     entry = db.scalar(select(FinancialEntry).where(FinancialEntry.id == entry_id,
         FinancialEntry.eeg_exam_id.is_not(None)).with_for_update())
@@ -566,12 +584,14 @@ def mudar_status(
     payload: EegExameStatusUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_eeg_access),
+    user: User = Depends(require_eeg_roles("eeg_operador", "eeg_tecnico")),
 ):
     """Transição conferida no servidor. Pulo de etapa é recusado, não corrigido."""
     exam = db.get(EegExam, exam_id, with_for_update=True)
     if not exam:
         raise HTTPException(status_code=404, detail="Exame não encontrado.")
+    if not user_effective_roles(user) & {'admin','eeg_operador'} and payload.status != eeg_flow.REALIZADO:
+        raise HTTPException(403, 'Técnico pode registrar realização; agenda e entrega exigem operador EEG.')
     anterior = exam.status
     try:
         eeg_flow.garantir_transicao(anterior, payload.status)
@@ -585,16 +605,10 @@ def mudar_status(
     # `laudo_disponivel` exige laudo de verdade: não se entrega ao paciente o
     # que ainda não chegou do laudador.
     if payload.status == eeg_flow.LAUDO_DISPONIVEL:
-        laudo = db.execute(
-            select(EegReportDocument).where(
-                EegReportDocument.exam_id == exam.id,
-                EegReportDocument.status != "substituido")
-        ).scalars().first()
-        if not laudo:
-            raise DomainError(409, "laudo_ausente",
-                              "Não há laudo recebido para disponibilizar.")
-        laudo.status = "vigente"
-        laudo.disponibilizado_em = payload.ocorrido_em or _agora()
+        from .eeg_operations import action
+        from ..schemas_eeg import CaseAction
+        action(exam.id, CaseAction(acao='publicar', confirmacao_codigo=exam.public_code),request,db,user)
+        return _ser_exame(db,exam)
 
     exam.status = payload.status
     carimbo = eeg_flow.CARIMBO.get(payload.status)
@@ -616,7 +630,7 @@ def registrar_arquivo_tecnico(
     payload: EegArquivoTecnicoCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_eeg_access),
+    user: User = Depends(require_eeg_technician),
 ):
     """Registra que o traçado EXISTE — e onde. Nunca recebe o traçado.
 
@@ -627,6 +641,9 @@ def registrar_arquivo_tecnico(
     exam = db.get(EegExam, exam_id, with_for_update=True)
     if not exam:
         raise HTTPException(status_code=404, detail="Exame não encontrado.")
+    case = case_for(db,exam.id)
+    if exam.status in {eeg_flow.LAUDO_RECEBIDO,eeg_flow.LAUDO_DISPONIVEL} or (case and case.current_file_id):
+        raise DomainError(409,'referencia_congelada','Use as versões privadas antes da conclusão; referência não substitui arquivo recebido.')
     registro = EegTechnicalFile(
         exam_id=exam.id,
         armazenamento_origem=payload.armazenamento_origem,
@@ -664,7 +681,7 @@ def registrar_envio(
     payload: EegEnvioLaudoCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_eeg_access),
+    user: User = Depends(require_eeg_operator),
 ):
     """Registra o envio ao laudador — empresa de telelaudo ou médico direto.
 
@@ -731,11 +748,11 @@ def listar_laudos(
     Não consulta `report_documents`: laudo de espirometria não entra aqui, e
     laudo de EEG não entra lá. São exames, autorias e documentos diferentes.
     """
-    stmt = (
-        select(EegExam)
-        .where(EegExam.status.in_(tuple(eeg_flow.EXAME_JA_REALIZADO)))
-        .order_by(EegExam.realizado_em.desc())
-    )
+    stmt = select(EegExam).where(EegExam.status.in_(tuple(eeg_flow.EXAME_JA_REALIZADO))).order_by(EegExam.realizado_em.desc())
+    roles = user_effective_roles(_user)
+    if not roles & {'admin','eeg_operador','eeg_tecnico'}:
+        if 'medical_eeg' not in roles: raise HTTPException(403, 'Papel clínico/operacional EEG necessário.')
+        stmt = stmt.join(EegCase, EegCase.exam_id == EegExam.id).join(EegProfessional, EegProfessional.id == EegCase.professional_id).where(EegProfessional.user_id == _user.id, EegProfessional.ativo.is_(True))
     return paginate(db, stmt, params, lambda e: _ser_exame(db, e))
 
 
@@ -746,8 +763,10 @@ def receber_laudo(
     arquivo: UploadFile = File(...),
     medico_laudador: str | None = Form(default=None),
     observacao: str | None = Form(default=None),
+    assinatura_recebida: bool = Form(default=False),
+    confirmacao_codigo: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    user: User = Depends(require_eeg_access),
+    user: User = Depends(require_eeg_operator),
 ):
     """Recebe o PDF que voltou do laudador.
 
@@ -769,6 +788,17 @@ def receber_laudo(
             f"O exame precisa ter sido enviado para laudo "
             f"(status atual: {exam.status}).")
 
+    case = case_for(db, exam.id, create=True)
+    if not case.professional_id or case.status not in {'atribuido','em_elaboracao','aguardando_assinatura','recebido_assinado','pronto_entrega','entregue'}:
+        raise DomainError(409,'atribuicao_ausente','Confira o traçado e atribua um laudador antes de receber o PDF.')
+    if assinatura_recebida and confirmacao_codigo != exam.public_code:
+        raise DomainError(422,'confirmacao_divergente','Confira o paciente e confirme o código EEG do PDF assinado.')
+    if not assinatura_recebida and case.status in {'recebido_assinado','pronto_entrega','entregue'}:
+        raise DomainError(409,'assinatura_exige_revisao','Substituição do resultado publicado exige novo PDF assinado conferido.')
+    professional = db.get(EegProfessional,case.professional_id)
+    if professional and professional.user_id and not case.final_document_id:
+        raise DomainError(409,'conclusao_medica_ausente','Médico interno deve concluir o laudo antes do retorno assinado.')
+    medico_laudador = (case.professional_snapshot or {}).get('nome')
     settings = get_settings()
     data = arquivo.file.read(settings.reports_max_upload_bytes + 1)
     try:
@@ -813,6 +843,14 @@ def receber_laudo(
     atomic_write_new_file(destino, data, root=root)
     documento.storage_path = str(destino.relative_to(root))
 
+    if assinatura_recebida:
+        case.assinado_document_id = documento.id
+        case.assinado_em = _agora()
+        case.status = 'recebido_assinado'
+    else:
+        case.final_document_id = documento.id
+        case.concluido_em = _agora()
+        case.status = 'aguardando_assinatura'
     exam.status = eeg_flow.LAUDO_RECEBIDO
     exam.laudo_recebido_em = documento.recebido_em
     audit(db, "eeg.laudo_recebido", "eeg_report_documents", documento.id,
@@ -835,6 +873,7 @@ def baixar_laudo(
     documento = db.get(EegReportDocument, documento_id)
     if not documento:
         raise HTTPException(status_code=404, detail="Laudo não encontrado.")
+    require_exam(db, user, documento.exam_id)
     settings = get_settings()
     root = settings.resolved_reports_storage_dir()
     caminho = root / documento.storage_path
@@ -865,7 +904,7 @@ def baixar_laudo(
 @router.post("/laudos/{documento_id}/acesso-resultado")
 def gerar_acesso_resultado(
     documento_id: str, request: Request, renovar: bool = False,
-    db: Session = Depends(get_db), user: User = Depends(require_eeg_access),
+    db: Session = Depends(get_db), user: User = Depends(require_eeg_operator),
 ):
     acesso = eeg_results.issue(db, documento_id, user.id, regenerate=renovar)
     link = eeg_results.public_url(acesso)
@@ -877,7 +916,7 @@ def gerar_acesso_resultado(
 @router.post("/laudos/{documento_id}/acesso-resultado/revogar")
 def revogar_acesso_resultado(
     documento_id: str, request: Request,
-    db: Session = Depends(get_db), user: User = Depends(require_eeg_access),
+    db: Session = Depends(get_db), user: User = Depends(require_eeg_operator),
 ):
     acesso = db.execute(select(EegResultAccess).where(
         EegResultAccess.document_id == documento_id)).scalar_one_or_none()

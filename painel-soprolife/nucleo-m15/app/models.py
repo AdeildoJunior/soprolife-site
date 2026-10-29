@@ -3223,19 +3223,11 @@ class EegExam(Base, TimestampMixin):
 
 
 class EegTechnicalFile(Base):
-    """METADADOS do traçado — nunca o traçado.
+    """Metadados de referência externa ou versão privada de arquivo técnico EEG.
 
-    Decisão desta fase: o arquivo bruto do EEG permanece na fonte técnica
-    externa (equipamento ou plataforma). Esta tabela registra que ele EXISTE e
-    como encontrá-lo; não há coluna de blob, e isso é deliberado.
-
-    Um traçado digital tem dezenas a centenas de MB, monitorização prolongada
-    chega a GB e vídeo-EEG passa disso. Guardar em BYTEA, trafegar em JSON ou
-    versionar no Git seriam três formas diferentes do mesmo erro.
-
-    `storage_provider` e `object_key` nascem vazios: ficam prontos para o
-    object storage privado do futuro, sem que nada seja contratado agora.
-    Nenhuma URL pública permanente é guardada em lugar nenhum.
+    Bytes permanecem no filesystem privado Life, nunca em banco/JSON/Git.
+    A importação manual preenche provider/chave internos e preserva versões.
+    Nenhuma URL pública permanente é armazenada.
     """
 
     __tablename__ = "eeg_technical_files"
@@ -3546,3 +3538,120 @@ class ResultDeliveryAuthorization(Base):
             name="uq_result_delivery_authorization_par",
         ),
     )
+
+
+# EEGLife operacional: extensões aditivas, sem reclassificar fatos históricos.
+class EegProfessional(Base, TimestampMixin):
+    __tablename__ = 'eeg_professionals'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('users.id'), unique=True)
+    nome: Mapped[str] = mapped_column(String(220), nullable=False)
+    crm: Mapped[str] = mapped_column(String(12), nullable=False)
+    uf: Mapped[str] = mapped_column(String(2), nullable=False)
+    rqe: Mapped[str | None] = mapped_column(String(30))
+    servico: Mapped[str | None] = mapped_column(String(200))
+    tipo: Mapped[str] = mapped_column(String(30), nullable=False)
+    referencia_verificacao: Mapped[str] = mapped_column(String(64), nullable=False)
+    verificado_por: Mapped[str] = mapped_column(String(36), ForeignKey('users.id'), nullable=False)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    __table_args__ = (
+        UniqueConstraint('crm', 'uf', name='uq_eeg_professional_crm_uf'),
+        CheckConstraint("tipo IN ('interno','parceiro','telelaudo')", name='eeg_professional_tipo'),
+        CheckConstraint('user_id IS NULL OR user_id <> verificado_por', name='eeg_professional_four_eyes'),
+    )
+
+
+class EegCase(Base, TimestampMixin):
+    __tablename__ = 'eeg_cases'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    exam_id: Mapped[str] = mapped_column(String(36), ForeignKey('eeg_exams.id'), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(30), default='aguardando_arquivo', nullable=False)
+    current_file_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('eeg_technical_files.id'))
+    professional_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('eeg_professionals.id'))
+    professional_snapshot: Mapped[dict | None] = mapped_column(JSON)
+    final_document_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('eeg_report_documents.id'))
+    assinado_document_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('eeg_report_documents.id'))
+    atribuido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    conferido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    conferido_por: Mapped[str | None] = mapped_column(String(36), ForeignKey('users.id'))
+    concluido_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    assinado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    entregue_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reteste_sem_cobranca: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    __table_args__ = (CheckConstraint("status IN ('aguardando_arquivo','aguardando_conferencia','pronto_laudo','atribuido','em_elaboracao','aguardando_assinatura','recebido_assinado','pronto_entrega','entregue')", name='eeg_case_status'),)
+
+
+class EegCaseRevision(Base):
+    __tablename__ = 'eeg_case_revisions'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    case_id: Mapped[str] = mapped_column(String(36), ForeignKey('eeg_cases.id'), nullable=False, index=True)
+    numero: Mapped[int] = mapped_column(Integer, nullable=False)
+    conteudo: Mapped[dict] = mapped_column(JSON, nullable=False)
+    professional_snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    criado_por: Mapped[str] = mapped_column(String(36), ForeignKey('users.id'), nullable=False)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__ = (UniqueConstraint('case_id', 'numero', name='uq_eeg_case_revision'),)
+
+
+class EegRelation(Base, TimestampMixin):
+    __tablename__ = 'eeg_relations'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    enrollment_id: Mapped[str] = mapped_column(String(36), ForeignKey('eeg_enrollments.id'), unique=True, nullable=False)
+    proximo_contato: Mapped[date | None] = mapped_column(Date)
+    situacao: Mapped[str] = mapped_column(String(30), default='ativo', nullable=False)
+    __table_args__ = (CheckConstraint("situacao IN ('ativo','aguardando_contato','acompanhamento','encerrado')", name='eeg_relation_status'),)
+
+
+class EegActivity(Base, TimestampMixin):
+    __tablename__ = 'eeg_activities'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    tipo: Mapped[str] = mapped_column(String(10), nullable=False)
+    titulo: Mapped[str] = mapped_column(String(200), nullable=False)
+    categoria: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    origem: Mapped[str | None] = mapped_column(String(30))
+    contato: Mapped[str | None] = mapped_column(String(80))
+    consentimento: Mapped[str] = mapped_column(String(20), default='desconhecido', nullable=False)
+    enrollment_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('eeg_enrollments.id'))
+    exam_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('eeg_exams.id'))
+    responsavel_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('users.id'))
+    prazo: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    criado_por: Mapped[str] = mapped_column(String(36), ForeignKey('users.id'), nullable=False)
+    __table_args__ = (
+        CheckConstraint("tipo IN ('lead','tarefa')", name='eeg_activity_tipo'),
+        CheckConstraint("(tipo='lead' AND status IN ('lead','interessado','aguardando_contato','solicitado','pre_agendado','confirmado','realizado','faltou','cancelado','reagendado','convertido')) OR (tipo='tarefa' AND status IN ('pendente','em_andamento','concluida','cancelada'))", name='eeg_activity_status'),
+        CheckConstraint("consentimento IN ('concedido','revogado','desconhecido')", name='eeg_activity_consent'),
+    )
+
+
+class EegPartnerScope(Base, TimestampMixin):
+    __tablename__ = 'eeg_partner_scopes'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    partner_id: Mapped[str] = mapped_column(String(36), ForeignKey('partners.id'), nullable=False, unique=True)
+    categoria: Mapped[str] = mapped_column(String(30), nullable=False)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class EegDocument(Base, TimestampMixin):
+    __tablename__ = 'eeg_documents'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    titulo: Mapped[str] = mapped_column(String(200), nullable=False)
+    categoria: Mapped[str] = mapped_column(String(30), nullable=False)
+    validade: Mapped[date | None] = mapped_column(Date)
+    predecessor_id: Mapped[str | None] = mapped_column(String(36), ForeignKey('eeg_documents.id'), unique=True)
+    storage_path: Mapped[str] = mapped_column(String(300), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    extensao: Mapped[str] = mapped_column(String(10), nullable=False)
+    criado_por: Mapped[str] = mapped_column(String(36), ForeignKey('users.id'), nullable=False)
+
+
+class EegPreparation(Base):
+    __tablename__ = 'eeg_preparations'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    modalidade_codigo: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    texto: Mapped[str] = mapped_column(Text, nullable=False)
+    referencia_aprovacao: Mapped[str] = mapped_column(String(120), nullable=False)
+    aprovado_por: Mapped[str] = mapped_column(String(36), ForeignKey('users.id'), nullable=False)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

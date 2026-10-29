@@ -10,7 +10,7 @@ from app import models  # noqa: F401 — registra todas as tabelas no metadata
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # M15_DATABASE_URL tem precedência sobre alembic.ini
 env_url = os.environ.get("M15_DATABASE_URL")

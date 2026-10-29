@@ -151,6 +151,29 @@ def _status(client, auth, exam_id: str, status: str, espera: int = 200):
     return resp
 
 
+
+def _preparar_laudador(client, auth, exam):
+    current = next(e for e in client.get(f"{API}/eeg/exames",headers=auth()).json()['itens'] if e['id']==exam['id'])
+    if current['fluxo']['status'] != 'aguardando_arquivo': return
+    upload=client.post(f"{API}/eeg/exames/{exam['id']}/importar",headers=auth(),data={'confirmacao_codigo':exam['public_code']},files={'arquivo':('tecnico.pdf',_pdf(),'application/pdf')})
+    assert upload.status_code==201,upload.text
+    review=client.post(f"{API}/eeg/exames/{exam['id']}/fluxo",headers=auth(),json={'acao':'conferir','confirmacao_codigo':exam['public_code']})
+    assert review.status_code==200,review.text
+    professionals=client.get(f"{API}/eeg/profissionais",headers=auth()).json()['itens']
+    if not professionals:
+        professional=client.post(f"{API}/eeg/profissionais",headers=auth(),json={'nome':'Laudador Sintetico EEG','crm':'900001','uf':'RJ','tipo':'telelaudo','servico':'Servico Sintetico','referencia_verificacao':'SYNTH-CRM-001'})
+        assert professional.status_code==201,professional.text
+        professionals=[professional.json()]
+    assigned=client.post(f"{API}/eeg/exames/{exam['id']}/atribuir",headers=auth(),json={'professional_id':professionals[0]['id']})
+    assert assigned.status_code==200,assigned.text
+
+
+def _receber(client,auth,exam,**kwargs):
+    _preparar_laudador(client,auth,exam)
+    data=kwargs.pop('data',{})
+    data.update(assinatura_recebida='true',confirmacao_codigo=exam['public_code'])
+    return client.post(f"{API}/eeg/exames/{exam['id']}/laudo",data=data,**kwargs)
+
 # ══════════════════════════ 1. identidade compartilhada ══════════════════
 
 def test_pessoa_sopro_existente_e_reaproveitada_sem_duplicar(client, auth, db):
@@ -281,7 +304,7 @@ def test_download_de_laudo_eeg_exige_admin(client, auth, db, storage):
     client.post(f"{API}/eeg/exames/{exame['id']}/envio-laudo",
                 json={"destino_tipo": "empresa", "destino_nome": "Laudador Sintetico",
                       "metodo": "plataforma_externa"}, headers=auth("admin"))
-    resp = client.post(f"{API}/eeg/exames/{exame['id']}/laudo",
+    resp = _receber(client, auth, exame,
                        files={"arquivo": ("laudo.pdf", _pdf(), "application/pdf")},
                        headers=auth("admin"))
     assert resp.status_code == 201, resp.text
@@ -518,7 +541,7 @@ def test_fluxo_completo_ate_laudo_disponivel(client, auth, db, storage):
                 json={"destino_tipo": "empresa", "destino_nome": "Telelaudo Sintetico",
                       "metodo": "plataforma_externa"}, headers=auth("admin"))
 
-    recebido = client.post(f"{API}/eeg/exames/{exame['id']}/laudo",
+    recebido = _receber(client, auth, exame,
                            files={"arquivo": ("laudo.pdf", _pdf(2), "application/pdf")},
                            data={"medico_laudador": "Dra. Sintetica"},
                            headers=auth("admin"))
@@ -549,7 +572,7 @@ def test_laudo_eeg_nao_vira_laudo_respiratorio(client, auth, db, storage):
     client.post(f"{API}/eeg/exames/{exame['id']}/envio-laudo",
                 json={"destino_tipo": "medico", "destino_nome": "Dr. Sintetico",
                       "metodo": "outro"}, headers=auth("admin"))
-    client.post(f"{API}/eeg/exames/{exame['id']}/laudo",
+    _receber(client, auth, exame,
                 files={"arquivo": ("laudo.pdf", _pdf(), "application/pdf")},
                 headers=auth("admin"))
 
@@ -567,7 +590,7 @@ def test_segundo_laudo_versiona_e_substitui(client, auth, db, storage):
                 json={"destino_tipo": "medico", "destino_nome": "Dr. Sintetico",
                       "metodo": "outro"}, headers=auth("admin"))
     for _ in range(2):
-        client.post(f"{API}/eeg/exames/{exame['id']}/laudo",
+        _receber(client, auth, exame,
                     files={"arquivo": ("laudo.pdf", _pdf(), "application/pdf")},
                     headers=auth("admin"))
 
@@ -585,7 +608,7 @@ def test_pdf_invalido_e_recusado(client, auth, storage):
     client.post(f"{API}/eeg/exames/{exame['id']}/envio-laudo",
                 json={"destino_tipo": "medico", "destino_nome": "Dr. Sintetico",
                       "metodo": "outro"}, headers=auth("admin"))
-    resp = client.post(f"{API}/eeg/exames/{exame['id']}/laudo",
+    resp = _receber(client, auth, exame,
                        files={"arquivo": ("x.pdf", b"nao sou um pdf", "application/pdf")},
                        headers=auth("admin"))
     assert resp.status_code == 422
@@ -604,7 +627,7 @@ def test_trilha_de_auditoria_cobre_o_fluxo(client, auth, db, storage):
     client.post(f"{API}/eeg/exames/{exame['id']}/envio-laudo",
                 json={"destino_tipo": "empresa", "destino_nome": "Telelaudo Sintetico",
                       "metodo": "plataforma_externa"}, headers=auth("admin"))
-    client.post(f"{API}/eeg/exames/{exame['id']}/laudo",
+    _receber(client, auth, exame,
                 files={"arquivo": ("laudo.pdf", _pdf(), "application/pdf")},
                 headers=auth("admin"))
     _status(client, auth, exame["id"], "laudo_disponivel")

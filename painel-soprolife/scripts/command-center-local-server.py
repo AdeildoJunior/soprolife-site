@@ -244,7 +244,7 @@ def _safe_request_id(value: str | None) -> str:
 def _is_report_upload(method: str, suffix: str, content_type: str | None) -> bool:
     return (
         method == "POST"
-        and (suffix == "/laudos" or re.fullmatch(rf"/eeg/exames/{_UUID}/laudo", suffix))
+        and (suffix == "/laudos" or suffix == "/eeg/documentos" or re.fullmatch(rf"/eeg/exames/{_UUID}/(?:laudo|importar)", suffix))
         and (content_type or "").lower().startswith("multipart/form-data;")
     )
 
@@ -257,6 +257,8 @@ def _tipos_binarios_esperados(method: str, suffix: str) -> frozenset:
     """
 
     if method == "GET":
+        if re.fullmatch(rf"/eeg/(?:arquivos|documentos)/{_UUID}/conteudo", suffix):
+            return frozenset({"application/pdf", "application/zip", "application/octet-stream"})
         if _M15_FISCAL_DOWNLOAD_RE.fullmatch(suffix):
             return _M15_TIPOS_FISCAIS
         if re.fullmatch(rf"/eeg/laudos/{_UUID}/arquivo", suffix):
@@ -308,6 +310,18 @@ def _is_administrative(identidade: dict | None) -> bool:
     if not isinstance(papeis, list):
         return False
     return any(p in _PAPEIS_ADMINISTRATIVOS for p in papeis if isinstance(p, str))
+
+
+def _can_read_operational_data(path: str, identidade: dict | None) -> bool:
+    # Exceção de marca nominal: nunca amplia o restante de data/ para EEG.
+    try:
+        target = _gate.normalize(path).lower()
+    except _gate.InvalidPath:
+        return False
+    if target == '/painel-soprolife/data/custos-investimentos-eeglife.local.json':
+        roles = identidade.get('papeis_efetivos', []) if identidade else []
+        return isinstance(roles,list) and bool({'admin','eeg_financeiro'} & set(p for p in roles if isinstance(p,str)))
+    return _is_administrative(identidade)
 
 
 def _session_identity(cookie_header: str | None) -> dict | None:
@@ -418,7 +432,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         if (
             kind == _gate.PROTECTED_DATA
             and not _gate.is_shared_session_data(self.path)
-            and not _is_administrative(identidade)
+            and not _can_read_operational_data(self.path, identidade)
         ):
             self._deny(403, "Permissão insuficiente para este dado.", method)
             return False
@@ -603,7 +617,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             method, suffix, self.headers.get("Content-Type")
         )
         request_limit = (
-            _M15_MAX_REPORT_REQUEST_BODY if report_upload else _M15_MAX_REQUEST_BODY
+            (65 * 1024 * 1024 if suffix.startswith("/eeg/") and (suffix.endswith("/importar") or suffix == "/eeg/documentos") else _M15_MAX_REPORT_REQUEST_BODY) if report_upload else _M15_MAX_REQUEST_BODY
         )
         if length > request_limit:
             self._m15_error(413, "Corpo da requisição excede o limite.")
@@ -637,7 +651,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             status = response.status
             report_content = _is_report_content(method, suffix)
             response_limit = (
-                _M15_MAX_REPORT_RESPONSE_BODY
+                (65 * 1024 * 1024 if re.fullmatch(rf"/eeg/(?:arquivos|documentos)/{_UUID}/conteudo", suffix) else _M15_MAX_REPORT_RESPONSE_BODY)
                 if report_content
                 else _M15_MAX_RESPONSE_BODY
             )

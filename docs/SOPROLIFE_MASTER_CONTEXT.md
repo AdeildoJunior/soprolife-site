@@ -13,6 +13,26 @@
 
 ---
 
+## Operação EEGLife — extensão de 29/10/2026
+
+Contrato vigente: [EEGLIFE_OPERACIONAL.md](EEGLIFE_OPERACIONAL.md). A missão
+preserva os commits `5b042f3` e `2d5ca4d` e acrescenta oito tabelas aditivas
+(`a291029eeg01`), sem backfill ou concessão de papéis reais. Central/atendimento,
+CRM, leads/agenda, tarefas, importação manual privada Nano, conferência, redação
+médica EEG, PDF final, assinatura externa, portal/entrega, parceiros/documentos,
+fontes e indicadores agora possuem operação própria. Custos usam o livro-caixa
+existente; marketing aguarda integração; fiscal EEG continua bloqueado sem
+classificação formal. Não há API iCelera nem conclusão clínica por IA.
+
+A política provisória admin-only e a restrição a referências externas da Fase
+2A, descritas abaixo como contexto anterior, são substituídas pelo contrato
+vigente: `eeg_operador`, `eeg_tecnico`, `medical_eeg`, `eeg_financeiro` são
+capacidades independentes, sem herdar autorização respiratória. Admin não
+herda autoria clínica. Traçados PDF/EDF/ZIP até 64 MiB podem ficar no storage
+privado Life, com hash, RBAC e histórico. Laudo só é publicado após recebimento
+operacional do PDF assinado. Deploy/HEADs e evidências constam do relatório
+externo da missão, sem equivaler a habilitação técnica ou fiscal dos serviços.
+
 ## Fundação Centro de Comando Life (decisão de 18/10/2026)
 
 Consultar [CENTRO_COMANDO_LIFE_ARCHITECTURE.md](CENTRO_COMANDO_LIFE_ARCHITECTURE.md)

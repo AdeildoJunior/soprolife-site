@@ -920,5 +920,21 @@ class CookieDeSessaoTests(unittest.TestCase):
                              frozenset({server._M15_DEFAULT_COOKIE}))
 
 
+
+class EegCostsScopeTests(unittest.TestCase):
+    def test_eeg_costs_requires_eeg_finance_or_admin(self):
+        path='/painel-soprolife/data/custos-investimentos-eeglife.local.json'
+        for role in ('admin','eeg_financeiro'):
+            self.assertTrue(server._can_read_operational_data(path,{'papeis_efetivos':[role]}))
+        for role in ('gestor','operacional','leitura','medico','medical_eeg','eeg_operador','eeg_tecnico'):
+            self.assertFalse(server._can_read_operational_data(path,{'papeis_efetivos':[role]}))
+        self.assertFalse(server._can_read_operational_data(path,None))
+
+    def test_eeg_finance_cannot_read_respiratory_snapshots(self):
+        identity={'papeis_efetivos':['eeg_financeiro']}
+        for file in ('resumo.local.json','financeiro-summary.local.json','custos-investimentos-summary.local.json'):
+            self.assertFalse(server._can_read_operational_data('/painel-soprolife/data/'+file,identity))
+        self.assertFalse(server._can_read_operational_data('/painel-soprolife/data/../data/custos-investimentos-eeglife.local.json',identity))
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

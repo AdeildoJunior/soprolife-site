@@ -7,6 +7,15 @@ técnico e adaptação fiscal com classificação real ainda pendente. Ela não 
 implantada em produção. Os demais planos futuros abaixo não atestam deploy.
 Contrato vigente: [EEGLife — cadastros e fiscal](EEGLIFE_CADASTROS_FISCAL.md).
 
+## Contrato operacional de 29/10/2026
+
+[EEGLIFE_OPERACIONAL.md](EEGLIFE_OPERACIONAL.md) é a especificação vigente
+para as capacidades EEG implementadas nesta worktree. Ele substitui a política
+provisória admin-only, o traçado apenas externo e os itens “futuros” da matriz
+histórica abaixo. A identidade corporativa, duas marcas, segregação do razão,
+RBAC clínico independente e limites fiscais permanecem invariantes. O relatório
+externo registra o estado efetivo de integração/deploy e os respectivos HEADs.
+
 ## 1. Objetivo e organização
 
 Evoluir incrementalmente o painel existente, reutilizando seus módulos e o

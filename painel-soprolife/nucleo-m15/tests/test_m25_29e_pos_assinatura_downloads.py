@@ -614,12 +614,14 @@ def test_assets_alterados_tem_cache_busting_atual():
     divergência.
     """
 
+    # O JS da correção técnica já está em 2026102301; CSS e guarda
+    # acompanham esse contrato sem reverter o código respiratório publicado.
     import re
 
     versoes = set(
         re.findall(r"report-workflow\.(?:js|css)\?v=(\d+)", INDEX_HTML)
     )
     assert versoes, "os assets precisam continuar versionados"
-    assert versoes == {"2026101402"}, (
+    assert versoes == {"2026102301"}, (
         "JS e CSS têm que subir juntos, na versão desta etapa: " + str(versoes)
     )

@@ -12,7 +12,7 @@ from app.config import get_settings
 from app.db import get_db
 from app.models import EegResultAccess, EegResultSession, PatientResultAccess, AuditLog
 from app.services import patient_results as prs
-from .test_fase2a_eeg_operacao import _pdf, _pessoa_sopro, _vincular, _exame, _status, storage
+from .test_fase2a_eeg_operacao import _pdf, _pessoa_sopro, _vincular, _exame, _status, storage, _preparar_laudador
 
 API = "/api/v1/eeg"
 
@@ -62,7 +62,9 @@ def ready(client, auth, *, release=True, patient_name="Paciente Sintetico Portal
         "destino_tipo": "medico", "destino_nome": "Laudador Sintetico", "metodo": "outro"
     }, headers=auth())
     assert sent.status_code == 201
+    _preparar_laudador(client, auth, exam)
     received = client.post(f"{API}/exames/{exam['id']}/laudo",
+        data={"assinatura_recebida":"true", "confirmacao_codigo":exam["public_code"]},
         files={"arquivo": ("laudo.pdf", _pdf(), "application/pdf")}, headers=auth())
     assert received.status_code == 201, received.text
     exam = received.json()
@@ -125,6 +127,7 @@ def test_renovar_revogar_e_substituir_invalidam_sessao(client, auth, portal):
     assert login(portal, old).status_code == 401
     assert login(portal, new).status_code == 200
     replacement = client.post(f"{API}/exames/{exam['id']}/laudo",
+        data={"assinatura_recebida":"true", "confirmacao_codigo":exam["public_code"]},
         files={"arquivo": ("novo.pdf", _pdf(2), "application/pdf")}, headers=auth())
     assert replacement.status_code == 201, replacement.text
     assert download(portal).status_code == 401

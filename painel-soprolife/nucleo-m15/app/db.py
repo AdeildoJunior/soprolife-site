@@ -138,6 +138,8 @@ def build_engine(url: str | None = None):
     _ensure_sqlite_dir(url)
     kwargs: dict = {
         "future": True,
+        # PII/texto clínico nunca entram na representação de parâmetros SQL.
+        "hide_parameters": True,
         # M26.5 — o pool devolve conexões que podem ter morrido enquanto
         # estavam paradas: o PostgreSQL derrubou por timeout, o ufw esqueceu
         # o fluxo, a máquina hibernou. Sem `pool_pre_ping` isso vira um

@@ -76,7 +76,7 @@ class TokenRequest(StrictModel):
 
 # ------------------------------------------------------ administração (M15.3A)
 
-PapelUsuario = Literal["admin", "gestor", "operacional", "leitura"]
+PapelUsuario = Literal["admin", "gestor", "operacional", "leitura", "eeg_operador", "eeg_tecnico", "medical_eeg", "eeg_financeiro"]
 
 _EMAIL_RE = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
@@ -1436,9 +1436,23 @@ class EegAtendimentoCreate(EegExameCreate):
     local_atendimento: str = Field(min_length=2, max_length=200)
     municipio_atendimento_ibge: str = Field(pattern=r"^[0-9]{7}$")
     origem_canal: Literal["direto", "site", "whatsapp", "indicacao", "parceiro", "outro"]
-    valor: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    valor: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    reteste_sem_cobranca: bool = False
+    forma_pagamento: Literal["pix", "dinheiro", "cartao", "transferencia", "outro"] | None = None
+    data_recebimento: date | None = None
     pagamento_status: Literal["Pendente", "Recebido"] = "Pendente"
     idempotency_key: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_.:-]+$")
+
+    @model_validator(mode="after")
+    def valor_reteste(self):
+        if self.reteste_sem_cobranca:
+            if self.valor != 0 or self.pagamento_status != 'Pendente' or self.data_recebimento:
+                raise ValueError('Reteste sem cobrança exige valor zero e nenhum recebimento.')
+        elif self.valor <= 0:
+            raise ValueError('Informe valor positivo ou declare reteste sem cobrança.')
+        if self.data_recebimento and self.data_recebimento > date.today():
+            raise ValueError('Recebimento não pode estar no futuro.')
+        return self
 
     @field_validator("agendado_para")
     @classmethod

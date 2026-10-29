@@ -1,38 +1,25 @@
-/* EEGLife — operação real (Fase 2A; Custos & Investimentos na M26.37).
- *
- * Transforma cinco módulos da casca EEGLife em telas com DADO DE VERDADE:
- * Central de Cadastros, Exames e traçados, Laudos de EEG e Agendamentos vêm
- * das rotas /eeg do núcleo; Custos & Investimentos vem do resumo derivado do
- * livro-caixa dos sócios, que não mora no PostgreSQL. Os demais seguem como
- * estrutura vazia.
- *
- * O QUE ESTE ARQUIVO NÃO DECIDE
- * -----------------------------
- * Autorização. Quem pode ver a EEGLife é decidido no servidor
- * (`require_eeg_access`), e toda rota aqui volta 403 para quem não pode. Este
- * arquivo só desenha o que a API devolveu — se ela recusar, a tela diz que
- * recusou, e é isso.
- *
- * ESCOPO
- * ------
- * A Central lista por VÍNCULO (`/eeg/pessoas`), nunca a base inteira de
- * pessoas. Uma pessoa da SoproLife sem exame de EEG não aparece aqui porque a
- * consulta do servidor não a devolve — não porque esta tela a esconde.
- *
- * ARQUIVO TÉCNICO
- * ---------------
- * O traçado não sobe por aqui e não é exibido. O que existe é o registro de
- * que ele EXISTE e onde está. Um EEG digital tem dezenas a centenas de MB;
- * trazê-lo para o navegador seria errado de três formas ao mesmo tempo.
+/* EEGLife: operação no M15 corporativo, com domínio clínico EEG independente.
+ * API valida RBAC e atribuição; UI adapta ações aos papéis da sessão.
+ * Nano usa importação manual privada, sem API de fabricante ou interpretação.
+ * Custos continuam no resumo por marca do livro-caixa corporativo existente.
  */
 (function () {
   "use strict";
 
   var MODULOS_VIVOS = {
+    visao: montarVisao,
+    crm: montarCrm,
+    tarefas: montarTarefas,
+    marketing: montarMarketing,
+    fontes: montarFontes,
+    lancamentos: montarEventos,
+    documentos: montarDocumentos,
+    parceiros: montarParceiros,
+    nucleo: montarNucleo,
     cadastros: montarCentral,
     exames: montarExames,
     laudos: montarLaudos,
-    leads: montarAgenda,
+    leads: montarLeads,
     custos: montarCustos,
     financeiro: montarFinanceiro,
     fiscal: montarFiscal,
@@ -55,6 +42,8 @@
     return d.toLocaleDateString("pt-BR") + " " +
       d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   }
+
+  function diaBr(value) { if(!value)return "—";var m=String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?m[3]+"/"+m[2]+"/"+m[1]:dataBr(value); }
 
   var ROTULO_STATUS = {
     cadastro: "Cadastro", agendado: "Agendado", confirmado: "Confirmado",
@@ -87,8 +76,12 @@
   function carregar(secao, promessa, render) {
     secao.querySelector("[data-eeg-corpo]").innerHTML =
       '<div class="empty-state">Carregando…</div>';
+    var ticket = crypto.randomUUID();
+    secao.dataset.eegRequest = ticket;
     return promessa.then(function (dados) {
+      if(secao.dataset.eegRequest !== ticket || !secao.isConnected) return;
       secao.querySelector("[data-eeg-corpo]").innerHTML = render(dados);
+      prepararTabela(secao);
       secao.querySelectorAll("[data-eeg-preparar]").forEach(function (b) {
         b.onclick = function () { prepararFiscal(secao, b.getAttribute("data-eeg-preparar")); };
       });
@@ -101,6 +94,8 @@
             function (dados) { return post("/eeg/financeiro/" + b.getAttribute("data-eeg-pagamento") + "/pagamento", dados, "PATCH").then(function () { atualizar(secao); }); });
         };
       });
+      secao.querySelectorAll('[data-eeg-edit]').forEach(function(b){b.onclick=function(){editarCadastro(secao,centralRows[b.dataset.eegEdit]);};});
+      secao.querySelectorAll('[data-eeg-history]').forEach(function(b){b.onclick=function(){historico(secao,b.dataset.eegHistory);};});
       secao.querySelectorAll("[data-eeg-atender]").forEach(function (b) {
         b.onclick = function () { novoAtendimento(secao, b.getAttribute("data-eeg-atender")); };
       });
@@ -108,6 +103,7 @@
         b.onclick = function () { operar(secao, exames[b.getAttribute("data-eeg-exame")]); };
       });
     }).catch(function (err) {
+      if(secao.dataset.eegRequest !== ticket || !secao.isConnected) return;
       secao.querySelector("[data-eeg-corpo]").innerHTML =
         '<div class="empty-state">' + esc(mensagemErro(err && err.detalhe || err)) + "</div>";
     });
@@ -140,6 +136,7 @@
         '<button type="button" data-eeg-novo-paciente>Cadastrar / vincular paciente</button>' +
       "</div>"
     );
+    var primary=document.createElement("button");primary.type="button";primary.textContent="Novo Atendimento EEG";primary.onclick=function(){novoAtendimento(secao);};secao.querySelector(".eeg-toolbar").prepend(primary);
     secao.querySelector("[data-eeg-novo-paciente]").onclick = function () { cadastrar(secao); };
     var busca = secao.querySelector("[data-eeg-busca]");
     var pedir = function () {
@@ -158,12 +155,14 @@
     return pedir();
   }
 
+  var centralRows={};
   function renderCentral(dados) {
     var itens = (dados && dados.itens) || [];
     if (!itens.length) {
       return vazio("Nenhuma pessoa vinculada à operação EEGLife ainda.");
     }
     var linhas = itens.map(function (v) {
+      centralRows[v.id]=v;
       var p = v.pessoa || {};
       var pendencias = (p.cadastro_pendencias || []).length;
       return "<tr>" +
@@ -174,7 +173,7 @@
         "<td>" + (pendencias
           ? '<span class="badge eeg-badge-pendente">' + pendencias + " pendência(s)</span>"
           : '<span class="badge">Completo</span>') + "</td>" +
-        '<td><button type="button" data-eeg-atender="' + esc(v.id) + '">Novo Atendimento</button></td></tr>';
+        '<td><button type="button" data-eeg-atender="' + esc(v.id) + '">Novo Atendimento</button> <button data-eeg-edit="' + esc(v.id) + '">Editar</button> <button data-eeg-history="' + esc(v.id) + '">Histórico</button></td></tr>';
     }).join("");
     return tabela(["Código", "Paciente", "CPF", "Exames EEG", "Cadastro", "Ações"], linhas) +
       '<p class="eeg-nota">Somente pessoas com vínculo EEGLife aparecem aqui. ' +
@@ -214,64 +213,27 @@
   function montarExames(secao) {
     secao.innerHTML = cabecalho(secao) + moldura(
       "Exames e traçados",
-      "Fila operacional dos exames de EEG.", '<button type="button" data-eeg-agendar>Agendar EEG</button>'
+      "Fila operacional dos exames de EEG.", tem("eeg_operador") ? '<button type="button" data-eeg-agendar>Agendar EEG</button>' : ""
     );
     ligarAgenda(secao);
-    return carregar(secao, todos("/eeg/exames"), function (dados) {
-      var itens = (dados && dados.itens) || [];
-      if (!itens.length) return vazio("Nenhum exame de EEG registrado.");
-      return tabela(
-        ["Exame", "Paciente", "Modalidade", "Local", "Realizado em",
-         "Situação", "Arquivo técnico", "Envio do laudo", "Ações"],
-        itens.map(function (e) {
-          var tec = e.arquivo_tecnico || {};
-          return "<tr><td>" + esc(e.public_code) + "</td>" +
-            "<td>" + esc((e.paciente || {}).nome_completo || "—") + "</td>" +
-            "<td>" + esc(e.modalidade_nome || e.modalidade_codigo) + "</td>" +
-            "<td>" + esc(e.local_nome || "—") + "</td>" +
-            "<td>" + esc(dataBr(e.realizado_em)) + "</td>" +
-            "<td>" + badgeStatus(e.status) + "</td>" +
-            "<td>" + (tec.registrado
-              ? '<span class="badge">' + esc(tec.formato || "registrado") + "</span>"
-              : '<span class="badge eeg-badge-pendente">não registrado</span>') + "</td>" +
-            "<td>" + (e.envio_laudo
-              ? esc(e.envio_laudo.destino_nome)
-              : "—") + "</td><td>" + botaoExame(e) + "</td></tr>";
-        }).join("")
-      ) + '<p class="eeg-nota">O traçado não é exibido nem armazenado aqui: ' +
-        "o Centro de Comando registra que ele existe e onde está. " +
-        "A fonte técnica continua sendo o equipamento ou a plataforma externa.</p>";
-    });
+    return carregar(secao, todos("/eeg/exames"), renderExamCards);
   }
 
-  // ── Laudos de EEG ───────────────────────────────────────────────────────
+  function renderExamCards(dados) {
+    var itens=dados.itens||[];
+    if(!itens.length) return vazio("Nenhum EEG nesta fila.");
+    return '<div class="eeg-cards">'+itens.map(function(e){
+      var f=e.fluxo||{},file=e.arquivo_tecnico||{},doctor=f.medico||{};
+      return '<article class="panel eeg-exam-card" data-eeg-record="'+esc(e.id)+'"><div class="eeg-record-heading"><span class="eyebrow">'+esc(e.public_code)+'</span>'+badgeStatus(e.status)+'</div><h3>'+esc((e.paciente||{}).nome_completo)+'</h3><p class="eeg-flow-label">'+esc(rotuloFluxo(e))+'</p><dl>'+[
+        ['Modalidade',e.modalidade_nome||e.modalidade_codigo],['Data',dataBr(e.realizado_em||e.agendado_para)],['Local',e.local_nome||'Não informado'],['Origem',e.origem_canal||e.origem_tipo],['Responsável técnico',e.tecnico_responsavel||'Não atribuído'],['Arquivo técnico',file.privado?'Arquivo privado · '+(file.formato||''):(file.registrado?'Referência externa registrada':'Aguardando arquivo')],['Laudador',doctor.nome?doctor.nome+' · CRM '+doctor.crm+'/'+doctor.uf:'Não atribuído'],['Financeiro',f.reteste_sem_cobranca?'Correção técnica sem cobrança':e.situacao_financeira||'Sem receita vinculada']
+      ].map(function(row){return '<div><dt>'+esc(row[0])+'</dt><dd>'+esc(row[1])+'</dd></div>';}).join('')+'</dl><div class="eeg-toolbar">'+botaoExame(e)+'</div></article>';
+    }).join('')+'</div>';
+  }
 
   function montarLaudos(secao) {
-    secao.innerHTML = cabecalho(secao) + moldura(
-      "Laudos de EEG",
-      "Fila própria da EEGLife — não reaproveita laudo de espirometria.", ""
-    );
-    return carregar(secao, todos("/eeg/laudos"), function (dados) {
-      var itens = (dados && dados.itens) || [];
-      if (!itens.length) return vazio("Nenhum exame realizado aguardando laudo.");
-      return tabela(
-        ["Exame", "Paciente", "Modalidade", "Realizado em", "Destino",
-         "Enviado em", "Situação", "Laudo", "Ações"],
-        itens.map(function (e) {
-          var l = e.laudo;
-          return "<tr><td>" + esc(e.public_code) + "</td>" +
-            "<td>" + esc((e.paciente || {}).nome_completo || "—") + "</td>" +
-            "<td>" + esc(e.modalidade_nome || e.modalidade_codigo) + "</td>" +
-            "<td>" + esc(dataBr(e.realizado_em)) + "</td>" +
-            "<td>" + esc(e.envio_laudo ? e.envio_laudo.destino_nome : "—") + "</td>" +
-            "<td>" + esc(dataBr(e.enviado_para_laudo_em)) + "</td>" +
-            "<td>" + badgeStatus(e.status) + "</td>" +
-            "<td>" + (l
-              ? '<span class="badge">' + esc(l.public_code) + " · v" + esc(String(l.versao)) + "</span>"
-              : "—") + "</td><td>" + botaoExame(e) + "</td></tr>";
-        }).join("")
-      );
-    });
+    secao.innerHTML = cabecalho(secao) + moldura("Laudos de EEG", "Fila médica própria · redação, assinatura e entrega.", '<button type="button" data-eeg-preparos>Preparos EEG</button>');
+    secao.querySelector('[data-eeg-preparos]').onclick=preparos;
+    return carregar(secao,todos('/eeg/laudos'),renderExamCards);
   }
 
   // ── Cabeçalho comum, no padrão do produto ───────────────────────────────
@@ -300,7 +262,7 @@
     try {
       fabrica(secao);
     } catch (e) {
-      console.error("EEG: falha ao montar módulo " + moduloId, e);
+      console.error("EEG: falha ao montar módulo " + moduloId);
       return false;
     }
     return true;
@@ -439,23 +401,25 @@
   }
 
   function ligarAgenda(secao) {
-    secao.querySelector("[data-eeg-agendar]").onclick = function () { novoAtendimento(secao); };
+    var b=secao.querySelector("[data-eeg-agendar]");
+    if(b)b.onclick = function () { novoAtendimento(secao); };
   }
 
-  function novoAtendimento(secao, enrollmentId) {
-    Promise.all([todos("/eeg/pessoas"), m15().api("/eeg/modalidades"), m15().api("/eeg/locais")]).then(function (r) {
+  function novoAtendimento(secao, enrollmentId, leadId) {
+    Promise.all([todos("/eeg/pessoas"), m15().api("/eeg/modalidades"), m15().api("/eeg/locais"),m15().api("/eeg/municipios")]).then(function (r) {
       if (!r[0].itens.length) { cadastrar(secao); return; }
       var key = "eeg-" + crypto.randomUUID();
       var d = formulario("Novo Atendimento EEG",
-        select("enrollment_id", "Paciente", r[0].itens.map(function (v) { return [v.id, v.pessoa.public_code + " · " + v.pessoa.nome_completo]; })) +
+        select("enrollment_id", "Paciente", [["", "Selecione o paciente após conferência"]].concat(r[0].itens.map(function (v) { return [v.id, v.pessoa.public_code + " · " + v.pessoa.nome_completo]; }))) +
         select("modalidade_codigo", "Modalidade", r[1].itens.filter(function (m) { return m.ativo; }).map(function (m) { return [m.codigo, m.nome + " · validação técnica pendente"]; })) +
         '<p class="eeg-nota">Modalidades pendentes de validação técnica no Nano/iCelera. O registro não confirma disponibilidade. Hospitalar, vídeo-EEG e especial estão inativos.</p>' +
         campo("agendado_para", "Data e hora", "datetime-local", true) +
         select("partner_unit_id", "Unidade parceira (opcional)", [["", "Atendimento direto EEGLife"]].concat(r[2].itens.map(function (u) { return [u.id, u.nome]; }))) +
         campo("local_atendimento", "Local de atendimento", "text", true) +
-        select("municipio_atendimento_ibge", "Município da prestação", [["", "Selecione o município"], ["3304557", "Rio de Janeiro/RJ"], ["3303302", "Niterói/RJ"]]) +
+        select("municipio_atendimento_ibge", "Município da prestação", [["", "Selecione o município"]].concat(r[3].itens.map(function(m){return [m.codigo,m.rotulo];}))) +
         select("origem_canal", "Origem", [["direto", "Direto"], ["site", "Site"], ["whatsapp", "WhatsApp"], ["indicacao", "Indicação"], ["parceiro", "Parceiro"], ["outro", "Outro"]]) +
-        campo("valor", "Valor contratado (R$)", "number", true) +
+        select("reteste_sem_cobranca","Reteste / cobrança",[["false","Atendimento com cobrança"],["true","Correção técnica sem nova cobrança"]])+campo("valor", "Valor contratado (R$)", "number", true) +
+        select("forma_pagamento","Forma de pagamento",[["pix","Pix"],["dinheiro","Dinheiro"],["cartao","Cartão"],["transferencia","Transferência"],["outro","Outro"]])+campo("data_recebimento","Data real de recebimento","date") +
         select("pagamento_status", "Situação do pagamento", [["Pendente", "Pendente"], ["Recebido", "Recebido"]]) +
         campo("observacao", "Observações operacionais (sem dados clínicos)") +
         '<p>NFS-e e laudo dependem de ações separadas após o registro.</p>',
@@ -463,11 +427,17 @@
           dados.origem_tipo = dados.partner_unit_id ? "parceiro" : "direto";
           dados.agendado_para = new Date(dados.agendado_para).toISOString();
           dados.idempotency_key = key;
-          return post("/eeg/atendimentos", dados).then(function () { atualizar(secao); });
+          dados.reteste_sem_cobranca = dados.reteste_sem_cobranca === "true";
+          return post("/eeg/atendimentos", dados).then(function (exam) { return (leadId?post("/eeg/atividades/"+leadId+"/converter",{enrollment_id:dados.enrollment_id,exam_id:exam.id}):Promise.resolve()).then(function(){atualizar(secao);}); });
         }, "Criar atendimento");
+      var payment=d.querySelector('[name="pagamento_status"]'),received=d.querySelector('[name="data_recebimento"]');
+      payment.onchange=function(){received.required=payment.value==="Recebido";};
+      var retest=d.querySelector('[name="reteste_sem_cobranca"]');retest.onchange=function(){if(retest.value==="true"){d.querySelector('[name="valor"]').value="0";payment.value="Pendente";received.value="";received.required=false;}};
       d.querySelector('[name="valor"]').step = "0.01";
-      d.querySelector('[name="valor"]').min = "0.01";
+      d.querySelector('[name="valor"]').min = "0";
+      d.querySelector('[name="municipio_atendimento_ibge"]').value="3304557";
       d.querySelector('[name="municipio_atendimento_ibge"]').required = true;
+      d.querySelector('[name="enrollment_id"]').required = true;
       if (enrollmentId) d.querySelector('[name="enrollment_id"]').value = enrollmentId;
     }).catch(function (e) { secao.querySelector("[data-eeg-corpo]").textContent = mensagemErro(e); });
   }
@@ -476,9 +446,8 @@
     secao.innerHTML = cabecalho(secao) + moldura("Financeiro EEGLife", "Receitas no razão compartilhado, identificadas pela marca de origem.", "");
     return carregar(secao, todos("/eeg/financeiro"), function (dados) {
       if (!dados.itens.length) return vazio("Nenhuma receita de EEG registrada.");
-      return tabela(["Lançamento", "Atendimento", "Valor", "Pagamento", "Ações"], dados.itens.map(function (e) {
-        return "<tr><td>" + esc(e.public_code) + "</td><td>" + esc(e.descricao) + "</td><td>" + brl(e.valor) + "</td><td>" + esc(e.status) + '</td><td><button type="button" data-eeg-pagamento="' + esc(e.id) + '">Pagamento</button> <button type="button" data-eeg-preparar="' + esc(e.eeg_exam_id) + '">Conferir NFS-e</button></td></tr>';
-      }).join(""));
+      return '<div class="eeg-cards">'+dados.itens.map(function(e){return '<article class="panel eeg-exam-card"><p class="eyebrow">'+esc(e.public_code)+' · '+esc(e.exame)+'</p><h3>'+brl(e.valor)+'</h3><p>'+esc(e.status)+' · '+esc(e.forma_pagamento||'Forma não informada')+'</p><dl>'+[['Recebido em',e.data_recebimento?diaBr(e.data_recebimento):'Não recebido'],['Origem',e.origem||'Não informada'],['Responsável',e.responsavel||'Não atribuído'],['Parceiro',e.parceiro||'Direto EEGLife']].map(function(row){return '<div><dt>'+esc(row[0])+'</dt><dd>'+esc(row[1])+'</dd></div>';}).join('')+'</dl><div class="eeg-toolbar"><button data-eeg-pagamento="'+esc(e.id)+'">Pagamento</button><button data-eeg-preparar="'+esc(e.eeg_exam_id)+'">Conferir NFS-e</button></div></article>';}).join('')+'</div>';
+
     });
   }
 
@@ -488,6 +457,7 @@
     d.innerHTML = '<h3>' + esc(e.public_code) + ' · ' + esc((e.paciente || {}).nome_completo) + '</h3>' +
       '<p>' + esc(e.modalidade_nome) + ' · ' + badgeStatus(e.status) + '</p>' +
       '<p>Local: ' + esc(e.local_nome) + ' · Agenda: ' + esc(dataBr(e.agendado_para)) + '</p>' +
+      '<p>Fluxo: ' + esc(rotuloFluxo(e)) + '</p>' +
       '<p>Referência técnica: ' + esc((e.arquivo_tecnico || {}).referencia_externa || "Não registrada") + '</p>' +
       '<p>Envio: ' + esc(e.envio_laudo ? e.envio_laudo.destino_nome + " · " + (e.envio_laudo.protocolo_externo || "sem protocolo") + " · " + dataBr(e.envio_laudo.enviado_em) : "Não registrado") + '</p>' +
       '<div data-eeg-acoes class="eeg-toolbar"></div><p data-eeg-erro role="alert"></p><button type="button" data-eeg-fechar>Fechar</button>';
@@ -509,51 +479,19 @@
           return post("/eeg/exames/" + e.id + "/status", dados, "PATCH").then(salvo);
         }, "Confirmar");
     }
-    if (["cadastro", "agendado", "confirmado"].includes(e.status)) {
-      acao("Agendar / reagendar", function () { transicao("agendado", true); });
-      if (e.status === "agendado") acao("Confirmar agendamento", function () { transicao("confirmado"); });
+    eegWorkspaceActions(secao,e,acao,salvo);
+    if (tem("eeg_operador", "eeg_tecnico") && ["cadastro", "agendado", "confirmado"].includes(e.status)) {
+      if(tem("eeg_operador")) acao("Agendar / reagendar", function () { transicao("agendado", true); });
+      if (tem("eeg_operador") && e.status === "agendado") acao("Confirmar agendamento", function () { transicao("confirmado"); });
       if (e.status !== "cadastro") acao("Registrar realização", function () { transicao("realizado", true); });
     }
-    if (["realizado", "aguardando_envio_laudo", "enviado_para_laudo", "em_laudo", "laudo_recebido", "laudo_disponivel"].includes(e.status)) {
-      acao("Registrar referência técnica", function () {
-        formulario("Referência técnica do EEG",
-          '<p>O arquivo bruto permanece no equipamento ou na plataforma externa.</p>' +
-          select("armazenamento_origem", "Onde está o traçado", [["equipamento", "Software do equipamento"], ["plataforma_externa", "Plataforma externa"]]) +
-          campo("referencia_externa", "Referência técnica", "text", true) + campo("formato", "Formato (opcional)") + campo("equipamento", "Equipamento (opcional)"),
-          function (dados) { return post("/eeg/exames/" + e.id + "/arquivo-tecnico", dados).then(salvo); });
-      });
-    }
-    if (["realizado", "aguardando_envio_laudo", "enviado_para_laudo"].includes(e.status)) {
-      acao("Registrar envio ao laudador", function () {
-        formulario("Registrar envio realizado",
-          '<p>Registre o envio feito fora do painel. Nenhum arquivo é enviado automaticamente.</p>' +
-          select("destino_tipo", "Tipo de destino", [["empresa", "Empresa / plataforma de laudos"], ["medico", "Médico laudador direto"]]) +
-          campo("destino_nome", "Destino", "text", true) +
-          campo("enviado_em", "Data e hora do envio", "datetime-local", true) +
-          select("metodo", "Método", [["plataforma_externa", "Plataforma externa"], ["upload_manual_externo", "Upload manual externo"], ["outro", "Outro"]]) +
-          campo("protocolo_externo", "Protocolo / referência (opcional)"),
-          function (dados) { dados.enviado_em = new Date(dados.enviado_em).toISOString(); return post("/eeg/exames/" + e.id + "/envio-laudo", dados).then(salvo); });
-      });
-    }
-    if (e.status === "enviado_para_laudo") acao("Registrar em laudo", function () { transicao("em_laudo"); });
-    if (["enviado_para_laudo", "em_laudo", "laudo_recebido", "laudo_disponivel"].includes(e.status)) {
-      acao("Receber PDF do laudo", function () {
-        var f = formulario("Receber laudo EEG",
-          '<p>Envie somente o laudo PDF final recebido do laudador.</p>' + campo("arquivo", "Laudo PDF", "file", true) + campo("medico_laudador", "Médico laudador (opcional)"),
-          function (_dados, _d, form) {
-            return m15().api("/eeg/exames/" + e.id + "/laudo", { method: "POST", body: new FormData(form) }).then(salvo);
-          });
-        f.querySelector('[name="arquivo"]').accept = "application/pdf,.pdf";
-      });
-    }
-    if (e.status === "laudo_recebido") acao("Disponibilizar PDF final", function () { transicao("laudo_disponivel"); });
     if (e.laudo) acao("Baixar laudo PDF", function () {
       return m15().apiBlob("/eeg/laudos/" + e.laudo.id + "/arquivo").then(function (blob) {
         var a = document.createElement("a"), url = URL.createObjectURL(blob);
         a.href = url; a.download = blob.nomeSugerido || (e.laudo.public_code + ".pdf"); a.click(); setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
       });
     });
-    if (e.status === "laudo_disponivel" && e.laudo) {
+    if (tem("eeg_operador") && e.status === "laudo_disponivel" && e.laudo) {
       function link(renovar) {
         return post("/eeg/laudos/" + e.laudo.id + "/acesso-resultado" + (renovar ? "?renovar=true" : ""), {}).then(function (r) {
           var info = d.querySelector("[data-eeg-erro]"); info.textContent = "Acesso do paciente (exige nascimento): ";
@@ -565,8 +503,8 @@
       acao("Renovar link do paciente", function () { return link(true); });
       acao("Revogar acesso do paciente", function () { return post("/eeg/laudos/" + e.laudo.id + "/acesso-resultado/revogar", {}).then(function () { d.querySelector("[data-eeg-erro]").textContent = "Acesso revogado."; }); });
     }
-    acao("Conferir NFS-e", function () { return prepararFiscal(secao, e.id); });
-    if (!["cancelado", "laudo_disponivel"].includes(e.status)) acao("Cancelar exame", function () { transicao("cancelado"); });
+    if(tem("eeg_financeiro")) acao("Conferir NFS-e", function () { return prepararFiscal(secao, e.id); });
+    if (tem("eeg_operador") && !["cancelado", "laudo_disponivel"].includes(e.status)) acao("Cancelar exame", function () { transicao("cancelado"); });
     d.showModal();
   }
 
@@ -582,7 +520,7 @@
       '<button type="button" data-eeg-fiscal-atualizar>Atualizar</button>');
     secao.querySelector("[data-eeg-fiscal-atualizar]").onclick = function () { montarFiscal(secao); };
     return carregar(secao, todos("/eeg/fiscal"), function (dados) {
-      return '<p class="eeg-nota">Classificação fiscal EEG deve ser validada especificamente. A emissão depende de confirmação humana e usa o emissor corporativo SoproLife.</p>' +
+      return '<p class="eeg-nota">Configuração fiscal EEG pendente de aprovação. A emissão depende de confirmação humana e usa o emissor corporativo SoproLife.</p>' +
         (dados.itens.length ? tabela(["Atendimento", "Modalidade executada", "Valor fiscal", "Situação", "Pendência", "Ações"], dados.itens.map(function (doc) {
           documentos[doc.id] = doc;
           var c = doc.confirmacao || {};
@@ -803,6 +741,86 @@
   }
   /* Não depende das rotas /eeg — ver `montar`. */
   montarCustos.semNucleo = true;
+
+  function papeis() { return ((window.SoproBootGate || {}).identidade || {}).papeis_efetivos || []; }
+  function tem() { var r=papeis(); return r.includes("admin") || Array.from(arguments).some(function(p){return r.includes(p);}); }
+  function medico() { return papeis().includes("medical_eeg"); }
+  var FLUXO = { aguardando_arquivo:"Aguardando traçado", aguardando_conferencia:"Aguardando conferência técnica", pronto_laudo:"Pronto para laudo", atribuido:"Aguardando laudo", em_elaboracao:"Laudo em elaboração", aguardando_assinatura:"Aguardando assinatura", recebido_assinado:"Assinatura recebida", pronto_entrega:"Pronto para entrega", entregue:"Entregue" };
+  function rotuloFluxo(e) { if(["cadastro","agendado","confirmado"].includes(e.status))return "Aguardando realização";if(e.status==="cancelado")return "Cancelado";return FLUXO[(e.fluxo||{}).status] || "Aguardando traçado"; }
+  function textArea(name,label,required) { return '<label>'+esc(label)+'<textarea name="'+esc(name)+'" rows="5" '+(required?'required':'')+'></textarea></label>'; }
+  function baixar(path, types) { return m15().apiBlob(path,{aceitaBlob:types||["application/pdf","application/zip","application/octet-stream"]}).then(function(b){var a=document.createElement("a"),u=URL.createObjectURL(b);a.href=u;a.download=b.nomeSugerido||"arquivo-eeg";a.click();setTimeout(function(){URL.revokeObjectURL(u);},1000);}); }
+  function mini(t,v) { return '<div class="stat-card"><span>'+esc(t)+'</span><strong>'+esc(v)+'</strong></div>'; }
+  function prepararTabela(secao) {
+    secao.querySelectorAll("table").forEach(function(t){var labels=Array.from(t.querySelectorAll("thead th")).map(function(x){return x.textContent;});t.querySelectorAll("tbody tr").forEach(function(row){Array.from(row.children).forEach(function(td,i){td.setAttribute("data-label",labels[i]||"");});});});
+  }
+  function painel(secao,titulo,resumo,acoes,load,render) { secao.innerHTML=cabecalho(secao)+moldura(titulo,resumo,acoes||""); return carregar(secao,load,render); }
+  function montarVisao(secao) {
+    return painel(secao,"Operação EEGLife","Fonte PostgreSQL · contagens atuais; receita por competência no mês, em Brasília.",'<button type="button" data-eeg-novo-atendimento>Novo Atendimento EEG</button>',m15().api("/eeg/indicadores"),function(d){
+      return '<div class="eeg-stats">'+mini("EEGs agendados",d.agendados)+mini("Realizados",d.realizados)+mini("Aguardando traçado",d.aguardando_tracado)+mini("Aguardando laudo",d.aguardando_laudo)+mini("Aguardando assinatura",d.aguardando_assinatura)+mini("Prontos para entrega",d.prontos_entrega)+mini("Receita na competência",brl(d.receita_competencia))+mini("Tarefas pendentes",d.tarefas_pendentes)+'</div><p>Receita de '+esc(diaBr(d.periodo_inicio))+' a '+esc(diaBr(d.periodo_fim))+'. Não inclui custos ou repasses ainda não configurados.</p>';
+    }).then(function(){var b=secao.querySelector('[data-eeg-novo-atendimento]');if(b)b.onclick=function(){novoAtendimento(secao);};});
+  }
+  function editarCadastro(secao,v) {
+    var p=v.pessoa||{}, d=formulario("Editar cadastro compartilhado · "+p.public_code,
+      '<p>A identidade é corporativa e a correção cadastral também aparece na SoproLife. Consentimento abaixo é específico EEG.</p>'+campo("nome_completo","Nome completo","text",true)+campo("data_nascimento","Nascimento","date")+campo("telefone","Telefone com DDI","tel")+campo("email","E-mail","email")+select("sexo","Sexo",[["","Não informado"],["feminino","Feminino"],["masculino","Masculino"],["outro","Outro"]])+select("consentimento_whatsapp","WhatsApp operacional EEG",[["desconhecido","Não informado"],["concedido","Autorizado"],["revogado","Revogado"]]),
+      function(data){["data_nascimento","sexo","telefone","email"].forEach(function(k){if(!data[k])data[k]=null;});return post("/eeg/pessoas/"+v.id+"/cadastro",data,"PATCH").then(function(){atualizar(secao);});});
+    ["nome_completo","data_nascimento","sexo"].forEach(function(k){d.querySelector('[name="'+k+'"]').value=p[k]||"";});
+    var contacts=p.contatos||[];["telefone","email"].forEach(function(k){var c=contacts.find(function(x){return x.ativo!==false && (k==="telefone"?["telefone","whatsapp"].includes(x.tipo):x.tipo==="email");});d.querySelector('[name="'+k+'"]').value=c?c.valor:"";});d.querySelector('[name="consentimento_whatsapp"]').value=v.consentimento_whatsapp||"desconhecido";
+  }
+  function historico(secao,eid) { return m15().api('/eeg/pessoas/'+eid+'/historico').then(function(d){var html=d.exames.map(function(e){return '<article class="panel"><h4>'+esc(e.public_code)+' · '+esc(e.modalidade_nome)+'</h4><p>'+esc(dataBr(e.agendado_para))+' · '+esc(ROTULO_STATUS[e.status])+' · '+esc(rotuloFluxo(e))+'</p>'+botaoExame(e)+'</article>';}).join('')||vazio('Nenhum EEG registrado.');html+='<h4>Trilha operacional</h4>'+d.eventos.map(function(a){return '<p>'+esc(dataBr(a.quando))+' · '+esc(a.acao)+'</p>';}).join('');var modal=formulario('Histórico EEG',html,function(){},'Fechar histórico');modal.querySelectorAll('[data-eeg-exame]').forEach(function(b){b.onclick=function(){operar(secao,exames[b.dataset.eegExame]);};});}); }
+  function buscarCrm(q,situacao,pagina,itens) { pagina=pagina||1;itens=itens||[];return post('/eeg/crm/busca',{q:q||null,situacao:situacao||null,pagina:pagina,tamanho:100}).then(function(r){itens=itens.concat(r.itens||[]);return itens.length<r.total&&r.itens.length?buscarCrm(q,situacao,pagina+1,itens):{itens:itens,total:r.total};});}
+  function montarCrm(secao) {
+    secao.innerHTML=cabecalho(secao)+moldura("Relacionamento EEG","Próximo contato manual. Nenhuma regra respiratória de seis meses é aplicada.",'<input type="search" data-crm-search aria-label="Buscar no CRM EEG" placeholder="Buscar paciente por nome" />'+select('crm_filter','Situação CRM',[["","Todas"],["ativo","Ativo"],["aguardando_contato","Aguardando contato"],["acompanhamento","Acompanhamento"],["encerrado","Encerrado"]]));
+    var input=secao.querySelector('[data-crm-search]'),filter=secao.querySelector('[name="crm_filter"]');
+    function load(){return carregar(secao,buscarCrm(input.value,filter.value),function(d){if(!d.itens.length)return vazio('Nenhum paciente para este filtro.');return '<div class="eeg-cards">'+d.itens.map(function(v){crmRows[v.id]=v;return '<article class="panel eeg-patient-card"><h4>'+esc(v.paciente)+'</h4><p>'+esc(v.codigo)+' · '+esc(v.contato||'Sem telefone')+'</p><p>Último EEG: '+esc(v.ultimo_eeg?v.ultimo_eeg.codigo+' · '+(ROTULO_STATUS[v.ultimo_eeg.status]||v.ultimo_eeg.status):'Nenhum')+'</p><p>Próximo contato: '+esc(v.proximo_contato?diaBr(v.proximo_contato):'Não definido')+' · '+esc(v.situacao)+'</p><p>Origem: '+esc(v.origem||'Não informada')+'</p><div class="eeg-toolbar">'+(v.whatsapp_url?'<a target="_blank" rel="noopener noreferrer" href="'+esc(v.whatsapp_url)+'">WhatsApp · revisar</a>':'<span>WhatsApp indisponível</span>')+'<button data-crm-history="'+esc(v.id)+'">Histórico</button><button data-eeg-atender="'+esc(v.id)+'">Novo EEG</button><button data-crm-schedule="'+esc(v.id)+'">Agendar / Reagendar</button><button data-crm-contact="'+esc(v.id)+'">Próximo contato</button></div></article>';}).join('')+'</div>';}).then(function(){secao.querySelectorAll('[data-crm-schedule]').forEach(function(b){b.onclick=function(){var v=crmRows[b.dataset.crmSchedule];return todos('/eeg/exames').then(function(r){var e=r.itens.find(function(x){return x.enrollment_id===v.id&&['agendado','confirmado'].includes(x.status);});if(e)operar(secao,e);else novoAtendimento(secao,v.id);});};});secao.querySelectorAll('[data-crm-history]').forEach(function(b){b.onclick=function(){historico(secao,b.dataset.crmHistory);};});secao.querySelectorAll('[data-crm-contact]').forEach(function(b){b.onclick=function(){var v=crmRows[b.dataset.crmContact];var f=formulario('Próximo contato EEG',campo('proximo_contato','Data do próximo contato','date')+select('situacao','Situação',[["ativo","Ativo"],["aguardando_contato","Aguardando contato"],["acompanhamento","Acompanhamento"],["encerrado","Encerrado"]]),function(d){d.proximo_contato=d.proximo_contato||null;return post('/eeg/crm/'+v.id,d,'PATCH').then(load);});f.querySelector('[name="proximo_contato"]').value=v.proximo_contato||'';f.querySelector('[name="situacao"]').value=v.situacao;};});});}
+    var timer;input.oninput=function(){clearTimeout(timer);timer=setTimeout(load,300);};filter.onchange=load;return load();
+  }
+  var crmRows={},activityRows={};
+  var leadStates=['lead','interessado','aguardando_contato','solicitado','pre_agendado','confirmado','realizado','faltou','cancelado','reagendado'];
+  var taskCategories=['confirmar_agenda','enviar_preparo','cobrar_tracado','atribuir_laudador','acompanhar_assinatura','liberar_resultado','cobranca','retorno_comercial'];
+  function human(v){return String(v||'').replace(/_/g,' ');}
+  function activitiesForm(secao,tipo,a) {
+    return Promise.all([todos('/eeg/pessoas'),m15().api('/eeg/equipe')]).then(function(r){
+      var d=formulario((a?'Editar ':'Nova ')+(tipo==='lead'?'oportunidade EEG':'tarefa EEG'),campo('titulo',tipo==='lead'?'Nome do contato / oportunidade':'Título operacional (sem conteúdo clínico)','text',true)+
+        (tipo==='lead'?campo('contato','Contato (opcional)')+select('origem','Origem',[['direto','Direto'],['site','Site'],['whatsapp','WhatsApp'],['indicacao','Indicação'],['parceiro','Parceiro'],['outro','Outro']])+select('consentimento','Contato operacional autorizado',[['desconhecido','Não informado'],['concedido','Autorizado'],['revogado','Revogado']]):select('categoria','Tipo de tarefa',taskCategories.map(function(v){return [v,human(v)];})))+
+        select('status','Situação',(tipo==='lead'?leadStates:['pendente','em_andamento','concluida','cancelada']).map(function(v){return [v,human(v)];}))+
+        select('enrollment_id','Paciente vinculado',[['','Não vinculado']].concat(r[0].itens.map(function(v){return [v.id,v.pessoa.public_code+' · '+v.pessoa.nome_completo];})))+
+        select('responsavel_id','Responsável',[['','Não atribuído']].concat(r[1].itens.map(function(u){return [u.id,u.nome+' · '+u.papeis.join(', ')];})))+campo('prazo','Prazo / agendamento solicitado','datetime-local'),
+        function(data){data.tipo=tipo;if(tipo==='lead')data.categoria='oportunidade';if(data.prazo)data.prazo=new Date(data.prazo).toISOString();if(a&&a.exam_id)data.exam_id=a.exam_id;return post('/eeg/atividades'+(a?'/'+a.id:''),data,a?'PATCH':'POST').then(function(){atualizar(secao);});});
+      if(a)Object.keys(a).forEach(function(k){var el=d.querySelector('[name="'+k+'"]');if(el)el.value=k==='prazo'&&a[k]?localTime(a[k]):a[k]||'';});
+    });
+  }
+  function localTime(iso){var d=new Date(iso);d=new Date(d.getTime()-d.getTimezoneOffset()*60000);return d.toISOString().slice(0,16);}
+  function montarAtividades(secao,tipo) {
+    return painel(secao,tipo==='lead'?'Leads e Agendamentos':'Tarefas EEG',tipo==='lead'?'Converta a oportunidade em pessoa e atendimento sem duplicar a identidade.':'Rotina operacional com responsáveis explícitos.', '<button data-activity-new>Adicionar '+(tipo==='lead'?'lead':'tarefa')+'</button>'+(tipo==='lead'?'<button data-eeg-agendar>Novo Atendimento EEG</button>':'<button data-eeg-preparos>Preparos por modalidade</button>'),todos('/eeg/atividades?tipo='+tipo),function(d){if(!d.itens.length)return vazio(tipo==='lead'?'Nenhum lead EEG cadastrado.':'Nenhuma tarefa EEG cadastrada.');return tabela(['Registro','Categoria / origem','Prazo','Situação','Ações'],d.itens.map(function(a){activityRows[a.id]=a;return '<tr><td>'+esc(a.titulo)+'</td><td>'+esc(human(tipo==='lead'?a.origem:a.categoria))+'</td><td>'+esc(dataBr(a.prazo))+'</td><td>'+esc(human(a.status))+'</td><td>'+'<button data-activity-edit="'+esc(a.id)+'">Editar</button>'+(tipo==='lead'?'<button data-activity-convert="'+esc(a.id)+'">'+(a.exam_id?'Atendimento':'Converter / agendar')+'</button>':'')+'</td></tr>';}).join(''));}).then(function(){secao.querySelector('[data-activity-new]').onclick=function(){activitiesForm(secao,tipo);};var schedule=secao.querySelector('[data-eeg-agendar]');if(schedule)schedule.onclick=function(){novoAtendimento(secao);};var prep=secao.querySelector('[data-eeg-preparos]');if(prep)prep.onclick=preparos;secao.querySelectorAll('[data-activity-edit]').forEach(function(b){b.onclick=function(){activitiesForm(secao,tipo,activityRows[b.dataset.activityEdit]);};});secao.querySelectorAll('[data-activity-convert]').forEach(function(b){b.onclick=function(){converterLead(secao,activityRows[b.dataset.activityConvert]);};});
+      if(tipo==='lead') {var host=document.createElement('div');host.setAttribute('data-eeg-titulo','Agenda de EEG');host.setAttribute('data-eeg-modulo','leads');secao.appendChild(host);montarAgenda(host);}
+    });
+  }
+  function converterLead(secao,a) {if(a.exam_id)return todos('/eeg/exames').then(function(r){var e=r.itens.find(function(e){return e.id===a.exam_id;});if(!e)throw Error('Atendimento não encontrado nesta fila.');operar(secao,e);});return todos('/eeg/pessoas').then(function(r){var d=formulario('Converter lead EEG', '<p>Selecione a identidade após conferência. Use Cadastrar / vincular para uma pessoa ainda ausente.</p><button type="button" data-convert-register>Cadastrar / vincular pessoa</button>'+select('enrollment_id','Paciente',r.itens.map(function(v){return [v.id,v.pessoa.public_code+' · '+v.pessoa.nome_completo];})),function(data){return post('/eeg/atividades/'+a.id+'/converter',data).then(function(){novoAtendimento(secao,data.enrollment_id,a.id);});},'Vincular e criar atendimento');d.querySelector('[data-convert-register]').onclick=function(){d.close();cadastrar(secao);};if(a.enrollment_id)d.querySelector('[name="enrollment_id"]').value=a.enrollment_id;});}
+  function montarTarefas(secao){return montarAtividades(secao,'tarefa');}
+  function montarLeads(secao){return montarAtividades(secao,'lead');}
+  function preparos() {return m15().api('/eeg/preparos').then(function(r){var dialog=formulario('Preparos EEG por modalidade',r.itens.map(function(p){return '<article><h4>'+esc(p.modalidade)+'</h4><p>'+esc(p.texto||'Aguardando texto aprovado. Não envie instrução clínica genérica.')+'</p><p>'+esc(p.referencia_aprovacao||'')+'</p></article>';}).join(''),function(){},'Fechar preparos');if(medico()){var button=document.createElement('button');button.type='button';button.textContent='Registrar preparo aprovado';button.onclick=function(){formulario('Aprovação médica de preparo EEG',select('modalidade_codigo','Modalidade',r.itens.map(function(p){return[p.codigo,p.modalidade];}))+textArea('texto','Texto aprovado (específico da modalidade)',true)+campo('referencia_aprovacao','Referência documental da aprovação','text',true),function(d){return post('/eeg/preparos',d).then(function(){dialog.close();preparos();});});};dialog.querySelector('form').appendChild(button);}});}
+  function montarMarketing(secao){return painel(secao,'Marketing & SEO EEGLife','Domínio eeglife.com.br','',Promise.resolve({}),function(){return '<div class="eeg-stats">'+mini('Search Console','Aguardando integração')+mini('GA4','Aguardando integração')+'</div><p>Métricas da SoproLife permanecem no contexto SoproLife. Conecte as propriedades EEGLife antes de apresentar indicadores.</p>';});}
+  function montarFontes(secao){return painel(secao,'Fontes de dados','Estado observado e configuração de cada fonte. Configurado não significa teste externo concluído.','',m15().api('/eeg/fontes'),function(d){return tabela(['Fonte','Situação'],d.itens.map(function(f){return '<tr><td>'+esc(f.nome)+'</td><td>'+esc(f.status)+'</td></tr>';}).join(''))+'<p>Verificação: '+esc(dataBr(d.verificado_em))+'</p>';});}
+  function montarEventos(secao){return painel(secao,'Últimos lançamentos','Trilha EEGLife sem conteúdo clínico, nomes de pacientes ou contatos.','',todos('/eeg/eventos'),function(d){return d.itens.length?tabela(['Quando','Evento','Entidade','Responsável'],d.itens.map(function(e){return '<tr><td>'+esc(dataBr(e.quando))+'</td><td>'+esc(e.acao)+'</td><td>'+esc(e.entidade)+' · '+esc(e.entidade_id)+'</td><td>'+esc(e.responsavel_id||'Sistema')+'</td></tr>';}).join('')):vazio('Nenhum evento EEG registrado.');});}
+  var docCategories=['contratos','equipamento','anvisa','calibracao','treinamento','neurologistas','parceiros','protocolos','fiscal','institucional'];
+  function uploadDocumento(secao,previous) {var f=formulario('Documento privado EEGLife',campo('titulo','Título','text',true)+select('categoria','Categoria',docCategories.map(function(c){return[c,human(c)];}))+campo('validade','Validade','date')+campo('arquivo','Arquivo institucional','file',true),function(_data,_d,form){var fd=new FormData(form);if(!fd.get('validade'))fd.delete('validade');if(previous)fd.set('predecessor_id',previous);return m15().api('/eeg/documentos',{method:'POST',body:fd}).then(function(){atualizar(secao);});});f.querySelector('[name="arquivo"]').accept='.pdf,.zip,.edf';}
+  function montarDocumentos(secao){return painel(secao,'Documentos EEGLife','Acervo privado com hash e versões preservadas. PDF, EDF ou ZIP até 64 MiB.','<button data-doc-new>Adicionar documento</button>',todos('/eeg/documentos'),function(d){var replaced=d.itens.map(function(v){return v.predecessor_id;});return d.itens.length?tabela(['Documento','Categoria','Validade','Versão','Ações'],d.itens.map(function(v){return '<tr><td>'+esc(v.titulo)+'</td><td>'+esc(human(v.categoria))+'</td><td>'+esc(v.validade?diaBr(v.validade):'Não informada')+'</td><td>'+esc(replaced.includes(v.id)?'Substituído':'Vigente')+'</td><td><button data-doc-download="'+esc(v.id)+'">Baixar</button>'+(!replaced.includes(v.id)?'<button data-doc-replace="'+esc(v.id)+'">Nova versão</button>':'')+'</td></tr>';}).join('')):vazio('Nenhum documento institucional EEGLife registrado.');}).then(function(){secao.querySelector('[data-doc-new]').onclick=function(){uploadDocumento(secao);};secao.querySelectorAll('[data-doc-download]').forEach(function(b){b.onclick=function(){baixar('/eeg/documentos/'+b.dataset.docDownload+'/conteudo').catch(function(e){secao.querySelector('[data-eeg-corpo]').textContent=mensagemErro(e);});};});secao.querySelectorAll('[data-doc-replace]').forEach(function(b){b.onclick=function(){uploadDocumento(secao,b.dataset.docReplace);};});});}
+  function montarParceiros(secao){return painel(secao,'Parceiros EEGLife','Instituição e unidade corporativas; profissional laudador tem cadastro próprio.','<button data-partner-new>Adicionar / vincular parceiro</button>',todos('/eeg/parceiros'),function(d){return d.itens.length?tabela(['Parceiro','Categoria','Unidades'],d.itens.map(function(p){return '<tr><td>'+esc(p.nome)+'</td><td>'+esc(human(p.categoria))+'</td><td>'+esc(p.unidades.map(function(u){return u.nome;}).join(' · ')||'Sem unidade')+'</td></tr>';}).join('')):vazio('Nenhum parceiro vinculado à EEGLife.');}).then(function(){secao.querySelector('[data-partner-new]').onclick=function(){return m15().api('/eeg/parceiros/corporativos').then(function(r){formulario('Parceiro corporativo EEG',select('partner_id','Instituição corporativa existente', [['','Cadastrar nova instituição']].concat(r.itens.map(function(p){return[p.id,p.codigo+' · '+p.nome];})))+campo('nome','Nome institucional (para novo)')+select('categoria','Categoria',['clinica','hospital','neurologista','telelaudo','pediatra','psiquiatra','home_care','unidade'].map(function(v){return[v,human(v)];}))+campo('unidade','Unidade (opcional)'),function(d){return post('/eeg/parceiros',d).then(function(){atualizar(secao);});});});};});}
+  function montarNucleo(secao) {return painel(secao,'Equipe e laudo EEG','Papéis são concedidos no Núcleo administrativo corporativo. Nenhuma conta ganha autorização clínica por ser admin.','<button data-eeg-professional>Registrar laudador verificado</button><button data-eeg-preparos>Consultar preparos</button>',m15().api('/eeg/profissionais'),function(d){return d.itens.length?tabela(['Médico','CRM','RQE','Serviço'],d.itens.map(function(p){return '<tr><td>'+esc(p.nome)+'</td><td>'+esc(p.crm+'/'+p.uf)+'</td><td>'+esc(p.rqe||'Não informado')+'</td><td>'+esc(p.servico||p.tipo)+'</td></tr>';}).join('')):vazio('Nenhum laudador EEG verificado. Não há médico padrão.');}).then(function(){secao.querySelector('[data-eeg-preparos]').onclick=preparos;secao.querySelector('[data-eeg-professional]').onclick=function(){return m15().api('/eeg/equipe').then(function(team){formulario('Laudador EEG verificado',campo('nome','Nome profissional','text',true)+campo('crm','CRM (dígitos)','text',true)+campo('uf','UF do CRM','text',true)+campo('rqe','RQE (quando aplicável)')+campo('servico','Serviço de telelaudo (opcional)')+select('tipo','Vínculo',[['interno','Neurologista interno'],['parceiro','Neurologista parceiro'],['telelaudo','Serviço de telelaudo']])+select('user_id','Conta médica EEG (obrigatória para interno)',[['','Profissional externo sem conta']].concat(team.itens.filter(function(u){return u.papeis.includes('medical_eeg');}).map(function(u){return[u.id,u.nome];})))+campo('referencia_verificacao','Referência da conferência CRM/RQE','text',true),function(d){return post('/eeg/profissionais',d).then(function(){atualizar(secao);});});});};});}
+  function eegWorkspaceActions(secao,e,acao,salvo) {
+    var fluxo=e.fluxo||{}, state=fluxo.status;
+    if(tem('eeg_tecnico') && !['aguardando_assinatura','recebido_assinado','pronto_entrega','entregue'].includes(state) && !['cadastro','agendado','confirmado','cancelado'].includes(e.status))acao('Importar arquivo do exame',function(){var f=formulario('Importar arquivo · '+e.public_code,'<p>Paciente: '+esc(e.paciente.nome_completo)+'. Confira paciente e código do arquivo exportado pelo Nano/iCelera. Nenhuma interpretação automática será feita. PDF, EDF ou ZIP até 64 MiB.</p>'+campo('confirmacao_codigo','Confirme o código EEG','text',true)+campo('arquivo','Arquivo exportado','file',true),function(_data,_dialog,form){return m15().api('/eeg/exames/'+e.id+'/importar',{method:'POST',body:new FormData(form)}).then(salvo);},'Validar e importar');f.querySelector('[name="arquivo"]').accept='.pdf,.edf,.zip';});
+    acao('Arquivos e versões',function(){return m15().api('/eeg/exames/'+e.id+'/arquivos').then(function(d){var f=formulario('Arquivos privados · '+e.public_code,d.itens.map(function(v){return '<article><p>'+esc(v.formato||'Referência externa')+' · '+esc(v.size_bytes||'—')+' bytes · '+esc(dataBr(v.criado_em))+'</p><p class="eeg-hash">SHA-256: '+esc(v.sha256||'Não disponível')+'</p>'+(v.privado?'<button type="button" data-file-download="'+esc(v.id)+'">Baixar arquivo</button>':'')+'</article>';}).join('')||vazio('Nenhum arquivo.'),function(){},'Fechar arquivos');f.querySelectorAll('[data-file-download]').forEach(function(b){b.onclick=function(){baixar('/eeg/arquivos/'+b.dataset.fileDownload+'/conteudo').catch(function(err){f.querySelector('[data-eeg-erro]').textContent=mensagemErro(err);});};});});});
+    function step(name,action){acao(name,function(){formulario(name,'<p>'+esc(e.paciente.nome_completo)+' · '+esc(e.public_code)+'</p>'+campo('confirmacao_codigo','Confirme o código EEG','text',true),function(d){d.acao=action;return post('/eeg/exames/'+e.id+'/fluxo',d).then(salvo);},'Confirmar');});}
+    if(tem('eeg_tecnico')&&state==='aguardando_conferencia')step('Confirmar conferência técnica','conferir');
+    if(tem('eeg_operador')&&['pronto_laudo','atribuido'].includes(state))acao('Atribuir laudador EEG',function(){return m15().api('/eeg/profissionais').then(function(r){if(!r.itens.length)throw Error('Cadastre um laudador verificado no Núcleo administrativo EEG.');formulario('Atribuir EEG',select('professional_id','Neurologista / serviço',r.itens.map(function(p){return [p.id,p.nome+' · CRM '+p.crm+'/'+p.uf+(p.servico?' · '+p.servico:'')];})),function(d){return post('/eeg/exames/'+e.id+'/atribuir',d).then(salvo);});});});
+    if(medico()&&['atribuido','em_elaboracao'].includes(state))acao('Editor de laudo EEG',function(){return m15().api('/eeg/exames/'+e.id+'/bancada').then(function(r){var f=formulario('Redação médica EEG · '+e.public_code,'<p>Autoria médica explícita. Preencha somente informações fornecidas e sua avaliação. Nenhuma conclusão automática.</p>'+textArea('indicacao','Indicação clínica (somente se fornecida)')+textArea('tecnica','Técnica',true)+textArea('descricao','Descrição',true)+textArea('conclusao','Conclusão',true)+textArea('observacoes','Observações'),function(d){return post('/eeg/exames/'+e.id+'/redacao',d).then(salvo);},'Salvar versão');Object.keys(r.conteudo||{}).forEach(function(k){var el=f.querySelector('[name="'+k+'"]');if(el)el.value=r.conteudo[k]||'';});});});
+    if(medico()&&state==='em_elaboracao')step('Concluir laudo e gerar PDF final','concluir');
+    if(fluxo.final_document_id)acao('Baixar PDF final para assinatura',function(){return baixar('/eeg/laudos/'+fluxo.final_document_id+'/arquivo');});
+    if(tem('eeg_operador')&&['atribuido','em_elaboracao','aguardando_assinatura'].includes(state))acao('Receber PDF assinado',function(){var f=formulario('Recebimento operacional de assinatura · '+e.public_code,'<p>Confira paciente, código, médico e assinatura no PDF. Este registro não certifica validação criptográfica ICP-Brasil.</p>'+campo('confirmacao_codigo','Confirme o código EEG','text',true)+campo('arquivo','PDF assinado recebido','file',true),function(_d,_modal,form){var fd=new FormData(form);fd.set('assinatura_recebida','true');return m15().api('/eeg/exames/'+e.id+'/laudo',{method:'POST',body:fd}).then(salvo);},'Registrar recebido assinado');f.querySelector('[name="arquivo"]').accept='.pdf,application/pdf';});
+    if(tem('eeg_operador')&&state==='recebido_assinado')step('Liberar resultado para entrega','publicar');
+    if(tem('eeg_operador')&&state==='pronto_entrega')step('Registrar entrega ao paciente','entregar');
+  }
 
   window.SoproEegOperacao = {
     MODULOS_VIVOS: Object.keys(MODULOS_VIVOS),

@@ -231,3 +231,15 @@ def _audit_append_only_guard(session, _flush_context, _instances):
     for obj in session.deleted:
         if isinstance(obj, AuditLog):
             raise AuditAppendOnlyError("audit_logs é append-only (delete bloqueado).")
+
+
+@event.listens_for(Session, "before_flush")
+def _eeg_append_only_guard(session, _flush_context, _instances):
+    from .models import EegCaseRevision, EegPreparation, EegTechnicalFile, EegDocument
+    immutable = (EegCaseRevision, EegPreparation, EegTechnicalFile, EegDocument)
+    for obj in session.dirty:
+        if isinstance(obj, immutable) and session.is_modified(obj):
+            raise AuditAppendOnlyError("Evidência EEG é append-only.")
+    for obj in session.deleted:
+        if isinstance(obj, immutable):
+            raise AuditAppendOnlyError("Evidência EEG é append-only.")

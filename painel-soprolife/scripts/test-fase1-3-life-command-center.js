@@ -433,34 +433,27 @@ caso("init() roda no máximo uma vez",
 console.log();
 console.log("L) Fase 2A: operação real da EEGLife, com autorização no servidor");
 
-caso("os módulos vivos leem as rotas /eeg do núcleo",
-     /MODULOS_VIVOS = \{[\s\S]{0,260}?cadastros:[\s\S]{0,260}?exames:[\s\S]{0,260}?laudos:/.test(eegOperacao) &&
-     /todos\("\/eeg\/pessoas/.test(eegOperacao) &&
-     /todos\("\/eeg\/exames"\)/.test(eegOperacao) &&
-     /todos\("\/eeg\/laudos"\)/.test(eegOperacao));
+caso("os módulos vivos usam rotas EEG do núcleo compartilhado",
+     /cadastros: montarCentral/.test(eegOperacao) && /exames: montarExames/.test(eegOperacao) && /laudos: montarLaudos/.test(eegOperacao) &&
+     /todos\(["']\/eeg\/pessoas/.test(eegOperacao) && /todos\(["']\/eeg\/exames/.test(eegOperacao) && /todos\(["']\/eeg\/laudos/.test(eegOperacao));
 caso("a casca entrega o módulo à operação real quando ela existe",
      /window\.SoproEegOperacao/.test(shellCodigo) &&
      /operacao\.montar\(id, secao\)/.test(shellCodigo));
 // O ponto que não pode afrouxar: autorização é do servidor.
-caso("TODA rota de EEG depende de require_eeg_access",
-     (() => {
-       const rotas = (eegRouter.match(/@router\.(get|post|patch|delete)\(/g) || []).length;
-       const guardas = (eegRouter.match(/require_eeg_access/g) || []).length;
-       // uma ocorrência é o import; as demais são as dependências.
-       return rotas > 0 && guardas >= rotas + 1;
-     })(),
-     `rotas=${(eegRouter.match(/@router\.(get|post|patch|delete)\(/g) || []).length} ` +
-     `guardas=${(eegRouter.match(/require_eeg_access/g) || []).length}`);
+caso("TODA rota EEG tem dependência de RBAC EEG no servidor",
+     eegRouterCodigo.split(/@router\.(?:get|post|patch)\(/).slice(1).every(function(route){
+       return /Depends\(require_eeg_(?:access|operator|technician|finance|roles)/.test(route.slice(0,1100));
+     }));
 caso("a política de acesso é por papel, sem nome de pessoa",
      !/\bana\b/i.test(eegRouter) && !/\bana\b/i.test(eegOperacao));
 caso("a Central EEG consulta o vínculo, nunca a tabela de pessoas inteira",
      /select\(EegEnrollment\)[\s\S]{0,200}?\.join\(Person/.test(eegRouter));
-caso("o frontend não decide autorização",
-     !/papeis_efetivos|require_|ROLE_/.test(eegOperacaoCodigo));
-caso("o traçado não trafega nem é exibido no navegador",
-     !/<canvas|FileReader/.test(eegOperacaoCodigo) &&
-     !/arquivo-tecnico[^;]{0,100}FormData/.test(eegOperacaoCodigo) &&
-     /não é exibido nem armazenado aqui/.test(eegOperacao));
+caso("a UI adapta ações ao papel e a autorização permanece no servidor",
+     /papeis_efetivos/.test(eegOperacaoCodigo) && !/issue_token|ROLE_IMPLIES/.test(eegOperacaoCodigo) &&
+     /require_eeg_roles/.test(securityPy) && /require_eeg_operator/.test(eegRouterCodigo));
+caso("importação manual usa upload autenticado e não interpreta traçado",
+     /\/importar/.test(eegOperacaoCodigo) && /new FormData/.test(eegOperacaoCodigo) &&
+     !/<canvas|FileReader/.test(eegOperacaoCodigo) && /[Nn]enhuma interpretação automática|sem interpretação automática/.test(eegOperacao));
 caso("o registro do arquivo técnico é só metadado (sem coluna de blob)",
      /class EegTechnicalFile/.test(eegModelsCodigo) &&
      !/LargeBinary|BYTEA|BLOB/i.test(

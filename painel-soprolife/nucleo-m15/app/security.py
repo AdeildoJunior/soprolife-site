@@ -55,7 +55,8 @@ ADMINISTRATIVE_ROLES = [
     ROLE_OPERACIONAL,
     ROLE_LEITURA,
 ]
-ALL_ROLES = [*ADMINISTRATIVE_ROLES, ROLE_MEDICO]
+EEG_ROLES = {"eeg_operador", "eeg_tecnico", "medical_eeg", "eeg_financeiro"}
+ALL_ROLES = [*ADMINISTRATIVE_ROLES, ROLE_MEDICO, *sorted(EEG_ROLES)]
 
 # hierarquia: papel -> papéis que ele engloba
 ROLE_IMPLIES = {
@@ -479,9 +480,9 @@ def require_patient_registration_editor(
 # ─────────────────────────────────────────────────────────────────────────
 
 def can_access_eeg(user: User) -> bool:
-    """Política provisória da Fase 2A: somente papel efetivo ``admin``."""
+    """Marca EEG exige admin ou uma capacidade EEG explícita; sem herança respiratória."""
 
-    return ROLE_ADMIN in user_effective_roles(user)
+    return bool(({ROLE_ADMIN} | EEG_ROLES) & user_effective_roles(user))
 
 
 def require_eeg_access(user: User = Depends(get_current_user)) -> User:
@@ -491,6 +492,19 @@ def require_eeg_access(user: User = Depends(get_current_user)) -> User:
         )
     return user
 
+
+
+def require_eeg_roles(*roles):
+    def dependency(user: User = Depends(get_current_user)):
+        if not ({"admin", *roles} & user_effective_roles(user)):
+            raise HTTPException(403, "Permissão insuficiente para esta ação EEGLife.")
+        return user
+    return dependency
+
+
+require_eeg_operator = require_eeg_roles("eeg_operador")
+require_eeg_technician = require_eeg_roles("eeg_tecnico")
+require_eeg_finance = require_eeg_roles("eeg_financeiro")
 
 def ensure_roles_exist(db: Session) -> None:
     existing = {r.name for r in db.execute(select(Role)).scalars()}

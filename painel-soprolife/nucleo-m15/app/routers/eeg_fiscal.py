@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import FiscalDocument, EegExam, User
 from ..pagination import PageParams, paginate
-from ..security import require_eeg_access
+from ..security import require_eeg_finance as require_eeg_access
 from .fiscal import enabled
 from ..services import nfse, nfse_eeg, nfse_production_issuance as production
 

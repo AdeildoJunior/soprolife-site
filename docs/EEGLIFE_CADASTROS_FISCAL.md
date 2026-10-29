@@ -4,6 +4,14 @@ Implementação local de 29/10/2026. Este documento não confirma deploy, ativa�
 fiscal ou capacidade técnica do equipamento. PostgreSQL/M15 é a fonte canônica.
 Somente os contextos SoproLife e EEGLife existem; não há terceira marca.
 
+## Extensão operacional
+
+O contrato de [operação completa](EEGLIFE_OPERACIONAL.md) amplia estes dois
+commits sem reconstruí-los. Substitui o acesso somente admin por capacidades
+EEG específicas, permite traçado privado por importação manual e acrescenta
+fluxo médico/assinatura. Regras fiscais, identidade e idempotência abaixo
+permanecem. A migration nova não instala classificação real nem concede papéis.
+
 ## Identidade e autorização
 
 `Person` é corporativo. A Central EEG lista vínculos `EegEnrollment`; busca

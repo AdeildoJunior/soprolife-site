@@ -162,6 +162,8 @@
 
       if (administrativo) {
         podarDOM(null);            // perfil completo — nada é removido
+      } else if (temPapel(papeis,["eeg_operador","eeg_tecnico","medical_eeg","eeg_financeiro"])) {
+        podarDOM(clinico ? [SECAO_CLINICA] : []);
       } else if (clinico) {
         podarDOM([SECAO_CLINICA]); // só a bancada médica sobrevive
         ativar(SECAO_CLINICA);

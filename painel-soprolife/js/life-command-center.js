@@ -258,7 +258,9 @@
     var papeis = identidade && Array.isArray(identidade.papeis_efetivos)
       ? identidade.papeis_efetivos
       : [];
-    if (papeis.indexOf(PAPEL_EEG) !== -1) lista.push("eeglife");
+    var eegRoles=["admin","eeg_operador","eeg_tecnico","medical_eeg","eeg_financeiro"];
+    if (eegRoles.some(function(r){return papeis.includes(r);})) lista.push("eeglife");
+    if (papeis.length && !papeis.some(function(r){return ["admin","gestor","operacional","leitura","medico"].includes(r);})) lista=lista.filter(function(c){return c!==PADRAO;});
     return lista;
   }
 
@@ -393,6 +395,12 @@
       function (botao) {
         botao.addEventListener("click", function () {
           abrirModuloEeg(botao.getAttribute("data-eeg-modulo"));
+          var menu=document.getElementById("eegMobileMenu");
+          if(menu && window.matchMedia("(max-width:820px)").matches) {
+            menu.open=false;
+            var active=document.querySelector('[data-eeg-section="'+botao.getAttribute("data-eeg-modulo")+'"]');
+            if(active){active.setAttribute("tabindex","-1");active.focus({preventScroll:true});active.scrollIntoView({block:"start"});}
+          }
         });
       }
     );
@@ -435,7 +443,7 @@
   /* ── Aplicação do contexto ──────────────────────────────────────────────── */
 
   function aplicar(id, origem) {
-    if (!permitido(id)) id = PADRAO;
+    if (!permitido(id)) id = permitidos[0] || PADRAO;
     atual = id;
 
     document.body.setAttribute("data-life-ativo", id);
@@ -519,6 +527,8 @@
 
   function ligarInterface() {
     renderCascaEeg();
+    var menu=document.getElementById("eegMobileMenu"), media=window.matchMedia("(max-width:820px)");
+    if(menu){menu.open=!media.matches;media.addEventListener("change",function(e){menu.open=!e.matches;});}
     if (MODULOS_EEG[0] && MODULOS_EEG[0].itens[0]) {
       abrirModuloEeg(MODULOS_EEG[0].itens[0].id);
     }
@@ -541,6 +551,17 @@
   function decidirEaplicar(identidade) {
     permitidos = calcularPermitidos(identidade);
     podarMarcasNaoPermitidas();
+    var roles=(identidade||{}).papeis_efetivos||[];
+    var permittedModules=roles.includes("admin")?null:[];
+    if(permittedModules) {
+      if(roles.includes("eeg_operador")) permittedModules.push("visao","cadastros","crm","leads","tarefas","exames","laudos","marketing","parceiros","documentos","fontes","lancamentos");
+      if(roles.includes("eeg_tecnico")) permittedModules.push("exames","laudos","fontes");
+      if(roles.includes("medical_eeg")) permittedModules.push("laudos","exames","fontes");
+      if(roles.includes("eeg_financeiro")) permittedModules.push("financeiro","fiscal","custos","fontes");
+      document.querySelectorAll('[data-eeg-modulo]').forEach(function(b){if(!permittedModules.includes(b.dataset.eegModulo))b.remove();});
+      document.querySelectorAll('[data-eeg-section]').forEach(function(b){if(!permittedModules.includes(b.dataset.eegSection))b.remove();});
+    }
+    if(permitidos.includes("eeglife")) abrirModuloEeg(permittedModules&&permittedModules.length?permittedModules[0]:"visao");
     aplicar(lerSalvo(), "inicial");
     aplicado = true;
   }

@@ -2269,7 +2269,7 @@
 
   // ------------------------------------------------------------ administração
 
-  var PAPEIS = ["admin", "gestor", "operacional", "leitura"];
+  var PAPEIS = ["admin", "gestor", "operacional", "leitura", "eeg_operador", "eeg_tecnico", "medical_eeg", "eeg_financeiro"];
 
   loaders.admin = function () {
     return api("/admin/usuarios?tamanho=100").then(function (data) {
