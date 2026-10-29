@@ -41,7 +41,16 @@ link anterior. Esta fase não afirma verificação criptográfica de assinatura.
 
 Traçado bruto permanece no equipamento/plataforma externa; só metadados e
 referência no painel. PDF final fica no filesystem privado `eeg/laudos/`.
-Financeiro, Fiscal, repasses e Marketing EEG seguem fora do escopo.
+A extensão local de 29/10 (ainda sem deploy) acrescenta busca corporativa
+explícita por POST, Novo Atendimento EEG e receita no razão compartilhado.
+`FinancialEntry.eeg_exam_id` determina a marca EEGLife; as projeções e rotas
+financeiras SoproLife excluem esse vínculo. Não há backfill de marca.
+Consentimento operacional EEG fica no vínculo e em auditoria, sem alterar
+`Consent`/permissão de contato SoproLife. Repasses e Marketing EEG continuam fora.
+
+A migration local `e9c4a1b72029` acrescenta vínculo/atendimento/razão;
+nenhuma classificação fiscal EEG foi criada. Adaptação fiscal permanece
+pendente da próxima etapa. Ver [contrato EEG](EEGLIFE_CADASTROS_FISCAL.md).
 Estado de deploy e evidências: relatório da Fase 2A em Downloads (fora do Git).
 
 Inicialização: `start-local.sh` exige o proxy autenticado em loopback;

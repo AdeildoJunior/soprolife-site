@@ -1358,8 +1358,8 @@ class ExternalValidationRequest(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════
 # EEGLife — Fase 2A
 #
-# Nenhum destes payloads aceita preço, repasse, prazo ou conteúdo clínico:
-# regra comercial do EEG é fase posterior, e laudo chega pronto de fora.
+# Atendimento recebe valor explícito para FinancialEntry; os dados clínicos
+# permanecem separados. Laudo e NFS-e dependem de ações posteriores.
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -1374,6 +1374,13 @@ class EegVinculoCreate(StrictModel):
     person_id: str = Field(min_length=1, max_length=36)
     origem: str | None = Field(default=None, max_length=40)
     observacao: str | None = Field(default=None, max_length=500)
+
+
+class EegPessoaBusca(StrictModel):
+    q: str | None = Field(default=None, max_length=200)
+    corporativo: bool = False
+    pagina: int = Field(default=1, ge=1)
+    tamanho: int = Field(default=25, ge=1, le=100)
 
 
 class EegPessoaCreate(StrictModel):
@@ -1394,7 +1401,24 @@ class EegPessoaCreate(StrictModel):
     observacao: str | None = Field(default=None, max_length=500)
     # Confirmação explícita de que o operador viu os candidatos e mesmo assim
     # quer uma pessoa nova. Sem isto, correspondência segura bloqueia.
+    consentimento_whatsapp: Literal["concedido", "revogado", "desconhecido"] | None = None
     confirmar_nova_pessoa: bool = False
+
+    @field_validator("data_nascimento")
+    @classmethod
+    def nascimento_passado(cls, value):
+        if value and value > date.today():
+            raise ValueError("Nascimento não pode estar no futuro.")
+        return value
+
+    @field_validator("telefone")
+    @classmethod
+    def telefone_valido(cls, value):
+        if value:
+            from .normalize import normalize_phone
+            if not normalize_phone(value) or not 10 <= len(normalize_phone(value)) <= 15:
+                raise ValueError("Informe telefone válido com DDD/DDI.")
+        return value
 
 
 class EegExameCreate(StrictModel):
@@ -1405,6 +1429,23 @@ class EegExameCreate(StrictModel):
     agendado_para: datetime | None = None
     tecnico_responsavel: str | None = Field(default=None, max_length=200)
     observacao: str | None = Field(default=None, max_length=500)
+
+
+class EegAtendimentoCreate(EegExameCreate):
+    agendado_para: datetime
+    local_atendimento: str = Field(min_length=2, max_length=200)
+    municipio_atendimento_ibge: str = Field(pattern=r"^[0-9]{7}$")
+    origem_canal: Literal["direto", "site", "whatsapp", "indicacao", "parceiro", "outro"]
+    valor: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    pagamento_status: Literal["Pendente", "Recebido"] = "Pendente"
+    idempotency_key: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_.:-]+$")
+
+    @field_validator("agendado_para")
+    @classmethod
+    def horario_com_fuso(cls, value):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Data/hora deve conter fuso horário.")
+        return value
 
 
 class EegExameStatusUpdate(StrictModel):

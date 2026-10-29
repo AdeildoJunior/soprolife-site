@@ -112,7 +112,18 @@ def test_postgres_migracao_aborta_conflito_e_depois_preserva_linha_valida(
     )
     first = _entry("LAN-920001", "Espirometria", exam_id=exam_id)
     duplicate = _entry("LAN-920002", " espirometria ", exam_id=exam_id)
-    session.add_all([first, duplicate])
+    # FinancialEntry atual conhece o vínculo EEG, ausente no schema M22.
+    # Fabricar o histórico pela tabela daquela revisão mantém o ensaio real.
+    from sqlalchemy import Table, MetaData, delete
+    legacy = Table("financial_entries", MetaData(), autoload_with=session.connection())
+    for row in (first, duplicate):
+        row.id = str(uuid.uuid4())
+    session.execute(legacy.insert(), [{
+        "id": row.id, "public_code": row.public_code, "tipo": row.tipo,
+        "categoria": row.categoria, "valor": row.valor, "moeda": "BRL", "status": row.status,
+        "spirometry_exam_id": row.spirometry_exam_id, "consultation_id": None,
+        "data_competencia_dia_assumido": False, "created_at": now, "updated_at": now,
+    } for row in (first, duplicate)])
     session.commit()
     before = session.execute(
         select(
@@ -151,7 +162,7 @@ def test_postgres_migracao_aborta_conflito_e_depois_preserva_linha_valida(
 
     # Limpa somente a segunda fixture conflitante; isso não faz parte da
     # migração e permite ensaiar o caso production-shaped sem duplicatas.
-    verify.delete(verify.get(FinancialEntry, duplicate.id))
+    verify.execute(delete(legacy).where(legacy.c.id == duplicate.id))
     verify.commit()
     valid_before = verify.execute(
         select(

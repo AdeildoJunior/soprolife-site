@@ -1,9 +1,11 @@
 # Centro de Comando Life — arquitetura e fronteiras
 
-Estado: decisões de fundação, documentadas em 18/10/2026. A arquitetura
-multimarcas descrita aqui é futura: não há seletor, tabela/coluna de marca,
-migração, autorização multimarcas ou operação EEG implementados por esta fase.
-O comportamento operacional existente continua sendo o SoproLife.
+Estado: fundação de 18/10/2026, atualizada em 29/10/2026. A Fase 2A já
+implementa operação EEG e autorização por admin no backend. A extensão desta
+worktree acrescenta cadastros/atendimentos, razão compartilhado por vínculo
+técnico e preparação da próxima etapa fiscal, ainda não implementada neste marco. Ela não foi
+implantada em produção. Os demais planos futuros abaixo não atestam deploy.
+Contrato vigente: [EEGLife — cadastros e fiscal](EEGLIFE_CADASTROS_FISCAL.md).
 
 ## 1. Objetivo e organização
 
@@ -52,10 +54,9 @@ DOM**, e `setContext("eeglife")` é recusado — localStorage e console não
 forçam a entrada. O localStorage guarda apenas preferência entre contextos que
 a sessão já pode acessar; ele nunca concede acesso.
 
-**Alcance honesto:** como a EEGLife ainda não tem endpoint próprio, esta é uma
-guarda de interface sobre um sinal do servidor. Ela impede a navegação, não
-substitui autorização de dados. Quando existirem endpoints de EEG, a
-autorização real terá de ser deles — ver §9.
+**Alcance atual:** todas as rotas `/eeg/*` exigem `require_eeg_access` no
+servidor. A futura etapa fiscal deverá aplicar a mesma autorização também nas rotas
+compartilhadas por ID; esconder a marca no seletor não é o controle de autorização.
 
 ## 2. Base existente preservada
 

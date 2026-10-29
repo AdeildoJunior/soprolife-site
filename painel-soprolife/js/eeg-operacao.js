@@ -34,6 +34,7 @@
     laudos: montarLaudos,
     leads: montarAgenda,
     custos: montarCustos,
+    financeiro: montarFinanceiro,
   };
 
   var cache = { modalidades: null, locais: null };
@@ -87,6 +88,9 @@
       '<div class="empty-state">Carregando…</div>';
     return promessa.then(function (dados) {
       secao.querySelector("[data-eeg-corpo]").innerHTML = render(dados);
+      secao.querySelectorAll("[data-eeg-atender]").forEach(function (b) {
+        b.onclick = function () { novoAtendimento(secao, b.getAttribute("data-eeg-atender")); };
+      });
       secao.querySelectorAll("[data-eeg-exame]").forEach(function (b) {
         b.onclick = function () { operar(secao, exames[b.getAttribute("data-eeg-exame")]); };
       });
@@ -118,7 +122,7 @@
       "Central de Cadastros",
       "Pessoas com vínculo operacional na EEGLife.",
       '<div class="eeg-toolbar">' +
-        '<input type="search" data-eeg-busca placeholder="Buscar paciente da EEGLife…" ' +
+        '<input type="search" data-eeg-busca placeholder="Nome, CPF, telefone ou PES…" ' +
         'aria-label="Buscar paciente da EEGLife" />' +
         '<button type="button" data-eeg-novo-paciente>Cadastrar / vincular paciente</button>' +
       "</div>"
@@ -128,7 +132,7 @@
     var pedir = function () {
       var q = busca && busca.value.trim();
       return carregar(secao,
-        todos("/eeg/pessoas" + (q ? "?busca=" + encodeURIComponent(q) : "")),
+        buscarPessoas(q, false),
         renderCentral);
     };
     if (busca) {
@@ -157,9 +161,9 @@
         "<td>" + (pendencias
           ? '<span class="badge eeg-badge-pendente">' + pendencias + " pendência(s)</span>"
           : '<span class="badge">Completo</span>') + "</td>" +
-        "</tr>";
+        '<td><button type="button" data-eeg-atender="' + esc(v.id) + '">Novo Atendimento</button></td></tr>';
     }).join("");
-    return tabela(["Código", "Paciente", "CPF", "Exames EEG", "Cadastro"], linhas) +
+    return tabela(["Código", "Paciente", "CPF", "Exames EEG", "Cadastro", "Ações"], linhas) +
       '<p class="eeg-nota">Somente pessoas com vínculo EEGLife aparecem aqui. ' +
       "A identidade é a mesma do cadastro corporativo — ninguém é duplicado por marca.</p>";
   }
@@ -332,7 +336,7 @@
       '<p data-eeg-erro role="alert"></p><div class="eeg-toolbar">' +
       '<button type="button" data-eeg-fechar>Fechar</button><button type="submit">' +
       esc(rotulo || "Salvar") + '</button></div></form>';
-    document.body.appendChild(d);
+    document.getElementById("lifePanelEegLife").appendChild(d);
     d.addEventListener("close", function () { d.remove(); });
     d.querySelector("[data-eeg-fechar]").onclick = function () { d.close(); };
     d.querySelector("form").onsubmit = function (ev) {
@@ -351,12 +355,15 @@
   }
 
   function cadastrar(secao) {
-    formulario("Cadastrar ou vincular paciente EEG",
+    var cadastro = formulario("Cadastrar ou vincular paciente EEG",
       '<p>Verifique a identidade corporativa antes de criar uma pessoa.</p>' +
+      '<label>Pesquisar pessoa existente<input type="search" data-eeg-corporativo placeholder="Nome, CPF, telefone ou PES" /></label><button type="button" data-eeg-procurar>Procurar no cadastro compartilhado</button><div data-eeg-encontrados role="status"></div>' +
       campo("nome_completo", "Nome completo", "text", true) +
       campo("cpf", "CPF (opcional)") + campo("data_nascimento", "Nascimento", "date") +
       campo("telefone", "Telefone com DDI (opcional)", "tel") +
       campo("email", "E-mail (opcional)", "email") +
+      select("sexo", "Sexo", [["", "Não informado"], ["feminino", "Feminino"], ["masculino", "Masculino"], ["outro", "Outro"]]) +
+      select("consentimento_whatsapp", "Contato operacional por WhatsApp · somente EEGLife", [["desconhecido", "Não informado"], ["concedido", "Autorizado pelo paciente"], ["revogado", "Não autorizado / revogado"]]) +
       '<div data-eeg-candidatos></div>',
       function (dados, d) {
         return post("/eeg/pessoas/verificar", dados).then(function (r) {
@@ -385,30 +392,81 @@
               .catch(function (e) { criar.disabled = false; d.querySelector("[data-eeg-erro]").textContent = mensagemErro(e); });
           };
           area.appendChild(criar);
-          d.querySelectorAll("input").forEach(function (i) { i.oninput = function () { area.innerHTML = ""; }; });
+          d.querySelectorAll("input, select").forEach(function (i) { i.oninput = function () { area.innerHTML = ""; }; });
           return false;
         });
       }, "Verificar identidade");
+    cadastro.querySelector("[data-eeg-procurar]").onclick = function () {
+      var area = cadastro.querySelector("[data-eeg-encontrados]");
+      area.textContent = "Buscando…";
+      buscarPessoas(cadastro.querySelector("[data-eeg-corporativo]").value, true).then(function (r) {
+        area.textContent = r.itens.length ? "Selecione a pessoa após conferir a identidade." : "Nenhuma pessoa encontrada.";
+        r.itens.forEach(function (v) {
+          var b = document.createElement("button"); b.type = "button";
+          b.textContent = (v.ja_vinculada ? "Abrir vínculo: " : "Vincular: ") + v.pessoa.public_code + " · " + v.pessoa.nome_completo + " · " + (v.pessoa.cpf_mascarado || "CPF não informado");
+          b.onclick = function () {
+            b.disabled = true;
+            post("/eeg/pessoas/vincular", { person_id: v.pessoa.id }).then(function () {
+              cadastro.close(); atualizar(secao);
+            }).catch(function (e) { b.disabled = false; area.textContent = mensagemErro(e); });
+          };
+          area.appendChild(b);
+        });
+      }).catch(function (e) { area.textContent = mensagemErro(e); });
+    };
+  }
+
+  function buscarPessoas(q, corporativo, pagina, itens) {
+    pagina = pagina || 1; itens = itens || [];
+    return post("/eeg/pessoas/busca", { q: q || null, corporativo: corporativo,
+      pagina: pagina, tamanho: 100 }).then(function (r) {
+      itens = itens.concat(r.itens || []);
+      return itens.length < r.total && r.itens.length ? buscarPessoas(q, corporativo, pagina + 1, itens) : { itens: itens, total: r.total };
+    });
   }
 
   function ligarAgenda(secao) {
-    secao.querySelector("[data-eeg-agendar]").onclick = function () {
-      Promise.all([todos("/eeg/pessoas"), m15().api("/eeg/modalidades"), m15().api("/eeg/locais")])
-        .then(function (r) {
-          if (!r[0].itens.length) { cadastrar(secao); return; }
-          formulario("Agendar EEG",
-            select("enrollment_id", "Paciente", r[0].itens.map(function (v) { return [v.id, v.pessoa.public_code + " · " + v.pessoa.nome_completo]; })) +
-            select("modalidade_codigo", "Modalidade", r[1].itens.filter(function (m) { return m.ativo; }).map(function (m) { return [m.codigo, m.nome]; })) +
-            campo("agendado_para", "Data e hora", "datetime-local", true) +
-            select("partner_unit_id", "Origem / local", [["", "Atendimento direto EEGLife"]].concat(r[2].itens.map(function (u) { return [u.id, u.nome]; }))) +
-            campo("tecnico_responsavel", "Técnico responsável (opcional)"),
-            function (dados) {
-              dados.origem_tipo = dados.partner_unit_id ? "parceiro" : "direto";
-              dados.agendado_para = new Date(dados.agendado_para).toISOString();
-              return post("/eeg/exames", dados).then(function () { atualizar(secao); });
-            });
-        }).catch(function (e) { secao.querySelector("[data-eeg-corpo]").textContent = mensagemErro(e); });
-    };
+    secao.querySelector("[data-eeg-agendar]").onclick = function () { novoAtendimento(secao); };
+  }
+
+  function novoAtendimento(secao, enrollmentId) {
+    Promise.all([todos("/eeg/pessoas"), m15().api("/eeg/modalidades"), m15().api("/eeg/locais")]).then(function (r) {
+      if (!r[0].itens.length) { cadastrar(secao); return; }
+      var key = "eeg-" + crypto.randomUUID();
+      var d = formulario("Novo Atendimento EEG",
+        select("enrollment_id", "Paciente", r[0].itens.map(function (v) { return [v.id, v.pessoa.public_code + " · " + v.pessoa.nome_completo]; })) +
+        select("modalidade_codigo", "Modalidade", r[1].itens.filter(function (m) { return m.ativo; }).map(function (m) { return [m.codigo, m.nome + " · validação técnica pendente"]; })) +
+        '<p class="eeg-nota">Modalidades pendentes de validação técnica no Nano/iCelera. O registro não confirma disponibilidade. Hospitalar, vídeo-EEG e especial estão inativos.</p>' +
+        campo("agendado_para", "Data e hora", "datetime-local", true) +
+        select("partner_unit_id", "Unidade parceira (opcional)", [["", "Atendimento direto EEGLife"]].concat(r[2].itens.map(function (u) { return [u.id, u.nome]; }))) +
+        campo("local_atendimento", "Local de atendimento", "text", true) +
+        select("municipio_atendimento_ibge", "Município da prestação", [["", "Selecione o município"], ["3304557", "Rio de Janeiro/RJ"], ["3303302", "Niterói/RJ"]]) +
+        select("origem_canal", "Origem", [["direto", "Direto"], ["site", "Site"], ["whatsapp", "WhatsApp"], ["indicacao", "Indicação"], ["parceiro", "Parceiro"], ["outro", "Outro"]]) +
+        campo("valor", "Valor contratado (R$)", "number", true) +
+        select("pagamento_status", "Situação do pagamento", [["Pendente", "Pendente"], ["Recebido", "Recebido"]]) +
+        campo("observacao", "Observações operacionais (sem dados clínicos)") +
+        '<p>NFS-e e laudo dependem de ações separadas após o registro.</p>',
+        function (dados) {
+          dados.origem_tipo = dados.partner_unit_id ? "parceiro" : "direto";
+          dados.agendado_para = new Date(dados.agendado_para).toISOString();
+          dados.idempotency_key = key;
+          return post("/eeg/atendimentos", dados).then(function () { atualizar(secao); });
+        }, "Criar atendimento");
+      d.querySelector('[name="valor"]').step = "0.01";
+      d.querySelector('[name="valor"]').min = "0.01";
+      d.querySelector('[name="municipio_atendimento_ibge"]').required = true;
+      if (enrollmentId) d.querySelector('[name="enrollment_id"]').value = enrollmentId;
+    }).catch(function (e) { secao.querySelector("[data-eeg-corpo]").textContent = mensagemErro(e); });
+  }
+
+  function montarFinanceiro(secao) {
+    secao.innerHTML = cabecalho(secao) + moldura("Financeiro EEGLife", "Receitas no razão compartilhado, identificadas pela marca de origem.", "");
+    return carregar(secao, todos("/eeg/financeiro"), function (dados) {
+      if (!dados.itens.length) return vazio("Nenhuma receita de EEG registrada.");
+      return tabela(["Lançamento", "Atendimento", "Valor", "Pagamento"], dados.itens.map(function (e) {
+        return "<tr><td>" + esc(e.public_code) + "</td><td>" + esc(e.descricao) + "</td><td>" + brl(e.valor) + "</td><td>" + esc(e.status) + "</td></tr>";
+      }).join(""));
+    });
   }
 
   function operar(secao, e) {
@@ -420,7 +478,7 @@
       '<p>Referência técnica: ' + esc((e.arquivo_tecnico || {}).referencia_externa || "Não registrada") + '</p>' +
       '<p>Envio: ' + esc(e.envio_laudo ? e.envio_laudo.destino_nome + " · " + (e.envio_laudo.protocolo_externo || "sem protocolo") + " · " + dataBr(e.envio_laudo.enviado_em) : "Não registrado") + '</p>' +
       '<div data-eeg-acoes class="eeg-toolbar"></div><p data-eeg-erro role="alert"></p><button type="button" data-eeg-fechar>Fechar</button>';
-    document.body.appendChild(d); d.addEventListener("close", function () { d.remove(); });
+    document.getElementById("lifePanelEegLife").appendChild(d); d.addEventListener("close", function () { d.remove(); });
     d.querySelector("[data-eeg-fechar]").onclick = function () { d.close(); };
     function acao(nome, fn) {
       var b = document.createElement("button"); b.type = "button"; b.textContent = nome;

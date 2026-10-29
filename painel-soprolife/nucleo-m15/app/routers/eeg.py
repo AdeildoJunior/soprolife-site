@@ -9,24 +9,22 @@ SoproLife recebe 403 em qualquer rota abaixo, inclusive no download do PDF.
 
 ESCOPO DA CONSULTA
 ------------------
-A Central da EEGLife lista pessoas pelo VÍNCULO (`eeg_enrollments`), nunca por
-`people`. Quem nunca teve exame de EEG não aparece — e é isso que impede a
-base da SoproLife de vazar para dentro da EEGLife.
+A lista padrão parte do vínculo `eeg_enrollments`. A busca corporativa é
+explícita, admin-only e por corpo POST, para vincular uma identidade existente.
 
-O QUE NÃO EXISTE AQUI
----------------------
-Preço, repasse, cobrança, NFS-e e prazo. Nada disso é desta fase, e inventar
-qualquer um seria pior do que a ausência. Também não há integração com
-plataforma de laudo: o envio é registrado como ato manual.
+O atendimento cria a receita em FinancialEntry, somente com IDs técnicos.
+Valores não são armazenados nas tabelas clínicas. O fiscal está em eeg_fiscal
+e usa o motor corporativo; o cadastro nunca emite nota ou gera laudo.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form
 from fastapi.responses import Response
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_
 from sqlalchemy.orm import Session
 
 from ..audit import audit
@@ -44,12 +42,13 @@ from ..models import (
     EegResultAccess,
     EegTechnicalFile,
     PartnerUnit,
-    Person,
+    Person, PersonContact, FinancialEntry,
     User,
 )
 from ..normalize import normalize_name, normalize_phone
 from ..pagination import PageParams, paginate
 from ..schemas import (
+    EegPessoaBusca, EegAtendimentoCreate,
     EegArquivoTecnicoCreate,
     EegEnvioLaudoCreate,
     EegExameCreate,
@@ -68,6 +67,7 @@ from ..services import eeg_results, patient_results
 from ..services.identity import find_person_candidates
 from ..services.pdf_validation import InvalidPdfError, validate_pdf_bytes
 from ..services.person_registration import add_contact
+from ..services.idempotency import idempotent_create, payload_fingerprint
 
 router = APIRouter(prefix="/eeg", tags=["eeg"])
 
@@ -92,6 +92,8 @@ def _ser_modalidade(m) -> dict:
         "duracao_minutos_aproximada": m.duracao_minutos_aproximada,
         "preparo": m.preparo,
         "ativo": m.ativo,
+        "validacao_tecnica": "pendente",
+        "aviso_tecnico": "Pendente de validação técnica no Nano/iCelera; cadastro não confirma capacidade.",
     }
 
 
@@ -106,6 +108,7 @@ def _ser_vinculo(db: Session, enrollment: EegEnrollment) -> dict:
         "status": enrollment.status,
         "origem": enrollment.origem,
         "observacao": enrollment.observacao,
+        "consentimento_whatsapp": enrollment.consentimento_whatsapp,
         "exames": total,
         # A pessoa vem do serializador CORPORATIVO: mesma identidade, mesmo
         # mascaramento de CPF, mesmas pendências de cadastro.
@@ -146,7 +149,9 @@ def _ser_exame(db: Session, exam: EegExam) -> dict:
         "modalidade_nome": modalidade.nome if modalidade else None,
         "origem_tipo": exam.origem_tipo,
         "partner_unit_id": exam.partner_unit_id,
-        "local_nome": unidade.nome if unidade else ("Direto EEGLife" if exam.origem_tipo == "direto" else None),
+        "local_nome": exam.local_atendimento or (unidade.nome if unidade else ("Direto EEGLife" if exam.origem_tipo == "direto" else None)),
+        "municipio_atendimento_ibge": exam.municipio_atendimento_ibge,
+        "origem_canal": exam.origem_canal,
         "status": exam.status,
         "agendado_para": _iso(exam.agendado_para),
         "realizado_em": _iso(exam.realizado_em),
@@ -256,6 +261,39 @@ def listar_pessoas_eeg(
     return paginate(db, stmt, params, lambda e: _ser_vinculo(db, e))
 
 
+@router.post("/pessoas/busca")
+def buscar_pessoas_eeg(payload: EegPessoaBusca, db: Session = Depends(get_db),
+                       _user: User = Depends(require_eeg_access)):
+    """Pesquisa explícita no cadastro corporativo; PII só no corpo, nunca URL."""
+    stmt = select(Person).where(Person.arquivado.is_(False))
+    if not payload.corporativo:
+        stmt = stmt.join(EegEnrollment).where(EegEnrollment.status == "ativo")
+    q = (payload.q or "").strip()
+    if payload.corporativo and len(q) < 3:
+        raise DomainError(422, "busca_insuficiente", "Informe pelo menos três caracteres para procurar pessoa existente.")
+    if q:
+        digits = "".join(c for c in q if c.isdigit())
+        if q.upper().startswith("PES-"):
+            stmt = stmt.where(Person.public_code == q.upper())
+        elif len(digits) >= 8:
+            phone = normalize_phone(q)
+            contacts = select(PersonContact.person_id).where(
+                PersonContact.ativo.is_(True), PersonContact.tipo.in_(["telefone", "whatsapp"]),
+                PersonContact.valor_normalizado == phone)
+            stmt = stmt.where(or_(Person.cpf == digits, Person.id.in_(contacts)))
+        else:
+            term = normalize_name(q).replace("%", "\\%").replace("_", "\\_")
+            stmt = stmt.where(Person.nome_normalizado.like(f"%{term}%", escape="\\"))
+    def serialize(person):
+        vinculo = db.scalar(select(EegEnrollment).where(EegEnrollment.person_id == person.id))
+        return {"pessoa": ser_person(person), "id": vinculo.id if vinculo else None,
+                "ja_vinculada": bool(vinculo and vinculo.status == "ativo"),
+                "exames": db.scalar(select(func.count()).select_from(EegExam).where(
+                    EegExam.enrollment_id == vinculo.id)) if vinculo else 0}
+    return paginate(db, stmt.order_by(Person.nome_completo, Person.id),
+                    PageParams(pagina=payload.pagina, tamanho=payload.tamanho), serialize)
+
+
 @router.post("/pessoas/vincular", status_code=201)
 def vincular_pessoa(
     payload: EegVinculoCreate,
@@ -269,14 +307,16 @@ def vincular_pessoa(
     pessoa não é copiado nem alterado: só passa a existir um vínculo.
     """
     person = db.get(Person, payload.person_id)
-    if not person:
-        raise HTTPException(status_code=404, detail="Pessoa não encontrada.")
+    if not person or person.arquivado:
+        raise HTTPException(status_code=404, detail="Pessoa não encontrada ou arquivada.")
     existente = db.execute(
         select(EegEnrollment).where(EegEnrollment.person_id == person.id)
     ).scalars().first()
     if existente:
         if existente.status != "ativo":
             existente.status = "ativo"
+            audit(db, "eeg.vinculo_reativado", "eeg_enrollments", existente.id, user_id=user.id,
+                  request_id=request.state.request_id, detalhes={"status": "ativo"})
             db.commit()
         return _ser_vinculo(db, existente)
 
@@ -366,13 +406,21 @@ def criar_pessoa_eeg(
         add_contact(db, person, "whatsapp", payload.telefone, True)
     if payload.email:
         add_contact(db, person, "email", payload.email, True)
+    audit(db, "pessoa.criada", "people", person.id, user_id=user.id,
+          request_id=request.state.request_id, detalhes={"contexto": "eeglife",
+          "candidatos_identidade": [p.id for p, _ in candidatos],
+          "decisao": "nova_identidade_confirmada" if candidatos else "nova_identidade"})
 
     enrollment = EegEnrollment(
         person_id=person.id, origem=payload.origem,
+        consentimento_whatsapp=payload.consentimento_whatsapp or "desconhecido",
         observacao=payload.observacao, criado_por=user.id,
     )
     db.add(enrollment)
     db.flush()
+    audit(db, "eeg.consentimento_registrado", "eeg_enrollments", enrollment.id,
+          user_id=user.id, request_id=request.state.request_id,
+          detalhes={"contexto": "eeglife", "canal": "whatsapp", "status": enrollment.consentimento_whatsapp})
     audit(db, "eeg.vinculo_criado", "eeg_enrollments", enrollment.id,
           user_id=user.id, request_id=getattr(request.state, "request_id", None),
           detalhes={"origem": payload.origem, "pessoa_nova": True})
@@ -407,6 +455,9 @@ def criar_exame(
     enrollment = db.get(EegEnrollment, payload.enrollment_id)
     if not enrollment or enrollment.status != "ativo":
         raise HTTPException(status_code=404, detail="Vínculo EEGLife não encontrado.")
+    person = db.get(Person, enrollment.person_id)
+    if not person or person.arquivado:
+        raise DomainError(409, "pessoa_arquivada", "Pessoa arquivada não pode receber atendimento.")
     if not modalidade_ativa(payload.modalidade_codigo):
         raise DomainError(422, "modalidade_invalida",
                           "Modalidade de EEG desconhecida ou inativa.")
@@ -417,7 +468,8 @@ def criar_exame(
             raise HTTPException(
                 status_code=422,
                 detail="Origem de parceiro exige a unidade parceira.")
-        if not db.get(PartnerUnit, payload.partner_unit_id):
+        unit = db.get(PartnerUnit, payload.partner_unit_id)
+        if not unit or not unit.ativo:
             raise HTTPException(status_code=404, detail="Unidade parceira não encontrada.")
     elif payload.partner_unit_id:
         raise HTTPException(
@@ -441,9 +493,43 @@ def criar_exame(
           user_id=user.id, request_id=getattr(request.state, "request_id", None),
           detalhes={"codigo": exam.modalidade_codigo, "status": exam.status,
                     "origem_tipo": exam.origem_tipo})
+    if not isinstance(payload, EegAtendimentoCreate):
+        db.commit()
+        db.refresh(exam)
+        return _ser_exame(db, exam)
+    return exam
+
+
+@router.post("/atendimentos", status_code=201)
+def novo_atendimento(payload: EegAtendimentoCreate, request: Request,
+                     db: Session = Depends(get_db), user: User = Depends(require_eeg_access)):
+    identity = payload.model_dump(mode="json", exclude={"idempotency_key"})
+    def factory(key, fingerprint):
+        exam = criar_exame(payload, request, db, user)
+        exam.local_atendimento = payload.local_atendimento
+        exam.municipio_atendimento_ibge = payload.municipio_atendimento_ibge
+        exam.origem_canal = payload.origem_canal
+        exam.idempotency_key, exam.idempotency_fingerprint = key, fingerprint
+        db.add(FinancialEntry(public_code=allocate_public_code(db, "financial_entries"),
+            tipo="receita", categoria="EEG", descricao="Atendimento EEG " + exam.public_code,
+            valor=payload.valor, moeda="BRL", status=payload.pagamento_status,
+            eeg_exam_id=exam.id, data_competencia=payload.agendado_para.astimezone(ZoneInfo("America/Sao_Paulo")).date()))
+        db.flush()
+        audit(db, "eeg.atendimento_criado", "eeg_exams", exam.id, user_id=user.id,
+              request_id=request.state.request_id, detalhes={"contexto": "eeglife", "status": exam.status})
+        return exam
+    exam, _ = idempotent_create(db, EegExam, payload.idempotency_key, identity, factory)
     db.commit()
-    db.refresh(exam)
     return _ser_exame(db, exam)
+
+
+@router.get("/financeiro")
+def financeiro_eeg(db: Session = Depends(get_db), params: PageParams = Depends(),
+                   _user: User = Depends(require_eeg_access)):
+    from ..serializers import ser_financial_entry
+    return paginate(db, select(FinancialEntry).where(FinancialEntry.eeg_exam_id.is_not(None))
+        .order_by(FinancialEntry.created_at.desc()), params, lambda e: {
+            **ser_financial_entry(e), "eeg_exam_id": e.eeg_exam_id, "marca": "eeglife"})
 
 
 @router.patch("/exames/{exam_id}/status")

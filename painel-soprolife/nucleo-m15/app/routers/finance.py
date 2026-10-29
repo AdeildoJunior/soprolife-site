@@ -166,7 +166,7 @@ def list_entries(
     db: Session = Depends(get_db),
     _user: User = Depends(require_role(ROLE_LEITURA)),
 ):
-    stmt = select(FinancialEntry).order_by(FinancialEntry.created_at.desc())
+    stmt = select(FinancialEntry).where(FinancialEntry.eeg_exam_id.is_(None)).order_by(FinancialEntry.created_at.desc())
     if tipo:
         stmt = stmt.where(FinancialEntry.tipo == tipo)
     if status:
@@ -192,7 +192,7 @@ def search_entries(
     lançamento (LAN-…), código do vínculo (ESP-/CON-/ENC-…) ou nome do
     paciente derivado da relação técnica."""
     q = (payload.q or "").strip()
-    stmt = select(FinancialEntry).order_by(FinancialEntry.created_at.desc())
+    stmt = select(FinancialEntry).where(FinancialEntry.eeg_exam_id.is_(None)).order_by(FinancialEntry.created_at.desc())
     upper = q.upper()
     if upper.startswith("LAN-"):
         stmt = stmt.where(FinancialEntry.public_code == upper)
@@ -979,7 +979,7 @@ def update_entry(
     canonizada e o MESMO guarda do POST roda sobre o estado final, excluindo
     da busca o próprio lançamento em edição.
     """
-    entry = db.get(FinancialEntry, entry_id)
+    entry = db.scalar(select(FinancialEntry).where(FinancialEntry.id == entry_id, FinancialEntry.eeg_exam_id.is_(None)))
     if not entry:
         raise HTTPException(status_code=404, detail="Lançamento não encontrado.")
     _check_pcmso(db, request, user, payload, "lancamentos.update")
@@ -1122,7 +1122,7 @@ def create_transfer(
             },
         )
     if payload.financial_entry_id:
-        entry = db.get(FinancialEntry, payload.financial_entry_id)
+        entry = db.scalar(select(FinancialEntry).where(FinancialEntry.id == payload.financial_entry_id, FinancialEntry.eeg_exam_id.is_(None)))
         if entry is None:
             raise HTTPException(status_code=422, detail={
                 "codigo": "vinculo_inexistente", "mensagem": "Lançamento não encontrado."})

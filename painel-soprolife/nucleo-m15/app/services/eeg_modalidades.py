@@ -8,10 +8,10 @@ não foi alterado). Os `codigo` são os mesmos `slug` de lá, de propósito: já
 estáveis, já foram revisados e evitam inventar um segundo vocabulário para a
 mesma coisa.
 
-Duas modalidades do escopo de laudo contratado ficam DE FORA, pela mesma razão
-registrada no site: EEG à beira-leito e EEG para morte encefálica são exames
-hospitalares, e oferecê-los num serviço ambulatorial sugeriria capacidade que a
-EEGLife não tem.
+A missão de 29/10 acrescenta modalidades solicitadas para classificação
+operacional. Hospitalar/beira-leito, vídeo-EEG e especial ficam inativos.
+Todos os itens são informados pela API como pendentes de validação técnica
+no Nano/iCelera. Não há modalidade de morte encefálica neste catálogo.
 
 O QUE ESTE CATÁLOGO NÃO AFIRMA
 ------------------------------
@@ -109,6 +109,20 @@ MODALIDADES: tuple[ModalidadeEeg, ...] = (
         ativo=True,
     ),
 )
+
+# Catálogo operacional: os códigos existentes permanecem estáveis. Novas
+# modalidades não têm comprovação de capacidade no Nano/iCelera; as de
+# ambiente/método hospitalar ficam inativas. As demais são somente planejamento
+# e a API informa explicitamente a validação técnica pendente em cada item.
+MODALIDADES += tuple(ModalidadeEeg(codigo, nome, None, None, None, ativo) for codigo, nome, ativo in (
+    ("infantil", "EEG infantil", True),
+    ("com-sono", "EEG com sono", True),
+    ("privacao-sono", "EEG com privação de sono", True),
+    ("ambulatorial", "EEG ambulatorial", True),
+    ("hospitalar-beira-leito", "EEG hospitalar à beira do leito", False),
+    ("video-eeg", "Vídeo-EEG", False),
+    ("especial", "EEG especial", False),
+))
 
 _POR_CODIGO = {m.codigo: m for m in MODALIDADES}
 

@@ -175,7 +175,7 @@ def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     # M26.36 (c3f8a1d7e529, reteste de controle sem cobrança) por cima da
     # M26.34 — aditiva, uma coluna booleana com server_default false.
     # M26.36b (d7b2c4e86a91, devolução cancelada) por cima da M26.36.
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["d7b2c4e86a91"]
+    assert ScriptDirectory.from_config(cfg).get_heads() == ["e9c4a1b72029"]
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(
@@ -412,7 +412,16 @@ def _popular_financeiro_pre_m23_1(engine, *, com_conflitos: bool):
                 ),
             ]
         )
-    session.add_all(rows)
+    # Fixture histórica usa a tabela refletida naquela revisão: o ORM atual
+    # já possui eeg_exam_id, que ainda não existia no schema pré-M23.1.
+    from sqlalchemy import Table, MetaData
+    legacy = Table("financial_entries", MetaData(), autoload_with=session.connection())
+    session.execute(legacy.insert(), [{
+        "id": str(uuid.uuid4()), "public_code": row.public_code, "tipo": row.tipo,
+        "categoria": row.categoria, "valor": row.valor, "moeda": "BRL", "status": row.status,
+        "spirometry_exam_id": row.spirometry_exam_id, "consultation_id": row.consultation_id,
+        "data_competencia_dia_assumido": False, "created_at": agora, "updated_at": agora,
+    } for row in rows])
     session.commit()
     snapshot = session.execute(
         select(

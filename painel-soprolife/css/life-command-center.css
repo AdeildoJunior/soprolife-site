@@ -569,3 +569,13 @@ body[data-life-ativo="eeglife"] { --life-accent: linear-gradient(90deg, var(--ee
 .eeg-toolbar { flex-wrap: wrap; gap: 8px; }
 .eeg-dialog [role="alert"] { overflow-wrap: anywhere; color: #923d23; }
 [data-eeg-candidatos] { display: grid; gap: 10px; }
+
+/* Formulários EEG pertencem ao contexto da marca, inclusive no top layer. */
+#lifePanelEegLife .eeg-dialog { box-sizing: border-box; color: var(--eeg-grafite); background: #fff; }
+#lifePanelEegLife .eeg-dialog button { background: #f1ebde; color: #222c34; border-color: #c48a32; white-space: normal; }
+#lifePanelEegLife .eeg-dialog :is(button,input,select):focus-visible { outline: 3px solid #865b1d; outline-offset: 2px; }
+#lifePanelEegLife .eeg-dialog h3 { overflow-wrap: anywhere; }
+#lifePanelEegLife .eeg-dialog .eeg-toolbar { display: flex; margin: 0; }
+#lifePanelEegLife .eeg-dialog label { min-width: 0; }
+#lifePanelEegLife .eeg-dialog select { max-width: 100%; }
+@media (max-width: 600px) { #lifePanelEegLife .eeg-dialog { padding: 16px; } }

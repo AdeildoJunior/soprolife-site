@@ -217,7 +217,7 @@ def build_financeiro_summary(db: Session) -> dict:
 
     Nada é inventado: parceria sem regra cadastrada contribui `None`, não zero.
     """
-    entradas = db.scalars(select(FinancialEntry)).all()
+    entradas = db.scalars(select(FinancialEntry).where(FinancialEntry.eeg_exam_id.is_(None))).all()
     settlements = db.scalars(select(PartnerSettlement)).all()
 
     # Fechamento → parceiro, para rotular a origem da receita sem PII.
@@ -822,6 +822,7 @@ def build_resumo_dashboard(db: Session) -> dict:
     ) or 0
     receita = db.scalar(
         select(func.coalesce(func.sum(FinancialEntry.valor), 0)).where(
+            FinancialEntry.eeg_exam_id.is_(None),
             FinancialEntry.tipo == "receita",
             FinancialEntry.status == "Recebido",
         )

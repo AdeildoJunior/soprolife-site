@@ -475,11 +475,14 @@ caso("as sete modalidades reais vêm do conteúdo publicado da EEGLife",
      (eegModalidades.match(/codigo="/g) || []).length === 7);
 caso("modalidade sem duração declarada não ganha número inventado",
      /duracao_minutos_aproximada=None/.test(eegModalidades));
-caso("nenhum preço, repasse ou prazo entrou nesta fase",
-     !/pre[çc]o|valor_|repasse|cobran[çc]a|nfse/i.test(eegRouterCodigo) &&
-     !/pre[çc]o|repasse/i.test(eegOperacaoCodigo) &&
-     !/pre[çc]o|repasse|valor_/i.test(
-       eegModelsCodigo.slice(eegModelsCodigo.indexOf("class EegEnrollment"))));
+caso("valores EEG pertencem ao razão financeiro e não às tabelas clínicas",
+     /FinancialEntry/.test(eegRouterCodigo) && /eeg_exam_id/.test(eegModelsCodigo) &&
+     !/valor|preco|pagamento_status/.test(
+       eegModelsCodigo.slice(eegModelsCodigo.indexOf("class EegExam("),
+                             eegModelsCodigo.indexOf("class EegTechnicalFile("))));
+caso("modalidades não confirmadas são identificadas como pendentes",
+     /validacao_tecnica/.test(eegRouterCodigo) && /pendente/.test(eegRouterCodigo));
+
 
 console.log();
 if (falhas) {

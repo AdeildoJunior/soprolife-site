@@ -858,6 +858,9 @@ class FinancialEntry(Base, TimestampMixin, LegacyMixin):
     spirometry_exam_id: Mapped[str | None] = mapped_column(
         String(UUID_LEN), ForeignKey("spirometry_exams.id")
     )
+    eeg_exam_id: Mapped[str | None] = mapped_column(
+        String(UUID_LEN), ForeignKey("eeg_exams.id"), unique=True, index=True
+    )
     consultation_id: Mapped[str | None] = mapped_column(
         String(UUID_LEN), ForeignKey("consultations.id")
     )
@@ -874,6 +877,7 @@ class FinancialEntry(Base, TimestampMixin, LegacyMixin):
     idempotency_key: Mapped[str | None] = mapped_column(String(64), unique=True)
     idempotency_fingerprint: Mapped[str | None] = mapped_column(String(FINGERPRINT_LEN))
     __table_args__ = (
+        CheckConstraint("eeg_exam_id IS NULL OR (spirometry_exam_id IS NULL AND consultation_id IS NULL AND partner_referral_id IS NULL AND partner_settlement_id IS NULL AND tipo = 'receita' AND categoria IS NOT NULL AND categoria = 'EEG')", name="financial_eeg_scope"),
         CheckConstraint("valor > 0", name="valor_positivo"),
         Index(
             "uq_financial_entries_receita_espirometria",
@@ -3143,10 +3147,14 @@ class EegEnrollment(Base, TimestampMixin):
         String(UUID_LEN), ForeignKey("people.id"), nullable=False, unique=True, index=True
     )
     status: Mapped[str] = mapped_column(String(20), default="ativo", nullable=False)
+    # Consentimento operacional da marca; não altera consentimentos SoproLife.
+    consentimento_whatsapp: Mapped[str] = mapped_column(
+        String(20), default="desconhecido", server_default="desconhecido", nullable=False)
     origem: Mapped[str | None] = mapped_column(String(40))
     observacao: Mapped[str | None] = mapped_column(Text)
     criado_por: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"))
     __table_args__ = (
+        CheckConstraint("consentimento_whatsapp IN ('concedido','revogado','desconhecido')", name="eeg_consentimento_valido"),
         CheckConstraint(
             "status IN ('ativo','arquivado')", name="eeg_enrollment_status_valido"
         ),
@@ -3175,6 +3183,11 @@ class EegExam(Base, TimestampMixin):
     partner_unit_id: Mapped[str | None] = mapped_column(
         String(UUID_LEN), ForeignKey("partner_units.id"), index=True
     )
+    local_atendimento: Mapped[str | None] = mapped_column(String(200))
+    municipio_atendimento_ibge: Mapped[str | None] = mapped_column(String(7))
+    origem_canal: Mapped[str | None] = mapped_column(String(30))
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), unique=True)
+    idempotency_fingerprint: Mapped[str | None] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(30), default="cadastro", nullable=False, index=True)
     agendado_para: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     realizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
