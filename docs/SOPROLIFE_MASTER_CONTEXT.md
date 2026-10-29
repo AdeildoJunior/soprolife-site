@@ -9,7 +9,7 @@
 > Sem PII, senhas, tokens, IPs de tailnet ou identificadores privados. Use
 > placeholders (`<VPS_TAILSCALE_IP>`, `<TOKEN>`).
 
-Última atualização: 2026-10-04 (base `140f0e3`).
+Última atualização: 2026-10-29 (CRM de relacionamento; base `6807a21`).
 
 ---
 
@@ -156,6 +156,20 @@ sugere a data exata do exame só com pagamento Recebido; acompanhamento sugere
 seis meses calendários (clamp no fim do mês), depois a primeira segunda-feira.
 Edição/limpeza manual das datas impede nova sugestão. Locais rápidos vêm da
 configuração do atendimento, com alternativa manual; não criam unidades.
+
+**CRM de relacionamento (29/10/2026):** entrada pela lista de pacientes, resumo
+compacto e ordenação de próximo contato no servidor antes da paginação
+(atrasados cronológicos, futuros crescentes, sem data ao fim). Automáticos
+pós-exame são projetados em leitura por `services/crm_schedule.py`: último
+exame realizado com data exata, incluindo reteste sem cobrança, +6 meses
+calendários, primeira segunda-feira. Nenhuma data histórica é regravada.
+Pendente manual prevalece sobre sugestões automáticas; datas importadas ou
+sem proveniência não são corrigidas por inferência. Payload informa fonte,
+data armazenada e data-base. Telefone pessoal permanece separado de contato
+responsável explicitamente vinculado; pagador não cria vínculo nem telefone.
+Lista usa ações primárias e menu secundário; relatórios anteriores continuam
+acessíveis sob seção expansível. Agendar usa `/followups` existente, com RBAC
+e auditoria; reagendar continua pelo serviço de contato, sem emissão fiscal.
 
 - **`Person`**: uma pessoa, muitos exames/consultas. Identidade estável por
   `id` (UUID) + `public_code`. Nome sozinho **nunca** liga registros; telefone é

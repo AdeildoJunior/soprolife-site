@@ -954,6 +954,8 @@ class CrmPacienteBusca(StrictModel):
     origem: str | None = Field(default=None, max_length=120)
     status_acompanhamento: str | None = Field(default=None, max_length=40)
     somente_sem_telefone: bool = False
+    situacao: Literal["atrasado", "hoje", "proximo", "futuro", "sem_data", "nao_contatar"] | None = None
+    ordenar_por: Literal["proximo_contato", "ultimo_exame", "nome", "ultima_interacao"] = "proximo_contato"
     pagina: int = Field(default=1, ge=1)
     tamanho: int = Field(default=25, ge=1, le=100)
 

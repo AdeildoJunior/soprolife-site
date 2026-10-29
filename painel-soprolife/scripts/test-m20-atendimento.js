@@ -255,10 +255,10 @@ caso("núcleo: + Nova pessoa abre o modo somente paciente",
      /centralBtn\("atendimento", "\+ Nova pessoa \/ paciente",[\s\S]{0,120}?somente_paciente: true/
        .test(nucleoSrc));
 caso("CRM: atalhos cobrem os quatro tipos, inclusive o combinado",
-     /"espirometria_soprolife", "\+ Espirometria"/.test(wsSrc) &&
-     /"espirometria_pastore", "\+ Espirometria Pastore"/.test(wsSrc) &&
-     /"consulta_soprolife", "\+ Consulta"/.test(wsSrc) &&
-     /"espirometria_consulta_soprolife", "\+ Espirometria \+ Consulta"/.test(wsSrc));
+     /"espirometria_soprolife", "Espirometria SoproLife"/.test(wsSrc) &&
+     /"espirometria_pastore", "Espirometria Pastore"/.test(wsSrc) &&
+     /"consulta_soprolife", "Consulta"/.test(wsSrc) &&
+     /"espirometria_consulta_soprolife", "Espirometria \+ Consulta"/.test(wsSrc));
 caso("aliases mantêm deep-links antigos vivos apontando para o fluxo único",
      /TAB_ALIASES = \{[\s\S]{0,400}?paciente:[\s\S]{0,120}?somente_paciente: true/
        .test(centralSrc) &&

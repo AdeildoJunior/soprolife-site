@@ -471,3 +471,94 @@
   .crm-ws-charts { grid-template-columns: 1fr; }
   .crm-ws-modal { width: 96vw; }
 }
+
+/* Lista de relacionamento: próxima ação primeiro, detalhes sob demanda. */
+.crm-patient-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:4px 0 22px; }
+.crm-patient-summary > div { padding:16px 18px; background:var(--card,#fff); border-radius:12px; box-shadow:0 2px 12px #0b1f3606; }
+.crm-patient-summary span { display:block; font-size:12px; color:var(--muted,#6d7b8a); line-height:1.4; }
+.crm-patient-summary strong { display:block; margin-top:6px; font-size:27px; line-height:1.15; color:var(--navy,#0b1f36); }
+.crm-patient-filters { display:grid; grid-template-columns:minmax(150px,1.6fr) minmax(100px,1fr) minmax(160px,1.1fr) minmax(130px,1fr) auto; align-items:end; gap:12px; margin-bottom:18px; }
+.crm-patient-filters .crm-ws-filtro { min-width:0; }
+.crm-patient-filters input, .crm-patient-filters select { width:100%; min-width:0; max-width:100%; min-height:38px; padding:8px 10px; border:1px solid var(--line,#dbe4ea); border-radius:8px; background:var(--card,#fff); color:var(--navy,#0b1f36); font:inherit; font-size:12px; }
+.crm-patient-filters input:focus-visible, .crm-patient-filters select:focus-visible { outline:2px solid var(--teal-dark,#0f8f83); outline-offset:2px; }
+.crm-patient-list { background:var(--card,#fff); border-radius:12px; }
+.crm-patients { width:100%; min-width:0; border-collapse:collapse; table-layout:fixed; font-size:12px; color:var(--navy,#0b1f36); }
+.crm-patients th { font-size:11px; color:var(--muted,#6d7b8a); text-align:left; padding:12px 10px; font-weight:600; border-bottom:1px solid var(--line,#dbe4ea); }
+.crm-patients th:first-child { width:22%; }
+.crm-patients th:nth-child(2) { width:13%; }
+.crm-patients th:nth-child(3) { width:12%; }
+.crm-patients th:nth-child(4) { width:17%; }
+.crm-patients th:nth-child(5) { width:12%; }
+.crm-patients th:last-child { width:24%; }
+.crm-patients td { padding:13px 10px; vertical-align:top; border-bottom:1px solid #edf1f4; overflow-wrap:anywhere; }
+.crm-patients tbody tr:last-child td { border-bottom:0; }
+.crm-patients tbody tr:hover { background:#f8fbfc; }
+.crm-patients th button { background:none; border:0; color:var(--navy,#0b1f36); font:inherit; font-weight:700; text-align:left; cursor:pointer; padding:0; }
+.crm-patient-name > strong { display:block; font-size:13px; line-height:1.45; font-weight:650; }
+.crm-patient-meta { display:block; font-size:10px; color:var(--muted,#6d7b8a); margin-top:4px; }
+.crm-patient-activity strong { display:block; font-weight:500; }
+.crm-patient-activity span, .crm-patient-next > span { display:block; margin-top:4px; font-size:10px; color:var(--muted,#6d7b8a); }
+.crm-patient-next time { display:block; color:var(--navy,#0b1f36); font-size:16px; font-weight:700; line-height:1.3; white-space:nowrap; }
+.crm-patients .crm-ws-pill { font-size:10px; font-weight:600; white-space:normal; line-height:1.4; padding:4px 7px; background:#f0f4f6; color:#526170; border:0; }
+.crm-patients .crm-ws-pill-atrasado { color:#815426; background:#fbf2e8; }
+.crm-patients .crm-ws-pill-hoje, .crm-patients .crm-ws-pill-proximo { color:#11665e; background:#eaf6f2; }
+.crm-ws-sem-tel, .crm-phone-missing { color:var(--muted,#6d7b8a); font-weight:400; }
+.crm-related-contact { display:block; font-size:10px; color:var(--muted,#6d7b8a); margin-top:8px; }
+.crm-patient-action-list { display:flex; align-items:center; gap:5px 8px; flex-wrap:wrap; }
+.crm-patient-action-list > button { border:0; background:none; font:inherit; font-size:11px; padding:5px 0; color:#526170; cursor:pointer; }
+.crm-patient-action-list > .crm-action-primary { color:var(--teal-dark,#0f8f83); font-weight:650; }
+.crm-patient-menu { position:relative; font-size:11px; }
+.crm-patient-menu > summary { color:#526170; padding:5px 0; cursor:pointer; }
+.crm-patient-menu > div { position:absolute; right:0; top:100%; min-width:215px; max-width:calc(100vw - 48px); z-index:20; display:grid; padding:6px; border-radius:10px; border:1px solid var(--line,#dbe4ea); box-shadow:0 10px 28px #0b1f361f; background:var(--card,#fff); }
+.crm-patient-menu button { border:0; background:transparent; text-align:left; font:inherit; color:var(--navy,#0b1f36); padding:10px; border-radius:5px; cursor:pointer; }
+.crm-patient-menu button:hover { background:var(--soft,#eef6f8); }
+.crm-patient-action-list button:focus-visible, .crm-patient-menu summary:focus-visible, .crm-patients th button:focus-visible { outline:2px solid var(--teal-dark,#0f8f83); outline-offset:3px; border-radius:3px; }
+.crm-patient-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:18px; font-size:12px; color:var(--muted,#6d7b8a); }
+.crm-patient-pagination > div { display:flex; gap:8px; }
+.crm-patient-compact { display:none; }
+.crm-secondary-reports { margin-top:28px; border-top:1px solid var(--line,#dbe4ea); padding-top:18px; }
+.crm-secondary-reports > summary { color:var(--muted,#6d7b8a); font-size:13px; cursor:pointer; margin-bottom:16px; }
+@media (max-width:1150px) {
+  .crm-patients .crm-patient-contact, .crm-patients .crm-patient-activity { display:none; }
+  .crm-patients th:first-child { width:31%; }
+  .crm-patients th:nth-child(4) { width:23%; }
+  .crm-patients th:nth-child(5) { width:16%; }
+  .crm-patients th:last-child { width:30%; }
+  .crm-patient-compact { display:flex; flex-wrap:wrap; gap:3px 5px; font-size:10px; color:var(--muted,#6d7b8a); margin-top:7px; }
+  .crm-patient-compact > strong { font-weight:500; }
+  .crm-patient-compact > span:last-child { flex-basis:100%; }
+  .crm-patient-filters { grid-template-columns:repeat(2,minmax(0,1fr)) auto; }
+  .crm-patient-filters > :first-child { grid-column:span 2; }
+  .crm-patient-filters > :nth-child(2) { grid-row:2; }
+  .crm-patient-filters > :nth-child(3) { grid-row:2; }
+  .crm-patient-filters > :nth-child(4) { grid-row:1; }
+  .crm-patient-filters > :last-child { grid-row:2; }
+}
+@media (max-width:700px) {
+  .crm-patient-summary { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:16px; }
+  .crm-patient-summary > div { padding:12px; }
+  .crm-patient-summary span { font-size:11px; }
+  .crm-patient-summary strong { font-size:24px; }
+  .crm-patient-filters { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .crm-patient-filters > :first-child { grid-column:1/-1; }
+  .crm-patient-filters > :nth-child(2), .crm-patient-filters > :nth-child(3), .crm-patient-filters > :nth-child(4), .crm-patient-filters > :last-child { grid-row:auto; }
+  .crm-patient-filters > :last-child { align-self:end; }
+  .crm-patient-filters .crm-ws-filtro { font-size:11px; }
+  .crm-patients, .crm-patients tbody { display:block; }
+  .crm-patients thead { display:none; }
+  .crm-patient-list { background:transparent; }
+  .crm-patients tbody tr { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px 8px; padding:16px; margin-bottom:12px; background:var(--card,#fff); border:1px solid var(--line,#dbe4ea); border-radius:12px; }
+  .crm-patients td { display:block; border:0; padding:0; width:auto; }
+  .crm-patients .crm-patient-name { grid-column:1/-1; }
+  .crm-patient-name > strong { font-size:14px; }
+  .crm-patients .crm-patient-next { grid-column:1; }
+  .crm-patient-next::before { content:'Próximo contato'; display:block; color:var(--muted,#6d7b8a); font-size:10px; margin-bottom:3px; }
+  .crm-patients .crm-patient-status { align-self:center; }
+  .crm-patients .crm-patient-actions { grid-column:1/-1; border-top:1px solid #edf1f4; padding-top:8px; }
+  .crm-patient-action-list { gap:4px 14px; justify-content:flex-start; }
+  .crm-patient-action-list > button, .crm-patient-menu > summary { min-height:40px; padding:8px 0; font-size:12px; }
+  .crm-patient-pagination { flex-wrap:wrap; font-size:11px; }
+  .crm-patient-actions { position:relative; }
+  .crm-patient-menu { position:static; }
+  .crm-patient-menu > div { right:0; left:auto; min-width:205px; }
+}

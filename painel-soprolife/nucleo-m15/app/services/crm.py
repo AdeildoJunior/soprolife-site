@@ -37,6 +37,7 @@ from ..models import (
 )
 from ..status_display import exam_status_display
 from .followup import today_local
+from .crm_schedule import project_followups, contact_situation
 
 # Janela usada para classificar "paciente reativado": um atendimento novo
 # depois de um intervalo longo sem qualquer atendimento.
@@ -269,8 +270,12 @@ def build_patient_rows(db: Session, *, com_financeiro: bool) -> list[dict]:
     leads = _index_by_person(
         db.execute(select(Lead).where(Lead.person_id.in_(ids))).scalars().all()
     )
-    followups = _index_by_person(
-        db.execute(select(Followup).where(Followup.person_id.in_(ids))).scalars().all()
+    followups = _index_by_person(project_followups(
+        db.execute(select(Followup).where(Followup.person_id.in_(ids))).scalars().all(),
+        [exam for values in exames.values() for exam in values], today,
+    ))
+    interactions = _index_by_person(
+        db.scalars(select(Interaction).where(Interaction.person_id.in_(ids))).all()
     )
     partner_names = {
         p.id: p.nome for p in db.execute(select(Partner)).scalars().all()
@@ -285,6 +290,8 @@ def build_patient_rows(db: Session, *, com_financeiro: bool) -> list[dict]:
 
     rows: list[dict] = []
     for person_id, person in people.items():
+        if person.arquivado:
+            continue
         p_exames = sorted(
             exames.get(person_id, []),
             key=lambda e: (e.data_exame or date.min),
@@ -318,6 +325,17 @@ def build_patient_rows(db: Session, *, com_financeiro: bool) -> list[dict]:
         contact = dialable_contact(db, contato_pessoa.id)
         ultimo_exame = p_exames[-1] if p_exames else None
         ultima_consulta = p_consultas[-1] if p_consultas else None
+        last_interaction = max(interactions.get(person_id, []),
+            key=lambda i: i.ts_utc.isoformat() if i.ts_utc else "", default=None)
+        personal_contact = dialable_contact(db, person.id)
+        activity = []
+        if ultimo_exame and ultimo_exame.data_exame:
+            activity.append(("Espirometria", ultimo_exame.data_exame.isoformat(), ultimo_exame.data_exame_precisao, ultimo_exame.data_exame_dia_assumido))
+        if ultima_consulta and ultima_consulta.data_consulta:
+            activity.append(("Consulta", ultima_consulta.data_consulta.isoformat(), ultima_consulta.data_consulta_precisao, ultima_consulta.data_consulta_dia_assumido))
+        if last_interaction and last_interaction.ts_utc:
+            activity.append(("Contato", last_interaction.ts_utc.date().isoformat(), "dia", False))
+        last_activity = max(activity, key=lambda a: a[1], default=None)
 
         row = {
             "person_id": person.id,
@@ -325,6 +343,14 @@ def build_patient_rows(db: Session, *, com_financeiro: bool) -> list[dict]:
             "nome_completo": person.nome_completo,
             "status_pessoa": person.status,
             "nao_contatar": person.nao_contatar,
+            "contato_pessoal": {
+                "telefone_mascarado": mask_phone(personal_contact.valor_normalizado if personal_contact else None),
+                "telefone_utilizavel": personal_contact is not None,
+            },
+            "ultima_atividade": {"tipo": last_activity[0], "data": last_activity[1], "precisao": last_activity[2], "dia_assumido": last_activity[3]} if last_activity else None,
+            "ultima_interacao": last_interaction.ts_utc.isoformat() if last_interaction and last_interaction.ts_utc else None,
+            "situacao_contato": contact_situation(
+                proximo.due_date if proximo else None, today, do_not_contact=person.nao_contatar),
             "contato": {
                 "person_id": contato_pessoa.id,
                 "public_code": contato_pessoa.public_code,
@@ -351,6 +377,10 @@ def build_patient_rows(db: Session, *, com_financeiro: bool) -> list[dict]:
                 "followup_id": proximo.id,
                 "public_code": proximo.public_code,
                 "due_date": proximo.due_date.isoformat() if proximo.due_date else None,
+                "due_date_manual": proximo.due_date_manual,
+                "fonte_data": proximo.date_source,
+                "data_original": proximo.stored_due_date.isoformat() if proximo.stored_due_date else None,
+                "data_base": proximo.base_date.isoformat() if proximo.base_date else None,
                 "tipo": proximo.tipo,
                 "tentativas": proximo.tentativas,
                 "controlado_por_parceiro": proximo.controlado_por_parceiro,
@@ -394,6 +424,19 @@ def build_patient_rows(db: Session, *, com_financeiro: bool) -> list[dict]:
     return rows
 
 
+def patient_summary(rows):
+    today = today_local()
+    dates = [date.fromisoformat(r["proximo_contato"]["due_date"])
+             for r in rows if r["proximo_contato"] and r["proximo_contato"]["due_date"]
+             and not r["nao_contatar"]]
+    return {
+        "total_pacientes": len(rows),
+        "atrasados": sum(d < today for d in dates),
+        "proximos_30": sum(today <= d <= today + timedelta(days=30) for d in dates),
+        "sem_data": sum(not r["proximo_contato"] or not r["proximo_contato"]["due_date"] for r in rows),
+    }
+
+
 # ------------------------------------------------------ filas / contatos a fazer
 
 def build_queue_rows(db: Session) -> list[dict]:
@@ -419,7 +462,13 @@ def build_queue_rows(db: Session) -> list[dict]:
     }
 
     out: list[dict] = []
-    for fup, person in rows:
+    people_by_id = {person.id: person for _, person in rows}
+    projected = project_followups([fup for fup, _ in rows],
+        db.scalars(select(SpirometryExam)).all(), today)
+    for fup in projected:
+        person = people_by_id[fup.person_id]
+        if person.arquivado:
+            continue
         if fup.status == "cancelado":
             continue
         contato_pessoa = person
@@ -496,10 +545,13 @@ def build_queue_rows(db: Session) -> list[dict]:
             "motivo": fup.tipo,
             "origem": origem_ref,
             "due_date": fup.due_date.isoformat() if fup.due_date else None,
+            "fonte_data": fup.date_source,
+            "data_original": fup.stored_due_date.isoformat() if fup.stored_due_date else None,
             "tentativas": fup.tentativas,
             "controlado_por_parceiro": fup.controlado_por_parceiro,
             "status_followup": fup.status,
         })
+    out.sort(key=lambda row: (row["due_date"] or "9999-99-99", row["paciente"]["public_code"]))
     return out
 
 
@@ -753,7 +805,9 @@ def build_indicators(
     contatos_por_mes: dict[str, int] = {}
     concluidos_por_mes: dict[str, int] = {}
     atrasados = 0
-    for fup in db.execute(select(Followup)).scalars().all():
+    for fup in project_followups(
+        db.scalars(select(Followup)).all(), db.scalars(select(SpirometryExam)).all(), today
+    ):
         if not keep(fup.person_id):
             continue
         if fup.due_date and _in_period(fup.due_date, inicio, fim):

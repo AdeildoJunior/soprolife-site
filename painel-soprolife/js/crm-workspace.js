@@ -19,15 +19,15 @@
   "use strict";
 
   var VIEWS = [
-    ["visao", "Visão geral"],
     ["pacientes", "Pacientes"],
     ["contatos", "Contatos a realizar"],
     ["historico", "Histórico de contatos"],
     ["indicadores", "Indicadores"],
+    ["visao", "Visão geral"],
   ];
 
   var state = {
-    view: "visao",
+    view: "pacientes",
     config: null,
     kpis: null,
     pacientes: null,
@@ -36,7 +36,7 @@
     indicadores: null,
     erro: null,
     carregando: false,
-    filtroPacientes: { q: "", origem: "todas", status_acompanhamento: "", fila: "" },
+    filtroPacientes: { q: "", origem: "todas", status_acompanhamento: "", fila: "", ordenar_por: "proximo_contato", pagina: 1 },
     filaAtiva: "hoje",
     filtroHistorico: { inicio: "", fim: "", resultado: "", canal: "", operador: "", origem: "todas" },
     filtroIndicadores: { meses: 12, origem: "todas" },
@@ -50,10 +50,10 @@
    * O CRM NÃO reimplementa formulário de cadastro: só abre a Central com o
    * paciente e o tipo já escolhidos. */
   var CENTRAL_ATALHOS = [
-    ["espirometria_soprolife", "+ Espirometria"],
-    ["espirometria_pastore", "+ Espirometria Pastore"],
-    ["consulta_soprolife", "+ Consulta"],
-    ["espirometria_consulta_soprolife", "+ Espirometria + Consulta"],
+    ["espirometria_soprolife", "Espirometria SoproLife"],
+    ["espirometria_pastore", "Espirometria Pastore"],
+    ["consulta_soprolife", "Consulta"],
+    ["espirometria_consulta_soprolife", "Espirometria + Consulta"],
   ];
 
   // ------------------------------------------------------------ utilitários
@@ -70,6 +70,15 @@
     if (!iso) return "—";
     var p = String(iso).slice(0, 10).split("-");
     return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : iso;
+  }
+
+  function fmtActivity(activity) {
+    if (!activity || !activity.data) return "—";
+    var date = activity.data.slice(0, 10).split("-");
+    if (activity.precisao === "ano") return date[0] + " (ano)";
+    if (activity.precisao === "mes") return date[1] + "/" + date[0] + " (mês)";
+    if (activity.dia_assumido) return "Data aproximada";
+    return fmtDate(activity.data);
   }
 
   function fmtMes(periodo) {
@@ -123,7 +132,7 @@
   function telefoneHtml(contato) {
     if (!contato) return '<span class="crm-ws-muted">—</span>';
     if (!contato.telefone_utilizavel) {
-      return '<span class="crm-ws-sem-tel" title="Sem telefone discável cadastrado">sem telefone</span>';
+      return '<span class="crm-ws-sem-tel" aria-label="Telefone não informado">—</span>';
     }
     return '<span class="crm-ws-tel" title="Número mascarado por privacidade">' +
       esc(contato.telefone_mascarado || "") + "</span>";
@@ -156,10 +165,10 @@
     }
     if (state.view === "pacientes") {
       var f = state.filtroPacientes;
-      var body = { tamanho: 100 };
+      var body = { tamanho: 25, pagina: f.pagina, ordenar_por: f.ordenar_por };
       if (f.q) body.q = f.q;
       if (f.origem && f.origem !== "todas") body.origem = f.origem;
-      if (f.status_acompanhamento) body.status_acompanhamento = f.status_acompanhamento;
+      if (f.status_acompanhamento) body.situacao = f.status_acompanhamento;
       if (f.fila) body.fila = f.fila;
       return c.api("/crm/pacientes/busca", {
         method: "POST", body: JSON.stringify(body),
@@ -348,119 +357,95 @@
 
   // -------------------------------------------------------------- PACIENTES
 
+  var SITUACOES = [
+    ["atrasado", "Atrasado"], ["hoje", "Hoje"], ["proximo", "Próximos 7 dias"],
+    ["futuro", "Futuro"], ["sem_data", "Sem data"], ["nao_contatar", "Não contatar"],
+  ];
+
   function viewPacientes() {
     var d = state.pacientes;
     if (!d) return '<div class="m15-empty">Sem dados.</div>';
     var f = state.filtroPacientes;
-
-    var origens = [];
-    (d.itens || []).forEach(function (i) {
-      if (origens.indexOf(i.origem) === -1) origens.push(i.origem);
-    });
-    origens.sort();
-
-    var statusOpts = ((state.config && state.config.status_acompanhamento) || [])
-      .map(function (s) {
-        return '<option value="' + esc(s.chave) + '"' +
-          (f.status_acompanhamento === s.chave ? " selected" : "") + ">" + esc(s.rotulo) + "</option>";
-      }).join("");
-
-    var filtros =
-      '<div class="m15-filtros crm-ws-filtros">' +
-      '  <label class="crm-ws-filtro"><span>Buscar</span>' +
-      '    <input type="search" id="crmWsBusca" value="' + esc(f.q) +
-      '" placeholder="nome ou PES-000000" aria-label="Buscar paciente por nome ou código"></label>' +
-      '  <label class="crm-ws-filtro"><span>Origem</span><select id="crmWsOrigem">' +
-      '    <option value="todas">Todas</option>' +
-      origens.map(function (o) {
-        return '<option value="' + esc(o) + '"' + (f.origem === o ? " selected" : "") +
-          ">" + esc(o) + "</option>";
-      }).join("") +
-      "  </select></label>" +
-      '  <label class="crm-ws-filtro"><span>Acompanhamento</span><select id="crmWsStatus">' +
-      '    <option value="">Todos</option>' + statusOpts + "</select></label>" +
-      '  <button type="button" class="m15-btn m15-btn-sec" id="crmWsAplicar">Aplicar</button>' +
-      (f.fila ? '  <span class="crm-ws-filtro-ativo">Fila: ' + esc(filaRotulo(f.fila)) +
-        ' <button type="button" class="crm-ws-link" id="crmWsLimparFila">limpar</button></span>' : "") +
-      "</div>";
-
-    if (!(d.itens || []).length) {
-      return filtros + '<div class="m15-empty">Nenhum paciente encontrado com estes filtros.</div>';
-    }
-
-    var colFin = d.com_financeiro
-      ? "<th scope=\"col\">Financeiro</th>" : "";
-
-    var linhas = (d.itens || []).map(function (p) {
-      var fin = "";
-      if (d.com_financeiro && p.financeiro) {
-        var rot = { conciliado: "conciliado", parcial: "parcial",
-                    sem_lancamento: "sem lançamento", nao_aplicavel: "—" };
-        fin = '<td data-label="Financeiro">' +
-          pill("fin-" + p.financeiro.status, rot[p.financeiro.status] || p.financeiro.status) +
-          (p.financeiro.lancamentos && p.financeiro.lancamentos.length
-            ? '<div class="crm-ws-codes">' + p.financeiro.lancamentos.map(function (c) {
-                return codigo("Lançamento", c);
-              }).join("") + "</div>"
-            : "") + "</td>";
-      }
+    var summary = d.resumo || {};
+    var cards = [["total_pacientes", "Total de pacientes"], ["atrasados", "Acompanhamentos atrasados"],
+      ["proximos_30", "Próximos 30 dias"], ["sem_data", "Sem contato definido"]];
+    var header = '<div class="crm-patient-summary" aria-label="Resumo do relacionamento">' +
+      cards.map(function (c) { return '<div><span>' + esc(c[1]) + '</span><strong>' +
+        esc(summary[c[0]] == null ? "—" : summary[c[0]]) + '</strong></div>'; }).join('') + '</div>';
+    var filters = '<div class="crm-patient-filters">' +
+      '<label class="crm-ws-filtro"><span>Busca</span><input type="search" id="crmWsBusca" value="' +
+      esc(f.q) + '" placeholder="nome ou PES-000000" aria-label="Buscar paciente por nome ou código"></label>' +
+      '<label class="crm-ws-filtro"><span>Origem</span><select id="crmWsOrigem"><option value="todas">Todas</option>' +
+      (d.origens_disponiveis || []).map(function (o) { return '<option value="' + esc(o) + '"' +
+        (f.origem === o ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="crm-ws-filtro"><span>Situação do acompanhamento</span><select id="crmWsStatus"><option value="">Todas</option>' +
+      SITUACOES.map(function (o) { return '<option value="' + o[0] + '"' +
+        (f.status_acompanhamento === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
+      '<label class="crm-ws-filtro"><span>Ordenar por</span><select id="crmWsOrdenar">' +
+      [["proximo_contato", "Próximo contato"], ["ultimo_exame", "Último exame"], ["nome", "Nome"],
+       ["ultima_interacao", "Última interação"]].map(function (o) { return '<option value="' + o[0] + '"' +
+         (f.ordenar_por === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
+      '<button type="button" class="m15-btn m15-btn-sec" id="crmWsAplicar">Aplicar</button></div>';
+    var rows = (d.itens || []).map(function (p) {
       var prox = p.proximo_contato;
-      return "<tr>" +
-        '<td data-label="Paciente">' + codigo("Paciente", p.public_code, { copiar: true }) +
-        '<div class="crm-ws-nome">' + esc(p.nome_completo) + "</div>" +
-        (p.nao_contatar ? pill("nao_contatar", "Não contatar") : "") + "</td>" +
-        '<td data-label="Contato">' + contatoHtml(p.contato) + "</td>" +
-        '<td data-label="Última espirometria">' +
-        (p.ultimo_exame
-          ? codigo("Espirometria", p.ultimo_exame.public_code) +
-            '<div class="crm-ws-sub">' + esc(fmtDate(p.ultimo_exame.data)) + "</div>"
-          : '<span class="crm-ws-muted">—</span>') + "</td>" +
-        '<td data-label="Última consulta">' +
-        (p.ultima_consulta
-          ? codigo("Consulta", p.ultima_consulta.public_code) +
-            '<div class="crm-ws-sub">' + esc(fmtDate(p.ultima_consulta.data)) + "</div>"
-          : '<span class="crm-ws-muted">—</span>') + "</td>" +
-        '<td data-label="Próximo contato">' +
-        (prox ? esc(fmtDate(prox.due_date)) + "<br>" +
-                pill(prox.status_apresentacao, statusRotulo(prox.status_apresentacao))
-              : '<span class="crm-ws-muted">—</span>') + "</td>" +
-        '<td data-label="Origem">' + esc(p.origem) + "</td>" +
-        fin +
-        '<td data-label="Ações" class="crm-ws-acoes-col">' + acoesPaciente(p) + "</td>" +
-        "</tr>";
-    }).join("");
-
-    return filtros +
-      '<div class="crm-ws-total">' + esc(d.total) + " paciente(s) · fonte PostgreSQL</div>" +
-      '<div class="m15-table-wrap crm-ws-table-wrap"><table class="m15-table crm-ws-table">' +
-      '<thead><tr><th scope="col">Paciente</th><th scope="col">Contato</th>' +
-      '<th scope="col">Última espirometria</th><th scope="col">Última consulta</th>' +
-      '<th scope="col">Próximo contato</th><th scope="col">Origem</th>' + colFin +
-      '<th scope="col">Ações</th></tr></thead><tbody>' + linhas + "</tbody></table></div>";
+      var activity = p.ultima_atividade;
+      var last = activity ? '<strong>' + esc(activity.tipo) + '</strong><span>' + esc(fmtActivity(activity)) + '</span>' : '<span class="crm-ws-muted">—</span>';
+      var personal = p.contato_pessoal || p.contato;
+      var contact = telefoneHtml(personal);
+      if (p.contato && p.contato.eh_responsavel) contact += '<span class="crm-related-contact">Responsável relacionado: ' +
+        esc(p.contato.nome_completo) + '<br>' + telefoneHtml(p.contato) + '</span>';
+      var situation = p.situacao_contato || (prox ? prox.status_apresentacao : 'sem_data');
+      var label = (SITUACOES.find(function (o) { return o[0] === situation; }) || [situation, situation])[1];
+      var source = prox && prox.due_date && {manual: 'Definido pelo operador', herdada: 'Histórico preservado',
+        derivada_exame: 'A partir do último exame', automatica: 'Agendamento existente',
+        sem_fonte_identificavel: 'Sem origem identificada'}[prox.fonte_data];
+      return '<tr data-crm-patient="' + esc(p.public_code) + '">' +
+        '<td class="crm-patient-name" data-label="Paciente"><strong>' + esc(p.nome_completo) + '</strong>' +
+        '<span class="crm-patient-meta">' + esc(p.public_code) + ' · ' + esc(p.origem) + '</span>' +
+        '<div class="crm-patient-compact">' + last + '<span>' + contact + '</span></div></td>' +
+        '<td class="crm-patient-contact" data-label="Contato">' + contact + '</td>' +
+        '<td class="crm-patient-activity" data-label="Última atividade"><div>' + last + '</div></td>' +
+        '<td class="crm-patient-next" data-label="Próximo contato"><time datetime="' + esc(prox && prox.due_date || '') + '">' +
+          esc(fmtDate(prox && prox.due_date)) + '</time>' + (source ? '<span>' + esc(source) + '</span>' : '') + '</td>' +
+        '<td class="crm-patient-status" data-label="Situação">' + pill(situation, label) + '</td>' +
+        '<td class="crm-patient-actions" data-label="Ações">' + acoesPaciente(p) + '</td></tr>';
+    }).join('');
+    var page = d.pagina || 1;
+    var pages = Math.max(1, Math.ceil(d.total / (d.tamanho || 25)));
+    return header + filters + (f.fila ? '<p class="crm-ws-total">Fila: ' + esc(filaRotulo(f.fila)) +
+      ' <button type="button" class="crm-ws-link" id="crmWsLimparFila">Limpar filtro</button></p>' : '') +
+      (rows ? '<div class="crm-patient-list"><table class="crm-patients"><thead><tr>' +
+       '<th scope="col">Paciente</th><th class="crm-patient-contact" scope="col">Contato</th>' +
+       '<th class="crm-patient-activity" scope="col">Última atividade</th><th scope="col" aria-sort="' +
+       (f.ordenar_por === 'proximo_contato' ? 'ascending' : 'none') + '"><button id="crmWsSortNext" type="button">Próximo contato ' +
+       (f.ordenar_por === 'proximo_contato' ? '↑' : '↕') + '</button></th>' +
+       '<th scope="col">Situação</th><th scope="col">Ações</th></tr></thead><tbody>' + rows + '</tbody></table></div>' :
+       '<div class="m15-empty">Nenhum paciente encontrado com estes filtros.</div>') +
+      '<div class="crm-patient-pagination"><span>' + esc(d.total) + ' pacientes · página ' + page + ' de ' + pages + '</span>' +
+      '<div><button class="m15-btn m15-btn-sec" data-crm-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>Anterior</button>' +
+      '<button class="m15-btn m15-btn-sec" data-crm-page="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>Próxima</button></div></div>';
   }
 
   function acoesPaciente(p) {
     var botoes = [];
-    if (p.contato && p.contato.telefone_utilizavel && !p.nao_contatar) {
-      botoes.push('<button type="button" class="m15-btn m15-btn-wa crm-ws-mini" ' +
-        'data-crm-ws-wa-pessoa="' + esc(p.person_id) + '">WhatsApp</button>');
+    var operar = cli() && cli().can("operacional");
+    if (operar && p.contato && p.contato.telefone_utilizavel && !p.nao_contatar) {
+      botoes.push('<button type="button" class="crm-action-primary" data-crm-ws-wa-pessoa="' + esc(p.person_id) + '">WhatsApp</button>');
     }
-    botoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
-      'data-crm-ws-timeline="' + esc(p.person_id) + '">Histórico</button>');
-    if (p.proximo_contato) {
-      botoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
-        'data-crm-ws-resultado="' + esc(p.proximo_contato.followup_id) + '">Resultado</button>');
-      botoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
-        'data-crm-ws-reagendar="' + esc(p.proximo_contato.followup_id) + '">Reagendar</button>');
+    botoes.push('<button type="button" class="crm-action" data-crm-ws-timeline="' + esc(p.person_id) + '">Histórico</button>');
+    if (operar && !p.nao_contatar) {
+      botoes.push('<button type="button" class="crm-action" ' +
+        (p.proximo_contato ? 'data-crm-ws-reagendar="' + esc(p.proximo_contato.followup_id) : 'data-crm-ws-agendar="' + esc(p.person_id)) +
+        '">' + (p.proximo_contato ? 'Reagendar' : 'Agendar') + '</button>');
     }
-    // Botoes contextuais abrem o fluxo unico "Novo atendimento" (M20) com o
-    // tipo ja selecionado. So o codigo publico viaja — nunca nome ou telefone.
-    CENTRAL_ATALHOS.forEach(function (a) {
-      botoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
-        'data-crm-ws-central="atendimento" data-crm-ws-tipo="' + esc(a[0]) + '" ' +
-        'data-crm-ws-codigo="' + esc(p.public_code) + '">' + esc(a[1]) + "</button>");
-    });
-    return '<div class="crm-ws-acoes">' + botoes.join("") + "</div>";
+    if (operar) {
+      var more = CENTRAL_ATALHOS.map(function (a) { return '<button type="button" data-crm-ws-central="atendimento" data-crm-ws-tipo="' +
+        esc(a[0]) + '" data-crm-ws-codigo="' + esc(p.public_code) + '">' + esc(a[1]) + '</button>'; }).join('');
+      if (p.proximo_contato) more += '<button type="button" data-crm-ws-resultado="' +
+        esc(p.proximo_contato.followup_id) + '">Registrar resultado do contato</button>';
+      botoes.push('<details class="crm-patient-menu"><summary>Mais ações</summary><div>' + more + '</div></details>');
+    }
+    return '<div class="crm-patient-action-list">' + botoes.join('') + '</div>';
   }
 
   // ------------------------------------------------------- CONTATOS A FAZER
@@ -898,6 +883,25 @@
     );
   }
 
+  function modalAgendar(personId) {
+    abrirModal('<h3>Agendar contato</h3><label class="crm-ws-modal-campo"><span>Próximo contato</span>' +
+      '<input type="date" id="crmWsAgendarData" required></label><div class="m15-modal-actions">' +
+      '<button type="button" class="m15-btn m15-btn-sec" data-crm-ws-fechar>Cancelar</button>' +
+      '<button type="button" class="m15-btn" id="crmWsAgendarSalvar">Agendar</button></div>',
+      function (overlay, fechar) {
+        overlay.querySelector('#crmWsAgendarSalvar').addEventListener('click', function () {
+          var data = overlay.querySelector('#crmWsAgendarData').value;
+          if (!data) { toast('Escolha a data do contato.', 'erro'); return; }
+          var button = overlay.querySelector('#crmWsAgendarSalvar');
+          button.disabled = true;
+          cli().api("/followups", { method: "POST", body: JSON.stringify({
+            patient_person_id: personId, tipo: "manual", due_date: data,
+          }) }).then(function () { fechar(); toast('Contato agendado.'); recarregar(containerEl()); })
+            .catch(function (error) { button.disabled = false; toast(error.message || String(error), 'erro'); });
+        });
+      });
+  }
+
   function modalReagendar(followupId) {
     abrirModal(
       "<h3>Reagendar contato</h3>" +
@@ -1032,13 +1036,40 @@
         state.filtroPacientes.origem = container.querySelector("#crmWsOrigem").value;
         state.filtroPacientes.status_acompanhamento =
           container.querySelector("#crmWsStatus").value;
+        state.filtroPacientes.ordenar_por = container.querySelector("#crmWsOrdenar").value;
+        state.filtroPacientes.pagina = 1;
         recarregar(container);
       };
       aplicar.addEventListener("click", aplicarFiltros);
       container.querySelector("#crmWsBusca").addEventListener("keydown", function (ev) {
         if (ev.key === "Enter") { ev.preventDefault(); aplicarFiltros(); }
       });
+      ["#crmWsOrigem", "#crmWsStatus", "#crmWsOrdenar"].forEach(function (selector) {
+        container.querySelector(selector).addEventListener("change", aplicarFiltros);
+      });
     }
+    var sortNext = container.querySelector("#crmWsSortNext");
+    if (sortNext) sortNext.addEventListener("click", function () {
+      state.filtroPacientes.ordenar_por = "proximo_contato";
+      state.filtroPacientes.pagina = 1;
+      recarregar(container);
+    });
+    container.querySelectorAll("[data-crm-page]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        state.filtroPacientes.pagina = Number(button.dataset.crmPage);
+        recarregar(container);
+      });
+    });
+    container.querySelectorAll(".crm-patient-menu").forEach(function (menu) {
+      menu.addEventListener("toggle", function () {
+        if (menu.open) container.querySelectorAll(".crm-patient-menu").forEach(function (other) {
+          if (other !== menu) other.open = false;
+        });
+      });
+      menu.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") { menu.open = false; menu.querySelector("summary").focus(); }
+      });
+    });
     var limparFila = container.querySelector("#crmWsLimparFila");
     if (limparFila) {
       limparFila.addEventListener("click", function () {
@@ -1087,6 +1118,9 @@
       b.addEventListener("click", function () {
         modalReagendar(b.getAttribute("data-crm-ws-reagendar"));
       });
+    });
+    container.querySelectorAll("[data-crm-ws-agendar]").forEach(function (b) {
+      b.addEventListener("click", function () { modalAgendar(b.getAttribute("data-crm-ws-agendar")); });
     });
     container.querySelectorAll("[data-crm-ws-timeline]").forEach(function (b) {
       b.addEventListener("click", function () {

@@ -122,6 +122,8 @@ def buscar_pacientes(
 ):
     com_financeiro = _pode_ver_financeiro(user)
     rows = csvc.build_patient_rows(db, com_financeiro=com_financeiro)
+    summary = csvc.patient_summary(rows)
+    origins = sorted({r["origem"] for r in rows})
 
     if payload.q:
         alvo = normalize_name(payload.q)
@@ -137,6 +139,8 @@ def buscar_pacientes(
             r for r in rows
             if r["status_acompanhamento"] == payload.status_acompanhamento
         ]
+    if payload.situacao:
+        rows = [r for r in rows if r["situacao_contato"] == payload.situacao]
     if payload.somente_sem_telefone:
         rows = [r for r in rows if not r["contato"]["telefone_utilizavel"]]
     if payload.fila:
@@ -149,6 +153,15 @@ def buscar_pacientes(
         }
         rows = [r for r in rows if r["person_id"] in na_fila]
 
+    # Ordenação no servidor ANTES da paginação: nunca só os 100 itens visíveis.
+    if payload.ordenar_por == "nome":
+        rows.sort(key=lambda r: (normalize_name(r["nome_completo"]), r["public_code"]))
+    elif payload.ordenar_por in {"ultimo_exame", "ultima_interacao"}:
+        def key(row):
+            if payload.ordenar_por == "ultimo_exame":
+                return (row["ultimo_exame"] or {}).get("data") or ""
+            return row["ultima_interacao"] or ""
+        rows.sort(key=lambda r: (key(r), r["public_code"]), reverse=True)
     total = len(rows)
     offset = (payload.pagina - 1) * payload.tamanho
     return {
@@ -157,6 +170,10 @@ def buscar_pacientes(
         "pagina": payload.pagina,
         "tamanho": payload.tamanho,
         "com_financeiro": com_financeiro,
+        "resumo": summary,
+        "origens_disponiveis": origins,
+        "ordenar_por": payload.ordenar_por,
+        "data_referencia": fsvc.today_local().isoformat(),
     }
 
 

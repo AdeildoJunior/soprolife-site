@@ -135,8 +135,8 @@ caso("o workspace não monta nenhum formulário de criação de pessoa/exame",
 const postsDoWorkspace = [...wsSrc.matchAll(/api\("([^"]+)",\s*\{\s*\n?\s*method: "POST"/g)]
   .map((m) => m[1]);
 const postsUnicos = [...new Set(postsDoWorkspace)].filter((p) => p !== "/crm/pacientes/busca");
-caso("o único endpoint de escrita do workspace é o registro de contato",
-     postsUnicos.length === 1 && postsUnicos[0] === "/crm/contatos",
+caso("workspace escreve apenas contato e agendamento manual",
+     postsUnicos.length === 2 && postsUnicos.includes("/crm/contatos") && postsUnicos.includes("/followups"),
      JSON.stringify(postsUnicos));
 // M20: os atalhos passaram a apontar para o fluxo ÚNICO "Novo atendimento",
 // com o tipo pré-selecionado — nunca para abas de cadastro concorrentes.
@@ -187,7 +187,7 @@ caso("todo KPI abre uma lista filtrada (nenhum é decorativo)",
      mod.KPI_DEFS.every((d) => d[2] && typeof d[2].view === "string"));
 caso("as cinco visões internas existem",
      mod.VIEWS.map((v) => v[0]).join(",") ===
-       "visao,pacientes,contatos,historico,indicadores");
+       "pacientes,contatos,historico,indicadores,visao");
 
 const wsCrmSrc = wsSrc;
 caso("as oito filas exigidas são renderizadas a partir do /crm/config",
@@ -247,7 +247,7 @@ caso("index.html carrega o CSS e o JS do workspace",
 caso("o workspace carrega DEPOIS do núcleo M15 (depende da sessão)",
      indexSrc.indexOf("js/m15-nucleo.js") < indexSrc.indexOf("js/crm-workspace.js"));
 caso("cache-buster novo aplicado ao workspace",
-     /crm-workspace\.js\?v=2026072501/.test(indexSrc) &&
+     /crm-workspace\.js\?v=\d{10}/.test(indexSrc) &&
      /crm-workspace\.css\?v=\d{10}/.test(indexSrc));
 
 caso("abas do workspace têm papel de tablist e estado acessível",

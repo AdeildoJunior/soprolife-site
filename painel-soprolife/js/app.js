@@ -1095,9 +1095,8 @@ function renderCrmHub(container) {
       <p class="eyebrow">Relacionamento com pacientes</p>
       <h2>CRM SoproLife</h2>
       <p class="section-sub">Pacientes, contatos a realizar, acompanhamento e recorrência.
-        Fonte oficial: PostgreSQL / Núcleo M15.</p>
+        Organize o próximo contato e acompanhe cada relacionamento.</p>
     </div>
-    ${marcoHtml}
 
     <!-- M21 — o CRM começa pela operação real de pacientes (KPIs, filas de
          contato, gráficos de acompanhamento e origem, atividade recente),
@@ -1105,6 +1104,9 @@ function renderCrmHub(container) {
          destino de sidebar. -->
     <div id="crmWorkspace"></div>
 
+    <details class="crm-secondary-reports" id="crmSecondaryReports">
+      <summary>Relatórios de relacionamento e parcerias</summary>
+      ${marcoHtml}
     <div class="crm-hub-report-header">
       <div>
         <h3>Relatórios CRM</h3>
@@ -1153,6 +1155,7 @@ function renderCrmHub(container) {
       <span>📊</span>
       <p><strong>Dados agregados do CRM.</strong> Atualizado a partir dos arquivos locais seguros. Sem dados pessoais exibidos nesta visão.</p>
     </div>
+    </details>
   `;
 
   // M21 — monta o workspace canônico de pacientes DENTRO do hub. Ele é a
@@ -1178,7 +1181,10 @@ function renderCrmHub(container) {
     }
   });
 
-  renderCrmReportBody();
+  const reports = container.querySelector("#crmSecondaryReports");
+  if (reports) reports.addEventListener("toggle", () => {
+    if (reports.open) renderCrmReportBody();
+  });
 }
 
 function renderCrmClinicas(container) {
