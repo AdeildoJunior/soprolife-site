@@ -24,6 +24,11 @@ def document_service_description(db: Session, doc: FiscalDocument) -> str:
     de texto livre, e um grupo com exames de variantes diferentes não tem
     descrição verdadeira — as duas possíveis mentiriam sobre metade dele.
     """
+    if getattr(doc, "kind", "single") == "eeg":
+        from ..nfse_eeg import service_description
+        from ...models import EegExam
+        exam = db.get(EegExam, doc.eeg_exam_id)
+        return service_description(exam.modalidade_codigo if exam else None)
     if getattr(doc, "kind", "single") == "grouped":
         exam_ids = list(db.scalars(select(FiscalDocumentItem.spirometry_exam_id).where(
             FiscalDocumentItem.document_id == doc.id

@@ -90,7 +90,7 @@ def _protect_fiscal_evidence(session, _flush_context, _instances):
         if isinstance(obj, FiscalDocument):
             state = inspect(obj)
             if any(state.attrs[key].history.has_changes() for key in (
-                "spirometry_exam_id", "environment", "created_by",
+                "spirometry_exam_id", "eeg_exam_id", "kind", "environment", "created_by",
                 "idempotency_key", "idempotency_fingerprint",
             )):
                 raise ValueError("Identidade fiscal imutável.")

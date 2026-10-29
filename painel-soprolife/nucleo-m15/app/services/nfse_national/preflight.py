@@ -150,8 +150,7 @@ def run_offline_preflight(db: Session, document_id: str, settings: Settings, act
     # caller does not explicitly supply one (tests still can, to exercise a
     # specific/synthetic contract in isolation without touching the DB).
     if national_config is None:
-        national_config = fiscal_config.resolve_active_configuration(
-            db, environment=doc.environment, as_of=preparation.competence)
+        national_config = fiscal_config.resolve_document_configuration(db, doc, preparation)
     if national_config is None:
         return _blocked(doc.id, Stage.NATIONAL_CONFIG,
                         ["national_dps_configuration_not_defined_for_any_real_document"])

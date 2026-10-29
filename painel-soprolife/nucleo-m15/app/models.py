@@ -2795,6 +2795,7 @@ class FiscalDocument(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     spirometry_exam_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("spirometry_exams.id"), nullable=True)
+    eeg_exam_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("eeg_exams.id"))
     environment: Mapped[str] = mapped_column(String(20))
     kind: Mapped[str] = mapped_column(String(10), default="single", server_default="single")
     # Tomador fiscal EXPLÍCITO, só para `grouped`. Mutável enquanto o
@@ -2814,12 +2815,15 @@ class FiscalDocument(Base, TimestampMixin):
     __table_args__ = (
         UniqueConstraint("spirometry_exam_id", "environment", name="uq_fiscal_exam_environment"),
         CheckConstraint("environment IN ('mock','restricted','production')", name="fiscal_document_environment"),
-        CheckConstraint("kind IN ('single','grouped')", name="fiscal_document_kind"),
+        CheckConstraint("kind IN ('single','grouped','eeg')", name="fiscal_document_kind"),
+        UniqueConstraint("eeg_exam_id", "environment", name="uq_fiscal_eeg_environment"),
         CheckConstraint(
-            "(kind = 'single' AND spirometry_exam_id IS NOT NULL "
+            "(kind = 'single' AND eeg_exam_id IS NULL AND spirometry_exam_id IS NOT NULL "
             "AND recipient_person_id IS NULL) OR "
-            "(kind = 'grouped' AND spirometry_exam_id IS NULL "
-            "AND recipient_person_id IS NOT NULL)",
+            "(kind = 'grouped' AND eeg_exam_id IS NULL AND spirometry_exam_id IS NULL "
+            "AND recipient_person_id IS NOT NULL) OR "
+            "(kind = 'eeg' AND eeg_exam_id IS NOT NULL AND spirometry_exam_id IS NULL "
+            "AND recipient_person_id IS NULL)",
             name="fiscal_document_shape"),
         # M57 — 'issued' (a real NFS-e exists at the tax authority) is a
         # DIFFERENT terminal success state from 'simulated' (the mock invented

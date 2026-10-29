@@ -13,7 +13,7 @@ from ..fiscal_schemas import (PolicyCreate, PrepareRequest, OperationRequest, Ba
                               ProductionIssueConfirmation)
 from ..models import FiscalPolicy, FiscalDocument, FiscalAttempt, FiscalPreparation, User
 from ..pagination import PageParams, paginate
-from ..security import ROLE_ADMIN, ROLE_GESTOR, ROLE_LEITURA, require_role
+from ..security import ROLE_ADMIN, ROLE_GESTOR, ROLE_LEITURA, require_role, user_has_explicit_role
 from ..services import nfse
 from ..services import nfse_grouped as grouped
 from ..services import nfse_production_issuance as production
@@ -33,6 +33,13 @@ def enabled():
 
 
 router = APIRouter(prefix='/fiscal', tags=['fiscal'], dependencies=[Depends(enabled)])
+
+
+def _document_access(db, document_id, user):
+    doc = nfse.get_document(db, document_id)
+    if doc.kind == 'eeg' and not user_has_explicit_role(user, ROLE_ADMIN):
+        nfse.fail('eeg_access_denied', 403)
+    return doc
 
 
 def _refuse_in_production(settings):
@@ -170,7 +177,7 @@ def new_national_configuration(payload: NationalDpsConfigurationVersionCreate, r
 @router.get('/documentos')
 def documents(state: str | None = None, params: PageParams = Depends(),
               db: Session = Depends(get_db), user: User = Depends(require_role(ROLE_LEITURA))):
-    stmt = select(FiscalDocument).order_by(FiscalDocument.created_at.desc())
+    stmt = select(FiscalDocument).where(FiscalDocument.kind != "eeg").order_by(FiscalDocument.created_at.desc())
     if state:
         stmt = stmt.where(FiscalDocument.state == state)
     return paginate(db, stmt, params, lambda doc: nfse.serialize_document(db, doc))
@@ -192,6 +199,7 @@ def batch(payload: BatchRequest, request: Request, db: Session = Depends(get_db)
     for document_id in dict.fromkeys(payload.document_ids):
         key = payload_fingerprint({'batch': payload.idempotency_key, 'document': document_id})
         try:
+            _document_access(db, document_id, user)
             doc = nfse.operate(db, document_id, 'issue', key, settings, user.id, request.state.request_id)
             results.append(nfse.serialize_document(db, doc))
         except HTTPException as exc:
@@ -203,13 +211,13 @@ def batch(payload: BatchRequest, request: Request, db: Session = Depends(get_db)
 @router.get('/documentos/{document_id}')
 def inspect_document(document_id: str, db: Session = Depends(get_db),
                      user: User = Depends(require_role(ROLE_LEITURA))):
-    return nfse.serialize_document(db, nfse.get_document(db, document_id))
+    return nfse.serialize_document(db, _document_access(db, document_id, user))
 
 
 @router.get('/documentos/{document_id}/preparacoes')
 def preparations(document_id: str, params: PageParams = Depends(), db: Session = Depends(get_db),
                  user: User = Depends(require_role(ROLE_LEITURA))):
-    nfse.get_document(db, document_id)
+    _document_access(db, document_id, user)
     def serialize(p):
         data = {c.name: getattr(p, c.name) for c in FiscalPreparation.__table__.columns}
         data['amount_snapshot'] = str(p.amount_snapshot) if p.amount_snapshot is not None else None
@@ -229,13 +237,14 @@ def preflight(document_id: str, db: Session = Depends(get_db), settings=Depends(
     for a real document today; it exists so the Command Center can show
     operators WHY, staged for the day a real configuration source exists.
     """
+    _document_access(db, document_id, user)
     return run_offline_preflight(db, document_id, settings, user.id).as_dict()
 
 
 @router.get('/documentos/{document_id}/tentativas')
 def attempts(document_id: str, params: PageParams = Depends(), db: Session = Depends(get_db),
              user: User = Depends(require_role(ROLE_LEITURA))):
-    nfse.get_document(db, document_id)
+    _document_access(db, document_id, user)
     return paginate(db, select(FiscalAttempt).where(FiscalAttempt.document_id == document_id)
                     .order_by(FiscalAttempt.number, FiscalAttempt.phase.desc()), params,
                     lambda a: {c.name: getattr(a, c.name) for c in FiscalAttempt.__table__.columns
@@ -247,6 +256,7 @@ def _operation(action, reprocess=False):
                  db: Session = Depends(get_db), settings=Depends(enabled),
                  user: User = Depends(require_role(ROLE_GESTOR))):
         _refuse_in_production(settings)
+        _document_access(db, document_id, user)
         return nfse.serialize_document(db, nfse.operate(
             db, document_id, action, payload.idempotency_key, settings, user.id,
             request.state.request_id, reprocess=reprocess))
@@ -286,13 +296,14 @@ def production_confirmation(document_id: str, db: Session = Depends(get_db),
                             settings=Depends(enabled),
                             user: User = Depends(require_role(ROLE_GESTOR))):
     production._require_production(settings)
-    return production.confirmation_summary(db, nfse.get_document(db, document_id))
+    return production.confirmation_summary(db, _document_access(db, document_id, user))
 
 
 @router.post('/producao/documentos/{document_id}/confirmar-emissao', status_code=202)
 def production_confirm(document_id: str, payload: ProductionIssueConfirmation, request: Request,
                        db: Session = Depends(get_db), settings=Depends(enabled),
                        user: User = Depends(require_role(ROLE_GESTOR))):
+    _document_access(db, document_id, user)
     return production.authorize_issue(
         db, document_id, preparation_id=payload.preparation_id, amount=payload.amount,
         confirmation=payload.confirmation, idempotency_key=payload.idempotency_key,
@@ -303,6 +314,7 @@ def production_confirm(document_id: str, payload: ProductionIssueConfirmation, r
 def production_reconcile(document_id: str, payload: OperationRequest, request: Request,
                          db: Session = Depends(get_db), settings=Depends(enabled),
                          user: User = Depends(require_role(ROLE_GESTOR))):
+    _document_access(db, document_id, user)
     return production.authorize_reconcile(
         db, document_id, idempotency_key=payload.idempotency_key, settings=settings,
         actor=user.id, request_id=request.state.request_id)
@@ -311,7 +323,9 @@ def production_reconcile(document_id: str, payload: OperationRequest, request: R
 @router.get('/producao/pedidos/{request_id}')
 def production_request(request_id: str, db: Session = Depends(get_db),
                        user: User = Depends(require_role(ROLE_GESTOR))):
-    return production.get_request(db, request_id)
+    result = production.get_request(db, request_id)
+    _document_access(db, result["document_id"], user)
+    return result
 
 
 # ── M26.34 — NFS-e agrupada: vários exames, um tomador ────────────────────
@@ -377,3 +391,41 @@ def grouped_change_recipient(document_id: str, payload: GroupedRecipientChange,
     doc = grouped.set_recipient(db, document_id, payload.recipient_person_id,
                                 settings, user.id, request.state.request_id)
     return nfse.serialize_document(db, doc)
+
+
+@router.get('/documentos/{document_id}/arquivos')
+def document_files(document_id: str, db: Session = Depends(get_db),
+                   user: User = Depends(require_role(ROLE_GESTOR))):
+    from ..models import FiscalArtifact
+    _document_access(db, document_id, user)
+    rows = db.scalars(select(FiscalArtifact).where(FiscalArtifact.document_id == document_id,
+        FiscalArtifact.kind.in_(['nfse_xml', 'danfse_pdf'])).order_by(FiscalArtifact.created_at.desc())).all()
+    return {'itens': [{'id': a.id, 'kind': a.kind, 'size_bytes': a.size_bytes} for a in rows]}
+
+
+@router.get('/documentos/{document_id}/arquivos/{artifact_id}/conteudo')
+def download_file(document_id: str, artifact_id: str, request: Request,
+                  db: Session = Depends(get_db), settings=Depends(enabled),
+                  user: User = Depends(require_role(ROLE_GESTOR))):
+    from hashlib import sha256
+    from pathlib import Path
+    from fastapi.responses import Response
+    from ..models import FiscalArtifact
+    from ..services.nfse_national.artifacts import read_artifact, FiscalArtifactStorageError
+    _document_access(db, document_id, user)
+    artifact = db.get(FiscalArtifact, artifact_id)
+    if not artifact or artifact.document_id != document_id or artifact.kind not in {'nfse_xml', 'danfse_pdf'}:
+        nfse.fail('fiscal_artifact_not_found', 404)
+    try:
+        data = read_artifact(settings.resolved_fiscal_artifacts_storage_dir(), Path(artifact.storage_relative_path))
+    except (FiscalArtifactStorageError, ValueError, OSError):
+        nfse.fail('fiscal_artifact_unavailable', 409)
+    if len(data) != artifact.size_bytes or sha256(data).hexdigest() != artifact.sha256:
+        nfse.fail('fiscal_artifact_integrity_failed', 409)
+    pdf = artifact.kind == 'danfse_pdf'
+    nfse.record(db, 'artifact_downloaded', 'fiscal_document', document_id, user.id,
+                request.state.request_id, tipo=artifact.kind, sha256=artifact.sha256)
+    db.commit()
+    return Response(data, media_type='application/pdf' if pdf else 'application/xml', headers={
+        'Content-Disposition': f'attachment; filename="nfse-{document_id}.{"pdf" if pdf else "xml"}"',
+        'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'})

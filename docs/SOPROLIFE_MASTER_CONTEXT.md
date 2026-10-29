@@ -48,9 +48,25 @@ financeiras SoproLife excluem esse vínculo. Não há backfill de marca.
 Consentimento operacional EEG fica no vínculo e em auditoria, sem alterar
 `Consent`/permissão de contato SoproLife. Repasses e Marketing EEG continuam fora.
 
-A migration local `e9c4a1b72029` acrescenta vínculo/atendimento/razão;
-nenhuma classificação fiscal EEG foi criada. Adaptação fiscal permanece
-pendente da próxima etapa. Ver [contrato EEG](EEGLIFE_CADASTROS_FISCAL.md).
+Fiscal EEG preparado no **mesmo motor** (`FiscalDocument.kind='eeg'`, vínculo
+único por EEG/ambiente), mesma confirmação, spool, worker, credenciais e DPS.
+**Nenhuma política EEG real foi criada e nenhuma transmissão foi habilitada.**
+Exige política `service='eeg'/flow='EEG'` validada, modalidades explicitamente
+aprovadas e referência ao perfil tributário corporativo imutável. Códigos de
+serviço nacional/municipal e NBS vêm da aprovação EEG; nunca são copiados como
+default da espirometria. Sem isso, prepara bloqueado. Nome legal informado:
+SOPRO LIFE DIAGNÓSTICO E SOLUÇÕES EM SAÚDE LTDA, CNPJ 63.544.026/0001-10.
+O emitente na DPS continua derivado do perfil corporativo referenciado.
+PDF/XML só ficam disponíveis quando já existem no acervo privado; não há
+busca de DANFSe nem cancelamento real novos. Rotas fiscais compartilhadas
+aplicam admin a documentos EEG também no acesso por ID.
+
+Migrations locais `e9c4a1b72029` (consentimento operacional no vínculo,
+local/município/origem/idempotência e razão) e `f1e4a2b72029` (documento fiscal
+EEG e identidade protegida). Downgrade recusa perder fatos novos. Catálogo
+preserva os códigos anteriores, soma modalidades solicitadas e informa a
+validação técnica Nano/iCelera pendente em todos; hospitalar, vídeo e especial
+estão inativos. Detalhes: [contrato EEG de cadastro/fiscal](EEGLIFE_CADASTROS_FISCAL.md).
 Estado de deploy e evidências: relatório da Fase 2A em Downloads (fora do Git).
 
 Inicialização: `start-local.sh` exige o proxy autenticado em loopback;

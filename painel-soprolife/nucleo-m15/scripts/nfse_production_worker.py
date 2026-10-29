@@ -65,7 +65,7 @@ POST_TIMEOUT_SECONDS = 60.0
 MAX_GETS = 2                     # GET /dps/{id} and, only if needed, GET /nfse/{chave}
 CERT_CREDENTIAL = "nfse-a1.pfx"
 PASSWORD_CREDENTIAL = "nfse-a1-password"
-SUPPORTED_FLOWS = ("DIRECT", "HOME", "PASTORE")
+SUPPORTED_FLOWS = ("DIRECT", "HOME", "PASTORE", "EEG")
 
 # The client constructor this process may use, and only from inside the
 # one-shot transport's send(). Tests replace it with a mock-backed one.
@@ -416,6 +416,9 @@ def guards(db, facts: dict, settings) -> tuple[list[str], dict]:
     # verificação abaixo que dependia de UM exame ganhou o ramo do grupo.
     grouped = getattr(doc, "kind", "single") == "grouped"
     exam = db.get(SpirometryExam, doc.spirometry_exam_id) if doc.spirometry_exam_id else None
+    if doc.kind == "eeg":
+        from app.models import EegExam
+        exam = db.get(EegExam, doc.eeg_exam_id)
     check("document_environment", doc.environment == "production")
     check("document_exam_mismatch", doc.spirometry_exam_id == facts["exam_id"])
     expected: dict = {}

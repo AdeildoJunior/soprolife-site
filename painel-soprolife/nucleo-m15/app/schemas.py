@@ -1448,6 +1448,11 @@ class EegAtendimentoCreate(EegExameCreate):
         return value
 
 
+class EegPagamentoUpdate(StrictModel):
+    status: Literal["Pendente", "Recebido"]
+    data_recebimento: date | None = None
+
+
 class EegExameStatusUpdate(StrictModel):
     status: str = Field(min_length=1, max_length=30)
     # Quando informado, substitui o "agora" do carimbo. Serve para registrar

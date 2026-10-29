@@ -35,6 +35,7 @@
     leads: montarAgenda,
     custos: montarCustos,
     financeiro: montarFinanceiro,
+    fiscal: montarFiscal,
   };
 
   var cache = { modalidades: null, locais: null };
@@ -88,6 +89,18 @@
       '<div class="empty-state">Carregando…</div>';
     return promessa.then(function (dados) {
       secao.querySelector("[data-eeg-corpo]").innerHTML = render(dados);
+      secao.querySelectorAll("[data-eeg-preparar]").forEach(function (b) {
+        b.onclick = function () { prepararFiscal(secao, b.getAttribute("data-eeg-preparar")); };
+      });
+      secao.querySelectorAll("[data-eeg-documento]").forEach(function (b) {
+        b.onclick = function () { abrirFiscal(secao, documentos[b.getAttribute("data-eeg-documento")]); };
+      });
+      secao.querySelectorAll("[data-eeg-pagamento]").forEach(function (b) {
+        b.onclick = function () {
+          formulario("Atualizar pagamento EEG", select("status", "Situação", [["Pendente", "Pendente"], ["Recebido", "Recebido"]]) + campo("data_recebimento", "Data real de recebimento", "date"),
+            function (dados) { return post("/eeg/financeiro/" + b.getAttribute("data-eeg-pagamento") + "/pagamento", dados, "PATCH").then(function () { atualizar(secao); }); });
+        };
+      });
       secao.querySelectorAll("[data-eeg-atender]").forEach(function (b) {
         b.onclick = function () { novoAtendimento(secao, b.getAttribute("data-eeg-atender")); };
       });
@@ -463,8 +476,8 @@
     secao.innerHTML = cabecalho(secao) + moldura("Financeiro EEGLife", "Receitas no razão compartilhado, identificadas pela marca de origem.", "");
     return carregar(secao, todos("/eeg/financeiro"), function (dados) {
       if (!dados.itens.length) return vazio("Nenhuma receita de EEG registrada.");
-      return tabela(["Lançamento", "Atendimento", "Valor", "Pagamento"], dados.itens.map(function (e) {
-        return "<tr><td>" + esc(e.public_code) + "</td><td>" + esc(e.descricao) + "</td><td>" + brl(e.valor) + "</td><td>" + esc(e.status) + "</td></tr>";
+      return tabela(["Lançamento", "Atendimento", "Valor", "Pagamento", "Ações"], dados.itens.map(function (e) {
+        return "<tr><td>" + esc(e.public_code) + "</td><td>" + esc(e.descricao) + "</td><td>" + brl(e.valor) + "</td><td>" + esc(e.status) + '</td><td><button type="button" data-eeg-pagamento="' + esc(e.id) + '">Pagamento</button> <button type="button" data-eeg-preparar="' + esc(e.eeg_exam_id) + '">Conferir NFS-e</button></td></tr>';
       }).join(""));
     });
   }
@@ -552,8 +565,107 @@
       acao("Renovar link do paciente", function () { return link(true); });
       acao("Revogar acesso do paciente", function () { return post("/eeg/laudos/" + e.laudo.id + "/acesso-resultado/revogar", {}).then(function () { d.querySelector("[data-eeg-erro]").textContent = "Acesso revogado."; }); });
     }
+    acao("Conferir NFS-e", function () { return prepararFiscal(secao, e.id); });
     if (!["cancelado", "laudo_disponivel"].includes(e.status)) acao("Cancelar exame", function () { transicao("cancelado"); });
     d.showModal();
+  }
+
+  // Fiscal: interface da marca, mesmo documento, confirmação e worker.
+  var documentos = {};
+  var FISCAL_STATUS = { blocked: "Bloqueada", pending: "Pronta para conferir", issuing: "Processando",
+    issued: "Emitida", simulated: "Simulada · sem validade fiscal", failed: "Rejeitada", uncertain: "Resultado incerto · reconciliar",
+    reconciling: "Consultando provedor", cancelled: "Cancelada" };
+
+  function montarFiscal(secao) {
+    secao.innerHTML = cabecalho(secao) + moldura("Fiscal EEGLife",
+      "Prestador legal: SOPRO LIFE DIAGNÓSTICO E SOLUÇÕES EM SAÚDE LTDA · CNPJ 63.544.026/0001-10.",
+      '<button type="button" data-eeg-fiscal-atualizar>Atualizar</button>');
+    secao.querySelector("[data-eeg-fiscal-atualizar]").onclick = function () { montarFiscal(secao); };
+    return carregar(secao, todos("/eeg/fiscal"), function (dados) {
+      return '<p class="eeg-nota">Classificação fiscal EEG deve ser validada especificamente. A emissão depende de confirmação humana e usa o emissor corporativo SoproLife.</p>' +
+        (dados.itens.length ? tabela(["Atendimento", "Modalidade executada", "Valor fiscal", "Situação", "Pendência", "Ações"], dados.itens.map(function (doc) {
+          documentos[doc.id] = doc;
+          var c = doc.confirmacao || {};
+          return "<tr><td>" + esc(c.exam_code) + "</td><td>" + esc(c.service_description) + "</td><td>" + brl(c.amount) + "</td><td>" + esc(doc.pedido ? "Pedido: " + doc.pedido.status : (FISCAL_STATUS[doc.state] || doc.state)) + "</td><td>" + esc(c.block_label || (doc.blocking_reasons || []).join(", ") || "—") +
+            '</td><td><button type="button" data-eeg-documento="' + esc(doc.id) + '">Consultar / arquivos</button></td></tr>';
+        }).join("")) : vazio("Nenhum documento EEG preparado. No atendimento ou financeiro, use Conferir NFS-e."));
+    });
+  }
+
+  function prepararFiscal(secao, examId) {
+    return post("/eeg/fiscal/exames/" + examId + "/preparar", {}).then(function (doc) {
+      abrirFiscal(secao, doc);
+    }).catch(function (err) {
+      formulario("NFS-e indisponível", '<p role="alert">' + esc(mensagemErro(err)) + '</p>', function () {}, "Fechar");
+    });
+  }
+
+  function abrirFiscal(secao, doc) {
+    if (!doc) return;
+    var c = doc.confirmacao || {}, key = "eeg-fiscal-" + crypto.randomUUID();
+    var d = formulario("Conferir NFS-e EEGLife",
+      '<p>Prestador legal: SOPRO LIFE DIAGNÓSTICO E SOLUÇÕES EM SAÚDE LTDA · CNPJ 63.544.026/0001-10</p>' +
+      '<dl class="fiscal-readiness-grid"><div><dt>Atendimento</dt><dd>' + esc(c.exam_code) + '</dd></div><div><dt>Tomador</dt><dd>' + esc(c.patient_name) + ' · ' + esc(c.cpf_masked) + '</dd></div><div><dt>Valor</dt><dd>' + brl(c.amount) + '</dd></div><div><dt>Município</dt><dd>' + esc(c.municipio_name || c.municipio_ibge) + '</dd></div><div><dt>Competência</dt><dd>' + esc(c.competence ? c.competence.split("-").reverse().join("/") : "—") + '</dd></div></dl>' +
+      '<p><strong>Descrição:</strong> ' + esc(c.service_description) + '</p><p><strong>Situação:</strong> ' + esc(FISCAL_STATUS[doc.state] || doc.state) + '</p>' +
+      '<p role="status">' + esc(c.block_label || (doc.blocking_reasons || []).join(", ") || "Confira os dados antes de emitir.") + '</p>' +
+      '<div data-eeg-arquivos></div><div data-eeg-emissao></div>', function () {}, "Fechar");
+    d.querySelector('[type="submit"]').hidden = true;
+    var area = d.querySelector("[data-eeg-emissao]");
+    if (doc.pedido && !c.can_confirm) acompanhar(doc.pedido.id, 0);
+    if (c.can_confirm) {
+      var emitir = document.createElement("button"); emitir.type = "button"; emitir.textContent = "Emitir NFS-e";
+      emitir.onclick = function () {
+        emitir.remove();
+        var aviso = document.createElement("p"); aviso.textContent = "Esta ação enviará uma NFS-e real ao provedor fiscal e poderá gerar obrigação fiscal.";
+        area.appendChild(aviso);
+        var confirmar = document.createElement("button"); confirmar.type = "button"; confirmar.textContent = c.confirmation_phrase;
+        confirmar.onclick = function () {
+          confirmar.disabled = true;
+          post("/fiscal/producao/documentos/" + doc.id + "/confirmar-emissao", {
+            preparation_id: c.preparation_id, amount: c.amount, confirmation: c.confirmation_phrase, idempotency_key: key
+          }).then(function (pedido) {
+            confirmar.remove(); acompanhar(pedido.id, 0);
+          }).catch(function (err) { confirmar.disabled = false; d.querySelector("[data-eeg-erro]").textContent = mensagemErro(err); });
+        };
+        area.appendChild(confirmar); confirmar.focus();
+      };
+      area.appendChild(emitir);
+    }
+    function acompanhar(id, n) {
+      if (!d.isConnected) return;
+      m15().api("/fiscal/producao/pedidos/" + id).then(function (pedido) {
+        if (!d.isConnected) return;
+        area.textContent = "Pedido fiscal: " + pedido.status + (pedido.result_code ? " · " + pedido.result_code : "");
+        if (["authorized", "running"].includes(pedido.status) && n < 120) setTimeout(function () { acompanhar(id, n + 1); }, 3000);
+        else atualizar(secao);
+      }).catch(function (err) { d.querySelector("[data-eeg-erro]").textContent = mensagemErro(err); });
+    }
+    if (["uncertain", "issuing", "reconciling"].includes(doc.state)) {
+      var consultar = document.createElement("button"); consultar.type = "button"; consultar.textContent = "Solicitar consulta de status (sem nova emissão)";
+      consultar.onclick = function () {
+        consultar.disabled = true;
+        post("/fiscal/producao/documentos/" + doc.id + "/solicitar-reconciliacao", { idempotency_key: key }).then(function (pedido) {
+          consultar.remove(); acompanhar(pedido.id, 0);
+        }).catch(function (err) { consultar.disabled = false; d.querySelector("[data-eeg-erro]").textContent = mensagemErro(err); });
+      };
+      area.appendChild(consultar);
+    }
+    m15().api("/fiscal/documentos/" + doc.id + "/arquivos").then(function (r) {
+      var files = d.querySelector("[data-eeg-arquivos]");
+      if (!r.itens.length) files.textContent = "PDF/XML ainda não disponíveis no acervo fiscal.";
+      r.itens.forEach(function (a) {
+        var b = document.createElement("button"); b.type = "button"; b.textContent = a.kind === "danfse_pdf" ? "Baixar PDF fiscal" : "Baixar XML da NFS-e";
+        b.onclick = function () {
+          b.disabled = true;
+          m15().apiBlob("/fiscal/documentos/" + doc.id + "/arquivos/" + a.id + "/conteudo", { aceitaBlob: [a.kind === "danfse_pdf" ? "application/pdf" : "application/xml"] }).then(function (blob) {
+            var url = URL.createObjectURL(blob), link = document.createElement("a");
+            link.href = url; link.download = blob.nomeSugerido || ("nfse-" + doc.id + (a.kind === "danfse_pdf" ? ".pdf" : ".xml")); link.click();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+          }).catch(function (err) { d.querySelector("[data-eeg-erro]").textContent = mensagemErro(err); }).finally(function () { b.disabled = false; });
+        };
+        files.appendChild(b);
+      });
+    }).catch(function (err) { d.querySelector("[data-eeg-arquivos]").textContent = mensagemErro(err); });
   }
 
   // ── Custos & Investimentos (escopo EEGLife) ─────────────────────────────

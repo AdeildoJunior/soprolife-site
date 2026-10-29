@@ -247,8 +247,7 @@ def run_production_preflight(db: Session, document_id: str, settings: Settings, 
         doc = nfse_service.get_document(db, document_id)
         preparation = nfse_service.latest_preparation(db, doc.id)
         if preparation is not None:
-            fiscal_config_resolved = fiscal_config.resolve_active_configuration(
-                db, environment=doc.environment, as_of=preparation.competence) is not None
+            fiscal_config_resolved = fiscal_config.resolve_document_configuration(db, doc, preparation) is not None
     except Exception:
         fiscal_config_resolved = False
     if not fiscal_config_resolved:

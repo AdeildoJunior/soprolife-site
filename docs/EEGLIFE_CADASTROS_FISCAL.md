@@ -58,6 +58,64 @@ Hospitalar/beira-leito, vídeo-EEG e especial estão inativos. A indicação de
 cadastro ativo permite classificação operacional; não certifica capacidade.
 Especial não tem descrição fiscal genérica liberada. Não há morte encefálica.
 
-## Próxima etapa
+## NFS-e — uma pessoa jurídica, um motor
 
-A adaptação fiscal é separada. Esta etapa não libera NFS-e EEG.
+Prestador legal: **SOPRO LIFE DIAGNÓSTICO E SOLUÇÕES EM SAÚDE LTDA**,
+**63.544.026/0001-10**. EEGLife é a marca de origem do fato e do documento.
+O emitente e os tributos são referenciados da mesma versão corporativa; não há
+segundo cadastro jurídico, provider, SEFIN, credencial, certificado ou série.
+
+`FiscalDocument.kind='eeg'` aponta para `eeg_exam_id` com unicidade por ambiente.
+Não cria `SpirometryExam` artificial nem itens respiratórios. CHECK de formato
+exclui híbridos; gatilhos e guarda ORM protegem a identidade fiscal. A
+preparação e tentativas usam as mesmas tabelas e auditoria corporativas.
+
+O botão Conferir NFS-e prepara sem rede. Em produção, emissão exige o resumo
+imutável e segundo clique com valor/frase/preparação; usa as rotas existentes
+`/fiscal/producao/documentos/{id}/confirmar-emissao`, spool e worker. O worker
+revalida a elegibilidade EEG, município, dinheiro, política e tomador; continua
+com no máximo um POST, sem repetição cega. Reconciliação segue por GET. Pedidos
+e estados são acompanhados na mesma infraestrutura. Não há cancelamento real
+adicionado. Mock é simulação sem validade fiscal.
+
+**Sem política EEG validada, transmissão bloqueada.** Nenhuma política real é
+fornecida nesta entrega. Aprovação contábil exige nova `FiscalPolicy` imutável,
+`service='eeg'`, `flow='EEG'`, ambiente/vigência e configuração completa:
+
+- `national_service_code`, `municipal_service_code` e decisões tributárias
+  efetivamente aprovados para EEG, sem defaults da espirometria;
+- `eeg_national_configuration_id`: ID da versão corporativa validada, de mesmo
+  ambiente e com vigência compatível, cujo perfil tributário foi revisado para EEG;
+- `eeg_modalidades`: códigos explicitamente abrangidos pela aprovação;
+- `eeg_nbs_code`: NBS aprovado ou string vazia quando sua ausência foi aprovada;
+- `validation_reference`: referência institucional da aprovação, sem PII.
+
+O CNPJ referenciado deve ser o corporativo. A resolução usa o perfil apontado
+pela política e os códigos EEG aprovados; não muda a configuração ativa da
+espirometria. Não criar versão global que substitua inadvertidamente a
+classificação respiratória. Aprovar configuração é ato humano separado;
+este código não fornece evidência de correção tributária de código algum.
+
+Descrição fiscal vem da modalidade estruturada do EEG realizado. Nenhum
+texto clínico, broncodilatador, repasse ou descrição de espirometria é copiado.
+Tomador individual é a pessoa atendida; terceiros/grupos EEG não estão nesta
+entrega. Valor vem da receita EEG recebida. Cadastro insuficiente, data futura,
+exame não realizado, modalidade não aprovada ou município ausente bloqueiam.
+
+## Arquivos, migrações e operação
+
+PDF/XML são entregues autenticados pelo acervo fiscal privado, com integridade
+por hash/tamanho, sem caminho no frontend. O proxy admite PDF/XML somente na
+rota fiscal exata. A ausência de DANFSe é mostrada; não há download externo
+automático nem geração artificial de PDF. Segredos nunca são enviados ao browser.
+
+Migrations: `e9c4a1b72029` (vínculo/atendimento/razão) e `f1e4a2b72029`
+(documento fiscal EEG), sobre `d7b2c4e86a91`. Sem classificação histórica ou
+backfill financeiro. Downgrade só com os novos fatos ausentes; desativar a
+funcionalidade é preferível a perder evidência. Migração real exige revisão,
+backup privado validado e autorização específica. Nenhum comando de deploy
+ou transmissão é parte desta homologação local.
+
+Testes específicos: `test_eeg_cadastros_atendimentos.py`, `test_eeg_fiscal.py`
+e `test_eeg_postgres.py`, somados às suítes corporativas. PostgreSQL deve ser
+descartável, apontado por `M15_TEST_POSTGRES_URL`; nenhum fixture usa dados reais.

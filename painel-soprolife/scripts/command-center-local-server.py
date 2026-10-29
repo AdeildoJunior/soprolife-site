@@ -160,6 +160,8 @@ _M15_LOTE_DOWNLOAD_PATHS = frozenset({
     "/laudos/assinatura-externa/baixar",
     "/laudos/lote/baixar",
 })
+_M15_FISCAL_DOWNLOAD_RE = re.compile(rf"^/fiscal/documentos/{_UUID}/arquivos/{_UUID}/conteudo$")
+_M15_TIPOS_FISCAIS = frozenset({"application/pdf", "application/xml"})
 _M15_TIPOS_PDF = frozenset({"application/pdf"})
 _M15_TIPOS_PDF_OU_ZIP = frozenset({"application/pdf", "application/zip"})
 # M25.18 — ESTA regra era a causa do arquivo baixado com nome aleatório.
@@ -255,6 +257,8 @@ def _tipos_binarios_esperados(method: str, suffix: str) -> frozenset:
     """
 
     if method == "GET":
+        if _M15_FISCAL_DOWNLOAD_RE.fullmatch(suffix):
+            return _M15_TIPOS_FISCAIS
         if re.fullmatch(rf"/eeg/laudos/{_UUID}/arquivo", suffix):
             return _M15_TIPOS_PDF
         if _M15_REPORT_CONTENT_RE.fullmatch(suffix):

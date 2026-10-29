@@ -9,7 +9,7 @@ Environment = Literal['mock', 'restricted', 'production']
 # M70 — 'PASTORE' is the one partner flow with a fiscal model: the NFS-e is
 # SoproLife's own share, taken from the partnership rule. PASTORE_A/B/SPLIT
 # remain vocabulary only.
-Flow = Literal['DIRECT', 'HOME', 'PASTORE', 'PASTORE_A', 'PASTORE_B', 'SPLIT']
+Flow = Literal['DIRECT', 'HOME', 'PASTORE', 'PASTORE_A', 'PASTORE_B', 'SPLIT', 'EEG']
 
 
 class FiscalInput(BaseModel):
@@ -37,18 +37,28 @@ class TaxConfiguration(FiscalInput):
     validation_reference: str | None = Field(None, min_length=1, max_length=100, pattern=r'^[A-Za-z0-9_.:-]+$')
 
     def missing_fields(self) -> list[str]:
-        return sorted(key for key, value in self.model_dump().items() if value is None)
+        return sorted(key for key, value in self.model_dump().items()
+                      if value is None and not key.startswith("eeg_"))
+
+
+class EegTaxConfiguration(TaxConfiguration):
+    # Só EEG: aprovação explícita do perfil de tributos compartilhado e dos
+    # códigos do serviço EEG. Não contém emitente, credenciais ou certificado.
+    eeg_national_configuration_id: str | None = Field(None, min_length=36, max_length=36)
+    eeg_modalidades: list[str] | None = Field(None, min_length=1, max_length=20)
+    eeg_nbs_code: str | None = Field(None, pattern=r"^(?:[0-9]{9})?$")
+
 
 
 class PolicyCreate(FiscalInput):
     version: str = Field(min_length=1, max_length=60, pattern=r'^[A-Za-z0-9_.-]+$')
     environment: Environment
     flow: Flow
-    service: Literal['spirometry'] = 'spirometry'
+    service: Literal['spirometry', 'eeg'] = 'spirometry'
     effective_from: date
     effective_to: date
     validation_state: Literal['draft', 'validated'] = 'draft'
-    configuration: TaxConfiguration
+    configuration: TaxConfiguration | EegTaxConfiguration
 
     @model_validator(mode='after')
     def valid_policy(self):
@@ -56,6 +66,15 @@ class PolicyCreate(FiscalInput):
             raise ValueError('Vigência invertida.')
         if self.validation_state == 'validated' and self.configuration.missing_fields():
             raise ValueError('Política incompleta: ' + ', '.join(self.configuration.missing_fields()))
+        if self.service == 'eeg':
+            if self.flow != 'EEG':
+                raise ValueError('Política EEG exige fluxo EEG.')
+            if self.validation_state == 'validated' and (not isinstance(self.configuration, EegTaxConfiguration) or any(v is None for v in (
+                    self.configuration.eeg_national_configuration_id,
+                    self.configuration.eeg_modalidades, self.configuration.eeg_nbs_code))):
+                raise ValueError('EEG exige classificação, modalidades e perfil tributário explicitamente validados.')
+        elif self.flow == 'EEG':
+            raise ValueError('Fluxo EEG exige serviço EEG.')
         return self
 
 

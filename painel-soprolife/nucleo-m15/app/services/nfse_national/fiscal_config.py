@@ -132,3 +132,11 @@ def safe_summary(row: NationalDpsConfigurationVersion) -> dict:
         "created_by": row.created_by, "created_at": row.created_at.isoformat(),
         "configuration": {key: cfg.get(key) for key in SAFE_CONFIGURATION_FIELDS},
     }
+
+
+def resolve_document_configuration(db, doc, preparation):
+    if doc.kind == "eeg":
+        from ..nfse_eeg import national_configuration
+        return national_configuration(db, preparation.policy_id, doc.environment,
+                                      preparation.competence)
+    return resolve_active_configuration(db, environment=doc.environment, as_of=preparation.competence)

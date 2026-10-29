@@ -95,3 +95,18 @@ def test_validacoes_e_catalogo_tecnico(client, auth, db):
     itens = client.get(API + '/modalidades', headers=auth()).json()['itens']
     assert all(m['validacao_tecnica'] == 'pendente' for m in itens)
     assert not next(m for m in itens if m['codigo'] == 'hospitalar-beira-leito')['ativo']
+
+
+def test_pagamento_explicito_nao_cria_laudo_nem_nota(client, auth, db):
+    from app.models import FiscalDocument
+    v = pessoa(client, auth)
+    payload = {**atendimento(v), 'pagamento_status': 'Pendente'}
+    exam = client.post(API + '/atendimentos', headers=auth(), json=payload).json()
+    entry = client.get(API + '/financeiro', headers=auth()).json()['itens'][0]
+    route = API + '/financeiro/' + entry['id'] + '/pagamento'
+    assert client.patch(route, headers=auth(), json={'status': 'Recebido'}).status_code == 422
+    assert client.patch(route, headers=auth('gestor'), json={'status': 'Recebido', 'data_recebimento': '2026-10-28'}).status_code == 403
+    assert client.patch(route, headers=auth(), json={'status': 'Recebido', 'data_recebimento': '2026-10-28'}).status_code == 200
+    assert db.scalar(select(func.count()).select_from(EegReportDocument)) == 0
+    assert db.scalar(select(func.count()).select_from(FiscalDocument)) == 0
+    db.rollback()

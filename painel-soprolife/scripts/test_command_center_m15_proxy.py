@@ -446,6 +446,22 @@ class ProxyM15Tests(unittest.TestCase):
         self.assertEqual(handler.wfile.getvalue(), pdf)
         self.assertFalse(server._is_report_content("GET", f"/eeg/exames/{ident}/arquivo-tecnico"))
 
+    def test_fiscal_pdf_xml_somente_no_download_autenticado_exato(self):
+        ident = "11111111-1111-4111-8111-111111111111"
+        path = f"/fiscal/documentos/{ident}/arquivos/{ident}/conteudo"
+        for mime, body in [("application/xml", b"<NFSe>SYNTHETIC</NFSe>"),
+                           ("application/pdf", b"%PDF-SYNTHETIC")]:
+            FakeConnection.response = FakeResponse(body=body, headers={"Content-Type": mime})
+            handler = self.run_m15("GET", "/painel-soprolife/api/m15" + path)
+            self.assertEqual(handler.statuses[-1], 200)
+            self.assertEqual(handler.wfile.getvalue(), body)
+        self.assertFalse(server._is_report_content("GET", path.replace(ident, "invalid", 1)))
+        self.assertFalse(server._is_report_content("POST", path))
+        self.assertFalse(server._is_report_content("GET", "/pessoas"))
+        FakeConnection.response = FakeResponse(body=b"<not-allowed/>", headers={"Content-Type": "application/xml"})
+        handler = self.run_m15("GET", "/painel-soprolife/api/m15/pessoas")
+        self.assertEqual(handler.statuses[-1], 502)
+
     def test_upload_multipart_de_laudo_tem_limite_dedicado_e_preserva_boundary(self):
         body = b"x" * (server._M15_MAX_REQUEST_BODY + 1)
         content_type = "multipart/form-data; boundary=fronteira-sintetica-m24a"

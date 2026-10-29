@@ -379,6 +379,9 @@ def evaluate_for_document(db, doc, environment, *, for_update: bool = True) -> d
     função de sempre, com o mesmo dict e, portanto, o mesmo fingerprint:
     nenhuma preparação histórica fica stale por causa desta mudança.
     """
+    if getattr(doc, 'kind', 'single') == 'eeg':
+        from .nfse_eeg import evaluate as evaluate_eeg
+        return evaluate_eeg(db, doc.eeg_exam_id, environment, for_update=for_update)
     if getattr(doc, 'kind', 'single') == 'grouped':
         from .nfse_grouped import document_exam_ids, evaluate_group
         return evaluate_group(db, document_exam_ids(db, doc.id),
@@ -805,6 +808,7 @@ BLOCK_CATEGORIES = [
     # patient's registration, never in the fiscal queue.
     ('recipient_fiscal_data_incomplete', set(RECIPIENT_FISCAL_REASONS)),
     ('missing_service_location', {'service_location_missing', 'service_location_unsupported'}),
+    ('eeg_tax_classification_pending', {'eeg_tax_classification_pending', 'eeg_tax_classification_invalid', 'eeg_modality_not_validated'}),
     ('missing_required_tax_configuration', {'policy_incomplete', 'policy_invalid'}),
     ('blocked_by_fiscal_policy', {'policy_missing', 'policy_outside_validity', 'policy_ambiguous'}),
     ('blocked_by_financial_source', {'financial_entry_missing', 'financial_entry_ambiguous',
@@ -831,7 +835,7 @@ def queue_summary(db: Session, environment: str) -> dict:
     counts — so this stays cheap to poll and free of anything sensitive.
     """
     rows = db.execute(select(FiscalDocument.state, FiscalDocument.blocking_reasons)
-                      .where(FiscalDocument.environment == environment)).all()
+                      .where(FiscalDocument.environment == environment, FiscalDocument.kind != "eeg")).all()
     counts = {
         'eligible': 0, 'issuing': 0, 'issued': 0, 'simulated': 0, 'failed': 0,
         'uncertain': 0, 'reconciling': 0, 'cancelled': 0,
@@ -867,6 +871,9 @@ def serialize_document(db, doc):
     data = {k: getattr(doc, k) for k in ('id', 'spirometry_exam_id', 'environment',
             'kind', 'recipient_person_id', 'state', 'eligibility', 'blocking_reasons',
             'created_at', 'updated_at')}
+    if doc.kind == 'eeg':
+        data['eeg_exam_id'] = doc.eeg_exam_id
+        data['marca'] = 'eeglife'
     data['reconciliation_required'] = doc.state in IN_FLIGHT | {'uncertain'}
     # M26.34 — os itens, com o exame de origem e o valor de cada um. Códigos
     # públicos e identificadores técnicos; nunca nome ou CPF de ninguém.

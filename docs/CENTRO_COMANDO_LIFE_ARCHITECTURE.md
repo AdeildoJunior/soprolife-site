@@ -3,7 +3,7 @@
 Estado: fundação de 18/10/2026, atualizada em 29/10/2026. A Fase 2A já
 implementa operação EEG e autorização por admin no backend. A extensão desta
 worktree acrescenta cadastros/atendimentos, razão compartilhado por vínculo
-técnico e preparação da próxima etapa fiscal, ainda não implementada neste marco. Ela não foi
+técnico e adaptação fiscal com classificação real ainda pendente. Ela não foi
 implantada em produção. Os demais planos futuros abaixo não atestam deploy.
 Contrato vigente: [EEGLife — cadastros e fiscal](EEGLIFE_CADASTROS_FISCAL.md).
 
@@ -55,8 +55,8 @@ forçam a entrada. O localStorage guarda apenas preferência entre contextos que
 a sessão já pode acessar; ele nunca concede acesso.
 
 **Alcance atual:** todas as rotas `/eeg/*` exigem `require_eeg_access` no
-servidor. A futura etapa fiscal deverá aplicar a mesma autorização também nas rotas
-compartilhadas por ID; esconder a marca no seletor não é o controle de autorização.
+servidor. Documentos fiscais EEG também exigem admin nas rotas compartilhadas
+por ID; esconder a marca no seletor não é o controle de autorização.
 
 ## 2. Base existente preservada
 

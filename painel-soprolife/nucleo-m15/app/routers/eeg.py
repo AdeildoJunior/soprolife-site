@@ -48,7 +48,7 @@ from ..models import (
 from ..normalize import normalize_name, normalize_phone
 from ..pagination import PageParams, paginate
 from ..schemas import (
-    EegPessoaBusca, EegAtendimentoCreate,
+    EegPessoaBusca, EegAtendimentoCreate, EegPagamentoUpdate,
     EegArquivoTecnicoCreate,
     EegEnvioLaudoCreate,
     EegExameCreate,
@@ -530,6 +530,34 @@ def financeiro_eeg(db: Session = Depends(get_db), params: PageParams = Depends()
     return paginate(db, select(FinancialEntry).where(FinancialEntry.eeg_exam_id.is_not(None))
         .order_by(FinancialEntry.created_at.desc()), params, lambda e: {
             **ser_financial_entry(e), "eeg_exam_id": e.eeg_exam_id, "marca": "eeglife"})
+
+
+@router.patch("/financeiro/{entry_id}/pagamento")
+def atualizar_pagamento(entry_id: str, payload: EegPagamentoUpdate, request: Request,
+                        db: Session = Depends(get_db), user: User = Depends(require_eeg_access)):
+    from ..models import FiscalDocument, FiscalAttempt, FiscalIssuanceRequest
+    entry = db.scalar(select(FinancialEntry).where(FinancialEntry.id == entry_id,
+        FinancialEntry.eeg_exam_id.is_not(None)).with_for_update())
+    if not entry:
+        raise HTTPException(404, "Receita EEG não encontrada.")
+    doc = db.scalar(select(FiscalDocument).where(FiscalDocument.eeg_exam_id == entry.eeg_exam_id,
+        FiscalDocument.environment == "production"))
+    if doc and (doc.state not in {"blocked", "pending"} or db.scalar(select(FiscalAttempt.id).where(
+            FiscalAttempt.document_id == doc.id).limit(1)) or db.scalar(select(FiscalIssuanceRequest.id).where(
+            FiscalIssuanceRequest.document_id == doc.id, FiscalIssuanceRequest.status.in_(["authorized", "running"])).limit(1))):
+        raise DomainError(409, "receita_fiscal_congelada", "Receita vinculada a emissão fiscal; requer revisão administrativa.")
+    if payload.status == "Recebido" and not payload.data_recebimento:
+        raise DomainError(422, "data_recebimento_obrigatoria", "Informe a data real do recebimento.")
+    if payload.data_recebimento and payload.data_recebimento > _agora().date():
+        raise DomainError(422, "recebimento_futuro", "Recebimento não pode estar no futuro.")
+    anterior = entry.status
+    entry.status = payload.status
+    entry.data_recebimento = payload.data_recebimento if payload.status == "Recebido" else None
+    audit(db, "eeg.pagamento_atualizado", "financial_entries", entry.id, user_id=user.id,
+          request_id=request.state.request_id, detalhes={"contexto": "eeglife", "status": entry.status,
+          "status_anterior": anterior})
+    db.commit()
+    return {"id": entry.id, "status": entry.status, "marca": "eeglife"}
 
 
 @router.patch("/exames/{exam_id}/status")

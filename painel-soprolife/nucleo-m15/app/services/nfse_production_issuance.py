@@ -61,6 +61,7 @@ SPOOL_NAME = re.compile(r'^(?P<id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4
 # Operator-facing labels, the single place the backend names a block. The
 # frontend shows these verbatim; the codes stay the API.
 BLOCK_LABELS = {
+    'eeg_tax_classification_pending': 'Classificação fiscal EEG pendente de validação específica',
     'blocked_by_partner_model': 'Parceria sem política fiscal — não é emitido por exame',
     'partner_before_fiscal_activation': 'Pastore anterior à ativação fiscal — conferir nota manual',
     'blocked_by_partner_rule': 'Regra fiscal da parceria não definida',
@@ -74,7 +75,7 @@ BLOCK_LABELS = {
     'blocked_other': 'Outro motivo',
 }
 
-FLOW_LABELS = {'DIRECT': 'Direto', 'HOME': 'Domiciliar', 'PASTORE': 'Pastore',
+FLOW_LABELS = {'EEG': 'EEGLife', 'DIRECT': 'Direto', 'HOME': 'Domiciliar', 'PASTORE': 'Pastore',
                'PARTNER': 'Parceria'}
 
 # M70 — what the amount IS, in the modal. For PASTORE it is SoproLife's own
@@ -341,6 +342,10 @@ def confirmation_summary(db: Session, doc: FiscalDocument) -> dict:
     live fields the worker would not use."""
     prep = nfse.latest_preparation(db, doc.id)
     exam = db.get(SpirometryExam, doc.spirometry_exam_id) if doc.spirometry_exam_id else None
+    eeg_exam = None
+    if doc.kind == 'eeg':
+        from ..models import EegExam
+        eeg_exam = db.get(EegExam, doc.eeg_exam_id)
     person = db.get(Person, prep.recipient_person_id) if prep and prep.recipient_person_id else None
     try:
         description = document_service_description(db, doc)
@@ -361,7 +366,7 @@ def confirmation_summary(db: Session, doc: FiscalDocument) -> dict:
     return {
         'document_id': doc.id,
         'preparation_id': prep.id if prep else None,
-        'exam_code': exam.public_code if exam else None,
+        'exam_code': exam.public_code if exam else eeg_exam.public_code if eeg_exam else None,
         'patient_name': person.nome_completo if person else None,
         'cpf_masked': mask_cpf(person.cpf if person else None),
         'service_date': prep.service_date if prep else None,
@@ -371,7 +376,7 @@ def confirmation_summary(db: Session, doc: FiscalDocument) -> dict:
         'amount_title': AMOUNT_LABELS.get(prep.flow if prep else None, 'Valor'),
         'amount_source': (prep.amount_source or ('financial_entry.valor' if prep.financial_entry_id else None))
         if prep else None,
-        'modality': exam.modalidade if exam else None,
+        'modality': exam.modalidade if exam else eeg_exam.modalidade_codigo if eeg_exam else None,
         'municipio_ibge': prep.service_municipio_ibge if prep else None,
         'municipio_name': SUPPORTED_SERVICE_MUNICIPALITIES.get((prep.service_municipio_ibge or '') if prep else ''),
         'amount': f'{amount:.2f}' if amount is not None else None,

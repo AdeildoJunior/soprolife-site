@@ -198,8 +198,7 @@ def resolve_national_provider(db: Session, settings: Settings, doc: FiscalDocume
     if readiness.blockers:
         fail(sorted(readiness.blockers)[0])
 
-    national_config = fiscal_config.resolve_active_configuration(
-        db, environment=environment, as_of=preparation.competence)
+    national_config = fiscal_config.resolve_document_configuration(db, doc, preparation)
     if national_config is None:
         fail("national_dps_configuration_not_defined_for_any_real_document")
 
