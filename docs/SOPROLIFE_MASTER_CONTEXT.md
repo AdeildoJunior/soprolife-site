@@ -246,8 +246,13 @@ e auditoria; reagendar continua pelo serviço de contato, sem emissão fiscal.
   `residencial | cowork | clinica_parceira`; o local do laudo deriva do exame.
 - **Broncodilatador** (`broncodilatador` bool/None): obrigatório para fatos
   fiscais Pastore; nunca entrou em cálculo financeiro DIRECT.
-- **Equipamento:** espirômetro **MIR**; o PDF técnico da MIR é o "documento 1",
-  intocado, baixado separadamente.
+- **Equipamento:** `SpirometryExam.equipamento_fonte` é opcional e pertence ao
+  exame: `MIR_SPIROBANK_SMART_II`, `KOKO`, `OUTRO` ou `NULL`. Históricos ficam
+  `NULL`, sem backfill ou inferência. Somente o valor MIR imprime “Observação
+  técnica sobre o FET” no laudo nativo, após a nota técnica e antes da
+  assinatura, separada da conclusão médica. O PDF técnico do equipamento é o
+  "documento 1", intocado, baixado separadamente. Migration `d7b2f3a9c1e0`
+  aditiva sobre `a291029eeg01`; nenhuma versão histórica é regenerada.
 - **Laudo:** gerado pelo núcleo (`report_native_pdf.py`), conclusão da médica,
   selo "Assinatura digital" institucional; rótulo ICP-Brasil só com prova
   criptográfica.
