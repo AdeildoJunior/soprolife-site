@@ -306,6 +306,13 @@ def vincular_pessoa(
     É o caminho de quem já fez espirometria e agora fará EEG. O cadastro da
     pessoa não é copiado nem alterado: só passa a existir um vínculo.
     """
+    enrollment = _vincular_pessoa(payload, request, db, user)
+    db.commit()
+    return _ser_vinculo(db, enrollment)
+
+
+def _vincular_pessoa(payload, request, db, user):
+    """Transaction-owned helper: never commits a partial attendance."""
     person = db.get(Person, payload.person_id)
     if not person or person.arquivado:
         raise HTTPException(status_code=404, detail="Pessoa não encontrada ou arquivada.")
@@ -317,8 +324,7 @@ def vincular_pessoa(
             existente.status = "ativo"
             audit(db, "eeg.vinculo_reativado", "eeg_enrollments", existente.id, user_id=user.id,
                   request_id=request.state.request_id, detalhes={"status": "ativo"})
-            db.commit()
-        return _ser_vinculo(db, existente)
+        return existente
 
     enrollment = EegEnrollment(
         person_id=person.id, origem=payload.origem,
@@ -329,9 +335,7 @@ def vincular_pessoa(
     audit(db, "eeg.vinculo_criado", "eeg_enrollments", enrollment.id,
           user_id=user.id, request_id=getattr(request.state, "request_id", None),
           detalhes={"origem": payload.origem, "reaproveitou_identidade": True})
-    db.commit()
-    db.refresh(enrollment)
-    return _ser_vinculo(db, enrollment)
+    return enrollment
 
 
 @router.post("/pessoas/verificar")
@@ -372,6 +376,13 @@ def criar_pessoa_eeg(
     devolve a lista: reaproveitar a identidade existente é decisão do
     operador, e é assim que a pessoa não vira duas por ter mudado de marca.
     """
+    enrollment = _criar_pessoa_vinculo(payload, request, db, user)
+    db.commit()
+    return _ser_vinculo(db, enrollment)
+
+
+def _criar_pessoa_vinculo(payload, request, db, user):
+    """Shared deduplication, contacts and EEG consent, without committing."""
     nome_normalizado = normalize_name(payload.nome_completo)
     candidatos = _candidatos(db, payload)
     if payload.cpf:
@@ -424,9 +435,7 @@ def criar_pessoa_eeg(
     audit(db, "eeg.vinculo_criado", "eeg_enrollments", enrollment.id,
           user_id=user.id, request_id=getattr(request.state, "request_id", None),
           detalhes={"origem": payload.origem, "pessoa_nova": True})
-    db.commit()
-    db.refresh(enrollment)
-    return _ser_vinculo(db, enrollment)
+    return enrollment
 
 
 # ── Exames e traçados ─────────────────────────────────────────────────────
@@ -508,8 +517,35 @@ def criar_exame(
 def novo_atendimento(payload: EegAtendimentoCreate, request: Request,
                      db: Session = Depends(get_db), user: User = Depends(require_eeg_operator)):
     identity = payload.model_dump(mode="json", exclude={"idempotency_key"})
+    # Preserve fingerprints of pre-inline attendance requests on retry.
+    for field, default in (("person_id", None), ("nova_pessoa", None),
+                           ("consentimento_whatsapp", None), ("status_inicial", "agendado")):
+        if identity[field] == default:
+            identity.pop(field)
+
     def factory(key, fingerprint):
-        exam = criar_exame(payload, request, db, user)
+        if payload.nova_pessoa:
+            enrollment = _criar_pessoa_vinculo(payload.nova_pessoa, request, db, user)
+        elif payload.person_id:
+            enrollment = _vincular_pessoa(EegVinculoCreate(
+                person_id=payload.person_id, origem=payload.origem_canal), request, db, user)
+        else:
+            enrollment = db.get(EegEnrollment, payload.enrollment_id)
+        if enrollment and payload.consentimento_whatsapp is not None:
+            enrollment.consentimento_whatsapp = payload.consentimento_whatsapp
+            audit(db, "eeg.consentimento_registrado", "eeg_enrollments", enrollment.id,
+                  user_id=user.id, request_id=request.state.request_id,
+                  detalhes={"contexto": "eeglife", "canal": "whatsapp", "status": payload.consentimento_whatsapp})
+        resolved = payload.model_copy(update={"enrollment_id": enrollment.id if enrollment else payload.enrollment_id})
+        exam = criar_exame(resolved, request, db, user)
+        if payload.status_inicial != eeg_flow.AGENDADO:
+            eeg_flow.garantir_transicao(exam.status, payload.status_inicial)
+            exam.status = payload.status_inicial
+            if exam.status == eeg_flow.REALIZADO:
+                exam.realizado_em = payload.agendado_para
+            audit(db, "eeg.exame_status", "eeg_exams", exam.id, user_id=user.id,
+                  request_id=request.state.request_id,
+                  detalhes={"status_anterior": eeg_flow.AGENDADO, "status": exam.status})
         exam.local_atendimento = payload.local_atendimento
         exam.municipio_atendimento_ibge = payload.municipio_atendimento_ibge
         exam.origem_canal = payload.origem_canal
@@ -528,7 +564,18 @@ def novo_atendimento(payload: EegAtendimentoCreate, request: Request,
         audit(db, "eeg.atendimento_criado", "eeg_exams", exam.id, user_id=user.id,
               request_id=request.state.request_id, detalhes={"contexto": "eeglife", "status": exam.status})
         return exam
-    exam, _ = idempotent_create(db, EegExam, payload.idempotency_key, identity, factory)
+    try:
+        exam, _ = idempotent_create(db, EegExam, payload.idempotency_key, identity, factory)
+    except HTTPException as exc:
+        # A concurrent winner can commit between the key lookup and identity
+        # validation. The savepoint has rolled back our partial factory; replay
+        # only an existing key, still checking the exact original fingerprint.
+        existing = (db.scalar(select(EegExam.id).where(
+            EegExam.idempotency_key == payload.idempotency_key))
+            if exc.status_code == 409 else None)
+        if not existing:
+            raise
+        exam, _ = idempotent_create(db, EegExam, payload.idempotency_key, identity, factory)
     db.commit()
     return _ser_exame(db, exam)
 

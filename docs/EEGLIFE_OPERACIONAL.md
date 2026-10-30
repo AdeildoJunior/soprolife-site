@@ -39,6 +39,32 @@ valida capacidade e atribuição, inclusive nos downloads por ID.
 
 ## Atendimento, CRM e agenda
 
+Ajuste incremental local, iniciado em 29/10 e retomado em 30/10/2026, ainda
+sem integração/deploy: a Central abre diretamente **Novo Atendimento EEG**, com
+três passos: paciente (busca corporativa ou novo cadastro visível), modalidade
+em cards e dados operacionais/financeiros. Busca exige seleção humana; o
+cadastro/vínculo avulso fica em ações auxiliares. Datas reutilizam o calendário
+brasileiro corporativo, sem copiar campos clínicos respiratórios.
+
+`POST /eeg/atendimentos` aceita exatamente uma fonte de identidade:
+`enrollment_id` (compatível com clientes anteriores), `person_id` ou
+`nova_pessoa`. Deduplicação, contatos, consentimento EEG, vínculo, exame e
+receita pertencem à mesma transação/savepoint idempotente. Erro no atendimento
+reverte inclusive a pessoa nova. Retry de payload anterior preserva seu
+fingerprint; reutilizar chave com conteúdo diferente continua retornando 409.
+Uma corrida que conclui entre a leitura da chave e a verificação de identidade
+também reaproveita o resultado após rollback do savepoint, sem duplicar pessoa.
+O status inicial admite agendado, confirmado ou realizado (data não futura),
+sem criar laudo, assinatura, arquivo ou documento fiscal. Consentimento omitido
+em pessoa existente preserva o registro EEG; nunca altera o consentimento
+corporativo respiratório.
+
+Defaults editáveis preservam a política vigente: Rio no catálogo IBGE, origem
+Direto, pagamento pendente e forma não informada. SITE é escolha explícita.
+A prontidão local orienta o preenchimento; não consulta/prepara/emite NFS-e e
+mantém a indicação de classificação fiscal EEG pendente. Modalidades do
+catálogo permanecem tecnicamente pendentes e especiais inativas.
+
 Novo Atendimento EEG é a entrada principal, sem Lead obrigatório. Seleção da
 pessoa é explícita. Modalidade, data/hora com fuso, local textual, município
 IBGE e origem são independentes. Município vem de catálogo estruturado

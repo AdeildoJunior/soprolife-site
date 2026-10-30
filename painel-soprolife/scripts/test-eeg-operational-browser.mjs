@@ -66,16 +66,64 @@ w=PdfWriter();w.add_blank_page(width=595,height=842);w.write(${JSON.stringify(jo
     async function closed(p=page){await p.waitForFunction(()=>!document.querySelector('dialog'));}
     async function openExam(p=page,id='exames'){await module(id,p);await p.locator('[data-eeg-section="'+id+'"] [data-eeg-record]').filter({hasText:'Paciente Browser Completo '+name}).getByRole('button',{name:'Abrir exame',exact:true}).click();}
     await login(page,'admin');await page.locator('[data-life-context="eeglife"]').click();
-    await module('cadastros');await page.getByRole('button',{name:'Cadastrar / vincular paciente',exact:true}).click();
-    await page.getByRole('dialog').last().getByLabel('Nome completo',{exact:true}).fill('Paciente Browser Completo '+name);await page.getByRole('dialog').last().getByLabel('Nascimento',{exact:true}).fill('1991-04-11');await submit('Verificar identidade');await page.getByRole('button',{name:'Confirmar novo paciente',exact:true}).click();await closed();
-    await page.getByRole('button',{name:'Novo Atendimento EEG',exact:true}).click();
-    await page.getByRole('dialog').last().getByLabel('Paciente',{exact:true}).waitFor({state:'visible'});
-    await page.getByRole('dialog').last().getByLabel('Paciente',{exact:true}).selectOption({label:(await page.getByRole('dialog').last().getByLabel('Paciente',{exact:true}).locator('option').allTextContents()).find(t=>t.includes('Paciente Browser Completo '+name))});
-    await page.getByRole('dialog').last().getByLabel('Data e hora',{exact:true}).fill('2026-10-20T10:30');await page.getByRole('dialog').last().getByLabel('Local de atendimento',{exact:true}).fill('Local Browser Sintetico');await page.getByRole('dialog').last().getByLabel('Valor contratado (R$)',{exact:true}).fill('250');
-    assert.equal(await page.getByRole('dialog').last().getByLabel('Município da prestação',{exact:true}).inputValue(),'3304557');await submit('Criar atendimento');await closed();
+    await module('cadastros');
+    const at=page.locator('[data-eeg-atendimento]');
+    assert.equal(await page.locator('dialog').count(),0);
+    await at.getByLabel('Nome completo',{exact:true}).waitFor({state:'visible'});
+    assert.equal(await at.getByLabel('Município onde o exame será/foi realizado',{exact:true}).inputValue(),'3304557');
+    assert.equal(await at.getByLabel('Origem',{exact:true}).inputValue(),'direto');
+    assert.equal(await at.getByLabel('Status do pagamento',{exact:true}).inputValue(),'Pendente');
+    assert.equal(await at.getByLabel('Forma de pagamento',{exact:true}).inputValue(),'');
+    for(const code of ['video-eeg','hospitalar-beira-leito','especial'])assert.ok(await at.locator('input[value="'+code+'"]').isDisabled());
+    await at.getByLabel('Buscar pessoa existente',{exact:true}).focus();
+    const tabbed=new Set();let reachedSave=false;
+    for(let i=0;i<80;i++){
+      const focused=await at.evaluate(f=>{const a=document.activeElement;return {inside:f.contains(a),name:a.name,type:a.type,text:a.textContent};});
+      assert.ok(focused.inside,'O foco saiu do atendimento antes de alcançar Salvar.');
+      if(focused.name)tabbed.add(focused.name);
+      if(focused.type==='submit'){reachedSave=true;break;}
+      await page.keyboard.press('Tab');
+    }
+    assert.ok(reachedSave);
+    for(const field of ['cpf','nome_completo','modalidade_codigo','status_inicial','valor','pagamento_status'])assert.ok(tabbed.has(field),'Campo ausente da ordem de teclado: '+field);
+    const corporate=await page.evaluate(async name=>window.SoproM15.api('/pessoas',{method:'POST',body:JSON.stringify({nome_completo:'Pessoa Compartilhada Browser '+name})}),name);
+    await at.getByLabel('Buscar pessoa existente',{exact:true}).fill(corporate.public_code);
+    await at.getByRole('button',{name:'Buscar',exact:true}).click();
+    await at.locator('[data-at-results]').getByRole('button').filter({hasText:corporate.public_code}).click();
+    assert.ok(await at.locator('[data-at-new]').isHidden());
+    assert.ok((await at.locator('[data-at-selected]').textContent()).includes(corporate.public_code));
+    await at.getByRole('button',{name:'Trocar paciente / cadastrar novo',exact:true}).click();
+    await at.getByLabel('Nome completo',{exact:true}).fill('Paciente Browser Completo '+name);
+    await at.getByLabel('Nascimento (formato DD/MM/AAAA)',{exact:true}).fill('11/04/1991');
+    await at.getByLabel('Consentimento operacional WhatsApp · somente EEGLife',{exact:true}).selectOption('revogado');
+    await at.locator('input[name="modalidade_codigo"][value="vigilia"]').check();
+    await at.getByLabel('Data do exame (formato DD/MM/AAAA)',{exact:true}).fill('20/10/2026');
+    await at.getByLabel('Horário',{exact:true}).fill('10:30');
+    await at.getByLabel('Local de atendimento',{exact:true}).fill('Local Browser Sintetico');
+    await at.getByLabel('Valor do EEG (R$)',{exact:true}).fill('250');
+    // Readiness is local guidance; it never calls fiscal preparation/issuance.
+    const fiscalRequests=[];page.on('request',r=>{if(r.method()!=='GET'&&r.url().includes('/fiscal'))fiscalRequests.push(r.url());});
+    for(const width of [390,768,1440]){
+      await page.setViewportSize({width,height:1000});
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+      await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:join(evidence,`${name}-${width}-central-filled.png`),fullPage:true});
+    }
+    await at.getByRole('button',{name:'SALVAR ATENDIMENTO EEG',exact:true}).click();
+    await at.locator('[data-at-success]').filter({hasText:'Atendimento EEG salvo'}).waitFor();
+    assert.deepEqual(fiscalRequests,[]);
+    assert.equal(await page.locator('dialog').count(),0);
     const e=await page.evaluate(async name=>(await window.SoproM15.api('/eeg/exames?tamanho=100')).itens.find(e=>e.paciente.nome_completo==='Paciente Browser Completo '+name),name);
     assert.ok(e?.id,JSON.stringify(await page.evaluate(()=>window.SoproM15.api('/eeg/exames?tamanho=100'))));
     await openExam();await page.getByRole('button',{name:'Registrar realização',exact:true}).click();await page.getByRole('dialog').last().getByLabel('Data e hora',{exact:true}).fill('2026-10-20T10:35');await submit('Confirmar');await closed();
+    await openExam();await page.getByRole('button',{name:'Conferir NFS-e EEG',exact:true}).click();
+    const fiscalDialog=page.getByRole('dialog').last();
+    await fiscalDialog.getByText('Eletroencefalograma (EEG) de rotina',{exact:false}).waitFor();
+    assert.ok((await fiscalDialog.textContent()).includes('63.544.026/0001-10'));
+    assert.ok((await fiscalDialog.textContent()).includes('Classificação fiscal EEG pendente de validação específica'));
+    assert.equal(await fiscalDialog.getByRole('button',{name:'Emitir NFS-e EEG',exact:true}).count(),0);
+    assert.ok(fiscalRequests.every(url=>url.includes('/eeg/fiscal/exames/')&&url.endsWith('/preparar')));
+    await fiscalDialog.getByRole('button',{name:'Fechar',exact:true}).click();
+    await page.getByRole('dialog').last().getByRole('button',{name:'Fechar',exact:true}).click();await closed();
     await openExam();await page.getByRole('button',{name:'Importar arquivo do exame',exact:true}).click();
     await page.getByRole('dialog').last().getByLabel('Confirme o código EEG',{exact:true}).fill('EEG-999999');await page.getByRole('dialog').last().getByLabel('Arquivo exportado',{exact:true}).setInputFiles(join(dir,'assinado.pdf'));await submit('Validar e importar');await page.getByRole('dialog').last().getByRole('alert').filter({hasText:'Confirme'}).waitFor();assert.equal(await page.getByRole('dialog').last().getByLabel('Confirme o código EEG',{exact:true}).inputValue(),'EEG-999999');
     await page.getByRole('dialog').last().getByLabel('Confirme o código EEG',{exact:true}).fill(e.public_code);await submit('Validar e importar');await closed();
@@ -96,11 +144,59 @@ w=PdfWriter();w.add_blank_page(width=595,height=842);w.write(${JSON.stringify(jo
       for(const id of ['visao','cadastros','crm','leads','tarefas','exames','laudos','marketing','financeiro','fiscal','parceiros','custos','documentos','fontes','lancamentos','nucleo']) {
         await module(id);
         const overflow=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));assert.ok(overflow.scroll<=overflow.width+1,JSON.stringify({engine:name,module:id,...overflow}));
-        if(['visao','crm','exames','laudos','fiscal'].includes(id))await page.screenshot({path:join(evidence,`${name}-${width}-${id}.png`),fullPage:true});
+        if(['visao','cadastros','crm','exames','laudos','fiscal'].includes(id))await page.screenshot({path:join(evidence,`${name}-${width}-${id}.png`),fullPage:true});
         results.push({engine:name,width,module:id,overflow:false});
       }
     }
-    await page.setViewportSize({width:1440,height:1000});await module('crm');await page.evaluate(()=>document.documentElement.style.zoom='2');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.evaluate(()=>document.documentElement.style.zoom='');
+    await page.setViewportSize({width:1440,height:1000});await module('cadastros');await page.evaluate(()=>document.documentElement.style.zoom='2');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.evaluate(()=>document.documentElement.style.zoom='');
+    for(const width of [390,768,1440]){
+      await page.setViewportSize({width,height:1000});await module('cadastros');
+      const f=page.locator('[data-eeg-atendimento]');
+      // Keyboard search, selection and correction in the same screen.
+      await f.getByLabel('Buscar pessoa existente',{exact:true}).fill(corporate.public_code);
+      await f.getByLabel('Buscar pessoa existente',{exact:true}).press('Enter');
+      await f.locator('[data-at-results]').getByRole('button').filter({hasText:corporate.public_code}).click();
+      await f.locator('input[name="modalidade_codigo"][value="infantil"]').check();
+      await f.getByLabel('Data do exame (formato DD/MM/AAAA)',{exact:true}).fill('20/10/2026');
+      await f.getByLabel('Horário',{exact:true}).fill('09:30');
+      await f.getByLabel('Local de atendimento',{exact:true}).fill('Unidade Sintetica com um nome operacional extenso para validar quebra de linha');
+      await f.getByLabel('Município onde o exame será/foi realizado',{exact:true}).selectOption('3303302');
+      await f.getByLabel('Origem',{exact:true}).selectOption('site');
+      await f.getByLabel('Reteste técnico / cobrança',{exact:true}).selectOption('true');
+      const before=await page.evaluate(async()=> (await window.SoproM15.api('/eeg/financeiro')).total);
+      // One failed request must retain identity, form decisions and idempotency key.
+      await page.route('**/eeg/atendimentos',async route=>{await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({erro:{codigo:'synthetic_unavailable',mensagem:'Falha sintética temporária'}})});},{times:1});
+      await f.getByRole('button',{name:'SALVAR ATENDIMENTO EEG',exact:true}).click();
+      await f.getByRole('alert').filter({hasText:'Falha sintética'}).waitFor();
+      assert.equal(await f.getByLabel('Município onde o exame será/foi realizado',{exact:true}).inputValue(),'3303302');
+      assert.equal(await f.getByLabel('Origem',{exact:true}).inputValue(),'site');
+      assert.ok((await f.locator('[data-at-selected]').textContent()).includes(corporate.public_code));
+      await f.getByRole('button',{name:'SALVAR ATENDIMENTO EEG',exact:true}).click();
+      await f.locator('[data-at-success]').filter({hasText:'Atendimento EEG salvo'}).waitFor();
+      assert.equal(await page.evaluate(async()=> (await window.SoproM15.api('/eeg/financeiro')).total),before);
+      const exams=await page.evaluate(async()=> (await window.SoproM15.api('/eeg/exames?tamanho=100')).itens);
+      assert.equal(exams.filter(e=>e.paciente.id===corporate.id).length,[390,768,1440].indexOf(width)+1);
+      assert.ok(exams.filter(e=>e.paciente.id===corporate.id).every(e=>e.paciente.public_code===corporate.public_code));
+      assert.equal(await page.locator('dialog').count(),0);
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    }
+    await page.setViewportSize({width:1440,height:1000});await module('cadastros');
+    const dup=page.locator('[data-eeg-atendimento]');
+    await dup.getByLabel('Nome completo',{exact:true}).fill('Paciente Browser Completo '+name);
+    await dup.getByLabel('Nascimento (formato DD/MM/AAAA)',{exact:true}).fill('11/04/1991');
+    await dup.locator('input[name="modalidade_codigo"][value="vigilia"]').check();
+    await dup.getByLabel('Data do exame (formato DD/MM/AAAA)',{exact:true}).fill('20/10/2026');
+    await dup.getByLabel('Horário',{exact:true}).fill('11:30');
+    await dup.getByLabel('Local de atendimento',{exact:true}).fill('Local Sintetico Conferencia de Identidade');
+    await dup.getByLabel('Reteste técnico / cobrança',{exact:true}).selectOption('true');
+    await dup.getByRole('button',{name:'SALVAR ATENDIMENTO EEG',exact:true}).click();
+    await dup.getByRole('alert').filter({hasText:'Confira os cadastros semelhantes'}).waitFor();
+    await dup.locator('[data-at-duplicates]').getByRole('button').filter({hasText:'Paciente Browser Completo '+name}).click();
+    await dup.locator('[data-at-new]').waitFor({state:'hidden'});
+    await dup.getByRole('button',{name:'SALVAR ATENDIMENTO EEG',exact:true}).click();
+    await dup.locator('[data-at-success]').filter({hasText:'Atendimento EEG salvo'}).waitFor();
+    const found=await page.evaluate(async name=>window.SoproM15.api('/eeg/pessoas/busca',{method:'POST',body:JSON.stringify({q:'Paciente Browser Completo '+name,corporativo:true})}),name);
+    assert.equal(found.total,1);
     await module('tarefas');await page.getByRole('button',{name:'Adicionar tarefa',exact:true}).click();await page.keyboard.press('Tab');assert.ok(await page.getByRole('dialog').evaluate(d=>d.contains(document.activeElement)));await page.keyboard.press('Escape');await closed();
     // Every exclusive EEG role has a useful brand, and no respiratory authority.
     for(const role of ['eeg_operador','eeg_tecnico','eeg_financeiro']){const p=await browser.newPage();await login(p,role);await p.waitForFunction(()=>document.body.dataset.lifeAtivo==='eeglife');assert.equal(await p.locator('[data-life-context="soprolife"]').count(),0);const status=await p.evaluate(async()=> (await fetch('/painel-soprolife/api/m15/espirometrias')).status);assert.equal(status,403);await p.close();}

@@ -1432,6 +1432,12 @@ class EegExameCreate(StrictModel):
 
 
 class EegAtendimentoCreate(EegExameCreate):
+    # Exactly one identity source; legacy enrollment payload remains supported.
+    enrollment_id: str | None = Field(default=None, min_length=1, max_length=36)
+    person_id: str | None = Field(default=None, min_length=1, max_length=36)
+    nova_pessoa: EegPessoaCreate | None = None
+    consentimento_whatsapp: Literal["concedido", "revogado", "desconhecido"] | None = None
+    status_inicial: Literal["agendado", "confirmado", "realizado"] = "agendado"
     agendado_para: datetime
     local_atendimento: str = Field(min_length=2, max_length=200)
     municipio_atendimento_ibge: str = Field(pattern=r"^[0-9]{7}$")
@@ -1445,6 +1451,10 @@ class EegAtendimentoCreate(EegExameCreate):
 
     @model_validator(mode="after")
     def valor_reteste(self):
+        if sum(v is not None for v in (self.enrollment_id, self.person_id, self.nova_pessoa)) != 1:
+            raise ValueError('Selecione uma pessoa existente ou informe uma pessoa nova.')
+        if self.status_inicial == 'realizado' and self.agendado_para > datetime.now(self.agendado_para.tzinfo):
+            raise ValueError('Exame realizado não pode ter data futura.')
         if self.reteste_sem_cobranca:
             if self.valor != 0 or self.pagamento_status != 'Pendente' or self.data_recebimento:
                 raise ValueError('Reteste sem cobrança exige valor zero e nenhum recebimento.')

@@ -13,6 +13,17 @@
 
 ---
 
+## Central EEGLife — ajuste local de UX iniciado em 29/10 e retomado em 30/10/2026
+
+Na worktree incremental, ainda sem integração/deploy, a Central abre Novo
+Atendimento EEG inline (paciente, modalidade, atendimento),
+com busca People e cadastro novo na própria tela. O endpoint de atendimento
+agora aceita vínculo, pessoa existente ou pessoa nova e grava toda a cadeia
+na mesma transação idempotente. Sem migration. Mantém defaults Rio/Direto,
+pagamento pendente, catálogo técnico pendente e fiscal fail-closed. Datas usam
+o calendário brasileiro compartilhado; nenhum campo clínico respiratório foi
+copiado. Contrato em [EEGLIFE_OPERACIONAL.md](EEGLIFE_OPERACIONAL.md).
+
 ## Operação EEGLife — extensão de 29/10/2026
 
 Contrato vigente: [EEGLIFE_OPERACIONAL.md](EEGLIFE_OPERACIONAL.md). A missão
