@@ -207,6 +207,9 @@ def ser_exam(e: m.SpirometryExam) -> dict:
         "responsavel": e.responsavel,
         "idempotency_key": e.idempotency_key,
         "observacao": e.observacao,
+        # Equipamento/fonte estruturada da manobra; None = não informado.
+        # Decide a observação técnica de FET no laudo (só MIR Spirobank Smart II).
+        "equipamento_fonte": e.equipamento_fonte,
         # M26.36 — reteste de controle sem cobrança: não remunera repasse.
         "reteste_sem_cobranca": bool(e.reteste_sem_cobranca),
         **_legacy(e),

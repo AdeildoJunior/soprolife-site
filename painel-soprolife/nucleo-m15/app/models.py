@@ -306,6 +306,38 @@ class Lead(Base, TimestampMixin, LegacyMixin):
     observacao: Mapped[str | None] = mapped_column(Text)
 
 
+# Fonte/equipamento estruturado da espirometria. É o ÚNICO ponto canônico
+# que diz em qual aparelho a manobra foi registrada — antes disso o modelo só
+# constava, quando constava, dentro do próprio PDF técnico (ver a decisão
+# M26.1 em services/report_native_pdf.py). Existe para o laudo nativo decidir,
+# sem adivinhação, se imprime a observação técnica de FET (exclusiva do MIR).
+#
+# NULL = não informado: é o estado dos exames históricos e de qualquer
+# cadastro que não escolher. Nunca é inferido de nome de arquivo, OCR do PDF,
+# nome de clínica ou texto livre — só a escolha explícita no recebimento do
+# exame o preenche.
+EQUIPAMENTO_FONTE_MIR_SPIROBANK_SMART_II = "MIR_SPIROBANK_SMART_II"
+EQUIPAMENTO_FONTE_KOKO = "KOKO"
+EQUIPAMENTO_FONTE_OUTRO = "OUTRO"
+EQUIPAMENTO_FONTE_VALUES = (
+    EQUIPAMENTO_FONTE_MIR_SPIROBANK_SMART_II,
+    EQUIPAMENTO_FONTE_KOKO,
+    EQUIPAMENTO_FONTE_OUTRO,
+)
+
+
+def equipamento_fonte_e_mir(valor: str | None) -> bool:
+    """True só para o MIR Spirobank Smart II.
+
+    A observação de FET nasce de uma particularidade do parâmetro temporal
+    do MIR; KoKo, Outro e NULL nunca a disparam. Centralizar o teste aqui
+    evita que o gerador de PDF, o router e os testes divirjam sobre o que
+    conta como MIR.
+    """
+
+    return valor == EQUIPAMENTO_FONTE_MIR_SPIROBANK_SMART_II
+
+
 class SpirometryExam(Base, TimestampMixin, LegacyMixin):
     __tablename__ = "spirometry_exams"
     id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
@@ -343,6 +375,10 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
     hora_exame: Mapped[str | None] = mapped_column(String(5))  # HH:MM
     indicacao_clinica: Mapped[str | None] = mapped_column(Text)
     observacao: Mapped[str | None] = mapped_column(Text)
+    # Equipamento/fonte estruturada da manobra (ver EQUIPAMENTO_FONTE_* acima).
+    # Opcional por construção: obrigar quebraria os fluxos legados (13 exames
+    # em produção vieram de importação sem modalidade; o mesmo vale aqui).
+    equipamento_fonte: Mapped[str | None] = mapped_column(String(40))
     # M26.36 — RETESTE DE CONTROLE, sem cobrança e sem repasse.
     #
     # Declaração do operador sobre o ATO: este exame foi refeito para
@@ -404,6 +440,11 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
         CheckConstraint(
             "municipio_atendimento_ibge IS NULL OR length(municipio_atendimento_ibge) = 7",
             name="municipio_atendimento_ibge_sete_digitos",
+        ),
+        CheckConstraint(
+            "equipamento_fonte IS NULL OR equipamento_fonte IN "
+            "('MIR_SPIROBANK_SMART_II','KOKO','OUTRO')",
+            name="spirometry_equipamento_fonte_valido",
         ),
     )
 

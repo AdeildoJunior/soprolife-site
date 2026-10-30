@@ -520,6 +520,7 @@ def _criar_exame(db: Session, person: Person, payload: AtendimentoCreate) -> Spi
             idempotency_key=key,
             idempotency_fingerprint=fingerprint,
             observacao=bloco.observacao,
+            equipamento_fonte=bloco.equipamento_fonte,
         )
         _apply_date(exam, "data_exame", bloco.data_exame, "Data do exame")
         db.add(exam)

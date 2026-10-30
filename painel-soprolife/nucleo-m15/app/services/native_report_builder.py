@@ -27,6 +27,7 @@ from ..models import (
     ReportAddendum,
     ReportDocument,
     SpirometryExam,
+    equipamento_fonte_e_mir,
 )
 from .cpf import formatar_cpf
 from .crm_display import format_crm_number
@@ -253,6 +254,10 @@ def build_native_content(
             date_precision=exam.data_exame_precisao,
             has_post_bd=exam.broncodilatador,
             clinical_indication=exam.indicacao_clinica,
+            # Só o MIR Spirobank Smart II dispara a observação técnica de FET;
+            # a decisão vive no domínio (equipamento_fonte_e_mir), nunca no
+            # gerador de PDF, que continua puro.
+            is_mir_equipment=equipamento_fonte_e_mir(exam.equipamento_fonte),
         ),
         location=LocationBlock(
             name=location.name,

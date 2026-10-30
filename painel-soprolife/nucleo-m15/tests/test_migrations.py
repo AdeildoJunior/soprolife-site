@@ -175,7 +175,11 @@ def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     # M26.36 (c3f8a1d7e529, reteste de controle sem cobrança) por cima da
     # M26.34 — aditiva, uma coluna booleana com server_default false.
     # M26.36b (d7b2c4e86a91, devolução cancelada) por cima da M26.36.
-    assert ScriptDirectory.from_config(cfg).get_heads() == ["a291029eeg01"]
+    # FET/MIR (d7b2f3a9c1e0, equipamento_fonte da espirometria — uma coluna
+    # nullable + CHECK, sem backfill) por cima da head EEG a291029eeg01.
+    script = ScriptDirectory.from_config(cfg)
+    assert script.get_heads() == ["d7b2f3a9c1e0"]
+    assert script.get_revision("d7b2f3a9c1e0").down_revision == "a291029eeg01"
 
 
 def test_downgrade_m24c_falha_fechado_com_perfil_profissional(

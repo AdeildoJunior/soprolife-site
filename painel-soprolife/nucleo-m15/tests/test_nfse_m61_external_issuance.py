@@ -330,7 +330,10 @@ def test_the_head_is_the_m61_revision(tmp_path, monkeypatch):
     script = ScriptDirectory.from_config(cfg)
     # M66 sits on top of M61; M61 itself is unchanged.
     # M26.36, additive on top of M26.34 (itself on top of M26.33).
-    assert script.get_heads() == ["a291029eeg01"]
+    # FET/MIR (d7b2f3a9c1e0) is additive on top of the EEG head a291029eeg01;
+    # the fiscal chain below is untouched.
+    assert script.get_heads() == ["d7b2f3a9c1e0"]
+    assert script.get_revision("d7b2f3a9c1e0").down_revision == "a291029eeg01"
     assert script.get_revision("e8b3d6a4f190").down_revision == "c4e8b1f37a92"
     assert script.get_revision("c4e8b1f37a92").down_revision == "a7d2c95e4f13"
 

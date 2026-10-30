@@ -801,7 +801,10 @@ def test_migration_e_aditiva_reversivel_e_recusa_apagar_agrupado(tmp_path, monke
     script = ScriptDirectory.from_config(cfg)
     # M26.36 (c3f8a1d7e529, reteste de controle sem cobrança) entra por
     # cima, aditiva: a cadeia fiscal agrupada abaixo segue intacta.
-    assert script.get_heads() == ["a291029eeg01"]
+    # FET/MIR (d7b2f3a9c1e0, equipamento_fonte) entra por cima da head EEG,
+    # aditiva: a cadeia fiscal agrupada abaixo segue intacta.
+    assert script.get_heads() == ["d7b2f3a9c1e0"]
+    assert script.get_revision("d7b2f3a9c1e0").down_revision == "a291029eeg01"
     assert script.get_revision("d7b2c4e86a91").down_revision == "c3f8a1d7e529"
     assert script.get_revision("c3f8a1d7e529").down_revision == "b5e2f7a91c38"
     assert script.get_revision("b5e2f7a91c38").down_revision == "a1c7e5d9b204"

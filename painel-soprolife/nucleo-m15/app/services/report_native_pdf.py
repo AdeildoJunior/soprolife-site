@@ -98,6 +98,31 @@ EQUIPMENT_SEPARATE_NOTICE = (
     "documento SEPARADO deste laudo, inalterado, com download próprio."
 )
 
+# Observação técnica de FET — desenhada SOMENTE quando o exame foi registrado
+# como MIR Spirobank Smart II (ExamBlock.is_mir_equipment). É explicativa sobre
+# a MÉTRICA temporal: não altera nenhum parâmetro, não recalcula, não sugere
+# conclusão e não diz que um FET curto é normal ou que um longo é obrigatório.
+#
+# A frase NÃO afirma como outro sistema (p.ex. KoKo) calcula o tempo: não há,
+# no material do projeto, documentação que comprove o parâmetro temporal
+# exibido por esses equipamentos. Diz apenas, em termos gerais, que sistemas
+# diferentes podem adotar critérios distintos de temporização/término e que os
+# números não devem ser comparados diretamente sem considerar a definição do
+# parâmetro — exatamente o limite técnico que se pode afirmar com segurança.
+# A referência ATS/ERS 2019 descreve o FET como o tempo do início ao fim da
+# expiração forçada segundo os critérios da manobra.
+FET_NOTICE_TITLE = "Observação técnica sobre o FET"
+FET_NOTICE_BODY = (
+    "O tempo expiratório forçado (FET) deste exame é o parâmetro calculado "
+    "pelo sistema MIR a partir da manobra expiratória forçada — do início da "
+    "expiração forçada até o seu término, segundo os critérios da manobra "
+    "(ATS/ERS 2019). Ele não deve ser comparado diretamente ao tempo total "
+    "ou ao cronômetro exibido por outros equipamentos, pois os critérios de "
+    "temporização e de término da manobra podem diferir entre sistemas. A "
+    "interpretação deve considerar as curvas, a aceitabilidade e a "
+    "reprodutibilidade das manobras e os demais parâmetros espirométricos."
+)
+
 # Declaração honesta da natureza da liberação. NÃO afirma ICP-Brasil.
 # M25.4 — encurtada sem perder nenhuma das três afirmações que precisam
 # constar: quem liberou e como, o que prova a integridade, e o que esta
@@ -221,6 +246,12 @@ class ExamBlock:
     date_precision: str | None
     has_post_bd: bool | None
     clinical_indication: str | None
+    # Fail-closed: só True quando o exame foi registrado como MIR Spirobank
+    # Smart II (quem monta o conteúdo resolve isso a partir de
+    # SpirometryExam.equipamento_fonte). KoKo, Outro e NULL chegam False e a
+    # observação técnica de FET não é desenhada. O gerador nunca consulta o
+    # banco nem adivinha o aparelho.
+    is_mir_equipment: bool = False
 
 
 @dataclass(frozen=True)
@@ -1419,6 +1450,42 @@ class _Composer:
             text_y -= 9.4
         self.y = top - height - 4
 
+    def draw_fet_notice(self) -> None:
+        """Rodapé técnico discreto sobre o FET (somente MIR).
+
+        Vem logo após a nota de equipamento e antes da faixa de assinatura.
+        Título curto em negrito e corpo em fonte menor que a conclusão, porém
+        plenamente legível; sem caixa, sem fundo e sem régua — uma nota de
+        rodapé técnica, não um bloco de alerta que competiria com a conclusão
+        médica. Não se mistura com "Observações complementares".
+        """
+
+        title_size = 8.6
+        body_size = 8.2
+        body_leading = 11.4
+        body_lines = wrap_text(
+            FET_NOTICE_BODY,
+            font=FONT,
+            size=body_size,
+            max_width=CONTENT_WIDTH - 12,
+        )
+        # Altura: folga acima do título + título + folga + corpo.
+        height = 6 + title_size + 4 + len(body_lines) * body_leading + 2
+        self.ensure(height + 4)
+        c = self.canvas
+        top = self.y
+        text_y = top - 6 - title_size
+        c.setFont(FONT_BOLD, title_size)
+        c.setFillColor(INK)
+        c.drawString(MARGIN_X + 6, text_y, pdf_safe(FET_NOTICE_TITLE))
+        text_y -= title_size + 4
+        c.setFont(FONT, body_size)
+        c.setFillColor(MUTED)
+        for line in body_lines:
+            c.drawString(MARGIN_X + 6, text_y, line)
+            text_y -= body_leading
+        self.y = top - height - 4
+
 
 # ------------------------------------------------------------------ API
 
@@ -1535,6 +1602,11 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
 
     composer.space(2)
     composer.draw_equipment_notice()
+    # Observação técnica de FET: rodapé discreto, logo após a nota de
+    # equipamento e antes da assinatura, APENAS para o MIR Spirobank Smart II.
+    # Fail-closed — KoKo, Outro e não informado não a recebem.
+    if content.exam.is_mir_equipment:
+        composer.draw_fet_notice()
     # A faixa de identificação e assinatura fecha o documento: é o último
     # bloco e nunca compartilha espaço com nenhum outro elemento.
     composer.draw_physician_signature_block()

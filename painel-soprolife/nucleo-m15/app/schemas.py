@@ -260,6 +260,12 @@ class ExamCreate(StrictModel):
     # SpirometryExam.municipio_atendimento_ibge (M31) e
     # services/nfse_national/service_location.py.
     municipio_atendimento_ibge: str | None = Field(default=None, max_length=7)
+    # Equipamento/fonte estruturada da manobra. Opcional (NULL = não
+    # informado). Só `MIR_SPIROBANK_SMART_II` faz o laudo imprimir a
+    # observação técnica de FET — ver SpirometryExam.equipamento_fonte.
+    equipamento_fonte: (
+        Literal["MIR_SPIROBANK_SMART_II", "KOKO", "OUTRO"] | None
+    ) = None
 
     @field_validator("municipio_atendimento_ibge")
     @classmethod
@@ -294,6 +300,12 @@ class ExamUpdate(StrictModel):
     # M26.36 — ausente = não mexe; `true` declara reteste de controle sem
     # cobrança (não remunera repasse médico); `false` desfaz a declaração.
     reteste_sem_cobranca: bool | None = None
+    # Equipamento/fonte estruturada. Ausente = não mexe (preserva o gravado).
+    # É por aqui que o operador INFORMA o aparelho no recebimento de um exame
+    # cadastrado sem ele. Só `MIR_SPIROBANK_SMART_II` dispara a observação de FET.
+    equipamento_fonte: (
+        Literal["MIR_SPIROBANK_SMART_II", "KOKO", "OUTRO"] | None
+    ) = None
 
     @field_validator("municipio_atendimento_ibge")
     @classmethod
@@ -638,6 +650,11 @@ class AtendimentoEspirometria(StrictModel):
     proximo_followup: date | None = None
     # M32 — município (IBGE, 7 dígitos) onde o exame foi realizado.
     municipio_atendimento_ibge: str | None = Field(default=None, max_length=7)
+    # Equipamento/fonte estruturada da manobra. Opcional (NULL = não
+    # informado); só `MIR_SPIROBANK_SMART_II` dispara a observação de FET.
+    equipamento_fonte: (
+        Literal["MIR_SPIROBANK_SMART_II", "KOKO", "OUTRO"] | None
+    ) = None
 
     @field_validator("municipio_atendimento_ibge")
     @classmethod

@@ -714,6 +714,7 @@
     "espirometria.responsavel": "esp_responsavel",
     "espirometria.status": "esp_status",
     "espirometria.municipio_atendimento_ibge": "esp_municipio",
+    "espirometria.equipamento_fonte": "esp_equipamento",
     "consulta.data_consulta": "con_data",
     "consulta.status": "con_status",
     "consulta.profissional": "con_profissional",
@@ -1819,6 +1820,13 @@
         ${fld("Broncodilatador", sel("esp_bd",
           [["", "não informado"], ["false", "sem broncodilatador"],
            ["true", "com broncodilatador"]], String(iniciais.broncodilatador === true)), { span: 3, nfse })}
+        ${fld("Equipamento / fonte", sel("esp_equipamento",
+          [["", "não informado"],
+           ["MIR_SPIROBANK_SMART_II", "MIR Spirobank Smart II"],
+           ["KOKO", "KoKo"],
+           ["OUTRO", "Outro"]], ""),
+          { span: 3, help: "Aparelho em que a manobra foi registrada. Só o MIR Spirobank Smart II " +
+            "faz o laudo imprimir a observação técnica sobre o FET. Em branco = não informado." })}
         ${fld("Município onde o exame foi realizado", sel("esp_municipio",
           [["", "não informado"]].concat((municipios || []).map((m) => [m.codigo, m.rotulo])), municipioInicial ? municipioInicial.codigo : ""),
           { span: 4, nfse, help: "Confira a cidade onde o exame foi realizado. A sugestão inicial é editável; " +
@@ -2444,6 +2452,9 @@
     if (!val(form, "esp_data")) throw new Error("Informe a data do exame.");
     bloco.data_exame = val(form, "esp_data");
     if (val(form, "esp_bd") !== "") bloco.broncodilatador = val(form, "esp_bd") === "true";
+    // Em branco = não informado (NULL): nunca assumido. Só MIR Spirobank
+    // Smart II faz o laudo imprimir a observação técnica de FET.
+    setIf(bloco, "equipamento_fonte", val(form, "esp_equipamento"));
     setIf(bloco, "responsavel", val(form, "esp_responsavel"));
     setIf(bloco, "observacao", val(form, "esp_observacao"));
     setIf(bloco, "proximo_followup", val(form, "esp_followup"));

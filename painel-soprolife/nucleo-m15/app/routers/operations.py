@@ -258,6 +258,7 @@ def create_exam(
             idempotency_key=key,
             idempotency_fingerprint=fingerprint,
             observacao=payload.observacao,
+            equipamento_fonte=payload.equipamento_fonte,
         )
         _apply_date(exam, "data_exame", payload.data_exame)
         db.add(exam)
@@ -362,6 +363,13 @@ def update_exam(
     if payload.observacao is not None:
         exam.observacao = payload.observacao
         changed.append("observacao")
+    # Equipamento/fonte estruturada. Permitir informá-la aqui é o que cobre o
+    # "recebimento" de um exame que já foi cadastrado antes de o campo existir
+    # ou sem ele. Não toca receita, nota, laudo histórico nem PDF técnico; só
+    # muda o que o PRÓXIMO laudo nativo gerado imprime sobre o FET.
+    if payload.equipamento_fonte is not None:
+        exam.equipamento_fonte = payload.equipamento_fonte
+        changed.append("equipamento_fonte")
     # M26.36 — declaração de reteste de controle sem cobrança. Só muda a
     # elegibilidade a repasse médico (services/medical_transfers.py); não
     # toca receita, nota fiscal, laudo nem PDF técnico. Fica na trilha
