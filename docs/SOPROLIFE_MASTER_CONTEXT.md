@@ -9,9 +9,31 @@
 > Sem PII, senhas, tokens, IPs de tailnet ou identificadores privados. Use
 > placeholders (`<VPS_TAILSCALE_IP>`, `<TOKEN>`).
 
-Última atualização: 2026-10-29 (CRM de relacionamento; base `6807a21`).
+Última atualização: 2026-10-30 (integração local EEGLife + MIR/FET; base `bb7566a`).
 
 ---
+
+## Integração local EEGLife + MIR/FET — 30/10/2026
+
+A worktree isolada de integração combina `bb7566a` (incluindo `fa728d0` MIR/FET)
+e `d6faf57` (Central EEG), sem modificar a oficial ou as worktrees de origem.
+O campo `equipamento_fonte` permanece exclusivo da espirometria; identidade e
+atendimento EEG continuam separados. Cache de ambas as interfaces preservado.
+Head Alembic única `d7b2f3a9c1e0`, sem nova migration da integração.
+Plano e limites de publicação/backup/rollback/health em
+[EEGLIFE_INTEGRACAO_PUBLICACAO.md](EEGLIFE_INTEGRACAO_PUBLICACAO.md).
+Integração local não equivale a deploy, aprovação tributária ou emissão EEG.
+
+## Central EEGLife — ajuste local de UX iniciado em 29/10 e retomado em 30/10/2026
+
+O commit local `d6faf57`, incorporado à integração acima, abre Novo
+Atendimento EEG inline (paciente, modalidade, atendimento),
+com busca People e cadastro novo na própria tela. O endpoint de atendimento
+agora aceita vínculo, pessoa existente ou pessoa nova e grava toda a cadeia
+na mesma transação idempotente. Sem migration. Mantém defaults Rio/Direto,
+pagamento pendente, catálogo técnico pendente e fiscal fail-closed. Datas usam
+o calendário brasileiro compartilhado; nenhum campo clínico respiratório foi
+copiado. Contrato em [EEGLIFE_OPERACIONAL.md](EEGLIFE_OPERACIONAL.md).
 
 ## Operação EEGLife — extensão de 29/10/2026
 

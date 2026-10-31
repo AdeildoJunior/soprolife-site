@@ -628,3 +628,64 @@ body[data-life-ativo="eeglife"] { --life-accent: linear-gradient(90deg, var(--ee
 @media(max-width:430px) {
   #lifePanelEegLife .eeg-exam-card dl { grid-template-columns:minmax(0,1fr); }
 }
+
+/* Central EEG: três passos corporativos, com identidade da marca e escopo local. */
+#lifePanelEegLife .eeg-atendimento { display:grid; gap:20px; min-width:0; margin-top:16px; }
+#lifePanelEegLife .eeg-atendimento .cad-passo { border:0; border-top:1px solid #e4dbcc; margin:0; padding:20px 0 0; min-width:0; }
+#lifePanelEegLife .eeg-atendimento .cad-passo:first-child { border-top:0; padding-top:0; }
+#lifePanelEegLife .cad-passo-titulo { display:flex; gap:8px; align-items:center; margin:0 0 14px; font-size:.95rem; color:#172c40; }
+#lifePanelEegLife .cad-passo-num { display:inline-flex; align-items:center; justify-content:center; flex:0 0 24px; height:24px; border-radius:50%; background:#c48a32; color:#172c40; font-size:.8rem; }
+#lifePanelEegLife .cad-microcopy { color:#675b48; font-size:.8rem; line-height:1.5; margin:8px 0 14px; }
+#lifePanelEegLife .eeg-atendimento :is(label,fieldset) { min-width:0; }
+#lifePanelEegLife .eeg-atendimento label { display:grid; gap:6px; font-size:.83rem; font-weight:600; }
+#lifePanelEegLife .eeg-atendimento :is(input,select,textarea) { box-sizing:border-box; width:100%; min-width:0; max-width:100%; padding:10px 12px; border:1px solid #c7b99e; border-radius:8px; background:#fff; color:#222c34; font:inherit; font-size:.88rem; }
+#lifePanelEegLife .eeg-atendimento input:read-only { background:#f7f4ee; }
+#lifePanelEegLife .eeg-atendimento textarea { resize:vertical; }
+#lifePanelEegLife .eeg-at-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+#lifePanelEegLife .eeg-atendimento fieldset { margin:14px 0; padding:16px; border:1px solid #e4dbcc; border-radius:10px; background:#fcfaf6; }
+#lifePanelEegLife .eeg-atendimento legend { font-size:.8rem; color:#675b48; max-width:100%; padding:0 5px; }
+#lifePanelEegLife .cad-picker-search { display:flex; gap:10px; align-items:end; flex-wrap:wrap; }
+#lifePanelEegLife .cad-picker-search label { flex:1 1 220px; }
+#lifePanelEegLife .cad-tipos { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:10px; }
+#lifePanelEegLife .cad-tipos .cad-tipo { display:grid; grid-template-columns:auto minmax(0,1fr); grid-template-areas:'radio nome' 'radio desc'; align-items:start; gap:4px 8px; border:1px solid #d9cdb9; border-radius:10px; padding:12px; background:#fcfaf6; cursor:pointer; }
+#lifePanelEegLife .cad-tipo input { grid-area:radio; width:16px; height:16px; padding:0; margin-top:2px; accent-color:#865b1d; }
+#lifePanelEegLife .cad-tipo-nome { grid-area:nome; font-weight:700; overflow-wrap:anywhere; }
+#lifePanelEegLife .cad-tipo-desc { grid-area:desc; font-size:.74rem; color:#675b48; font-weight:400; }
+#lifePanelEegLife .cad-tipo:has(input:checked) { border-color:#865b1d; background:#f6ecd9; box-shadow:inset 0 0 0 1px #865b1d; }
+#lifePanelEegLife .cad-tipo.is-inactive { background:#f1f0ed; cursor:not-allowed; }
+#lifePanelEegLife .eeg-at-finance { margin:18px 0; padding:16px; background:#fcfaf6; border:1px solid #e4dbcc; border-radius:10px; }
+#lifePanelEegLife .eeg-at-finance h5 { margin:0 0 14px; font-size:.85rem; color:#865b1d; }
+#lifePanelEegLife .eeg-readiness { border:1px solid #d9c7a7; border-radius:12px; padding:16px; background:#fcfaf6; }
+#lifePanelEegLife .eeg-readiness h4 { margin:0 0 14px; }
+#lifePanelEegLife .eeg-readiness ul { list-style:none; padding:0; margin:0; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+#lifePanelEegLife .eeg-readiness li { display:grid; gap:5px; align-content:start; border-left:3px solid #c48a32; padding-left:9px; font-size:.75rem; overflow-wrap:anywhere; }
+#lifePanelEegLife .eeg-readiness .is-ready { border-color:#334963; }
+#lifePanelEegLife .eeg-readiness span { color:#675b48; }
+#lifePanelEegLife .eeg-readiness > p { color:#865b1d; font-size:.83rem; }
+#lifePanelEegLife [data-at-selected] { padding:14px; border:1px solid #c48a32; background:#fcfaf6; border-radius:10px; margin-bottom:14px; }
+#lifePanelEegLife :is([data-at-results],[data-at-duplicates]) { display:grid; gap:8px; margin:8px 0; }
+#lifePanelEegLife .eeg-atendimento .eeg-at-confirm { display:flex; align-items:start; gap:8px; }
+#lifePanelEegLife .eeg-at-confirm input { width:18px; flex:0 0 18px; }
+#lifePanelEegLife [data-at-error] { color:#923d23; margin:0; overflow-wrap:anywhere; }
+#lifePanelEegLife [data-at-success]:not(:empty) { padding:16px; background:#f6ecd9; border:1px solid #c48a32; border-radius:10px; }
+#lifePanelEegLife .eeg-atendimento .eeg-at-submit { background:#c48a32; color:#172c40; font-weight:700; justify-self:start; padding:13px 20px; }
+#lifePanelEegLife .eeg-directory { margin-top:24px; padding-top:18px; border-top:1px solid #e4dbcc; }
+#lifePanelEegLife .eeg-directory summary { cursor:pointer; font-weight:600; color:#675b48; padding:10px 0; }
+#lifePanelEegLife .eeg-atendimento [hidden] { display:none; }
+@media(max-width:1100px) {
+  #lifePanelEegLife .eeg-at-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #lifePanelEegLife .eeg-readiness ul { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:600px) {
+  #lifePanelEegLife .eeg-at-grid { grid-template-columns:minmax(0,1fr); }
+  #lifePanelEegLife .eeg-atendimento fieldset { padding:12px; }
+  #lifePanelEegLife .eeg-atendimento .eeg-at-submit { justify-self:stretch; }
+  #lifePanelEegLife .eeg-readiness ul { grid-template-columns:minmax(0,1fr); }
+}
+#lifePanelEegLife .eeg-atendimento .m15-date { min-width:0; }
+#lifePanelEegLife .eeg-atendimento .m15-date-btn { border-color:#c7b99e; background:#f1ebde; }
+#lifePanelEegLife .eeg-atendimento .m15-cal { max-width:calc(100vw - 85px); box-sizing:border-box; }
+#lifePanelEegLife .eeg-atendimento .m15-cal button { padding:5px; border-color:transparent; background:#fff; min-width:0; }
+#lifePanelEegLife .eeg-atendimento .m15-cal button.m15-cal-selected { background:#865b1d; color:#fff; }
+#lifePanelEegLife .eeg-atendimento .m15-cal button:hover { background:#f1ebde; color:#222c34; }
+#lifePanelEegLife .eeg-atendimento .m15-cal :is(.m15-cal-today,.m15-cal-nav) { color:#865b1d; }
