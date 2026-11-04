@@ -21,6 +21,17 @@ def test_cancelled_exam_does_not_enter_productive_count(client, auth, person):
     assert result.json()["exames"]==[]
 
 
+def test_partner_location_without_partner_is_incomplete(client, auth, person):
+    exam=client.post("/api/v1/espirometrias",json={"person_id":person["id"],
+        "data_exame":"04/11/2026","status":"Realizado","local_atendimento":"MACLIN"},
+        headers=auth("operacional"))
+    assert exam.status_code==201,exam.text
+    result=client.get("/api/v1/financeiro/lucro/painel?start=2026-11-04&end=2026-11-04",
+                      headers=auth("gestor")).json()["exames"][0]
+    assert result["status"]=="incompleto"
+    assert "parceiro_nao_definido" in result["pendencias"]
+
+
 def test_rules_are_versioned_and_admin_only(client, auth):
     path = "/api/v1/financeiro/lucro/regras"
     body = {"key":"material","effective_from":"2026-11-04","value":"10.00","reason":"Custo inicial aprovado"}

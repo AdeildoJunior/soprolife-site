@@ -14,7 +14,7 @@ from ..models import (
     FinancialEntry, FiscalAttempt, FiscalDocument, FiscalDocumentItem, FiscalPreparation,
     OperationalSession, OperationalSessionExam, Partner, PartnerReferral, PartnerSettlement,
     PartnerSettlementItem, PartnerTransfer, PartnerUnit, PhysicianTransfer,
-    ProfitCostRule, ProfitRevenueBasis, ReportDocument, SpirometryExam,
+    ProfitCostRule, ProfitRevenueBasis, ReportDocument, SpirometryExam, Person,
 )
 from .exam_profit import DEFAULT_RULES, allocate, calculate_exam, cents, money, percent, session_cost
 from .partner_pricing import resolve_regra_fiscal_por_exame, FISCAL_OK
@@ -79,7 +79,8 @@ def _payment(entry: FinancialEntry | None) -> tuple[bool, int | None, int | None
 
 def build_projection(db: Session, start: date, end: date) -> dict:
     """Todos os exames do intervalo; rateio usa também pares fora do filtro."""
-    all_exams = db.scalars(select(SpirometryExam).where(
+    all_exams = db.scalars(select(SpirometryExam).join(Person, Person.id == SpirometryExam.person_id).where(
+        Person.arquivado.is_not(True),
         SpirometryExam.data_exame.is_not(None),
         SpirometryExam.data_exame <= end,
         SpirometryExam.status.in_(("Realizado", "Exame realizado", "Laudo Liberado", "Liberado")),
@@ -149,7 +150,7 @@ def build_projection(db: Session, start: date, end: date) -> dict:
     for exam in all_exams:
         if exam.id in links:
             groups["session", links[exam.id]].append(exam.id)
-        elif places[exam.id] == "pastore" and exam.data_exame not in pastore_overrides:
+        elif places[exam.id] == "pastore" and not exam.data_exame_dia_assumido and exam.data_exame not in pastore_overrides:
             groups["pastore_day", exam.data_exame].append(exam.id)
     allocations = {}
     for (kind, key), exam_ids in groups.items():
@@ -192,7 +193,7 @@ def build_projection(db: Session, start: date, end: date) -> dict:
         known, received, card_paid = _payment(entry)
         net_partner = False
         basis = None
-        partner_cost = 0 if not exam.partner_id else None
+        partner_cost = 0 if not exam.partner_id and place not in ("maclin", "alergolife", "pastore") else None
         partner_source = "não aplicável" if not exam.partner_id else None
         direct_other = 0
         card_fee_recorded = None
@@ -271,6 +272,12 @@ def build_projection(db: Session, start: date, end: date) -> dict:
             extra_direct=direct_other + allocations.get(exam.id, {}).get("other", 0),
             card_fee_override=card_fee_recorded, tax_amount_override=tax_recorded,
         )
+        if place in ("maclin", "alergolife", "pastore") and not exam.partner_id:
+            result["pendencias"].append("parceiro_nao_definido")
+            result.update(status="incompleto", lucro=None, margem=None)
+        if exam.data_exame_dia_assumido:
+            result["pendencias"].append("data_exame_imprecisa")
+            result.update(status="incompleto", lucro=None, margem=None)
         if entry and exam.partner_id and place != "pastore" and not basis:
             result["pendencias"].append("base_receita_parceiro_nao_confirmada")
             result["status"] = "incompleto"
