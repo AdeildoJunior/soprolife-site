@@ -952,6 +952,73 @@ class PaymentAllocation(Base):
     )
 
 
+class ProfitCostRule(Base):
+    """Versão administrativa de uma regra analítica; não é lançamento contábil."""
+    __tablename__ = "profit_cost_rules"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    key: Mapped[str] = mapped_column(String(80), nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    value: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    reason: Mapped[str] = mapped_column(String(300), nullable=False)
+    __table_args__ = (
+        Index("ix_profit_cost_rules_key_effective_from", "key", "effective_from"),
+        CheckConstraint("value >= 0", name="profit_cost_rule_nonnegative"),
+    )
+
+
+class ProfitRevenueBasis(Base):
+    """Confirma a semântica de receita de parceiro sem duplicar o lançamento."""
+    __tablename__ = "profit_revenue_basis"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    spirometry_exam_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("spirometry_exams.id"), nullable=False, index=True)
+    financial_entry_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("financial_entries.id"), nullable=False)
+    entry_amount_snapshot: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    basis: Mapped[str] = mapped_column(String(10), nullable=False)  # bruto|liquido
+    gross_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    evidence_note: Mapped[str] = mapped_column(String(300), nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__ = (
+        CheckConstraint("basis IN ('bruto','liquido')", name="profit_revenue_basis_kind"),
+        CheckConstraint("gross_amount IS NULL OR gross_amount > 0", name="profit_revenue_basis_gross_positive"),
+        CheckConstraint("entry_amount_snapshot > 0", name="profit_revenue_basis_entry_positive"),
+    )
+
+
+class OperationalSession(Base, TimestampMixin):
+    """Uma ida física; Pastore agrupa por dia, demais locais exigem confirmação."""
+    __tablename__ = "operational_sessions"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    place: Mapped[str] = mapped_column(String(30), nullable=False)
+    service_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    start_time: Mapped[str | None] = mapped_column(String(5))
+    end_time: Mapped[str | None] = mapped_column(String(5))
+    billable_hours: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    parking_override: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    fuel_override: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    room_override: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    other_shared: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    note: Mapped[str | None] = mapped_column(String(500))
+    source: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
+    __table_args__ = (
+        CheckConstraint("billable_hours IS NULL OR billable_hours > 0", name="session_hours_positive"),
+        CheckConstraint("parking_override IS NULL OR parking_override >= 0", name="session_parking_nonnegative"),
+        CheckConstraint("fuel_override IS NULL OR fuel_override >= 0", name="session_fuel_nonnegative"),
+        CheckConstraint("room_override IS NULL OR room_override >= 0", name="session_room_nonnegative"),
+        CheckConstraint("other_shared IS NULL OR other_shared >= 0", name="session_other_nonnegative"),
+    )
+
+
+class OperationalSessionExam(Base):
+    __tablename__ = "operational_session_exams"
+    session_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("operational_sessions.id"), primary_key=True)
+    spirometry_exam_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("spirometry_exams.id"), primary_key=True, unique=True)
+
+
 class PartnerTransfer(Base, TimestampMixin):
     __tablename__ = "partner_transfers"
     id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)

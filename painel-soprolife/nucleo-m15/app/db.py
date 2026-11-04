@@ -24,6 +24,18 @@ class Base(DeclarativeBase):
 
 
 @event.listens_for(Session, "before_flush")
+def _protect_profit_cost_rule_versions(session, _flush_context, _instances):
+    """Uma mudança de preço cria versão nova; versão anterior é imutável."""
+    from .models import ProfitCostRule, ProfitRevenueBasis
+    for obj in session.deleted:
+        if isinstance(obj, (ProfitCostRule, ProfitRevenueBasis)):
+            raise ValueError("Evidência financeira histórica não pode ser removida.")
+    for obj in session.dirty:
+        if isinstance(obj, (ProfitCostRule, ProfitRevenueBasis)) and session.is_modified(obj):
+            raise ValueError("Evidência financeira histórica não pode ser alterada.")
+
+
+@event.listens_for(Session, "before_flush")
 def _protect_m24c_immutable_evidence(session, _flush_context, _instances):
     """Defesa ORM para SQLite/dev e para qualquer escrita fora da API.
 

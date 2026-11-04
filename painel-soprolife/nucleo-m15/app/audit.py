@@ -157,6 +157,13 @@ ALLOWED_KEYS = {
     # do acesso e a nova geração do link já ficam na própria linha
     # `resultado_acesso_regenerado`, cuja entidade é o acesso.
     "acesso_resultado_restaurado",
+    # Lucro analítico: apenas chave de catálogo, vigência, quantidades,
+    # códigos técnicos de exame e valores administrativos. Nada clínico.
+    "regra_custo", "vigencia_custo", "valor_custo", "local_operacional",
+    "data_operacional", "horas_faturaveis", "exames_antes", "exames_depois",
+    "estacionamento_override", "combustivel_override", "sala_override",
+    "outros_compartilhados",
+    "base_receita", "entry_code",
 }
 
 _MAX_STR = 120
