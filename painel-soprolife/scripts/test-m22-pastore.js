@@ -63,7 +63,7 @@ check("ramos SoproLife e Pastore foram localizados no fonte",
 check("local do atendimento existe somente no ramo não-Pastore",
   /Local do atendimento/.test(ramoSoproLife) && !/esp_local/.test(ramoPastore));
 check("controles de pagamento existem somente no ramo não-Pastore",
-  /Valor da espirometria/.test(ramoSoproLife) &&
+  /Valor cheio da espirometria/.test(ramoSoproLife) &&
   /Status do pagamento/.test(ramoSoproLife) &&
   /Data de recebimento/.test(ramoSoproLife) &&
   /Forma de pagamento/.test(ramoSoproLife) &&

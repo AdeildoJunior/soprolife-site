@@ -18,9 +18,11 @@ por um fluxo canônico. Regras de negócio impostas aqui:
 from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..audit import audit
+from ..services.maclin import canonical_maclin, record_basis, split_gross
 from ..config import get_settings
 from ..dates import add_months, parse_incomplete_date
 from ..db import get_db
@@ -232,6 +234,7 @@ def attendance_configuration(
             },
             "valor_padrao": str(settings.espirometria_soprolife_valor_padrao),
             "valor_padrao_editavel": True,
+            "parcerias_comerciais": [{"codigo": "maclin", "rotulo": "Maclin — 70% SoproLife / 30% Maclin"}],
             "modalidades": MODALIDADES_SOPROLIFE,
             "modalidades_indisponiveis": [MODALIDADE_INDISPONIVEL_SOPROLIFE],
         }
@@ -395,6 +398,15 @@ def _create_attendance(
 
     lancamentos = _criar_financeiro(db, payload, exam, consultation)
     resultado["lancamentos"] = lancamentos
+    if exam is not None and payload.espirometria.parceria_comercial == "maclin":
+        entry = db.scalar(select(FinancialEntry).where(
+            FinancialEntry.spirometry_exam_id == exam.id, FinancialEntry.tipo == "receita"))
+        record_basis(db, exam, entry, basis="bruto", gross_amount=entry.valor,
+                     evidence_note="Fluxo novo Maclin: valor cheio informado; 70% SoproLife / 30% Maclin.",
+                     user_id=user.id, request_id=request.state.request_id)
+        net, partner_amount = split_gross(entry.valor)
+        resultado["partilha_maclin"] = {"bruto": str(entry.valor), "soprolife": str(net),
+                                      "maclin": str(partner_amount), "pagamento_criado": False}
 
     # M26.3 — o exame de parceria entra no fechamento da sua competência na
     # MESMA transação em que nasce. Antes isso dependia de alguém lembrar de
@@ -472,6 +484,12 @@ def _criar_exame(db: Session, person: Person, payload: AtendimentoCreate) -> Spi
     partner_id = bloco.partner_id
     partner_unit_id = bloco.partner_unit_id
     origem = bloco.origem
+    if bloco.parceria_comercial == "maclin":
+        if modalidade != "cowork" or local_atendimento is None or local_atendimento.strip().casefold() != "maclin":
+            raise _erro("local_maclin_incoerente", "Parceria Maclin exige modalidade cowork e local MACLIN.")
+        partner_id = canonical_maclin(db).id
+    elif payload.tipo != TIPO_PASTORE and local_atendimento and local_atendimento.strip().casefold() == "maclin":
+        raise _erro("maclin_valor_cheio_obrigatorio", "Selecione a parceria Maclin e informe o valor cheio pago pelo cliente.")
     if payload.tipo == TIPO_PASTORE:
         partner = canonical_pastore(db)
         if bloco.partner_id != partner.id:

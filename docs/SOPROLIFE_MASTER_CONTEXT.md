@@ -15,6 +15,19 @@
 
 ## Lucro gerencial por competência — 05/11/2026
 
+Maclin distingue histórico líquido confirmado e novos atendimentos com bruto
+informado. `ProfitRevenueBasis` congela a base e o vínculo com a receita; não
+reescreve `FinancialEntry`. Líquido histórico não sofre outra dedução do parceiro,
+mesmo com saída de caixa registrada. Bruto desconhecido fica NULL: Pix não exige
+bruto para lucro gerencial; cartão exige a base efetivamente processada. Fluxo
+novo seleciona explicitamente a parceria Maclin, registra o bruto no livro-caixa
+e calcula 30% arredondado + restante de 70%, conservando centavos. Receita
+econômica e imposto gerencial usam a parcela SoproLife; taxa de cartão usa o bruto.
+O cálculo não cria pagamento Maclin. NFS-e nova usa o bruto com base confirmada,
+mesma política DIRECT e confirmação humana; histórico líquido exige revisão
+fiscal separada, preservando notas já emitidas. Nenhuma conversão automática do
+histórico. Reconfirmação idêntica de base é idempotente e auditável.
+
 O painel de lucro separa receita reconhecida, recebimento comprovado e situação
 fiscal. Imposto gerencial estimado de 6% usa receita reconhecida sem exigir
 NFS-e; isso não cria nem modifica documento fiscal. Técnico explicitamente zero

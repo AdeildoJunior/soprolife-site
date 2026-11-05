@@ -20,8 +20,9 @@ from ..finance_categories import CATEGORIA_ESPIROMETRIA, e_receita_propria_do_co
 from ..ids import new_uuid
 from ..models import (FiscalPolicy, FiscalDocument, FiscalDocumentItem, FiscalPreparation,
                       FiscalAttempt, FiscalArtifact, FinancialEntry, SpirometryExam,
-                      Person, utcnow)
+                      Partner, Person, utcnow)
 from .idempotency import idempotent_create, payload_fingerprint
+from .maclin import is_maclin, latest_basis
 from .nfse_national import artifacts as artifact_storage
 from .nfse_national import dispatch as national_dispatch
 from .nfse_national.identifiers import NFSE_ACCESS_KEY_PATTERN
@@ -263,10 +264,18 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
     person = db.get(Person, exam.person_id)
     if not person or person.arquivado:
         reasons.append('recipient_missing_or_archived')
-    # Structured modality + partner IDs only. No clinic-name classification.
+    # Modalidade e vínculo técnico ao cadastro; nunca inferir pelo local livre.
     partner_flow = bool(exam.partner_id or exam.partner_unit_id or exam.modalidade == 'clinica_parceira')
     partner_share = None
-    if partner_flow:
+    maclin = is_maclin(db.get(Partner, exam.partner_id)) if exam.partner_id else False
+    if maclin and exam.modalidade == 'cowork' and not exam.partner_unit_id:
+        # Somente o fluxo novo tem preço cheio comprovado no livro-caixa.
+        # O histórico líquido permanece sujeito à revisão fiscal separada.
+        flow = 'DIRECT'
+        basis = latest_basis(db, exam.id)
+        if not basis or basis.basis != 'bruto':
+            reasons.append('maclin_historical_gross_not_confirmed')
+    elif partner_flow:
         # M70 — PASTORE is the one partner flow with a fiscal model, and only
         # when every structured link resolves (see _pastore_share). Any other
         # partner — or a Pastore exam whose links do not resolve — keeps the
@@ -306,6 +315,10 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
             reasons.append('financial_link_incoherent')
         if entry and (entry.status != 'Recebido' or entry.moeda != 'BRL' or entry.valor <= 0):
             reasons.append('financial_revenue_not_received_or_invalid')
+        if maclin and entry and flow == 'DIRECT':
+            if (not basis or basis.financial_entry_id != entry.id or basis.entry_amount_snapshot != entry.valor
+                    or basis.gross_amount != entry.valor):
+                reasons.append('maclin_gross_basis_missing_or_stale')
     policies = db.scalars(select(FiscalPolicy).where(
         FiscalPolicy.environment == environment, FiscalPolicy.flow == flow,
         FiscalPolicy.service == 'spirometry',

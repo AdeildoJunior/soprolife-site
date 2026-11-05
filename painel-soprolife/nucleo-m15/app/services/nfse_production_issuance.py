@@ -61,6 +61,8 @@ SPOOL_NAME = re.compile(r'^(?P<id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4
 # Operator-facing labels, the single place the backend names a block. The
 # frontend shows these verbatim; the codes stay the API.
 BLOCK_LABELS = {
+    'maclin_historical_gross_not_confirmed': 'Maclin histórica: preço bruto não confirmado para emissão fiscal',
+    'maclin_gross_basis_missing_or_stale': 'Maclin: confira o valor cheio e a base de receita antes da emissão',
     'eeg_tax_classification_pending': 'Classificação fiscal EEG pendente de validação específica',
     'blocked_by_partner_model': 'Parceria sem política fiscal — não é emitido por exame',
     'partner_before_fiscal_activation': 'Pastore anterior à ativação fiscal — conferir nota manual',

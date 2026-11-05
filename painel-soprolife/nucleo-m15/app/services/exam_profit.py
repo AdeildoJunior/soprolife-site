@@ -110,7 +110,8 @@ def calculate_exam(*, revenue: int | None, received: int | None,
         missing.append("custos_da_sessao_incompletos")
     if revenue is not None and received is not None and received > revenue:
         missing.append("recebido_superior_a_receita")
-    if revenue is not None and card_paid is not None and card_paid > revenue:
+    card_limit = gross if gross is not None else revenue
+    if card_limit is not None and card_paid is not None and card_paid > card_limit:
         missing.append("cartao_superior_a_receita")
     required_rules = {"material", "technician"}
     if card_fee_override is None and card_paid != 0 and not (contractual_partner and not payment_known):

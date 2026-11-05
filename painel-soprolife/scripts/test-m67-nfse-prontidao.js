@@ -211,7 +211,7 @@ function opcoesDoCampo(rotulo) {
   return resto.slice(0, fim === -1 ? 600 : fim);
 }
 const fiscais = ["Nome completo", "CPF", "Data do exame", "Status", "Broncodilatador",
-  "Município onde o exame foi realizado", "Modalidade", "Valor da espirometria (R$)",
+  "Município onde o exame foi realizado", "Modalidade", "Valor cheio da espirometria (R$)",
   "Status do pagamento"];
 fiscais.forEach((rot) => {
   const o = opcoesDoCampo(rot);

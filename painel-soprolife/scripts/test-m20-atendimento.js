@@ -219,7 +219,7 @@ caso("o valor de tabela vem do servidor, não é número mágico no JavaScript",
      // uso seria o preço codificado na tela, que é o que a Fase E proíbe.
      !/\b220\b/.test(centralCodigo.replace(/placeholder="220,00"/g, "")));
 caso("o campo de valor permanece editável (não é readonly nem disabled)",
-     /fld\("Valor da espirometria \(R\$\)", inp\("esp_valor", valorPadrao,\s*'inputmode="decimal" placeholder="220,00"'\)/
+     /fld\("Valor cheio da espirometria \(R\$\)", inp\("esp_valor", valorPadrao,\s*'inputmode="decimal" placeholder="220,00"'\)/
        .test(centralSrc.replace(/\n\s*/g, " ")));
 caso("o servidor NÃO infere valor: financeiro só nasce de valor explícito",
      /nenhum valor é inferido/i.test(

@@ -94,4 +94,6 @@ def test_partner_revenue_basis_requires_admin_confirmation(client, auth, person)
     assert done.status_code==201,done.text
     after=client.get(path,headers=auth("gestor")).json()["exames"][0]
     assert "base_receita_parceiro_nao_confirmada" not in after["pendencias"]
-    assert after["fonte_repasse_parceiro"]=="regra_percentual"
+    assert after["fonte_repasse_parceiro"]=="maclin_liquido_do_bruto"
+    assert after["receita"] == "140.00"
+    assert after["custos"]["parceiro"] == "0.00"

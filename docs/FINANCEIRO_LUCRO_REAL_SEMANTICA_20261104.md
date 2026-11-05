@@ -1,5 +1,17 @@
 # Semântica financeira auditada antes do cálculo de lucro
 
+Atualização de 05/11/2026: o proprietário confirmou que o histórico Maclin foi
+registrado já com a parcela líquida de 70%. A confirmação é append-only em
+`ProfitRevenueBasis`; o lançamento original é preservado. O bruto pode permanecer
+desconhecido no histórico Pix sem bloquear lucro gerencial. Cartão usa o bruto
+comprovado/reconstruído em centavos, não os 70% lançados. Saída Maclin efetivamente
+registrada permanece no caixa e não é deduzida novamente da receita líquida.
+Novos atendimentos Maclin usam seleção explícita, valor cheio informado e partilha
+30% arredondado / restante SoproLife. O bruto fica no razão e na base fiscal nova;
+a receita econômica é a parcela SoproLife. Não há backfill automático nem emissão
+fiscal na confirmação da base. As observações de falta de confirmação abaixo
+descrevem a auditoria anterior a essa decisão.
+
 Base: `d9d28617951a136553155fcc6799d3c5b508bd11`.
 
 - `financial_entries` é a fonte canônica de lançamentos. `valor` é o valor digitado/registrado, não há coluna separada de preço bruto, parcela recebida ou base tributável. `status` distingue Recebido, Pendente, Parcial e Cancelado; `forma_pagamento` é única por lançamento. `payment_allocations` aloca lançamentos a alvos, não descreve parcelas por meio de pagamento. Portanto pagamento misto não pode ser inferido.

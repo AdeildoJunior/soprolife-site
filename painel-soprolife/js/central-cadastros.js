@@ -1873,7 +1873,10 @@
           { span: 4, help: "Nome do lugar, editável. Este texto não determina o município fiscal." })}
         ${fld("Origem", inp("esp_origem", iniciais.origem || "", 'list="cadOrigens"'),
           { span: 4, ajuda: "Como o paciente chegou até a SoproLife (Google, indicação, empresa…). Não é o lugar do exame." })}
-        ${fld("Valor da espirometria (R$)", inp("esp_valor", valorPadrao,
+        ${fld("Parceria comercial", sel("esp_parceria_comercial", [["", "Sem partilha"]].concat(
+          (cfgEsp.parcerias_comerciais || []).map((p) => [p.codigo, p.rotulo])), ""),
+          { span: 4, help: "Maclin: informe o valor cheio pago pelo cliente; o sistema separa 70% / 30%." })}
+        ${fld("Valor cheio da espirometria (R$)", inp("esp_valor", valorPadrao,
           'inputmode="decimal" placeholder="220,00"'),
           { span: 4, nfse, ajuda: "Nasce com o valor de tabela e pode ser alterado. Apagando o campo, nenhum lançamento financeiro é criado — nada é inferido. É este valor, bruto, que vai na NFS-e." })}
         ${fld("Status do pagamento", sel("esp_pgto_status",
@@ -1881,6 +1884,7 @@
         ${fld("Data de recebimento", dateInp("esp_pgto_data", ""), 4)}
         ${fld("Forma de pagamento", sel("esp_pgto_forma",
           [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"], "Pix"), 4)}
+        <div class="m15-form-full cad-microcopy" id="cadMaclinPartilha" role="status" aria-live="polite" hidden></div>
         ${datalist("cadLocais", [])}
       ` + commonEnd;
     }
@@ -2160,7 +2164,40 @@
       });
       form.addEventListener("change", (ev) => {
         if (ev.target.name === "esp_pgto_status") atualizarDatasSugeridas();
+        if (ev.target.name === "esp_pgto_forma") ev.target.dataset.cadManual = "1";
+        if (ev.target.name === "esp_parceria_comercial" && ev.target.value === "maclin") {
+          form.elements.esp_modalidade.value = "cowork";
+          aplicarModalidade();
+          form.elements.esp_local.value = "MACLIN";
+          form.elements.esp_local.dataset.tocado = "1";
+          if (!form.elements.esp_pgto_forma.dataset.cadManual) form.elements.esp_pgto_forma.value = "";
+        }
+        if (["esp_parceria_comercial", "esp_local_opcao"].includes(ev.target.name)) {
+          if (val(form, "esp_local_opcao") === "MACLIN" && form.elements.esp_parceria_comercial) {
+            form.elements.esp_parceria_comercial.value = "maclin";
+            if (!form.elements.esp_pgto_forma.dataset.cadManual) form.elements.esp_pgto_forma.value = "";
+          } else if (ev.target.name === "esp_local_opcao" && form.elements.esp_parceria_comercial) {
+            form.elements.esp_parceria_comercial.value = "";
+          }
+          atualizarMaclin();
+        }
       });
+      form.addEventListener("input", (ev) => {
+        if (["esp_valor", "esp_pgto_forma"].includes(ev.target.name)) atualizarMaclin();
+      });
+
+      function atualizarMaclin() {
+        const info = form.querySelector("#cadMaclinPartilha");
+        if (!info) return;
+        info.hidden = val(form, "esp_parceria_comercial") !== "maclin";
+        const gross = parseMoneyBR(val(form, "esp_valor"));
+        if (!gross) { info.textContent = "Informe o valor cheio pago pelo cliente."; return; }
+        const centavos = Math.round(Number(gross) * 100);
+        const parceiro = Math.round(centavos * 30 / 100);
+        const fmt = (n) => (n / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        info.textContent = `SoproLife (70%): ${fmt(centavos - parceiro)} · Maclin (30%): ${fmt(parceiro)}. ` +
+          "NFS-e pelo valor cheio, mediante emissão confirmada. Cartão: taxa sobre o valor cheio; Pix: sem taxa de cartão. O cálculo não registra pagamento à Maclin.";
+      }
 
       function reiniciarNovoAtendimento() {
         form.reset();
@@ -2254,6 +2291,7 @@
           wireModalidade();
         }
         atualizarProntidaoNfse();
+        atualizarMaclin();
         if (ehPastore) {
           const pastoreAviso = bodyEl.querySelector("#cadAtPastoreAviso");
           if (pastore.erro) {
@@ -2495,6 +2533,7 @@
       setIf(bloco, "modalidade", modalidade);
       setIf(bloco, "local_atendimento", local);
       setIf(bloco, "origem", val(form, "esp_origem"));
+      setIf(bloco, "parceria_comercial", val(form, "esp_parceria_comercial"));
     }
     return bloco;
   }

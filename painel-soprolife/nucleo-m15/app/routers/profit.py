@@ -10,10 +10,11 @@ from sqlalchemy.orm import Session
 from ..audit import audit
 from ..db import get_db
 from ..ids import new_uuid
-from ..models import FinancialEntry, OperationalSession, OperationalSessionExam, ProfitCostRule, ProfitRevenueBasis, SpirometryExam, User
+from ..models import FinancialEntry, OperationalSession, OperationalSessionExam, Partner, ProfitCostRule, SpirometryExam, User
 from ..security import ROLE_ADMIN, ROLE_GESTOR, require_role
 from ..services.exam_profit import DEFAULT_RULES
 from ..services.profit_projection import PLACES, build_projection, classify_place, summarize
+from ..services.maclin import is_maclin, record_basis, split_gross
 
 router = APIRouter(prefix="/financeiro/lucro", tags=["financeiro"])
 
@@ -43,7 +44,7 @@ class SessionInput(BaseModel):
 class RevenueBasisInput(BaseModel):
     exam_id: str
     basis: str
-    gross_amount: Decimal | None = Field(default=None, gt=0)
+    gross_amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     evidence_note: str = Field(min_length=5, max_length=300)
 
 
@@ -135,21 +136,15 @@ def confirm_revenue_basis(payload: RevenueBasisInput, request: Request,
         raise HTTPException(422, "Para base bruta, o preço deve igualar o lançamento financeiro.")
     if payload.basis == "liquido" and payload.gross_amount is not None and payload.gross_amount < entry.valor:
         raise HTTPException(422, "Preço bruto não pode ser menor que a receita líquida.")
-    row = ProfitRevenueBasis(spirometry_exam_id=exam.id,
-                             financial_entry_id=entry.id,
-                             entry_amount_snapshot=entry.valor,
-                             basis=payload.basis,
-                             gross_amount=payload.gross_amount,
-                             evidence_note=payload.evidence_note,
-                             created_by_user_id=user.id)
-    db.add(row)
-    db.flush()
-    audit(db, "lucro.base_receita_confirmada", "profit_revenue_basis", row.id,
-          user_id=user.id, request_id=request.state.request_id,
-          detalhes={"exam_code": exam.public_code, "entry_code": entry.public_code,
-                    "base_receita": payload.basis})
+    if is_maclin(db.get(Partner, exam.partner_id)) and payload.basis == "liquido" and payload.gross_amount is not None:
+        if split_gross(payload.gross_amount)[0] != entry.valor:
+            raise HTTPException(422, "Bruto Maclin não fecha com a parcela líquida de 70% em centavos.")
+    row, existing = record_basis(db, exam, entry, basis=payload.basis,
+                                gross_amount=payload.gross_amount,
+                                evidence_note=payload.evidence_note, user_id=user.id,
+                                request_id=request.state.request_id)
     db.commit()
-    return {"id": row.id, "exame": exam.public_code, "base": row.basis}
+    return {"id": row.id, "exame": exam.public_code, "base": row.basis, "idempotente": existing}
 
 
 @router.get("/sessoes")

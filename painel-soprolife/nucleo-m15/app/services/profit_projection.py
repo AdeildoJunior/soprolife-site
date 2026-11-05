@@ -19,6 +19,7 @@ from ..models import (
 from .exam_profit import allocate, calculate_exam, cents, money, percent, session_cost
 from .partner_pricing import resolve_regra_fiscal_por_exame, FISCAL_OK
 from .nfse_validity import fiscal_validity
+from .maclin import split_gross
 
 LOCAL_TZ = ZoneInfo("America/Sao_Paulo")
 PLACES = {"downtown", "nova_america", "pastore", "maclin", "alergolife", "home"}
@@ -242,11 +243,24 @@ def build_projection(db: Session, start: date, end: date) -> dict:
                 for transfer in transfers_by_referral[referral.id]:
                     linked[transfer.id] = transfer
             separate = [e for e in entries[exam.id] if e.tipo == "repasse" and e.status != "Cancelado"]
-            if basis and basis.basis == "liquido" and not linked and not separate:
+            if basis and basis.basis == "liquido" and (place == "maclin" or (not linked and not separate)):
                 net_partner = True
                 partner_cost = 0
                 gross = cents(basis.gross_amount) if basis.gross_amount is not None else None
                 partner_source = "receita_liquida_confirmada"
+                if place == "maclin" and card_paid:
+                    # O caixa do histórico guarda só os 70%; a maquininha
+                    # processou o bruto. Ausência do bruto só bloqueia cartão.
+                    card_paid = gross
+            elif basis and basis.basis == "bruto" and place == "maclin":
+                gross = revenue
+                if exam_rules.get("maclin.partner_percent") == Decimal("30.00"):
+                    net, _ = split_gross(entry.valor)
+                    revenue = cents(net)
+                    received = revenue if received == gross else received
+                    net_partner = True
+                    partner_cost = 0
+                    partner_source = "maclin_liquido_do_bruto"
             elif basis and basis.basis == "bruto" and len(linked) == 1:
                 partner_cost = cents(next(iter(linked.values())).valor)
                 gross = revenue
@@ -283,6 +297,9 @@ def build_projection(db: Session, start: date, end: date) -> dict:
         if place in ("maclin", "alergolife", "pastore") and not exam.partner_id:
             result["pendencias"].append("parceiro_nao_definido")
             result.update(status="incompleto", lucro=None, margem=None)
+        if place == "maclin" and basis and basis.basis == "liquido" and known and card_paid is None:
+            result["pendencias"] = ["valor_bruto_cartao_nao_comprovado" if p == "forma_de_pagamento_nao_classificada" else p
+                                    for p in result["pendencias"]]
         if exam.data_exame_dia_assumido:
             result["pendencias"].append("data_exame_imprecisa")
             result.update(status="incompleto", lucro=None, margem=None)
@@ -305,7 +322,13 @@ def build_projection(db: Session, start: date, end: date) -> dict:
             result["custo_total"] = None
             result["lucro_competencia"] = result["lucro_realizado"] = None
         session = sessions.get(links.get(exam.id)) if exam.id in links else None
+        maclin_split = None
+        if place == "maclin" and basis and net_partner:
+            maclin_split = {"modelo": "historico_liquido" if basis.basis == "liquido" else "novo_bruto",
+                            "parcela_soprolife": money(revenue),
+                            "parcela_maclin": money(gross - revenue) if gross is not None else None}
         rows.append({"id": exam.id, "session_id": links.get(exam.id),
+                     "partilha_maclin": maclin_split,
                      "fonte_sessao": session_sources.get(exam.id),
                      "horas_faturaveis": session_hours.get(exam.id),
                      "fonte_horas": "sessao_registrada" if session else "minimo_operacional_aprovado" if session_hours.get(exam.id) else None,
