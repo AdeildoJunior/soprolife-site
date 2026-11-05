@@ -437,6 +437,15 @@ def _traduzir_conflito_de_unicidade(
     )
 
 
+def _bloquear_lancamento_reteste(db: Session, exam_id: str | None) -> None:
+    exam = db.get(SpirometryExam, exam_id) if exam_id else None
+    if exam and exam.reteste_sem_cobranca:
+        raise HTTPException(status_code=422, detail={
+            "codigo": "reteste_sem_cobranca",
+            "mensagem": "Reteste sem cobrança não aceita novo lançamento financeiro.",
+        })
+
+
 @router.post("/lancamentos", status_code=201)
 def create_entry(
     payload: FinancialEntryCreate,
@@ -451,6 +460,7 @@ def create_entry(
         payload.consultation_id,
         payload.partner_referral_id,
     )
+    _bloquear_lancamento_reteste(db, payload.spirometry_exam_id)
     if payload.spirometry_exam_id:
         exam = db.get(SpirometryExam, payload.spirometry_exam_id)
         partner = db.get(Partner, exam.partner_id) if exam and exam.partner_id else None
@@ -773,6 +783,7 @@ def conciliacao_extra_pastore(
 
     conciliados = []
     pendentes = []
+    retestes = []
     total_vinculado = Decimal("0.00")
     for exam in exames:
         entry = entries_by_exam.get(exam.id)
@@ -785,7 +796,13 @@ def conciliacao_extra_pastore(
             "data_exame": exam.data_exame.isoformat() if exam.data_exame else None,
             "local_atendimento": exam.local_atendimento,
         }
-        if entry:
+        # Produção clínica permanece no histórico; reteste não é pendência
+        # de conciliação nem integra os totais financeiros remuneráveis.
+        if exam.reteste_sem_cobranca:
+            item.update({"status": "reteste_sem_cobranca", "reteste_sem_cobranca": True,
+                         "financial_public_code": None, "valor": None})
+            retestes.append(item)
+        elif entry:
             total_vinculado += entry.valor
             item.update({
                 "status": "conciliado",
@@ -817,11 +834,12 @@ def conciliacao_extra_pastore(
         "total_pendente": _num_str(total_pendente),
         "total_alem_do_alvo": _num_str(total_alem_do_alvo),
         "alvo_conciliado": total_pendente == 0,
-        "total_exames": len(exames),
+        "total_exames": len(conciliados) + len(pendentes),
         "exames_conciliados": len(conciliados),
         "exames_pendentes": len(pendentes),
         "conciliados": conciliados,
         "pendentes": pendentes,
+        "retestes_sem_cobranca": retestes,
         "rotulo": "Total histórico informado — exames próprios fora da Pastore",
     }
 
@@ -840,7 +858,7 @@ def conciliar_lote_extra_pastore(
     nunca preenche valores por média — cada item precisa vir com o valor
     exato evidenciado.
     """
-    exames = _exames_extra_pastore(db)
+    exames = [e for e in _exames_extra_pastore(db) if not e.reteste_sem_cobranca]
     exam_ids = {e.id for e in exames}
     ja_vinculados = {
         row.spirometry_exam_id
@@ -852,6 +870,7 @@ def conciliar_lote_extra_pastore(
     seen_in_payload: set[str] = set()
     soma = Decimal("0.00")
     for item in payload.itens:
+        _bloquear_lancamento_reteste(db, item.spirometry_exam_id)
         if item.spirometry_exam_id not in exam_ids:
             raise HTTPException(422, detail={
                 "codigo": "exame_fora_do_escopo",

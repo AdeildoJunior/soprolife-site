@@ -155,7 +155,7 @@
     const open = openProductionFor === row.physician_profile_id;
     return `<tr>
       <td class="medical-doctor">${esc(row.medica)}</td>
-      <td class="num">${esc(row.quantidade_laudos_elegiveis)}</td>
+      <td class="num">${esc(row.quantidade_laudos_elegiveis)} remuneráveis</td>
       <td class="num">${brl(row.valor_unitario)}</td>
       <td class="num">${brl(row.total_calculado)}</td>
       <td class="num">${brl(row.valor_pago)}</td>
@@ -197,7 +197,7 @@
         <button type="button" class="m15-btn m15-btn-sec cad-btn-mini" data-medical-production-toggle="${esc(payload.physician_profile_id)}">Fechar</button>
       </div>
       <div class="medical-production-cards">
-        <div class="medical-production-card"><strong>${esc(payload.efetivos)}</strong><span>Laudos efetivos</span></div>
+        <div class="medical-production-card"><strong>${esc(payload.efetivos)}</strong><span>Laudos remuneráveis</span></div>
         <div class="medical-production-card"><strong>${esc(payload.corrigidos)}</strong><span>Corrigidos</span></div>
         <div class="medical-production-card"><strong>${esc(payload.assinados)}</strong><span>Assinados</span></div>
         <div class="medical-production-card"><strong>${esc(payload.entregues)}</strong><span>Entregues</span></div>

@@ -439,6 +439,10 @@ sem ele, cai na data do serviço).
   (M26.13) nem exames marcados `spirometry_exams.reteste_sem_cobranca`
   (M26.36). `eligible_report_count` e `physician_production_summary` usam o
   MESMO predicado — divergir faria a tela explicar um total diferente do pago.
+- Retestes sem cobrança aparecem na conciliação com esse rótulo, em lista
+  própria sem ações financeiras. Não integram pendências nem contagem de
+  exames remuneráveis. POST individual e em lote recusam novo lançamento
+  para exame marcado; histórico clínico e laudos permanecem inalterados.
 - **Settlements** (`PartnerSettlement`) com sequência por competência.
 - Correção monetária = novo lançamento auditável; nunca sobrescrever valor.
 - Competência exibida usa `today_local()` (fuso de Brasília), nunca UTC.

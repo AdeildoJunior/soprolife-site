@@ -102,7 +102,7 @@
           <div class="kpi-card"><span class="kpi-label">Total histórico informado</span><strong class="kpi-value">${fmtMoney(d.total_alvo)}</strong></div>
           <div class="kpi-card"><span class="kpi-label">Receita vinculada a exames</span><strong class="kpi-value">${fmtMoney(d.total_vinculado)}</strong></div>
           <div class="kpi-card"><span class="kpi-label">Valor ainda a conciliar</span><strong class="kpi-value">${fmtMoney(d.total_pendente)}</strong></div>
-          <div class="kpi-card"><span class="kpi-label">Exames conciliados</span><strong class="kpi-value">${d.exames_conciliados} de ${d.total_exames}</strong></div>
+          <div class="kpi-card"><span class="kpi-label">Exames remuneráveis conciliados</span><strong class="kpi-value">${d.exames_conciliados} de ${d.total_exames}</strong></div>
           <div class="kpi-card"><span class="kpi-label">Exames pendentes</span><strong class="kpi-value">${d.exames_pendentes}</strong></div>
           ${Number(d.total_alem_do_alvo || 0) > 0 ? `
           <div class="kpi-card"><span class="kpi-label">Receita além do alvo histórico</span><strong class="kpi-value">${fmtMoney(d.total_alem_do_alvo)}</strong></div>` : ""}
@@ -124,6 +124,15 @@
           <table>
             <thead><tr><th>Exame</th><th>Data</th><th>Local</th><th>Status</th><th>Valor</th><th>Ação</th></tr></thead>
             <tbody>
+              ${(d.retestes_sem_cobranca || []).map((e) => `
+                <tr>
+                  <td>${esc(e.exam_public_code)}</td>
+                  <td>${fmtDate(e.data_exame)}</td>
+                  <td>${esc(e.local_atendimento || "—")}</td>
+                  <td><span class="badge">Reteste sem cobrança</span></td>
+                  <td>—</td>
+                  <td>—</td>
+                </tr>`).join("")}
               ${d.pendentes.map((e) => `
                 <tr>
                   <td>${esc(e.exam_public_code)}</td>
