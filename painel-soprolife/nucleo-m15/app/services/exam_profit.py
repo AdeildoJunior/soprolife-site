@@ -13,6 +13,8 @@ DEFAULT_RULES = {
     "card_percent": Decimal("5.00"),
     "tax_percent": Decimal("6.00"),
     "technician": Decimal("0.00"),
+    "downtown.minimum_hours": Decimal("1.00"),
+    "nova_america.minimum_hours": Decimal("1.00"),
     "downtown.room_hour": Decimal("60.00"),
     "downtown.parking": Decimal("25.00"),
     "downtown.fuel": Decimal("10.00"),
@@ -88,16 +90,16 @@ def calculate_exam(*, revenue: int | None, received: int | None,
                    shared: dict[str, int] | None, rules: dict[str, Decimal],
                    partner_revenue_is_net: bool = False,
                    extra_direct: int = 0, card_fee_override: int | None = None,
-                   tax_amount_override: int | None = None) -> dict:
+                   tax_amount_override: int | None = None,
+                   contractual_partner: bool = False) -> dict:
     missing = []
     if revenue is None:
         missing.append("receita_soprolife_ausente")
-    if received is None:
-        missing.append("valor_recebido_nao_discriminado")
-    if not payment_known or card_paid is None:
+    if (not payment_known or card_paid is None) and not (contractual_partner and not payment_known) and card_fee_override is None:
         missing.append("forma_de_pagamento_nao_classificada")
-    if tax_base is None and tax_amount_override is None:
-        missing.append("base_tributavel_ausente")
+    # Base gerencial é a receita reconhecida; não afirma emissão fiscal.
+    # O argumento legado não permite trocar a base gerencial pela fiscal.
+    tax_base = revenue
     if partner_transfer is None and not partner_revenue_is_net:
         missing.append("repasse_parceiro_nao_conciliado")
     if physician_transfer is None:
@@ -106,14 +108,12 @@ def calculate_exam(*, revenue: int | None, received: int | None,
         missing.append("sessao_operacional_ausente")
     elif not {"room", "parking", "fuel"}.issubset(shared):
         missing.append("custos_da_sessao_incompletos")
-    if gross is None and not partner_revenue_is_net:
-        missing.append("preco_bruto_nao_comprovado")
     if revenue is not None and received is not None and received > revenue:
         missing.append("recebido_superior_a_receita")
     if revenue is not None and card_paid is not None and card_paid > revenue:
         missing.append("cartao_superior_a_receita")
     required_rules = {"material", "technician"}
-    if card_fee_override is None and card_paid != 0:
+    if card_fee_override is None and card_paid != 0 and not (contractual_partner and not payment_known):
         required_rules.add("card_percent")
     if tax_amount_override is None:
         required_rules.add("tax_percent")
@@ -123,6 +123,9 @@ def calculate_exam(*, revenue: int | None, received: int | None,
     # None é desconhecido; zero só decorre de regra, pagamento ou não aplicação.
     shared = shared or {}
     card_cost = card_fee_override
+    if card_cost is None and contractual_partner and not payment_known:
+        # Fechamento contratual: nenhuma taxa sem evidência de cartão.
+        card_cost = 0
     if card_cost is None and payment_known and card_paid is not None:
         if card_paid == 0:
             card_cost = 0
@@ -149,6 +152,9 @@ def calculate_exam(*, revenue: int | None, received: int | None,
     profit = revenue - total if not missing else None
     margin = (Decimal(profit) * 100 / Decimal(revenue)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP) if profit is not None and revenue else None
     return {
+        "lucro_competencia": money(profit) if profit is not None else None,
+        "lucro_realizado": money(profit) if profit is not None and received is not None and received == revenue else None,
+        "pendencias_caixa": ["recebimento_nao_comprovado"] if received is None else ["recebimento_nao_integral"] if received != revenue else [],
         "status": "incompleto" if missing else "completo", "pendencias": missing,
         "receita": money(revenue) if revenue is not None else None,
         "bruto": money(gross) if gross is not None else None,
@@ -157,7 +163,10 @@ def calculate_exam(*, revenue: int | None, received: int | None,
         "base_imposto": money(tax_base) if tax_base is not None else None,
         "aliquota_imposto": str(rules["tax_percent"]) if "tax_percent" in rules else None,
         "imposto_tipo": "contabilizado" if tax_amount_override is not None else "estimado",
-        "cartao_fonte": "lancamento" if card_fee_override is not None else "regra",
+        "imposto_descricao": "Imposto contabilizado" if tax_amount_override is not None else f"Imposto gerencial estimado — {format(rules['tax_percent'].normalize(), 'f') if 'tax_percent' in rules else '—'}%",
+        "cartao_fonte": "lancamento" if card_fee_override is not None else "sem_evidencia_cartao_fechamento" if contractual_partner and not payment_known else "regra",
+        "componentes_pendentes": [key for key, value in costs.items() if value is None],
+        "regras_pendentes": sorted(required_rules.difference(rules)),
         "custos": {key: money(value) if value is not None else None for key, value in costs.items()},
         "custos_comprovados": money(total) if total is not None else None,
         "custo_total": money(total) if not missing else None,

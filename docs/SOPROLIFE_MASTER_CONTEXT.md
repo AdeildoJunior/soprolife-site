@@ -13,6 +13,31 @@
 
 ---
 
+## Lucro gerencial por competência — 05/11/2026
+
+O painel de lucro separa receita reconhecida, recebimento comprovado e situação
+fiscal. Imposto gerencial estimado de 6% usa receita reconhecida sem exigir
+NFS-e; isso não cria nem modifica documento fiscal. Técnico explicitamente zero
+é completo. Pastore usa a parcela contratual líquida, sem segunda dedução do
+parceiro, e calcula competência sem comprovação de recebimento; taxa de cartão
+só é aplicada com evidência de cartão. Forma desconhecida em receita direta
+continua pendente. O indicador realizado usa apenas exames com recebimento
+integral comprovado e conserva custos econômicos, sem afirmar quitação de despesas.
+
+Local fixo inequívoco + data exata agrupa uma ida, salvo sessões explícitas.
+Domiciliar usa uma ida por exame salvo sessão compartilhada explicitamente
+registrada. Sala usa horas/override da sessão ou regra versionada
+`<local>.minimum_hours`, quando aprovada; não há duração histórica presumida.
+Valores de referência em `DEFAULT_RULES` nunca substituem vigências no banco.
+
+`append_profit_history.py` produz dry-run e exige hash do plano para executar;
+só insere versões de custos e auditoria. Preserva valores/versões existentes.
+O banco contém exames antigos com precisão mensal: o dia do primeiro exame
+não pode ser afirmado a partir de `data_exame` quando o dia é assumido. A política
+para limite técnico mensal ou primeira data exata exige escolha explícita.
+Estado de produção, data efetiva autorizada e números finais: relatório externo
+da missão, sem PII e fora do Git.
+
 ## Integração local EEGLife + MIR/FET — 30/10/2026
 
 A worktree isolada de integração combina `bb7566a` (incluindo `fa728d0` MIR/FET)

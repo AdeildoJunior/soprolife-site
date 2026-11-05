@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import (
-    FinancialEntry, FiscalAttempt, FiscalDocument, FiscalDocumentItem, FiscalPreparation,
+    FinancialEntry, FiscalDocument, FiscalDocumentItem,
     OperationalSession, OperationalSessionExam, Partner, PartnerReferral, PartnerSettlement,
     PartnerSettlementItem, PartnerTransfer, PartnerUnit, PhysicianTransfer,
     ProfitCostRule, ProfitRevenueBasis, ReportDocument, SpirometryExam, Person,
@@ -69,9 +69,9 @@ def _payment(entry: FinancialEntry | None) -> tuple[bool, int | None, int | None
     elif entry.status == "Pendente":
         received = 0
     else:
-        return False, None, None  # parcial: valor pago não registrado
+        received = None  # parcial: valor pago não registrado
     if form in {"cartao", "credito", "debito", "cartao de credito", "cartao de debito"}:
-        return True, received, received
+        return True, received, cents(entry.valor)
     if form in {"pix", "dinheiro", "transferencia", "transferencia bancaria"}:
         return True, received, 0
     return False, received, None
@@ -126,32 +126,27 @@ def build_projection(db: Session, start: date, end: date) -> dict:
     fiscal_docs = {d.id: d for d in db.scalars(select(FiscalDocument).where(
         FiscalDocument.environment == "production", FiscalDocument.state == "issued")).all()
                    if fiscal_validity(db, d)}
-    fiscal_base = {}
-    issued_attempts = db.scalars(select(FiscalAttempt).where(
-        FiscalAttempt.document_id.in_(list(fiscal_docs)),
-        FiscalAttempt.phase == "completed", FiscalAttempt.outcome == "issued",
-        FiscalAttempt.provider == "production",
-    )).all() if fiscal_docs else []
-    issued_prep_ids = {a.preparation_id for a in issued_attempts if a.preparation_id}
-    preparations = db.scalars(select(FiscalPreparation).where(
-        FiscalPreparation.id.in_(issued_prep_ids))).all() if issued_prep_ids else []
-    for prep in preparations:
-        doc = fiscal_docs.get(prep.document_id)
-        if doc and doc.spirometry_exam_id and prep.amount_snapshot is not None:
-            fiscal_base[doc.spirometry_exam_id] = cents(prep.amount_snapshot)
+    issued_exam_ids = {d.spirometry_exam_id for d in fiscal_docs.values() if d.spirometry_exam_id}
     for item in db.scalars(select(FiscalDocumentItem).where(FiscalDocumentItem.environment == "production")).all():
-        if item.document_id in fiscal_docs and item.amount is not None:
-            fiscal_base[item.spirometry_exam_id] = cents(item.amount)
+        if item.document_id in fiscal_docs:
+            issued_exam_ids.add(item.spirometry_exam_id)
 
     links = {link.spirometry_exam_id: link.session_id for link in db.scalars(select(OperationalSessionExam)).all()}
     sessions = {s.id: s for s in db.scalars(select(OperationalSession)).all()}
-    pastore_overrides = {s.service_date for s in sessions.values() if s.place == "pastore"}
+    explicit_days = {(s.place, s.service_date) for s in sessions.values()}
+    session_sources = {}
+    session_hours = {}
     groups = defaultdict(list)
     for exam in all_exams:
         if exam.id in links:
             groups["session", links[exam.id]].append(exam.id)
-        elif places[exam.id] == "pastore" and not exam.data_exame_dia_assumido and exam.data_exame not in pastore_overrides:
-            groups["pastore_day", exam.data_exame].append(exam.id)
+        elif not exam.data_exame_dia_assumido:
+            place = places[exam.id]
+            if place == "home":
+                groups["home_visit", exam.id].append(exam.id)
+            elif place in PLACES and (place, exam.data_exame) not in explicit_days:
+                identity = place if place in {"downtown", "nova_america", "pastore"} else (place, exam.partner_unit_id or _plain(exam.local_atendimento))
+                groups["place_day", (identity, exam.data_exame)].append(exam.id)
     allocations = {}
     for (kind, key), exam_ids in groups.items():
         if kind == "session":
@@ -164,7 +159,9 @@ def build_projection(db: Session, start: date, end: date) -> dict:
             hours = sess.billable_hours
         else:
             sess = None
-            place, when, hours = "pastore", key, None
+            place = places[exam_ids[0]]
+            when = by_id[exam_ids[0]].data_exame
+            hours = rules_at(rules, when).get(f"{place}.minimum_hours") if place in ("downtown", "nova_america") else None
         try:
             components = session_cost(
                 place, hours, rules_at(rules, when), sess.room_override if sess else None,
@@ -182,6 +179,8 @@ def build_projection(db: Session, start: date, end: date) -> dict:
                 components["other"] = cents(sess.other_shared)
         pieces = {name: allocate(amount, exam_ids) for name, amount in components.items()}
         for eid in exam_ids:
+            session_sources[eid] = sess.source if sess else "domiciliar_individual" if place == "home" else "local_mesma_data"
+            session_hours[eid] = str(hours) if hours is not None else None
             allocations[eid] = {name: shares[eid] for name, shares in pieces.items()}
 
     rows = []
@@ -270,9 +269,8 @@ def build_projection(db: Session, start: date, end: date) -> dict:
             transfer = medical.get((root.released_physician_profile_id, competence))
             if len(roots[exam.id]) == 1 and transfer:
                 physician_cost = cents(transfer.unit_amount)
-        # Receita não prova a base fiscal. Só evidência fiscal válida ou
-        # imposto contabilizado permite conhecer esse componente.
-        base = fiscal_base.get(exam.id)
+        # Fiscal permanece independente do imposto gerencial autorizado.
+        base = revenue
         result = calculate_exam(
             revenue=revenue, received=received, gross=gross, card_paid=card_paid,
             payment_known=known, tax_base=base, partner_transfer=partner_cost,
@@ -280,6 +278,7 @@ def build_projection(db: Session, start: date, end: date) -> dict:
             rules=exam_rules, partner_revenue_is_net=net_partner,
             extra_direct=direct_other + allocations.get(exam.id, {}).get("other", 0),
             card_fee_override=card_fee_recorded, tax_amount_override=tax_recorded,
+            contractual_partner=place == "pastore" and net_partner,
         )
         if place in ("maclin", "alergolife", "pastore") and not exam.partner_id:
             result["pendencias"].append("parceiro_nao_definido")
@@ -304,10 +303,12 @@ def build_projection(db: Session, start: date, end: date) -> dict:
             result["margem"] = None
         if result["status"] != "completo":
             result["custo_total"] = None
+            result["lucro_competencia"] = result["lucro_realizado"] = None
         session = sessions.get(links.get(exam.id)) if exam.id in links else None
         rows.append({"id": exam.id, "session_id": links.get(exam.id),
-                     "fonte_sessao": session.source if session else "pastore_mesmo_dia" if place == "pastore" and exam.id in allocations else None,
-                     "horas_faturaveis": str(session.billable_hours) if session and session.billable_hours is not None else None,
+                     "fonte_sessao": session_sources.get(exam.id),
+                     "horas_faturaveis": session_hours.get(exam.id),
+                     "fonte_horas": "sessao_registrada" if session else "minimo_operacional_aprovado" if session_hours.get(exam.id) else None,
                      "exame": exam.public_code, "data": exam.data_exame.isoformat(),
                      "local": place or "não classificado", "parceiro": partners.get(exam.partner_id).nome if exam.partner_id in partners else None,
                      "forma_pagamento": payment_entry.forma_pagamento if payment_entry else None,
@@ -315,7 +316,8 @@ def build_projection(db: Session, start: date, end: date) -> dict:
                      "status_financeiro": payment_entry.status if payment_entry else settlement.status if settlement else "sem_lancamento_individual",
                      "fonte_receita": "financial_entry" if entry else "partnership" if net_partner else None,
                      "fonte_repasse_parceiro": partner_source,
-                     "fonte_base_imposto": "nfse_valida" if base is not None else None,
+                     "fonte_base_imposto": "receita_reconhecida" if base is not None else None,
+                     "status_fiscal": "EMITIDA" if exam.id in issued_exam_ids else "NÃO EMITIDA",
                      **result})
     return summarize(rows)
 
@@ -338,14 +340,16 @@ def summarize(rows: list[dict]) -> dict:
             "a_receber": known_sum(source, "pendente"),
             "custos": known_sum(source, "custos_comprovados"),
             "receita_calculada": revenue, "custo_total_calculado": cost,
-            "lucro": profit,
+            "lucro": profit, "lucro_competencia": profit,
             "margem": str((Decimal(profit) * 100 / Decimal(revenue)).quantize(Decimal("0.1"))) if profit is not None and revenue is not None and Decimal(revenue) else None,
-            "lucro_medio": money(cents(profit) // len(complete)) if complete else None,
-            "custo_medio": money(cents(cost) // len(complete)) if complete else None,
+            "lucro_medio": money(cents(Decimal(profit) / len(complete))) if complete else None,
+            "custo_medio": money(cents(Decimal(cost) / len(complete))) if complete else None,
             "exames": len(complete), "incompletos": len(source) - len(complete),
             "total_exames": len(source), "cobertura": counts,
             "informacoes_faltantes": sum(len(r["pendencias"]) for r in source),
             "lucro_realizado": known_sum([r for r in complete if r["realizado"]], "lucro"),
+            "exames_caixa_comprovado": sum(r["realizado"] is True for r in complete),
+            "exames_caixa_pendente": sum(r["realizado"] is not True for r in complete),
             "lucro_previsto": known_sum([r for r in complete if not r["realizado"]], "lucro"),
         }
 

@@ -51,14 +51,14 @@ def test_alergolife_and_home_share_visit():
     check_session("home", 3, None, "10")
 
 
-def test_card_only_paid_part_and_tax_base():
+def test_card_proven_portion_and_tax_on_recognized_revenue():
     rules = profit.DEFAULT_RULES
     result = profit.calculate_exam(
         revenue=20000, received=20000, gross=20000, card_paid=8000,
         payment_known=True, tax_base=15000, partner_transfer=0,
         physician_transfer=0, shared={"room":0,"parking":0,"fuel":0}, rules=rules)
     assert result["custos"]["cartao"] == "4.00"
-    assert result["custos"]["imposto"] == "9.00"
+    assert result["custos"]["imposto"] == "12.00"
     assert result["custos"]["material"] == "10.00"
     assert result["custos"]["tecnico"] == "0.00"
     pix = profit.calculate_exam(

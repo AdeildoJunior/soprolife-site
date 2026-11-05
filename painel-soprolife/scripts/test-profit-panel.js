@@ -20,9 +20,9 @@ const data={kpis:k,por_mes:[{chave:'2026-09',...k}],por_dia:[{chave:'2026-09-15'
   exames:[row],pendencias:{regras_de_custo_sem_vigencia:1},filtros:{locais:['home'],parceiros:[],formas:[],status:['Recebido']}};
 sandbox.testProfit.render(data);
 assert.match(root.innerHTML,/Receita comprovada/);assert.match(root.innerHTML,/220,00/);
-assert.match(root.innerHTML,/Custos já comprovados/);assert.match(root.innerHTML,/Aguardando fechamento/);
+assert.match(root.innerHTML,/Custos reconhecidos/);assert.match(root.innerHTML,/Aguardando fechamento/);
 assert.match(root.innerHTML,/Composição parcial/);assert.doesNotMatch(root.innerHTML,/financial_entry/);
-const monthly=configs.find(c=>c.data.datasets.some(d=>d.label==='Lucro calculado')&&c.type==='bar');
+const monthly=configs.find(c=>c.data.datasets.some(d=>d.label==='Lucro por competência')&&c.type==='bar');
 assert.equal(monthly.data.datasets[0].data[0],220);
 assert.equal(monthly.data.datasets[2].data[0],null);
 const tooltip=monthly.options.plugins.tooltip.callbacks.afterBody([{dataset:monthly.data.datasets[2],dataIndex:0}]);

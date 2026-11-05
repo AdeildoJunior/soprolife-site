@@ -30,7 +30,7 @@ with Session(get_engine()) as db:
  p=Person(public_code='PES-SYN1',nome_completo='Pessoa Sintética',nome_normalizado='pessoa sintetica');db.add(p);db.flush()
  doctor=PhysicianProfile(user_id=u.id,professional_name='Médico Sintético',crm_number='000001',crm_state='RJ',verification_status='pending');db.add(doctor);db.flush()
  db.add(PhysicianTransfer(physician_profile_id=doctor.id,competencia=date(2026,9,1),eligible_report_count=3,unit_amount=15,reference_total=45,paid_amount=45,payment_date=date(2026,10,1),status='Pago',created_by_user_id=u.id,payment_registered_by_user_id=u.id,payment_registered_at=datetime(2026,10,1,tzinfo=timezone.utc)))
- for key,value in [('material',10),('technician',0)]:db.add(ProfitCostRule(key=key,value=value,effective_from=date(2026,9,1),reason='Evidência sintética para teste'))
+ for key,value in [('material',10),('technician',0),('tax_percent',6),('home.parking',0),('home.fuel',10)]:db.add(ProfitCostRule(key=key,value=value,effective_from=date(2026,9,1),reason='Evidência sintética para teste'))
  for n in (1,2,3):
   e=SpirometryExam(public_code=f'ESP-SYN{n}',person_id=p.id,status='Realizado',local_atendimento='SHOPPING DOWNTOWN' if n==1 else 'Domiciliar',modalidade='cowork' if n==1 else 'residencial',data_exame=date(2026,9,14+n))
   db.add(e);db.flush()
@@ -67,16 +67,18 @@ async function main(){
   await page.locator('.profit-exam').first().waitFor();
   const kpi=label=>page.locator('.profit-kpi').filter({has:page.locator('small',{hasText:new RegExp('^'+label+'$')})});
   assert.match(await kpi('Receita comprovada').innerText(),/420,00/);
-  assert.match(await kpi('Lucro líquido calculado').innerText(),/70,00/);
-  assert.match(await kpi('Margem líquida calculada').innerText(),/35.0%/);
-  assert.match(await kpi('Exames com cálculo completo').innerText(),/1/);
-  assert.match(await kpi('Exames com cálculo pendente').innerText(),/2/);
+  assert.match(await kpi('Lucro por competência').innerText(),/241,80/);
+  assert.match(await kpi('Margem por competência').innerText(),/57.6%/);
+  assert.match(await kpi('Exames com cálculo completo').innerText(),/2/);
+  assert.match(await kpi('Exames com cálculo pendente').innerText(),/1/);
   for(const width of [1440,430,390]){
    await page.setViewportSize({width,height:1000});
    const detail=page.locator('.profit-exam').filter({hasText:'ESP-SYN2'});
    await detail.locator('summary').first().click();
    assert.match(await detail.innerText(),/Receita comprovada[\s\S]*220,00/);
-   assert.match(await detail.innerText(),/Aguardando fechamento/);
+   assert.match(await detail.innerText(),/171,80/);
+   assert.match(await detail.innerText(),/NÃO EMITIDA/);
+   assert.match(await detail.innerText(),/Imposto gerencial estimado — 6%/);
    await page.waitForTimeout(400);
    const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
    if(overflow){
@@ -108,14 +110,14 @@ async function main(){
   await page.locator('.profit-panel').evaluate(el=>el.style.zoom='2');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${name} zoom 200%`);
   await page.locator('.profit-panel').evaluate(el=>el.style.zoom='');
-  // Somente exames pendentes: receitas visíveis e lucro ausente no gráfico real.
+  // Competência calculada sem NFS-e; exame sem receita continua pendente.
   await page.locator('#profitFilters [name="local"]').selectOption('home');await page.locator('#profitFilters button[type="submit"]').click();
   await page.waitForFunction(()=>document.querySelectorAll('.profit-exam').length===2);
   assert.match(await kpi('Receita comprovada').innerText(),/220,00/);
-  assert.match(await kpi('Lucro líquido calculado').innerText(),/—/);
+  assert.match(await kpi('Lucro por competência').innerText(),/171,80/);
   const series=await page.evaluate(()=>Chart.getChart(document.querySelector('#profitMonthly')).data.datasets.map(d=>({label:d.label,data:d.data})));
   assert.equal(series.find(d=>d.label==='Receita comprovada').data[0],220);
-  assert.equal(series.find(d=>d.label==='Lucro calculado').data[0],null);
+  assert.equal(series.find(d=>d.label==='Lucro por competência').data[0],171.8);
   const unknown=page.locator('.profit-exam').filter({hasText:'ESP-SYN3'});await unknown.locator('summary').first().click();
   assert.match(await unknown.innerText(),/Receita comprovada\s*—/);
   assert.match(await page.locator('.profit-chart-pending').first().innerText(),/Lucro pendente/);
@@ -125,7 +127,7 @@ async function main(){
   await page.reload();await wait(()=>page.locator('.nav-item[data-section="financeiro"]').evaluate(el=>{el.click();return document.querySelector('#financeiro').classList.contains('active');}));await page.locator('#profitTitle').waitFor();
   assert.match(await page.locator('.profit-list').innerText(),/Nenhum exame produtivo/);
   assert.equal(errors.length,0,JSON.stringify(errors));
-  console.log(`PASS ${name}: populações mistas, só pendentes, receita desconhecida, gráficos null, vazio, erro e zoom 200%`);
+  console.log(`PASS ${name}: populações mistas, competência sem NFS-e, receita desconhecida, gráficos, vazio, erro e zoom 200%`);
   await browser.close();browser=null;
  }
  console.log('Artefatos sintéticos:',tmp);

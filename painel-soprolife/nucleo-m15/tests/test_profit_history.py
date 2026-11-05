@@ -43,7 +43,7 @@ def test_complete_and_real_zero():
     r = calc()
     assert (r["status"],r["custo_total"],r["lucro"],r["margem"]) == ("completo","132.00","68.00","34.0")
     assert r["custos"]["cartao"] == "0.00"
-    zero = calc(revenue=13200,received=13200,gross=13200,tax_base=20000)
+    zero = calc(revenue=12766,received=12766,gross=12766,tax_base=None)
     assert summarize([row(zero)])["kpis"]["lucro"] == "0.00"
 
 def test_mixed_population_closed_denominator():
@@ -88,10 +88,12 @@ def test_history_no_rules_no_fiscal(client,auth,db,person):
     db.add(ProfitCostRule(key="material",effective_from=date(2026,11,4),value=10,reason="Regra sintética atual"))
     db.commit(); s=dashboard(client,auth); r=s["exames"][0]
     assert s["kpis"]["receita"] == "220.00"
-    assert s["kpis"]["lucro"] is r["base_imposto"] is r["custos"]["material"] is None
+    assert s["kpis"]["lucro"] is r["custos"]["material"] is None
+    assert r["base_imposto"] == "220.00"
+    assert r["status_fiscal"] == "NÃO EMITIDA"
     assert r["data_recebimento"] == "2026-09-15"
-    assert "base_tributavel_ausente" in r["pendencias"]
-    assert "sessao_operacional_ausente" in r["pendencias"]
+    assert "base_tributavel_ausente" not in r["pendencias"]
+    assert "custos_da_sessao_incompletos" in r["pendencias"]
     assert db.scalar(select(func.count()).select_from(OperationalSession)) == 0
 
 @pytest.mark.parametrize("query,expected",[("",2),("&local=downtown",1),
@@ -132,9 +134,9 @@ def test_pastore_canonical_receipt_and_no_double_count(client,auth,db,person):
     assert s["kpis"]["receita"] == "219.00"
     assert s["kpis"]["recebido"] is None
 
-def test_no_session_inference_and_partial_session_distinct(client,auth,db,person,users):
+def test_location_day_inference_and_partial_session_distinct(client,auth,db,person,users):
     a=make_exam(db,person,"ESP-SYN1",date(2026,9,15)); b=make_exam(db,person,"ESP-SYN2",date(2026,9,15)); db.commit()
-    assert all("sessao_operacional_ausente" in r["pendencias"] for r in dashboard(client,auth)["exames"])
+    assert all("custos_da_sessao_incompletos" in r["pendencias"] for r in dashboard(client,auth)["exames"])
     session=OperationalSession(place="downtown",service_date=date(2026,9,15),source="manual",status="confirmado",parking_override=25,created_by_user_id=users["admin"].id)
     db.add(session); db.flush()
     for e in (a,b): db.add(OperationalSessionExam(session_id=session.id,spirometry_exam_id=e.id))
