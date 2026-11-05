@@ -54,14 +54,30 @@ def allocate(total: int, exam_ids: list[str]) -> dict[str, int]:
 
 
 def session_cost(place: str, hours: Decimal | None, rules: dict[str, Decimal],
-                 room_override: Decimal | None = None) -> dict[str, int]:
+                 room_override: Decimal | None = None, *,
+                 parking_override: Decimal | None = None,
+                 fuel_override: Decimal | None = None,
+                 partial: bool = False) -> dict[str, int]:
     """Componentes compartilhados de uma única ida confirmada."""
     if place in ("downtown", "nova_america") and room_override is None and (hours is None or hours <= 0):
-        raise ValueError("horas_faturaveis_ausentes")
+        if not partial:
+            raise ValueError("horas_faturaveis_ausentes")
     result = {}
-    for component in ("parking", "fuel"):
-        result[component] = cents(rules[f"{place}.{component}"])
-    result["room"] = (cents(room_override) if room_override is not None else cents(Decimal(hours) * rules[f"{place}.room_hour"])) if place in ("downtown", "nova_america") else 0
+    for component, override in (("parking", parking_override), ("fuel", fuel_override)):
+        if override is not None:
+            result[component] = cents(override)
+        elif f"{place}.{component}" in rules:
+            result[component] = cents(rules[f"{place}.{component}"])
+        elif not partial:
+            raise KeyError(f"{place}.{component}")
+    if room_override is not None:
+        result["room"] = cents(room_override)
+    elif place not in ("downtown", "nova_america"):
+        result["room"] = 0
+    elif hours is not None and hours > 0 and f"{place}.room_hour" in rules:
+        result["room"] = cents(Decimal(hours) * rules[f"{place}.room_hour"])
+    elif not partial:
+        raise KeyError(f"{place}.room_hour")
     return result
 
 
@@ -80,7 +96,7 @@ def calculate_exam(*, revenue: int | None, received: int | None,
         missing.append("valor_recebido_nao_discriminado")
     if not payment_known or card_paid is None:
         missing.append("forma_de_pagamento_nao_classificada")
-    if tax_base is None:
+    if tax_base is None and tax_amount_override is None:
         missing.append("base_tributavel_ausente")
     if partner_transfer is None and not partner_revenue_is_net:
         missing.append("repasse_parceiro_nao_conciliado")
@@ -88,40 +104,64 @@ def calculate_exam(*, revenue: int | None, received: int | None,
         missing.append("repasse_medico_nao_conciliado")
     if shared is None:
         missing.append("sessao_operacional_ausente")
+    elif not {"room", "parking", "fuel"}.issubset(shared):
+        missing.append("custos_da_sessao_incompletos")
     if gross is None and not partner_revenue_is_net:
         missing.append("preco_bruto_nao_comprovado")
     if revenue is not None and received is not None and received > revenue:
         missing.append("recebido_superior_a_receita")
     if revenue is not None and card_paid is not None and card_paid > revenue:
         missing.append("cartao_superior_a_receita")
-    if not {"material", "card_percent", "tax_percent", "technician"}.issubset(rules):
+    required_rules = {"material", "technician"}
+    if card_fee_override is None and card_paid != 0:
+        required_rules.add("card_percent")
+    if tax_amount_override is None:
+        required_rules.add("tax_percent")
+    if not required_rules.issubset(rules):
         missing.append("regras_de_custo_sem_vigencia")
-    if missing:
-        return {"status": "incompleto", "pendencias": missing, "lucro": None, "margem": None}
+    # Cada componente conserva sua própria evidência, mesmo sem fechamento.
+    # None é desconhecido; zero só decorre de regra, pagamento ou não aplicação.
+    shared = shared or {}
+    card_cost = card_fee_override
+    if card_cost is None and payment_known and card_paid is not None:
+        if card_paid == 0:
+            card_cost = 0
+        elif "card_percent" in rules:
+            card_cost = percent(card_paid, rules["card_percent"])
+    tax_cost = tax_amount_override
+    if tax_cost is None and tax_base is not None and "tax_percent" in rules:
+        tax_cost = percent(tax_base, rules["tax_percent"])
     costs = {
-        "material": cents(rules["material"]),
+        "material": cents(rules["material"]) if "material" in rules else None,
         "parceiro": 0 if partner_revenue_is_net else partner_transfer,
         "medico": physician_transfer,
-        "sala": shared.get("room", 0),
-        "estacionamento": shared.get("parking", 0),
-        "combustivel": shared.get("fuel", 0),
-        "cartao": card_fee_override if card_fee_override is not None else percent(card_paid, rules["card_percent"]),
-        "imposto": tax_amount_override if tax_amount_override is not None else percent(tax_base, rules["tax_percent"]),
-        "tecnico": cents(rules["technician"]),
-        "outros": extra_direct,
+        "sala": shared.get("room"),
+        "estacionamento": shared.get("parking"),
+        "combustivel": shared.get("fuel"),
+        "cartao": card_cost,
+        "imposto": tax_cost,
+        "tecnico": cents(rules["technician"]) if "technician" in rules else None,
     }
-    total = sum(costs.values())
-    profit = revenue - total
-    margin = (Decimal(profit) * 100 / Decimal(revenue)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP) if revenue else None
+    if extra_direct:
+        costs["outros"] = extra_direct
+    known_costs = [v for v in costs.values() if v is not None]
+    total = sum(known_costs) if known_costs else None
+    profit = revenue - total if not missing else None
+    margin = (Decimal(profit) * 100 / Decimal(revenue)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP) if profit is not None and revenue else None
     return {
-        "status": "completo", "pendencias": [], "receita": money(revenue),
-        "bruto": money(gross) if gross is not None else None, "recebido": money(received),
-        "pendente": money(revenue - received), "base_imposto": money(tax_base),
-        "aliquota_imposto": str(rules["tax_percent"]),
+        "status": "incompleto" if missing else "completo", "pendencias": missing,
+        "receita": money(revenue) if revenue is not None else None,
+        "bruto": money(gross) if gross is not None else None,
+        "recebido": money(received) if received is not None else None,
+        "pendente": money(revenue - received) if revenue is not None and received is not None and received <= revenue else None,
+        "base_imposto": money(tax_base) if tax_base is not None else None,
+        "aliquota_imposto": str(rules["tax_percent"]) if "tax_percent" in rules else None,
         "imposto_tipo": "contabilizado" if tax_amount_override is not None else "estimado",
         "cartao_fonte": "lancamento" if card_fee_override is not None else "regra",
-        "custos": {key: money(value) for key, value in costs.items()},
-        "custo_total": money(total), "lucro": money(profit),
+        "custos": {key: money(value) if value is not None else None for key, value in costs.items()},
+        "custos_comprovados": money(total) if total is not None else None,
+        "custo_total": money(total) if not missing else None,
+        "lucro": money(profit) if profit is not None else None,
         "margem": str(margin) if margin is not None else None,
-        "realizado": received == revenue,
+        "realizado": received == revenue if received is not None and revenue is not None else None,
     }

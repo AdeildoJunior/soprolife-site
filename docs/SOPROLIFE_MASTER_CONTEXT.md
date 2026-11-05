@@ -418,6 +418,16 @@ sem ele, cai na data do serviço).
 - Correção monetária = novo lançamento auditável; nunca sobrescrever valor.
 - Competência exibida usa `today_local()` (fuso de Brasília), nunca UTC.
 
+### Lucro por exame — histórico (05/11/2026)
+
+O painel privado `/financeiro/lucro/*` mantém fatos conhecidos de exames
+incompletos nos KPIs e gráficos; lucro, margem e custo final calculados usam
+somente exames completos, com cobertura explícita. Desconhecido é `null`,
+exibido como “—”; não vira zero nem barra de zero. Base fiscal não é inferida
+da receita. Sem backfill ou nova migration; exceção histórica de deslocamento
+Pastore desde 01/07/2026 preservada. Contrato e fontes em
+[semântica de lucro](FINANCEIRO_LUCRO_REAL_SEMANTICA_20261104.md).
+
 ### 8.1 Custos & Investimentos / rateio dos sócios (M26.21 · marcas na M26.37)
 
 - Fonte: `painel-soprolife/data-private/custos-investimentos.local.json` —

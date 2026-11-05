@@ -16,7 +16,7 @@ from ..models import (
     PartnerSettlementItem, PartnerTransfer, PartnerUnit, PhysicianTransfer,
     ProfitCostRule, ProfitRevenueBasis, ReportDocument, SpirometryExam, Person,
 )
-from .exam_profit import DEFAULT_RULES, allocate, calculate_exam, cents, money, percent, session_cost
+from .exam_profit import allocate, calculate_exam, cents, money, percent, session_cost
 from .partner_pricing import resolve_regra_fiscal_por_exame, FISCAL_OK
 from .nfse_validity import fiscal_validity
 
@@ -70,9 +70,9 @@ def _payment(entry: FinancialEntry | None) -> tuple[bool, int | None, int | None
         received = 0
     else:
         return False, None, None  # parcial: valor pago não registrado
-    if "cart" in form or "credito" in form or "debito" in form:
+    if form in {"cartao", "credito", "debito", "cartao de credito", "cartao de debito"}:
         return True, received, received
-    if "pix" in form or "dinheiro" in form or "transferencia" in form:
+    if form in {"pix", "dinheiro", "transferencia", "transferencia bancaria"}:
         return True, received, 0
     return False, received, None
 
@@ -159,14 +159,18 @@ def build_projection(db: Session, start: date, end: date) -> dict:
             if not sess or sess.status != "confirmado":
                 continue
             place, when = sess.place, sess.service_date
-            if place not in PLACES or any(places[eid] != place or by_id[eid].data_exame != when for eid in exam_ids):
+            if place not in PLACES or any(places[eid] != place or by_id[eid].data_exame != when or by_id[eid].data_exame_dia_assumido for eid in exam_ids):
                 continue
             hours = sess.billable_hours
         else:
             sess = None
             place, when, hours = "pastore", key, None
         try:
-            components = session_cost(place, hours, rules_at(rules, when), sess.room_override if sess else None)
+            components = session_cost(
+                place, hours, rules_at(rules, when), sess.room_override if sess else None,
+                parking_override=sess.parking_override if sess else None,
+                fuel_override=sess.fuel_override if sess else None, partial=True,
+            )
         except (ValueError, KeyError):
             continue
         if sess:
@@ -185,9 +189,11 @@ def build_projection(db: Session, start: date, end: date) -> dict:
         if exam.data_exame < start:
             continue
         place = places[exam.id]
-        exam_rules = rules_at(rules, exam.data_exame)
+        exam_rules = rules_at(rules, exam.data_exame) if not exam.data_exame_dia_assumido else {}
         direct = [e for e in entries[exam.id] if e.tipo == "receita" and e.status != "Cancelado"]
         entry = direct[0] if len(direct) == 1 else None
+        payment_entry = entry
+        settlement = None
         revenue = cents(entry.valor) if entry else None
         gross = revenue if entry and not exam.partner_id else None
         known, received, card_paid = _payment(entry)
@@ -222,7 +228,8 @@ def build_projection(db: Session, start: date, end: date) -> dict:
                 item = settlement_items.get(exam.id)
                 receipt = receipts.get(item.settlement_id) if item else None
                 settlement = settlements.get(item.settlement_id) if item else None
-                if receipt and settlement and len(settlement_exam_ids[item.settlement_id]) * revenue == cents(receipt.valor):
+                if receipt and settlement and receipt.status != "Cancelado" and settlement.status != "cancelado" and len(settlement_exam_ids[item.settlement_id]) * revenue == cents(receipt.valor):
+                    payment_entry = receipt
                     known, received, card_paid = _payment(receipt)
                     # Forma do pagamento do parceiro vale para sua parcela igual.
                     received = allocate(received, settlement_exam_ids[item.settlement_id])[exam.id] if received is not None else None
@@ -263,7 +270,9 @@ def build_projection(db: Session, start: date, end: date) -> dict:
             transfer = medical.get((root.released_physician_profile_id, competence))
             if len(roots[exam.id]) == 1 and transfer:
                 physician_cost = cents(transfer.unit_amount)
-        base = fiscal_base.get(exam.id, revenue)
+        # Receita não prova a base fiscal. Só evidência fiscal válida ou
+        # imposto contabilizado permite conhecer esse componente.
+        base = fiscal_base.get(exam.id)
         result = calculate_exam(
             revenue=revenue, received=received, gross=gross, card_paid=card_paid,
             payment_known=known, tax_base=base, partner_transfer=partner_cost,
@@ -293,49 +302,66 @@ def build_projection(db: Session, start: date, end: date) -> dict:
             result["pendencias"].append("local_nao_classificado")
             result["lucro"] = None
             result["margem"] = None
+        if result["status"] != "completo":
+            result["custo_total"] = None
         session = sessions.get(links.get(exam.id)) if exam.id in links else None
         rows.append({"id": exam.id, "session_id": links.get(exam.id),
                      "fonte_sessao": session.source if session else "pastore_mesmo_dia" if place == "pastore" and exam.id in allocations else None,
                      "horas_faturaveis": str(session.billable_hours) if session and session.billable_hours is not None else None,
                      "exame": exam.public_code, "data": exam.data_exame.isoformat(),
                      "local": place or "não classificado", "parceiro": partners.get(exam.partner_id).nome if exam.partner_id in partners else None,
-                     "forma_pagamento": entry.forma_pagamento if entry else None,
-                     "status_financeiro": entry.status if entry else "sem_lancamento_individual",
+                     "forma_pagamento": payment_entry.forma_pagamento if payment_entry else None,
+                     "data_recebimento": payment_entry.data_recebimento.isoformat() if payment_entry and payment_entry.data_recebimento else None,
+                     "status_financeiro": payment_entry.status if payment_entry else settlement.status if settlement else "sem_lancamento_individual",
                      "fonte_receita": "financial_entry" if entry else "partnership" if net_partner else None,
                      "fonte_repasse_parceiro": partner_source,
+                     "fonte_base_imposto": "nfse_valida" if base is not None else None,
                      **result})
     return summarize(rows)
 
 
 def summarize(rows: list[dict]) -> dict:
-    complete = [r for r in rows if r["status"] == "completo"]
-    revenue = sum(cents(r["receita"]) for r in complete)
-    cost = sum(cents(r["custo_total"]) for r in complete)
-    realized = sum(cents(r["lucro"]) for r in complete if r["realizado"])
-    forecast = sum(cents(r["lucro"]) for r in complete if not r["realizado"])
+    def known_sum(source, key):
+        values = [cents(r[key]) for r in source if r.get(key) is not None]
+        return money(sum(values)) if values else None
+
+    def metrics(source):
+        complete = [r for r in source if r["status"] == "completo"]
+        revenue = known_sum(complete, "receita")
+        profit = known_sum(complete, "lucro")
+        cost = known_sum(complete, "custo_total")
+        counts = {key: sum(r.get(key) is not None for r in source)
+                  for key in ("receita", "recebido", "pendente", "custos_comprovados")}
+        return {
+            "receita": known_sum(source, "receita"),
+            "recebido": known_sum(source, "recebido"),
+            "a_receber": known_sum(source, "pendente"),
+            "custos": known_sum(source, "custos_comprovados"),
+            "receita_calculada": revenue, "custo_total_calculado": cost,
+            "lucro": profit,
+            "margem": str((Decimal(profit) * 100 / Decimal(revenue)).quantize(Decimal("0.1"))) if profit is not None and revenue is not None and Decimal(revenue) else None,
+            "lucro_medio": money(cents(profit) // len(complete)) if complete else None,
+            "custo_medio": money(cents(cost) // len(complete)) if complete else None,
+            "exames": len(complete), "incompletos": len(source) - len(complete),
+            "total_exames": len(source), "cobertura": counts,
+            "informacoes_faltantes": sum(len(r["pendencias"]) for r in source),
+            "lucro_realizado": known_sum([r for r in complete if r["realizado"]], "lucro"),
+            "lucro_previsto": known_sum([r for r in complete if not r["realizado"]], "lucro"),
+        }
+
     missing = Counter(p for row in rows for p in row["pendencias"])
-    by_place = defaultdict(lambda: {"receita": 0, "custo": 0, "exames": 0})
-    by_month = defaultdict(lambda: {"receita": 0, "custo": 0, "exames": 0})
-    by_day = defaultdict(lambda: {"receita": 0, "custo": 0, "exames": 0})
+    by_place, by_month, by_day = (defaultdict(list) for _ in range(3))
     composition = Counter()
-    for row in complete:
-        for group in (by_place[row["local"]], by_month[row["data"][:7]], by_day[row["data"]]):
-            group["receita"] += cents(row["receita"])
-            group["custo"] += cents(row["custo_total"])
-            group["exames"] += 1
-        composition.update({k: cents(v) for k, v in row["custos"].items()})
+    for row in rows:
+        by_place[row["local"]].append(row)
+        by_month[row["data"][:7]].append(row)
+        by_day[row["data"]].append(row)
+        composition.update({k: cents(v) for k, v in row.get("custos", {}).items() if v is not None})
     def series(source):
-        return [{"chave": key, "receita": money(v["receita"]), "custos": money(v["custo"]),
-                 "lucro": money(v["receita"] - v["custo"]), "exames": v["exames"],
-                 "margem": str((Decimal(v["receita"] - v["custo"]) * 100 / v["receita"]).quantize(Decimal("0.1"))) if v["receita"] else None}
-                for key, v in sorted(source.items())]
-    return {"kpis": {"receita": money(revenue), "custos": money(cost),
-                     "lucro": money(revenue - cost), "margem": str((Decimal(revenue - cost) * 100 / revenue).quantize(Decimal("0.1"))) if revenue else None,
-                     "lucro_medio": money((revenue - cost) // len(complete)) if complete else None,
-                     "custo_medio": money(cost // len(complete)) if complete else None,
-                     "exames": len(complete), "incompletos": len(rows) - len(complete),
-                     "lucro_realizado": money(realized), "lucro_previsto": money(forecast)},
+        return [{"chave": key, **metrics(group)} for key, group in sorted(source.items())]
+    return {"kpis": metrics(rows),
             "por_local": series(by_place), "por_mes": series(by_month),
             "por_dia": series(by_day),
             "composicao": {k: money(v) for k, v in composition.items()},
+            "composicao_parcial": any(r["status"] != "completo" for r in rows),
             "pendencias": dict(missing), "exames": rows}

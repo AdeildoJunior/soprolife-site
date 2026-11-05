@@ -16,3 +16,37 @@ Base: `d9d28617951a136553155fcc6799d3c5b508bd11`.
 Consequência: quando preço bruto, meio de pagamento, sessão/horas ou vínculo médico não forem comprováveis, o resultado individual deve ser `incompleto` e ficar fora dos KPIs de lucro fechado. Valores estimados e recebidos devem ter rótulos distintos.
 
 Os custos padrão de 04/11/2026 têm vigência a partir desse dia, exceto combustível/estacionamento Pastore, cuja regra diária expressa foi autorizada para o histórico desde 01/07/2026. Os demais custos não foram projetados retroativamente sobre exames antigos. O administrador pode registrar uma versão anterior, com justificativa, se houver evidência administrativa para o período.
+
+## Correção do histórico (05/11/2026)
+
+`calculate_exam` conserva receita, recebido, a receber e cada componente de custo
+conhecido, mesmo com pendências. Campos monetários desconhecidos são `null`.
+`custos_comprovados` é um subtotal parcial; `custo_total` exige cálculo completo.
+Regras vigentes e rateios confirmados são evidências analíticas, distintas de
+novos lançamentos contábeis. Uma sessão confirmada pode ter somente alguns custos
+comprovados: seus overrides prevalecem mesmo sem regra histórica; componentes
+restantes continuam pendentes. Não há inferência diária fora da Pastore.
+
+KPIs e séries incluem fatos de todos os exames filtrados. Lucro, margem, médias
+e custo final calculados usam somente a população completa. A margem divide o
+lucro calculado pela receita **dessa mesma população**, nunca pela receita dos
+exames pendentes. `total_exames`, `exames` (completos), `incompletos`, `cobertura`
+e `informacoes_faltantes` explicitam a cobertura. Sem população elegível o
+resultado é `null`, inclusive em período vazio; zero numérico comprovado continua
+zero. A composição agrega somente componentes conhecidos e informa quando parcial.
+
+O navegador mantém `null` nos datasets, exibe receita e custos na evolução e
+sinaliza pendências de locais também em texto acessível. A memória de exames
+incompletos mostra seus fatos conhecidos e os motivos de bloqueio. Meios, status
+e data de recebimento Pastore vêm do recibo canônico do fechamento quando há
+vínculo e conciliação de valor, sem somar esse recibo novamente à receita.
+
+A ausência de NFS-e válida não autoriza usar a receita como base tributável.
+Esse fallback foi removido: base vem da evidência fiscal válida já existente;
+um imposto explicitamente contabilizado fornece o componente conhecido sem
+estimar outra despesa. Nenhuma nota é emitida, alterada ou reconciliada aqui.
+
+Não há nova migration, backfill ou regra retroativa automática. O administrador
+pode criar uma versão histórica append-only em Configurar custos, informando
+vigência, valor e referência da evidência na justificativa. A autorização
+histórica de combustível/estacionamento Pastore desde 01/07/2026 permanece.

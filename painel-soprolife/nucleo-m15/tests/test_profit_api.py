@@ -7,7 +7,9 @@ def test_dashboard_requires_manager_and_keeps_empty_truth(client, auth):
     result = client.get(path, headers=auth("gestor"))
     assert result.status_code == 200, result.text
     assert result.json()["kpis"]["exames"] == 0
-    assert result.json()["kpis"]["lucro"] == "0.00"
+    assert result.json()["kpis"]["lucro"] is None
+    assert result.json()["kpis"]["receita"] is None
+    assert result.json()["kpis"]["custos"] is None
 
 
 def test_cancelled_exam_does_not_enter_productive_count(client, auth, person):

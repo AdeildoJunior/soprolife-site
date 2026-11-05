@@ -128,7 +128,9 @@ def test_alembic_graph_fiscal_after_m26_9(tmp_path, monkeypatch):
     # head, still no fork.
     # FET/MIR one more (d7b2f3a9c1e0, spirometry_exams.equipamento_fonte) on
     # top of the EEG head — still one head, still no fork.
-    assert script.get_heads() == ['d7b2f3a9c1e0']
+    # Custos analíticos (0b90ea2) já publicados: cadeia anterior preservada.
+    assert script.get_heads() == ["a04f1c202611"]
+    assert script.get_revision("a04f1c202611").down_revision == "d7b2f3a9c1e0"
     assert script.get_revision('d7b2f3a9c1e0').down_revision == 'a291029eeg01'
     assert script.get_revision('d7b2c4e86a91').down_revision == 'c3f8a1d7e529'
     assert script.get_revision('c3f8a1d7e529').down_revision == 'b5e2f7a91c38'

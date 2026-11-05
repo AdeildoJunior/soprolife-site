@@ -58,6 +58,8 @@ run "bash -n deploy-fase2a-eeg-vps.sh" bash -n painel-soprolife/nucleo-m15/scrip
 run "node --check eeg-operacao.js"           node --check painel-soprolife/js/eeg-operacao.js
 run "node --check test-fase1-3-life-browser-e2e.js" node --check painel-soprolife/scripts/test-fase1-3-life-browser-e2e.js
 run "node --check js/financeiro-conciliacao.js" node --check painel-soprolife/js/financeiro-conciliacao.js
+run "node --check js/profit-panel.js" node --check painel-soprolife/js/profit-panel.js
+run "test-profit-panel (histórico sem zeros inventados)" node painel-soprolife/scripts/test-profit-panel.js
 run "node --check js/pastore-settlement.js" node --check painel-soprolife/js/pastore-settlement.js
 run "node --check js/crm-workspace.js"       node --check painel-soprolife/js/crm-workspace.js
 run "node --check js/report-workflow.js"     node --check painel-soprolife/js/report-workflow.js
