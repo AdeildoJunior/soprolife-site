@@ -18,6 +18,9 @@ from .exam_profit import DEFAULT_RULES
 from .profit_projection import classify_place, rules_at
 
 REASON = "Valores confirmados pelos sócios como vigentes desde o início da operação."
+# ALERGOCARE foi confirmada para sua própria vigência. Não participa da
+# autorização anterior de projetar custos até o início de toda a operação.
+HISTORICAL_RULE_KEYS = {key for key in DEFAULT_RULES if not key.startswith("alergocare.")}
 
 
 def plan_history(db: Session, *, as_of: date, first_date_policy: str = "exact",
@@ -38,12 +41,14 @@ def plan_history(db: Session, *, as_of: date, first_date_policy: str = "exact",
         raise ValueError("Não existe exame com dia exato.")
     rows = db.scalars(select(ProfitCostRule).order_by(ProfitCostRule.created_at, ProfitCostRule.id)).all()
     current = rules_at(rows, as_of)
-    if not set(DEFAULT_RULES).difference({"downtown.minimum_hours", "nova_america.minimum_hours"}).issubset(current):
+    if not HISTORICAL_RULE_KEYS.difference({"downtown.minimum_hours", "nova_america.minimum_hours"}).issubset(current):
         raise ValueError("Configuração operacional atual incompleta; audite antes de executar.")
     proposed, preserved = [], []
     for key, value in sorted(current.items()):
         if key not in DEFAULT_RULES:
             raise ValueError(f"Regra desconhecida: {key}")
+        if key not in HISTORICAL_RULE_KEYS:
+            continue
         existing = rules_at(rows, beginning).get(key)
         if key.startswith("pastore."):
             pastore_dates = [e.data_exame for e in exams if classify_place(e, None, None) == "pastore"]

@@ -106,6 +106,7 @@ def test_history_requires_precision_decision_is_idempotent_and_append_only(db,pe
     assert plan["first_date_is_approximate"]
     assert plan["first_exact_date"] == "2026-07-10"
     assert len(plan["create"]) == 20
+    assert not any(r["key"].startswith("alergocare.") for r in plan["create"])
     assert set(plan["preserved"]) == {"pastore.fuel","pastore.parking"}
     with pytest.raises(ValueError,match="Plano mudou"):append_history(db,plan,"wrong")
     append_history(db,plan,plan["sha256"]);db.commit()

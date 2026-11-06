@@ -15,6 +15,14 @@
 
 ## Lucro gerencial por competência — 05/11/2026
 
+ALERGOCARE tem classificação própria, separada de AlergoLife. A regra confirmada
+é 30% parceiro / 70% SoproLife, combustível e estacionamento de R$ 10 por ida,
+sem sala horária adicional. Base bruta precisa ser confirmada em
+`ProfitRevenueBasis`; a projeção separa os 30% uma única vez e usa o bruto no
+cartão. Sessão exclusiva confirmada conserva seus overrides e não compartilha
+custos com exame sem vínculo, mesmo na mesma data. Não cria pagamento ao parceiro
+nem modifica lançamentos, documentos fiscais ou evidência clínica.
+
 Maclin distingue histórico líquido confirmado e novos atendimentos com bruto
 informado. `ProfitRevenueBasis` congela a base e o vínculo com a receita; não
 reescreve `FinancialEntry`. Líquido histórico não sofre outra dedução do parceiro,

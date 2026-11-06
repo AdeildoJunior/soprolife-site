@@ -22,7 +22,8 @@ from .nfse_validity import fiscal_validity
 from .maclin import split_gross
 
 LOCAL_TZ = ZoneInfo("America/Sao_Paulo")
-PLACES = {"downtown", "nova_america", "pastore", "maclin", "alergolife", "home"}
+PLACES = {"downtown", "nova_america", "pastore", "maclin", "alergolife", "alergocare", "home"}
+NET_PARTNER_PLACES = {"maclin", "alergocare"}
 
 
 def _plain(value: str | None) -> str:
@@ -40,6 +41,8 @@ def classify_place(exam: SpirometryExam, partner: Partner | None,
         return "pastore" if "ipanema" in label else None
     if "maclin" in label:
         return "maclin"
+    if "alergocare" in label:
+        return "alergocare"
     if "alergolife" in label or "alergo life" in label:
         return "alergolife"
     if "downtown" in label:
@@ -199,7 +202,7 @@ def build_projection(db: Session, start: date, end: date) -> dict:
         known, received, card_paid = _payment(entry)
         net_partner = False
         basis = None
-        partner_cost = 0 if not exam.partner_id and place not in ("maclin", "alergolife", "pastore") else None
+        partner_cost = 0 if not exam.partner_id and place not in ("maclin", "alergolife", "alergocare", "pastore") else None
         partner_source = "não aplicável" if not exam.partner_id else None
         direct_other = 0
         card_fee_recorded = None
@@ -243,24 +246,24 @@ def build_projection(db: Session, start: date, end: date) -> dict:
                 for transfer in transfers_by_referral[referral.id]:
                     linked[transfer.id] = transfer
             separate = [e for e in entries[exam.id] if e.tipo == "repasse" and e.status != "Cancelado"]
-            if basis and basis.basis == "liquido" and (place == "maclin" or (not linked and not separate)):
+            if basis and basis.basis == "liquido" and (place in NET_PARTNER_PLACES or (not linked and not separate)):
                 net_partner = True
                 partner_cost = 0
                 gross = cents(basis.gross_amount) if basis.gross_amount is not None else None
                 partner_source = "receita_liquida_confirmada"
-                if place == "maclin" and card_paid:
+                if place in NET_PARTNER_PLACES and card_paid:
                     # O caixa do histórico guarda só os 70%; a maquininha
                     # processou o bruto. Ausência do bruto só bloqueia cartão.
                     card_paid = gross
-            elif basis and basis.basis == "bruto" and place == "maclin":
+            elif basis and basis.basis == "bruto" and place in NET_PARTNER_PLACES:
                 gross = revenue
-                if exam_rules.get("maclin.partner_percent") == Decimal("30.00"):
+                if exam_rules.get(f"{place}.partner_percent") == Decimal("30.00"):
                     net, _ = split_gross(entry.valor)
                     revenue = cents(net)
                     received = revenue if received == gross else received
                     net_partner = True
                     partner_cost = 0
-                    partner_source = "maclin_liquido_do_bruto"
+                    partner_source = f"{place}_liquido_do_bruto"
             elif basis and basis.basis == "bruto" and len(linked) == 1:
                 partner_cost = cents(next(iter(linked.values())).valor)
                 gross = revenue
@@ -294,10 +297,10 @@ def build_projection(db: Session, start: date, end: date) -> dict:
             card_fee_override=card_fee_recorded, tax_amount_override=tax_recorded,
             contractual_partner=place == "pastore" and net_partner,
         )
-        if place in ("maclin", "alergolife", "pastore") and not exam.partner_id:
+        if place in ("maclin", "alergolife", "alergocare", "pastore") and not exam.partner_id:
             result["pendencias"].append("parceiro_nao_definido")
             result.update(status="incompleto", lucro=None, margem=None)
-        if place == "maclin" and basis and basis.basis == "liquido" and known and card_paid is None:
+        if place in NET_PARTNER_PLACES and basis and basis.basis == "liquido" and known and card_paid is None:
             result["pendencias"] = ["valor_bruto_cartao_nao_comprovado" if p == "forma_de_pagamento_nao_classificada" else p
                                     for p in result["pendencias"]]
         if exam.data_exame_dia_assumido:
@@ -328,6 +331,8 @@ def build_projection(db: Session, start: date, end: date) -> dict:
                             "parcela_soprolife": money(revenue),
                             "parcela_maclin": money(gross - revenue) if gross is not None else None}
         rows.append({"id": exam.id, "session_id": links.get(exam.id),
+                     "partilha_alergocare": {"parcela_soprolife": money(revenue), "parcela_parceiro": money(gross - revenue) if gross is not None else None}
+                     if place == "alergocare" and basis and net_partner else None,
                      "partilha_maclin": maclin_split,
                      "fonte_sessao": session_sources.get(exam.id),
                      "horas_faturaveis": session_hours.get(exam.id),
