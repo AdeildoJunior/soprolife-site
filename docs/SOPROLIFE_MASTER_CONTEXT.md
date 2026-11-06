@@ -15,6 +15,14 @@
 
 ## Lucro gerencial por competência — 05/11/2026
 
+Uma confirmação administrativa de custo médico histórico pode ser registrada
+como versão imutável `exam.<UUID>.physician` em `ProfitCostRule`, por plano
+auditável com decisão humana, vigência e perfil médico na evidência. A projeção
+aplica esse valor somente ao exame identificado, substituindo (sem somar) o
+valor mensal quando ambos existem. Não cria autoria clínica, laudo, lançamento
+ou pagamento, nem altera o fechamento de repasse médico. O backfill geral
+ignora essas regras individuais e não antecipa sua vigência.
+
 ALERGOCARE tem classificação própria, separada de AlergoLife. A regra confirmada
 é 30% parceiro / 70% SoproLife, combustível e estacionamento de R$ 10 por ida,
 sem sala horária adicional. Base bruta precisa ser confirmada em

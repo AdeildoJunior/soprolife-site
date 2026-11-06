@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..audit import audit
 from ..models import Person, ProfitCostRule, SpirometryExam
-from .exam_profit import DEFAULT_RULES
+from .exam_profit import DEFAULT_RULES, is_physician_cost_rule
 from .profit_projection import classify_place, rules_at
 
 REASON = "Valores confirmados pelos sócios como vigentes desde o início da operação."
@@ -45,6 +45,9 @@ def plan_history(db: Session, *, as_of: date, first_date_policy: str = "exact",
         raise ValueError("Configuração operacional atual incompleta; audite antes de executar.")
     proposed, preserved = [], []
     for key, value in sorted(current.items()):
+        # Decisão por exame não autoriza retroagir ou generalizar seu custo.
+        if is_physician_cost_rule(key):
+            continue
         if key not in DEFAULT_RULES:
             raise ValueError(f"Regra desconhecida: {key}")
         if key not in HISTORICAL_RULE_KEYS:

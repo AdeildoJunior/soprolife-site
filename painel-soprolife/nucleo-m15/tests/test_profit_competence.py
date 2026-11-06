@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import func, select
 from app.models import (FinancialEntry, FiscalDocument, OperationalSession, OperationalSessionExam,
     Partner, Partnership, PhysicianProfile, PhysicianTransfer, ProfitCostRule, ReportDocument, SpirometryExam)
-from app.services.exam_profit import DEFAULT_RULES, calculate_exam
+from app.services.exam_profit import DEFAULT_RULES, calculate_exam, physician_cost_rule_key
 from app.services.profit_history import append_history, plan_history
 from app.services.profit_projection import _payment, build_projection, rules_at
 
@@ -91,6 +91,87 @@ def test_eight_pastore_contract_without_receipt_or_double_partner(db,person,user
     assert result["composicao"]["parceiro"] == result["composicao"]["cartao"] == "0.00"
     assert result["composicao"]["medico"] == "120.00"
     assert result["composicao"]["combustivel"] == "30.00"
+
+
+def test_confirmed_historical_medical_cost_without_clinical_or_cash_writes(db,person,users):
+    seed(db,person,users,date(2026,8,4))
+    partner=Partner(public_code="CLI-SYN1",nome="Pastore",tipo="clinica")
+    db.add(partner);db.flush()
+    db.add(Partnership(public_code="PAR-SYN1",partner_id=partner.id,status="ativa",
+        modelo_recebimento="valor_por_exame",valor_recebido_por_exame=Decimal("109.50"),
+        vigencia_inicio=date(2026,7,1)))
+    for n,day in enumerate((4,4,1,10)):
+        exam=SpirometryExam(public_code=f"ESP-SYN{n}",person_id=person["id"],
+            data_exame=date(2026,8,day),status="Realizado",local_atendimento="Pastore Ipanema",
+            partner_id=partner.id)
+        db.add(exam);db.flush()
+        if n<3:
+            db.add(ProfitCostRule(key=physician_cost_rule_key(exam.id),value=15,
+                effective_from=exam.data_exame,reason="Decisão administrativa sintética",
+                created_by_user_id=users["admin"].id))
+    db.commit()
+    before={model.__tablename__:[tuple(row) for row in db.execute(select(model.__table__))]
+            for model in (SpirometryExam,ReportDocument,FinancialEntry,PhysicianTransfer,FiscalDocument)}
+    result=build_projection(db,date(2026,8,1),date(2026,8,31))
+    rows={r["exame"]:r for r in result["exames"]}
+    assert [rows[f"ESP-SYN{n}"]["lucro"] for n in range(3)]==["59.93","59.93","41.93"]
+    assert result["kpis"]["exames"]==3 and result["kpis"]["incompletos"]==1
+    assert result["kpis"]["lucro"]=="161.79"
+    assert rows["ESP-SYN3"]["pendencias"]==["repasse_medico_nao_conciliado"]
+    assert all(rows[f"ESP-SYN{n}"]["custos"]["medico"]=="15.00" for n in range(3))
+    assert all(rows[f"ESP-SYN{n}"]["fonte_custo_medico"]=="regra_individual_confirmada" for n in range(3))
+    db.flush()
+    after={model.__tablename__:[tuple(row) for row in db.execute(select(model.__table__))]
+           for model in (SpirometryExam,ReportDocument,FinancialEntry,PhysicianTransfer,FiscalDocument)}
+    assert before==after
+
+
+@pytest.mark.parametrize("effective_day,complete",[(14,True),(15,True),(16,False)])
+def test_individual_medical_cost_respects_effective_date(db,person,users,effective_day,complete):
+    seed(db,person,users)
+    exam=SpirometryExam(public_code="ESP-SYN1",person_id=person["id"],
+        data_exame=date(2026,9,15),status="Realizado",local_atendimento="Domiciliar")
+    db.add(exam);db.flush()
+    db.add(FinancialEntry(public_code="LAN-SYN1",tipo="receita",valor=200,
+        status="Recebido",forma_pagamento="Pix",spirometry_exam_id=exam.id))
+    db.add(ProfitCostRule(key=physician_cost_rule_key(exam.id),value=15,
+        effective_from=date(2026,9,effective_day),reason="Decisão sintética"))
+    db.commit()
+    row=build_projection(db,date(2026,9,1),date(2026,9,30))["exames"][0]
+    assert (row["status"]=="completo")==complete
+    assert row["custos"]["medico"]==("15.00" if complete else None)
+
+
+@pytest.mark.parametrize("amount,profit",[(Decimal("12"),"156.00"),(Decimal("0"),"168.00")])
+def test_individual_medical_cost_replaces_monthly_cost_without_double_deduction(db,person,users,amount,profit):
+    make=seed(db,person,users)
+    exam=make(1,"Domiciliar")
+    db.add(FinancialEntry(public_code="LAN-SYN1",tipo="receita",valor=200,
+        status="Recebido",forma_pagamento="Pix",spirometry_exam_id=exam.id))
+    db.add(ProfitCostRule(key=physician_cost_rule_key(exam.id),value=amount,
+        effective_from=exam.data_exame,reason="Decisão sintética"))
+    db.commit()
+    row=build_projection(db,date(2026,9,1),date(2026,9,30))["exames"][0]
+    assert row["lucro"]==profit
+    assert Decimal(row["custos"]["medico"])==amount
+    assert row["fonte_custo_medico"]=="regra_individual_confirmada"
+
+
+def test_general_history_preserves_individual_medical_cost_and_rejects_unknown_rule(db,person,users):
+    make=seed(db,person,users)
+    exam=make(1,"Domiciliar")
+    scoped=physician_cost_rule_key(exam.id)
+    db.add(ProfitCostRule(key=scoped,value=15,effective_from=exam.data_exame,
+        reason="Decisão individual sintética"))
+    db.commit()
+    plan=plan_history(db,as_of=date(2026,11,6))
+    assert not any(r["key"]==scoped for r in plan["create"])
+    assert scoped not in plan["preserved"]
+    db.add(ProfitCostRule(key="exam.invalid.physician",value=15,
+        effective_from=exam.data_exame,reason="Regra desconhecida sintética"))
+    db.commit()
+    with pytest.raises(ValueError,match="Regra desconhecida"):
+        plan_history(db,as_of=date(2026,11,6))
 
 
 def test_history_requires_precision_decision_is_idempotent_and_append_only(db,person):

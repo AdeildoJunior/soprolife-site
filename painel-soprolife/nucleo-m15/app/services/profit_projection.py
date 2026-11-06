@@ -16,7 +16,7 @@ from ..models import (
     PartnerSettlementItem, PartnerTransfer, PartnerUnit, PhysicianTransfer,
     ProfitCostRule, ProfitRevenueBasis, ReportDocument, SpirometryExam, Person,
 )
-from .exam_profit import allocate, calculate_exam, cents, money, percent, session_cost
+from .exam_profit import allocate, calculate_exam, cents, money, percent, physician_cost_rule_key, session_cost
 from .partner_pricing import resolve_regra_fiscal_por_exame, FISCAL_OK
 from .nfse_validity import fiscal_validity
 from .maclin import split_gross
@@ -280,12 +280,20 @@ def build_projection(db: Session, start: date, end: date) -> dict:
                     gross = revenue
                     partner_source = "regra_percentual" if partner_cost is not None else None
         physician_cost = 0 if exam.reteste_sem_cobranca else None
+        physician_source = None
         if roots[exam.id]:
             root = roots[exam.id][0]
             competence = root.released_at.astimezone(LOCAL_TZ).date().replace(day=1)
             transfer = medical.get((root.released_physician_profile_id, competence))
             if len(roots[exam.id]) == 1 and transfer:
                 physician_cost = cents(transfer.unit_amount)
+                physician_source = "repasse_mensal"
+        # Versão explícita por exame substitui o valor mensal, nunca soma.
+        # Reconhece custo, sem criar laudo, autoria ou pagamento médico.
+        medical_key = physician_cost_rule_key(exam.id)
+        if medical_key in exam_rules:
+            physician_cost = cents(exam_rules[medical_key])
+            physician_source = "regra_individual_confirmada"
         # Fiscal permanece independente do imposto gerencial autorizado.
         base = revenue
         result = calculate_exam(
@@ -344,6 +352,7 @@ def build_projection(db: Session, start: date, end: date) -> dict:
                      "status_financeiro": payment_entry.status if payment_entry else settlement.status if settlement else "sem_lancamento_individual",
                      "fonte_receita": "financial_entry" if entry else "partnership" if net_partner else None,
                      "fonte_repasse_parceiro": partner_source,
+                     "fonte_custo_medico": physician_source,
                      "fonte_base_imposto": "receita_reconhecida" if base is not None else None,
                      "status_fiscal": "EMITIDA" if exam.id in issued_exam_ids else "NÃO EMITIDA",
                      **result})

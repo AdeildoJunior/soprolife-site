@@ -6,6 +6,16 @@ evidência bloqueia lucro fechado em vez de transformar desconhecido em zero.
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
+import re
+
+
+def physician_cost_rule_key(exam_id: str) -> str:
+    """Evidência econômica por exame, independente da autoria clínica."""
+    return f"exam.{exam_id}.physician"
+
+
+def is_physician_cost_rule(key: str) -> bool:
+    return re.fullmatch(r"exam\.[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.physician", key) is not None
 
 
 DEFAULT_RULES = {
