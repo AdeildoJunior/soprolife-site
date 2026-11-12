@@ -50,6 +50,7 @@ Exit codes: 0=fresh · 10=stale · 11=autenticação · 12=schema · 13=indispon
 """
 
 import argparse
+import copy
 import json
 import os
 import sys
@@ -936,7 +937,22 @@ def _scan_for_secrets(output):
     return None
 
 
-def _write_output(output, out_public=None):
+def _write_output(output, out_public=None, cfg=None):
+    # Só esta posição do contrato representa uma página pública do SC. A
+    # propriedade vem da configuração real, nunca do JSON retornado pelo Google.
+    rules = {**_PII_RULES, "propriedade_search_console":
+             (cfg or {}).get("searchConsoleSiteUrl")}
+    output = copy.deepcopy(output)
+    pages = (output.get("searchConsole") or {}).get("topPages", [])
+    if isinstance(pages, list):
+        for row in pages:
+            if isinstance(row, dict) and "page" in row:
+                try:
+                    row["page"] = pii_guard.public_search_console_page(
+                        row["page"], rules["propriedade_search_console"], normalize=True)
+                except (ValueError, UnicodeError):
+                    # Mantém o valor inválido para a guarda abortar sem imprimi-lo.
+                    pass
     found = _scan_for_secrets(output)
     if found:
         print(f"ERRO CRÍTICO: padrão proibido '{found}' detectado no JSON de saída.")
@@ -945,7 +961,7 @@ def _write_output(output, out_public=None):
 
     # 2ª validação: guarda de PII compartilhada (M2) — aborta com exit 1 se
     # encontrar violação; nunca imprime o valor sensível.
-    pii_guard.ensure_summary_safe(output, rules=_PII_RULES, context="marketing-seo")
+    pii_guard.ensure_summary_safe(output, rules=rules, context="marketing-seo")
 
     destino_publico = Path(out_public) if out_public else _OUT_PUBLIC
 
@@ -1120,7 +1136,7 @@ def cmd_sync(args, mode):
         aval = _avaliar_snapshot(payload, max_age_hours=args.max_age_hours)
         print()
         if mode == "write":
-            _write_output(payload, out_public=out_path)
+            _write_output(payload, out_public=out_path, cfg=cfg)
         else:
             print("next_step: use --write para gravar os dados.")
         _imprimir_status(aval, out_path)

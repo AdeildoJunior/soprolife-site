@@ -46,6 +46,10 @@ API:
         # (telefone, CPF, e-mail, bearer, chave de API, URL de planilha)
         # continua valendo. Ver M25.29C.
         "campos_vocabulario": ["acao", "entidade_tipo", ...],
+        # URL-prefix confiável da configuração real de Marketing/SEO. Só em
+        # searchConsole.topPages[*].page: valida URL/host e dispensa apenas
+        # token/ID longo de slug público descritivo. Query/fragmento proibidos.
+        "propriedade_search_console": "https://dominio-publico.example/",
     }
 
 Arquivos mantidos à mão (sem gerador): validar com
@@ -60,6 +64,7 @@ import json
 import re
 import sys
 import unicodedata
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 # ---------------------------------------------------------------------------
 # Valores reconhecidamente seguros (full-match, testados ANTES dos scans).
@@ -183,9 +188,68 @@ def _is_safe_value(text: str) -> bool:
     return any(rx.fullmatch(text) for rx in _SAFE_VALUE_RES)
 
 
+def _public_url_parts(value):
+    """Parse estrito: urlsplit sozinho tolera controles, userinfo e host inválido."""
+    if not isinstance(value, str) or re.search(r"[\s\x00-\x1f\x7f\\]", value):
+        raise ValueError("URL publica invalida")
+    if re.search(r"%(?![0-9a-fA-F]{2})", value):
+        raise ValueError("URL publica invalida")
+    try:
+        url = urlsplit(value)
+        host = url.hostname or ""
+        if (url.scheme not in ("http", "https") or not url.netloc
+                or url.username is not None or url.password is not None
+                or not re.fullmatch(r"[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9]+(?:[a-z0-9-]*[a-z0-9])?)+", host)
+                or url.port not in (None, 443 if url.scheme == "https" else 80)):
+            raise ValueError("URL publica invalida")
+    except ValueError:
+        raise ValueError("URL publica invalida") from None
+    return url
+
+
+def public_search_console_page(value, property_url, *, normalize=False):
+    """URL-prefix da configuração confiável, nunca request.siteUrl do payload.
+
+    O painel usa o caminho da página. Query/fragmento podem conter identificadores
+    de clique e dados pessoais: só a normalização de saída pode removê-los;
+    a guarda recusa um snapshot que ainda os contenha. Não agrega nem recalcula
+    métricas de linhas distintas do Search Console.
+    """
+    url = _public_url_parts(value)
+    prop = _public_url_parts(property_url)
+    prefix = prop.path or "/"
+    path = url.path or "/"
+    if (prop.query or prop.fragment or url.scheme != prop.scheme
+            or url.hostname != prop.hostname
+            or not (path == prefix or path.startswith(prefix.rstrip("/") + "/"))):
+        raise ValueError("pagina fora da propriedade autorizada")
+    if not normalize and (url.query or url.fragment):
+        raise ValueError("pagina publica com query ou fragmento")
+    # Decodifica para que telefone/e-mail/segredo escapado não burle os scans.
+    decoded = url.path
+    for _ in range(4):
+        next_path = unquote(decoded, errors="strict")
+        if next_path == decoded:
+            break
+        decoded = next_path
+    if ("%" in decoded or re.search(r"[\x00-\x1f\x7f\\]", decoded)
+            or any(part in (".", "..") for part in decoded.split("/"))):
+        raise ValueError("caminho publico invalido")
+    # A dispensa é para slugs descritivos, nunca um identificador opaco no path.
+    token_rx = dict(_CONTENT_SCANS)[_SCAN_TOKEN_LONGO]
+    for match in token_rx.finditer(decoded):
+        words = match.group().split("-")
+        if (re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", match.group())
+                or sum(bool(re.fullmatch(r"[a-z]{2,}", w)) for w in words) < 2):
+            raise ValueError("identificador opaco em pagina publica")
+    return urlunsplit((url.scheme, url.netloc, url.path or "/", "", ""))
+
+
 def _norm_rules(rules) -> dict:
     rules = rules or {}
     return {
+        "sc_pages": "propriedade_search_console" in rules,
+        "sc_property": rules.get("propriedade_search_console"),
         "pessoa":        {str(f).lower() for f in rules.get("campos_pessoa", [])},
         "institucional": {str(f).lower() for f in rules.get("campos_institucionais", [])},
         "extra_keys":    {str(f).lower() for f in rules.get("chaves_proibidas_extras", [])},
@@ -228,7 +292,7 @@ def validate_summary(payload, rules=None, context="") -> list:
     r = _norm_rules(rules)
     violations = []
 
-    def _scan_text(text, path, key_lower, vocabulario=False):
+    def _scan_text(text, path, key_lower, vocabulario=False, public_page=False):
         """Aplica os scans de conteúdo a um texto solto (valor ou rótulo).
 
         ``vocabulario=True`` indica posição declarada de vocabulário fechado
@@ -252,7 +316,7 @@ def validate_summary(payload, rules=None, context="") -> list:
                 # forma de rótulo (frase com espaço, maiúsculas, acima do
                 # limite de 80) é suspeita por si só — e continua sendo varrida.
                 violations.append(f"rotulo fora do formato de vocabulario em '{path}'")
-        elif _is_safe_value(text):
+        elif not public_page and _is_safe_value(text):
             return
 
         dispensa_clinico = (
@@ -260,6 +324,8 @@ def validate_summary(payload, rules=None, context="") -> list:
             or _strip_accents(text).strip().lower() in r["fornecedores"]
         )
         for label, rx in _CONTENT_SCANS:
+            if public_page and label == _SCAN_TOKEN_LONGO:
+                continue
             # Termo de busca agregado do Search Console é palavra-chave de
             # SEO, não texto clínico sobre alguém: "precisa de pedido
             # médico?" é exatamente o que a SoproLife quer ranquear. Só este
@@ -277,8 +343,26 @@ def validate_summary(payload, rules=None, context="") -> list:
         if key_lower not in r["institucional"] and _NAME_RE.search(text):
             violations.append(f"possivel nome de pessoa em campo nao institucional '{path}'")
 
-    def _walk(node, path, key_name):
+    def _walk(node, path, key_name, location=()):
         key_lower = str(key_name).lower() if key_name is not None else ""
+
+        # Caminho ESTRUTURAL exato: não aceita chave que imite pontos/índices,
+        # prefixos searchConsole nem objetos usados no lugar de uma lista.
+        public_page = (r["sc_pages"] and len(location) == 4
+                       and location[:2] == ("searchConsole", "topPages")
+                       and type(location[2]) is int and location[3] == "page")
+        if public_page:
+            try:
+                public_search_console_page(node, r["sc_property"])
+            except (ValueError, UnicodeError):
+                violations.append(f"pagina publica invalida ou nao autorizada em '{path}'")
+                return
+            # Todos os outros scans, inclusive os de conteúdo escapado, valem.
+            for _ in range(4):
+                decoded = unquote(node)
+                if decoded == node:
+                    break
+                node = decoded
 
         if isinstance(node, dict):
             # Num mapa de contagem as chaves são rótulos contados, não nomes
@@ -294,7 +378,7 @@ def validate_summary(payload, rules=None, context="") -> list:
                         # A chave de um mapa de contagem É vocabulário fechado
                         # por definição (M25.29C).
                         _scan_text(rotulo, aqui, "", vocabulario=True)
-                    _walk(v, aqui, k)
+                    _walk(v, aqui, k, location + (k,))
                     continue
                 # Exceção declarada: a chave não bloqueia, mas o valor ainda
                 # passa por todos os scans de conteúdo ao descer.
@@ -302,12 +386,12 @@ def validate_summary(payload, rules=None, context="") -> list:
                     if _key_tokens(k) & _FORBIDDEN_KEY_TOKENS or kl in r["extra_keys"]:
                         violations.append(f"chave proibida '{k}' em {path or 'raiz'}")
                         continue  # não desce: o conteúdo é proibido por definição
-                _walk(v, aqui, k)
+                _walk(v, aqui, k, location + (k,))
             return
 
         if isinstance(node, list):
             for i, item in enumerate(node):
-                _walk(item, f"{path}[{i}]", key_name)
+                _walk(item, f"{path}[{i}]", key_name, location + (i,))
             return
 
         if not isinstance(node, str):
@@ -323,7 +407,8 @@ def validate_summary(payload, rules=None, context="") -> list:
                 violations.append(f"nome completo em campo de pessoa '{path}'")
             return  # campo de pessoa não passa pelos demais scans (1 palavra tolerada)
 
-        _scan_text(text, path, key_lower, vocabulario=key_lower in r["vocabulario"])
+        _scan_text(text, path, key_lower, vocabulario=key_lower in r["vocabulario"],
+                   public_page=public_page)
 
     _walk(payload, "", None)
 

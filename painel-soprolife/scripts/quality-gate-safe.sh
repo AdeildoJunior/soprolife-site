@@ -165,6 +165,7 @@ run "test-safe-launchers (local protegido/legado recusado)" python3 painel-sopro
 run "test-fase1-3/2A casca Life + operação EEG" node painel-soprolife/scripts/test-fase1-3-life-command-center.js
 run "test-marketing credencial durável (M21)" python3 painel-soprolife/scripts/test-marketing-credencial.py
 run "test-marketing janela 60 dias (SC+GA4)" python3 painel-soprolife/scripts/test-marketing-window.py
+run "test-marketing páginas públicas/PII" python3 painel-soprolife/scripts/test-marketing-pages-pii.py
 run "test-marketing subtítulo da tendência" node painel-soprolife/scripts/test-marketing-trend-subtitle.js
 run "test-m26-20-ipanema-pastore (bloco Pastore Ipanema)" \
   python3 painel-soprolife/scripts/test-m26-20-ipanema-pastore.py
