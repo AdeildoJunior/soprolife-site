@@ -33,6 +33,7 @@
    * concorrente. O cadastro só de paciente é ação SECUNDÁRIA lá dentro. */
   const TABS = [
     ["atendimento", "Novo atendimento", "operacional"],
+    ["contato", "+ Novo contato", "operacional"],
     ["clinica", "Clínica / Parceiro", "operacional"],
     ["contato-b2b", "Contato B2B", "operacional"],
     ["financeiro", "Financeiro", "gestor"],
@@ -1361,6 +1362,7 @@
     };
 
     picker.selecionada = function () { return picker.selected; };
+    picker.selectExisting = showSelected;
 
     picker.confirmouDuplicado = function () { return picker.dupConfirmado; };
 
@@ -1682,6 +1684,43 @@
   // ------------------------------------------------------------------- abas
 
   const LOADERS = {};
+
+  // Contato prospectivo compacto; seletor e criação atômica já usados na Central.
+  LOADERS.contato = async function (bodyEl) {
+    const cfg = await api("/funil/config");
+    const choices = obj => Object.entries(obj);
+    bodyEl.innerHTML = `<div class="m15-panel"><h3>Novo contato</h3>
+      <p>Origem é como conheceu a SoproLife. Canal é por onde entrou em contato.</p>
+      <form class="m15-form" id="cadContato">
+        <div class="m15-form-full">${personPickerHtml("cadContactP")}</div>
+        ${fld("Origem", sel("origem_aquisicao", choices(cfg.origens), "nao_informado"), 6)}
+        ${fld("Canal", sel("canal_entrada", choices(cfg.canais), "nao_informado"), 6)}
+        ${fld("Unidade desejada", sel("unidade_pretendida", choices(cfg.unidades), "nao_definido"), 6)}
+        ${fld("Serviço", sel("servico_interesse", choices(cfg.servicos), "espirometria"), 6)}
+        <details class="m15-form-full"><summary>Parceria / corrigir horário inicial</summary>
+          ${fld("Unidade parceira (opcional)", sel("partner_unit_id", [["", "Não se aplica"], ...cfg.unidades_parceiras.map(u=>[u.id,u.nome])], ""), 12)}
+          ${m15().can("gestor") ? fld("Primeiro contato (Brasília; vazio = agora)", '<input type="datetime-local" name="primeiro_contato_em">', 12) : ""}
+        </details>${submitBtn("Registrar contato")}
+      </form></div>`;
+    const form=bodyEl.querySelector("form"); markDirtyOn(form);
+    const picker=wirePersonPicker(form,"cadContactP");
+    if (state.prefill?.person_id) api("/pessoas/"+encodeURIComponent(state.prefill.person_id)).then(p=>picker.selectExisting(p));
+    const key=m15().idemKey();
+    wireSubmit(form,async()=>{
+      const payload={idempotency_key:key};
+      ["origem_aquisicao","canal_entrada","unidade_pretendida","servico_interesse"].forEach(k=>payload[k]=val(form,k));
+      const unit=cfg.unidades_parceiras.find(u=>u.id===val(form,"partner_unit_id"));
+      if(unit){ payload.partner_id=unit.partner_id; payload.partner_unit_id=unit.id; }
+      const first=val(form,"primeiro_contato_em"); if(first) payload.primeiro_contato_em=new Date(first+"-03:00").toISOString();
+      const existing=picker.selecionada();
+      if(existing) payload.person_id=existing.id;
+      else {payload.pessoa=picker.dadosNovaPessoa(); payload.confirmar_duplicado=picker.confirmouDuplicado();}
+      try {return await api("/funil/contatos",{method:"POST",body:JSON.stringify(payload)});}
+      catch(err){if(err?.detalhe?.candidatos) picker.mostrarDuplicados(err.detalhe.candidatos); if(err?.code==="cpf_ja_cadastrado")picker.mostrarCpfExistente(err.detalhe.pessoa); throw err;}
+    },lead=>{state.dirty=false; bodyEl.innerHTML=`<div class="m15-panel"><h3>Contato ${esc(lead.public_code)} registrado</h3><p>Primeiro contato registrado. Acompanhe resposta, agendamento e exame no Funil Comercial.</p><button type="button" id="goFunnel">Abrir funil</button><button type="button" id="anotherContact">+ Novo contato</button></div>`;
+      bodyEl.querySelector("#goFunnel").onclick=()=>document.querySelector('.nav-item[data-section="leads"]').click();
+      bodyEl.querySelector("#anotherContact").onclick=()=>open("contato");});
+  };
 
   // ------------------------------------------------------------------- LEAD
 
@@ -2409,7 +2448,7 @@
         }).then(() => { btnSoPessoa.disabled = false; });
       });
 
-      wireSubmit(form, () => {
+      wireSubmit(form, async () => {
         const tipo = tipoAtual();
         if (!tipo) throw new Error("Escolha o tipo do atendimento.");
         if (tipo === TIPO_PASTORE && (pastore.erro || !pastore.unidades.length)) {
@@ -2427,6 +2466,9 @@
         if (financeiro) blocos.financeiro = financeiro;
 
         const existente = picker.selecionada();
+        if (blocos.espirometria && window.SoproFunnel) {
+          Object.assign(blocos.espirometria, await window.SoproFunnel.chooseContact(existente));
+        }
         if (existente) {
           return api("/atendimentos", {
             method: "POST",

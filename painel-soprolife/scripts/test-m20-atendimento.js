@@ -102,9 +102,9 @@ caso("não há mais aba primária Consulta",
      !/\["consulta",/.test(tabsBloco));
 const chavesTabs = (tabsBloco.match(/\["([a-z0-9-]+)",/g) || [])
   .map((m) => m.slice(2, -2));
-caso("abas primárias finais são exatamente as cinco previstas",
+caso("abas primárias preservadas com Novo contato prospectivo",
      JSON.stringify(chavesTabs) ===
-     JSON.stringify(["atendimento", "clinica", "contato-b2b", "financeiro", "lead"]),
+     JSON.stringify(["atendimento", "contato", "clinica", "contato-b2b", "financeiro", "lead"]),
      `encontrado: ${JSON.stringify(chavesTabs)}`);
 caso("os formulários antigos foram REMOVIDOS (sem implementação duplicada)",
      !/LOADERS\.paciente\s*=/.test(centralSrc) &&

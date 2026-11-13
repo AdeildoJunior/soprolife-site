@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..audit import audit
+from ..services.funnel import attach_exam, sync_exam, reuse_scheduled
 from ..dates import parse_incomplete_date
 from ..db import get_db
 from ..domain import ensure_sem_pcmso
@@ -261,6 +262,7 @@ def create_exam(
             equipamento_fonte=payload.equipamento_fonte,
         )
         _apply_date(exam, "data_exame", payload.data_exame)
+        exam = reuse_scheduled(db, exam, payload.lead_id, payload.continuar_sem_rastreamento)
         db.add(exam)
         db.flush()
         return exam
@@ -273,6 +275,8 @@ def create_exam(
         data = ser_exam(exam)
         data["idempotente"] = True
         return data
+    attach_exam(db, exam, payload.lead_id, payload.continuar_sem_rastreamento, user.id)
+    sync_exam(db, exam, user.id)
     fup_info = _sync_exam_followup(db, person, exam)
     audit(db, "espirometria.criada", "spirometry_exams", exam.id, user.id,
           request.state.request_id, {"public_code": exam.public_code, "status": exam.status})
@@ -347,6 +351,7 @@ def update_exam(
     if not exam:
         raise HTTPException(status_code=404, detail="Exame não encontrado.")
     _check_pcmso(db, request, user, payload, "espirometrias.update")
+    previous_date, previous_status = exam.data_exame, exam.status
     changed = []
     if payload.status is not None:
         exam.status = payload.status
@@ -444,6 +449,7 @@ def update_exam(
                     ),
                 },
             )
+    sync_exam(db, exam, user.id, previous_date, previous_status)
     # recalcula/cancela o follow-up na MESMA transação da mudança de origem
     person = db.get(Person, exam.person_id)
     fup_info = _sync_exam_followup(db, person, exam)

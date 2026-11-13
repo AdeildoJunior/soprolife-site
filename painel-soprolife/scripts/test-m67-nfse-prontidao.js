@@ -262,7 +262,7 @@ caso("a Central inteira não referencia rota fiscal/NFS-e de emissão",
      !/api\(["'`]\/(fiscal|nfse)/.test(centralCodigo));
 caso("15. o submit não consulta a prontidão (salvar incompleto continua permitido)",
      !/\bavaliar\b|SoproNfseProntidao|nfseRegras|ProntidaoNfse|\bcompleto\b/.test(
-       (centralCodigo.match(/wireSubmit\(form, \(\) => \{\n\s+const tipo = tipoAtual\(\);[\s\S]*?\n      \}, \(res\)/) || ["avaliar"])[0]));
+       (centralCodigo.match(/wireSubmit\(form, (?:async )?\(\) => \{\n\s+const tipo = tipoAtual\(\);[\s\S]*?\n      \}, \(res\)/) || ["avaliar"])[0]));
 
 console.log(`\n${falhas === 0 ? "OK" : "FALHOU"} — ${falhas} falha(s)`);
 process.exit(falhas === 0 ? 0 : 1);

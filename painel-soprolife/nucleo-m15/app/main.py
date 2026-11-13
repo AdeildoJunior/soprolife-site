@@ -15,6 +15,7 @@ from .routers import (
     attendances,
     auth,
     crm,
+    funnel,
     eeg,
     finance,
     fiscal,
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(pastore.router, prefix=prefix)
     app.include_router(followups.router, prefix=prefix)
     app.include_router(crm.router, prefix=prefix)
+    app.include_router(funnel.router, prefix=prefix)
     app.include_router(marketing.router, prefix=prefix)
     app.include_router(finance.router, prefix=prefix)
     app.include_router(profit.router, prefix=prefix)

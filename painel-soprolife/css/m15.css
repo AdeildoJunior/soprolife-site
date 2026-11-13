@@ -746,3 +746,22 @@
   border-left: 3px solid var(--warning, #e7a93f);
   background: #fffaf0;
 }
+
+/* Funil comercial prospectivo; componentes restritos à seção. */
+#funnelRoot .m15-panel { margin-bottom: 1.25rem; }
+#funnelRoot .m15-form, .funnel-dialog .m15-form { display: flex; flex-wrap: wrap; gap: .85rem; align-items: end; }
+#funnelRoot label, .funnel-dialog label { display: flex; flex-direction: column; gap: .4rem; min-width: 140px; }
+#funnelRoot .funnel-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(130px,1fr)); gap: .8rem; margin: 1rem 0; }
+#funnelRoot .funnel-cards > div { padding: 1rem; background: var(--bg, #f3f7fa); border-radius: 12px; }
+#funnelRoot .funnel-cards strong { display: block; font-size: 1.7rem; color: var(--navy, #143247); }
+#funnelRoot .m15-table-wrap { overflow-x:auto; max-width:100%; }
+#funnelRoot th, #funnelRoot td { white-space:normal; min-width:100px; }
+.funnel-dialog { max-width:min(900px,95vw); max-height:90vh; overflow:auto; border:1px solid #ccd9de; border-radius:16px; padding:1.5rem; }
+.funnel-dialog::backdrop { background:rgba(11,34,57,.4); }
+#funnelRoot button, .funnel-dialog button { margin: .25rem; padding: .55rem .8rem; cursor: pointer; }
+#funnelRoot button:focus-visible, .funnel-dialog button:focus-visible { outline:3px solid #159c96; outline-offset:2px; }
+#funnelRoot button, .funnel-dialog button { border:1px solid var(--border,#d7e2ea); border-radius:9px; background:var(--navy,#0b1f36); color:#fff; font:inherit; font-size:.85rem; font-weight:600; }
+#funnelRoot button:hover:not(:disabled), .funnel-dialog button:hover:not(:disabled) { background:var(--teal-dark,#0f8f83); }
+#funnelRoot button:disabled, .funnel-dialog button:disabled { opacity:.5; cursor:default; }
+#funnelRoot .m15-date-btn, .funnel-dialog .m15-date-btn { background:transparent; color:var(--navy,#0b1f36); margin:0; }
+#funnelRoot h3 { margin-top:1.5rem; }

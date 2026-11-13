@@ -333,7 +333,9 @@ def test_the_head_is_the_m61_revision(tmp_path, monkeypatch):
     # FET/MIR (d7b2f3a9c1e0) is additive on top of the EEG head a291029eeg01;
     # the fiscal chain below is untouched.
     # Custos analíticos (0b90ea2) já publicados: cadeia anterior preservada.
-    assert script.get_heads() == ["a04f1c202611"]
+    # Funil prospectivo: head aditiva; guardas e cadeia fiscal preservadas.
+    assert script.get_heads() == ["f131126funil"]
+    assert script.get_revision("f131126funil").down_revision == "a04f1c202611"
     assert script.get_revision("a04f1c202611").down_revision == "d7b2f3a9c1e0"
     assert script.get_revision("d7b2f3a9c1e0").down_revision == "a291029eeg01"
     assert script.get_revision("e8b3d6a4f190").down_revision == "c4e8b1f37a92"

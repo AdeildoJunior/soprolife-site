@@ -297,7 +297,7 @@ const CONFERE = {
     (modulo.match(/"\/[a-z\-\/]+"/g) || []).every((r) => r === '"/pessoas/busca-cpf"' || r === '"/pessoas/identificacao-assistida"'));
   caso("25. salvar não depende da consulta oficial (submit não consulta o controlador)",
     !/ctl\.|atualizar\(|estado\(\)/.test(
-      (semComentarios(central).match(/wireSubmit\(form, \(\) => \{\n\s+const tipo = tipoAtual\(\);[\s\S]*?\n      \}, \(res\)/) || ["ctl."])[0]));
+      (semComentarios(central).match(/wireSubmit\(form, (?:async )?\(\) => \{\n\s+const tipo = tipoAtual\(\);[\s\S]*?\n      \}, \(res\)/) || ["ctl."])[0]));
   caso("nome digitado pelo operador nunca é sobrescrito (só vazio ou o próprio autofill)",
     /const preencher = !atual \|\| atual === autofill;/.test(central));
   caso("autofill dispara 'input' (a prontidão NFS-e reage)",

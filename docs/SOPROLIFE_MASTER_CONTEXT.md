@@ -13,6 +13,20 @@
 
 ---
 
+## Funil comercial prospectivo — 13/11/2026
+
+`leads` conserva pessoa corporativa e ganha timestamps/dimensões controladas.
+`spirometry_exams.lead_id` integra a agenda existente; completar atendimento
+reutiliza a reserva. `funnel_events` é append-only e não guarda conversa.
+Migration aditiva `f131126funil`, pai `a04f1c202611`, sem backfill histórico;
+downgrade recusa perder fatos. Leitura/escrita usa RBAC existente em `/funil/*`.
+Ação + Novo contato na Central; Funil Comercial em Leads e Agendamentos.
+Conversões são por coorte de primeiro contato, com cobertura separada de
+produção e semanas PARCIAL. Tempo de realização é confirmação operacional.
+Contratos: [operação](FUNIL_COMERCIAL_OPERACAO.md),
+[técnico, métricas e rollback](FUNIL_COMERCIAL_TECNICO.md).
+Estado de deploy e evidências ficam no relatório externo da missão.
+
 ## Lucro gerencial por competência — 05/11/2026
 
 Uma confirmação administrativa de custo médico histórico pode ser registrada
@@ -693,8 +707,7 @@ Skills de usuário (`~/.claude/skills/`, fora do repo): `soprolife-router`,
   (≥ 2026-10-02, com BD, CPF e município) e autorização humana.
 - **NFS-e manual nº 3 (18/08, Pastore):** não importada; conferir o tomador e
   registrar via `nfse_m61_import_manual_nfse.py`.
-- **Leads:** o Núcleo não recebe lead novo desde 25/07/2026; não há fonte do
-  evento de agendamento.
+- **Leads históricos:** sem cobertura após julho até a implantação do funil prospectivo; não inferir origem ou agendamento de exames anteriores.
 - **Falhas herdadas do quality gate:** `test-m21-auth-crm-nav` (cache-buster de
   Marketing) e `test-m25-26-fluxo-espirometria`; pytest
   `test_rubrica_real_nao_esta_versionada` (falso positivo) e

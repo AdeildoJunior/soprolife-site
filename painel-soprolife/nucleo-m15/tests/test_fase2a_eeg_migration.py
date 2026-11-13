@@ -34,7 +34,8 @@ def test_migration_aditiva_reversivel_sem_backfill_e_sem_apagar_evidencia(tmp_pa
     # FET/MIR (d7b2f3a9c1e0, equipamento_fonte) soma outra no topo, aditiva e
     # reversível, sem backfill — a cadeia EEG abaixo dela segue intacta.
     # Custos analíticos (0b90ea2): a nova head preserva a cadeia EEG/MIR.
-    assert script.get_heads() == ["a04f1c202611"]
+    assert script.get_heads() == ["f131126funil"]
+    assert script.get_revision("f131126funil").down_revision == "a04f1c202611"
     assert script.get_revision("a04f1c202611").down_revision == "d7b2f3a9c1e0"
     assert script.get_revision("d7b2f3a9c1e0").down_revision == "a291029eeg01"
     assert script.get_revision("d7b2c4e86a91").down_revision == "c3f8a1d7e529"

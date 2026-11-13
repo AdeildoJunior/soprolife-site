@@ -243,6 +243,8 @@ class LeadUpdate(StrictModel):
 
 
 class ExamCreate(StrictModel):
+    lead_id: str | None = None
+    continuar_sem_rastreamento: bool = False
     person_id: str
     data_exame: str | None = Field(default=None, max_length=40)
     modalidade: Literal["residencial", "cowork", "clinica_parceira"] | None = None
@@ -636,6 +638,8 @@ CATEGORIA_REPASSE_MEDICO = _CATEGORIA_REPASSE_MEDICO
 
 
 class AtendimentoEspirometria(StrictModel):
+    lead_id: str | None = None
+    continuar_sem_rastreamento: bool = False
     parceria_comercial: Literal["maclin"] | None = None
     data_exame: str = Field(min_length=4, max_length=40)
     status: StatusExame = "Realizado"

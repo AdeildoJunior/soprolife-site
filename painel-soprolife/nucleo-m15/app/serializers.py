@@ -188,6 +188,8 @@ def ser_lead(l: m.Lead) -> dict:
 
 def ser_exam(e: m.SpirometryExam) -> dict:
     return {
+        "lead_id": e.lead_id,
+        "funil_rastreado": e.lead_id is not None,
         "id": e.id,
         "public_code": e.public_code,
         "person_id": e.person_id,

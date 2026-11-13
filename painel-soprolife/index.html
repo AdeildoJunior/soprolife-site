@@ -449,6 +449,8 @@
       </section>
 
       <section id="leads" class="section">
+        <div id="funnelRoot" aria-live="polite"></div>
+        <details><summary>Leads anteriores e acompanhamento legado (cobertura histórica incompleta)</summary>
         <div class="section-title">
           <div>
             <p class="eyebrow">Pré-atendimento · CRM</p>
@@ -522,6 +524,7 @@
           <span>ℹ️</span>
           <p><strong>Leads = interessados antes do atendimento.</strong> Quando um lead realiza o primeiro atendimento (espirometria, consulta ou teleconsulta), ele migra para o <strong>CRM Pacientes</strong>. Enquanto não atendido, permanece aqui como lead.</p>
         </div>
+        </details>
       </section>
 
       <section id="marketing" class="section">
@@ -1138,7 +1141,7 @@
        login só em HTTPS ou loopback local; HTTP remoto fica bloqueado. -->
   <script src="./js/m15-security.js?v=2026072402" defer></script>
   <script src="./js/m15-datepicker.js?v=2026102801" defer></script>
-  <script src="./js/m15-nucleo.js?v=2026102910" defer></script>
+  <script src="./js/m15-nucleo.js?v=2026111301" defer></script>
   <link rel="stylesheet" href="./css/profit-panel.css?v=2026110501">
   <script src="./js/profit-panel.js?v=2026110503" defer></script>
   <!-- M24C: feature independente e desabilitada por padrão; quando
@@ -1153,7 +1156,8 @@
   <script src="./js/nfse-prontidao.js?v=2026100201" defer></script>
   <!-- M68: CPF → nascimento → nome oficial (SERPRO via servidor, nunca direto). -->
   <script src="./js/identificacao-assistida.js?v=2026092401" defer></script>
-  <script src="./js/central-cadastros.js?v=2026110502" defer></script>
+  <script src="./js/central-cadastros.js?v=2026111301" defer></script>
+  <script src="./js/funnel-panel.js?v=2026111301" defer></script>
   <!-- M22: fechamento mensal da Pastore. O exame permanece não monetário;
        o módulo cria um único recibo agregado somente após confirmação. -->
   <link rel="stylesheet" href="./css/pastore-settlement.css?v=2026083001">

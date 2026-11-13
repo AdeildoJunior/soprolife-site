@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..audit import audit
+from ..services.funnel import attach_exam, sync_exam, reuse_scheduled
 from ..services.maclin import canonical_maclin, record_basis, split_gross
 from ..config import get_settings
 from ..dates import add_months, parse_incomplete_date
@@ -389,6 +390,9 @@ def _create_attendance(
     exam = None
     if payload.tipo in TIPOS_COM_ESPIROMETRIA:
         exam = _criar_exame(db, person, payload)
+        attach_exam(db, exam, payload.espirometria.lead_id,
+                    payload.espirometria.continuar_sem_rastreamento, user.id)
+        sync_exam(db, exam, user.id)
         resultado["espirometria"] = ser_exam(exam)
 
     consultation = None
@@ -541,6 +545,7 @@ def _criar_exame(db: Session, person: Person, payload: AtendimentoCreate) -> Spi
             equipamento_fonte=bloco.equipamento_fonte,
         )
         _apply_date(exam, "data_exame", bloco.data_exame, "Data do exame")
+        exam = reuse_scheduled(db, exam, bloco.lead_id, bloco.continuar_sem_rastreamento)
         db.add(exam)
         db.flush()
         return exam

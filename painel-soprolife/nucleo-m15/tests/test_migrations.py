@@ -179,7 +179,9 @@ def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     # nullable + CHECK, sem backfill) por cima da head EEG a291029eeg01.
     script = ScriptDirectory.from_config(cfg)
     # Custos analíticos (0b90ea2) já publicados: cadeia anterior preservada.
-    assert script.get_heads() == ["a04f1c202611"]
+    # Funil prospectivo: head aditiva; guardas e cadeia fiscal preservadas.
+    assert script.get_heads() == ["f131126funil"]
+    assert script.get_revision("f131126funil").down_revision == "a04f1c202611"
     assert script.get_revision("a04f1c202611").down_revision == "d7b2f3a9c1e0"
     assert script.get_revision("d7b2f3a9c1e0").down_revision == "a291029eeg01"
 

@@ -804,7 +804,9 @@ def test_migration_e_aditiva_reversivel_e_recusa_apagar_agrupado(tmp_path, monke
     # FET/MIR (d7b2f3a9c1e0, equipamento_fonte) entra por cima da head EEG,
     # aditiva: a cadeia fiscal agrupada abaixo segue intacta.
     # Custos analíticos (0b90ea2) já publicados: cadeia anterior preservada.
-    assert script.get_heads() == ["a04f1c202611"]
+    # Funil prospectivo: head aditiva; guardas e cadeia fiscal preservadas.
+    assert script.get_heads() == ["f131126funil"]
+    assert script.get_revision("f131126funil").down_revision == "a04f1c202611"
     assert script.get_revision("a04f1c202611").down_revision == "d7b2f3a9c1e0"
     assert script.get_revision("d7b2f3a9c1e0").down_revision == "a291029eeg01"
     assert script.get_revision("d7b2c4e86a91").down_revision == "c3f8a1d7e529"

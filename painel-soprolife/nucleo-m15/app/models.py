@@ -305,6 +305,43 @@ class Lead(Base, TimestampMixin, LegacyMixin):
     responsavel: Mapped[str | None] = mapped_column(String(120))
     observacao: Mapped[str | None] = mapped_column(Text)
 
+    # Funil prospectivo: NULL no legado; nunca derivar created_at como contato.
+    primeiro_contato_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    primeira_resposta_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    agendado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    exame_previsto_em: Mapped[date | None] = mapped_column(Date)
+    realizado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    origem_aquisicao: Mapped[str | None] = mapped_column(String(40))
+    unidade_pretendida: Mapped[str | None] = mapped_column(String(40))
+    partner_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("partners.id"))
+    partner_unit_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("partner_units.id"))
+    status_funil: Mapped[str | None] = mapped_column(String(30))
+    motivo_encerramento: Mapped[str | None] = mapped_column(String(40))
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), unique=True)
+    idempotency_fingerprint: Mapped[str | None] = mapped_column(String(64))
+
+
+class FunnelEvent(Base):
+    """Cronologia append-only, sem texto livre ou conteúdo de interação."""
+    __tablename__ = "funnel_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    lead_id: Mapped[str] = mapped_column(String(36), ForeignKey("leads.id"), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    event_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"))
+    related_exam_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("spirometry_exams.id"))
+    previous_date: Mapped[date | None] = mapped_column(Date)
+    scheduled_date: Mapped[date | None] = mapped_column(Date)
+    dimensions: Mapped[dict | None] = mapped_column(JSON)
+    reason_code: Mapped[str | None] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class FunnelDeployment(Base):
+    __tablename__ = "funnel_deployment"
+    key: Mapped[str] = mapped_column(String(30), primary_key=True)
+    deployed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
 
 # Fonte/equipamento estruturado da espirometria. É o ÚNICO ponto canônico
 # que diz em qual aparelho a manobra foi registrada — antes disso o modelo só
@@ -345,6 +382,7 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
     person_id: Mapped[str] = mapped_column(
         String(UUID_LEN), ForeignKey("people.id"), index=True, nullable=False
     )
+    lead_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("leads.id"), index=True)
     data_exame: Mapped[date | None] = mapped_column(Date, index=True)
     data_exame_original: Mapped[str | None] = mapped_column(String(40))
     data_exame_precisao: Mapped[str | None] = mapped_column(String(15))
