@@ -18,6 +18,28 @@ window.SITE_ANALYTICS = {
   consentKey: "sl_consent_v1"        // chave do consentimento (localStorage)
 };
 
+window.SITE_ANALYTICS.safePath = function () {
+  var paths = ["/", "/index.html", "/espirometria/", "/espirometria.html",
+    "/espirometria-rio-de-janeiro/", "/espirometria-barra-da-tijuca/",
+    "/espirometria-zona-norte-rio-de-janeiro/", "/espirometria-ipanema/",
+    "/espirometria-domiciliar-rio-de-janeiro/", "/consulta-pneumologista-rio-de-janeiro/",
+    "/telemedicina/", "/conheca/", "/links/", "/servicos/", "/funil/", "/funil/espirometria/", "/funil/domiciliar/", "/funil/parcerias/"];
+  var path = location.pathname.replace(/index\.html$/, "");
+  return paths.indexOf(path) >= 0 ? path : "/";
+};
+
+
+window.SITE_ANALYTICS.rememberAttribution = function () {
+  try {
+    if (localStorage.getItem(window.SITE_ANALYTICS.consentKey) !== "granted") return "";
+    var query = new URLSearchParams(location.search);
+    if (query.get("utm_source") === "google" && query.get("utm_medium") === "organic" && query.get("utm_campaign") === "perfil_empresa") {
+      sessionStorage.setItem("sl_attribution_v1", "google_business_profile");
+    }
+    return sessionStorage.getItem("sl_attribution_v1") === "google_business_profile" ? "google_business_profile" : "";
+  } catch (e) { return ""; }
+};
+
 (function () {
   var c = window.SITE_ANALYTICS;
   var booted = false;
@@ -28,6 +50,12 @@ window.SITE_ANALYTICS = {
 
   function getConsent() { try { return localStorage.getItem(c.consentKey); } catch (e) { return null; } }
   function setConsent(v) { try { localStorage.setItem(c.consentKey, v); } catch (e) {} }
+
+  function safePath() { return window.SITE_ANALYTICS.safePath(); }
+  function safeReferrer() {
+    try { var u = new URL(document.referrer); return /^https?:$/.test(u.protocol) ? u.origin + "/" : ""; }
+    catch (e) { return ""; }
+  }
 
   /* ---- Carrega as ferramentas (só após consentimento) ---- */
   function boot() {
@@ -42,7 +70,14 @@ window.SITE_ANALYTICS = {
       window.dataLayer = window.dataLayer || [];
       window.gtag = function () { window.dataLayer.push(arguments); };
       window.gtag("js", new Date());
-      window.gtag("config", c.GA4_ID); // dispara page_view
+      // URLs de analytics nunca recebem query/hash (UTM ou texto digitado).
+      var pageConfig = {
+        page_location: location.origin + safePath(), page_path: safePath(),
+        page_referrer: safeReferrer()
+      };
+      var source = c.rememberAttribution();
+      if (source) pageConfig.session_source = source;
+      window.gtag("config", c.GA4_ID, pageConfig);
     }
 
     if (hasRealPixel()) {
@@ -134,18 +169,72 @@ window.SITE_ANALYTICS = {
   }
 })();
 
-/* track(evento, params)
-   Use SOMENTE para eventos genéricos do funil — nunca passe dados pessoais.
-   Páginas comuns não precisam chamar isto: o page_view já é automático.
-   Antes do consentimento (gtag/fbq inexistentes) é um no-op silencioso. */
-window.track = function (event, params) {
-  params = params || {};
-  try { if (window.gtag) window.gtag("event", event, params); } catch (e) {}
-  try {
-    if (window.fbq) {
+/* Eventos seguros: vocabulário fechado; nenhuma URL de destino ou texto livre. */
+(function () {
+  var aliases = { whatsapp_click: "click_whatsapp", click_whatsapp_ipanema: "click_whatsapp",
+    click_agendar_pastore: "click_agendamento" };
+  var allowedEvents = ["click_whatsapp", "click_agendamento", "click_telefone",
+    "booking_location_selected", "funnel_start", "funnel_step", "funnel_complete",
+    "click_pastore_agendamento", "click_maps_ipanema", "click_waze_ipanema",
+    "view_espirometria_ipanema", "click_rota_pastore_ipanema", "click_mapa_pastore_ipanema"];
+  var last = {};
+  var paths = window.SITE_ANALYTICS.safePath;
+  function consent() {
+    try { return localStorage.getItem(window.SITE_ANALYTICS.consentKey) === "granted"; }
+    catch (e) { return false; }
+  }
+  function locality() {
+    var path = paths();
+    if (path.indexOf("barra") >= 0) return "barra";
+    if (path.indexOf("zona-norte") >= 0) return "zona_norte";
+    if (path.indexOf("ipanema") >= 0) return "ipanema";
+    if (path.indexOf("domiciliar") >= 0) return "domiciliar";
+    return "geral";
+  }
+  window.track = function (event, params) {
+    if (!consent()) return;
+    var originalEvent = event;
+    event = aliases[event] || event;
+    if (allowedEvents.indexOf(event) < 0) return;
+    // Evita duplicar evento do handler local + delegação do mesmo clique.
+    if (event.indexOf("click_") === 0 && Date.now() - (last[event] || 0) < 250) return;
+    last[event] = Date.now();
+    // O painel de Marketing já consome estes equivalentes; preserva a série.
+    var outputEvent = ["click_whatsapp_ipanema", "click_agendar_pastore"].indexOf(originalEvent) >= 0 ? originalEvent : event;
+    params = params || {};
+    var safe = { page_path: paths(), localidade: locality() };
+    var path = paths();
+    if (path.indexOf("espirometria") >= 0 || path.indexOf("domiciliar") >= 0) safe.service = "espirometria";
+    else if (path.indexOf("consulta") >= 0 || path.indexOf("telemedicina") >= 0) safe.service = "consulta";
+    var positions = ["header", "footer", "booking", "content", "floating"];
+    safe.cta_position = positions.indexOf(params.cta_position) >= 0 ? params.cta_position : "content";
+    var funnels = ["geral", "espirometria", "domiciliar", "parcerias"];
+    if (funnels.indexOf(params.funnel) >= 0) safe.funnel = params.funnel;
+    if (Number.isInteger(params.step) && params.step >= 0 && params.step <= 20) safe.step = params.step;
+    var steps = ["inicio","objetivo","pedido","teleconsulta","local","contato","empresa","medico","fim","interesse","paciente","regiao","volume"];
+    if (steps.indexOf(params.step) >= 0) safe.step = params.step;
+    if (Number.isInteger(params.index) && params.index >= 1 && params.index <= 20) safe.index = params.index;
+    var locations = ["downtown", "barra", "pastore-ipanema", "ipanema", "nova-america", "zona-norte", "domiciliar", "soprolife-padrao", "norte-shopping"];
+    if (locations.indexOf(params.location_id) >= 0) safe.location_id = params.location_id;
+    var source = window.SITE_ANALYTICS.rememberAttribution();
+    if (source) safe.session_source = source;
+    try { if (window.gtag) window.gtag("event", outputEvent, safe); } catch (e) {}
+    try { if (window.fbq) {
       if (event === "funnel_complete") window.fbq("track", "Lead");
-      else if (event === "whatsapp_click") window.fbq("track", "Contact");
-      else window.fbq("trackCustom", event, params);
-    }
-  } catch (e) {}
-};
+      else if (event === "click_whatsapp") window.fbq("track", "Contact");
+      else window.fbq("trackCustom", event, safe);
+    } } catch (e) {}
+  };
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("a,button");
+    if (!a) return;
+    var href = a.getAttribute("href") || "";
+    var name = "";
+    if (/^(?:https?:\/\/)?(?:wa\.me|api\.whatsapp\.com|web\.whatsapp\.com)\//i.test(href)) name = "click_whatsapp";
+    else if (/^tel:/i.test(href)) name = "click_telefone";
+    else if (/#(?:agendamento|agendar|agenda|booking)(?:$|[?&])/.test(href) || a.matches('[data-sl-booking], [data-sl-agendar], #sl-booking-submit, .sl-booking-confirm')) name = "click_agendamento";
+    if (!name) return;
+    var position = a.closest("header,nav") ? "header" : a.closest("footer") ? "footer" : a.closest('#agendamento, [data-sl-booking], .sl-booking') ? "booking" : a.closest('.sl-whatsapp-bar, .whatsapp-float') ? "floating" : "content";
+    window.track(name, { cta_position: position });
+  });
+})();
