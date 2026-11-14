@@ -60,10 +60,13 @@ def lead_for_update(db, lead_id):
     return lead
 
 
-def candidates(db, person_id):
-    return db.scalars(select(Lead).where(Lead.person_id==person_id,
+def candidates(db, person_id, exam_date=None):
+    rows = db.scalars(select(Lead).where(Lead.person_id==person_id,
         Lead.primeiro_contato_em.is_not(None), Lead.status_funil.not_in(CLOSED))
         .order_by(Lead.primeiro_contato_em.desc()).with_for_update()).all()
+    # An earlier examination cannot originate from a later prospective contact.
+    return [lead for lead in rows if not exam_date or
+            aware(lead.primeiro_contato_em).astimezone(TZ).date() <= exam_date]
 
 
 def attach_exam(db, exam, lead_id=None, skip=False, user_id=None):
@@ -76,12 +79,10 @@ def attach_exam(db, exam, lead_id=None, skip=False, user_id=None):
     if lead_id:
         lead=lead_for_update(db, lead_id)
     else:
-        options=candidates(db, exam.person_id)
-        if len(options)>1:
-            raise HTTPException(status_code=409, detail={'codigo':'escolher_contato',
-                'mensagem':'Há mais de um contato aberto. Escolha o contato ou continue sem rastreamento.',
-                'contatos':[{'id':l.id,'public_code':l.public_code} for l in options]})
-        lead=options[0] if options else None
+        options=candidates(db, exam.person_id, exam.data_exame)
+        # Ambiguous acquisition is completed later, outside the clinical save.
+        # Never select arbitrarily or create an operational lead for coverage.
+        lead=options[0] if len(options)==1 else None
     if lead:
         if lead.person_id != exam.person_id:
             fail('Contato e exame devem pertencer à mesma pessoa.')
@@ -228,9 +229,9 @@ def reuse_scheduled(db, new_exam, lead_id=None, skip=False):
         lead=lead_for_update(db,lead_id)
         options=[lead]
     else:
-        options=candidates(db,new_exam.person_id)
+        options=candidates(db,new_exam.person_id,new_exam.data_exame)
     if len(options)!=1 or options[0].person_id!=new_exam.person_id:
-        return new_exam  # attach_exam validates ambiguity/identity before commit
+        return new_exam  # Unresolved acquisition stays untracked; explicit IDs are validated.
     pending=db.scalars(select(SpirometryExam).where(SpirometryExam.lead_id==options[0].id,
         SpirometryExam.status.in_(('Aguardando','Agendado','Remarcado'))).with_for_update()).all()
     if len(pending)>1:

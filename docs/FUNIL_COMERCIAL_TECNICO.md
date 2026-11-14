@@ -47,11 +47,23 @@ Nenhum dado de contato pessoal é aceito em eventos ou métricas.
 
 `POST /espirometrias` e os dois fluxos `POST /atendimentos` aceitam `lead_id`
 e `continuar_sem_rastreamento` no bloco de exame. Um único contato aberto
-pode ser escolhido automaticamente por person_id. Mais de um gera escolha
-explícita (409), ou o operador pode continuar sem rastreamento. A reserva
+pode ser escolhido automaticamente por person_id, desde que o exame não seja
+anterior ao contato. Nenhum ou vários candidatos salvam sem vínculo, sem
+modal nem escolha obrigatória. IDs explícitos continuam validados. A reserva
 pendente desse contato é reutilizada ao completar o atendimento. Os endpoints
 existentes permanecem válidos sem campos novos. PATCH do exame sincroniza
 etapa e remarcação; realização direta não inventa agendamento anterior.
+
+Pastore conserva a atribuição operacional em `SpirometryExam`: `partner_id`,
+`partner_unit_id`, modalidade `clinica_parceira`, local da unidade e origem
+do parceiro canônico. Isso alimenta produção/fechamentos sem criar `Lead`,
+`primeiro_contato_em` ou eventos prospectivos. Serviço é o próprio registro
+de espirometria; BD é atributo desse exame, não outro cadastro de serviço.
+Sem alteração de schema ou backfill nesta correção de UX (14/11/2026).
+Vínculo posterior usa a rota existente `vincular-exame`, com pessoa e datas
+validadas; correção operacional da origem permanece no exame. Nunca criar
+um contato atual para justificar um exame anterior. Mais de uma reserva do
+mesmo contato continua exigindo resolver a duplicidade na operação existente.
 
 Eventos: NOVO_CONTATO, PRIMEIRA_RESPOSTA, EXAME_VINCULADO, AGENDADO,
 REMARCADO, CANCELADO, NAO_COMPARECEU, EXAME_REALIZADO, AGUARDANDO_RETORNO,

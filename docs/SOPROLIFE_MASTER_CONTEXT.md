@@ -27,6 +27,14 @@ Contratos: [operação](FUNIL_COMERCIAL_OPERACAO.md),
 [técnico, métricas e rollback](FUNIL_COMERCIAL_TECNICO.md).
 Estado de deploy e evidências ficam no relatório externo da missão.
 
+Correção UX de 14/11/2026: salvar exame/atendimento não consulta nem abre modal
+de contato na UI. Servidor vincula um único contato elegível por pessoa/data;
+ausência/ambiguidade salva sem vínculo, com complementação posterior. Pastore
+usa os mesmos defaults comuns de município/BD e acompanhamento do formulário
+SoproLife; troca inicial preserva os dados comuns do exame. Atribuição
+operacional continua no exame/parceiro/unidade, separada da aquisição do lead.
+Sem migration, backfill, contato fabricado ou mudança nas regras fiscais.
+
 ## Lucro gerencial por competência — 05/11/2026
 
 Uma confirmação administrativa de custo médico histórico pode ser registrada

@@ -38,10 +38,80 @@ function run(bin,args,env){const p=cp.spawnSync(bin,args,{cwd:core,env,encoding:
    await page.setViewportSize({width,height:1000});await page.screenshot({path:path.join(temp,`${name}-${width}.png`),fullPage:true});
    assert(await page.locator('#funnelRoot').evaluate(el=>el.getBoundingClientRect().right<=window.innerWidth+2),'funnel viewport overflow '+name+' '+width);
   }
-  const noContact=page.evaluate(()=>window.SoproFunnel.chooseContact(null));
-  await page.locator('dialog #skip').click();assert.equal((await noContact).continuar_sem_rastreamento,true);
+  await page.setViewportSize({width:1440,height:1000});
+  if(name==='chromium') await page.evaluate(async()=>{
+   const api=window.SoproM15.api;
+   const partner=await api('/parceiros',{method:'POST',body:JSON.stringify({nome:'Pastore',tipo:'clinica',status:'ativa'})});
+   await api('/unidades',{method:'POST',body:JSON.stringify({partner_id:partner.id,nome:'Pastore Ipanema'})});
+  });
+  const openAttendance=async tipo=>{
+   await page.evaluate(tipo=>window.SoproCentral.open('atendimento',{tipo}),tipo);
+   await page.locator('#cadFormAtend').waitFor();
+   await page.waitForFunction(tipo=>document.querySelector('[name=tipo]:checked')?.value===tipo,tipo);
+  };
+  const dateField=name=>page.locator(`.m15-date:has([name=${name}]) .m15-date-input`);
+  await openAttendance('espirometria_soprolife');
+  const defaults=await page.locator('#cadFormAtend').evaluate(f=>Object.fromEntries(
+   ['esp_bd','esp_status','esp_municipio','esp_responsavel','esp_equipamento','esp_followup'].map(k=>[k,f.elements[k].value])));
+  await page.locator('[name=esp_bd]').selectOption('false');
+  await dateField('esp_data').fill('31/08/2026');await dateField('esp_data').blur();
+  await page.locator('[name=tipo][value=espirometria_pastore]').check();
+  assert.equal(await page.locator('[name=esp_bd]').inputValue(),'false','type from same exam survives switch');
+  assert.equal(await page.locator('[name=esp_followup]').inputValue(),'2027-03-01','shared calendar-month followup');
+  await dateField('esp_followup').fill('10/03/2027');await dateField('esp_followup').blur();
+  await dateField('esp_data').fill('01/09/2026');await dateField('esp_data').blur();
+  assert.equal(await page.locator('[name=esp_followup]').inputValue(),'2027-03-10','manual followup preserved');
+  // Discard only this synthetic draft to test fresh defaults on both paths.
+  page.once('dialog',d=>d.accept());await openAttendance('espirometria_pastore');
+  const pastoreDefaults=await page.locator('#cadFormAtend').evaluate(f=>Object.fromEntries(
+   ['esp_bd','esp_status','esp_municipio','esp_responsavel','esp_equipamento','esp_followup'].map(k=>[k,f.elements[k].value])));
+  assert.deepEqual(pastoreDefaults,defaults,'Pastore shares SoproLife clinical defaults');
+  assert.equal(await page.locator('[name=esp_pgto_status]').count(),0);
+  await page.getByText('Pastore Ipanema',{exact:true}).first().waitFor();
+  for(const [tipo,patient] of [['espirometria_pastore','Amostra Parceria '+name],['espirometria_soprolife','Cadastro Direto '+name]]){
+   if(tipo!=='espirometria_pastore')await openAttendance(tipo);
+   await page.locator('[name=cadAtP_nome]').fill(patient);
+   await dateField('esp_data').fill(day.split('-').reverse().join('/'));await dateField('esp_data').blur();
+   if(tipo==='espirometria_soprolife'){
+    await page.locator('[name=esp_valor]').fill('');
+    await page.locator('[name=esp_local]').fill('Espaço Sintético');
+   }
+   for(const width of [1440,800,390]){
+    await page.setViewportSize({width,height:1000});
+    await page.evaluate(()=>scrollTo(0,0));
+    await page.screenshot({path:path.join(temp,`${name}-${tipo}-${width}.png`),fullPage:true});
+    assert(await page.locator('#cadFormAtend').evaluate(el=>el.getBoundingClientRect().right<=innerWidth+2));
+   }
+   // Keyboard enters the primary submit action; no contact lookup or modal.
+   let contactLookups=0;const listener=r=>{if(r.url().includes('/funil/contatos'))contactLookups++;};page.on('request',listener);
+   const response=page.waitForResponse(r=>r.url().endsWith('/atendimentos/novo-paciente')&&r.request().method()==='POST');
+   const save=page.locator('#cadFormAtend button[type=submit]');await save.focus();await page.keyboard.press('Enter');
+   const result=await response.catch(async e=>{console.log('SYNTHETIC SAVE DEBUG',await page.locator('#cadFormAtend').evaluate(f=>({status:f.querySelector('.cad-submit-status')?.textContent,invalid:[...f.elements].filter(x=>x.validity&&!x.validity.valid).map(x=>({name:x.name,validation:x.validationMessage})),dialogs:document.querySelectorAll('dialog[open]').length})));throw e;});assert.equal(result.status(),201,await result.text());
+   const saved=(await result.json()).espirometria;
+   assert.equal(saved.lead_id,null);assert.equal(saved.broncodilatador,true);
+   if(tipo==='espirometria_pastore'){
+    assert.equal(saved.modalidade,'clinica_parceira');assert.equal(saved.origem,'Pastore');
+    assert.equal(saved.local_atendimento,'Pastore Ipanema');assert(saved.partner_id&&saved.partner_unit_id);
+   }
+   await page.getByText('Sem contato prospectivo vinculado.',{exact:false}).first().waitFor();
+   assert.equal(await page.locator('dialog[open]').count(),0);assert.equal(contactLookups,0);page.off('request',listener);
+  }
+  const deferred=await page.evaluate(async day=>{
+   const api=window.SoproM15.api,lead=(await api('/funil/contatos')).itens[0];
+   const exam=await api('/espirometrias',{method:'POST',body:JSON.stringify({person_id:lead.person_id,data_exame:day,status:'Realizado',continuar_sem_rastreamento:true})});
+   return {lead,exam};
+  },day);
+  await page.locator('.nav-item[data-section=leads]').click();
+  await page.locator(`[data-link="${deferred.lead.id}"]`).click();
+  await page.locator('dialog [name=exam_code]').fill(deferred.exam.public_code);
+  await page.locator('dialog form button:not([type=button])').click();
+  await page.locator('dialog').waitFor({state:'detached'});
+  const afterLink=await page.evaluate(async id=>(await window.SoproM15.api('/funil/contatos')).itens.find(l=>l.id===id),deferred.lead.id);
+  assert.equal(afterLink.primeiro_contato_em,deferred.lead.primeiro_contato_em);
+  assert.equal(afterLink.agendado_em,deferred.lead.agendado_em);
+  assert(afterLink.exam_ids.includes(deferred.exam.id),'deferred link through existing funnel action');
   assert.deepEqual(errors,[],'browser JS errors');
-  console.log(`${name}: real login, new contact, response, schedule, performed, history, 1440/800/390 PASS`);
+  console.log(`${name}: funnel, shared defaults, BD, manual followup, SoproLife/Pastore save without lead/modal, keyboard, 1440/800/390 PASS`);
   await browser.close();browser=null;
  }
  console.log('Synthetic visual artifacts: '+temp);

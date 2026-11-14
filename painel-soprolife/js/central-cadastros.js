@@ -1842,7 +1842,7 @@
     // M67 — selo NFS-e só na variante SoproLife: Pastore não gera NFS-e por
     // exame, então os mesmos campos lá não carregam requisito fiscal.
     const nfse = !ehPastore;
-    const iniciais = !ehPastore && cfg && cfg.espirometria_soprolife
+    const iniciais = cfg && cfg.espirometria_soprolife
       ? cfg.espirometria_soprolife.valores_iniciais || {} : {};
     const municipioInicial = (municipios || []).find(
       (m) => m.codigo === iniciais.municipio_atendimento_ibge);
@@ -1858,7 +1858,7 @@
             : STATUS_EXAME), "Realizado"), { span: 3, nfse })}
         ${fld("Broncodilatador", sel("esp_bd",
           [["", "não informado"], ["false", "sem broncodilatador"],
-           ["true", "com broncodilatador"]], String(iniciais.broncodilatador === true)), { span: 3, nfse })}
+           ["true", "com broncodilatador"]], typeof iniciais.broncodilatador === "boolean" ? String(iniciais.broncodilatador) : ""), { span: 3, nfse })}
         ${fld("Equipamento / fonte", sel("esp_equipamento",
           [["", "não informado"],
            ["MIR_SPIROBANK_SMART_II", "MIR Spirobank Smart II"],
@@ -2178,7 +2178,6 @@
       }
 
       function atualizarDatasSugeridas() {
-        if (tipoAtual() === TIPO_PASTORE) return;
         const parsed = window.SoproM15DatePicker?.parseFlex(val(form, "esp_data"));
         const iso = parsed && parsed.ok && parsed.precisao === "dia" ? parsed.iso : "";
         sugerirData("esp_pgto_data", val(form, "esp_pgto_status") === "Recebido" ? iso : "");
@@ -2309,12 +2308,19 @@
         blocoCon.hidden = !temCon;
         const ehPastore = tipo === TIPO_PASTORE;
         if (temEsp && renderedPastore !== ehPastore) {
-          rascunhosEsp.set(renderedPastore, [...blocoEsp.querySelectorAll("input[name], select[name]")]
+          const camposAnteriores = [...blocoEsp.querySelectorAll("input[name], select[name]")]
             .map((campo) => ({ nome: campo.name, valor: campo.value,
-              manual: campo.dataset.cadManual, tocado: campo.dataset.tocado })));
+              manual: campo.dataset.cadManual, tocado: campo.dataset.tocado }));
+          rascunhosEsp.set(renderedPastore, camposAnteriores);
+          // Primeira troca: transportar os dados do MESMO exame, inclusive BD.
+          // Ao voltar, restaurar o rascunho daquela modalidade sem sobrescrevê-lo.
+          const comuns = new Set(["esp_data", "esp_status", "esp_bd", "esp_equipamento",
+            "esp_municipio", "esp_responsavel", "esp_followup", "esp_observacao"]);
+          const rascunho = rascunhosEsp.get(ehPastore) ||
+            camposAnteriores.filter((campo) => comuns.has(campo.nome));
           blocoEsp.innerHTML = blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg, municipios);
           renderedPastore = ehPastore;
-          (rascunhosEsp.get(ehPastore) || []).forEach((anterior) => {
+          rascunho.forEach((anterior) => {
             const campo = form.elements[anterior.nome];
             if (!campo) return;
             campo.value = anterior.valor;
@@ -2466,9 +2472,8 @@
         if (financeiro) blocos.financeiro = financeiro;
 
         const existente = picker.selecionada();
-        if (blocos.espirometria && window.SoproFunnel) {
-          Object.assign(blocos.espirometria, await window.SoproFunnel.chooseContact(existente));
-        }
+        // O servidor conserva o vínculo ou resolve um único contato por person_id.
+        // Origem ausente/ambígua não exige decisão para salvar o atendimento.
         if (existente) {
           return api("/atendimentos", {
             method: "POST",
@@ -2517,7 +2522,8 @@
           `<strong>${esc(partes.join(" + "))} criada(s)</strong> para ` +
           `${esc(res.pessoa.nome_completo)} (${esc(res.pessoa.public_code)}).` +
           (lanc ? ` Lançamentos: ${esc(lanc)}.` : " Nenhum lançamento financeiro criado.") +
-          avisoPend);
+          (c.espirometria && !c.espirometria.lead_id
+            ? " Sem contato prospectivo vinculado." : "") + avisoPend);
         reiniciarNovoAtendimento();
         picker.resetState();
         aplicarModo();

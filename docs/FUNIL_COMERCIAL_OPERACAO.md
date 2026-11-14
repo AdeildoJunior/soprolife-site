@@ -35,10 +35,41 @@ campos clínicos e financeiros continuam nos fluxos existentes. Ao completar
 um Novo atendimento da mesma pessoa/contato, a reserva pendente é reutilizada.
 Reteste pode apontar para o mesmo contato e não gera outra entrada no funil.
 
-Ao criar exame sem contato, o atendimento continua disponível. A tela oferece
-Registrar contato ou Continuar sem rastreamento. Se houver vários contatos
-abertos da mesma pessoa, escolha explicitamente. Nunca associe por texto de
-nome, telefone ou documento. Exames antigos não recebem contatos inventados.
+Ao salvar exame/atendimento, nenhum modal de contato interrompe a operação.
+Um único contato aberto elegível da mesma pessoa é vinculado automaticamente.
+Sem contato ou com vários candidatos, salva sem vínculo e informa apenas
+“Sem contato prospectivo vinculado.” no resultado. A complementação pode ser
+feita depois; nunca associe por texto de nome, telefone ou documento. Exames
+antigos não recebem contatos inventados nem horário de primeiro contato
+copiado do exame.
+
+Para complementar um vínculo depois, no Funil Comercial use **Vincular exame
+existente** no contato real e informe o código ESP. O sistema confere pessoa
+e datas, preserva o primeiro contato e não cria resposta/agendamento anterior.
+Se a origem do próprio contato ainda for desconhecida, continua **Não informado**;
+use **Corrigir origem/canal** quando obtiver a informação.
+
+Na Pastore, parceiro/unidade ativos vêm do cadastro institucional existente.
+Com unidade única, Pastore Ipanema é preenchida sem seleção. Modalidade,
+local e origem operacional são derivados no servidor; produção e fechamento
+mensal continuam identificando a parceria mesmo sem contato prospectivo.
+
+| Campo no novo atendimento | SoproLife | Pastore |
+| --- | --- | --- |
+| Município | Rio/RJ do catálogo, editável | Mesma sugestão editável |
+| Broncodilatador | Default do catálogo, editável | Mesmo default; preserva o tipo ao trocar de fluxo |
+| Status | Realizado | Realizado |
+| Técnico/responsável | Default operacional atual do formulário, editável | Mesma regra compartilhada |
+| Equipamento/fonte | Não informado | Não informado |
+| Data/observação | Sem valor presumido | Sem valor presumido |
+| Próximo acompanhamento | Seis meses calendários, depois primeira segunda; respeita edição manual | Mesma regra |
+| Parceiro/unidade/modalidade/origem/local | Contexto SoproLife editável | Derivados da parceria/unidade Pastore |
+| Pagamento/valor | Defaults existentes, editáveis | Sem recebimento individual; fechamento mensal |
+
+A troca inicial entre SoproLife/Pastore leva os dados comuns do mesmo exame.
+Voltar restaura o rascunho daquela variante. As confirmações de duplicidade,
+emissão fiscal e alterações clínicas permanecem. A NFS-e Pastore continua
+pela fila Fiscal com confirmação humana e regra própria da parcela SoproLife.
 
 Os filtros de período selecionam **a coorte de primeiro contato**, e os
 indicadores acompanham suas etapas acumuladas até agora. Exames de outro

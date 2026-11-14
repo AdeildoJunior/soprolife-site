@@ -78,7 +78,7 @@ def test_untracked_history_and_multiple_contacts(client,auth,person,db):
     a=contact(client,auth,person); b=contact(client,auth,person)
     payload={'person_id':person['id'],'data_exame':utcnow().date().isoformat()}
     r=client.post('/api/v1/espirometrias',json=payload,headers=auth())
-    assert r.status_code==409
+    assert r.status_code==201 and r.json()['lead_id'] is None
     r=client.post('/api/v1/espirometrias',json={**payload,'lead_id':a['id']},headers=auth())
     assert r.status_code==201 and r.json()['lead_id']==a['id'],r.text
     r=client.post('/api/v1/espirometrias',json={**payload,'continuar_sem_rastreamento':True},headers=auth())
@@ -136,12 +136,87 @@ def test_attendance_completes_existing_reservation(client,auth,person,db):
     reserved_id=exam_for(db,lead).id
     r=client.post('/api/v1/atendimentos',json={'person_id':person['id'],'tipo':'espirometria_soprolife',
         'idempotency_key':'attendance-from-reservation','espirometria':{'data_exame':day,'status':'Realizado',
-        'lead_id':lead['id'],'modalidade':'cowork','local_atendimento':'Local sintético'}},headers=auth())
+        'modalidade':'cowork','local_atendimento':'Local sintético','broncodilatador':True}},headers=auth())
     assert r.status_code==201,r.text
     assert r.json()['espirometria']['id']==reserved_id
+    assert r.json()['espirometria']['lead_id']==lead['id']
+    assert r.json()['espirometria']['broncodilatador'] is True
     db.expire_all()
     assert db.scalar(select(func.count()).select_from(SpirometryExam))==1
     assert db.get(Lead,lead['id']).status_funil=='EXAME_REALIZADO'
+
+
+@pytest.mark.parametrize('new_person', [False, True])
+@pytest.mark.parametrize('pastore', [False, True])
+def test_attendance_without_lead_keeps_production_outside_prospective_metrics(
+    client, auth, person, db, new_person, pastore,
+):
+    from app.models import Partner, PartnerUnit, FinancialEntry, FiscalIssuanceRequest
+    day = utcnow().date().isoformat()
+    exam = {'data_exame': day, 'status': 'Realizado', 'broncodilatador': True,
+            'municipio_atendimento_ibge': '3304557'}
+    if pastore:
+        partner = Partner(public_code='CLI-SYNTHETIC', nome='Pastore', tipo='clinica')
+        db.add(partner); db.flush()
+        unit = PartnerUnit(public_code='UNI-SYNTHETIC', partner_id=partner.id,
+                           nome='Pastore Ipanema', ativo=True)
+        db.add(unit); db.commit()
+        exam.update(partner_id=partner.id, partner_unit_id=unit.id)
+    payload = {'tipo': 'espirometria_pastore' if pastore else 'espirometria_soprolife',
+               'espirometria': exam}
+    if new_person:
+        payload['pessoa'] = {'nome_completo': 'Pessoa Sintética Atendimento Sem Contato'}
+    else:
+        payload['person_id'] = person['id']
+    route = '/atendimentos/novo-paciente' if new_person else '/atendimentos'
+    result = client.post('/api/v1'+route, json=payload, headers=auth())
+    assert result.status_code == 201, result.text
+    saved = result.json()['espirometria']
+    assert saved['lead_id'] is None and saved['broncodilatador'] is True
+    if pastore:
+        assert saved['partner_id'] == partner.id and saved['partner_unit_id'] == unit.id
+        assert saved['modalidade'] == 'clinica_parceira'
+        assert saved['origem'] == 'Pastore' and saved['local_atendimento'] == 'Pastore Ipanema'
+        production = client.get('/api/v1/pastore/fechamentos', headers=auth()).json()
+        assert any(row['unidade']['id'] == unit.id for row in production['fechamentos'])
+    for model in (Lead, FunnelEvent, FinancialEntry, FiscalIssuanceRequest):
+        assert db.scalar(select(func.count()).select_from(model)) == 0
+    db.commit()
+    data = client.get(BASE+'/metricas', params={'inicio':day,'fim':day}, headers=auth()).json()
+    assert data['contatos'] == data['respondidos'] == data['agendados'] == 0
+    assert all(value is None for value in data['conversoes'].values())
+    assert all(row['disponiveis'] == 0 for row in data['tempos'].values())
+    assert data['cobertura']['exames_rastreados'] == {'com_dado':0,'total':1,'percentual':0}
+
+
+def test_automatic_contact_never_attributes_earlier_exam(client, auth, person, db):
+    lead = contact(client, auth, person)
+    yesterday = (utcnow().date()-timedelta(days=2)).isoformat()
+    result = client.post('/api/v1/atendimentos', headers=auth(), json={
+        'person_id':person['id'], 'tipo':'espirometria_soprolife',
+        'espirometria':{'data_exame':yesterday,'status':'Realizado'},
+    })
+    assert result.status_code == 201, result.text
+    assert result.json()['espirometria']['lead_id'] is None
+    db.expire_all()
+    stored = db.get(Lead, lead['id'])
+    assert stored.primeira_resposta_em is stored.agendado_em is stored.realizado_em is None
+
+
+def test_deferred_link_preserves_real_contact_without_fabricating_previous_steps(client, auth, person):
+    lead = contact(client, auth, person)
+    exam = client.post('/api/v1/espirometrias', headers=auth(), json={
+        'person_id':person['id'], 'status':'Realizado',
+        'data_exame':utcnow().date().isoformat(), 'continuar_sem_rastreamento':True,
+    }).json()
+    assert exam['lead_id'] is None
+    result = client.post(BASE+'/contatos/'+lead['id']+'/vincular-exame',
+                         headers=auth(), json={'exam_id':exam['id']})
+    assert result.status_code == 200, result.text
+    updated = client.get(BASE+'/contatos', headers=auth()).json()['itens'][0]
+    assert updated['primeiro_contato_em'] == lead['primeiro_contato_em']
+    assert not updated.get('primeira_resposta_em') and not updated.get('agendado_em')
+    assert updated['realizado_em'] and updated['exam_ids'] == [exam['id']]
 
 
 def test_invalid_new_contact_rolls_back_person_and_mass_assignment(client,auth,db):
