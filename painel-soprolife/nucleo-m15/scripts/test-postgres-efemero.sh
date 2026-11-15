@@ -66,9 +66,11 @@ M15_DATABASE_URL="$URL" "$ALEMBIC" check
 M15_DATABASE_URL="$URL" "$ALEMBIC" downgrade base
 M15_DATABASE_URL="$URL" "$ALEMBIC" upgrade head
 
-echo "== suíte completa (SQLite + testes PG) =="
+# Optional explicit test paths keep domain regression repeatable; no args = full suite.
+if [[ "$#" == 0 ]]; then set -- tests/; fi
+echo "== suíte selecionada (SQLite + testes PG) =="
 env -u M15_DATABASE_URL M15_TEST_POSTGRES_URL="$URL" \
-  "$PYTHON" -m pytest tests/ -q
+  "$PYTHON" -m pytest "$@" -q
 
 cleanup
 trap - EXIT

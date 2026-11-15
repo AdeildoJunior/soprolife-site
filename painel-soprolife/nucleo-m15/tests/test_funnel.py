@@ -5,7 +5,7 @@ import json
 import pytest
 from sqlalchemy import select, func
 from app.models import Lead, Person, SpirometryExam, FunnelEvent, utcnow
-from app.services.funnel import metrics
+from app.services.funnel import metrics, TZ
 
 BASE='/api/v1/funil'
 
@@ -55,7 +55,7 @@ def test_response_idempotent_and_immutable(client,auth,person,db):
 
 def test_schedule_reschedule_cancel_and_realize(client,auth,person,db):
     lead=contact(client,auth,person)
-    day=utcnow().date()+timedelta(days=2)
+    day=utcnow().astimezone(TZ).date()+timedelta(days=2)
     a=transition(client,auth,lead,'AGENDADO',data_prevista=day.isoformat())
     exam=exam_for(db,lead); exam_id=exam.id
     transition(client,auth,lead,'REMARCADO',data_prevista=(day+timedelta(days=1)).isoformat())
@@ -76,7 +76,7 @@ def test_untracked_history_and_multiple_contacts(client,auth,person,db):
     assert r.status_code==201,r.text
     assert r.json()['lead_id'] is None
     a=contact(client,auth,person); b=contact(client,auth,person)
-    payload={'person_id':person['id'],'data_exame':utcnow().date().isoformat()}
+    payload={'person_id':person['id'],'data_exame':utcnow().astimezone(TZ).date().isoformat()}
     r=client.post('/api/v1/espirometrias',json=payload,headers=auth())
     assert r.status_code==201 and r.json()['lead_id'] is None
     r=client.post('/api/v1/espirometrias',json={**payload,'lead_id':a['id']},headers=auth())
@@ -91,7 +91,7 @@ def test_untracked_history_and_multiple_contacts(client,auth,person,db):
 
 def test_synthetic_cohort_and_coverage(client,auth,db):
     leads=[contact(client,auth) for _ in range(10)]
-    day=utcnow().date()
+    day=utcnow().astimezone(TZ).date()
     for l in leads[:8]: transition(client,auth,l,'PRIMEIRA_RESPOSTA')
     for l in leads[:6]: transition(client,auth,l,'AGENDADO',data_prevista=day.isoformat())
     transition(client,auth,leads[0],'REMARCADO',data_prevista=(day+timedelta(days=1)).isoformat())
@@ -131,7 +131,7 @@ def test_validation_auth_and_person_mismatch(client,auth,person):
 
 def test_attendance_completes_existing_reservation(client,auth,person,db):
     lead=contact(client,auth,person)
-    day=utcnow().date().isoformat()
+    day=utcnow().astimezone(TZ).date().isoformat()
     transition(client,auth,lead,'AGENDADO',data_prevista=day)
     reserved_id=exam_for(db,lead).id
     r=client.post('/api/v1/atendimentos',json={'person_id':person['id'],'tipo':'espirometria_soprolife',
@@ -152,7 +152,7 @@ def test_attendance_without_lead_keeps_production_outside_prospective_metrics(
     client, auth, person, db, new_person, pastore,
 ):
     from app.models import Partner, PartnerUnit, FinancialEntry, FiscalIssuanceRequest
-    day = utcnow().date().isoformat()
+    day = utcnow().astimezone(TZ).date().isoformat()
     exam = {'data_exame': day, 'status': 'Realizado', 'broncodilatador': True,
             'municipio_atendimento_ibge': '3304557'}
     if pastore:
@@ -191,7 +191,7 @@ def test_attendance_without_lead_keeps_production_outside_prospective_metrics(
 
 def test_automatic_contact_never_attributes_earlier_exam(client, auth, person, db):
     lead = contact(client, auth, person)
-    yesterday = (utcnow().date()-timedelta(days=2)).isoformat()
+    yesterday = (utcnow().astimezone(TZ).date()-timedelta(days=2)).isoformat()
     result = client.post('/api/v1/atendimentos', headers=auth(), json={
         'person_id':person['id'], 'tipo':'espirometria_soprolife',
         'espirometria':{'data_exame':yesterday,'status':'Realizado'},
@@ -207,7 +207,7 @@ def test_deferred_link_preserves_real_contact_without_fabricating_previous_steps
     lead = contact(client, auth, person)
     exam = client.post('/api/v1/espirometrias', headers=auth(), json={
         'person_id':person['id'], 'status':'Realizado',
-        'data_exame':utcnow().date().isoformat(), 'continuar_sem_rastreamento':True,
+        'data_exame':utcnow().astimezone(TZ).date().isoformat(), 'continuar_sem_rastreamento':True,
     }).json()
     assert exam['lead_id'] is None
     result = client.post(BASE+'/contatos/'+lead['id']+'/vincular-exame',
@@ -232,7 +232,7 @@ def test_invalid_new_contact_rolls_back_person_and_mass_assignment(client,auth,d
 def test_origins_channels_filters_and_non_converters(client,auth,db):
     lead=contact(client,auth,origem_aquisicao='nao_informado',canal_entrada='telefone',unidade_pretendida='domiciliar')
     transition(client,auth,lead,'AGUARDANDO_RETORNO')
-    day=utcnow().date().isoformat()
+    day=utcnow().astimezone(TZ).date().isoformat()
     res=client.get(BASE+'/metricas',params={'inicio':day,'fim':day,'origem':'nao_informado','unidade':'domiciliar','canal':'telefone'},headers=auth()).json()
     assert res['contatos']==1 and res['aguardando_retorno']==1 and res['perdidos']==res['cancelados']==0
     assert res['cobertura']['origem_registrada']['percentual']==0
@@ -269,7 +269,7 @@ def test_explicit_wait_loss_no_show_and_dimension_correction(client,auth,person)
     lead=contact(client,auth,person)
     r=client.post(BASE+'/contatos/'+lead['id']+'/eventos',json={'evento':'NAO_COMPARECEU'},headers=auth())
     assert r.status_code==422  # Date passing alone never creates a no-show.
-    day=utcnow().date().isoformat()
+    day=utcnow().astimezone(TZ).date().isoformat()
     transition(client,auth,lead,'AGENDADO',data_prevista=day)
     assert transition(client,auth,lead,'NAO_COMPARECEU')['status_funil']=='NAO_COMPARECEU'
     assert transition(client,auth,lead,'AGENDADO',data_prevista=day)['status_funil']=='AGENDADO'

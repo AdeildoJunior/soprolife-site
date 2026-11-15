@@ -343,6 +343,40 @@ class FunnelDeployment(Base):
     deployed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class WhatsAppPeer(Base):
+    """Stable pseudonymous sender and serialization lock; no phone in clear."""
+    __tablename__ = "whatsapp_peers"
+    sender_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+
+class WhatsAppIntake(Base):
+    __tablename__ = "whatsapp_intakes"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    sender_key: Mapped[str] = mapped_column(String(64), ForeignKey("whatsapp_peers.sender_key"), nullable=False, index=True)
+    phone_suffix: Mapped[str] = mapped_column(String(4), nullable=False)
+    first_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lead_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("leads.id"), index=True)
+    state: Mapped[str] = mapped_column(String(30), nullable=False, default="unknown")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__ = (CheckConstraint("state IN ('unknown','ambiguous_person','ambiguous_lead','identified','chronology_review')", name="state"),)
+
+
+class WhatsAppEvent(Base):
+    """Only operational metadata. No raw payload, message, media or profile."""
+    __tablename__ = "whatsapp_events"
+    event_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    sender_key: Mapped[str] = mapped_column(String(64), ForeignKey("whatsapp_peers.sender_key"), nullable=False, index=True)
+    intake_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("whatsapp_intakes.id"), index=True)
+    direction: Mapped[str] = mapped_column(String(3), nullable=False)
+    event_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    __table_args__ = (
+        CheckConstraint("direction IN ('in','out')", name="direction"),
+        CheckConstraint("state IN ('pending','processed','ignored')", name="state"),
+    )
+
+
 # Fonte/equipamento estruturado da espirometria. É o ÚNICO ponto canônico
 # que diz em qual aparelho a manobra foi registrada — antes disso o modelo só
 # constava, quando constava, dentro do próprio PDF técnico (ver a decisão

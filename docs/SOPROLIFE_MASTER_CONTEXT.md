@@ -35,6 +35,24 @@ SoproLife; troca inicial preserva os dados comuns do exame. Atribuição
 operacional continua no exame/parceiro/unidade, separada da aquisição do lead.
 Sem migration, backfill, contato fabricado ou mudança nas regras fiscais.
 
+## Preparação WhatsApp / funil — 14/11/2026
+
+Receptor oficial GET/POST `/api/v1/integrations/whatsapp/webhook`, desligado por
+`WHATSAPP_INTEGRATION_ENABLED=false`. Sem cliente de envio, conversa, mídia,
+credenciais ou onboarding. Assinatura Meta HMAC-SHA256, WABA/Phone ID permitidos,
+limites e transação curta; configurações ausentes bloqueiam só o receptor.
+Migration aditiva `w141126wa` sobre `f131126funil`: remetentes pseudonimizados,
+intakes e deduplicação, sem backfill. Usa normalizador existente; telefone exato
+único pode vincular pessoa, desconhecido/ambíguo exige identificação explícita.
+Nunca cria pessoa pelo webhook. Alimenta o mesmo funil, canal WhatsApp, aquisição
+independente; Pastore permanece separado. Echo oficial pode registrar resposta
+por timestamp sem sobrescrever. UI no funil, estado administrativo só admin.
+Segredos futuros no EnvironmentFile já existente; chave HMAC própria e estável.
+A rota pública nginx fica preparada como snippet, sem instalação nesta etapa.
+Ativação, limites, segurança, backups e rollback em
+[runbook de coexistência](WHATSAPP_COEXISTENCE_ACTIVATION.md).
+Evidências de deploy ficam no relatório externo da missão.
+
 ## Lucro gerencial por competência — 05/11/2026
 
 Uma confirmação administrativa de custo médico histórico pode ser registrada
@@ -260,8 +278,9 @@ com cwd `nucleo-m15`, `app.db.get_engine()` e `SET TRANSACTION READ ONLY`.
 - **Integrações externas legítimas:** SEFIN Nacional (NFS-e), SERPRO Consulta
   CPF v3 (preparada, desligada), Search Console/GA4 (Marketing, venv próprio
   `/opt/soprolife/venvs/marketing`), IntegraICP/VIDaaS (assinatura), Instagram
-  Graph API (convite ao paciente, preparada e desligada). WhatsApp é
-  só link `wa.me` para revisão humana — **não existe** envio automático.
+  Graph API (convite ao paciente, preparada e desligada). WhatsApp mantém
+  link `wa.me` para revisão humana e receptor Cloud API preparado/desligado
+  (runbook acima) — **não existe** envio automático.
   Scraping de rede social é proibido: o Instagram só é lido por API oficial.
 
 ## 4. Command Center — módulos

@@ -82,6 +82,21 @@ def config(db:Session=Depends(get_db),user:User=Depends(require_role(ROLE_LEITUR
         'unidades_parceiras':[{'id':u.id,'partner_id':u.partner_id,'nome':u.nome} for u in units]}
 
 
+def resolve_person(db,payload,request,user):
+    if payload.person_id:
+        person=db.get(Person,payload.person_id)
+        if not person or person.arquivado_em: f.fail('Pessoa indisponível.',404)
+    else:
+        p=payload.pessoa
+        recusar_cpf_ja_cadastrado(db,p.cpf)
+        options=_candidatos_de_identidade(db,p)
+        if options and not payload.confirmar_duplicado:
+            raise HTTPException(status_code=409,detail={'codigo':'possivel_duplicado','mensagem':'Selecione o paciente existente ou confirme a criação.','candidatos':options})
+        person=build_person(db,nome_completo=p.nome_completo,cpf=p.cpf,data_nascimento=p.data_nascimento,sexo=p.sexo,observacao=p.observacao,contatos=p.contatos,consentimento_whatsapp=p.consentimento_whatsapp,registrado_por=user.id)
+        registrar_identificacao_oficial(db,request,user,person,p)
+    return person
+
+
 @router.post('/contatos',status_code=201)
 def create(payload:ContactCreate,request:Request,db:Session=Depends(get_db),user:User=Depends(require_role(ROLE_OPERACIONAL))):
     check_dimensions(db,payload)
@@ -91,17 +106,7 @@ def create(payload:ContactCreate,request:Request,db:Session=Depends(get_db),user
         from ..security import user_effective_roles
         if ROLE_GESTOR not in user_effective_roles(user): f.fail('Correção de horário exige gestor.',403)
     def factory(key,fingerprint):
-        if payload.person_id:
-            person=db.get(Person,payload.person_id)
-            if not person or person.arquivado_em: f.fail('Pessoa indisponível.',404)
-        else:
-            p=payload.pessoa
-            recusar_cpf_ja_cadastrado(db,p.cpf)
-            options=_candidatos_de_identidade(db,p)
-            if options and not payload.confirmar_duplicado:
-                raise HTTPException(status_code=409,detail={'codigo':'possivel_duplicado','mensagem':'Selecione o paciente existente ou confirme a criação.','candidatos':options})
-            person=build_person(db,nome_completo=p.nome_completo,cpf=p.cpf,data_nascimento=p.data_nascimento,sexo=p.sexo,observacao=p.observacao,contatos=p.contatos,consentimento_whatsapp=p.consentimento_whatsapp,registrado_por=user.id)
-            registrar_identificacao_oficial(db,request,user,person,p)
+        person=resolve_person(db,payload,request,user)
         lead=Lead(public_code=allocate_public_code(db,'leads'),person_id=person.id,
             **payload.model_dump(include=set(Dimensions.model_fields)),origem=f.ORIGINS[payload.origem_aquisicao],
             primeiro_contato_em=first,data_primeiro_contato=first.astimezone(f.TZ).date(),data_primeiro_contato_precisao='dia',data_primeiro_contato_dia_assumido=False,

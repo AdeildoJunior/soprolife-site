@@ -25,7 +25,7 @@
         <label>Unidade<select name="unidade">${options(cfg.unidades)}</select></label><label>Origem<select name="origem">${options(cfg.origens)}</select></label>
         <label>Canal<select name="canal">${options(cfg.canais)}</select></label><label>Serviço<select name="servico">${options(cfg.servicos)}</select></label><button type="submit">Aplicar filtros</button></form>
         <div id="funnelError" role="status"></div><div id="funnelMetrics"></div></div>
-        <div class="m15-panel"><h3>Contatos recentes · operação</h3><p>Lista operacional de todos os períodos; os filtros acima afetam os indicadores.</p><div id="funnelContacts"></div></div>`;
+        <div id="whatsappArea"></div><div class="m15-panel"><h3>Contatos recentes · operação</h3><p>Lista operacional de todos os períodos; os filtros acima afetam os indicadores.</p><div id="funnelContacts"></div></div>`;
       const form=root.querySelector('form');Object.entries(state.filters).forEach(([k,v])=>{if(form.elements[k])form.elements[k].value=v;});
       window.SoproM15DatePicker?.attachAll(form);
       form.onsubmit=e=>{e.preventDefault();state.filters=Object.fromEntries(new FormData(form));render();};
@@ -44,6 +44,7 @@
         ${table(['Semana','Contatos','Agendados','Realizados','Contato → agendamento','Agendamento → exame','Contato → exame'],data.semanas.map(r=>[`${esc(date(r.inicio))} – ${esc(date(r.fim))}${r.parcial?' · <strong>PARCIAL</strong>':''}`,r.contatos,r.agendados,r.realizados,pct(r.conversoes.contato_agendamento),pct(r.conversoes.agendamento_exame),pct(r.conversoes.contato_exame)]))}
         <details><summary>Origem e unidade por semana</summary>${data.semanas.map(r=>`<h4>${esc(date(r.inicio))}${r.parcial?' · PARCIAL':''}</h4>${table(['Origem','Contatos'],Object.entries(r.origens).filter(([,v])=>v).map(([k,v])=>[esc(cfg.origens[k]),v]))}${table(['Unidade','Contatos'],Object.entries(r.unidades).filter(([,v])=>v).map(([k,v])=>[esc(cfg.unidades[k]),v]))}`).join('')}</details>`;
       await loadContacts(root);
+      await window.SoproWhatsApp?.render(root.querySelector("#whatsappArea"));
     }catch(e){root.innerHTML='<p role="alert">Falha ao carregar Funil Comercial. Reabra a seção para tentar novamente.</p>';}
   }
   async function loadContacts(root){

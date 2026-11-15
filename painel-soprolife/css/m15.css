@@ -765,3 +765,7 @@
 #funnelRoot button:disabled, .funnel-dialog button:disabled { opacity:.5; cursor:default; }
 #funnelRoot .m15-date-btn, .funnel-dialog .m15-date-btn { background:transparent; color:var(--navy,#0b1f36); margin:0; }
 #funnelRoot h3 { margin-top:1.5rem; }
+
+/* WhatsApp identification reuses the funnel dialog; scoped checkbox sizing. */
+.whatsapp-dialog .whatsapp-confirm { display:flex; align-items:flex-start; gap:.6rem; font-size:.9rem; }
+.whatsapp-dialog .whatsapp-confirm input[type="checkbox"] { width:1.1rem; height:1.1rem; min-height:0; flex:0 0 auto; margin:.15rem 0 0; padding:0; }

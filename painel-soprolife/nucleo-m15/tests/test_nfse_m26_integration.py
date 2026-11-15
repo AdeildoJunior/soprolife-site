@@ -130,7 +130,9 @@ def test_alembic_graph_fiscal_after_m26_9(tmp_path, monkeypatch):
     # top of the EEG head — still one head, still no fork.
     # Custos analíticos (0b90ea2) já publicados: cadeia anterior preservada.
     # Funil prospectivo: head aditiva; guardas e cadeia fiscal preservadas.
-    assert script.get_heads() == ["f131126funil"]
+    # WhatsApp: new additive head, existing fiscal/EEG chain unchanged.
+    assert script.get_heads() == ["w141126wa"]
+    assert script.get_revision("w141126wa").down_revision == "f131126funil"
     assert script.get_revision("f131126funil").down_revision == "a04f1c202611"
     assert script.get_revision("a04f1c202611").down_revision == "d7b2f3a9c1e0"
     assert script.get_revision('d7b2f3a9c1e0').down_revision == 'a291029eeg01'

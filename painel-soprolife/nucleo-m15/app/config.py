@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -58,7 +58,7 @@ def _validar_origens(origins: list[str], nome: str) -> list[str]:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="M15_", env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_prefix="M15_", env_file=".env", env_file_encoding="utf-8", extra="ignore", populate_by_name=True
     )
 
     env: Literal["dev", "prod"] = "dev"
@@ -69,6 +69,15 @@ class Settings(BaseSettings):
     api_port: int = 8015
     cors_origins: list[str] = ["http://127.0.0.1:8765", "http://localhost:8765"]
     display_timezone: str = "America/Sao_Paulo"
+
+    # Independent gate; aliases deliberately keep the public WHATSAPP_* contract.
+    whatsapp_integration_enabled: bool = Field(False, validation_alias="WHATSAPP_INTEGRATION_ENABLED")
+    whatsapp_verify_token: SecretStr | None = Field(None, validation_alias="WHATSAPP_VERIFY_TOKEN")
+    whatsapp_app_secret: SecretStr | None = Field(None, validation_alias="WHATSAPP_APP_SECRET")
+    whatsapp_phone_number_id: str | None = Field(None, validation_alias="WHATSAPP_PHONE_NUMBER_ID")
+    whatsapp_waba_id: str | None = Field(None, validation_alias="WHATSAPP_WABA_ID")
+    # Stable HMAC key: rotates neither with Meta credentials nor login sessions.
+    whatsapp_identity_key: SecretStr | None = Field(None, validation_alias="WHATSAPP_IDENTITY_KEY")
 
     # Fiscal foundation: only the in-process mock has an implementation.
     nfse_enabled: bool = False

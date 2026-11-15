@@ -334,7 +334,9 @@ def test_the_head_is_the_m61_revision(tmp_path, monkeypatch):
     # the fiscal chain below is untouched.
     # Custos analíticos (0b90ea2) já publicados: cadeia anterior preservada.
     # Funil prospectivo: head aditiva; guardas e cadeia fiscal preservadas.
-    assert script.get_heads() == ["f131126funil"]
+    # WhatsApp: new additive head, existing fiscal/EEG chain unchanged.
+    assert script.get_heads() == ["w141126wa"]
+    assert script.get_revision("w141126wa").down_revision == "f131126funil"
     assert script.get_revision("f131126funil").down_revision == "a04f1c202611"
     assert script.get_revision("a04f1c202611").down_revision == "d7b2f3a9c1e0"
     assert script.get_revision("d7b2f3a9c1e0").down_revision == "a291029eeg01"

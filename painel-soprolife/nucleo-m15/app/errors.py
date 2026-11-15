@@ -58,7 +58,10 @@ def _envelope(request: Request, status: int, codigo: str, mensagem, extra: dict 
 def install_error_handling(app: FastAPI) -> None:
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):
-        request.state.request_id = resolve_request_id(request.headers.get("X-Request-ID"))
+        # Public callbacks must never persist attacker-supplied identifiers
+        # (a syntactically valid X-Request-ID could itself be phone/name/PII).
+        webhook = request.url.path == "/api/v1/integrations/whatsapp/webhook"
+        request.state.request_id = resolve_request_id(None if webhook else request.headers.get("X-Request-ID"))
         if request.url.path.startswith("/api/v1/laudos"):
             # Esta borda roda antes do parser multipart. Assim, feature
             # desabilitada e Content-Length obviamente excessivo não fazem o
