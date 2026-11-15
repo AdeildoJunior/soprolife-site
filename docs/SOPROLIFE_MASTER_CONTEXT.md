@@ -9,9 +9,40 @@
 > Sem PII, senhas, tokens, IPs de tailnet ou identificadores privados. Use
 > placeholders (`<VPS_TAILSCALE_IP>`, `<TOKEN>`).
 
-Última atualização: 2026-10-30 (integração local EEGLife + MIR/FET; base `bb7566a`).
+Última atualização: 2026-11-15 (parcerias comerciais Maclin/Alergocare; base `04ad541`).
 
 ---
+
+## Parcerias Maclin e Alergocare — 15/11/2026
+
+`PartnerCommercialRule` versiona percentuais/unidade/modalidade/vigência sobre
+`Partnership` existente. Nova versão vale pela maior vigência inicial elegível;
+`ExamPartnerShare` congela os fatos de cada exame. Sem backfill automático.
+`PartnerShareMovement` aponta a `FinancialEntry(tipo='movimentacao')`: valor fica
+no razão canônico, separado de receita/despesa. Migração aditiva `p151126share`,
+pai `w141126wa`, sem reescrever dados; evidências imutáveis em ORM/PostgreSQL e
+downgrade bloqueado com fatos. Pastore mantém sua regra e fechamento mensal.
+
+Maclin e Alergocare: 30% clínica/70% SoproLife sobre bruto; cadastro deriva
+parceiro/unidade/modalidade da configuração e exige quem recebeu do paciente.
+Recebedor SoproLife gera a pagar à clínica; parceiro gera a receber da clínica;
+já dividido não gera obrigação. Acerto baixa obrigação sem receita adicional;
+regularização deposita parcela própria sem criar obrigação. Financeiro tem
+painel próprio das partilhas, movimentações e saldos. Projeção de lucro não
+confunde bruto recebido pela clínica com recebimento da SoproLife.
+
+Históricos `ESP-000059/69/72` não ganham partilha nova nem mudança da base
+consolidada. Nenhum registro/regra de Alergo Life é reutilizado ou alterado.
+Custos Alergocare não vêm de defaults de combustível/estacionamento: somente
+sessão explícita ou despesa individual; a sessão histórica de 27/10 permanece.
+Maclin conserva fiscal DIRECT pelo bruto confirmado e confirmação humana;
+Alergocare continua bloqueada para emissão até validação fiscal própria.
+Nenhuma política tributária é criada por esta configuração comercial.
+
+Operação, implantação e rollback: [contrato de parcerias](PARCERIAS_COMERCIAIS.md).
+Evidências de produção e confirmação do exame existente ficam no relatório
+externo da missão, sem PII no Git. Funil, WhatsApp desligado, EEGLife e fiscal
+conservam seus contratos e permissões.
 
 ## Funil comercial prospectivo — 13/11/2026
 
@@ -64,8 +95,9 @@ ou pagamento, nem altera o fechamento de repasse médico. O backfill geral
 ignora essas regras individuais e não antecipa sua vigência.
 
 ALERGOCARE tem classificação própria, separada de AlergoLife. A regra confirmada
-é 30% parceiro / 70% SoproLife, combustível e estacionamento de R$ 10 por ida,
-sem sala horária adicional. Base bruta precisa ser confirmada em
+é 30% parceiro / 70% SoproLife. Os R$10 de combustível e R$10 de estacionamento
+da ida de 27/10 são custos exclusivos daquela sessão, sem defaults para outros
+exames e sem sala horária adicional. Base bruta precisa ser confirmada em
 `ProfitRevenueBasis`; a projeção separa os 30% uma única vez e usa o bruto no
 cartão. Sessão exclusiva confirmada conserva seus overrides e não compartilha
 custos com exame sem vínculo, mesmo na mesma data. Não cria pagamento ao parceiro

@@ -27,6 +27,7 @@ from ..finance_categories import (
 )
 from ..ids import allocate_public_code
 from ..models import (
+    ExamPartnerShare, PartnerShareMovement,
     Consultation,
     FinancialEntry,
     Partner,
@@ -454,6 +455,8 @@ def create_entry(
     user: User = Depends(require_role(ROLE_GESTOR)),
 ):
     _check_pcmso(db, request, user, payload, "lancamentos.create")
+    if payload.spirometry_exam_id and payload.tipo in ("receita", "repasse") and db.scalar(select(ExamPartnerShare).where(ExamPartnerShare.spirometry_exam_id == payload.spirometry_exam_id)):
+        raise HTTPException(409, "Exame com partilha: use o acerto vinculado, sem segunda receita/repasse.")
     ensure_financial_links_coherent(
         db,
         payload.spirometry_exam_id,
@@ -1002,6 +1005,11 @@ def update_entry(
     if not entry:
         raise HTTPException(status_code=404, detail="Lançamento não encontrado.")
     _check_pcmso(db, request, user, payload, "lancamentos.update")
+    if entry.tipo == "movimentacao":
+        raise HTTPException(409, "Movimento de acerto consolidado é imutável.")
+    share = db.scalar(select(ExamPartnerShare).where(ExamPartnerShare.financial_entry_id == entry.id))
+    if share and db.scalar(select(PartnerShareMovement).where(PartnerShareMovement.share_id == share.id)):
+        raise HTTPException(409, "Receita com acerto já registrado: preserve os fatos consolidados.")
     updates = payload.model_dump(exclude_none=True)
     # Estado final efetivo: linha existente + mudanças pedidas. valor/tipo e os
     # vínculos não são atualizáveis (não existem em FinancialEntryUpdate), então
@@ -1141,6 +1149,8 @@ def create_transfer(
             },
         )
     if payload.financial_entry_id:
+        if db.scalar(select(ExamPartnerShare).where(ExamPartnerShare.financial_entry_id == payload.financial_entry_id)):
+            raise HTTPException(409, "Use o acerto da partilha para este exame.")
         entry = db.scalar(select(FinancialEntry).where(FinancialEntry.id == payload.financial_entry_id, FinancialEntry.eeg_exam_id.is_(None)))
         if entry is None:
             raise HTTPException(status_code=422, detail={

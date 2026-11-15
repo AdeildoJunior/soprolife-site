@@ -35,7 +35,8 @@ def test_migration_aditiva_reversivel_sem_backfill_e_sem_apagar_evidencia(tmp_pa
     # reversível, sem backfill — a cadeia EEG abaixo dela segue intacta.
     # Custos analíticos (0b90ea2): a nova head preserva a cadeia EEG/MIR.
     # WhatsApp: new additive head, existing fiscal/EEG chain unchanged.
-    assert script.get_heads() == ["w141126wa"]
+    assert script.get_heads() == ["p151126share"]
+    assert script.get_revision("p151126share").down_revision == "w141126wa"
     assert script.get_revision("w141126wa").down_revision == "f131126funil"
     assert script.get_revision("f131126funil").down_revision == "a04f1c202611"
     assert script.get_revision("a04f1c202611").down_revision == "d7b2f3a9c1e0"

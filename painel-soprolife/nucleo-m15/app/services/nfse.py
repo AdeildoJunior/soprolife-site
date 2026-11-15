@@ -19,6 +19,7 @@ from ..fiscal_schemas import PolicyCreate, TaxConfiguration
 from ..finance_categories import CATEGORIA_ESPIROMETRIA, e_receita_propria_do_componente
 from ..ids import new_uuid
 from ..models import (FiscalPolicy, FiscalDocument, FiscalDocumentItem, FiscalPreparation,
+    ExamPartnerShare, PartnerCommercialRule,
                       FiscalAttempt, FiscalArtifact, FinancialEntry, SpirometryExam,
                       Partner, Person, utcnow)
 from .idempotency import idempotent_create, payload_fingerprint
@@ -267,8 +268,15 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
     # Modalidade e vínculo técnico ao cadastro; nunca inferir pelo local livre.
     partner_flow = bool(exam.partner_id or exam.partner_unit_id or exam.modalidade == 'clinica_parceira')
     partner_share = None
+    commercial_share = db.scalar(select(ExamPartnerShare).where(ExamPartnerShare.spirometry_exam_id == exam.id))
+    commercial_rule = db.get(PartnerCommercialRule, commercial_share.rule_id) if commercial_share else None
     maclin = is_maclin(db.get(Partner, exam.partner_id)) if exam.partner_id else False
-    if maclin and exam.modalidade == 'cowork' and not exam.partner_unit_id:
+    if commercial_rule and commercial_rule.fiscal_flow == 'DIRECT':
+        flow = 'DIRECT'
+        basis = latest_basis(db, exam.id)
+        if not basis or basis.basis != 'bruto':
+            reasons.append('maclin_gross_basis_missing_or_stale')
+    elif maclin and exam.modalidade == 'cowork' and not exam.partner_unit_id:
         # Somente o fluxo novo tem preço cheio comprovado no livro-caixa.
         # O histórico líquido permanece sujeito à revisão fiscal separada.
         flow = 'DIRECT'
@@ -315,7 +323,7 @@ def evaluate(db: Session, exam_id: str, environment: str, *, for_update: bool = 
             reasons.append('financial_link_incoherent')
         if entry and (entry.status != 'Recebido' or entry.moeda != 'BRL' or entry.valor <= 0):
             reasons.append('financial_revenue_not_received_or_invalid')
-        if maclin and entry and flow == 'DIRECT':
+        if (maclin or commercial_rule) and entry and flow == 'DIRECT':
             if (not basis or basis.financial_entry_id != entry.id or basis.entry_amount_snapshot != entry.valor
                     or basis.gross_amount != entry.valor):
                 reasons.append('maclin_gross_basis_missing_or_stale')

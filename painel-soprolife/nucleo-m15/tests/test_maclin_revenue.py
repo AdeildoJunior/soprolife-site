@@ -91,10 +91,12 @@ def test_gross_unknown_does_not_invent_card_or_payment(db, person, users, form, 
 @pytest.mark.parametrize("form,fee", [("Pix", "0.00"), ("Cartão", "10.00")])
 def test_new_attendance_gross_cash_net_profit_and_full_invoice(client, auth, db, person, users, form, fee):
     p = partner(db)
+    from app.services.partner_share_setup import configure
+    configure(db, "maclin", DAY, users["admin"].id)
     seed(db, person, users)
     db.commit()
     payload = {"person_id":person["id"], "tipo":"espirometria_soprolife", "idempotency_key":"maclin-synthetic",
-        "espirometria":{"data_exame":DAY.isoformat(), "modalidade":"cowork", "local_atendimento":"MACLIN", "parceria_comercial":"maclin"},
+        "espirometria":{"data_exame":DAY.isoformat(), "modalidade":"cowork", "local_atendimento":"MACLIN", "parceria_comercial":"maclin", "recebido_por":"dividido"},
         "financeiro":{"espirometria":{"valor":"200.00", "status":"Recebido", "forma_pagamento":form}}}
     response = client.post("/api/v1/atendimentos", json=payload, headers=auth("operacional"))
     assert response.status_code == 201, response.text

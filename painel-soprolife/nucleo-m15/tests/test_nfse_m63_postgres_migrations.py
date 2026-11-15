@@ -53,14 +53,14 @@ PRE_M62_OPERATIONAL = 'd6a9f20c3e41'
 # em produção.
 # Custos analíticos (0b90ea2), já aplicados em produção; nenhuma migration nova.
 # Funil prospectivo: uma head aditiva sem backfill de exames/leads.
-OPERATIONAL_HEAD = 'w141126wa'
+OPERATIONAL_HEAD = 'p151126share'
 
 FISCAL_MIGRATIONS = ('f6a1d9e28b40', '9c310c422ce2', 'ba3afa480112', 'a58f6c31d9e7',
                      '3a97d7535a49', 'a7d2c95e4f13', 'c4e8b1f37a92', 'e8b3d6a4f190',
                      'b70c4a2e9d15', 'c3f0a7b12e45', 'e2a0b6c719af',
                      'a1c7e5d9b204', 'b5e2f7a91c38', 'c3f8a1d7e529',
                      'd7b2c4e86a91', 'e9c4a1b72029', 'f1e4a2b72029', 'a291029eeg01',
-                     'd7b2f3a9c1e0', 'a04f1c202611', 'f131126funil', 'w141126wa')
+                     'd7b2f3a9c1e0', 'a04f1c202611', 'f131126funil', 'w141126wa', 'p151126share')
 
 
 def _current(url):

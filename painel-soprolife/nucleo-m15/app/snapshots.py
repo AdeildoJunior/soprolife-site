@@ -217,7 +217,9 @@ def build_financeiro_summary(db: Session) -> dict:
 
     Nada é inventado: parceria sem regra cadastrada contribui `None`, não zero.
     """
-    entradas = db.scalars(select(FinancialEntry).where(FinancialEntry.eeg_exam_id.is_(None))).all()
+    # Movimentos de acerto aparecem no painel próprio; não entram em agregados de receita/status.
+    entradas = db.scalars(select(FinancialEntry).where(
+        FinancialEntry.eeg_exam_id.is_(None), FinancialEntry.tipo != "movimentacao")).all()
     settlements = db.scalars(select(PartnerSettlement)).all()
 
     # Fechamento → parceiro, para rotular a origem da receita sem PII.

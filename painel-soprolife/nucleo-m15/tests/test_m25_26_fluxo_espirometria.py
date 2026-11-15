@@ -441,12 +441,10 @@ def test_valor_padrao_vem_da_configuracao(client, auth):
     assert cfg["valor_padrao"] == "220.00"
     assert cfg["valor_padrao_editavel"] is True
     oferecidas = [m["valor"] for m in cfg["modalidades"]]
-    assert oferecidas == ["residencial", "cowork"]
-    # clínica parceira é declarada indisponível COM o motivo, em vez de
-    # simplesmente sumir sem explicação.
-    indisponivel = cfg["modalidades_indisponiveis"][0]
-    assert indisponivel["valor"] == "clinica_parceira"
-    assert "Pastore" in indisponivel["motivo"]
+    assert oferecidas == ["residencial", "cowork", "clinica_parceira"]
+    clinic = next(m for m in cfg["modalidades"] if m["valor"] == "clinica_parceira")
+    assert clinic["exige_unidade"] is True
+    assert cfg["modalidades_indisponiveis"] == []
 
 
 def test_valor_de_tabela_e_configuravel_sem_tocar_codigo():

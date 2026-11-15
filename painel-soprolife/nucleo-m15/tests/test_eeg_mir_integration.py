@@ -51,7 +51,7 @@ def test_domains_reject_each_others_fields(client,auth):
 def test_assets_keep_both_cache_versions():
     panel=Path(__file__).resolve().parents[2]
     html=(panel/'index.html').read_text()
-    assert 'central-cadastros.js?v=2026111401' in html
+    assert 'central-cadastros.js?v=2026111501' in html
     assert 'eeg-operacao.js?v=2026103001' in html
     assert 'life-command-center.css?v=2026102911' in html
 

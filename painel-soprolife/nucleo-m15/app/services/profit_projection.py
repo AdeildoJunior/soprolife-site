@@ -11,9 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models import (
-    FinancialEntry, FiscalDocument, FiscalDocumentItem,
+    ExamPartnerShare, FinancialEntry, FiscalDocument, FiscalDocumentItem,
     OperationalSession, OperationalSessionExam, Partner, PartnerReferral, PartnerSettlement,
-    PartnerSettlementItem, PartnerTransfer, PartnerUnit, PhysicianTransfer,
+    PartnerSettlementItem, PartnerTransfer, PartnerUnit, PhysicianTransfer, PartnerShareMovement,
     ProfitCostRule, ProfitRevenueBasis, ReportDocument, SpirometryExam, Person,
 )
 from .exam_profit import allocate, calculate_exam, cents, money, percent, physician_cost_rule_key, session_cost
@@ -96,6 +96,13 @@ def build_projection(db: Session, start: date, end: date) -> dict:
     places = {e.id: classify_place(e, partners.get(e.partner_id), units.get(e.partner_unit_id))
               for e in all_exams}
     rules = db.scalars(select(ProfitCostRule).order_by(ProfitCostRule.created_at, ProfitCostRule.id)).all()
+    shares_by_exam = {s.spirometry_exam_id: s for s in db.scalars(select(ExamPartnerShare))}
+    receipts_from_partner = defaultdict(int)
+    for movement, cash in db.execute(select(PartnerShareMovement, FinancialEntry).join(
+            FinancialEntry, FinancialEntry.id == PartnerShareMovement.financial_entry_id).where(
+            PartnerShareMovement.natureza == "acerto", PartnerShareMovement.direcao == "entrada",
+            FinancialEntry.status == "Recebido")):
+        receipts_from_partner[movement.share_id] += cents(cash.valor)
     basis_by_exam = {}
     for basis in db.scalars(select(ProfitRevenueBasis).order_by(ProfitRevenueBasis.created_at, ProfitRevenueBasis.id)).all():
         basis_by_exam[basis.spirometry_exam_id] = basis
@@ -255,6 +262,12 @@ def build_projection(db: Session, start: date, end: date) -> dict:
                     # O caixa do histórico guarda só os 70%; a maquininha
                     # processou o bruto. Ausência do bruto só bloqueia cartão.
                     card_paid = gross
+            elif basis and basis.basis == "bruto" and exam.id in shares_by_exam:
+                share = shares_by_exam[exam.id]
+                gross, revenue = cents(share.valor_bruto), cents(share.parcela_soprolife)
+                if entry.status == "Recebido":
+                    received = receipts_from_partner[share.id] if share.recebido_por == "parceiro" else revenue
+                net_partner, partner_cost, partner_source = True, 0, "partilha_comercial_confirmada"
             elif basis and basis.basis == "bruto" and place in NET_PARTNER_PLACES:
                 gross = revenue
                 if exam_rules.get(f"{place}.partner_percent") == Decimal("30.00"):

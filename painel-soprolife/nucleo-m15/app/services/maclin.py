@@ -39,6 +39,8 @@ def record_basis(db, exam, entry, *, basis, gross_amount, evidence_note, user_id
             and previous.entry_amount_snapshot == entry.valor
             and previous.basis == basis and previous.gross_amount == gross_amount):
         return previous, True
+    if exam.public_code in {"ESP-000059", "ESP-000069", "ESP-000072"}:
+        raise HTTPException(409, "Base histórica Maclin consolidada: não alterar bruto/líquido ou valores.")
     row = ProfitRevenueBasis(spirometry_exam_id=exam.id, financial_entry_id=entry.id,
                              entry_amount_snapshot=entry.valor, basis=basis,
                              gross_amount=gross_amount, evidence_note=evidence_note,

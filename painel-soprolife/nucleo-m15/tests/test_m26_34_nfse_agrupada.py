@@ -806,7 +806,8 @@ def test_migration_e_aditiva_reversivel_e_recusa_apagar_agrupado(tmp_path, monke
     # Custos analíticos (0b90ea2) já publicados: cadeia anterior preservada.
     # Funil prospectivo: head aditiva; guardas e cadeia fiscal preservadas.
     # WhatsApp: new additive head, existing fiscal/EEG chain unchanged.
-    assert script.get_heads() == ["w141126wa"]
+    assert script.get_heads() == ["p151126share"]
+    assert script.get_revision("p151126share").down_revision == "w141126wa"
     assert script.get_revision("w141126wa").down_revision == "f131126funil"
     assert script.get_revision("f131126funil").down_revision == "a04f1c202611"
     assert script.get_revision("a04f1c202611").down_revision == "d7b2f3a9c1e0"

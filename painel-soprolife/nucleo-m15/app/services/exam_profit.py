@@ -37,8 +37,6 @@ DEFAULT_RULES = {
     "maclin.parking": Decimal("10.00"),
     "maclin.fuel": Decimal("0.00"),
     "alergocare.partner_percent": Decimal("30.00"),
-    "alergocare.parking": Decimal("10.00"),
-    "alergocare.fuel": Decimal("10.00"),
     "alergolife.partner_percent": Decimal("30.00"),
     "alergolife.parking": Decimal("10.00"),
     "alergolife.fuel": Decimal("10.00"),
@@ -81,6 +79,8 @@ def session_cost(place: str, hours: Decimal | None, rules: dict[str, Decimal],
     for component, override in (("parking", parking_override), ("fuel", fuel_override)):
         if override is not None:
             result[component] = cents(override)
+        elif place == "alergocare":
+            result[component] = 0  # gastos avulsos só por evidência explícita
         elif f"{place}.{component}" in rules:
             result[component] = cents(rules[f"{place}.{component}"])
         elif not partial:

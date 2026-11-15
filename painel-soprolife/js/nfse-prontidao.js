@@ -259,7 +259,7 @@
 
     // E. Fluxo / modalidade
     var fFaltas = [];
-    var fluxo = fluxoFiscal(tipo, exame.modalidade);
+    var fluxo = exame.fluxoParceria === "DIRECT" ? "DIRECT" : fluxoFiscal(tipo, exame.modalidade);
     if (FLUXOS_SUPORTADOS.indexOf(fluxo) === -1) {
       fFaltas.push(exame.modalidade ? MSG.modalidade_nao_suportada : MSG.modalidade_ausente);
     }

@@ -640,7 +640,8 @@ CATEGORIA_REPASSE_MEDICO = _CATEGORIA_REPASSE_MEDICO
 class AtendimentoEspirometria(StrictModel):
     lead_id: str | None = None
     continuar_sem_rastreamento: bool = False
-    parceria_comercial: Literal["maclin"] | None = None
+    parceria_comercial: str | None = Field(default=None, min_length=1, max_length=40)
+    recebido_por: Literal["soprolife", "parceiro", "dividido"] | None = None
     data_exame: str = Field(min_length=4, max_length=40)
     status: StatusExame = "Realizado"
     broncodilatador: bool | None = None
@@ -776,10 +777,12 @@ class _AtendimentoBlocos(StrictModel):
 
         exame = self.espirometria
         if exame and exame.parceria_comercial:
-            if self.tipo == TIPO_PASTORE or exame.partner_id or exame.partner_unit_id:
-                raise ValueError("Maclin não pode ser combinada com Pastore ou outra unidade/parceria.")
+            if not exame.recebido_por:
+                raise ValueError("Informe quem recebeu do paciente: SoproLife, parceiro ou pagamento dividido.")
+            if self.tipo == TIPO_PASTORE:
+                raise ValueError("Partilha comercial não pode ser combinada com Pastore.")
             if not self.financeiro or not self.financeiro.espirometria:
-                raise ValueError("Novo atendimento Maclin exige o valor cheio do exame.")
+                raise ValueError("Novo atendimento de parceria exige o valor bruto do exame.")
         if self.tipo == TIPO_PASTORE:
             if not (exame and exame.partner_id):
                 raise ValueError("Espirometria Pastore exige o parceiro.")
@@ -789,7 +792,7 @@ class _AtendimentoBlocos(StrictModel):
                 raise ValueError(
                     "Espirometria Pastore não aceita pagamento direto do paciente."
                 )
-        elif exame is not None and (exame.partner_id or exame.partner_unit_id):
+        elif exame is not None and not exame.parceria_comercial and (exame.partner_id or exame.partner_unit_id):
             # Atendimento SoproLife (inclusive o combinado) NUNCA é Pastore.
             raise ValueError(
                 "Atendimento SoproLife não aceita parceiro/unidade — "

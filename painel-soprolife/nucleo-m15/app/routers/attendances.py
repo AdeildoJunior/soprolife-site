@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from ..audit import audit
 from ..services.funnel import attach_exam, sync_exam, reuse_scheduled
-from ..services.maclin import canonical_maclin, record_basis, split_gross
+from ..services import partner_shares
 from ..config import get_settings
 from ..dates import add_months, parse_incomplete_date
 from ..db import get_db
@@ -168,10 +168,7 @@ def _entry(
 #   LOCAL/UNIDADE  = onde especificamente aconteceu (texto livre, sugerido
 #                    de acordo com a modalidade, nunca uma segunda categoria).
 #
-# `clinica_parceira` NÃO é oferecida no fluxo SoproLife de propósito: o
-# schema proíbe parceiro/unidade fora do tipo Pastore, então escolhê-la
-# criaria um exame que a emissão do laudo recusa por falta de unidade. Existe
-# um registro assim em produção, nascido justamente dessa armadilha.
+# Clínica parceira resolve a unidade pela regra comercial ou pelo fluxo Pastore.
 MODALIDADES_SOPROLIFE = [
     {
         "valor": "residencial",
@@ -200,18 +197,10 @@ MODALIDADES_SOPROLIFE = [
     },
 ]
 
-MODALIDADE_INDISPONIVEL_SOPROLIFE = {
-    "valor": "clinica_parceira",
-    "rotulo": "Clínica parceira",
-    "motivo": (
-        "Exame em clínica parceira é lançado pelo tipo 'Espirometria "
-        "Pastore', que já vincula o parceiro e a unidade."
-    ),
-}
-
 
 @router.get("/atendimentos/configuracao")
 def attendance_configuration(
+    db: Session = Depends(get_db),
     _user: User = Depends(require_role(ROLE_LEITURA)),
 ):
     """Fonte única do que o formulário de atendimento oferece.
@@ -235,9 +224,14 @@ def attendance_configuration(
             },
             "valor_padrao": str(settings.espirometria_soprolife_valor_padrao),
             "valor_padrao_editavel": True,
-            "parcerias_comerciais": [{"codigo": "maclin", "rotulo": "Maclin — 70% SoproLife / 30% Maclin"}],
-            "modalidades": MODALIDADES_SOPROLIFE,
-            "modalidades_indisponiveis": [MODALIDADE_INDISPONIVEL_SOPROLIFE],
+            "parcerias_comerciais": partner_shares.catalog(db),
+            "modalidades": MODALIDADES_SOPROLIFE + [{
+                "valor": "clinica_parceira", "rotulo": "Clínica parceira",
+                "ajuda": "Selecione a parceria comercial para preencher a unidade.",
+                "local_rotulo": "Unidade da clínica", "local_sugestoes": [],
+                "local_obrigatorio": True, "exige_unidade": True,
+            }],
+            "modalidades_indisponiveis": [],
         }
     }
 
@@ -402,15 +396,16 @@ def _create_attendance(
 
     lancamentos = _criar_financeiro(db, payload, exam, consultation)
     resultado["lancamentos"] = lancamentos
-    if exam is not None and payload.espirometria.parceria_comercial == "maclin":
+    if exam is not None and payload.espirometria.parceria_comercial:
         entry = db.scalar(select(FinancialEntry).where(
             FinancialEntry.spirometry_exam_id == exam.id, FinancialEntry.tipo == "receita"))
-        record_basis(db, exam, entry, basis="bruto", gross_amount=entry.valor,
-                     evidence_note="Fluxo novo Maclin: valor cheio informado; 70% SoproLife / 30% Maclin.",
-                     user_id=user.id, request_id=request.state.request_id)
-        net, partner_amount = split_gross(entry.valor)
-        resultado["partilha_maclin"] = {"bruto": str(entry.valor), "soprolife": str(net),
-                                      "maclin": str(partner_amount), "pagamento_criado": False}
+        share = partner_shares.create_share(db, exam, entry, payload.espirometria.parceria_comercial,
+            payload.espirometria.recebido_por, user.id, request.state.request_id)
+        resultado["partilha_parceiro"] = partner_shares.position(db, share)
+        # Compatibilidade da resposta anterior do fluxo Maclin.
+        if payload.espirometria.parceria_comercial == "maclin":
+            resultado["partilha_maclin"] = {"bruto": str(entry.valor), "soprolife": str(share.parcela_soprolife),
+                "maclin": str(share.parcela_parceiro), "pagamento_criado": False}
 
     # M26.3 — o exame de parceria entra no fechamento da sua competência na
     # MESMA transação em que nasce. Antes isso dependia de alguém lembrar de
@@ -488,12 +483,21 @@ def _criar_exame(db: Session, person: Person, payload: AtendimentoCreate) -> Spi
     partner_id = bloco.partner_id
     partner_unit_id = bloco.partner_unit_id
     origem = bloco.origem
-    if bloco.parceria_comercial == "maclin":
-        if modalidade != "cowork" or local_atendimento is None or local_atendimento.strip().casefold() != "maclin":
-            raise _erro("local_maclin_incoerente", "Parceria Maclin exige modalidade cowork e local MACLIN.")
-        partner_id = canonical_maclin(db).id
-    elif payload.tipo != TIPO_PASTORE and local_atendimento and local_atendimento.strip().casefold() == "maclin":
-        raise _erro("maclin_valor_cheio_obrigatorio", "Selecione a parceria Maclin e informe o valor cheio pago pelo cliente.")
+    if bloco.parceria_comercial:
+        when = parse_incomplete_date(bloco.data_exame)
+        if when.value is None or when.day_assumed or when.precision != "dia":
+            raise _erro("data_partilha_imprecisa", "Partilha exige a data exata do exame.")
+        rule, partner, unit = partner_shares.resolve_rule(db, bloco.parceria_comercial, when.value)
+        if (partner_id and partner_id != partner.id) or (partner_unit_id and partner_unit_id != unit.id):
+            raise _erro("parceria_incoerente", "Parceiro/unidade divergem da parceria selecionada.")
+        partner_id, partner_unit_id = partner.id, unit.id
+        modalidade, local_atendimento = rule.modalidade, unit.nome
+    elif payload.tipo != TIPO_PASTORE:
+        # Locais sugeridos antigos também precisam da seleção comercial explícita.
+        label = (local_atendimento or "").strip().casefold()
+        if any(label in {r["codigo"].casefold(), r["rotulo"].casefold(), r["unidade"].casefold()}
+               for r in partner_shares.catalog(db)) or label in {"maclin", "alergocare"}:
+            raise _erro("parceria_valor_bruto_obrigatorio", "Selecione a parceria e informe o bruto pago pelo paciente.")
     if payload.tipo == TIPO_PASTORE:
         partner = canonical_pastore(db)
         if bloco.partner_id != partner.id:

@@ -1059,6 +1059,75 @@ class ProfitRevenueBasis(Base):
     )
 
 
+class PartnerCommercialRule(Base):
+    """Vigência comercial vinculada à parceria existente; nunca configuração fiscal implícita."""
+    __tablename__ = "partner_commercial_rules"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    codigo: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    partnership_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("partnerships.id"), nullable=False)
+    partner_unit_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("partner_units.id"), nullable=False)
+    modalidade: Mapped[str] = mapped_column(String(30), nullable=False)
+    vigencia_inicio: Mapped[date] = mapped_column(Date, nullable=False)
+    vigencia_fim: Mapped[date | None] = mapped_column(Date)
+    percentual_parceiro: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    percentual_soprolife: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    fiscal_flow: Mapped[str | None] = mapped_column(String(10))
+    created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__ = (
+        UniqueConstraint("codigo", "vigencia_inicio", name="uq_commercial_rule_version"),
+        CheckConstraint("percentual_parceiro >= 0 AND percentual_soprolife >= 0 AND percentual_parceiro + percentual_soprolife = 100", name="rule_percent"),
+        CheckConstraint("vigencia_fim IS NULL OR vigencia_fim >= vigencia_inicio", name="rule_dates"),
+        CheckConstraint("fiscal_flow IS NULL OR fiscal_flow = 'DIRECT'", name="rule_fiscal_flow"),
+    )
+
+
+class ExamPartnerShare(Base):
+    """Snapshot comercial novo, sem reclassificar exames históricos."""
+    __tablename__ = "exam_partner_shares"
+    rule_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("partner_commercial_rules.id"), nullable=False)
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    spirometry_exam_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("spirometry_exams.id"), unique=True, nullable=False)
+    financial_entry_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("financial_entries.id"), unique=True, nullable=False)
+    partner_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("partners.id"), nullable=False)
+    partner_unit_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("partner_units.id"), nullable=False)
+    modalidade: Mapped[str] = mapped_column(String(30), nullable=False)
+    vigencia_inicio: Mapped[date] = mapped_column(Date, nullable=False)
+    percentual_parceiro: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    percentual_soprolife: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    valor_bruto: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    parcela_parceiro: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    parcela_soprolife: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    recebido_por: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__ = (
+        CheckConstraint("percentual_parceiro >= 0 AND percentual_soprolife >= 0 AND percentual_parceiro + percentual_soprolife = 100", name="share_percent"),
+        CheckConstraint("valor_bruto > 0 AND parcela_parceiro >= 0 AND parcela_soprolife >= 0 AND parcela_parceiro + parcela_soprolife = valor_bruto", name="share_amount"),
+        CheckConstraint("recebido_por IN ('soprolife','parceiro','dividido')", name="share_receiver"),
+    )
+
+
+class PartnerShareMovement(Base):
+    """Movimento de caixa/acerto: valor reside exclusivamente no razão."""
+    __tablename__ = "partner_share_movements"
+    id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
+    share_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("exam_partner_shares.id"), nullable=False, index=True)
+    financial_entry_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("financial_entries.id"), unique=True, nullable=False)
+    natureza: Mapped[str] = mapped_column(String(30), nullable=False)
+    direcao: Mapped[str] = mapped_column(String(10), nullable=False)
+    conta: Mapped[str] = mapped_column(String(60), nullable=False)
+    origem_bancaria: Mapped[str | None] = mapped_column(String(120))
+    ocorrido_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__ = (
+        CheckConstraint("natureza IN ('acerto','regularizacao')", name="movement_kind"),
+        CheckConstraint("direcao IN ('entrada','saida')", name="movement_direction"),
+    )
+
+
 class OperationalSession(Base, TimestampMixin):
     """Uma ida física; Pastore agrupa por dia, demais locais exigem confirmação."""
     __tablename__ = "operational_sessions"

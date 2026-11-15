@@ -764,6 +764,8 @@
 
         <div id="financeStats" class="finance-stats"></div>
 
+        <div id="partnerSharesRoot" aria-live="polite"></div>
+
         <div id="profitPanelRoot" aria-live="polite"></div>
 
         <div id="medicalTransfersRoot" aria-live="polite">
@@ -1153,15 +1155,16 @@
        Depende do cliente compartilhado window.SoproM15 (script acima). -->
   <!-- M67: regras de prontidão para NFS-e (puras, sem rede) usadas pelo
        "Novo atendimento". Orientação apenas — o Fiscal decide. -->
-  <script src="./js/nfse-prontidao.js?v=2026100201" defer></script>
+  <script src="./js/nfse-prontidao.js?v=2026111501" defer></script>
   <!-- M68: CPF → nascimento → nome oficial (SERPRO via servidor, nunca direto). -->
   <script src="./js/identificacao-assistida.js?v=2026092401" defer></script>
-  <script src="./js/central-cadastros.js?v=2026111401" defer></script>
+  <script src="./js/central-cadastros.js?v=2026111501" defer></script>
   <script src="./js/whatsapp-panel.js?v=2026111402" defer></script>
   <script src="./js/funnel-panel.js?v=2026111402" defer></script>
   <!-- M22: fechamento mensal da Pastore. O exame permanece não monetário;
        o módulo cria um único recibo agregado somente após confirmação. -->
   <link rel="stylesheet" href="./css/pastore-settlement.css?v=2026083001">
+  <script src="./js/partner-shares.js?v=2026111501" defer></script>
   <script src="./js/pastore-settlement.js?v=2026083001" defer></script>
   <!-- Fiscal — Command Center do NFS-e (fundação offline). -->
   <link rel="stylesheet" href="./css/fiscal-command-center.css?v=2026102102">

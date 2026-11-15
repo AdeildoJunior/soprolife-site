@@ -1886,10 +1886,7 @@
        * que antes só existia como placeholder e agora nasce preenchido e
        * editável, vindo de `M15_ESPIROMETRIA_SOPROLIFE_VALOR_PADRAO`.
        *
-       * "Clínica parceira" saiu da lista: o tipo SoproLife não aceita
-       * parceiro/unidade, então escolhê-la produzia um exame que a emissão do
-       * laudo depois recusava por falta de unidade. Existe um registro assim
-       * em produção, criado exatamente por essa armadilha. */
+       * Clínica parceira preenche a unidade pela parceria configurada. */
       const cfgEsp = (cfg && cfg.espirometria_soprolife) || {};
       const modalidades = cfgEsp.modalidades || [];
       const indisponiveis = cfgEsp.modalidades_indisponiveis || [];
@@ -1913,8 +1910,8 @@
         ${fld("Origem", inp("esp_origem", iniciais.origem || "", 'list="cadOrigens"'),
           { span: 4, ajuda: "Como o paciente chegou até a SoproLife (Google, indicação, empresa…). Não é o lugar do exame." })}
         ${fld("Parceria comercial", sel("esp_parceria_comercial", [["", "Sem partilha"]].concat(
-          (cfgEsp.parcerias_comerciais || []).map((p) => [p.codigo, p.rotulo])), ""),
-          { span: 4, help: "Maclin: informe o valor cheio pago pelo cliente; o sistema separa 70% / 30%." })}
+          [...new Map((cfgEsp.parcerias_comerciais || []).map(p => [p.codigo, p.rotulo])).entries()]), ""),
+          { span: 4, help: "Selecione a clínica para preencher parceiro, unidade, modalidade e divisão pela configuração vigente." })}
         ${fld("Valor cheio da espirometria (R$)", inp("esp_valor", valorPadrao,
           'inputmode="decimal" placeholder="220,00"'),
           { span: 4, nfse, ajuda: "Nasce com o valor de tabela e pode ser alterado. Apagando o campo, nenhum lançamento financeiro é criado — nada é inferido. É este valor, bruto, que vai na NFS-e." })}
@@ -1923,6 +1920,10 @@
         ${fld("Data de recebimento", dateInp("esp_pgto_data", ""), 4)}
         ${fld("Forma de pagamento", sel("esp_pgto_forma",
           [["", "—"], "Pix", "Dinheiro", "Cartão", "Outro"], "Pix"), 4)}
+        ${fld("Quem recebeu do paciente", sel("esp_recebido_por",
+          [["", "Selecione…"], ["soprolife", "SoproLife recebeu o bruto"], ["parceiro", "Clínica recebeu o bruto"],
+           ["dividido", "Já dividido: cada parte recebeu sua parcela"]], ""),
+          { span: 4, help: "Obrigatório nas parcerias. Determina se há valor a pagar ou a receber no acerto." })}
         <div class="m15-form-full cad-microcopy" id="cadMaclinPartilha" role="status" aria-live="polite" hidden></div>
         ${datalist("cadLocais", [])}
       ` + commonEnd;
@@ -2041,7 +2042,7 @@
     return out;
   }
 
-  function rascunhoNfse(form, tipo, pessoaExistente) {
+  function rascunhoNfse(form, tipo, pessoaExistente, parceria) {
     const pessoa = pessoaExistente
       ? { existente: true, pendenciasServidor: pendenciasIdentidadeExistente(pessoaExistente) }
       : { existente: false, nome: val(form, "cadAtP_nome"), cpf: cpfDigitos(val(form, "cadAtP_cpf")) };
@@ -2054,6 +2055,7 @@
         broncodilatador: val(form, "esp_bd"),
         municipio: val(form, "esp_municipio"),
         modalidade: val(form, "esp_modalidade"),
+        fluxoParceria: parceria ? parceria.fiscal_flow : null,
       },
       financeiro: {
         valor: parseMoneyBR(val(form, "esp_valor")),
@@ -2203,38 +2205,61 @@
       form.addEventListener("change", (ev) => {
         if (ev.target.name === "esp_pgto_status") atualizarDatasSugeridas();
         if (ev.target.name === "esp_pgto_forma") ev.target.dataset.cadManual = "1";
-        if (ev.target.name === "esp_parceria_comercial" && ev.target.value === "maclin") {
-          form.elements.esp_modalidade.value = "cowork";
-          aplicarModalidade();
-          form.elements.esp_local.value = "MACLIN";
-          form.elements.esp_local.dataset.tocado = "1";
-          if (!form.elements.esp_pgto_forma.dataset.cadManual) form.elements.esp_pgto_forma.value = "";
-        }
-        if (["esp_parceria_comercial", "esp_local_opcao"].includes(ev.target.name)) {
-          if (val(form, "esp_local_opcao") === "MACLIN" && form.elements.esp_parceria_comercial) {
-            form.elements.esp_parceria_comercial.value = "maclin";
-            if (!form.elements.esp_pgto_forma.dataset.cadManual) form.elements.esp_pgto_forma.value = "";
-          } else if (ev.target.name === "esp_local_opcao" && form.elements.esp_parceria_comercial) {
-            form.elements.esp_parceria_comercial.value = "";
+        if (["esp_parceria_comercial", "esp_local_opcao", "esp_data", "esp_recebido_por"].includes(ev.target.name)) {
+          if (ev.target.name === "esp_local_opcao" && form.elements.esp_parceria_comercial) {
+            const local = val(form, "esp_local_opcao").toLowerCase();
+            const found = partnershipConfig().find(p => [p.codigo, p.rotulo, p.unidade].some(v => v.toLowerCase() === local));
+            form.elements.esp_parceria_comercial.value = found ? found.codigo : "";
           }
+          aplicarParceria();
           atualizarMaclin();
+          atualizarProntidaoNfse();
         }
       });
       form.addEventListener("input", (ev) => {
         if (["esp_valor", "esp_pgto_forma"].includes(ev.target.name)) atualizarMaclin();
       });
 
+      function partnershipConfig() {
+        return ((cfg && cfg.espirometria_soprolife) || {}).parcerias_comerciais || [];
+      }
+      function selectedPartnership() {
+        const day = val(form, "esp_data");
+        const p = partnershipConfig().find(p => p.codigo === val(form, "esp_parceria_comercial") &&
+          (!day || p.vigencia_inicio <= day));
+        return p && (!day || !p.vigencia_fim || p.vigencia_fim >= day) ? p : undefined;
+      }
+      function aplicarParceria() {
+        const p = selectedPartnership();
+        const local = form.elements.esp_local;
+        if (!local) return;
+        local.readOnly = !!p;
+        if (!p) return;
+        form.elements.esp_modalidade.value = p.modalidade;
+        aplicarModalidade();
+        local.value = p.unidade;
+        local.dataset.tocado = "1";
+        if (form.elements.esp_local_opcao) form.elements.esp_local_opcao.value = "";
+      }
       function atualizarMaclin() {
         const info = form.querySelector("#cadMaclinPartilha");
         if (!info) return;
-        info.hidden = val(form, "esp_parceria_comercial") !== "maclin";
+        const p = selectedPartnership();
+        info.hidden = !val(form, "esp_parceria_comercial");
+        if (!p) { info.textContent = "Parceria sem configuração vigente para a data informada."; return; }
         const gross = parseMoneyBR(val(form, "esp_valor"));
-        if (!gross) { info.textContent = "Informe o valor cheio pago pelo cliente."; return; }
+        if (!gross) { info.textContent = "Informe o valor bruto cobrado do paciente."; return; }
         const centavos = Math.round(Number(gross) * 100);
-        const parceiro = Math.round(centavos * 30 / 100);
-        const fmt = (n) => (n / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-        info.textContent = `SoproLife (70%): ${fmt(centavos - parceiro)} · Maclin (30%): ${fmt(parceiro)}. ` +
-          "NFS-e pelo valor cheio, mediante emissão confirmada. Cartão: taxa sobre o valor cheio; Pix: sem taxa de cartão. O cálculo não registra pagamento à Maclin.";
+        const parceiro = Math.round(centavos * Number(p.percentual_parceiro) / 100);
+        const fmt = n => (n / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        const receiver = val(form, "esp_recebido_por");
+        const acerto = receiver === "dividido" ? "Pagamento já dividido: nenhum repasse pendente." :
+          receiver === "parceiro" ? `SoproLife a receber da clínica: ${fmt(centavos - parceiro)}.` :
+          receiver === "soprolife" ? `A pagar à clínica: ${fmt(parceiro)}.` : "Informe quem recebeu do paciente.";
+        info.textContent = `${p.unidade} · Clínica parceira. Valor cobrado do paciente: ${fmt(centavos)} · ` +
+          `Parcela parceiro (${Number(p.percentual_parceiro)}%): ${fmt(parceiro)} · ` +
+          `Parcela SoproLife (${Number(p.percentual_soprolife)}%): ${fmt(centavos - parceiro)}. ${acerto} ` +
+          "Acertos posteriores não geram receita adicional. Emissão fiscal segue a regra vigente e confirmação própria.";
       }
 
       function reiniciarNovoAtendimento() {
@@ -2362,7 +2387,7 @@
       function atualizarProntidaoNfse() {
         const regras = nfseRegras();
         const r = regras
-          ? regras.avaliar(rascunhoNfse(form, tipoAtual(), picker.selecionada()),
+          ? regras.avaliar(rascunhoNfse(form, tipoAtual(), picker.selecionada(), selectedPartnership()),
             { municipios: municipiosSuportados, hoje: regras.hojeSaoPaulo() })
           : { modo: "nao_aplicavel" };
         form.setAttribute("data-nfse-modo", r.modo);
@@ -2391,7 +2416,15 @@
         const modSel = form.elements.esp_modalidade;
         const localEl = form.elements.esp_local;
         const rapido = form.elements.esp_local_opcao;
-        if (modSel) modSel.addEventListener("change", aplicarModalidade);
+        if (modSel) modSel.addEventListener("change", () => {
+          const p = selectedPartnership();
+          if (p && modSel.value !== p.modalidade) {
+            form.elements.esp_parceria_comercial.value = "";
+            localEl.readOnly = false;
+            atualizarMaclin();
+          }
+          aplicarModalidade();
+        });
         if (localEl) {
           localEl.addEventListener("input", () => {
             localEl.dataset.tocado = localEl.value.trim() ? "1" : "";
@@ -2578,10 +2611,17 @@
           "diz onde o exame aconteceu e o laudo não consegue derivar o endereço."
         );
       }
+      if (modalidade === "clinica_parceira" && !val(form, "esp_parceria_comercial")) {
+        throw new Error("Selecione a parceria comercial para preencher a unidade da clínica.");
+      }
       setIf(bloco, "modalidade", modalidade);
       setIf(bloco, "local_atendimento", local);
       setIf(bloco, "origem", val(form, "esp_origem"));
       setIf(bloco, "parceria_comercial", val(form, "esp_parceria_comercial"));
+      if (bloco.parceria_comercial) {
+        if (!val(form, "esp_recebido_por")) throw new Error("Informe quem recebeu o pagamento do paciente.");
+        bloco.recebido_por = val(form, "esp_recebido_por");
+      }
     }
     return bloco;
   }

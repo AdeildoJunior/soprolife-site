@@ -181,7 +181,8 @@ def test_m24a_auditoria_final_tem_exatamente_uma_head(tmp_path, monkeypatch):
     # Custos analíticos (0b90ea2) já publicados: cadeia anterior preservada.
     # Funil prospectivo: head aditiva; guardas e cadeia fiscal preservadas.
     # WhatsApp: new additive head, existing fiscal/EEG chain unchanged.
-    assert script.get_heads() == ["w141126wa"]
+    assert script.get_heads() == ["p151126share"]
+    assert script.get_revision("p151126share").down_revision == "w141126wa"
     assert script.get_revision("w141126wa").down_revision == "f131126funil"
     assert script.get_revision("f131126funil").down_revision == "a04f1c202611"
     assert script.get_revision("a04f1c202611").down_revision == "d7b2f3a9c1e0"
