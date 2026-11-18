@@ -611,6 +611,8 @@ class ConciliacaoItemCreate(StrictModel):
 TipoAtendimento = Literal[
     "espirometria_soprolife",
     "espirometria_pastore",
+    "espirometria_maclin",
+    "espirometria_alergocare",
     "consulta_soprolife",
     "espirometria_consulta_soprolife",
 ]
@@ -618,6 +620,8 @@ TipoAtendimento = Literal[
 TIPOS_COM_ESPIROMETRIA = (
     "espirometria_soprolife",
     "espirometria_pastore",
+    "espirometria_maclin",
+    "espirometria_alergocare",
     "espirometria_consulta_soprolife",
 )
 TIPOS_COM_CONSULTA = ("consulta_soprolife", "espirometria_consulta_soprolife")
@@ -776,6 +780,14 @@ class _AtendimentoBlocos(StrictModel):
             raise ValueError(f"O tipo '{self.tipo}' não aceita o bloco 'consulta'.")
 
         exame = self.espirometria
+        parceria_do_tipo = {
+            "espirometria_maclin": "maclin",
+            "espirometria_alergocare": "alergocare",
+        }.get(self.tipo)
+        if exame and parceria_do_tipo:
+            if exame.parceria_comercial not in (None, parceria_do_tipo):
+                raise ValueError("Parceria comercial diverge do tipo de atendimento.")
+            exame.parceria_comercial = parceria_do_tipo
         if exame and exame.parceria_comercial:
             if not exame.recebido_por:
                 raise ValueError("Informe quem recebeu do paciente: SoproLife, parceiro ou pagamento dividido.")

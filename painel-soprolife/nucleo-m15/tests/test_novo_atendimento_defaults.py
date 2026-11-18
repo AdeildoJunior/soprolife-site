@@ -16,11 +16,10 @@ def test_configuracao_sugere_valores_editaveis_sem_escrita(client, auth, person,
     config = client.get(f'{API}/atendimentos/configuracao', headers=auth()).json()['espirometria_soprolife']
     defaults = config['valores_iniciais']
     assert defaults == {'municipio_atendimento_ibge': '3304557', 'broncodilatador': True,
-                        'modalidade': 'cowork', 'origem': 'SITE'}
+                        'modalidade': 'cowork', 'origem': ''}
     assert defaults['municipio_atendimento_ibge'] in SUPPORTED_SERVICE_MUNICIPALITIES
     places = next(m for m in config['modalidades'] if m['valor']=='cowork')['local_sugestoes']
-    assert 'NOVA AMERICA' in places and 'SOPROLIFE DOWNTOWN' in places
-    assert not any('NORTE' in p for p in places)  # não confirmado na auditoria
+    assert places == ['Coworking Downtown', 'Coworking Nova América']
     assert client.get(f'{API}/espirometrias', headers=auth()).json() == before
     assert old['municipio_atendimento_ibge']=='3303302' and old['broncodilatador'] is False
 

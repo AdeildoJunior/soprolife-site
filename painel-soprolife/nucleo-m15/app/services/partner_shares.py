@@ -14,6 +14,11 @@ from .maclin import record_basis
 HISTORICAL_NET_CODES = frozenset(("ESP-000059", "ESP-000069", "ESP-000072"))
 
 
+def operational_origin(codigo, partner):
+    # O nome institucional pode conter o responsável; a origem é da operação.
+    return {'maclin': 'Maclin', 'alergocare': 'Alergocare'}.get(codigo, partner.nome)
+
+
 def _utc(when):
     return when.astimezone(ZoneInfo("UTC")) if when.tzinfo else when.replace(tzinfo=ZoneInfo("UTC"))
 
@@ -49,6 +54,7 @@ def catalog(db):
         if partner.arquivado or agreement.status != "ativa" or not unit.ativo:
             continue
         rows.append({"codigo": rule.codigo, "rotulo": partner.nome, "partner_id": partner.id,
+                     "origem_operacional": operational_origin(rule.codigo, partner),
                      "partner_unit_id": unit.id, "unidade": unit.nome, "modalidade": rule.modalidade,
                      "percentual_parceiro": str(rule.percentual_parceiro),
                      "percentual_soprolife": str(rule.percentual_soprolife), "fiscal_flow": rule.fiscal_flow,

@@ -50,9 +50,13 @@
 
   const TIPOS_ATENDIMENTO = [
     ["espirometria_soprolife", "Espirometria SoproLife",
-     "Operação clínica e financeira da SoproLife."],
+     "Coworkings SoproLife ou atendimento domiciliar."],
     ["espirometria_pastore", "Espirometria Pastore",
      "Exame realizado na unidade do parceiro Pastore."],
+    ["espirometria_maclin", "Espirometria Maclin",
+     "Clínica parceira · Maclin / Norte Shopping. Contexto automático."],
+    ["espirometria_alergocare", "Espirometria Alergocare",
+     "Clínica parceira · unidade Alergocare. Contexto automático."],
     ["consulta_soprolife", "Consulta SoproLife",
      "Receita bruta da SoproLife; repasse ao médico é lançamento separado."],
     ["espirometria_consulta_soprolife", "Espirometria + Consulta SoproLife",
@@ -66,14 +70,20 @@
     espirometria_soprolife: ["emite", "NFS-e da espirometria pela SoproLife"],
     espirometria_consulta_soprolife: ["emite", "NFS-e da espirometria pela SoproLife"],
     espirometria_pastore: ["nao-emite", "Sem NFS-e por exame — entra no fechamento da Pastore"],
+    espirometria_maclin: ["emite", "NFS-e pelo bruto — confirmação no Fiscal"],
+    espirometria_alergocare: ["nao-emite", "NFS-e aguarda validação fiscal própria"],
   };
 
   const TIPOS_COM_ESPIROMETRIA = [
     "espirometria_soprolife", "espirometria_pastore",
+    "espirometria_maclin", "espirometria_alergocare",
     "espirometria_consulta_soprolife",
   ];
   const TIPOS_COM_CONSULTA = ["consulta_soprolife", "espirometria_consulta_soprolife"];
   const TIPO_PASTORE = "espirometria_pastore";
+  const PARCERIA_POR_TIPO = {
+    espirometria_maclin: "maclin", espirometria_alergocare: "alergocare",
+  };
 
   // Valores ARMAZENADOS do status do exame; a exibição passa pelo formatador
   // único (SoproStatus) — nada aqui reescreve o que vai para o banco.
@@ -1908,7 +1918,7 @@
         ${fld("Local do atendimento", inp("esp_local", "", 'list="cadLocais" placeholder="escolha um local ou escreva manualmente"'),
           { span: 4, help: "Nome do lugar, editável. Este texto não determina o município fiscal." })}
         ${fld("Origem", inp("esp_origem", iniciais.origem || "", 'list="cadOrigens"'),
-          { span: 4, ajuda: "Como o paciente chegou até a SoproLife (Google, indicação, empresa…). Não é o lugar do exame." })}
+          { span: 4, ajuda: "Origem operacional deste atendimento. Nas clínicas, preenchida pela parceria; a aquisição comercial pertence ao Funil." })}
         ${fld("Parceria comercial", sel("esp_parceria_comercial", [["", "Sem partilha"]].concat(
           [...new Map((cfgEsp.parcerias_comerciais || []).map(p => [p.codigo, p.rotulo])).entries()]), ""),
           { span: 4, help: "Selecione a clínica para preencher parceiro, unidade, modalidade e divisão pela configuração vigente." })}
@@ -1925,6 +1935,7 @@
            ["dividido", "Já dividido: cada parte recebeu sua parcela"]], ""),
           { span: 4, help: "Obrigatório nas parcerias. Determina se há valor a pagar ou a receber no acerto." })}
         <div class="m15-form-full cad-microcopy" id="cadMaclinPartilha" role="status" aria-live="polite" hidden></div>
+        <div class="m15-form-full cad-microcopy" id="cadParceiroContexto" role="status" hidden></div>
         ${datalist("cadLocais", [])}
       ` + commonEnd;
     }
@@ -2168,7 +2179,9 @@
       const blocoEsp = bodyEl.querySelector("#cadAtBlocoEsp");
       const blocoCon = bodyEl.querySelector("#cadAtBlocoCon");
       const btnSalvar = form.querySelector('button[type="submit"]');
-      let renderedPastore = tipoInicial === TIPO_PASTORE;
+      const varianteEsp = tipo => tipo === TIPO_PASTORE || PARCERIA_POR_TIPO[tipo]
+        ? tipo : "espirometria_soprolife";
+      let renderedTipo = varianteEsp(tipoInicial);
       const rascunhosEsp = new Map();
 
       function sugerirData(nome, iso) {
@@ -2199,18 +2212,17 @@
         if (["esp_pgto_data", "esp_followup"].includes(ev.target.name)) {
           ev.target.dataset.cadManual = "1";
         }
-        if (ev.target.name === "esp_data") atualizarDatasSugeridas();
+        if (ev.target.name === "esp_data") {
+          atualizarDatasSugeridas();
+          aplicarParceria();
+          atualizarMaclin();
+        }
         state.dirty = true;
       });
       form.addEventListener("change", (ev) => {
         if (ev.target.name === "esp_pgto_status") atualizarDatasSugeridas();
         if (ev.target.name === "esp_pgto_forma") ev.target.dataset.cadManual = "1";
         if (["esp_parceria_comercial", "esp_local_opcao", "esp_data", "esp_recebido_por"].includes(ev.target.name)) {
-          if (ev.target.name === "esp_local_opcao" && form.elements.esp_parceria_comercial) {
-            const local = val(form, "esp_local_opcao").toLowerCase();
-            const found = partnershipConfig().find(p => [p.codigo, p.rotulo, p.unidade].some(v => v.toLowerCase() === local));
-            form.elements.esp_parceria_comercial.value = found ? found.codigo : "";
-          }
           aplicarParceria();
           atualizarMaclin();
           atualizarProntidaoNfse();
@@ -2230,22 +2242,44 @@
         return p && (!day || !p.vigencia_fim || p.vigencia_fim >= day) ? p : undefined;
       }
       function aplicarParceria() {
+        const codigo = PARCERIA_POR_TIPO[tipoAtual()];
+        const campo = form.elements.esp_parceria_comercial;
+        if (campo) campo.value = codigo || "";
         const p = selectedPartnership();
         const local = form.elements.esp_local;
         if (!local) return;
-        local.readOnly = !!p;
-        if (!p) return;
+        local.readOnly = !!codigo;
+        local.closest(".m15-field").querySelector(".m15-field-help").textContent = codigo
+          ? "Unidade canônica preenchida pela parceria vigente."
+          : "Nome do lugar, editável. Este texto não determina o município fiscal.";
+        const origem = form.elements.esp_origem;
+        origem.readOnly = !!codigo;
+        const contexto = form.querySelector("#cadParceiroContexto");
+        contexto.hidden = !codigo;
+        contexto.textContent = p ? `Parceiro: ${p.rotulo} · Unidade: ${p.unidade} · Clínica parceira.` :
+          "Parceria sem configuração vigente para a data informada. Não é possível salvar este atendimento.";
+        // O card já escolheu o contexto; não pedir parceiro/modalidade/local novamente.
+        ["esp_parceria_comercial", "esp_recebido_por", "esp_local_opcao", "esp_modalidade"].forEach(nome => {
+          const el = form.elements[nome];
+          if (el) el.closest(".m15-field").hidden = nome === "esp_parceria_comercial" ||
+            (nome === "esp_recebido_por" ? !codigo : !!codigo);
+        });
+        if (!p) {
+          if (codigo) { local.value = ""; origem.value = ""; }
+          return;
+        }
         form.elements.esp_modalidade.value = p.modalidade;
         aplicarModalidade();
         local.value = p.unidade;
         local.dataset.tocado = "1";
+        origem.value = p.origem_operacional;
         if (form.elements.esp_local_opcao) form.elements.esp_local_opcao.value = "";
       }
       function atualizarMaclin() {
         const info = form.querySelector("#cadMaclinPartilha");
         if (!info) return;
         const p = selectedPartnership();
-        info.hidden = !val(form, "esp_parceria_comercial");
+        info.hidden = !PARCERIA_POR_TIPO[tipoAtual()];
         if (!p) { info.textContent = "Parceria sem configuração vigente para a data informada."; return; }
         const gross = parseMoneyBR(val(form, "esp_valor"));
         if (!gross) { info.textContent = "Informe o valor bruto cobrado do paciente."; return; }
@@ -2293,7 +2327,10 @@
         const localEl = form.elements.esp_local;
         if (!modSel || !localEl) return;
         const cfgEsp = (cfg && cfg.espirometria_soprolife) || {};
-        const escolhida = (cfgEsp.modalidades || [])
+        const modalidades = (cfgEsp.modalidades || []).filter(m =>
+          PARCERIA_POR_TIPO[tipoAtual()] || m.valor !== "clinica_parceira");
+        modSel.querySelectorAll('option[value="clinica_parceira"]').forEach(o => { o.hidden = !PARCERIA_POR_TIPO[tipoAtual()]; });
+        const escolhida = modalidades
           .find((m) => m.valor === modSel.value);
         const dl = bodyEl.querySelector("#cadLocais");
         const rapido = form.elements.esp_local_opcao;
@@ -2332,19 +2369,22 @@
         blocoEsp.hidden = !temEsp;
         blocoCon.hidden = !temCon;
         const ehPastore = tipo === TIPO_PASTORE;
-        if (temEsp && renderedPastore !== ehPastore) {
+        const variante = varianteEsp(tipo);
+        if (temEsp && renderedTipo !== variante) {
           const camposAnteriores = [...blocoEsp.querySelectorAll("input[name], select[name]")]
             .map((campo) => ({ nome: campo.name, valor: campo.value,
               manual: campo.dataset.cadManual, tocado: campo.dataset.tocado }));
-          rascunhosEsp.set(renderedPastore, camposAnteriores);
+          rascunhosEsp.set(renderedTipo, camposAnteriores);
           // Primeira troca: transportar os dados do MESMO exame, inclusive BD.
           // Ao voltar, restaurar o rascunho daquela modalidade sem sobrescrevê-lo.
           const comuns = new Set(["esp_data", "esp_status", "esp_bd", "esp_equipamento",
-            "esp_municipio", "esp_responsavel", "esp_followup", "esp_observacao"]);
-          const rascunho = rascunhosEsp.get(ehPastore) ||
-            camposAnteriores.filter((campo) => comuns.has(campo.nome));
+            "esp_municipio", "esp_responsavel", "esp_followup", "esp_observacao",
+            "esp_valor", "esp_pgto_status", "esp_pgto_data", "esp_pgto_forma"]);
+          const rascunho = rascunhosEsp.get(variante) ||
+            camposAnteriores.filter((campo) => comuns.has(campo.nome) &&
+              (!PARCERIA_POR_TIPO[tipo] || campo.nome !== "esp_municipio"));
           blocoEsp.innerHTML = blocoEspirometriaConteudoHtml(pastore, ehPastore, cfg, municipios);
-          renderedPastore = ehPastore;
+          renderedTipo = variante;
           rascunho.forEach((anterior) => {
             const campo = form.elements[anterior.nome];
             if (!campo) return;
@@ -2360,6 +2400,7 @@
           wireAjuda(blocoEsp);
           wireModalidade();
         }
+        aplicarParceria();
         atualizarProntidaoNfse();
         atualizarMaclin();
         if (ehPastore) {
@@ -2423,6 +2464,9 @@
             localEl.readOnly = false;
             atualizarMaclin();
           }
+          // Uma nova modalidade não pode herdar um coworking como domicílio.
+          delete localEl.dataset.tocado;
+          localEl.value = "";
           aplicarModalidade();
         });
         if (localEl) {
@@ -2597,6 +2641,13 @@
        * agora quebraria a compatibilidade com o histórico. */
       const cfgEsp = (cfg && cfg.espirometria_soprolife) || {};
       const escolhida = (cfgEsp.modalidades || []).find((m) => m.valor === modalidade);
+      const codigo = PARCERIA_POR_TIPO[tipo];
+      if (codigo && val(form, "esp_parceria_comercial") !== codigo) {
+        throw new Error("Parceria sem configuração vigente para este atendimento.");
+      }
+      if (!codigo && modalidade === "clinica_parceira") {
+        throw new Error("Escolha o card da clínica parceira.");
+      }
       if (modalidade && !escolhida) {
         throw new Error("Modalidade não reconhecida — escolha uma das opções da lista.");
       }

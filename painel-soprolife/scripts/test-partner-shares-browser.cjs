@@ -22,7 +22,9 @@ with Session(get_engine()) as db:
  user=db.scalar(select(User))
  for code in ('maclin','alergocare'):configure(db,code,date(2026,1,1),user.id)
  p=Partner(public_code='CLI-SYN-L',nome='ALERGO LIFE',status='ativa');db.add(p);db.flush()
- db.add(PartnerUnit(public_code='UNI-SYN-L',partner_id=p.id,nome='ALERGO LIFE'));db.commit()`],env);
+ db.add(PartnerUnit(public_code='UNI-SYN-L',partner_id=p.id,nome='ALERGO LIFE'))
+ p=Partner(public_code='CLI-SYN-P',nome='Pastore',status='ativa');db.add(p);db.flush()
+ db.add(PartnerUnit(public_code='UNI-SYN-P',partner_id=p.id,nome='Pastore Ipanema'));db.commit()`],env);
  for(const [bin,args,cwd,e] of [[python,['-m','app.serve'],core,env],['python3',[path.join(root,'painel-soprolife/scripts/command-center-local-server.py')],root,{...env,SOPROLIFE_PANEL_HOST:'127.0.0.1',SOPROLIFE_PANEL_PORT:String(panelPort),SOPROLIFE_M15_UPSTREAM:`http://127.0.0.1:${apiPort}/api/v1`}]] )children.push(cp.spawn(bin,args,{cwd,env:e,stdio:'ignore'}));
  const base=`http://127.0.0.1:${panelPort}/painel-soprolife/`;await wait(async()=> (await fetch(base+'api/m15/health')).ok);
  assert.equal((await fetch(`http://127.0.0.1:${apiPort}/api/v1/integrations/whatsapp/webhook`,{method:'POST',body:'{}'})).status,503);
@@ -34,14 +36,53 @@ with Session(get_engine()) as db:
   const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const cfg=await page.evaluate(async()=> (await window.SoproM15.api('/atendimentos/configuracao')).espirometria_soprolife);
   assert(!JSON.stringify(cfg.parcerias_comerciais).includes('ALERGO LIFE'));
+  await page.evaluate(()=>window.SoproCentral.open('atendimento',{tipo:'espirometria_soprolife'}));
+  await page.locator('#cadFormAtend').waitFor();
+  assert.equal(await page.locator('.cad-tipo').count(),6);
+  const quick=await page.locator('[name=esp_local_opcao] option').allTextContents();
+  assert(quick.includes('Coworking Downtown')&&quick.includes('Coworking Nova América'));
+  assert(!quick.some(t=>/maclin|alergocare|alergo life|pastore/i.test(t)));
+  for(const local of ['Coworking Downtown','Coworking Nova América']){
+   await page.locator('[name=esp_local_opcao]').selectOption(local);
+   assert.equal(await page.locator('[name=esp_local]').inputValue(),local);
+   assert.equal(await page.locator('[name=esp_origem]').inputValue(),'');
+  }
+  await page.locator('[name=esp_origem]').fill('Indicação');
+  await page.locator('[name=esp_modalidade]').selectOption('residencial');
+  assert.equal(await page.locator('[name=esp_modalidade]').inputValue(),'residencial');
+  assert.equal(await page.locator('[name=esp_origem]').inputValue(),'Indicação');
+  await page.locator('[name=esp_local_opcao]').selectOption('Domicílio do paciente');
+  assert.equal(await page.locator('[name=esp_parceria_comercial]').inputValue(),'');
+  await page.locator('[name=esp_modalidade]').selectOption('cowork');
+  await page.locator('[name=esp_local_opcao]').selectOption('__manual__');
+  await page.locator('[name=esp_local]').fill('Coworking sintético manual');
+  await page.locator('[name=esp_bd]').selectOption('false');
+  await page.locator('[name=esp_valor]').fill('123,45');
+  await page.locator('[name=tipo][value=espirometria_pastore]').check();
+  assert.equal(await page.locator('[name=esp_bd]').inputValue(),'false');
+  assert((await page.locator('#cadAtBlocoEsp').innerText()).includes('Pastore Ipanema'));
+  assert.equal(await page.locator('[name=esp_valor]').count(),0);
+  await page.locator('[name=tipo][value=espirometria_maclin]').check();
+  await page.locator('[name=tipo][value=espirometria_alergocare]').check();
+  await page.locator('[name=tipo][value=espirometria_soprolife]').check();
+  assert.equal(await page.locator('[name=esp_local]').inputValue(),'Coworking sintético manual');
+  assert.equal(await page.locator('[name=esp_origem]').inputValue(),'Indicação');
+  assert.equal(await page.locator('[name=esp_valor]').inputValue(),'123,45');
   for(const code of ['maclin','alergocare']){
    await page.evaluate(()=>window.SoproCentral.open('atendimento',{tipo:'espirometria_soprolife'}));
    await page.locator('#cadFormAtend').waitFor();
    const initial=await page.locator('[name=esp_bd]').inputValue();
+   await page.locator('[name=cadAtP_nome]').fill('Pessoa Sintética '+code+' '+name);
+   await page.locator(`[name=tipo][value=espirometria_${code}]`).check();
    await page.locator('.m15-date:has([name=esp_data]) .m15-date-input').fill(day.split('-').reverse().join('/'));
    await page.locator('.m15-date:has([name=esp_data]) .m15-date-input').blur();
-   await page.locator('[name=cadAtP_nome]').fill('Pessoa Sintética '+code+' '+name);
-   await page.locator('[name=esp_parceria_comercial]').selectOption(code);
+   assert.equal(await page.locator('[name=esp_parceria_comercial]').inputValue(),code);
+   assert.equal(await page.locator('[name=esp_municipio]').inputValue(),'3304557');
+   assert.equal(await page.locator('[name=esp_origem]').inputValue(),cfg.parcerias_comerciais.find(r=>r.codigo===code).origem_operacional);
+   assert(await page.locator('[name=esp_parceria_comercial]').isHidden());
+   assert(await page.locator('[name=esp_modalidade]').isHidden());
+   assert(await page.locator('[name=esp_local_opcao]').isHidden());
+   assert(!(await page.locator('[name=esp_valor]').getAttribute('readonly')));
    assert.equal(await page.locator('[name=esp_modalidade]').inputValue(),'clinica_parceira');
    assert.equal(await page.locator('[name=esp_bd]').inputValue(),initial);
    assert.equal(await page.locator('[name=esp_local]').inputValue(),cfg.parcerias_comerciais.find(r=>r.codigo===code).unidade);
@@ -51,16 +92,36 @@ with Session(get_engine()) as db:
    await page.locator('#cadMaclinPartilha').getByText('Parcela parceiro (30%):',{exact:false}).waitFor();
    if(code==='maclin')assert(!(await page.locator('#cadAtNfse').innerText()).includes('Esta modalidade não tem fluxo fiscal'));
    const summary=await page.locator('#cadMaclinPartilha').innerText();assert(summary.includes('100,00')&&summary.includes('30,00')&&summary.includes('70,00'));
+   for(const [gross,own,partner] of [['220,00','154,00','66,00'],['123,45','86,41','37,04'],['100,00','70,00','30,00']]){
+    await page.locator('[name=esp_valor]').fill(gross);
+    const text=await page.locator('#cadMaclinPartilha').innerText();
+    assert(text.includes(gross)&&text.includes(own)&&text.includes(partner),text);
+   }
+   if(code==='alergocare'){
+    assert((await page.locator('#cadAtNfse').innerText()).includes('Esta modalidade não tem fluxo fiscal'));
+    await page.locator('[name=esp_valor]').fill('123,45');
+   }
    for(const width of [1440,800,390]){
     await page.setViewportSize({width,height:1000});
     assert(await page.locator('#cadFormAtend').evaluate(el=>el.getBoundingClientRect().right<=innerWidth+2));
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));
     await page.screenshot({path:path.join(temp,`${name}-${code}-${width}.png`),fullPage:true});
    }
    await page.setViewportSize({width:1440,height:1000});
+   // Reflow a 200% de uma janela de 1440 px: viewport CSS efetivo de 720 px.
+   // CSS zoom isolado não muda media queries e não simula o zoom do navegador.
+   await page.setViewportSize({width:720,height:800});
+   assert(await page.locator('#cadFormAtend').evaluate(el=>el.getBoundingClientRect().right<=innerWidth+2));
+   await page.screenshot({path:path.join(temp,`${name}-${code}-zoom200.png`),fullPage:true});
+   await page.setViewportSize({width:1440,height:1000});
    const response=page.waitForResponse(r=>r.url().endsWith('/atendimentos/novo-paciente')&&r.request().method()==='POST');
    await page.locator('#cadFormAtend button[type=submit]').focus();await page.keyboard.press('Enter');
-   const result=await response;assert.equal(result.status(),201,await result.text());
-   const saved=await result.json();assert.equal(saved.partilha_parceiro.bruto,'100.00');
+   const result=await response.catch(async e=>{console.error(await page.locator('#cadFormAtend').innerText());console.error(await page.locator('.m15-toast, .cad-campo-erro').allTextContents());throw e;});assert.equal(result.status(),201,await result.text());
+   const saved=await result.json();assert.equal(saved.partilha_parceiro.bruto,code==='alergocare'?'123.45':'100.00');
+   const rule=cfg.parcerias_comerciais.find(r=>r.codigo===code);
+   assert.equal(saved.espirometria.partner_id,rule.partner_id);
+   assert.equal(saved.espirometria.partner_unit_id,rule.partner_unit_id);
+   assert.equal(saved.espirometria.origem,rule.origem_operacional);
    assert.equal(saved.partilha_parceiro.a_pagar,'0.00');assert.equal(saved.partilha_parceiro.a_receber,'0.00');
    assert.equal(await page.locator('dialog[open]').count(),0);
   }

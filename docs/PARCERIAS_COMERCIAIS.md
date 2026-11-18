@@ -20,9 +20,16 @@ para partilha individual. Alergo Life mantém seus cadastros e regras anteriores
 
 ## Cadastro e acertos
 
-Selecione a parceria em Novo atendimento SoproLife: parceiro, unidade e
-modalidade Clínica parceira vêm da configuração. Defaults comuns do exame,
-BD e município permanecem. Informe bruto, forma de pagamento e recebedor.
+Selecione o card Espirometria Maclin ou Espirometria Alergocare em Novo
+atendimento: parceiro, unidade, origem operacional e modalidade Clínica parceira
+vêm da configuração vigente. O município inicial é Rio de Janeiro/RJ.
+Não há segunda seleção de parceria/local. Defaults comuns do exame e BD
+permanecem. Informe bruto editável, forma de pagamento e recebedor.
+
+Espirometria SoproLife fica para coworkings/domiciliar, com locais rápidos
+Coworking Downtown e Coworking Nova América e opção manual. Escolher coworking
+não presume SITE. Pastore conserva seu card e mecanismo anterior. Alergo Life
+não é uma alternativa de Alergocare e não tem seus IDs/cadastros reaproveitados.
 
 | Recebedor do bruto de R$100 | Clínica | SoproLife | Obrigação |
 |---|---:|---:|---|
@@ -69,7 +76,7 @@ testes nunca disparam NFS-e real. Notas importadas/emitidas não são modificada
    fiscal sem pedido ativo. Usar `scripts/deploy-partner-shares-vps.sh` com HEAD
    anterior/alvo conferidos e `SOPROLIFE_PARTNER_GATES_VERIFIED=YES`.
 3. Backup privado validado com `pg_restore`, bundle Git verificado e hashes.
-   Migração `w141126wa -> p151126share`; `alembic check`; comparar fingerprints
+   Migração `w141126wa -> p151126share -> u181126ux`; `alembic check`; comparar fingerprints
    de todas as tabelas preexistentes, sem mudanças de fatos nessa etapa.
 4. Reiniciar somente a API; health API/proxy/portal, GETs autenticados de
    partilhas, Pastore, financeiro, fiscal, Funil, WhatsApp, EEGLife e Marketing.
@@ -79,6 +86,12 @@ testes nunca disparam NFS-e real. Notas importadas/emitidas não são modificada
    reutilizada sem mudar endereço. Endereço desconhecido fica NULL.
 6. Verificar preservação de todos os registros anteriores, hashes de arquivos,
    logs, timer de dados e portão de acesso. Relatório real fora do Git.
+
+`u181126ux` apenas troca a constraint de soma por conferência em centavos
+inteiros; não altera partilhas. Evita a imprecisão binária da soma SQLite dev
+para R$123,45 e preserva o resultado PostgreSQL (37,04 + 86,41).
+Sem configuração anterior, nesta missão UX a vigência começa em 18/11/2026;
+não executar `confirm-existing`, regularização antiga ou backfill.
 
 O setup de configuração é idempotente e não renomeia parceiros. Nomes com
 sufixo institucional ALERGOCARE (...) só resolvem essa entidade; Alergo Life

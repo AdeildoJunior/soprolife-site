@@ -3,6 +3,7 @@ from datetime import timedelta
 import hashlib
 import hmac
 import json
+import sys
 import pytest
 from sqlalchemy import select, text
 from app.config import Settings, get_settings
@@ -17,6 +18,12 @@ SECRET='synthetic-app-secret-not-a-real-credential'
 IDENTITY='synthetic-identity-key-not-a-real-credential-0123456789'
 STAMP=int((utcnow()-timedelta(minutes=10)).timestamp())
 
+@pytest.fixture(autouse=True)
+def synthetic_message_clock(monkeypatch):
+    # A suíte ampla pode levar >5 min: o evento deve ser relativo a ESTE teste,
+    # não à coleta do módulo, para não tornar o lead sintético mais novo que ele.
+    monkeypatch.setattr(sys.modules[__name__], 'STAMP', int((utcnow()-timedelta(minutes=10)).timestamp()))
+
 @pytest.fixture
 def active(monkeypatch):
     for k,v in {'INTEGRATION_ENABLED':'true','VERIFY_TOKEN':'synthetic-verify','APP_SECRET':SECRET,
@@ -26,7 +33,8 @@ def active(monkeypatch):
     yield get_settings()
     get_settings.cache_clear()
 
-def payload(message_id='synthetic-message-1',phone=SYNTH_PHONE_NORM,direction='in',stamp=STAMP,kind='text',**extra):
+def payload(message_id='synthetic-message-1',phone=SYNTH_PHONE_NORM,direction='in',stamp=None,kind='text',**extra):
+    stamp = STAMP if stamp is None else stamp
     msg={'id':message_id,'timestamp':str(stamp),'type':kind,'from':phone if direction=='in' else '552100000000',
          'text':{'body':'SYNTHETIC_PRIVATE_BODY clinical content never persisted'},**extra}
     if direction=='out':msg['to']=phone

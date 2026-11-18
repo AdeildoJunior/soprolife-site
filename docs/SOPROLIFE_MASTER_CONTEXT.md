@@ -9,7 +9,33 @@
 > Sem PII, senhas, tokens, IPs de tailnet ou identificadores privados. Use
 > placeholders (`<VPS_TAILSCALE_IP>`, `<TOKEN>`).
 
-Última atualização: 2026-11-15 (parcerias comerciais Maclin/Alergocare; base `04ad541`).
+Última atualização: 2026-11-18 (UX espirometria por parceiro; base `7da7ffe`).
+
+## UX espirometria por parceiro — 18/11/2026
+
+Novo atendimento oferece seis cards: SoproLife, Pastore, Maclin, Alergocare,
+Consulta SoproLife e Espirometria + Consulta SoproLife. Cards Maclin/Alergocare
+resolvem a parceria comercial por código e vigência, com parceiro/unidade IDs
+canônicos, Clínica parceira, município inicial Rio e origem operacional própria
+(`Maclin`/`Alergocare`, independente do sufixo institucional). Sem seleção
+repetida de parceria/local. Ausência/expiração da configuração bloqueia o novo
+cadastro dessa parceria, sem tentar outra entidade. Bruto é editável; parcelas
+vêm da regra versionada, inclusive centavos, sem segunda receita no acerto.
+
+SoproLife oferece coworkings e domiciliar; locais rápidos são Coworking
+Downtown e Coworking Nova América, com opção manual. Modalidade domiciliar
+preenche Domicílio do paciente e não recebe vínculo de clínica. Origem inicial
+vazia, nunca SITE por escolher coworking. Trocas preservam rascunhos do formulário
+e defaults comuns da Pastore; regra fiscal, fechamento e valores Pastore intactos.
+Nenhuma mudança de Alergo Life, nenhum backfill ou reinterpretação histórica.
+
+Migração `u181126ux`, pai `p151126share`, valida a soma em centavos inteiros:
+evita falsa rejeição de R$123,45 no SQLite dev e mantém exatidão PostgreSQL.
+Não atualiza fatos. Downgrade com partilhas é recusado. Deploy deve seguir
+o contrato de parcerias (inclusive o deploy anterior ainda pendente se a VPS
+estiver em `w141126wa`). Configuração institucional, quando ausente, usa o
+administrador existente e vigência prospectiva explícita, sem confirmar exame
+antigo. Estado produtivo e evidências ficam no relatório externo da missão.
 
 ---
 

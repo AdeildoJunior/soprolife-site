@@ -186,11 +186,9 @@ MODALIDADES_SOPROLIFE = [
         "ajuda": "Exame realizado em espaço de atendimento da SoproLife.",
         "local_rotulo": "Nome do espaço",
         "local_padrao": "",
-        # Locais já usados na operação (conferidos em 28/10/2026).
-        # Sugestões textuais, não novas PartnerUnits nem fonte de município.
+        # Conveniências de novo cadastro; não renomeiam locais históricos.
         "local_sugestoes": [
-            "NOVA AMERICA", "SOPROLIFE DOWNTOWN", "SHOPPING DOWNTOWN",
-            "MACLIN", "ALERGOCARE", "Coworking",
+            "Coworking Downtown", "Coworking Nova América",
         ],
         "local_obrigatorio": True,
         "exige_unidade": False,
@@ -219,7 +217,7 @@ def attendance_configuration(
                     None,
                 ),
                 "broncodilatador": True,
-                "origem": "SITE",
+                "origem": "",
                 "modalidade": "cowork",
             },
             "valor_padrao": str(settings.espirometria_soprolife_valor_padrao),
@@ -492,6 +490,8 @@ def _criar_exame(db: Session, person: Person, payload: AtendimentoCreate) -> Spi
             raise _erro("parceria_incoerente", "Parceiro/unidade divergem da parceria selecionada.")
         partner_id, partner_unit_id = partner.id, unit.id
         modalidade, local_atendimento = rule.modalidade, unit.nome
+        # Atribuição operacional do NOVO exame, independente da aquisição do lead.
+        origem = partner_shares.operational_origin(bloco.parceria_comercial, partner)
     elif payload.tipo != TIPO_PASTORE:
         # Locais sugeridos antigos também precisam da seleção comercial explícita.
         label = (local_atendimento or "").strip().casefold()

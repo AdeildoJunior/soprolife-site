@@ -9,15 +9,19 @@ from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 from app.db import get_db
 from .test_fase2a_eeg_portal import ready, link, login, download, portal_config, storage
+from .test_nfse_migrations import postgres_url, config
+from alembic import command
 
 URL = os.environ.get("M15_TEST_POSTGRES_URL", "")
 pytestmark = pytest.mark.skipif(not URL, reason="PostgreSQL descartável não configurado")
 
 
 @pytest.fixture()
-def engine():
-    url = make_url(URL)
+def engine(postgres_url):
+    # Cada prova tem banco próprio; outra suíte pode zerar o schema compartilhado.
+    url = make_url(postgres_url)
     assert url.host in {"127.0.0.1", "localhost"} and "test" in url.database
+    command.upgrade(config(postgres_url), 'head')
     eng = create_engine(url)
     yield eng
     eng.dispose()

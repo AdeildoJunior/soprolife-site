@@ -1103,7 +1103,7 @@ class ExamPartnerShare(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     __table_args__ = (
         CheckConstraint("percentual_parceiro >= 0 AND percentual_soprolife >= 0 AND percentual_parceiro + percentual_soprolife = 100", name="share_percent"),
-        CheckConstraint("valor_bruto > 0 AND parcela_parceiro >= 0 AND parcela_soprolife >= 0 AND parcela_parceiro + parcela_soprolife = valor_bruto", name="share_amount"),
+        CheckConstraint("valor_bruto > 0 AND parcela_parceiro >= 0 AND parcela_soprolife >= 0 AND round(parcela_parceiro * 100) + round(parcela_soprolife * 100) = round(valor_bruto * 100)", name="share_amount"),
         CheckConstraint("recebido_por IN ('soprolife','parceiro','dividido')", name="share_receiver"),
     )
 

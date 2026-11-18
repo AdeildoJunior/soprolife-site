@@ -50,7 +50,8 @@
   var STATUS_RECEBIDO = "Recebido";
 
   // Tipos do formulário (central-cadastros.js::TIPOS_ATENDIMENTO).
-  var TIPOS_ESPIROMETRIA_SOPROLIFE = ["espirometria_soprolife", "espirometria_consulta_soprolife"];
+  var TIPOS_ESPIROMETRIA_SOPROLIFE = ["espirometria_soprolife", "espirometria_consulta_soprolife",
+    "espirometria_maclin", "espirometria_alergocare"];
   var TIPO_PASTORE = "espirometria_pastore";
 
   // Códigos do servidor (nfse.py::RECIPIENT_FISCAL_REASONS) → frase humana.
@@ -139,6 +140,7 @@
 
   // nfse.py::evaluate — fluxo derivado SÓ de tipo/parceiro/modalidade estruturados.
   function fluxoFiscal(tipo, modalidade) {
+    if (tipo === "espirometria_alergocare") return "UNSUPPORTED";
     if (tipo === TIPO_PASTORE || modalidade === "clinica_parceira") return "PASTORE";
     return FLUXO_POR_MODALIDADE[modalidade] || "UNSUPPORTED";
   }

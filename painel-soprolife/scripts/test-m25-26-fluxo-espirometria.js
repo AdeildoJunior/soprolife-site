@@ -157,7 +157,7 @@ caso("as modalidades vêm do servidor, não de uma lista fixa na tela",
 caso("o campo de local é desabilitado quando nenhuma modalidade foi escolhida",
      /if \(!escolhida\) \{\s*localEl\.disabled = true/.test(centralCodigo));
 caso("escolher a modalidade habilita e rotula o local",
-     /function aplicarModalidade[\s\S]{0,900}?localEl\.disabled = false;[\s\S]{0,200}?escolhida\.local_rotulo/
+     /function aplicarModalidade[\s\S]{0,1400}?localEl\.disabled = false;[\s\S]{0,200}?escolhida\.local_rotulo/
        .test(centralCodigo));
 caso("o local sugerido nunca sobrescreve o que o operador digitou",
      /if \(!localEl\.dataset\.tocado\)/.test(centralCodigo));
