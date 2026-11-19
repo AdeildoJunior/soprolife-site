@@ -205,18 +205,99 @@
       document.head.appendChild(script);
     });
   }
+  var moduleQueue = Promise.resolve();
+  var modulePromises = new Map();
+  var legacySections = ["crm","tarefas","marketing","financeiro","parcerias-pastore","custos-investimentos","documentos","automacoes-crm","automacoes","lancamentos"];
+  var groupsBySection = {
+    "central-cadastros": ["central"], "laudos-espirometria": ["clinical"],
+    "crm": ["legacy","crm"], "leads": ["leads"],
+    "financeiro": ["legacy","financeiro"], "fiscal": ["fiscal"],
+    "parcerias-pastore": ["legacy","pastore"],
+  };
+  gate.carregar = function (group) {
+    if (gate.estado !== "ready" || (!gate.administrativo &&
+        ["core","clinical","report-stats","eeg"].indexOf(group) === -1) ||
+        (group === "eeg" && !window.LifeCommandCenter.isAllowed("eeglife"))) {
+      return Promise.reject(new Error("Módulo não autorizado"));
+    }
+    var task = moduleQueue.then(async function () {
+      var declarations = document.querySelectorAll('script[type="application/x-soprolife-module"]');
+      for (var declaration of declarations) {
+        if (!(declaration.dataset.ccGroups || "").split(" ").includes(group) || declaration.dataset.loaded) continue;
+        if (!modulePromises.has(declaration.src)) modulePromises.set(declaration.src, carregarModulo(declaration));
+        try { await modulePromises.get(declaration.src); declaration.dataset.loaded = "true"; }
+        catch (error) { modulePromises.delete(declaration.src); throw error; }
+        if (declaration.src.includes("/m15-nucleo.js") && window.SoproM15) await window.SoproM15.ready;
+      }
+    });
+    moduleQueue = task.catch(function () {});
+    return task;
+  };
+  var dispatching = false;
+  gate.navegar = async function (section, options) {
+    if (gate.estado !== "ready") throw new Error("Sessão indisponível");
+    var button = document.querySelector('.nav-item[data-section="' + CSS.escape(section) + '"]');
+    var panel = document.getElementById(section);
+    if (!button || !panel) throw new Error("Seção não autorizada");
+    var alreadyActive = panel.classList.contains("active");
+    var firstClinical = section === "laudos-espirometria" && !window.SoproReports;
+    var groups = groupsBySection[section] || (legacySections.includes(section) ? ["legacy"] : []);
+    var firstLegacy = groups.includes("legacy") && !window.SoproLegacy?.ready;
+    for (var group of groups) await gate.carregar(group);
+    if (gate.can("operacional") && (groups.includes("legacy") || groups.includes("leads"))) await gate.carregar("central");
+    if (groups.includes("legacy") && window.SoproLegacy) await window.SoproLegacy.start();
+    if (section === "laudos-espirometria" && window.SoproReports) await window.SoproReports.ready;
+    document.querySelectorAll(".section").forEach(function (el) { el.classList.toggle("active", el === panel); });
+    document.querySelectorAll(".nav-item").forEach(function (el) { el.classList.toggle("active", el === button); });
+    dispatching = true;
+    try { if ((!options || options.dispatch !== false) && !alreadyActive && !firstClinical && !firstLegacy) button.click(); } finally { dispatching = false; }
+    if (section === "overview" && window.SoproCommandCenter) await window.SoproCommandCenter.refresh();
+    panel.scrollIntoView({ block: "start" });
+    return panel;
+  };
+  document.addEventListener("click", function (event) {
+    if (dispatching) return;
+    var button = event.target.closest && event.target.closest('.nav-item[data-section],.nav-hub-card[data-section]');
+    if (!button) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    gate.navegar(button.dataset.section).catch(function () {
+      var message = document.getElementById("ccAnnouncement");
+      if (message) message.textContent = "Não foi possível abrir o módulo. Tente novamente.";
+    });
+  }, true);
+  document.addEventListener("click", function (event) {
+    var shortcut = event.target.closest && event.target.closest("[data-m15-central]");
+    if (!shortcut || window.SoproCentral) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    gate.carregar("central").then(function () { shortcut.click(); }).catch(function () {});
+  }, true);
   gate.interfacePronta = gate.pronto.then(async function (identidade) {
     if (!identidade) return false;
-    var modulos = document.querySelectorAll('script[type="application/x-soprolife-module"]');
-    for (var modulo of modulos) if (!modulo.dataset.loaded) await carregarModulo(modulo);
+    await gate.carregar("core");
     if (window.SoproM15 && window.SoproM15.ready) await window.SoproM15.ready;
     if (!window.SoproM15 || !window.SoproM15.hasSession() ||
         !window.LifeCommandCenter || !window.LifeCommandCenter.allowedContexts().length ||
         gate.estado !== "ready") throw new Error("Interface incompleta");
+    if (gate.config.reports_enabled === true && gate.config.reports_mode === "pilot") {
+      document.querySelectorAll("[data-report-entry]").forEach(function (el) { el.hidden = false; });
+    }
+    if (gate.somenteClinico && window.LifeCommandCenter.getContext() === "soprolife") {
+      await gate.carregar("clinical");
+      if (window.SoproReports) await window.SoproReports.ready;
+    }
     if (window.LifeCommandCenter.getContext() === "eeglife") {
+      await gate.carregar("eeg");
       window.LifeCommandCenter.openEegModule(window.LifeCommandCenter.activeEegModule());
     }
-    // Inclui folhas de estilo adicionadas pelos módulos, antes do primeiro frame.
+    if (window.SoproCommandCenter) {
+      await window.SoproCommandCenter.ready;
+      await window.SoproCommandCenter.route();
+    }
+    document.getElementById("ccLegacy")?.addEventListener("toggle", async function (event) {
+      if (!event.target.open) return;
+      try { await gate.carregar("legacy"); await window.SoproLegacy.start(); }
+      catch (error) { event.target.open = false; }
+    });
     await Promise.all(Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
       .filter(function (link) { return new URL(link.href).origin === location.origin && !link.sheet; })
       .map(function (link) { return new Promise(function (resolve, reject) {
@@ -232,7 +313,6 @@
     window.dispatchEvent(new Event("resize"));
     return true;
   }).catch(function () { gate.fechar(); return false; });
-  // bfcache não pode restaurar um frame protegido de uma sessão anterior.
   window.addEventListener("pagehide", function () { if (painel) { painel.hidden = true; painel.inert = true; } });
   window.addEventListener("pageshow", function (e) { if (e.persisted) location.reload(); });
 })();

@@ -19,8 +19,9 @@
        propósito — o style.css redefine .app-shell/.sidebar/.main/.topbar em
        mais de dez pontos, e esta folha precisa da palavra final no que toca. -->
   <link rel="stylesheet" href="./css/life-command-center.css?v=2026102911" />
+  <link rel="stylesheet" href="./css/command-home.css?v=2026111901" />
   <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
-  <script src="./js/vendor/chart.umd.min.js"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="legacy report-stats" src="./js/vendor/chart.umd.min.js"></script>
 </head>
 <body data-auth-state="loading">
   <main id="authShell" role="status" aria-live="polite" aria-busy="true"
@@ -52,6 +53,15 @@
         </div>
       </div>
 
+      <div class="cc-header-actions">
+        <div class="cc-search" role="search">
+          <input id="ccGlobalSearch" type="search" maxlength="80" autocomplete="off"
+            placeholder="Buscar no Centro de Comando" aria-label="Buscar no Centro de Comando"
+            aria-controls="ccSearchResults" aria-expanded="false">
+          <div id="ccSearchResults" class="cc-results" role="region" aria-label="Resultados da busca" hidden></div>
+        </div>
+        <button type="button" id="ccPendingToggle" disabled>Pendências</button>
+      </div>
       <nav class="life-switcher" aria-label="Contexto do Centro de Comando Life">
         <div class="life-switcher-track" role="tablist" aria-label="Contexto ativo">
           <button type="button" role="tab" class="life-tab" id="lifeTabSoproLife"
@@ -76,6 +86,8 @@
       </nav>
     </div>
   </header>
+  <p id="ccAnnouncement" class="cc-announcement" role="status" aria-live="polite"></p>
+  <section id="ccPendingPanel" class="cc-pending" aria-label="Central de pendências" hidden></section>
 
   <!-- Contexto SOPROLIFE — o painel operacional existente, intacto. A casca
        só o envolve: nenhum módulo, rota, ação ou identidade visual mudou. -->
@@ -93,6 +105,7 @@
         </div>
       </div>
 
+      <details class="cc-mobile-menu" id="soproMobileMenu" open><summary>Módulos SoproLife</summary>
       <nav class="nav">
         <button class="nav-item active" data-section="overview">
           <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="6" height="6" rx="1.2"/><rect x="10" y="2" width="6" height="6" rx="1.2"/><rect x="2" y="10" width="6" height="6" rx="1.2"/><rect x="10" y="10" width="6" height="6" rx="1.2"/></svg>
@@ -182,6 +195,7 @@
           Últimos lançamentos
         </button>
       </nav>
+      </details>
 
       <div class="sidebar-footer">
         <div class="sidebar-user">
@@ -202,7 +216,6 @@
         </div>
 
         <div class="top-actions">
-          <input id="globalSearch" type="search" placeholder="Buscar no painel..." aria-label="Buscar no painel" />
           <button id="refreshBtn" title="Recarrega esta página com os dados já sincronizados. Não busca dados novos nas fontes externas.">
             <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4v5h5"/><path d="M17 14v-5h-5"/><path d="M15.5 6.5A7 7 0 1 0 16 9"/></svg>
             Atualizar
@@ -223,6 +236,10 @@
       </header>
 
       <section id="overview" class="section active">
+        <div id="ccHome" class="cc-home" data-state="loading" aria-busy="true"><p role="status">Carregando…</p></div>
+        <details id="ccLegacy" class="cc-legacy"><summary>Indicadores históricos e fontes</summary>
+
+        <template id="ccRetiredOverviewNavigation">
         <!-- Banner de saúde operacional: só aparece com alerta CRÍTICO (M3) -->
         <div id="saudeBannerCritico" class="saude-banner-critico" hidden></div>
         <div class="hero">
@@ -316,6 +333,7 @@
           </button>
         </nav>
 
+        </template>
         <div class="grid-two">
           <article class="panel">
             <div class="panel-header">
@@ -352,8 +370,10 @@
           </article>
         </div>
 
+        <template id="ccRetiredOverviewActions">
         <div id="cardsGrid" class="cards-sections"></div>
 
+        <template id="ccRetiredBriefings">
         <div class="hub-grid">
           <article class="panel hub-card cerebro-panel" id="cerebroPanel" hidden>
             <div class="panel-header">
@@ -417,6 +437,7 @@
             </div>
           </article>
         </div>
+        </template>
 
         <article class="panel">
           <div class="panel-header">
@@ -439,7 +460,10 @@
           <div class="b2b-stats" id="b2bStats"></div>
           <div id="b2bLista"></div>
         </article>
-      </section>
+
+        </template>
+        </details>
+</section>
 
       <section id="central-cadastros" class="section">
         <div class="section-title">
@@ -1128,64 +1152,65 @@
   <!-- Casca do Centro de Comando Life: decide qual contexto aparece e adia a
        carga de dados do SoproLife até que o contexto SoproLife seja entrado.
        Precisa vir ANTES de app.js, que consulta window.LifeCommandCenter. -->
-  <script type="application/x-soprolife-module" src="./js/life-command-center.js?v=2026111901"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="life" src="./js/life-command-center.js?v=2026111903"></script>
   <!-- Fase 2A — quatro módulos da EEGLife deixam de ser casca e passam a ler
        as rotas /eeg do núcleo. A autorização continua no servidor. -->
-  <script type="application/x-soprolife-module" src="./js/eeg-operacao.js?v=2026103001"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="eeg" src="./js/eeg-operacao.js?v=2026111903"></script>
 
   <!-- O bootstrap executa estes módulos em ordem, somente após resolver a
        sessão e remover do fragmento inerte as superfícies não autorizadas. -->
-  <script type="application/x-soprolife-module" src="./js/operational-actions.js?v=2026070701"></script>
-  <script type="application/x-soprolife-module" src="./js/b2b-actions.js?v=2026070701"></script>
-  <script type="application/x-soprolife-module" src="./js/operational-brain.js?v=2026070801"></script>
-  <script type="application/x-soprolife-module" src="./js/daily-briefing.js?v=2026070801"></script>
-  <script type="application/x-soprolife-module" src="./js/today-actions.js?v=2026070803"></script>
-  <script type="application/x-soprolife-module" src="./js/espirometria-financeiro.js?v=2026070902"></script>
-  <script type="application/x-soprolife-module" src="./js/marketing-freshness.js?v=2026080101"></script>
-  <script type="application/x-soprolife-module" src="./js/app.js?v=2026111901"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="legacy" src="./js/operational-actions.js?v=2026070701"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="legacy" src="./js/b2b-actions.js?v=2026070701"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="legacy" src="./js/operational-brain.js?v=2026070801"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="legacy" src="./js/daily-briefing.js?v=2026070801"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="legacy" src="./js/today-actions.js?v=2026070803"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="legacy" src="./js/espirometria-financeiro.js?v=2026070902"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="legacy" src="./js/marketing-freshness.js?v=2026080101"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="legacy" src="./js/app.js?v=2026111903"></script>
   <!-- Apresentação canônica de status de atendimento (M20): formatador
        ÚNICO usado por Central, CRM, linha do tempo, listas, filtros e
        inspeção técnica. Precisa existir antes dos módulos consumidores. -->
-  <script type="application/x-soprolife-module" src="./js/status-atendimento.js?v=2026072501"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="core" src="./js/status-atendimento.js?v=2026072501"></script>
   <!-- Núcleo Operacional M15 (beta — go-live controlado M15.5A): habilitado
        globalmente por data/m15-config.json (enabled=true; rollback: false).
        A guarda de contexto seguro (m15-security.js) carrega ANTES do núcleo:
        login só em HTTPS ou loopback local; HTTP remoto fica bloqueado. -->
-  <script type="application/x-soprolife-module" src="./js/m15-datepicker.js?v=2026102801"></script>
-  <script type="application/x-soprolife-module" src="./js/m15-nucleo.js?v=2026111901"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="core" src="./js/m15-datepicker.js?v=2026102801"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="core" src="./js/m15-nucleo.js?v=2026111903"></script>
   <link rel="stylesheet" href="./css/profit-panel.css?v=2026110501">
-  <script type="application/x-soprolife-module" src="./js/profit-panel.js?v=2026110503"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="financeiro" src="./js/profit-panel.js?v=2026110503"></script>
   <!-- M24C: feature independente e desabilitada por padrão; quando
        explicitamente habilitada, consome window.SoproM15 (sessão/CSRF) e
        usa Blob autenticado, nunca URL pública de documento. -->
-  <script type="application/x-soprolife-module" src="./js/report-statistics.js?v=2026100701"></script>
-  <script type="application/x-soprolife-module" src="./js/report-workflow.js?v=2026111902"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="report-stats" src="./js/report-statistics.js?v=2026111903"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="clinical" src="./js/report-workflow.js?v=2026111903"></script>
   <!-- Central de Cadastros (M16): fluxo canônico ÚNICO de entrada de dados.
        Depende do cliente compartilhado window.SoproM15 (script acima). -->
   <!-- M67: regras de prontidão para NFS-e (puras, sem rede) usadas pelo
        "Novo atendimento". Orientação apenas — o Fiscal decide. -->
-  <script type="application/x-soprolife-module" src="./js/nfse-prontidao.js?v=2026111802"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="central" src="./js/nfse-prontidao.js?v=2026111802"></script>
   <!-- M68: CPF → nascimento → nome oficial (SERPRO via servidor, nunca direto). -->
-  <script type="application/x-soprolife-module" src="./js/identificacao-assistida.js?v=2026092401"></script>
-  <script type="application/x-soprolife-module" src="./js/central-cadastros.js?v=2026111901"></script>
-  <script type="application/x-soprolife-module" src="./js/whatsapp-panel.js?v=2026111402"></script>
-  <script type="application/x-soprolife-module" src="./js/funnel-panel.js?v=2026111402"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="central" src="./js/identificacao-assistida.js?v=2026092401"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="central" src="./js/central-cadastros.js?v=2026111903"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="leads" src="./js/whatsapp-panel.js?v=2026111402"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="leads" src="./js/funnel-panel.js?v=2026111903"></script>
   <!-- M22: fechamento mensal da Pastore. O exame permanece não monetário;
        o módulo cria um único recibo agregado somente após confirmação. -->
   <link rel="stylesheet" href="./css/pastore-settlement.css?v=2026083001">
-  <script type="application/x-soprolife-module" src="./js/partner-shares.js?v=2026111501"></script>
-  <script type="application/x-soprolife-module" src="./js/pastore-settlement.js?v=2026083001"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="financeiro" src="./js/partner-shares.js?v=2026111903"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="financeiro pastore" src="./js/pastore-settlement.js?v=2026111903"></script>
   <!-- Fiscal — Command Center do NFS-e (fundação offline). -->
   <link rel="stylesheet" href="./css/fiscal-command-center.css?v=2026102102">
-  <script type="application/x-soprolife-module" src="./js/fiscal-command-center.js?v=2026102102"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="fiscal" src="./js/fiscal-command-center.js?v=2026102102"></script>
   <link rel="stylesheet" href="./css/medical-transfers.css?v=2026091601">
-  <script type="application/x-soprolife-module" src="./js/medical-transfers.js?v=2026110501"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="financeiro" src="./js/medical-transfers.js?v=2026110501"></script>
   <!-- Conciliação de exames extra-Pastore (M18). Depende de window.SoproM15. -->
-  <script type="application/x-soprolife-module" src="./js/financeiro-conciliacao.js?v=2026110501"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="financeiro" src="./js/financeiro-conciliacao.js?v=2026110501"></script>
   <!-- CRM Pacientes e Acompanhamento (M19): ÚNICA implementação de
        paciente/follow-up do painel. Substituiu a tela legada de planilha
        e a parcial "Acompanhamento e WhatsApp". Depende de window.SoproM15. -->
-  <script type="application/x-soprolife-module" src="./js/crm-workspace.js?v=2026102802"></script>
-  <script src="./js/boot-gate.js?v=2026111901" defer></script>
+  <script type="application/x-soprolife-module" data-cc-groups="crm" src="./js/crm-workspace.js?v=2026111903"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="core" src="./js/command-center.js?v=2026111901"></script>
+  <script src="./js/boot-gate.js?v=2026111903" defer></script>
 </body>
 </html>

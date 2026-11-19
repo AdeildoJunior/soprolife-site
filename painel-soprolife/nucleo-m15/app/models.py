@@ -26,6 +26,8 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
+    literal_column,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -3904,3 +3906,10 @@ class EegPreparation(Base):
     referencia_aprovacao: Mapped[str] = mapped_column(String(120), nullable=False)
     aprovado_por: Mapped[str] = mapped_column(String(36), ForeignKey('users.id'), nullable=False)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+# Command Center read indexes. No denormalized search data or backfill.
+Index("ix_cc_people_name_fts", func.to_tsvector(literal_column("'simple'"), Person.nome_normalizado), postgresql_using="gin", _table=Person.__table__).ddl_if(dialect="postgresql")
+Index("ix_cc_partner_name_prefix", func.lower(Partner.nome).label("name_lower"), postgresql_ops={"name_lower": "text_pattern_ops"})
+Index("ix_cc_unit_name_prefix", func.lower(PartnerUnit.nome).label("name_lower"), postgresql_ops={"name_lower": "text_pattern_ops"})
+Index("ix_cc_fiscal_external", FiscalAttempt.external_id)

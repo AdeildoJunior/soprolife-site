@@ -303,7 +303,7 @@ caso("m15-nucleo.js mantém a limpeza do token legado",
 caso("único setItem permitido continua sendo apenas o flag legado (nenhum novo)",
      (nucleoSrc.match(/\.setItem\(/g) || []).length === 0);
 caso("index.html carrega o datepicker ANTES do núcleo (módulos inertes em ordem)",
-     /m15-datepicker\.js[^"]*"><\/script>\s*<script type="application\/x-soprolife-module" src="\.\/js\/m15-nucleo\.js/.test(indexSrc));
+     /m15-datepicker\.js[^"]*"><\/script>\s*<script type="application\/x-soprolife-module" data-cc-groups="core" src="\.\/js\/m15-nucleo\.js/.test(indexSrc));
 
 console.log();
 console.log("C2) Feature flag ligada (go-live M15.5A) e API base intocada");

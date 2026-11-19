@@ -9,7 +9,46 @@
 > Sem PII, senhas, tokens, IPs de tailnet ou identificadores privados. Use
 > placeholders (`<VPS_TAILSCALE_IP>`, `<TOKEN>`).
 
-Última atualização: 2026-11-18 (UX espirometria por parceiro; base `7da7ffe`).
+Última atualização: 2026-11-19 (Centro de Comando 2.0; base `aecc09c`).
+
+## Centro de Comando 2.0 — 19/11/2026
+
+O Painel Geral existente consome uma projeção compacta em `/comando/resumo`.
+Pendências são derivadas dos fatos e filas atuais, sem tabela de notificações:
+`GET /comando/pendencias` filtra/pagina e também abre os exames de hoje. Dados
+financeiros só são serializados para gestão autorizada; parcial e ausência
+permanecem explícitos. Resultado vem da projeção canônica de lucro por exame;
+receita/despesa EEG só usa vínculo explícito, sem inferir despesas por marca.
+Fiscal conta documentos de produção já preparados; elegibilidade de novos
+exames continua no Fiscal. A home não chama rotinas que expiram pedidos.
+
+Busca por `POST /comando/busca` tem limite, rate limit por usuário, normalização,
+FTS/prefixos indexados PostgreSQL e identificação exata por telefone/CPF (CPF
+somente conforme `can_edit_patient_registration`). Termos não vão à URL,
+histórico ou auditoria. Resultados mínimos e contatos mascarados. Médicos só
+localizam laudos/exames atribuídos ao perfil verificado, inclusive quando a
+mesma pessoa tem outro exame. EEG reutiliza o escopo clínico próprio existente.
+`POST /comando/registro` revalida marca, papel e ID antes de qualquer navegação;
+links `#cc/marca/tipo/UUID` sobrevivem ao refresh sem carregar termos pessoais.
+
+O gate de autenticação anterior continua deny by default: template inerte,
+publicação atômica após usuário/sessão/contexto e home/fila inicial. Loading é
+somente “Carregando…”. Scripts dos módulos são lazy, compartilhados por promessa;
+laudadores SoproLife não baixam os módulos administrativos. A fila clínica
+existente continua a home do laudador. Gráficos históricos ficam sob demanda;
+briefings e filas heurísticas antigos ficam inertes, sem segunda fila na home.
+Cache da projeção é somente em memória, até 30 s por marca; voltar à home,
+atualização e cadastro invalidam/recarregam conforme o evento.
+
+Migração `c191126cc2` (pai `a191126direct`) cria apenas quatro índices de busca;
+nenhum fato, backfill ou regra fiscal/econômica/clínica. Queries de seleção de
+entrega/assinatura e de visibilidade EEG foram extraídas para compartilhamento,
+preservando os endpoints e suas regras. Deploy exige modo `full` do runbook
+versionado (backup, fingerprints antes/depois, migração/check, restart API,
+health e validação autenticada). Publicação efetiva e evidências ficam no
+relatório externo `CENTRO_COMANDO_2_20261119.md`.
+
+Detalhes: [arquitetura CC2](CENTRO_COMANDO_2.md).
 
 ## Correção fiscal Alergocare — 18/11/2026
 

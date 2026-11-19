@@ -3,9 +3,18 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const panel=path.resolve(__dirname,'..'),source=fs.readFileSync(path.join(panel,'js/boot-gate.js'),'utf8');
 const html=fs.readFileSync(path.join(panel,'index.html'),'utf8');
-const inert=html.match(/<template id="authorizedPanelTemplate">([\s\S]*?)<\/template>/);
-assert(inert,'Protected panel must be inert at parse time');
-const live=html.replace(inert[0],'');
+// Templates may contain other inert templates. Count their nesting instead of
+// ending at the first closing tag; the browser suite checks actual live DOM.
+const start=html.indexOf('<template id="authorizedPanelTemplate">');
+assert(start>=0,'Protected panel must be inert at parse time');
+let depth=0,end=-1;
+const tags=/<\/?template\b[^>]*>/g;tags.lastIndex=start;
+for(let token;(token=tags.exec(html));){
+  depth+=token[0].startsWith('</')?-1:1;
+  if(depth===0){end=tags.lastIndex;break;}
+}
+assert(end>start,'Protected template must close');
+const live=html.slice(0,start)+html.slice(end);
 assert(!/class="(?:nav-item|section|nav-hub-card)|id="(?:lifeMasthead|lifePanelSoproLife|lifePanelEegLife)"/.test(live));
 assert(live.includes('id="authShell"'));
 assert(!/<script src="\.\/js\/(?:app|m15-nucleo|central-cadastros|report-workflow)\.js/.test(live));
@@ -14,7 +23,7 @@ async function checkFailure() {
   const elements={authShell:{hidden:false,setAttribute(){}},authMessage:{},authRetry:{hidden:true}};
   const body={dataset:{authState:'loading'},appendChild(){appendCount++;}};
   const window={SoproM15Security:{canAuthenticate:()=>true},addEventListener(){},location:{replace(){}},sessionStorage:{getItem(){},setItem(){}}};
-  const context={window,document:{body,getElementById:id=>elements[id]},location:{},fetch:()=>new Promise((_,reject)=>{rejectFetch=reject;}),AbortSignal,URL,Promise,Event};
+  const context={window,document:{body,getElementById:id=>elements[id],addEventListener(){}},location:{},fetch:()=>new Promise((_,reject)=>{rejectFetch=reject;}),AbortSignal,URL,Promise,Event};
   vm.runInNewContext(source,context);
   const gate=window.SoproBootGate;
   assert.equal(gate.estado,'loading');

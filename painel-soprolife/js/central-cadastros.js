@@ -3145,7 +3145,7 @@
       }
     });
 
-    render();
+    if (sectionEl()?.classList.contains("active")) render();
   }
 
   window.SoproCentral = { open, render };

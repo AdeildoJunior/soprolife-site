@@ -440,6 +440,16 @@ def _criar_pessoa_vinculo(payload, request, db, user):
 
 # ── Exames e traçados ─────────────────────────────────────────────────────
 
+def visible_exam_query(user: User):
+    """Existing EEG row authorization, also used by the command read model."""
+    stmt = select(EegExam)
+    roles = user_effective_roles(user)
+    if not roles & {'admin', 'eeg_operador', 'eeg_tecnico'}:
+        if 'medical_eeg' not in roles: raise HTTPException(403, 'Papel clínico/operacional EEG necessário.')
+        stmt = stmt.join(EegCase, EegCase.exam_id == EegExam.id).join(EegProfessional, EegProfessional.id == EegCase.professional_id).where(EegProfessional.user_id == user.id, EegProfessional.ativo.is_(True))
+    return stmt
+
+
 @router.get("/exames")
 def listar_exames(
     status: str | None = Query(default=None, max_length=30),
@@ -447,11 +457,7 @@ def listar_exames(
     params: PageParams = Depends(),
     _user: User = Depends(require_eeg_access),
 ):
-    stmt = select(EegExam)
-    roles = user_effective_roles(_user)
-    if not roles & {'admin', 'eeg_operador', 'eeg_tecnico'}:
-        if 'medical_eeg' not in roles: raise HTTPException(403, 'Papel clínico/operacional EEG necessário.')
-        stmt = stmt.join(EegCase, EegCase.exam_id == EegExam.id).join(EegProfessional, EegProfessional.id == EegCase.professional_id).where(EegProfessional.user_id == _user.id, EegProfessional.ativo.is_(True))
+    stmt = visible_exam_query(_user)
     if status:
         stmt = stmt.where(EegExam.status == status)
     stmt = stmt.order_by(EegExam.created_at.desc())

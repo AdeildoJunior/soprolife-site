@@ -101,6 +101,8 @@ with Session(get_engine()) as db:
           assert.equal(await page.evaluate(()=>window.SoproM15.hasSession()),true);
         } else {
           assert.equal(await page.locator('#lifePanelSoproLife').count(),0);
+          assert.equal(await page.locator('#ccPendingToggle').isEnabled(),true);
+          assert.match(await page.locator('#ccPendingToggle').textContent(),/^Pendências \(\d+\)$/);
           assert.deepEqual(await page.locator('[data-eeg-modulo]').evaluateAll(ns=>[...new Set(ns.map(n=>n.dataset.eegModulo))].sort()),['exames','fontes','laudos']);
         }
       }

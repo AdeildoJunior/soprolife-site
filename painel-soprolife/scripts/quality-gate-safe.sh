@@ -155,6 +155,10 @@ run "test-m23-postgres-only (arquitetura sem Sheets)" \
 run "json.tool data-source-mode.json" \
   python3 -m json.tool painel-soprolife/core/contracts/data-source-mode.json
 
+run "node --check Centro de Comando" node --check painel-soprolife/js/command-center.js
+run "node --check teste real Centro de Comando" node --check painel-soprolife/scripts/test-command-center-browser.cjs
+run "py_compile Centro de Comando" python3 -m py_compile painel-soprolife/nucleo-m15/app/services/command_center.py painel-soprolife/nucleo-m15/app/services/command_search.py painel-soprolife/nucleo-m15/app/routers/command_center.py
+
 secao "8b/10 M14.3A.1 — contrato de frescor operacional (offline, clock injetado)"
 run "py_compile eeg (modalidades/fluxo/storage)" python3 -m py_compile painel-soprolife/nucleo-m15/app/services/eeg_results.py painel-soprolife/nucleo-m15/app/services/eeg_modalidades.py painel-soprolife/nucleo-m15/app/services/eeg_flow.py painel-soprolife/nucleo-m15/app/services/eeg_storage.py painel-soprolife/nucleo-m15/app/routers/eeg.py
 run "py_compile freshness_contract"        python3 -m py_compile painel-soprolife/scripts/freshness_contract.py

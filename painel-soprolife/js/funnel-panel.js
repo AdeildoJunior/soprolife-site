@@ -12,7 +12,9 @@
   const table=(headers,rows)=>`<div class="m15-table-wrap"><table class="m15-table"><thead><tr>${headers.map(h=>`<th scope="col">${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${headers.length}">Sem contatos registrados nesta coorte.</td></tr>`}</tbody></table></div>`;
   function dialog(html){const d=document.createElement('dialog');d.className='m15-panel funnel-dialog';d.innerHTML=html;document.body.appendChild(d);d.showModal();return d;}
   function error(el,e){el.textContent='Não foi possível concluir: '+(e.message||'tente novamente.');}
-  async function render(){
+  let rendering=null;
+  function render(){if(rendering)return rendering;rendering=renderNow().finally(()=>rendering=null);return rendering;}
+  async function renderNow(){
     const root=document.getElementById('funnelRoot');if(!root)return;
     if(!window.SoproM15?.can('leitura')){root.innerHTML='<div class="m15-panel">Entre no Núcleo para acessar o Funil Comercial.</div>';return;}
     root.innerHTML='<p>Carregando funil…</p>';
@@ -54,12 +56,13 @@
     el.innerHTML=table(['Contato / paciente','Origem / canal / unidade','Status','Próximo passo'],res.itens.map(l=>[`${esc(l.public_code)} · ${esc(l.nome_completo)}<br>${esc(date(l.primeiro_contato_em))}`,`${esc(state.config.origens[l.origem_aquisicao])}<br>${esc(state.config.canais[l.canal_entrada])}<br>${esc(state.config.unidades[l.unidade_pretendida])}`,esc(labels[l.status_funil]),`<button data-history="${esc(l.id)}">Histórico</button>${write?`<button data-action="${esc(l.id)}">Atualizar etapa</button><button data-edit="${esc(l.id)}">Corrigir origem/canal</button><button data-link="${esc(l.id)}">Vincular exame existente</button>${l.exam_ids.length?`<button data-performed="${esc(l.exam_ids[0])}">Registrar exame realizado</button>`:''}`:''}`]))+
       `<button id="funnelPrev" ${state.page===1?'disabled':''}>Anterior</button><span> Página ${state.page} </span><button id="funnelNext" ${res.tem_proxima?'':'disabled'}>Próxima</button>`;
     el.querySelector('#funnelPrev').onclick=()=>{state.page--;loadContacts(root);};el.querySelector('#funnelNext').onclick=()=>{state.page++;loadContacts(root);};
-    el.querySelectorAll('[data-history]').forEach(b=>b.onclick=async()=>{const d=dialog('<h3>Histórico do contato</h3><div></div><button>Fechar</button>');d.querySelector('button').onclick=()=>{d.close();d.remove();};try{const h=await api('/funil/contatos/'+b.dataset.history+'/eventos');d.querySelector('div').innerHTML=table(['Evento','Quando','Data anterior','Data prevista','Motivo'],h.itens.map(e=>[esc(labels[e.evento]||({EXAME_VINCULADO:'Exame vinculado',DIMENSOES_CORRIGIDAS:'Classificação corrigida'})[e.evento]||e.evento),esc(date(e.em)),esc(date(e.data_anterior)),esc(date(e.data_prevista)),esc(state.config.motivos[e.motivo]||'Não informado')]));}catch(e){error(d.querySelector('div'),e);}});
+    el.querySelectorAll('[data-history]').forEach(b=>b.onclick=()=>showHistory(b.dataset.history));
     el.querySelectorAll('[data-performed]').forEach(b=>b.onclick=async()=>{if(!window.confirm('Confirmar que este exame foi realizado?'))return;try{await api('/espirometrias/'+b.dataset.performed,{method:'PATCH',body:JSON.stringify({status:'Realizado'})});render();}catch(e){error(root.querySelector('#funnelError'),e);}});
     el.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editDimensions(res.itens.find(l=>l.id===b.dataset.edit)));
     el.querySelectorAll('[data-link]').forEach(b=>b.onclick=()=>linkExam(res.itens.find(l=>l.id===b.dataset.link)));
     el.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>action(b.dataset.action));
   }
+  async function showHistory(id){const d=dialog('<h3>Histórico do contato</h3><div></div><button>Fechar</button>');d.querySelector('button').onclick=()=>{d.close();d.remove();};try{const h=await api('/funil/contatos/'+id+'/eventos');d.querySelector('div').innerHTML=table(['Evento','Quando','Data anterior','Data prevista','Motivo'],h.itens.map(e=>[esc(labels[e.evento]||({EXAME_VINCULADO:'Exame vinculado',DIMENSOES_CORRIGIDAS:'Classificação corrigida'})[e.evento]||e.evento),esc(date(e.em)),esc(date(e.data_anterior)),esc(date(e.data_prevista)),esc(state.config.motivos[e.motivo]||'Não informado')]));}catch(e){error(d.querySelector('div'),e);}}
   function linkExam(lead){
     const d=dialog(`<h3>Vincular exame a ${esc(lead.public_code)}</h3><p>Use apenas um contato real anterior ao exame, da mesma pessoa. O vínculo não inventa resposta ou agendamento.</p><form class="m15-form"><label>Código do exame<input name="exam_code" placeholder="ESP-000001" required></label><button>Vincular exame</button><button type="button" id="close">Voltar</button><p role="status"></p></form>`);
     d.querySelector('#close').onclick=()=>{d.close();d.remove();};
@@ -85,6 +88,6 @@
     d.querySelector('#close').onclick=()=>{d.close();d.remove();};d.querySelector('form').onsubmit=async e=>{e.preventDefault();const btn=e.submitter;btn.disabled=true;const payload=Object.fromEntries([...new FormData(e.target)].filter(([,v])=>v));try{await api('/funil/contatos/'+id+'/eventos',{method:'POST',body:JSON.stringify(payload)});d.close();d.remove();render();}catch(err){error(d.querySelector('[role=status]'),err);btn.disabled=false;}};
   }
   function boot(){document.querySelectorAll('.nav-item[data-section="leads"]').forEach(b=>b.addEventListener('click',render));window.SoproM15?.onSessionChange(()=>{state.config=null;if(document.getElementById('leads')?.classList.contains('active'))render();});}
-  window.SoproFunnel={render};
+  window.SoproFunnel={render,openContact:showHistory};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();

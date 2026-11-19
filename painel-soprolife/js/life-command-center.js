@@ -501,8 +501,12 @@
       }
       id = PADRAO;
     }
+    if (id === "eeglife" && window.SoproBootGate && !window.SoproEegOperacao) {
+      return window.SoproBootGate.carregar("eeg").then(function () { definir(id); });
+    }
     if (id === atual && aplicado) return;
     aplicar(id, "usuario");
+    if (id === "eeglife") abrirModuloEeg(moduloAtivo || "visao");
   }
 
   /* ── Teclado: padrão de tablist ─────────────────────────────────────────── */

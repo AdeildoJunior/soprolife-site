@@ -543,6 +543,7 @@
       document.querySelectorAll(".section").forEach(function (sec) { sec.classList.remove("active"); });
       btn.classList.add("active");
       document.getElementById("m15-nucleo").classList.add("active");
+      checkApi();
       render();
     });
     return btn;
@@ -657,7 +658,7 @@
         state.csrf = "";
         afterAuth();
       });
-      checkApi();
+      if (document.getElementById("m15-nucleo")?.classList.contains("active")) checkApi();
     }
   }
 
@@ -2511,7 +2512,7 @@
     return restaurarSessao().then(function (ok) {
       renderAuthArea();
       renderTabs();
-      render();
+      if (document.getElementById("m15-nucleo")?.classList.contains("active")) render();
       sincronizarSairDoTopo();
       if (ok) notifySession();
     });

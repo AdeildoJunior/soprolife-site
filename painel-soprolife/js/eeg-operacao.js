@@ -838,6 +838,7 @@
   }
   function painel(secao,titulo,resumo,acoes,load,render) { secao.innerHTML=cabecalho(secao)+moldura(titulo,resumo,acoes||""); return carregar(secao,load,render); }
   function montarVisao(secao) {
+    if (window.SoproCommandCenter) return window.SoproCommandCenter.mountEeg(secao);
     return painel(secao,"Operação EEGLife","Fonte PostgreSQL · contagens atuais; receita por competência no mês, em Brasília.",'<button type="button" data-eeg-novo-atendimento>Novo Atendimento EEG</button>',m15().api("/eeg/indicadores"),function(d){
       return '<div class="eeg-stats">'+mini("EEGs agendados",d.agendados)+mini("Realizados",d.realizados)+mini("Aguardando traçado",d.aguardando_tracado)+mini("Aguardando laudo",d.aguardando_laudo)+mini("Aguardando assinatura",d.aguardando_assinatura)+mini("Prontos para entrega",d.prontos_entrega)+mini("Receita na competência",brl(d.receita_competencia))+mini("Tarefas pendentes",d.tarefas_pendentes)+'</div><p>Receita de '+esc(diaBr(d.periodo_inicio))+' a '+esc(diaBr(d.periodo_fim))+'. Não inclui custos ou repasses ainda não configurados.</p>';
     }).then(function(){var b=secao.querySelector('[data-eeg-novo-atendimento]');if(b)b.onclick=function(){novoAtendimento(secao);};});
@@ -906,6 +907,12 @@
   }
 
   window.SoproEegOperacao = {
+    newAttendance: function () { return novoAtendimento(document.querySelector('[data-eeg-section="cadastros"]')); },
+    openExam: function (id, resolved) {
+      if (!resolved) return window.SoproM15.api('/comando/registro', {method:'POST',body:JSON.stringify({marca:'eeglife',tipo:'eeg_exame',id:id})}).then(function (r) { return window.SoproEegOperacao.openExam(id,r.dados); });
+      window.LifeCommandCenter.openEegModule('exames');
+      return operar(document.querySelector('[data-eeg-section="exames"]'), resolved);
+    },
     MODULOS_VIVOS: Object.keys(MODULOS_VIVOS),
     montar: montar,
     cache: cache,

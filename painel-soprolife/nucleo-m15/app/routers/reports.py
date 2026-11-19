@@ -4810,13 +4810,16 @@ def _assinado_mais_recente(
     administrativo entrega e se um novo arquivo assinado pode entrar.
     """
 
-    return db.execute(
-        select(ExternalSignedDocument)
-        .where(ExternalSignedDocument.report_document_id == document_id)
-        .where(ExternalSignedDocument.status != ASSINADO_RECUSADO)
-        .order_by(ExternalSignedDocument.received_at.desc())
-        .limit(1)
-    ).scalar_one_or_none()
+    return db.execute(current_signed_query([document_id]).limit(1)).scalar_one_or_none()
+
+
+def current_signed_query(document_ids):
+    """Shared current-signature selection, including the existing refusal rule."""
+    return select(ExternalSignedDocument).where(
+        ExternalSignedDocument.report_document_id.in_(document_ids),
+        ExternalSignedDocument.status != ASSINADO_RECUSADO,
+    ).order_by(ExternalSignedDocument.received_at.desc())
+
 
 
 def _estado_de_entrega_do_documento(
@@ -4838,42 +4841,8 @@ def _estado_de_entrega_payload(db: Session, document: ReportDocument) -> dict:
     return {"estado_entrega": estado, "estado_entrega_rotulo": FILA_ROTULOS[estado]}
 
 
-@router.get("/assinatura-externa/fila")
-def list_delivery_queue(
-    estado: str | None = None,
-    incluir_superados: bool = False,
-    db: Session = Depends(get_db),
-    _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
-):
-    """A fila de entrega, com os cinco estados do percurso do documento.
-
-    A transição para "assinado recebido" é AUTOMÁTICA: ela acontece quando a
-    médica confirma o lote devolvido. Ninguém precisa avisar a administração
-    por WhatsApp de que os laudos voltaram.
-
-    M26.22 — um laudo que já tem CORRETIVA SUCESSORA não é entrega pendente:
-    ele foi substituído, e quem vai ao paciente é o sucessor. Continuar
-    listando o predecessor criava duas linhas do mesmo atendimento na fila e,
-    pior, contava o predecessor nos totalizadores — um "Aguardando assinatura"
-    que ninguém podia resolver, porque assinar o documento superado não
-    entrega nada. É a MESMA regra que `/laudos/acompanhamento` e
-    `/laudos/assinatura-externa/pendentes` já aplicavam; esta fila era a
-    única das três sem ela.
-
-    Excluir não é esconder: nada é apagado, o histórico continua intacto e
-    `incluir_superados=true` traz os predecessores de volta para auditoria.
-
-    O "entregue" NÃO entra nessa exclusão de propósito, embora
-    `/acompanhamento` o exclua: lá a lista é de trabalho pendente, aqui
-    "Entregue" é um dos cinco estados do próprio percurso e precisa aparecer.
-    """
-
-    _require_reports_enabled()
-    if estado is not None and estado not in FILA_ROTULOS:
-        raise ReportDomainError(
-            422, "estado_fila_invalido", "Estado de fila inválido."
-        )
-
+def delivery_queue_statement(incluir_superados: bool = False):
+    """Shared read-only work selection; no delivery/clinical rule is changed."""
     corretiva = aliased(ReportDocument)
     # M26.36 — corretiva cancelada não supera (ver list_report_documents).
     tem_corretiva_sucessora = exists().where(
@@ -4921,6 +4890,47 @@ def list_delivery_queue(
         # isso que ela é. Excluir não é esconder — nada foi apagado, e
         # `incluir_superados=true` a traz de volta para auditoria.
         statement = statement.where(~tem_corretiva_sucessora, ~devolucao_cancelada)
+
+    return statement
+
+
+@router.get("/assinatura-externa/fila")
+def list_delivery_queue(
+    estado: str | None = None,
+    incluir_superados: bool = False,
+    db: Session = Depends(get_db),
+    _operator: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    """A fila de entrega, com os cinco estados do percurso do documento.
+
+    A transição para "assinado recebido" é AUTOMÁTICA: ela acontece quando a
+    médica confirma o lote devolvido. Ninguém precisa avisar a administração
+    por WhatsApp de que os laudos voltaram.
+
+    M26.22 — um laudo que já tem CORRETIVA SUCESSORA não é entrega pendente:
+    ele foi substituído, e quem vai ao paciente é o sucessor. Continuar
+    listando o predecessor criava duas linhas do mesmo atendimento na fila e,
+    pior, contava o predecessor nos totalizadores — um "Aguardando assinatura"
+    que ninguém podia resolver, porque assinar o documento superado não
+    entrega nada. É a MESMA regra que `/laudos/acompanhamento` e
+    `/laudos/assinatura-externa/pendentes` já aplicavam; esta fila era a
+    única das três sem ela.
+
+    Excluir não é esconder: nada é apagado, o histórico continua intacto e
+    `incluir_superados=true` traz os predecessores de volta para auditoria.
+
+    O "entregue" NÃO entra nessa exclusão de propósito, embora
+    `/acompanhamento` o exclua: lá a lista é de trabalho pendente, aqui
+    "Entregue" é um dos cinco estados do próprio percurso e precisa aparecer.
+    """
+
+    _require_reports_enabled()
+    if estado is not None and estado not in FILA_ROTULOS:
+        raise ReportDomainError(
+            422, "estado_fila_invalido", "Estado de fila inválido."
+        )
+
+    statement = delivery_queue_statement(incluir_superados)
 
     linhas = db.execute(
         statement.order_by(ReportDocument.created_at.desc()).limit(300)

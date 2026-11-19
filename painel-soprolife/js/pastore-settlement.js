@@ -138,7 +138,7 @@
         </article>
         <article>
           <h4>Fechamentos</h4>
-          ${settlements.length ? settlements.map((row) => `<div class="pastore-settlement-row">
+          ${settlements.length ? settlements.map((row) => `<div class="pastore-settlement-row" data-settlement-record="${esc(row.id)}" tabindex="-1">
             <div class="pastore-settlement-row-head">
               <div><strong>${esc(row.unidade && row.unidade.nome)}</strong>
                 <span>${esc(row.competencia)}${row.complementar
@@ -164,7 +164,9 @@
     el.className = "pastore-live-status" + (error ? " is-error" : "");
   }
 
-  function load() {
+  let loading=null;
+  function load(){if(loading)return loading;loading=loadNow().finally(()=>loading=null);return loading;}
+  function loadNow() {
     const root = document.getElementById(ROOT);
     const fin = document.getElementById(FIN_ROOT);
     if (!root && !fin) return Promise.resolve();
@@ -264,5 +266,5 @@
     load();
   }
 
-  window.SoproPastoreSettlement = { refresh: load };
+  window.SoproPastoreSettlement = { refresh: load, open:async function(id){await load();const row=document.querySelector('[data-settlement-record="'+CSS.escape(id)+'"]');if(!row)throw Error('Fechamento indisponível');row.focus();row.scrollIntoView({block:'start'});} };
 })();

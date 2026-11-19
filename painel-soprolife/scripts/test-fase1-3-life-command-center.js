@@ -213,8 +213,8 @@ const SECOES_SOPRO = [
 caso("todos os módulos da sidebar SoproLife continuam presentes",
      SECOES_SOPRO.every((s) => painelSopro.includes(`data-section="${s}"`)),
      SECOES_SOPRO.filter((s) => !painelSopro.includes(`data-section="${s}"`)).join(","));
-caso("o topbar e as ações do painel não mudaram de lugar",
-     painelSopro.includes('id="globalSearch"') && painelSopro.includes('id="refreshBtn"') &&
+caso("a busca é global entre marcas e as ações do painel permanecem",
+     indexHtml.includes('id="ccGlobalSearch"') && painelSopro.includes('id="refreshBtn"') &&
      painelSopro.includes('id="topbarSair"'));
 caso("a identidade azul/teal do SoproLife não foi redesenhada",
      !/^\.sidebar\s*\{/m.test(lifeCss) && !/^\.topbar\s*\{/m.test(lifeCss) &&
@@ -420,14 +420,14 @@ caso("o boot-gate continua sendo a autoridade de papel",
      /auth\/me/.test(bootGate) && /SoproBootGate/.test(bootGate));
 caso("a casca não mexe em sessão, cookie, token ou logout",
      !/cookie|sessionStorage|logout|hasToken/i.test(shellCodigo));
-caso("o painel SoproLife só inicia depois do papel do servidor",
-     /gate\.pronto\.then\(\(identidade\) => \{[\s\S]{0,200}?if \(!identidade \|\| gate\.somenteClinico\) return;/.test(appJs));
-caso("a carga de dados SoproLife espera a entrada no contexto SoproLife",
-     /life\.onContext\("soprolife", entrarEmSoproLife\)/.test(appJs));
-caso("sem a casca, o painel inicia como antes (sem regressão)",
-     /\} else \{[\s\S]{0,260}?entrarEmSoproLife\(\);/.test(appJs));
-caso("init() roda no máximo uma vez",
-     /if \(!painelIniciado\) \{[\s\S]{0,120}?painelIniciado = true;[\s\S]{0,60}?init\(\);/.test(appJs));
+caso("o legado só inicia com identidade administrativa confirmada",
+     /if \(!gate\.identidade \|\| !gate\.administrativo\)/.test(appJs));
+caso("os dados legados esperam abertura explícita do módulo",
+     /window\.SoproLegacy = \{ start: function/.test(appJs) && /gate\.carregar/.test(bootGate));
+caso("sem o gate, nenhum painel administrativo inicia",
+     /Gate de boot ausente/.test(appJs) && /return;/.test(appJs));
+caso("init() roda no máximo uma vez, com promise compartilhada",
+     /if \(!window\.SoproLegacy\.ready\)[\s\S]{0,100}window\.SoproLegacy\.ready = init\(\)/.test(appJs));
 
 // ───────────── L) Fase 2A — operação real da EEGLife ─────────────────────
 console.log();

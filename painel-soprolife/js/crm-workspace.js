@@ -977,7 +977,7 @@
             '<p class="m15-muted">Eventos financeiros ficam visíveis apenas para gestão.</p>') +
           '<div class="m15-modal-actions">' +
           '<button type="button" class="m15-btn m15-btn-sec" data-crm-ws-fechar>Fechar</button>' +
-          CENTRAL_ATALHOS.map(function (a) {
+          (cli() && cli().can("operacional") ? CENTRAL_ATALHOS : []).map(function (a) {
             return '<button type="button" class="m15-btn m15-btn-sec" ' +
               'data-crm-ws-central="atendimento" data-crm-ws-tipo="' + esc(a[0]) + '" ' +
               'data-crm-ws-codigo="' + esc(p.public_code) + '">' + esc(a[1]) + "</button>";
@@ -1157,6 +1157,7 @@
 
   var glob = typeof window !== "undefined" ? window : null;
   if (glob) glob.SoproCrm = {
+    history: modalTimeline,
     abrir: abrir,
     render: function (container) { abrir(container); },
     // exposto para teste em Node: funções puras, sem DOM nem rede

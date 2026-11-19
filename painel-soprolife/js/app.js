@@ -727,6 +727,7 @@ function renderMetricCard(card) {
 
 function renderCards() {
   const container = document.querySelector("#cardsGrid");
+  if (!container) return;
   const cards = getDashboardCards();
 
   const byKey = new Map(cards.filter((c) => c.key).map((c) => [c.key, c]));
@@ -826,6 +827,7 @@ function formatDashboardValue(key, value) {
 
 function renderTasks() {
   const list = document.querySelector("#tasksList");
+  if (!list) return;
   list.innerHTML = state.resumo.tarefas.map((task) => `
     <div class="task">
       <div>
@@ -4341,15 +4343,6 @@ function bindEvents() {
     });
   }
 
-  document.querySelector("#globalSearch").addEventListener("input", (event) => {
-    const term = event.target.value.toLowerCase().trim();
-
-    document.querySelectorAll("tbody tr").forEach((row) => {
-      const visible = row.textContent.toLowerCase().includes(term);
-      row.style.display = visible || !term ? "" : "none";
-    });
-  });
-
   // Delegado no tbody (persiste entre re-renders de renderLeadsTable)
   const leadsTbody = document.querySelector("#leadsTable");
   if (leadsTbody) {
@@ -4408,37 +4401,16 @@ function updateLeadsFilterTip(el) {
     return;
   }
 
-  // Fase 1.3 — o painel SoproLife é UM dos contextos do Centro de Comando
-  // Life. `init()` lê todos os data/*.json da SoproLife, então ele passa a
-  // esperar a ENTRADA no contexto SoproLife, em vez de rodar no carregamento.
-  //
-  // É isso que faz a casca EEGLife não disparar carregamento de dado
-  // SoproLife: quem abre o painel já em EEGLife (preferência salva) não lê
-  // nada da espirometria, e portanto não há como esse dado aparecer com
-  // rótulo de EEG. Entrar em SoproLife depois carrega na hora, uma única vez.
-  let painelIniciado = false;
-  function entrarEmSoproLife() {
-    if (!painelIniciado) {
-      painelIniciado = true;
-      init();
-      return;
+  // Detailed legacy indicators remain in the existing modules. The command
+  // home does not load their snapshots or charts until explicitly requested.
+  window.SoproLegacy = { start: function () {
+    if (!gate.identidade || !gate.administrativo) return Promise.resolve();
+    if (!window.SoproLegacy.ready) {
+      window.SoproLegacy.ready = init();
     }
-    // Reentrada: os gráficos foram medidos com o painel oculto (largura zero)
-    // e precisam de nova medida agora que ele está visível.
-    resizeCharts();
-  }
+    return window.SoproLegacy.ready;
+  }};
 
-  gate.pronto.then((identidade) => {
-    if (!identidade || gate.somenteClinico) return;
-    const life = window.LifeCommandCenter;
-    if (life && typeof life.onContext === "function") {
-      life.onContext("soprolife", entrarEmSoproLife);
-    } else {
-      // Sem a casca carregada, o painel SoproLife é o único contexto — é o
-      // comportamento de antes da Fase 1.3, preservado de propósito.
-      entrarEmSoproLife();
-    }
-  });
 })();
 
 

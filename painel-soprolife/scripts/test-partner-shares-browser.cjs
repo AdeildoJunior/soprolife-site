@@ -31,7 +31,8 @@ with Session(get_engine()) as db:
  for(const [engine,name] of [[chromium,'chromium'],[firefox,'firefox']]){
   browser=await engine.launch({headless:true});const page=await browser.newPage({locale:'pt-BR',viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base);await page.locator('#loginForm [name=email]').fill('wa-browser@teste.local');await page.locator('#loginForm [name=password]').fill('senha-sintetica-123');await page.locator('#loginForm button[type=submit]').click();
-  await page.waitForFunction(()=>window.SoproM15?.can('operacional'));await page.waitForFunction(()=>Boolean(document.querySelector('#cardsGrid')?.children.length));
+  await page.waitForFunction(()=>window.SoproM15?.can('operacional'));await page.waitForFunction(()=>document.body.dataset.authPublished==='true');
+  await page.evaluate(()=>window.SoproBootGate.carregar('central'));
 
   const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const cfg=await page.evaluate(async()=> (await window.SoproM15.api('/atendimentos/configuracao')).espirometria_soprolife);

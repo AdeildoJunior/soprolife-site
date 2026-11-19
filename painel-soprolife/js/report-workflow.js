@@ -3654,6 +3654,12 @@
     const mount = root();
     if (!mount) return;
     setPhysicianNavigationIsolation();
+    if (authenticated() && !state.initialLoaded) {
+      mount.innerHTML = state.initialError
+        ? '<div class="report-state" role="alert">Não foi possível carregar a fila. <button type="button" data-report-retry>Tentar novamente</button></div>'
+        : '<div class="report-state" role="status">Carregando…</div>';
+      return;
+    }
     if (!authenticated()) {
       mount.innerHTML = renderStatus() + renderUnauthenticated();
       return;
@@ -3745,6 +3751,7 @@
       return;
     }
     state.busy = true;
+    state.initialError = false;
     render();
     try {
       const calls = [];
@@ -3819,6 +3826,7 @@
       }
       const values = await Promise.all(calls);
       if (epoch !== state.loadEpoch) return;
+      state.initialLoaded = true;
       labels.forEach((label, index) => {
         state[label] = unwrapPayload(label, values[index]);
       });
@@ -3839,9 +3847,14 @@
       }
       state.busy = false;
       render();
+      if (explicit("medico") && !state.statusFilter) {
+        state.commandQueueCount = state.queue.length;
+        window.dispatchEvent(new Event('soprolife:report-queue'));
+      }
       if (state.selectedDocumentId) await loadDocument(state.selectedDocumentId, false);
     } catch (error) {
       if (epoch !== state.loadEpoch) return;
+      state.initialError = true;
       announce(readableError(error), "erro");
       render();
     } finally {
@@ -5205,6 +5218,7 @@
     const statistics = event.target.closest("[data-report-statistics]");
     if (statistics) {
       if (window.SoproReportStatistics) window.SoproReportStatistics.open(statistics);
+      else window.SoproBootGate.carregar('report-stats').then(() => window.SoproReportStatistics.open(statistics)).catch(() => announce('Não foi possível abrir as estatísticas.', 'erro'));
       return;
     }
     // M25.24 — a ajuda vem ANTES de tudo. O ícone pode estar dentro de uma
@@ -5797,7 +5811,7 @@
     setPhysicianNavigationIsolation();
     // O bootstrap pode ter restaurado a sessão antes de carregar este módulo.
     // A primeira carga não depende de receber um evento já publicado.
-    if (authenticated()) loadAuthenticatedData();
+    if (authenticated()) state.initialLoading = loadAuthenticatedData();
     else render();
   }
 
@@ -5894,9 +5908,16 @@
     bindClient();
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
-  }
+  window.SoproReports = {
+    pendingCount: function () { return state.commandQueueCount ?? null; },
+    open: async function (id) { await window.SoproReports.ready; return loadDocument(id, true); },
+    openExam: async function (code) {
+      await window.SoproReports.ready;
+      await locateExam(code);
+      const input = document.getElementById('reportExamCode'); if (input) input.value = code;
+    },
+  };
+  window.SoproReports.ready = document.readyState === 'loading'
+    ? new Promise(resolve => document.addEventListener('DOMContentLoaded', () => Promise.resolve(boot()).then(() => state.initialLoading).then(resolve)))
+    : Promise.resolve(boot()).then(() => state.initialLoading);
 })();

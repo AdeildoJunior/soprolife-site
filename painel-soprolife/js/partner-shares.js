@@ -27,13 +27,15 @@
         <button type="submit">Registrar movimento sem nova receita</button><p role="status"></p>
       </form></details>`;
   }
-  async function load() {
+  let loading=null;
+  function load(){if(loading)return loading;loading=loadNow().finally(()=>loading=null);return loading;}
+  async function loadNow() {
     if (!m15()?.can("leitura")) { root.innerHTML=""; return; }
     try {
       rows=(await m15().api("/financeiro/partilhas")).itens;
       root.innerHTML=`<article class="panel pastore-settlement-panel"><h3>Partilhas e acertos de clínicas</h3>
         <p>Bruto do exame, parcelas econômicas e entradas em conta são valores distintos. Acerto não gera receita.</p>
-        ${rows.length?rows.map(row=>`<article class="pastore-settlement-row"><h4>${esc(row.exame)} · ${esc(row.unidade)}</h4>
+        ${rows.length?rows.map(row=>`<article class="pastore-settlement-row" data-share-record="${esc(row.id)}" tabindex="-1"><h4>${esc(row.exame)} · ${esc(row.unidade)}</h4>
           <p>${esc(receiver[row.recebido_por])} · ${esc(row.forma_pagamento||"Forma não informada")} · ${esc(status[row.status_acerto])}</p>
           <dl>${[["Bruto do exame",row.bruto],["Parcela clínica",row.parcela_parceiro],["Parcela SoproLife",row.parcela_soprolife],["A pagar à clínica",row.a_pagar],["A receber da clínica",row.a_receber],["Entradas em conta registradas",row.entradas_em_conta],["Saídas de conta registradas",row.saidas_de_conta]].map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${brl(v)}</dd></div>`).join("")}</dl>
           ${row.movimentos.map(m=>`<p>${esc(m.natureza==="acerto"?"Acerto":"Regularização")} · ${brl(m.valor)} · ${esc(m.direcao)} · ${esc(m.conta)}${m.origem_bancaria?" · "+esc(m.origem_bancaria):""} · ${esc(new Date(m.ocorrido_em).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"}))}</p>`).join("")}${form(row)}</article>`).join(""):"<p>Nenhuma partilha nova registrada. Histórico preservado.</p>"}</article>`;
@@ -61,6 +63,7 @@
       await load();
     } catch(e) {message.textContent=e.message;button.disabled=false;}
   });
+  window.SoproPartnerShares={open:async function(id){await load();const row=root.querySelector('[data-share-record="'+CSS.escape(id)+'"]');if(!row)throw Error('Acerto indisponível');row.focus();row.scrollIntoView({block:'start'});}};
   document.addEventListener("soprolife:cadastro",load);
   if(m15())m15().onSessionChange(load);
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",load);else load();
