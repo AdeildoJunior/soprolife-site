@@ -4,8 +4,10 @@ set -Eeuo pipefail
 umask 077
 EXPECTED="${1:?Reviewed official HEAD required}"
 PREVIOUS="${2:?Verified production HEAD required}"
+PREVIOUS_SCHEMA="${3:-w141126wa}"
 [[ "$EUID" == 0 && -t 0 && -t 1 ]]
 [[ "$EXPECTED" =~ ^[a-f0-9]{40}$ && "$PREVIOUS" =~ ^[a-f0-9]{40}$ ]]
+[[ "$PREVIOUS_SCHEMA" =~ ^[a-zA-Z0-9_]+$ ]]
 [[ "${SOPROLIFE_PARTNER_GATES_VERIFIED:-}" == YES ]]
 ROOT=/opt/soprolife/soprolife-site
 CORE="$ROOT/painel-soprolife/nucleo-m15"
@@ -19,7 +21,7 @@ cd "$ROOT"
 [[ "$(git_as branch --show-current)" == painel-soprolife-v01 ]]
 [[ "$(git_as rev-parse HEAD)" == "$PREVIOUS" ]]
 [[ "$(find .git ! -user soprolife | wc -l)" == 0 ]]
-[[ "$(sudo -u postgres psql -X -d soprolife_m15 -Atqc 'SELECT version_num FROM alembic_version')" == w141126wa ]]
+[[ "$(sudo -u postgres psql -X -d soprolife_m15 -Atqc 'SELECT version_num FROM alembic_version')" == "$PREVIOUS_SCHEMA" ]]
 source "$CORE/scripts/lib-deploy-hardening.sh"
 soprolife_wait_health_ok http://127.0.0.1:8015/api/v1/health 'API preflight' 10 1 20
 soprolife_wait_health_ok http://127.0.0.1:8016/p/v1/health 'Portal preflight' 10 1 20

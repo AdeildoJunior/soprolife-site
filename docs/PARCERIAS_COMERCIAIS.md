@@ -3,7 +3,8 @@
 O bruto permanece em `FinancialEntry` como uma única receita. A regra comercial
 é versionada em `PartnerCommercialRule`, ligada ao cadastro `Partnership` e à
 unidade própria. Percentuais somam 100; cada nova partilha congela a versão
-aplicada. A maior vigência inicial elegível vale para novos cadastros; uma nova
+aplicada. A maior vigência inicial elegível vale para novos cadastros, com a
+maior data de criação como desempate de versões intradiárias; uma nova
 regra nunca recalcula partilha anterior. O bootstrap só configura as duas
 parcerias autorizadas; o motor não depende de seus nomes ou de 30% fixos.
 
@@ -62,9 +63,12 @@ A confirmação administrativa de um exame existente exige exame, lançamento,
 data e evidência individual, com plano/hash e transação, sem criar paciente
 ou exame. Dados já existentes são preservados; só fatos novos são anexados.
 
-Maclin nova mantém a regra fiscal DIRECT e bruto confirmado, pelas políticas
-existentes. Alergocare tem regra comercial confirmada, mas não recebeu política
-fiscal ou cópia da Pastore: sua emissão permanece bloqueada até validação própria.
+Maclin e Alergocare usam a mesma regra fiscal DIRECT, com NFS-e emitida pela
+SoproLife sobre o bruto confirmado, pelas mesmas políticas e pelo mesmo motor
+existentes. A divisão 70/30 é somente econômica, nunca reduz a base da nota.
+Autorização explícita de 18/11/2026 habilita Alergocare por nova versão imutável
+da regra existente: mesmos parceiro, unidade, parceria, percentuais e vigência.
+Partilhas anteriores conservam o rule_id original; não são reinterpretadas.
 Emissão sempre depende de confirmação humana no módulo Fiscal. O cadastro e os
 testes nunca disparam NFS-e real. Notas importadas/emitidas não são modificadas.
 
@@ -74,9 +78,10 @@ testes nunca disparam NFS-e real. Notas importadas/emitidas não são modificada
    sintéticos/efêmeros, incluindo PostgreSQL, browsers e `check-access.sh`.
 2. Commit/publicação fast-forward; preflight de HEAD, worktree, health e worker
    fiscal sem pedido ativo. Usar `scripts/deploy-partner-shares-vps.sh` com HEAD
-   anterior/alvo conferidos e `SOPROLIFE_PARTNER_GATES_VERIFIED=YES`.
+   anterior/alvo conferidos e `SOPROLIFE_PARTNER_GATES_VERIFIED=YES`. Terceiro
+   argumento informa o schema inicial esperado (`u181126ux` nesta correção).
 3. Backup privado validado com `pg_restore`, bundle Git verificado e hashes.
-   Migração `w141126wa -> p151126share -> u181126ux`; `alembic check`; comparar fingerprints
+   Migração `w141126wa -> p151126share -> u181126ux -> a191126direct`; `alembic check`; comparar fingerprints
    de todas as tabelas preexistentes, sem mudanças de fatos nessa etapa.
 4. Reiniciar somente a API; health API/proxy/portal, GETs autenticados de
    partilhas, Pastore, financeiro, fiscal, Funil, WhatsApp, EEGLife e Marketing.
@@ -92,6 +97,15 @@ inteiros; não altera partilhas. Evita a imprecisão binária da soma SQLite dev
 para R$123,45 e preserva o resultado PostgreSQL (37,04 + 86,41).
 Sem configuração anterior, nesta missão UX a vigência começa em 18/11/2026;
 não executar `confirm-existing`, regularização antiga ou backfill.
+
+Correção fiscal Alergocare: `partner_share_admin.py approve-alergocare-direct
+--actor <ADMIN_ID>` produz dry-run/hash. Aplicar somente esse plano com
+`--apply --plan-sha256 <HASH>`. Não executar `configure` para criar entidades.
+Anexa uma versão intradiária DIRECT e uma auditoria; não altera nem exclui
+regras existentes e não prepara/confirma/emite NFS-e. O lock da parceria
+serializa essa aprovação com a criação administrativa de versões. Migração
+`a191126direct` só amplia a unicidade para incluir `created_at`; gatilhos de
+imutabilidade continuam ativos. Downgrade com versões intradiárias é recusado.
 
 O setup de configuração é idempotente e não renomeia parceiros. Nomes com
 sufixo institucional ALERGOCARE (...) só resolvem essa entidade; Alergo Life

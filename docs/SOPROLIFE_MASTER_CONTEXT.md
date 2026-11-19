@@ -11,6 +11,23 @@
 
 Última atualização: 2026-11-18 (UX espirometria por parceiro; base `7da7ffe`).
 
+## Correção fiscal Alergocare — 18/11/2026
+
+Autorização explícita: Alergocare passa ao mesmo DIRECT da Maclin, NFS-e pela
+SoproLife sobre o bruto confirmado, com confirmação fiscal humana. A divisão
+70/30 continua somente econômica. Motor fiscal, políticas, emissor, base do
+razão e gates de confirmação são compartilhados, sem cópia de lógica fiscal.
+Ambos os cards usam o mesmo texto fiscal. Pastore e Alergo Life não mudam.
+
+Configuração anterior é imutável: `approve-alergocare-direct` no administrador
+existente anexa uma versão da regra, com os mesmos IDs/percentuais/vigência.
+`a191126direct` (pai `u181126ux`) permite versões no mesmo dia por `created_at`;
+resolução por data desempata pela criação mais recente. Unicidade/append-only
+permanecem, sem update/backfill de fatos. Partilhas anteriores mantêm sua regra
+e enquadramento originais. Bootstrap de novos ambientes já usa DIRECT para
+ambas. Aplicação produtiva exige dry-run/hash; não cria parceiro ou unidade e
+não emite nota. Contrato operacional em `docs/PARCERIAS_COMERCIAIS.md`.
+
 ## UX espirometria por parceiro — 18/11/2026
 
 Novo atendimento oferece seis cards: SoproLife, Pastore, Maclin, Alergocare,
@@ -62,7 +79,8 @@ consolidada. Nenhum registro/regra de Alergo Life é reutilizado ou alterado.
 Custos Alergocare não vêm de defaults de combustível/estacionamento: somente
 sessão explícita ou despesa individual; a sessão histórica de 27/10 permanece.
 Maclin conserva fiscal DIRECT pelo bruto confirmado e confirmação humana;
-Alergocare continua bloqueada para emissão até validação fiscal própria.
+Alergocare estava bloqueada nesta etapa; a autorização posterior está descrita
+na seção Correção fiscal Alergocare, acima, sem reescrever partilhas anteriores.
 Nenhuma política tributária é criada por esta configuração comercial.
 
 Operação, implantação e rollback: [contrato de parcerias](PARCERIAS_COMERCIAIS.md).

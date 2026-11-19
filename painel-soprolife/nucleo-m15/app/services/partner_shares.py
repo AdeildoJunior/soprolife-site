@@ -23,6 +23,10 @@ def _utc(when):
     return when.astimezone(ZoneInfo("UTC")) if when.tzinfo else when.replace(tzinfo=ZoneInfo("UTC"))
 
 
+def rule_version_key(rule):
+    return rule.vigencia_inicio, _utc(rule.created_at)
+
+
 def split(gross, partner_percent):
     partner = (gross * partner_percent / Decimal(100)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return gross - partner, partner
@@ -32,7 +36,7 @@ def resolve_rule(db, codigo, when):
     rows = db.scalars(select(PartnerCommercialRule).where(
         PartnerCommercialRule.codigo == codigo,
         PartnerCommercialRule.vigencia_inicio <= when,
-    ).order_by(PartnerCommercialRule.vigencia_inicio.desc())).all()
+    ).order_by(PartnerCommercialRule.vigencia_inicio.desc(), PartnerCommercialRule.created_at.desc())).all()
     if not rows or (rows[0].vigencia_fim and rows[0].vigencia_fim < when):
         raise HTTPException(422, "Regra comercial ausente para a data do exame.")
     rule = rows[0]
@@ -47,7 +51,7 @@ def resolve_rule(db, codigo, when):
 
 def catalog(db):
     rows = []
-    for rule in db.scalars(select(PartnerCommercialRule).order_by(PartnerCommercialRule.codigo, PartnerCommercialRule.vigencia_inicio.desc())):
+    for rule in db.scalars(select(PartnerCommercialRule).order_by(PartnerCommercialRule.codigo, PartnerCommercialRule.vigencia_inicio.desc(), PartnerCommercialRule.created_at.desc())):
         agreement = db.get(Partnership, rule.partnership_id)
         partner = db.get(Partner, agreement.partner_id)
         unit = db.get(PartnerUnit, rule.partner_unit_id)

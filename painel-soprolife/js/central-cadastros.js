@@ -66,12 +66,13 @@
   /* M67 — o que cada tipo significa para a NFS-e, dito no próprio cartão.
    * Consulta pura não tem linha: a emissão de NFS-e cobre hoje só a
    * espirometria, e prometer ou negar algo sobre a consulta seria inventar. */
+  const NFSE_PARCEIRO_DIRECT = ["emite", "NFS-e pelo bruto — confirmação no Fiscal"];
   const NFSE_POR_TIPO = {
     espirometria_soprolife: ["emite", "NFS-e da espirometria pela SoproLife"],
     espirometria_consulta_soprolife: ["emite", "NFS-e da espirometria pela SoproLife"],
     espirometria_pastore: ["nao-emite", "Sem NFS-e por exame — entra no fechamento da Pastore"],
-    espirometria_maclin: ["emite", "NFS-e pelo bruto — confirmação no Fiscal"],
-    espirometria_alergocare: ["nao-emite", "NFS-e aguarda validação fiscal própria"],
+    espirometria_maclin: NFSE_PARCEIRO_DIRECT,
+    espirometria_alergocare: NFSE_PARCEIRO_DIRECT,
   };
 
   const TIPOS_COM_ESPIROMETRIA = [

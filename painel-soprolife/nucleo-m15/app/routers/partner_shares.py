@@ -87,7 +87,7 @@ def commercial_rule(partnership_id: str, payload: CommercialRuleCreate, request:
         raise HTTPException(409, "Código comercial já pertence a outra parceria.")
     if any(r.vigencia_inicio == payload.vigencia_inicio for r in versions):
         raise HTTPException(409, "Vigência já cadastrada; regras anteriores são imutáveis.")
-    fiscal_flow = max(versions, key=lambda r: r.vigencia_inicio).fiscal_flow if versions else None
+    fiscal_flow = max(versions, key=partner_shares.rule_version_key).fiscal_flow if versions else None
     row = PartnerCommercialRule(**payload.model_dump(), partnership_id=agreement.id,
                                 fiscal_flow=fiscal_flow, created_by_user_id=user.id)
     db.add(row)

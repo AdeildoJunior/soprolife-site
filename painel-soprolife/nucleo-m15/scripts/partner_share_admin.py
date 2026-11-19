@@ -13,12 +13,14 @@ from sqlalchemy.orm import Session
 from app.db import get_engine
 from app.models import (ExamPartnerShare, FinancialEntry, Partner, PartnerCommercialRule,
                         SpirometryExam, User, ProfitRevenueBasis)
-from app.services.partner_share_setup import configure
+from app.services.partner_share_setup import configure, approve_alergocare_direct
 from app.services.partner_shares import create_share, position, record_movement
 from app.routers.partner_shares import ShareMovementCreate
 
 
 def perform(db, args, actor):
+    if args.mode == 'approve-alergocare-direct':
+        return approve_alergocare_direct(db, actor.id)
     if args.mode == 'configure':
         results=[]
         for code, when in [('maclin',args.maclin_from),('alergocare',args.alergocare_from)]:
@@ -57,7 +59,7 @@ def perform(db, args, actor):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('mode',choices=['configure','confirm-existing'])
+    p.add_argument('mode',choices=['configure','confirm-existing','approve-alergocare-direct'])
     p.add_argument('--actor',required=True)
     p.add_argument('--maclin-from',type=date.fromisoformat)
     p.add_argument('--alergocare-from',type=date.fromisoformat)
@@ -75,7 +77,7 @@ def main():
         facts={'mode':args.mode,'actor':args.actor,'maclin_from':str(args.maclin_from),
                'alergocare_from':str(args.alergocare_from),'exam':args.exam_code,'entry':args.entry_code,
                'service_date':str(args.service_date)}
-        if args.mode=='confirm-existing':facts['result']=result
+        if args.mode in ('confirm-existing','approve-alergocare-direct'):facts['result']=result
         digest=hashlib.sha256(json.dumps(facts,sort_keys=True).encode()).hexdigest()
         print(encoded);print('plan_sha256='+digest)
         if args.apply:

@@ -140,7 +140,6 @@
 
   // nfse.py::evaluate — fluxo derivado SÓ de tipo/parceiro/modalidade estruturados.
   function fluxoFiscal(tipo, modalidade) {
-    if (tipo === "espirometria_alergocare") return "UNSUPPORTED";
     if (tipo === TIPO_PASTORE || modalidade === "clinica_parceira") return "PASTORE";
     return FLUXO_POR_MODALIDADE[modalidade] || "UNSUPPORTED";
   }

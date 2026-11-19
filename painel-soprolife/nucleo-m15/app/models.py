@@ -1075,7 +1075,7 @@ class PartnerCommercialRule(Base):
     created_by_user_id: Mapped[str] = mapped_column(String(UUID_LEN), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     __table_args__ = (
-        UniqueConstraint("codigo", "vigencia_inicio", name="uq_commercial_rule_version"),
+        UniqueConstraint("codigo", "vigencia_inicio", "created_at", name="uq_commercial_rule_version"),
         CheckConstraint("percentual_parceiro >= 0 AND percentual_soprolife >= 0 AND percentual_parceiro + percentual_soprolife = 100", name="rule_percent"),
         CheckConstraint("vigencia_fim IS NULL OR vigencia_fim >= vigencia_inicio", name="rule_dates"),
         CheckConstraint("fiscal_flow IS NULL OR fiscal_flow = 'DIRECT'", name="rule_fiscal_flow"),

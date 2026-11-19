@@ -97,8 +97,10 @@ with Session(get_engine()) as db:
     const text=await page.locator('#cadMaclinPartilha').innerText();
     assert(text.includes(gross)&&text.includes(own)&&text.includes(partner),text);
    }
+   assert(!(await page.locator('#cadAtNfse').innerText()).includes('Esta modalidade não tem fluxo fiscal'));
+   const fiscalCard=await page.locator(`.cad-tipo:has([value=espirometria_${code}]) .cad-tipo-nfse`).innerText();
+   assert.equal(fiscalCard,'NFS-e pelo bruto — confirmação no Fiscal');
    if(code==='alergocare'){
-    assert((await page.locator('#cadAtNfse').innerText()).includes('Esta modalidade não tem fluxo fiscal'));
     await page.locator('[name=esp_valor]').fill('123,45');
    }
    for(const width of [1440,800,390]){
