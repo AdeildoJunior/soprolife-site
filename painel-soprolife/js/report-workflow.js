@@ -5795,7 +5795,10 @@
       loadAuthenticatedData();
     });
     setPhysicianNavigationIsolation();
-    render();
+    // O bootstrap pode ter restaurado a sessão antes de carregar este módulo.
+    // A primeira carga não depende de receber um evento já publicado.
+    if (authenticated()) loadAuthenticatedData();
+    else render();
   }
 
   async function boot() {

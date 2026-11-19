@@ -35,15 +35,18 @@ function observeAuthFrames() {
 module.exports = {observeAuthFrames};
 if (require.main === module) (async()=>{let browser;try {
   const apiPort=await port(), panelPort=await port();
-  const env={...process.env,M15_ENV:'dev',M15_DATABASE_URL:'sqlite:///'+path.join(temp,'test.db'),M15_API_HOST:'127.0.0.1',M15_API_PORT:String(apiPort),M15_AUTH_SECRET:'auth-browser-synthetic-secret-32-chars',M15_SESSION_COOKIE_PATH:'/painel-soprolife',M15_NOVA_SENHA:password,WHATSAPP_INTEGRATION_ENABLED:'false',WHATSAPP_VERIFY_TOKEN:'',WHATSAPP_APP_SECRET:'',WHATSAPP_WABA_ID:'',WHATSAPP_PHONE_NUMBER_ID:'',WHATSAPP_IDENTITY_KEY:''};
+  const env={...process.env,M15_ENV:'dev',M15_REPORTS_ENABLED:'true',M15_REPORTS_MODE:'pilot',M15_REPORTS_STORAGE_DIR:path.join(temp,'reports'),M15_DATABASE_URL:'sqlite:///'+path.join(temp,'test.db'),M15_API_HOST:'127.0.0.1',M15_API_PORT:String(apiPort),M15_AUTH_SECRET:'auth-browser-synthetic-secret-32-chars',M15_SESSION_COOKIE_PATH:'/painel-soprolife',M15_NOVA_SENHA:password,WHATSAPP_INTEGRATION_ENABLED:'false',WHATSAPP_VERIFY_TOKEN:'',WHATSAPP_APP_SECRET:'',WHATSAPP_WABA_ID:'',WHATSAPP_PHONE_NUMBER_ID:'',WHATSAPP_IDENTITY_KEY:''};
   run(['-m','alembic','upgrade','head'],env);
   for(const role of ['admin','medico','eeg_tecnico']) run(['-m','app.cli','criar-usuario','--email',role+'@bootstrap.local','--nome','Conta Sintética '+role,'--papel',role==='eeg_tecnico'?'leitura':role],env);
   run(['-c',`from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.db import get_engine
-from app.models import User,Role
+from app.models import User,Role,PhysicianProfile
+from datetime import datetime,timezone
 with Session(get_engine()) as db:
- u=db.scalar(select(User).where(User.email=='eeg_tecnico@bootstrap.local')); r=db.scalar(select(Role).where(Role.name=='eeg_tecnico')); assert r; u.roles=[r]; db.commit()`],env);
+ u=db.scalar(select(User).where(User.email=='eeg_tecnico@bootstrap.local')); r=db.scalar(select(Role).where(Role.name=='eeg_tecnico')); assert r; u.roles=[r]
+ doctor=db.scalar(select(User).where(User.email=='medico@bootstrap.local'))
+ db.add(PhysicianProfile(user_id=doctor.id,professional_name='Médica Sintética',crm_number='999999',crm_state='RJ',active=True,verification_status='verified',verified_at=datetime.now(timezone.utc),verified_by_user_id=db.scalar(select(User.id).where(User.email=='admin@bootstrap.local')),verification_reference='SYNTHETIC-BOOTSTRAP-ONLY')); db.commit()`],env);
   for(const [bin,args,cwd,e] of [[python,['-m','app.serve'],core,env],['python3',[path.join(root,'painel-soprolife/scripts/command-center-local-server.py')],root,{...env,SOPROLIFE_PANEL_HOST:'127.0.0.1',SOPROLIFE_PANEL_PORT:String(panelPort),SOPROLIFE_M15_UPSTREAM:`http://127.0.0.1:${apiPort}/api/v1`}]] ) children.push(cp.spawn(bin,args,{cwd,env:e,stdio:'ignore'}));
   const base=`http://127.0.0.1:${panelPort}/painel-soprolife/`;
   await wait(async()=>(await fetch(base+'api/m15/health')).ok);
@@ -55,7 +58,6 @@ with Session(get_engine()) as db:
       const page=await context.newPage(), errors=[];
       page.on('pageerror',e=>errors.push(e.message));
       await context.addInitScript(observeAuthFrames);
-      let clinical=false;
       await context.addInitScript(()=>{window.__expectedClinical=sessionStorage.getItem('testClinical')==='yes';});
       // Deliberately stagger auth, context manifest and script responses.
       await page.route('**/*',async route=>{
@@ -85,6 +87,11 @@ with Session(get_engine()) as db:
         for(const suffix of ['/auth/me','/auth/sessao','/m15-config.json'])assert.equal(calls.filter(p=>p.endsWith(suffix)).length,1,'One shared bootstrap request: '+suffix);
         assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2),false);
         if(role==='medico') {
+          // The module must initiate the clinical queue even when it subscribes
+          // after the shared session restoration event has already completed.
+          await page.waitForFunction(()=>performance.getEntriesByType('resource').some(r=>new URL(r.name).pathname.endsWith('/laudos/meus')));
+          const queue=await page.evaluate(async()=>{const r=await fetch('/painel-soprolife/api/m15/laudos/meus');return {status:r.status,payload:await r.json()};});
+          assert.equal(queue.status,200,'Verified synthetic physician queue');
           assert.deepEqual(await page.locator('.nav-item').evaluateAll(ns=>ns.map(n=>n.dataset.section)),['laudos-espirometria']);
           assert.equal(await page.locator('#lifePanelEegLife,.nav-hub-card,#m15-nucleo,#central-cadastros,#financeiro,#fiscal,#crm,#leads,#marketing').count(),0);
           assert.equal(await page.evaluate(()=>{window.LifeCommandCenter.setContext('eeglife');return window.LifeCommandCenter.getContext();}),'soprolife');
@@ -137,7 +144,7 @@ with Session(get_engine()) as db:
       assert.equal(await page.locator('.nav-item,.section,#lifeMasthead').count(),0);
       await page.unroute('**/auth/me');
       assert.deepEqual(errors,[],name+' '+width+' script errors');
-      console.log(`${name} ${width}: delayed auth, atomic admin, doctor deny-first, EEG roles, refresh/direct URL/logout/login, 401/403, outages PASS`);
+      console.log(`${name} ${width}: delayed auth, atomic admin, doctor deny-first, EEG roles, refresh/direct URL/logout/login, 401/403, initial clinical queue, outages PASS`);
       await context.close();
     }
     await browser.close();browser=null;
