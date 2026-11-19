@@ -31,6 +31,7 @@ const ler = (...p) => fs.readFileSync(path.join(RAIZ, ...p), "utf8");
 
 const appSrc = ler("js", "app.js");
 const nucleoSrc = ler("js", "m15-nucleo.js");
+const bootSrc = ler("js", "boot-gate.js");
 const wsSrc = ler("js", "crm-workspace.js");
 const mfSrc = ler("js", "marketing-freshness.js");
 const indexSrc = ler("index.html");
@@ -78,7 +79,7 @@ caso("a senha NÃO é limpa antes da resposta de sucesso",
 caso("a senha é limpa depois que a requisição termina (sucesso ou falha)",
      /\.finally\(function \(\) \{[\s\S]{0,240}campoSenha\.value = ""/.test(nucleoSrc));
 caso("o formulário sai do DOM só depois do sucesso confirmado",
-     /Sucesso confirmado[\s\S]{0,200}renderAuthArea/.test(nucleoSrc));
+     /function afterAuth\(\)[\s\S]{0,300}window.location.replace/.test(nucleoSrc));
 caso("a senha nunca entra no estado da aplicação",
      !/state\.(senha|password)\b/.test(nucleoSrc));
 caso("labels preservados e associados por for/id",
@@ -95,7 +96,7 @@ caso('existe a opção "Manter conectado neste dispositivo"',
 caso("a escolha é enviada ao servidor como manter_conectado",
      /manter_conectado: manter/.test(nucleoSrc));
 caso("a sessão é restaurada ao carregar a página (GET /auth/sessao)",
-     /api\("\/auth\/sessao"\)/.test(nucleoSrc) &&
+     bootSrc.includes('json(API + "/auth/sessao")') &&
      /restaurarSessao\(\)\.then/.test(nucleoSrc));
 caso("Sair chama o logout do servidor (revogação real)",
      /api\("\/auth\/logout", \{ method: "POST" \}\)/.test(nucleoSrc));
@@ -116,7 +117,7 @@ caso("CSRF é enviado nos métodos que mudam estado",
 caso("sessão expirada mostra mensagem clara e cai fechado",
      nucleoSrc.indexOf("Sua sessão expirou. Entre novamente.") !== -1);
 caso("a guarda de contexto seguro (HTTPS/loopback) continua antes de tudo",
-     /if \(!state\.access\.secure\) return Promise\.resolve\(false\)/.test(nucleoSrc));
+     /if \(!state\.access\.secure \|\|/.test(nucleoSrc));
 caso("o proxy repassa o cookie do painel e o cabeçalho CSRF",
      proxySrc.indexOf('"x-csrf-token": "X-CSRF-Token"') !== -1 &&
      /headers\["Cookie"\] = cookie/.test(proxySrc));

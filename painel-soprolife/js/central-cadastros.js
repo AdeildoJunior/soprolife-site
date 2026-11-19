@@ -1555,7 +1555,7 @@
 
   function visibleTabs() {
     const cli = m15();
-    return TABS.filter((t) => !cli || cli.can(t[2]));
+    return TABS.filter((t) => cli && cli.can(t[2]));
   }
 
   function render() {

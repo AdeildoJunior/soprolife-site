@@ -120,8 +120,8 @@ caso("os carregadores técnicos continuam existindo (APIs e dados intactos)",
      ["pessoas", "leads", "espirometrias", "consultas", "parceiros",
       "encaminhamentos", "followup", "financeiro"]
        .every((id) => nucleoSrc.indexOf("loaders." + id) !== -1));
-caso("RBAC da UI segue sem esconder nada quando o papel é desconhecido",
-     nucleoSrc.indexOf("if (!state.user || !state.user.papeis_efetivos) return true;") !== -1);
+caso("RBAC da UI nega quando o papel é desconhecido",
+     nucleoSrc.includes("autenticado() && state.user && gate && gate.can(role)"));
 
 // ───────────── D) cadastro só na Central ────────────────────────────────────
 console.log();

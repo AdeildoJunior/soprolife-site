@@ -36,6 +36,7 @@ const indexSrc = fs.readFileSync(path.join(RAIZ, "index.html"), "utf8");
 const configSrc = fs.readFileSync(path.join(RAIZ, "data", "m15-config.json"), "utf8");
 
 const sec = require(secPath);
+const bootSrc = fs.readFileSync(path.join(RAIZ, "js", "boot-gate.js"), "utf8");
 
 // ─────────────── A) guarda de contexto seguro (funcional) ──────────────────
 console.log("A) Contexto seguro: HTTPS e loopback permitem, HTTP remoto bloqueia");
@@ -103,16 +104,11 @@ console.log("B) Ativação global — enabled=true sem opt-in de localStorage");
   caso("m15-config.json: api_base de mesma origem preservado",
        cfg.api_base === "/painel-soprolife/api/m15" && cfg.api_base.indexOf("://") === -1);
 
-  // Reproduz a expressão de decisão do boot() com o config REAL e SEM opt-in:
-  const decisaoBoot = (config, optInLocalStorage) =>
-    (config && config.enabled === true) || optInLocalStorage === "on";
-  caso("menu M15 ativa com o config real SEM localStorage soproM15",
-       decisaoBoot(cfg, null) === true);
-  caso("expressão de decisão do boot permanece a mesma no código",
-       nucleoSrc.indexOf("config.enabled === true") !== -1 &&
-       nucleoSrc.indexOf('localStorage.getItem("soproM15") === "on"') !== -1);
-  caso("compatibilidade com o opt-in local antigo preservada (flag false → opt-in ainda liga)",
-       decisaoBoot({ enabled: false }, "on") === true);
+  caso("bootstrap usa manifesto versionado e não opt-in local",
+       bootSrc.includes('config.enabled !== true') && !bootSrc.includes('localStorage.getItem("soproM15")'));
+  caso("núcleo reutiliza a configuração confirmada pelo bootstrap",
+       nucleoSrc.includes('activate(gateBoot.config)'));
+
 }
 
 // ───────── C) guardas estáticas do núcleo (bloqueio fail-closed) ───────────
@@ -174,7 +170,7 @@ console.log("D) Sessão de servidor, RBAC e contratos preservados");
   // origem, HttpOnly/Secure/SameSite=Strict, com Path restrito. O que segue
   // proibido é token em storage acessível ao JavaScript.
   caso("sessão persistente por cookie de servidor (nada em storage do navegador)",
-       nucleoSrc.indexOf('api("/auth/sessao")') !== -1 &&
+       bootSrc.includes('json(API + "/auth/sessao")') &&
        nucleoSrc.indexOf("restaurarSessao") !== -1 &&
        !/localStorage\.setItem/.test(nucleoSrc) &&
        !/sessionStorage\.(set|get)Item/.test(nucleoSrc));
@@ -183,7 +179,7 @@ console.log("D) Sessão de servidor, RBAC e contratos preservados");
   caso("logout (Sair) preservado", nucleoSrc.indexOf('id="m15Sair"') !== -1);
   caso("login continua no endpoint /auth/token via POST",
        nucleoSrc.indexOf('api("/auth/token"') !== -1);
-  caso("identidade continua via /auth/me", nucleoSrc.indexOf('api("/auth/me")') !== -1);
+  caso("identidade continua via /auth/me", bootSrc.includes('json(API + "/auth/me")'));
 
   // RBAC da UI: papéis mínimos por aba inalterados.
   caso("aba auditoria continua exigindo gestor",
@@ -201,8 +197,8 @@ console.log("D) Sessão de servidor, RBAC e contratos preservados");
        /\["migracao", "Migração", "leitura"\]/.test(tabsSrc));
   caso("inspeção técnica de dados exige admin",
        /\["dados", "Inspeção técnica de dados", "admin"\]/.test(tabsSrc));
-  caso("can() continua fail-open na UI com autorização real no servidor",
-       nucleoSrc.indexOf("papeis_efetivos.indexOf(role) !== -1") !== -1);
+  caso("can() nega sem sessão/identidade e delega ao gate compartilhado",
+       nucleoSrc.includes("autenticado() && state.user && gate && gate.can(role)"));
 
   caso("apiBase padrão de mesma origem preservado",
        nucleoSrc.indexOf('apiBase: "/painel-soprolife/api/m15"') !== -1);

@@ -22,7 +22,16 @@
   <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
   <script src="./js/vendor/chart.umd.min.js"></script>
 </head>
-<body>
+<body data-auth-state="loading">
+  <main id="authShell" role="status" aria-live="polite" aria-busy="true"
+        style="padding:clamp(24px,8vw,96px);font-family:Manrope,system-ui,sans-serif">
+    <h1>Centro de Comando Life</h1>
+    <p id="authMessage">Preparando seu painel seguro…</p>
+    <a id="authRetry" href="./" hidden>Tentar novamente</a>
+  </main>
+  <noscript>Ative o JavaScript para acessar o painel.</noscript>
+  <!-- Conteúdo inerte: nenhum menu, ação ou contexto é montado sem sessão. -->
+  <template id="authorizedPanelTemplate">
   <!-- ══ Centro de Comando Life ══════════════════════════════════════════════
        Barra única acima das duas cascas de marca. O contexto ativo é dito de
        três formas independentes: aria-selected/aria-current na aba, o estado
@@ -1114,68 +1123,69 @@
     </div>
   </div><!-- /lifePanelEegLife -->
 
+  </template>
+  <script src="./js/m15-security.js?v=2026072402" defer></script>
   <!-- Casca do Centro de Comando Life: decide qual contexto aparece e adia a
        carga de dados do SoproLife até que o contexto SoproLife seja entrado.
        Precisa vir ANTES de app.js, que consulta window.LifeCommandCenter. -->
-  <script src="./js/life-command-center.js?v=2026102910"></script>
+  <script type="application/x-soprolife-module" src="./js/life-command-center.js?v=2026111901"></script>
   <!-- Fase 2A — quatro módulos da EEGLife deixam de ser casca e passam a ler
        as rotas /eeg do núcleo. A autorização continua no servidor. -->
-  <script src="./js/eeg-operacao.js?v=2026103001"></script>
+  <script type="application/x-soprolife-module" src="./js/eeg-operacao.js?v=2026103001"></script>
 
-  <!-- M25.23 — precisa vir ANTES de app.js: é ele que resolve o papel real no
-       servidor e REMOVE do DOM (não esconde) tudo que estiver fora dele. -->
-  <script src="./js/boot-gate.js?v=2026102910"></script>
-  <script src="./js/operational-actions.js?v=2026070701"></script>
-  <script src="./js/b2b-actions.js?v=2026070701"></script>
-  <script src="./js/operational-brain.js?v=2026070801"></script>
-  <script src="./js/daily-briefing.js?v=2026070801"></script>
-  <script src="./js/today-actions.js?v=2026070803"></script>
-  <script src="./js/espirometria-financeiro.js?v=2026070902"></script>
-  <script src="./js/marketing-freshness.js?v=2026080101"></script>
-  <script src="./js/app.js?v=2026102802"></script>
+  <!-- O bootstrap executa estes módulos em ordem, somente após resolver a
+       sessão e remover do fragmento inerte as superfícies não autorizadas. -->
+  <script type="application/x-soprolife-module" src="./js/operational-actions.js?v=2026070701"></script>
+  <script type="application/x-soprolife-module" src="./js/b2b-actions.js?v=2026070701"></script>
+  <script type="application/x-soprolife-module" src="./js/operational-brain.js?v=2026070801"></script>
+  <script type="application/x-soprolife-module" src="./js/daily-briefing.js?v=2026070801"></script>
+  <script type="application/x-soprolife-module" src="./js/today-actions.js?v=2026070803"></script>
+  <script type="application/x-soprolife-module" src="./js/espirometria-financeiro.js?v=2026070902"></script>
+  <script type="application/x-soprolife-module" src="./js/marketing-freshness.js?v=2026080101"></script>
+  <script type="application/x-soprolife-module" src="./js/app.js?v=2026111901"></script>
   <!-- Apresentação canônica de status de atendimento (M20): formatador
        ÚNICO usado por Central, CRM, linha do tempo, listas, filtros e
-       inspeção técnica. Sem defer: precisa existir antes dos módulos. -->
-  <script src="./js/status-atendimento.js?v=2026072501"></script>
+       inspeção técnica. Precisa existir antes dos módulos consumidores. -->
+  <script type="application/x-soprolife-module" src="./js/status-atendimento.js?v=2026072501"></script>
   <!-- Núcleo Operacional M15 (beta — go-live controlado M15.5A): habilitado
        globalmente por data/m15-config.json (enabled=true; rollback: false).
        A guarda de contexto seguro (m15-security.js) carrega ANTES do núcleo:
        login só em HTTPS ou loopback local; HTTP remoto fica bloqueado. -->
-  <script src="./js/m15-security.js?v=2026072402" defer></script>
-  <script src="./js/m15-datepicker.js?v=2026102801" defer></script>
-  <script src="./js/m15-nucleo.js?v=2026111402" defer></script>
+  <script type="application/x-soprolife-module" src="./js/m15-datepicker.js?v=2026102801"></script>
+  <script type="application/x-soprolife-module" src="./js/m15-nucleo.js?v=2026111901"></script>
   <link rel="stylesheet" href="./css/profit-panel.css?v=2026110501">
-  <script src="./js/profit-panel.js?v=2026110503" defer></script>
+  <script type="application/x-soprolife-module" src="./js/profit-panel.js?v=2026110503"></script>
   <!-- M24C: feature independente e desabilitada por padrão; quando
        explicitamente habilitada, consome window.SoproM15 (sessão/CSRF) e
        usa Blob autenticado, nunca URL pública de documento. -->
-  <script src="./js/report-statistics.js?v=2026100701" defer></script>
-  <script src="./js/report-workflow.js?v=2026102301" defer></script>
+  <script type="application/x-soprolife-module" src="./js/report-statistics.js?v=2026100701"></script>
+  <script type="application/x-soprolife-module" src="./js/report-workflow.js?v=2026111901"></script>
   <!-- Central de Cadastros (M16): fluxo canônico ÚNICO de entrada de dados.
        Depende do cliente compartilhado window.SoproM15 (script acima). -->
   <!-- M67: regras de prontidão para NFS-e (puras, sem rede) usadas pelo
        "Novo atendimento". Orientação apenas — o Fiscal decide. -->
-  <script src="./js/nfse-prontidao.js?v=2026111802" defer></script>
+  <script type="application/x-soprolife-module" src="./js/nfse-prontidao.js?v=2026111802"></script>
   <!-- M68: CPF → nascimento → nome oficial (SERPRO via servidor, nunca direto). -->
-  <script src="./js/identificacao-assistida.js?v=2026092401" defer></script>
-  <script src="./js/central-cadastros.js?v=2026111802" defer></script>
-  <script src="./js/whatsapp-panel.js?v=2026111402" defer></script>
-  <script src="./js/funnel-panel.js?v=2026111402" defer></script>
+  <script type="application/x-soprolife-module" src="./js/identificacao-assistida.js?v=2026092401"></script>
+  <script type="application/x-soprolife-module" src="./js/central-cadastros.js?v=2026111901"></script>
+  <script type="application/x-soprolife-module" src="./js/whatsapp-panel.js?v=2026111402"></script>
+  <script type="application/x-soprolife-module" src="./js/funnel-panel.js?v=2026111402"></script>
   <!-- M22: fechamento mensal da Pastore. O exame permanece não monetário;
        o módulo cria um único recibo agregado somente após confirmação. -->
   <link rel="stylesheet" href="./css/pastore-settlement.css?v=2026083001">
-  <script src="./js/partner-shares.js?v=2026111501" defer></script>
-  <script src="./js/pastore-settlement.js?v=2026083001" defer></script>
+  <script type="application/x-soprolife-module" src="./js/partner-shares.js?v=2026111501"></script>
+  <script type="application/x-soprolife-module" src="./js/pastore-settlement.js?v=2026083001"></script>
   <!-- Fiscal — Command Center do NFS-e (fundação offline). -->
   <link rel="stylesheet" href="./css/fiscal-command-center.css?v=2026102102">
-  <script src="./js/fiscal-command-center.js?v=2026102102" defer></script>
+  <script type="application/x-soprolife-module" src="./js/fiscal-command-center.js?v=2026102102"></script>
   <link rel="stylesheet" href="./css/medical-transfers.css?v=2026091601">
-  <script src="./js/medical-transfers.js?v=2026110501" defer></script>
+  <script type="application/x-soprolife-module" src="./js/medical-transfers.js?v=2026110501"></script>
   <!-- Conciliação de exames extra-Pastore (M18). Depende de window.SoproM15. -->
-  <script src="./js/financeiro-conciliacao.js?v=2026110501" defer></script>
+  <script type="application/x-soprolife-module" src="./js/financeiro-conciliacao.js?v=2026110501"></script>
   <!-- CRM Pacientes e Acompanhamento (M19): ÚNICA implementação de
        paciente/follow-up do painel. Substituiu a tela legada de planilha
        e a parcial "Acompanhamento e WhatsApp". Depende de window.SoproM15. -->
-  <script src="./js/crm-workspace.js?v=2026102802" defer></script>
+  <script type="application/x-soprolife-module" src="./js/crm-workspace.js?v=2026102802"></script>
+  <script src="./js/boot-gate.js?v=2026111901" defer></script>
 </body>
 </html>

@@ -156,10 +156,10 @@ caso("os papéis vêm de papeis_efetivos da sessão",
      /"papeis_efetivos": sorted\(user_effective_roles\(user\)\)/.test(authPy));
 caso("a decisão usa o mesmo gate de papel do painel (boot-gate / auth/me)",
      /window\.SoproBootGate/.test(shellCodigo) &&
-     /gate\.pronto\.then\(decidirEaplicar\)/.test(shellCodigo) &&
+     /gate\.pronto\.then[\s\S]{0,160}decidirEaplicar\(identidade\)/.test(shellCodigo) &&
      /auth\/me/.test(bootGate));
-caso("sem identidade, a lista de permitidos é só SoproLife (fail-closed)",
-     /function calcularPermitidos\(identidade\)[\s\S]{0,320}?var lista = \[PADRAO\];/.test(shellCodigo) &&
+caso("sem identidade, nenhum contexto é permitido (fail-closed)",
+     /function calcularPermitidos\(identidade\)[\s\S]{0,220}return \[\];/.test(shellCodigo) &&
      /decidirEaplicar\(null\)/.test(shellCodigo));
 caso("admin NÃO implica medico no sistema de papéis",
      /ROLE_ADMIN: set\(ADMINISTRATIVE_ROLES\)/.test(securityPy) &&
@@ -175,7 +175,7 @@ caso("a marca não autorizada é REMOVIDA do DOM, não escondida",
 caso("com uma marca só, o seletor inteiro é removido",
      /querySelectorAll\("\[data-life-context\]"\)\.length < 2[\s\S]{0,160}?seletor\.remove\(\)/.test(shellCodigo));
 caso("o contexto é aplicado SÓ depois da resposta do servidor",
-     /function ligar\(\)[\s\S]{0,400}?gate\.pronto\.then\(decidirEaplicar\)/.test(shellCodigo) &&
+     /function ligar\(\)[\s\S]{0,400}?gate\.pronto\.then[\s\S]{0,160}decidirEaplicar\(identidade\)/.test(shellCodigo) &&
      /function decidirEaplicar\(identidade\)[\s\S]{0,260}?permitidos = calcularPermitidos\(identidade\);/.test(shellCodigo));
 caso("o localStorage é declarado preferência, nunca permissão",
      /não é autorização|nunca\s+(\*\s+)?concede acesso/i.test(shellJs) &&

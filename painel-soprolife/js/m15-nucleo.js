@@ -29,7 +29,6 @@
 (function () {
   "use strict";
 
-  var CONFIG_URL = "data/m15-config.json";
   var state = {
     apiBase: "/painel-soprolife/api/m15",
     tab: "visao",
@@ -72,10 +71,8 @@
   var STATE_CHANGING = { POST: 1, PATCH: 1, PUT: 1, DELETE: 1 };
 
   function can(role) {
-    // Sem identidade resolvida (ex.: /auth/me falhou), não esconde nada:
-    // o servidor continua negando o que o papel não permite (fail-closed lá).
-    if (!state.user || !state.user.papeis_efetivos) return true;
-    return state.user.papeis_efetivos.indexOf(role) !== -1;
+    var gate = window.SoproBootGate;
+    return !!(autenticado() && state.user && gate && gate.can(role));
   }
 
   function esc(value) {
@@ -253,6 +250,9 @@
           err.code = detail.code;
           err.detalhe = detail.detalhe;
           err.status = resp.status;
+          if (resp.status === 401 && path !== "/auth/logout" && (state.sessao || state.token)) {
+            return encerrarSessao("Sua sessão expirou. Entre novamente.").then(function () { throw err; });
+          }
           throw err;
         }
         return body;
@@ -665,6 +665,7 @@
   // Depois disso outro usuário pode entrar no mesmo navegador sem herdar nada.
   function encerrarSessao(mensagem) {
     var eraSessao = state.sessao === true;
+    if (window.SoproBootGate) window.SoproBootGate.fechar();
     var limpar = function () {
       state.token = "";
       state.sessao = false;
@@ -675,7 +676,7 @@
       renderTabs();
       render();
       notifySession();
-      if (mensagem) toast(mensagem, "erro");
+      window.location.replace("/painel-soprolife/");
     };
     if (!eraSessao) { limpar(); return Promise.resolve(); }
     return api("/auth/logout", { method: "POST" })
@@ -685,19 +686,14 @@
 
   // Restauração automática ao carregar a página (o que faz o F5 não deslogar).
   function restaurarSessao() {
-    if (!state.access.secure) return Promise.resolve(false);
-    return api("/auth/sessao").then(function (resp) {
-      state.sessao = true;
-      state.csrf = resp && resp.csrf ? resp.csrf : "";
-      state.sessaoPersistente = !!(resp && resp.sessao && resp.sessao.persistente);
-      state.user = (resp && resp.usuario) || null;
-      return true;
-    }).catch(function () {
-      state.sessao = false;
-      state.csrf = "";
-      state.user = null;
-      return false; // sem sessão viva: segue no formulário de login
-    });
+    var gate = window.SoproBootGate;
+    if (!state.access.secure || !gate || gate.estado !== "ready" || !gate.sessao) return Promise.resolve(false);
+    var resp = gate.sessao;
+    state.sessao = true;
+    state.csrf = resp.csrf;
+    state.sessaoPersistente = !!(resp.sessao && resp.sessao.persistente);
+    state.user = gate.identidade;
+    return Promise.resolve(true);
   }
 
   // Ouvintes externos de sessão (Central de Cadastros) — avisados a cada
@@ -741,18 +737,31 @@
   }
 
   function afterAuth() {
+    // Login por cookie muda a identidade: exige novo bootstrap completo.
+    if (!state.token) {
+      if (window.SoproBootGate) window.SoproBootGate.fechar();
+      window.location.replace("/painel-soprolife/");
+      return Promise.resolve();
+    }
+    // O token avançado continua só em memória e só pode usar a superfície
+    // já autorizada para a MESMA identidade e os MESMOS papéis da sessão.
     return api("/auth/me").then(function (me) {
-      state.user = me;
-    }).catch(function () {
-      state.user = null; // segue sem ocultar ações; servidor decide (403)
-    }).then(function () {
-      // Sucesso confirmado: só AGORA o formulário (e com ele o campo de
-      // senha) sai do DOM. A senha nunca entrou em state.
-
+      var gate = window.SoproBootGate;
+      if (!gate || gate.estado !== "ready" || !gate.identidade || me.id !== gate.identidade.id ||
+          JSON.stringify(me.papeis_efetivos) !== JSON.stringify(gate.identidade.papeis_efetivos)) {
+        throw new Error("Credencial exige novo login.");
+      }
+      state.user = gate.identidade;
       renderAuthArea();
       renderTabs();
       render();
       notifySession();
+    }).catch(function (err) {
+      state.token = "";
+      state.user = null;
+      if (window.SoproBootGate) window.SoproBootGate.fechar();
+      window.location.replace("/painel-soprolife/");
+      throw err;
     });
   }
 
@@ -772,6 +781,7 @@
   function body() { return document.getElementById("m15Body"); }
 
   function showError(err) {
+    if (!body()) return;
     var hint = err && err.status === 401
       ? " Entre com e-mail e senha (ou um token válido) e tente de novo."
       : (err && err.message && err.message.indexOf("fetch") !== -1
@@ -2492,14 +2502,13 @@
     // restauração de sessão e o "Sair" do cabeçalho. Sair é de quem está
     // autenticado, não de quem é administrador.
     var gateBoot = window.SoproBootGate;
-    if (!(gateBoot && gateBoot.somenteClinico)) montarSuperficieAdministrativa();
+    if (gateBoot && gateBoot.administrativo && !gateBoot.somenteClinico) montarSuperficieAdministrativa();
 
     wireSairDoTopo();
-    render();
 
     // M21 — restaura a sessão do cookie ANTES de qualquer interação: é isso
     // que faz recarregar a página manter o mesmo usuário conectado.
-    restaurarSessao().then(function (ok) {
+    return restaurarSessao().then(function (ok) {
       renderAuthArea();
       renderTabs();
       render();
@@ -2543,27 +2552,9 @@
   }
 
   function boot() {
-    // M25.27 — o papel real precisa ter voltado do servidor ANTES de decidir
-    // o que montar. `activate` consulta `SoproBootGate.somenteClinico`, que só
-    // tem valor confiável depois que `/auth/me` respondeu; sem esperar aqui, a
-    // corrida entre os dois fetches decidiria por sorteio se a médica veria o
-    // menu administrativo. Falha do gate não abre nada: o próprio gate já é
-    // fail-closed e marca a sessão como clínica.
     var gateBoot = window.SoproBootGate;
-    var pronto = (gateBoot && gateBoot.pronto && typeof gateBoot.pronto.then === "function")
-      ? gateBoot.pronto
-      : Promise.resolve(null);
-
-    pronto.catch(function () { return null; }).then(function () {
-      return fetch(CONFIG_URL).then(function (r) { return r.json(); })
-        .catch(function () { return {}; })
-        .then(function (config) {
-          var enabled = (config && config.enabled === true) ||
-            localStorage.getItem("soproM15") === "on";
-          if (!enabled) return; // flag desligada: painel permanece intocado
-          activate(config);
-        });
-    });
+    if (!gateBoot || gateBoot.estado !== "ready") return Promise.resolve();
+    return activate(gateBoot.config);
   }
 
   // Deep-link "+ Novo …" → Central de Cadastros (delegado no documento:
@@ -2631,9 +2622,5 @@
     refresh: function () { render(); },
   };
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
-  }
+  window.SoproM15.ready = boot();
 })();

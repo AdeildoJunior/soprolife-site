@@ -5,6 +5,8 @@ umask 077
 EXPECTED="${1:?Reviewed official HEAD required}"
 PREVIOUS="${2:?Verified production HEAD required}"
 PREVIOUS_SCHEMA="${3:-w141126wa}"
+MODE="${4:-full}"
+[[ "$MODE" == full || "$MODE" == frontend ]]
 [[ "$EUID" == 0 && -t 0 && -t 1 ]]
 [[ "$EXPECTED" =~ ^[a-f0-9]{40}$ && "$PREVIOUS" =~ ^[a-f0-9]{40}$ ]]
 [[ "$PREVIOUS_SCHEMA" =~ ^[a-zA-Z0-9_]+$ ]]
@@ -33,6 +35,15 @@ git_as fetch origin painel-soprolife-v01
 [[ "$(git_as rev-parse origin/painel-soprolife-v01)" == "$EXPECTED" ]]
 git_as merge-base --is-ancestor "$PREVIOUS" "$EXPECTED"
 git_as log --oneline "$PREVIOUS..$EXPECTED"
+if [[ "$MODE" == frontend ]]; then
+  # A frontend release cannot silently include backend code or migrations.
+  while IFS= read -r file; do
+    case "$file" in
+      painel-soprolife/index.html|painel-soprolife/js/*|painel-soprolife/css/*|painel-soprolife/scripts/*|painel-soprolife/docs/*|painel-soprolife/nucleo-m15/scripts/deploy-partner-shares-vps.sh) ;;
+      *) echo 'Arquivo fora do escopo frontend; deploy recusado.' >&2; exit 1 ;;
+    esac
+  done < <(git_as diff --name-only "$PREVIOUS" "$EXPECTED")
+fi
 bash "$CORE/scripts/backup-postgresql-m15.sh" "$BACKUP"
 DUMP="$(find "$BACKUP" -maxdepth 1 -type f -name '*.dump')"
 [[ -n "$DUMP" && -s "$DUMP" ]]
@@ -48,11 +59,15 @@ git_as show "$EXPECTED:painel-soprolife/nucleo-m15/scripts/partner_deploy_checks
 run_api "$PY" - fingerprint < "$BACKUP/checks.py" > "$BACKUP/protected.before.json"
 (umask 022; git_as merge --ff-only origin/painel-soprolife-v01)
 [[ "$(git_as rev-parse HEAD)" == "$EXPECTED" ]]
-run_api /opt/soprolife/venvs/m15/bin/alembic upgrade head
+if [[ "$MODE" == full ]]; then run_api /opt/soprolife/venvs/m15/bin/alembic upgrade head; fi
 run_api /opt/soprolife/venvs/m15/bin/alembic check
 run_api "$PY" scripts/partner_deploy_checks.py fingerprint > "$BACKUP/protected.schema.json"
 (cd "$CORE"; PYTHONPATH="$CORE" "$PY" scripts/partner_deploy_checks.py compare --before "$BACKUP/protected.before.json" --after "$BACKUP/protected.schema.json")
-systemctl restart soprolife-m15-api.service
+if [[ "$MODE" == full ]]; then
+  systemctl restart soprolife-m15-api.service
+else
+  echo "Publicação frontend: sem migração e sem reiniciar API/proxy."
+fi
 soprolife_wait_health_ok http://127.0.0.1:8015/api/v1/health 'API depois' 30 1 45
 soprolife_wait_health_ok http://127.0.0.1:8765/painel-soprolife/api/m15/health 'Proxy depois' 30 1 45
 soprolife_wait_health_ok http://127.0.0.1:8016/p/v1/health 'Portal depois' 10 1 20

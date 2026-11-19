@@ -349,6 +349,7 @@ function formatDateBr(dateStr) {
 }
 
 async function init() {
+  bindEvents();
   try {
     const [resumo, crm, leads, marketing, tarefas, documentos, automacoes] = await Promise.all([
       loadJson("./data/resumo.json"),
@@ -530,7 +531,6 @@ async function init() {
     renderHojeAcoes();
     renderAuditoria();
     renderLancamentos();
-    bindEvents();
   } catch (error) {
     document.body.innerHTML = `
       <main style="padding:32px;font-family:system-ui">

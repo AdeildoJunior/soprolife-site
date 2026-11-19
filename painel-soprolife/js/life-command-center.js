@@ -211,7 +211,7 @@
   var ouvintes = { soprolife: [], eeglife: [] };
   var atual = null;
   var aplicado = false;
-  var permitidos = [PADRAO];
+  var permitidos = [];
   var moduloAtivo = null;
 
   function valido(id) {
@@ -220,6 +220,8 @@
 
   /* Permitido = existe E a sessão autoriza. As duas coisas, sempre. */
   function permitido(id) {
+    var gate = window.SoproBootGate;
+    if (!gate || gate.estado === "denied") return false;
     return valido(id) && permitidos.indexOf(id) !== -1;
   }
 
@@ -252,8 +254,9 @@
   /* ── Papéis da sessão ───────────────────────────────────────────────────── */
 
   /* Fail-closed por construção: sem gate, sem identidade ou sem o papel, a
-   * lista de contextos permitidos continua sendo só a SoproLife. */
+   * lista de contextos permitidos permanece vazia. */
   function calcularPermitidos(identidade) {
+    if (!identidade || !Array.isArray(identidade.papeis_efetivos) || !identidade.papeis_efetivos.length) return [];
     var lista = [PADRAO];
     var papeis = identidade && Array.isArray(identidade.papeis_efetivos)
       ? identidade.papeis_efetivos
@@ -266,19 +269,20 @@
 
   /* Remove da árvore a marca que a sessão não pode acessar — não esconde.
    * Mesmo princípio do boot-gate: o que não está no DOM não vaza. */
-  function podarMarcasNaoPermitidas() {
+  function podarMarcasNaoPermitidas(root) {
+    root = root || document;
     ORDEM.forEach(function (chave) {
       if (permitido(chave)) return;
       var cfg = CONTEXTOS[chave];
-      var aba = document.getElementById(cfg.aba);
+      var aba = root.querySelector("#" + cfg.aba);
       if (aba) aba.remove();
-      var painel = document.getElementById(cfg.painel);
+      var painel = root.querySelector("#" + cfg.painel);
       if (painel) painel.remove();
     });
     // Com uma marca só, o seletor não tem o que selecionar.
-    var trilho = document.querySelector(".life-switcher-track");
+    var trilho = root.querySelector(".life-switcher-track");
     if (trilho && trilho.querySelectorAll("[data-life-context]").length < 2) {
-      var seletor = document.querySelector(".life-switcher");
+      var seletor = root.querySelector(".life-switcher");
       if (seletor) seletor.remove();
     }
   }
@@ -567,17 +571,25 @@
   }
 
   function ligar() {
-    ligarInterface();
     var gate = window.SoproBootGate;
     if (gate && gate.pronto && typeof gate.pronto.then === "function") {
-      gate.pronto.then(decidirEaplicar).catch(function () { decidirEaplicar(null); });
+      gate.pronto.then(function (identidade) {
+        if (!identidade) return;
+        ligarInterface();
+        decidirEaplicar(identidade);
+      });
     } else {
-      // Sem gate não há identidade confiável: fail-closed, só SoproLife.
+      // Sem gate não há identidade confiável: nenhum contexto permitido.
       decidirEaplicar(null);
     }
   }
 
   window.LifeCommandCenter = {
+    prepare: function (root, identidade) {
+      permitidos = calcularPermitidos(identidade);
+      podarMarcasNaoPermitidas(root);
+      return permitidos.length > 0;
+    },
     CONTEXTOS: CONTEXTOS,
     ORDEM: ORDEM,
     MODULOS_EEG: MODULOS_EEG,

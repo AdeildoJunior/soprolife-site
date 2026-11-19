@@ -5826,7 +5826,9 @@
     // desabilitado", e a tela não dizia nem uma coisa nem outra.
     let config = null;
     try {
-      const response = await fetch(CONFIG_URL, { credentials: "same-origin" });
+      const response = window.SoproBootGate && window.SoproBootGate.config
+        ? { ok: true, json: () => Promise.resolve(window.SoproBootGate.config) }
+        : await fetch(CONFIG_URL, { credentials: "same-origin" });
       if (!response.ok) {
         renderBootFailure(`manifesto de boot HTTP ${response.status}`);
         return;
