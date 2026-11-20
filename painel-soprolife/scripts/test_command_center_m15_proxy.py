@@ -135,6 +135,33 @@ class ProxyM15Tests(unittest.TestCase):
         self.assertEqual(conn.request_args[:2], ("GET", "/api/v1/health?probe=1"))
         self.assertEqual(json.loads(handler.wfile.getvalue()), {"status": "ok"})
 
+    def test_cancelamento_do_cliente_nao_vira_falha_upstream(self):
+        for exception in (BrokenPipeError, ConnectionResetError):
+            for phase in ("headers", "body"):
+                with self.subTest(exception=exception, phase=phase):
+                    handler = Harness("/painel-soprolife/api/m15/health")
+                    if phase == "headers":
+                        handler.end_headers = mock.Mock(side_effect=exception())
+                    else:
+                        handler.wfile.write = mock.Mock(side_effect=exception())
+                    with mock.patch.object(server.http.client, "HTTPConnection", FakeConnection), \
+                            mock.patch.object(handler, "_m15_log") as log:
+                        handler.do_GET()
+                    self.assertEqual(handler.statuses, [200])
+                    self.assertTrue(handler.close_connection)
+                    self.assertEqual(log.call_args.args[1], 499)
+
+    def test_cliente_desconectado_durante_resposta_de_erro(self):
+        handler = Harness("/painel-soprolife/api/m15/health")
+        handler.wfile.write = mock.Mock(side_effect=BrokenPipeError())
+        FakeConnection.connect_error = ConnectionRefusedError()
+        with mock.patch.object(server.http.client, "HTTPConnection", FakeConnection), \
+                mock.patch.object(handler, "_m15_log") as log:
+            handler.do_GET()
+        self.assertEqual(handler.statuses, [502])
+        self.assertTrue(handler.close_connection)
+        self.assertEqual(log.call_args.args[1], 502)
+
     def test_get_autorizado_e_allowlist_de_headers(self):
         handler = self.run_m15(headers={
             "Authorization": "Bearer token-sintetico",

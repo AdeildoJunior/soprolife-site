@@ -703,8 +703,16 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
                 if _allowed_set_cookie(cookie_header):
                     self.send_header("Set-Cookie", cookie_header)
             self.send_header("Content-Length", str(len(result_raw)))
-            self.end_headers()
-            self.wfile.write(result_raw)
+            try:
+                self.end_headers()
+                self.wfile.write(result_raw)
+            except (BrokenPipeError, ConnectionResetError):
+                # Debounced searches/navigation may cancel a healthy response.
+                # Only downstream writes are caught here: upstream failures
+                # still use the existing 502/504 handling below. 499 is log-only;
+                # a disconnected client cannot receive another HTTP response.
+                status = 499
+                self.close_connection = True
         except (socket.timeout, TimeoutError):
             status = 504
             self._m15_error(504, "Tempo limite excedido ao contatar a API.")
@@ -730,8 +738,11 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             for name, value in headers.items():
                 self.send_header(name, value)
         self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
 
     @staticmethod
     def _m15_log(method: str, status: int, request_id: str, started: float) -> None:
