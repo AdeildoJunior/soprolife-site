@@ -247,7 +247,7 @@ caso('a rota antiga "automacoes-crm" do CRM leva ao novo destino',
 caso("Central de Cadastros continua acessível pela sidebar",
      navItens.some((i) => i.secao === "central-cadastros"));
 caso("Parcerias continua o destino canônico de parceiros",
-     navItens.some((i) => i.secao === "parcerias-pastore") &&
+     navItens.some((i) => i.secao === "parcerias") &&
      /id="parceriaClinicasBtn"/.test(indexSrc));
 caso("a lista B2B de clínicas segue com implementação única",
      (appSrc.match(/function renderCrmClinicas\(/g) || []).length === 1 &&

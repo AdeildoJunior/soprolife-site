@@ -47,7 +47,7 @@ def search(payload:Search,response:Response,db:Session=Depends(get_db),user:User
 
 class Record(StrictModel):
     marca: Brand='soprolife'
-    tipo: Literal['pessoa','exame','agenda','laudo','eeg_exame','eeg_pessoa','parceiro','unidade','fiscal','contato','acerto','pastore']
+    tipo: Literal['parceria','pessoa','exame','agenda','laudo','eeg_exame','eeg_pessoa','parceiro','unidade','fiscal','contato','acerto','pastore']
     id: UUID
 
 

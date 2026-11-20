@@ -189,9 +189,12 @@ def search(db, user, brand, term, limit=12):
         docs=select(EegReportDocument).where(EegReportDocument.exam_id.in_(eeg_scope.with_only_columns(EegExam.id)),EegReportDocument.public_code==code)
         add('laudos','Laudos EEG',[result(d.public_code,d.public_code,_target('eeg_exame',d.exam_id,d.public_code)) for d in db.scalars(docs.limit(4))])
 
+    from .partnership_center import catalog as partnership_catalog
+    partnership_codes = {p['partner_id']:p['codigo'] for p in partnership_catalog(db)} if brand=='soprolife' and administrative else {}
     if (brand=='soprolife' and administrative) or (brand=='eeglife' and cap['operacao']):
         partner_filter = Partner.public_code == code if match else _prefix(func.lower(Partner.nome),q.lower()) if not is_number else false()
-        add('parceiros','Parceiros',[result(p.nome,p.public_code,_target('parceiro',p.id,p.public_code))
+        add('parceiros','Parceiros',[result(p.nome,p.public_code,_target('parceiro',p.id,p.public_code),
+                **({'ver_parceria':_target('parceria',p.id,p.public_code)} if partnership_codes.get(p.id) in ('maclin','alergocare') else {}))
             for p in db.scalars(select(Partner).where(Partner.arquivado.is_(False),partner_filter).order_by(Partner.nome).limit(4))])
         unit_filter = PartnerUnit.public_code == code if match else _prefix(func.lower(PartnerUnit.nome),q.lower()) if not is_number else false()
         add('unidades','Unidades',[result(u.nome,u.public_code,_target('unidade',u.id,u.public_code,parceiro=u.partner_id))
@@ -221,10 +224,16 @@ def lookup(db, user, brand, kind, record_id):
     cap = capabilities(user, brand)
     admin_read = ROLE_LEITURA in user_effective_roles(user)
     people_scope = exam_scope = doc_scope = None
+    if kind == 'parceria' and not admin_read:
+        raise HTTPException(403,'Área de parcerias não autorizada.')
     if brand == 'soprolife':
         people_scope, exam_scope, doc_scope = _sopro_visibility(db, user)
     data, target = {}, None
-    if kind == 'pessoa' and brand == 'soprolife' and admin_read:
+    if kind == 'parceria' and brand == 'soprolife' and admin_read:
+        from .partnership_center import code_for_partner
+        code=code_for_partner(db,record_id)
+        if code:data={'codigo':code};target=_target(kind,record_id)
+    elif kind == 'pessoa' and brand == 'soprolife' and admin_read:
         p = db.scalar(select(Person).where(Person.id == record_id, Person.arquivado.is_not(True)))
         if p:
             data={'nome_completo':p.nome_completo,'public_code':p.public_code};target=_target(kind,p.id,p.public_code)

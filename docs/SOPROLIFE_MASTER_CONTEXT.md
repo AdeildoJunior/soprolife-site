@@ -9,7 +9,27 @@
 > Sem PII, senhas, tokens, IPs de tailnet ou identificadores privados. Use
 > placeholders (`<VPS_TAILSCALE_IP>`, `<TOKEN>`).
 
-Última atualização: 2026-11-19 (Centro de Comando 2.0; base `aecc09c`).
+Última atualização: 2026-11-20 (Central de Parcerias; base `78618ac`).
+
+## Central de Parcerias — 20/11/2026
+
+A entrada lateral Parcerias abre consolidado/cards Pastore, Maclin e Alergocare.
+Pastore mantém sua seção anterior por inteiro, acessível pelo card; gate navega
+`parcerias-pastore` pela entrada `parcerias`, sem outro item de menu. Detalhes
+Maclin/Alergocare compartilham componente somente leitura sobre partilhas e lucro
+canônicos, com links aos acertos existentes. Busca mantém destino original e
+acrescenta “Ver parceria”, com revalidação de ID/marca/RBAC.
+
+GET `/parcerias/central` e `/{codigo}` derivam período e paginação, sem novos fatos
+ou tabelas. Partner IDs vêm dos resolvedores existentes, sem inferir por nome de
+local/exame e sem Alergo Life. Dinheiro só para gestor; laudador não recebe API ou
+JS da central. Totais desconhecidos são nulos, não subtotais disfarçados de total.
+Pastore usa fechamentos conferidos completos, sem ratear conjunto parcial nem
+assumir bruto/parcela parceira a partir de sua receita líquida. Regra 70/30 e
+DIRECT Maclin/Alergocare são consumidas, sem alteração ou retroatividade.
+
+Contrato: [Central de Parcerias](CENTRAL_PARCERIAS.md). Report externo registra
+commits, testes, backup/deploy e health efetivamente concluídos.
 
 ## Centro de Comando 2.0 — 19/11/2026
 

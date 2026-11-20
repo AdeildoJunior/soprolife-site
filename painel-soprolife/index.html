@@ -158,7 +158,7 @@
           Fiscal
         </button>
 
-        <button class="nav-item" data-section="parcerias-pastore">
+        <button class="nav-item" data-section="parcerias">
           <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2.6"/><circle cx="13" cy="12" r="2.6"/><path d="M7 7.6L11 10.4"/></svg>
           Parcerias
         </button>
@@ -301,7 +301,7 @@
             <strong>Financeiro</strong>
             <span class="nav-hub-desc">Receita e lançamentos</span>
           </button>
-          <button type="button" class="nav-hub-card" data-section="parcerias-pastore">
+          <button type="button" class="nav-hub-card" data-section="parcerias">
             <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2.6"/><circle cx="13" cy="12" r="2.6"/><path d="M7 7.6L11 10.4"/></svg></span>
             <strong>Parcerias</strong>
             <span class="nav-hub-desc">Agenda SoproLife na Pastore</span>
@@ -867,9 +867,13 @@
       </section>
 
 
+      <section id="parcerias" class="section">
+        <div id="partnershipCenterRoot" data-state="loading" aria-busy="true"><p role="status">Carregando…</p></div>
+      </section>
       <section id="parcerias-pastore" class="section">
         <div class="section-title">
           <div>
+            <button type="button" data-partnership-back>← Central de Parcerias</button>
             <p class="eyebrow">Parceria Pastore</p>
             <h2>Agenda SoproLife na Pastore</h2>
             <p class="section-sub">Controle operacional e financeiro da parceria</p>
@@ -1209,8 +1213,10 @@
   <!-- CRM Pacientes e Acompanhamento (M19): ÚNICA implementação de
        paciente/follow-up do painel. Substituiu a tela legada de planilha
        e a parcial "Acompanhamento e WhatsApp". Depende de window.SoproM15. -->
+  <link rel="stylesheet" href="./css/partnership-center.css?v=2026112001">
+  <script type="application/x-soprolife-module" data-cc-groups="partnerships" src="./js/partnership-center.js?v=2026112001"></script>
   <script type="application/x-soprolife-module" data-cc-groups="crm" src="./js/crm-workspace.js?v=2026111903"></script>
-  <script type="application/x-soprolife-module" data-cc-groups="core" src="./js/command-center.js?v=2026111901"></script>
-  <script src="./js/boot-gate.js?v=2026111903" defer></script>
+  <script type="application/x-soprolife-module" data-cc-groups="core" src="./js/command-center.js?v=2026112001"></script>
+  <script src="./js/boot-gate.js?v=2026112001" defer></script>
 </body>
 </html>

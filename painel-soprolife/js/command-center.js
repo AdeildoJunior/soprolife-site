@@ -127,8 +127,9 @@
       resultItems=[];box.dataset.state=data.total?'ready':'empty';
       box.innerHTML=data.total?data.grupos.map(g=>'<section><h3>'+esc(g.rotulo)+'</h3>'+g.itens.map(item=>{
         const n=resultItems.push(item)-1;
-        return '<button type="button" data-cc-search-result="'+n+'"><strong>'+esc(item.codigo)+'</strong><span>'+esc(item.rotulo)+'</span>'+(item.contato_mascarado?'<small>'+esc(item.contato_mascarado)+'</small>':'')+'</button>';
+        return '<button type="button" data-cc-search-result="'+n+'"><strong>'+esc(item.codigo)+'</strong><span>'+esc(item.rotulo)+'</span>'+(item.contato_mascarado?'<small>'+esc(item.contato_mascarado)+'</small>':'')+'</button>'+(item.ver_parceria?'<a href="#cc/'+b+'/parceria/'+esc(item.ver_parceria.id)+'" data-cc-partnership="'+n+'">Ver parceria</a>':'');
       }).join('')+'</section>').join(''):'<p>Nenhum registro encontrado.</p>';
+      box.querySelectorAll('[data-cc-partnership]').forEach(link=>link.onclick=e=>{e.preventDefault();const target=resultItems[Number(link.dataset.ccPartnership)].ver_parceria;clearSearch();openTarget(target);});
       box.querySelectorAll('button').forEach(button=>button.onclick=()=>{const target=resultItems[Number(button.dataset.ccSearchResult)].destino;clearSearch();openTarget(target);});
     }catch(error){if(epoch===searchEpoch&&error.name!=='AbortError'){box.dataset.state=error.status===403?'unauthorized':'error';box.textContent=error.status===429?'Aguarde um momento antes de pesquisar novamente.':error.status===422?'Informe um nome com 3 letras ou um identificador completo.':'Não foi possível pesquisar.';}}
   }
@@ -167,6 +168,7 @@
       target=resolved.destino;
       if(history){const route=['cc',brand(),target.tipo,target.id||''].map(encodeURIComponent).join('/');window.history.pushState(null,'','#'+route);}
       switch(target.tipo){
+      case 'parceria':await gate.navegar('parcerias',{dispatch:false});if(current())await window.SoproPartnerships.open(resolved.dados.codigo);break;
       case 'pessoa':await navigate('crm');window.SoproCrm.history(target.id);break;
       case 'contato':await navigate('leads');await window.SoproFunnel.render();await window.SoproFunnel.openContact(target.id,resolved.dados);break;
       case 'exame':case 'agenda':
@@ -208,7 +210,7 @@
     if(parts[0]!=='cc'||parts.length!==4)return;
     if(!life.isAllowed(parts[1])){announce('Contexto não autorizado.');return;}
     await life.setContext(parts[1]);
-    const kinds=['pessoa','contato','exame','agenda','laudo','fiscal','acerto','pastore','parceiro','unidade','eeg_exame','eeg_pessoa'];
+    const kinds=['parceria','pessoa','contato','exame','agenda','laudo','fiscal','acerto','pastore','parceiro','unidade','eeg_exame','eeg_pessoa'];
     if(!kinds.includes(parts[2])||!/^[-a-f0-9]{36}$/.test(parts[3]))return;
     await openTarget({tipo:parts[2],id:parts[3]},false);
   }

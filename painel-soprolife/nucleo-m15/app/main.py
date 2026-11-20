@@ -13,6 +13,7 @@ from .errors import install_error_handling
 from .routers import (
     admin_users,
     command_center,
+    partnership_center,
     attendances,
     auth,
     crm,
@@ -58,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix=prefix)
     app.include_router(auth.router, prefix=prefix)
     app.include_router(command_center.router, prefix=prefix)
+    app.include_router(partnership_center.router, prefix=prefix)
     app.include_router(people.router, prefix=prefix)
     app.include_router(operations.router, prefix=prefix)
     app.include_router(attendances.router, prefix=prefix)

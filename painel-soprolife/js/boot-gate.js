@@ -212,6 +212,7 @@
     "central-cadastros": ["central"], "laudos-espirometria": ["clinical"],
     "crm": ["legacy","crm"], "leads": ["leads"],
     "financeiro": ["legacy","financeiro"], "fiscal": ["fiscal"],
+    "parcerias": ["partnerships"],
     "parcerias-pastore": ["legacy","pastore"],
   };
   gate.carregar = function (group) {
@@ -236,7 +237,7 @@
   var dispatching = false;
   gate.navegar = async function (section, options) {
     if (gate.estado !== "ready") throw new Error("Sessão indisponível");
-    var button = document.querySelector('.nav-item[data-section="' + CSS.escape(section) + '"]');
+    var button = document.querySelector('.nav-item[data-section="' + CSS.escape(section === 'parcerias-pastore' ? 'parcerias' : section) + '"]');
     var panel = document.getElementById(section);
     if (!button || !panel) throw new Error("Seção não autorizada");
     var alreadyActive = panel.classList.contains("active");
@@ -250,8 +251,10 @@
     document.querySelectorAll(".section").forEach(function (el) { el.classList.toggle("active", el === panel); });
     document.querySelectorAll(".nav-item").forEach(function (el) { el.classList.toggle("active", el === button); });
     dispatching = true;
-    try { if ((!options || options.dispatch !== false) && !alreadyActive && !firstClinical && !firstLegacy) button.click(); } finally { dispatching = false; }
+    try { if ((!options || options.dispatch !== false) && !alreadyActive && !firstClinical && !firstLegacy && section !== "parcerias-pastore" && section !== "parcerias") button.click(); } finally { dispatching = false; }
+    if (section === "parcerias" && (!options || options.dispatch !== false)) await window.SoproPartnerships.show();
     if (section === "overview" && window.SoproCommandCenter) await window.SoproCommandCenter.refresh();
+    if (section === "parcerias-pastore") window.dispatchEvent(new Event("resize"));
     panel.scrollIntoView({ block: "start" });
     return panel;
   };

@@ -155,6 +155,9 @@ run "test-m23-postgres-only (arquitetura sem Sheets)" \
 run "json.tool data-source-mode.json" \
   python3 -m json.tool painel-soprolife/core/contracts/data-source-mode.json
 
+run "node --check Central de Parcerias" node --check painel-soprolife/js/partnership-center.js
+run "node --check browser Parcerias" node --check painel-soprolife/scripts/test-partnership-center-browser.cjs
+run "py_compile Central de Parcerias" python3 -m py_compile painel-soprolife/nucleo-m15/app/services/partnership_center.py painel-soprolife/nucleo-m15/app/routers/partnership_center.py
 run "node --check Centro de Comando" node --check painel-soprolife/js/command-center.js
 run "node --check teste real Centro de Comando" node --check painel-soprolife/scripts/test-command-center-browser.cjs
 run "py_compile Centro de Comando" python3 -m py_compile painel-soprolife/nucleo-m15/app/services/command_center.py painel-soprolife/nucleo-m15/app/services/command_search.py painel-soprolife/nucleo-m15/app/routers/command_center.py
