@@ -15,6 +15,8 @@
  */
 (function () {
   "use strict";
+  function uiIcon(name) { return window.SoproIcons ? window.SoproIcons.svg(name) : ""; }
+
 
   const ROOT = "fiscalRoot";
   const STATE_LABELS = {
@@ -146,7 +148,7 @@
       </div>` : "";
     const blockers = (r.blockers || []).map((b) => `<li>${esc(b)}</li>`).join("");
     const gates = (prod.gates || []).map((g) => `<li class="fiscal-gate ${g.satisfied ? 'fiscal-gate-ok' : 'fiscal-gate-blocked'}">
-        <span>${g.satisfied ? '✓' : '✕'} ${esc(g.name)}</span><small>${esc(g.detail)}</small>
+        <span>${g.satisfied ? uiIcon('check') : uiIcon('x')} ${esc(g.name)}</span><small>${esc(g.detail)}</small>
       </li>`).join("");
     return `<article class="panel fiscal-readiness-panel">
       <div class="panel-header"><h3>Prontidão do provedor (Produção Restrita)</h3>

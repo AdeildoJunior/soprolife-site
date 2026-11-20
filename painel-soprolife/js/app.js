@@ -1,3 +1,4 @@
+function uiIcon(name) { return typeof window !== "undefined" && window.SoproIcons ? window.SoproIcons.svg(name) : ""; }
 const state = {
   resumo: null,
   crm: [],
@@ -546,13 +547,13 @@ const CARD_GROUPS = [
   {
     title: "Comercial",
     subtitle: "Prospecção e pipeline",
-    icon: "📈",
+    icon: uiIcon('trend'),
     keys: ["totalLeads", "leadsNovos", "leadsAgendados", "leadsConcluidos", "clinicasCadastradas"]
   },
   {
     title: "Atendimentos / CRM",
     subtitle: "Acompanhamento e recorrência",
-    icon: "🩺",
+    icon: uiIcon('activity'),
     keys: [
       "pacientesEmAcompanhamento",
       "examesEspirometriaRealizados",
@@ -568,7 +569,7 @@ const CARD_GROUPS = [
     // única linha o Painel Geral não fica com três faixas quase vazias.
     title: "Gestão",
     subtitle: "Financeiro, marketing e operação",
-    icon: "🗂️",
+    icon: uiIcon('folder'),
     keys: ["receitaPrevista", "receitaRecebida", "conteudosPlanejados", "tarefasPendentes", "eventosAgendados"]
   }
 ];
@@ -986,12 +987,12 @@ function renderFollowupB2B() {
       <span>Ações prioritárias do CRM</span>
     </div>
     <div class="followup-grid">
-      ${card({ cls: "card-hoje",     icon: "⚡", title: "Hoje",            items: hoje,          empty: "Nenhuma ação agendada para hoje" })}
-      ${card({ cls: "card-atrasado", icon: "⚠",  title: "Atrasados",       items: atrasados,     empty: "Nenhum follow-up em atraso" })}
-      ${card({ cls: "card-alta",     icon: "🔴", title: "Alta prioridade", items: altaPrio,      empty: "Nenhuma clínica de alta prioridade" })}
-      ${card({ cls: "card-conversa", icon: "💬", title: "Em conversa",     items: emConversa,    empty: "Nenhuma clínica em conversa ativa" })}
-      ${card({ cls: "card-parceiro", icon: "🤝", title: "Parceiros ativos", items: parceirosAtivos, empty: "Nenhum parceiro ativo ainda", tip: "Etapa terminal positiva: parceria já fechada. Fica aqui — não conta como atraso ou alta prioridade de prospecção comum." })}
-      ${card({ cls: "card-perdido",  icon: "🗂",  title: "Perdidas/Arquivadas", items: perdidasArquivadas, empty: "Nenhuma clínica perdida ou arquivada", tip: "Etapa terminal negativa: sem interesse, não contatar/bloqueou, sem canal válido ou arquivada. Fora do funil ativo." })}
+      ${card({ cls: "card-hoje",     icon: uiIcon('activity'), title: "Hoje",            items: hoje,          empty: "Nenhuma ação agendada para hoje" })}
+      ${card({ cls: "card-atrasado", icon: uiIcon('alert'),  title: "Atrasados",       items: atrasados,     empty: "Nenhum follow-up em atraso" })}
+      ${card({ cls: "card-alta",     icon: uiIcon('alert'), title: "Alta prioridade", items: altaPrio,      empty: "Nenhuma clínica de alta prioridade" })}
+      ${card({ cls: "card-conversa", icon: uiIcon('message'), title: "Em conversa",     items: emConversa,    empty: "Nenhuma clínica em conversa ativa" })}
+      ${card({ cls: "card-parceiro", icon: uiIcon('partners'), title: "Parceiros ativos", items: parceirosAtivos, empty: "Nenhum parceiro ativo ainda", tip: "Etapa terminal positiva: parceria já fechada. Fica aqui — não conta como atraso ou alta prioridade de prospecção comum." })}
+      ${card({ cls: "card-perdido",  icon: uiIcon('folder'),  title: "Perdidas/Arquivadas", items: perdidasArquivadas, empty: "Nenhuma clínica perdida ou arquivada", tip: "Etapa terminal negativa: sem interesse, não contatar/bloqueou, sem canal válido ou arquivada. Fora do funil ativo." })}
     </div>
   `;
 }
@@ -1067,7 +1068,7 @@ function renderCrmHub(container) {
 
   const marcoHtml = parceirosAtivosAlta.length > 0 ? `
     <div class="marco-banner marco-banner-parceiro">
-      <span class="marco-icon" aria-hidden="true">🤝</span>
+      <span class="marco-icon" aria-hidden="true">${uiIcon('partners')}</span>
       <div class="marco-body">
         <strong>Implantação / Piloto — parceiro(s) ativo(s)</strong>
         <p>${parceirosAtivosAlta.map((p) => `<b>${escapeHtml(p.clinica)}</b>${p.bairro ? ` (${escapeHtml(p.bairro.split(" · ").pop())})` : ""} — ${escapeHtml(p.proximaAcao || "Alinhar próximo passo")}`).join("<br>")}</p>
@@ -1076,7 +1077,7 @@ function renderCrmHub(container) {
     </div>
   ` : propostasEstrategicas.length > 0 ? `
     <div class="marco-banner">
-      <span class="marco-icon" aria-hidden="true">🏆</span>
+      <span class="marco-icon" aria-hidden="true">${uiIcon('trophy')}</span>
       <div class="marco-body">
         <strong>Marco estratégico em andamento</strong>
         <p>${propostasEstrategicas.map((p) => `<b>${escapeHtml(p.clinica)}</b> — ${escapeHtml(p.proximaAcao)}`).join("<br>")}</p>
@@ -1154,7 +1155,7 @@ function renderCrmHub(container) {
     </article>
 
     <div class="crm-safe-note">
-      <span>📊</span>
+      <span>${uiIcon('chart')}</span>
       <p><strong>Dados agregados do CRM.</strong> Atualizado a partir dos arquivos locais seguros. Sem dados pessoais exibidos nesta visão.</p>
     </div>
     </details>
@@ -1346,7 +1347,7 @@ function renderCrmAutomacoes(container) {
   function autoSection({ id, icon, title, subtitle, risk, dados, objetivo, steps, aviso }) {
     const dadosHtml = dados.map(dataBadge).join(" ");
     const avisoHtml = aviso
-      ? `<div class="auto-aviso"><span>⚠️</span><span>${aviso}</span></div>`
+      ? `<div class="auto-aviso"><span>${uiIcon('alert')}</span><span>${aviso}</span></div>`
       : "";
     const stepsHtml = steps.map(({ label, cmd, hint }) => `
       <div class="auto-step">
@@ -1409,25 +1410,25 @@ function renderCrmAutomacoes(container) {
   const statusBlock = `
     <div class="auto-status-grid">
       ${statusRow(
-        fonteOk ? "✅" : "❌",
+        fonteOk ? uiIcon('check') : uiIcon('x'),
         "Fonte operacional",
         fonteOk ? fonteName : "Fonte canônica não declarada",
         fonteOk ? `Verificado ${fonteAt}` : "Execute update-local-data.sh"
       )}
       ${statusRow(
-        crmLocal > 0 ? "✅" : "ℹ️",
+        crmLocal > 0 ? uiIcon('check') : uiIcon('info'),
         "CRM Clínicas local",
         crmLocal > 0 ? `${crmLocal} clínicas` : "Arquivo local ausente",
         crmLocal > 0 ? `Atualizado ${crmAt}` : "Execute update-local-data.sh"
       )}
       ${statusRow(
-        ds ? "✅" : "ℹ️",
+        ds ? uiIcon('check') : uiIcon('info'),
         "Resumo Dashboard",
         ds ? "Carregado" : "Arquivo local ausente",
         ds ? `Atualizado ${dashAt}` : "Execute update-local-data.sh"
       )}
       ${statusRow(
-        fp ? "✅" : "ℹ️",
+        fp ? uiIcon('check') : uiIcon('info'),
         "Follow-up de pacientes",
         fp ? `${fpEspi} espirometrias · ${fpCons} consultas` : "Resumo não encontrado",
         fp ? `Gerado ${fpAt}` : "Execute generate-followup-pacientes.py --write"
@@ -1442,7 +1443,7 @@ function renderCrmAutomacoes(container) {
   const automacoes = [
     {
       id: "auto-sync",
-      icon: "🔄",
+      icon: uiIcon('refresh'),
       title: "Sincronização do painel",
       subtitle: "Regenera os snapshots do painel a partir do PostgreSQL",
       risk: "baixo",
@@ -1463,7 +1464,7 @@ function renderCrmAutomacoes(container) {
     },
     {
       id: "auto-pcmso",
-      icon: "🏢",
+      icon: uiIcon('building'),
       title: "Promoção PCMSO → CRM Clínicas",
       subtitle: "Utilitário legado — bloqueado no modo postgresql-only",
       risk: "medio",
@@ -1493,7 +1494,7 @@ function renderCrmAutomacoes(container) {
     },
     {
       id: "auto-followup",
-      icon: "💬",
+      icon: uiIcon('message'),
       title: "Follow-up de pacientes (arquivo histórico)",
       subtitle: "Utilitário legado — bloqueado no modo postgresql-only",
       risk: "baixo",
@@ -1524,7 +1525,7 @@ function renderCrmAutomacoes(container) {
     },
     {
       id: "auto-seguranca",
-      icon: "🔒",
+      icon: uiIcon('lock'),
       title: "Verificação de segurança",
       subtitle: "Valida que nenhum dado sensível está exposto no painel",
       risk: "baixo",
@@ -1540,7 +1541,7 @@ function renderCrmAutomacoes(container) {
     },
     {
       id: "auto-resumo",
-      icon: "📊",
+      icon: uiIcon('chart'),
       title: "Resumo Dashboard",
       subtitle: "Atualiza os indicadores da visão geral a partir do PostgreSQL",
       risk: "baixo",
@@ -1587,7 +1588,7 @@ function renderCrmAutomacoes(container) {
     </div>
 
     <div class="auto-footer-note">
-      <span>ℹ️</span>
+      <span>${uiIcon('info')}</span>
       <p>Todos os comandos devem ser executados no terminal, dentro da pasta <code>~/soprolife-site</code>. Nenhum script é executado por este painel. O envio de mensagens WhatsApp é sempre revisado e disparado manualmente pelo operador.</p>
     </div>
   `;
@@ -1649,7 +1650,7 @@ function renderAutomacaoCrmRegras() {
     ["Sem telefone válido", num(k?.sem_telefone), "sem canal de contato"],
   ].map(([rotulo, valor, sub]) => `
     <div class="auto-status-row">
-      <span class="auto-status-icon">${valor !== "0" && valor !== "—" ? "⚠️" : "✅"}</span>
+      <span class="auto-status-icon">${valor !== "0" && valor !== "—" ? uiIcon('alert') : uiIcon('check')}</span>
       <div class="auto-status-body">
         <strong>${escapeHtml(rotulo)}</strong>
         <span>${escapeHtml(valor)}</span>
@@ -1684,7 +1685,7 @@ function renderAutomacaoCrmRegras() {
       <h3 class="auto-status-title">Regras ativas</h3>
       <div class="auto-regras">
         ${regra({
-          icon: "📅",
+          icon: uiIcon('calendar'),
           titulo: "Acompanhamento após atendimento",
           quando: "Um exame ou consulta é registrado com data de retorno explícita.",
           acao: "O CRM cria um acompanhamento com vencimento nessa data e ele "
@@ -1694,7 +1695,7 @@ function renderAutomacaoCrmRegras() {
             + "nenhum acompanhamento é criado.",
         })}
         ${regra({
-          icon: "🔔",
+          icon: uiIcon('bell'),
           titulo: "Lembrete de contato a realizar",
           quando: "Um acompanhamento vence hoje ou já passou da data.",
           acao: "O paciente entra na fila correspondente do CRM e o operador "
@@ -1703,7 +1704,7 @@ function renderAutomacaoCrmRegras() {
           obs: "O lembrete é visual, na fila do CRM. Nenhuma mensagem sai sozinha.",
         })}
         ${regra({
-          icon: "♻️",
+          icon: uiIcon('refresh'),
           titulo: "Reativação de paciente",
           quando: "Um paciente sem atendimento recente volta a ser atendido "
             + "ou contatado com sucesso.",
@@ -1713,7 +1714,7 @@ function renderAutomacaoCrmRegras() {
           obs: "Regra de medição, não de disparo: nada é enviado ao paciente.",
         })}
         ${regra({
-          icon: "💬",
+          icon: uiIcon('message'),
           titulo: "WhatsApp assistido",
           quando: "O operador escolhe abrir o WhatsApp de um paciente com "
             + "consentimento registrado e telefone válido.",
@@ -1915,7 +1916,7 @@ function renderCrmRelatorios(container) {
     </article>
 
     <div class="crm-safe-note">
-      <span>📊</span>
+      <span>${uiIcon('chart')}</span>
       <p><strong>Dados agregados do CRM.</strong> Atualizado a partir dos arquivos locais seguros. Sem dados pessoais exibidos nesta visão.</p>
     </div>
   `;
@@ -2246,7 +2247,7 @@ function renderCrmReportInsights(leads) {
     const etapaEntries = Object.entries(etapaCounts);
     const [topEtapa, topEtapaCount] = etapaEntries.reduce((best, cur) => (cur[1] > best[1] ? cur : best), etapaEntries[0]);
     insights.push({
-      icon: "📌", type: "info",
+      icon: uiIcon('pin'), type: "info",
       label: "Etapa predominante",
       title: `A maior parte dos leads está em "${topEtapa}"`,
       meta: `${topEtapaCount} de ${leads.length} lead(s) no filtro atual`
@@ -2260,7 +2261,7 @@ function renderCrmReportInsights(leads) {
     const origemEntries = Object.entries(origemCounts);
     const [topOrigem, topOrigemCount] = origemEntries.reduce((best, cur) => (cur[1] > best[1] ? cur : best), origemEntries[0]);
     insights.push({
-      icon: "📡", type: "neutral",
+      icon: uiIcon('radio'), type: "neutral",
       label: "Canal principal",
       title: `O canal com mais leads é ${topOrigem}`,
       meta: `${topOrigemCount} lead(s) no filtro atual`
@@ -2271,7 +2272,7 @@ function renderCrmReportInsights(leads) {
     const emProspeccao = state.crm.filter((c) => !isCrmEtapaTerminal(c.etapa)).length;
     const parceirosAtivos = countCrmEtapa(CRM_ETAPA_TERMINAL_POSITIVA);
     insights.push({
-      icon: "🏥", type: "neutral",
+      icon: uiIcon('building'), type: "neutral",
       label: "Clínicas",
       title: `Há ${emProspeccao} clínica(s) em prospecção e ${parceirosAtivos} parceira(s)`,
       meta: `${state.crm.length} clínica(s) cadastradas no total`
@@ -2280,7 +2281,7 @@ function renderCrmReportInsights(leads) {
 
   if (state.crmContatosB2B.length > 0) {
     insights.push({
-      icon: "🤝", type: "neutral",
+      icon: uiIcon('partners'), type: "neutral",
       label: "Contatos B2B",
       title: `Existem ${state.crmContatosB2B.length} contato(s) B2B vinculados a clínicas`,
       meta: "Base de relacionamento institucional"
@@ -2464,7 +2465,7 @@ function renderCrmTable(filter = "Ativos") {
     const dataLabel = formatDateBr(item.dataProximaAcao);
     const contato = findContatoB2B(item.id);
     const contatoTag = contato
-      ? `<br><small class="crm-contato-tag">👤 ${escapeHtml(contato.nome_contato || "Contato vinculado")}${contato.cargo ? " — " + escapeHtml(contato.cargo) : ""}${contato.papel ? " · " + escapeHtml(contato.papel) : ""}</small>`
+      ? `<br><small class="crm-contato-tag">${uiIcon('user')} ${escapeHtml(contato.nome_contato || "Contato vinculado")}${contato.cargo ? " — " + escapeHtml(contato.cargo) : ""}${contato.papel ? " · " + escapeHtml(contato.papel) : ""}</small>`
       : "";
     const stageBtn = item.id
       ? `<button type="button" class="lead-stage-btn crm-stage-btn" data-clinica-id="${escapeHtml(item.id)}" data-tip="Mudar a etapa desta clínica" aria-label="Mudar etapa de ${escapeHtml(item.clinica)}">
@@ -2646,7 +2647,7 @@ function openLeadStageModal(lead, triggerBtn) {
           <p class="eyebrow">Mudar etapa <span class="legacy-write-tag" title="A alteração é gravada no PostgreSQL pela API autenticada do Núcleo M15. Cadastros novos: Central de Cadastros.">Grava no PostgreSQL</span></p>
           <h4 id="leadStageTitle">${escapeHtml(nome)}</h4>
         </div>
-        <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
+        <button type="button" class="lead-stage-close" aria-label="Fechar">${uiIcon('x')}</button>
       </div>
 
       <p class="lead-stage-current">
@@ -2786,7 +2787,7 @@ function openCrmStageModal(clinica, triggerBtn) {
           <p class="eyebrow">Mudar etapa <span class="legacy-write-tag" title="A alteração é gravada no PostgreSQL pela API autenticada do Núcleo M15. Cadastros novos: Central de Cadastros.">Grava no PostgreSQL</span></p>
           <h4 id="crmStageTitle">${escapeHtml(nome)}</h4>
         </div>
-        <button type="button" class="lead-stage-close" aria-label="Fechar">✕</button>
+        <button type="button" class="lead-stage-close" aria-label="Fechar">${uiIcon('x')}</button>
       </div>
 
       <p class="lead-stage-current">
@@ -3364,18 +3365,18 @@ function renderMktInsights() {
     }
     const opp = sc.topQueries.find((q) => q.avgPosition >= 5 && q.avgPosition <= 20 && q.impressions >= 8);
     if (opp) {
-      insights.push({ icon: "🎯", type: "info", label: "Oportunidade", title: opp.query, meta: `pos. ${opp.avgPosition.toFixed(1)} · ${opp.impressions} impr.` });
+      insights.push({ icon: uiIcon('target'), type: "info", label: "Oportunidade", title: opp.query, meta: `pos. ${opp.avgPosition.toFixed(1)} · ${opp.impressions} impr.` });
     }
     const lowCtr = sc.topQueries.find((q) => q.impressions >= 5 && q.ctr < 0.02 && q !== opp);
     if (lowCtr) {
-      insights.push({ icon: "⚠", type: "warning", label: "CTR baixo", title: lowCtr.query, meta: `${lowCtr.impressions} impr. · CTR ${(lowCtr.ctr * 100).toFixed(1)}%` });
+      insights.push({ icon: uiIcon('alert'), type: "warning", label: "CTR baixo", title: lowCtr.query, meta: `${lowCtr.impressions} impr. · CTR ${(lowCtr.ctr * 100).toFixed(1)}%` });
     }
   }
 
   if (sc?.topPages?.length) {
     const top = sc.topPages[0];
     const name = mktCleanPath(top.page);
-    insights.push({ icon: "📄", type: "neutral", label: "Melhor página", title: name, meta: `${top.impressions} impr. · ${top.clicks} cliques` });
+    insights.push({ icon: uiIcon('file'), type: "neutral", label: "Melhor página", title: name, meta: `${top.impressions} impr. · ${top.clicks} cliques` });
   }
 
   if (insights.length === 0) { container.hidden = true; return; }
@@ -3835,7 +3836,7 @@ function renderMktAlerts() {
     sc.topQueries.forEach((q) => {
       if (q.impressions >= 5 && q.ctr < 0.02) {
         alerts.push({
-          type: "warning", icon: "📉",
+          type: "warning", icon: uiIcon('trend'),
           title: `CTR baixo: "${q.query}"`,
           text: `${q.impressions.toLocaleString("pt-BR")} impressões · CTR ${(q.ctr * 100).toFixed(1)}% · pos. ${q.avgPosition.toFixed(1)}`,
           action: "Melhorar título e meta description para aumentar cliques.",
@@ -3845,7 +3846,7 @@ function renderMktAlerts() {
     sc.topQueries.forEach((q) => {
       if (q.avgPosition >= 5 && q.avgPosition <= 20 && q.impressions >= 8) {
         alerts.push({
-          type: "info", icon: "🎯",
+          type: "info", icon: uiIcon('target'),
           title: `Subir para top 5: "${q.query}"`,
           text: `Posição média ${q.avgPosition.toFixed(1)} · ${q.impressions.toLocaleString("pt-BR")} impressões`,
           action: "Reforçar conteúdo e backlinks para essa palavra-chave.",
@@ -3859,7 +3860,7 @@ function renderMktAlerts() {
       if (p.impressions >= 100 && p.ctr < 0.03) {
         const name = p.page.replace(/^https?:\/\/[^/]+/, "").split("?")[0] || p.page;
         alerts.push({
-          type: "warning", icon: "📄",
+          type: "warning", icon: uiIcon('file'),
           title: `Página com CTR baixo: ${name}`,
           text: `${p.impressions.toLocaleString("pt-BR")} impressões · CTR ${(p.ctr * 100).toFixed(1)}%`,
           action: "Revisar snippet e adicionar structured data.",
@@ -5146,7 +5147,7 @@ function renderParceriaPastore() {
       </article>
       ${total === 0 ? `<p class="crm-empty">Nenhum paciente atendido via Pastore ainda — os dados aparecerão aqui quando o atendimento começar.</p>` : ""}
       <div class="crm-private-note">
-        <span>🔒</span>
+        <span>${uiIcon('lock')}</span>
         <p>Nome, telefone e observações ficam apenas no arquivo privado local (<code>data-private/parcerias-pastore.local.json</code>) — gitignored, nunca enviado ao GitHub. Aqui só aparecem agregados seguros.</p>
       </div>
     `;
@@ -5829,7 +5830,7 @@ function renderCustosInvestimentos() {
     const alertas = ci.alertas || [];
     const alertCards = alertas.map((alerta, i) => `
       <div class="ci-pending-card">
-        <div class="ci-pending-icon">⚠️</div>
+        <div class="ci-pending-icon">${uiIcon('alert')}</div>
         <div class="ci-pending-body">
           <strong>Alerta ${i + 1} de ${alertas.length}</strong>
           <p>${escapeHtml(alerta)}</p>
@@ -5841,7 +5842,7 @@ function renderCustosInvestimentos() {
     // vir de ci.pendencias, para não contradizerem o dado quando ele mudar.
     const pendCards = (ci.pendencias || []).map((p) => `
         <div class="ci-pending-card" style="border-left-color:var(--muted)">
-          <div class="ci-pending-icon">📋</div>
+          <div class="ci-pending-icon">${uiIcon('clipboard')}</div>
           <div class="ci-pending-body">
             <strong>${escapeHtml(p.item)}</strong>
             <p>${escapeHtml(p.descricao)}</p>
@@ -5855,7 +5856,7 @@ function renderCustosInvestimentos() {
         ${alertCards}
         ${pendCards}
         <div class="ci-pending-card" style="border-left-color:var(--navy)">
-          <div class="ci-pending-icon">ℹ️</div>
+          <div class="ci-pending-icon">${uiIcon('info')}</div>
           <div class="ci-pending-body">
             <strong>Como cadastrar novos itens</strong>
             <p>Adicione ao arquivo <code>data-private/custos-investimentos.local.json</code> e atualize o summary em <code>data/custos-investimentos-summary.local.json</code>. Os dados são carregados automaticamente ao recarregar o painel.</p>
@@ -6041,7 +6042,7 @@ function renderSaudeOperacional() {
     if (criticos.length > 0) {
       banner.hidden = false;
       banner.innerHTML = `
-        <strong>⚠ ${criticos.length} alerta(s) crítico(s) na operação.</strong>
+        <strong>${uiIcon('alert')} ${criticos.length} alerta(s) crítico(s) na operação.</strong>
         <span>${escapeHtml(String(criticos[0].titulo || ""))} — ver detalhes na seção Automações → Saúde Operacional.</span>`;
     } else {
       banner.hidden = true;

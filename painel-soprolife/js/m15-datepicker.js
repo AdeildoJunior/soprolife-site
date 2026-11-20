@@ -190,7 +190,7 @@
     }
     display.value = isoToBr(input.value || "");
 
-    var btn = el(doc, "button", "m15-date-btn", "📅");
+    var btn = el(doc, "button", "m15-date-btn", "");
     btn.type = "button";
     btn.setAttribute("aria-label", "Abrir calendário");
     btn.setAttribute("aria-haspopup", "dialog");

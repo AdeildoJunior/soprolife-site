@@ -255,6 +255,8 @@
     if (section === "parcerias" && (!options || options.dispatch !== false)) await window.SoproPartnerships.show();
     if (section === "overview" && window.SoproCommandCenter) await window.SoproCommandCenter.refresh();
     if (section === "parcerias-pastore") window.dispatchEvent(new Event("resize"));
+    var mobileMenu=document.getElementById("soproMobileMenu");
+    if (mobileMenu && !gate.somenteClinico && window.matchMedia("(max-width:820px)").matches) mobileMenu.open=false;
     panel.scrollIntoView({ block: "start" });
     return panel;
   };

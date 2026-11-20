@@ -17,6 +17,8 @@
  */
 (function () {
   "use strict";
+  function uiIcon(name) { return typeof window !== "undefined" && window.SoproIcons ? window.SoproIcons.svg(name) : ""; }
+
 
   var VIEWS = [
     ["pacientes", "Pacientes"],
@@ -345,10 +347,10 @@
     }).join("");
 
     return '<div class="crm-ws-kpis">' + cards + "</div>" +
-      '<div class="crm-ws-nota"><span aria-hidden="true">🔒</span><p>Todos os números vêm ' +
+      '<div class="crm-ws-nota"><span aria-hidden="true">' + uiIcon("lock") + '</span><p>Todos os números vêm ' +
       "das tabelas reais do Núcleo M15 (PostgreSQL) na data de referência " +
       esc(fmtDate(k.data_referencia)) + ". Nenhum valor de demonstração é exibido aqui.</p></div>" +
-      '<div class="crm-ws-nota crm-ws-nota-central"><span aria-hidden="true">📝</span>' +
+      '<div class="crm-ws-nota crm-ws-nota-central"><span aria-hidden="true">' + uiIcon("file") + '</span>' +
       "<p>Para cadastrar paciente, exame, consulta, lead, parceiro ou lançamento, use a " +
       '<button type="button" class="crm-ws-link" data-crm-ws-central="atendimento" ' +
       'data-crm-ws-tipo="somente_paciente">Central de Cadastros</button>' +
@@ -514,7 +516,7 @@
       '<div class="crm-ws-total">Referência ' + esc(fmtDate(d.data_referencia)) +
       " · " + esc(itens.length) + " item(ns) na fila " + esc(filaRotulo(state.filaAtiva)) + "</div>" +
       corpo +
-      '<div class="crm-ws-nota"><span aria-hidden="true">💬</span><p>Abrir o WhatsApp ' +
+      '<div class="crm-ws-nota"><span aria-hidden="true">' + uiIcon("message") + '</span><p>Abrir o WhatsApp ' +
       "<strong>não</strong> conclui o acompanhamento. Depois de enviar, registre o resultado " +
       "— cada resultado grava um registro auditável de tentativa.</p></div>";
   }
@@ -589,7 +591,7 @@
       '<th scope="col">Contatado</th><th scope="col">Canal</th><th scope="col">Resultado</th>' +
       '<th scope="col">Follow-up</th><th scope="col">Operador</th>' +
       '<th scope="col">Observação</th></tr></thead><tbody>' + linhas + "</tbody></table></div>" +
-      '<div class="crm-ws-nota"><span aria-hidden="true">🔒</span><p>O histórico exibe ' +
+      '<div class="crm-ws-nota"><span aria-hidden="true">' + uiIcon("lock") + '</span><p>O histórico exibe ' +
       "apenas dado operacional: nenhum telefone completo, CPF ou narrativa clínica é " +
       "guardado ou exportado por esta tela.</p></div>";
   }
@@ -653,7 +655,7 @@
 
     return filtros + destaque +
       '<div class="crm-ws-charts">' + graficos + "</div>" +
-      '<div class="crm-ws-nota"><span aria-hidden="true">📊</span><p>Todos os gráficos ' +
+      '<div class="crm-ws-nota"><span aria-hidden="true">' + uiIcon("chart") + '</span><p>Todos os gráficos ' +
       "agregam registros reais do PostgreSQL. Séries sem dado mostram estado vazio " +
       "explícito — nenhum valor é simulado.</p></div>";
   }
@@ -934,8 +936,8 @@
   }
 
   var ICONE_EVENTO = {
-    cadastro: "👤", lead: "📥", espirometria: "🫁", consulta: "🩺",
-    followup: "📅", interacao: "💬", financeiro: "💰",
+    cadastro: uiIcon('user'), lead: uiIcon('inbox'), espirometria: uiIcon('activity'), consulta: uiIcon('activity'),
+    followup: uiIcon('calendar'), interacao: uiIcon('message'), financeiro: uiIcon('wallet'),
   };
 
   function modalTimeline(personId) {

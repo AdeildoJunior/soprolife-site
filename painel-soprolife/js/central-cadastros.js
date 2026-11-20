@@ -16,6 +16,8 @@
  */
 (function () {
   "use strict";
+  function uiIcon(name) { return window.SoproIcons ? window.SoproIcons.svg(name) : ""; }
+
 
   const ROOT_ID = "centralRoot";
   const SECTION_ID = "central-cadastros";
@@ -2099,7 +2101,7 @@
     // "pendente" é o que o leitor de tela e o daltônico recebem.
     lista.innerHTML = r.itens.map((i) => `
       <li class="cad-nfse-item ${i.ok ? "is-ok" : "is-pendente"}" data-nfse-item="${esc(i.chave)}">
-        <span class="cad-nfse-marca" aria-hidden="true">${i.ok ? "✓" : "!"}</span>
+        <span class="cad-nfse-marca" aria-hidden="true">${i.ok ? uiIcon("check") : uiIcon("alert")}</span>
         <span class="cad-nfse-rotulo">${esc(i.rotulo)}<span class="cad-sr-only">: ${i.ok ? "completo" : "pendente"}</span></span>
         ${i.faltas.length ? `<ul class="cad-nfse-faltas">${i.faltas.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}
       </li>`).join("");

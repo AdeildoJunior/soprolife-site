@@ -78,7 +78,7 @@ with Session(get_engine()) as db:
   await login('admin');assert(!requests.some(u=>u.includes('/partnership-center.js')),'Lazy module');
   let release;const hold=new Promise(r=>release=r);await page.route('**/parcerias/central?*',async r=>{await hold;await r.continue();});
   await clickNav();await page.locator('#partnershipCenterRoot[data-state=loading]').waitFor();assert.equal(await page.locator('#partnershipCenterRoot dd').count(),0);release();await page.locator('#partnershipCenterRoot[data-state=ready]').waitFor();await page.unroute('**/parcerias/central?*');
-  assert.equal(await page.locator('[data-partnership-card]').count(),3);assert.equal(await page.locator('#parcerias-pastore.active').count(),0);
+  assert.equal(await page.locator('[data-partnership-card]').count(),3);assert.equal(await page.locator('.pc-filters .m15-date-btn').first().textContent(),'');assert.notEqual(await page.locator('.pc-filters .m15-date-btn').first().evaluate(el=>getComputedStyle(el,'::before').maskImage),'none');assert.equal(await page.locator('#parcerias-pastore.active').count(),0);
   assert(!(await page.locator('#partnershipCenterRoot').innerText()).includes('Alergo Life'));
   assert((await card('maclin').innerText()).includes('123,45'));assert((await card('alergocare').innerText()).includes('220,00'));
   assert((await card('pastore').innerText()).includes('109,50'));
@@ -93,8 +93,8 @@ with Session(get_engine()) as db:
   await search('Alergocare');await page.locator('[data-cc-partnership]').click();await page.locator('[data-partnership-detail=alergocare]').waitFor();
   await page.reload();await ready();await page.locator('[data-partnership-detail=alergocare]').waitFor();
   await search('Alergocare');await page.locator('#ccSearchResults button').first().click();await page.locator('#ccSelectedRecord[data-record-id="'+ids.canonical.alergocare+'"]').waitFor();
-  await landing();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2),false);
-  if(process.env.PC_SCREENSHOTS){fs.mkdirSync(process.env.PC_SCREENSHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.PC_SCREENSHOTS,`${name}-${width}-admin.png`),fullPage:true});}
+  await landing();await page.locator('.pc-filters select').selectOption('todas');await page.locator('.pc-filters button[type=submit]').click();await card('pastore').waitFor();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2),false);
+  if(process.env.PC_SCREENSHOTS){fs.mkdirSync(process.env.PC_SCREENSHOTS,{recursive:true});await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:path.join(process.env.PC_SCREENSHOTS,`${name}-${width}-admin.png`),fullPage:true});}
   await page.route('**/parcerias/central?*',r=>r.fulfill({status:503,contentType:'application/json',body:'{}'}));await clickNav();
   // Wait on the error state directly, rather than presenting provisional totals.
   await page.locator('#partnershipCenterRoot[data-state=error]').waitFor();assert.equal(await page.locator('#partnershipCenterRoot dd').count(),0);await page.unroute('**/parcerias/central?*');

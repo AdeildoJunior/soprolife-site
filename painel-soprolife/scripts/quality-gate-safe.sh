@@ -75,6 +75,7 @@ run "node --check test-m26-34-nfse-agrupada-painel.js" node --check painel-sopro
 run "node --check test-m26-36c-corretiva-cancelada-painel.js" node --check painel-soprolife/scripts/test-m26-36c-corretiva-cancelada-painel.js
 
 secao "2/10 Testes JS (M4 e M5)"
+run "SVG locais e interface sem emojis" node painel-soprolife/scripts/test-ui-icons.js
 run "auth bootstrap deny by default" node painel-soprolife/scripts/test-auth-bootstrap.js
 run "node --check auth browser regression" node --check painel-soprolife/scripts/test-auth-bootstrap-browser.cjs
 run "test-operational-actions (M4)" node painel-soprolife/scripts/test-operational-actions.js

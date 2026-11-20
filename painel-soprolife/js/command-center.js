@@ -3,6 +3,8 @@
   'use strict';
   const api=()=>window.SoproM15, gate=window.SoproBootGate, life=window.LifeCommandCenter;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const icon=name=>window.SoproIcons.svg(name);
+  const categoryIcons={hoje:'calendar',sem_laudo:'file',laudo:'activity',fiscal:'file',contato:'inbox',followup:'bell',agenda:'calendar',acerto:'partners',inconsistencia:'alert'};
   const labels={hoje:'Exames de hoje',sem_laudo:'Realizados sem laudo',laudo:'Laudos pendentes',fiscal:'NFS-e pendentes',contato:'Contatos aguardando ação',followup:'Follow-ups vencidos / hoje',agenda:'Próximos 7 dias',acerto:'Acertos de parceiros',inconsistencia:'Informações a completar'};
   const snapshots=new Map(),inflight=new Map();
   let resultItems=[],searchEpoch=0,searchAbort=null,searchTimer=null;
@@ -20,18 +22,18 @@
       '<div class="cc-state" role="status"><p>'+esc(message)+'</p>'+(kind==='error'?'<button type="button" data-cc-refresh>Tentar novamente</button>':'')+'</div>';
   }
   function card(label,value,category,extra=''){
-    return '<button type="button" class="cc-stat" data-cc-category="'+esc(category)+'"><span>'+esc(label)+'</span><strong>'+esc(count(value))+'</strong>'+extra+'</button>';
+    return '<button type="button" class="cc-stat" data-cc-category="'+esc(category)+'"><span class="cc-stat-heading"><i class="cc-stat-icon">'+icon(categoryIcons[category]||'chart')+'</i><span>'+esc(label)+'</span></span><strong>'+esc(count(value))+'</strong>'+extra+'</button>';
   }
   function record(item,index,attr='data-cc-item'){
-    return '<button type="button" class="cc-work-row" '+attr+'="'+index+'"><span><strong>'+esc(item.codigo)+'</strong><span>'+esc(item.titulo??item.rotulo)+'</span></span><span>'+esc(item.data?date(item.data):labels[item.categoria]||'Abrir registro')+' <b aria-hidden="true">→</b></span></button>';
+    return '<button type="button" class="cc-work-row" '+attr+'="'+index+'"><span><strong>'+esc(item.codigo)+'</strong><span>'+esc(item.titulo??item.rotulo)+'</span></span><span>'+esc(item.data?date(item.data):labels[item.categoria]||'Abrir registro')+' <b aria-hidden="true">'+icon('arrow')+'</b></span></button>';
   }
   function render(root,data){
     const cap=data.capacidades,p=data.pendencias,nums=p.categorias,b=data.marca;
     root.dataset.state='ready';root.setAttribute('aria-busy','false');root.classList.add('cc-home');
     const finance=data.financeiro;
     root.innerHTML='<div class="cc-heading"><div><p class="eyebrow">'+(b==='eeglife'?'EEGLife':'SoproLife')+' · operação</p><h2>O que precisa da sua atenção?</h2><p>Hoje, '+esc(date(data.periodo.hoje))+'</p></div></div>'+
-      '<div class="cc-actions">'+(cap.operacao?'<button type="button" class="cc-primary" data-cc-new="atendimento">+ Novo atendimento</button>':'')+
-      (cap.operacao&&b==='soprolife'?'<button type="button" data-cc-new="contato">+ Novo contato</button>':'')+
+      '<div class="cc-actions">'+(cap.operacao?'<button type="button" class="cc-primary" data-cc-new="atendimento">'+icon('plus')+' Novo atendimento</button>':'')+
+      (cap.operacao&&b==='soprolife'?'<button type="button" data-cc-new="contato">'+icon('plus')+' Novo contato</button>':'')+
       '<button type="button" data-cc-category="agenda">Ver agenda</button>'+
       (cap.operacao?'<button type="button" data-cc-category="laudo">Ver laudos pendentes</button>':'')+
       (cap.fiscal?'<button type="button" data-cc-category="fiscal">Ver NFS-e pendentes</button>':'')+
@@ -43,7 +45,7 @@
       (p.indisponiveis.length?'<p class="cc-note" role="status">Dados indisponíveis: '+p.indisponiveis.map(k=>esc(labels[k]||k)).join(', ')+'. O total não inclui essas fontes.</p>':'')+'</section>'+
       '<section class="cc-block"><h3>Resumo do mês</h3><p class="cc-note">Desde '+esc(date(data.periodo.inicio))+' · competência do atendimento</p><div class="cc-month">'+
       '<article class="cc-metric"><span>Exames realizados</span><strong>'+esc(count(data.mes.exames))+'</strong></article>'+
-      (b==='soprolife'?'<article class="cc-metric cc-cohort"><span>Contatos → Agendados → Realizados</span><strong>'+esc(data.mes.contatos)+' <i>→</i> '+esc(data.mes.agendados)+' <i>→</i> '+esc(data.mes.realizados)+'</strong><small>Contatos iniciados no mês; etapas acumuladas.</small></article>':'')+
+      (b==='soprolife'?'<article class="cc-metric cc-cohort"><span>Contatos → Agendados → Realizados</span><div class="cc-cohort-bars">'+[['Contatos',data.mes.contatos],['Agendados',data.mes.agendados],['Realizados',data.mes.realizados]].map(([label,n])=>'<div><span>'+esc(label)+'</span><strong>'+esc(n)+'</strong><i aria-hidden="true" style="--cc-bar:'+Number(n)/Math.max(1,data.mes.contatos,data.mes.agendados,data.mes.realizados)*100+'%"></i></div>').join('')+'</div><small>Contatos iniciados no mês; etapas acumuladas.</small></article>':'')+
       (finance?(b==='soprolife'?[['Receita bruta dos exames','bruto'],['Parcela econômica SoproLife','soprolife'],['Parcela dos parceiros','parceiros'],['Despesas registradas no razão','despesas'],['Resultado gerencial dos exames','resultado']]:[['Receita registrada EEG','bruto'],['Despesas registradas EEG','despesas'],['Resultado gerencial EEG','resultado']]).map(([label,key])=>'<article class="cc-metric" data-cc-financial><span>'+esc(label)+'</span><strong>'+esc(money(finance[key]))+'</strong>'+(finance[key]==null?'<small>Base a confirmar</small>':finance.parcial?.[key]?'<small>Parcial confirmado · '+esc(finance.cobertura_valores?.[key]?.com_dado??finance.cobertura.completos)+'/'+esc(finance.cobertura.total)+' exames</small>':'')+'</article>').join(''):'')+'</div>'+
       (finance?'<p class="cc-note">'+esc(finance.nota)+(finance.cobertura?' Cobertura de custos: '+esc(finance.cobertura.completos)+' de '+esc(finance.cobertura.total)+' exames.':'')+'</p>':'')+'</section>'+
       '<section class="cc-block"><h3>Alertas operacionais</h3>'+

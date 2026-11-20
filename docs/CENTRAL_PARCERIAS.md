@@ -50,3 +50,20 @@ fixtures sintéticas. Deploy autorizado segue runbook existente em modo full,
 com backup/fingerprints, schema check, restart API, health API/proxy/portal e
 validação autenticada somente leitura. Evidências e SHAs efetivamente publicados:
 `~/SoproLife_Programacao/RELATORIOS/CENTRAL_PARCERIAS_20261120.md`.
+
+
+## Acabamento visual do Centro de Comando
+
+Pedido complementar do usuário: interface mais gráfica, com menos emojis.
+Vocabulário vetorial local em `ui-icons.js`, sempre decorativo/aria-hidden, com
+rótulos e avisos semânticos conservados. UI do painel, CRM, avisos de prontidão,
+status de assinatura e calendário usam traço consistente, sem alterar dados ou
+condições. O calendário continua montando DOM sem innerHTML; ícone via máscara
+SVG local. Nenhuma mudança de texto/modelo emitido em PDF médico.
+
+`premium-ui.css` mantém navy/teal e a distinção EEG, ajusta densidade, cartões,
+tipografia e foco. Gráfico compacto da coorte usa somente contagens da API;
+sem série, meta ou tendência inventada. Navegação mobile recolhe após seleção;
+o scroll reserva espaço para a barra do contexto. Novos filtros usam o calendário
+brasileiro existente, com datas ISO preservadas na API. Testes de vocabulário
+verificam ausência de emojis, SVG seguro e fallback de nomes desconhecidos.

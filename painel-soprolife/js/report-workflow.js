@@ -7,6 +7,8 @@
  */
 (function () {
   "use strict";
+  function uiIcon(name) { return window.SoproIcons ? window.SoproIcons.svg(name) : ""; }
+
 
   const SECTION_ID = "laudos-espirometria";
   const ROOT_ID = "reportWorkflowRoot";
@@ -1713,7 +1715,7 @@
     if (signatureReceived(detail)) {
       return `
       <div class="report-concluded" role="status">
-        <p class="report-concluded-title">✓ PDF assinado recebido</p>
+        <p class="report-concluded-title">${uiIcon('check')} PDF assinado recebido</p>
         <p>O arquivo foi associado a este laudo. Seu trabalho neste exame
           terminou.</p>
       </div>`;
@@ -1722,7 +1724,7 @@
     const assinavel = native && native.kind !== "laudo_previa";
     return `
       <div class="report-concluded" role="status">
-        <p class="report-concluded-title">✓ Laudo concluído</p>
+        <p class="report-concluded-title">${uiIcon('check')} Laudo concluído</p>
         <p>Agora baixe o PDF final para assinatura.</p>
         ${assinavel ? `
           <button type="button" class="m15-btn m15-btn-primary report-download-final"
@@ -2372,7 +2374,7 @@
         item.ok ? " is-ok" : " is-problem"
       }">
         <span class="report-signature-mark" aria-hidden="true">${
-          item.ok ? "✓" : "⚠"
+          item.ok ? uiIcon("check") : uiIcon("alert")
         }</span>
         <span class="report-signature-result-body">
           <strong>${esc(item.paciente || item.arquivo)}</strong>

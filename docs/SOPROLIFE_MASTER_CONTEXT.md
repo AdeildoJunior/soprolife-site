@@ -28,6 +28,13 @@ Pastore usa fechamentos conferidos completos, sem ratear conjunto parcial nem
 assumir bruto/parcela parceira a partir de sua receita líquida. Regra 70/30 e
 DIRECT Maclin/Alergocare são consumidas, sem alteração ou retroatividade.
 
+Apresentação premium de 20/11: vocabulário SVG local `SoproIcons`, ícones
+decorativos com rótulos preservados, sem fonte de emojis/dependência externa.
+`premium-ui.css` refina hierarquia, contraste, espaçamento e reflow; barras do
+funil usam apenas a coorte já retornada. Calendário conserva DOM seguro e contrato
+de datas. Navegação mobile recolhe menu após escolher módulo. Sem mudança de
+permissões, modelos médicos ou regras fiscais/financeiras.
+
 Contrato: [Central de Parcerias](CENTRAL_PARCERIAS.md). Report externo registra
 commits, testes, backup/deploy e health efetivamente concluídos.
 
