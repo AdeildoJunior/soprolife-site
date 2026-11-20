@@ -164,6 +164,8 @@ ALLOWED_KEYS = {
     "estacionamento_override", "combustivel_override", "sala_override",
     "outros_compartilhados",
     "base_receita", "entry_code",
+    # Structural historical repair: technical IDs only; no financial rewrite.
+    "partner_id", "partner_unit_id", "previous_partner_id", "previous_partner_unit_id",
 }
 
 _MAX_STR = 120

@@ -9,7 +9,19 @@
 > Sem PII, senhas, tokens, IPs de tailnet ou identificadores privados. Use
 > placeholders (`<VPS_TAILSCALE_IP>`, `<TOKEN>`).
 
-Última atualização: 2026-11-20 (Central de Parcerias; base `78618ac`).
+Última atualização: 2026-11-20 (auditoria de vínculos históricos; base `7f7b6c3`).
+
+## Auditoria de vínculos históricos de parceiros — 20/11/2026
+
+Ferramenta operacional de lote revisado, dry-run por padrão, sem endpoint ou
+backfill automático. Reutiliza catálogo canônico; corrige apenas IDs ausentes
+em exames com evidência inequívoca, sem alterar modalidade, datas, updated_at,
+financeiro, fiscal, laudos, bases ou partilhas. Hash/locks, transação
+serializável, backup verificado, administrador ativo e fingerprints integrais
+recusam alterações concorrentes ou fora do plano. Conflitos ficam pendentes;
+repetição idêntica não escreve. Não existe partnership_id no exame e nenhuma
+partilha é criada para suprir essa ausência. Procedimento e contrato:
+[Auditoria de vínculos](AUDITORIA_VINCULOS_HISTORICOS_PARCEIROS.md).
 
 ## Central de Parcerias — 20/11/2026
 
