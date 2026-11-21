@@ -1,0 +1,22 @@
+# SoproLife — Timer do backup automático do PostgreSQL M15.
+# PREPARADO, NÃO INSTALADO: só tem efeito após
+#   scripts/install-backup-postgres.sh --apply --enable-timer
+# na VPS, decisão humana explícita.
+#
+# Dispara soprolife-backup-postgres.service (mesmo basename) diariamente.
+
+[Unit]
+Description=SoproLife — Timer do backup diário do PostgreSQL M15
+
+[Timer]
+# 02:00 BRT. O sufixo de fuso exige systemd >= 252. Se a VPS tiver systemd
+# mais antigo, remover o sufixo "America/Sao_Paulo" e garantir que o fuso do
+# sistema (timedatectl) seja America/Sao_Paulo — o instalador confere isso.
+OnCalendar=*-*-* 02:00:00 America/Sao_Paulo
+# Recupera o disparo perdido se a VPS estiver desligada às 02:00.
+Persistent=true
+# Precisão apertada: backup deve ocorrer na janela de baixo tráfego.
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

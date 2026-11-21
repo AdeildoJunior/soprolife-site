@@ -1,0 +1,63 @@
+# SoproLife — Backup automático do PostgreSQL 16 de produção (M15).
+#
+# PREPARADO, NÃO INSTALADO: só tem efeito depois que um humano rodar
+#   scripts/install-backup-postgres.sh --apply --enable-timer
+# na VPS. Este arquivo precisa refletir exatamente a unit instalada — o Git não
+# pode mentir sobre o que roda.
+#
+# O QUE FAZ:
+#   - reutiliza o ÚNICO script oficial de dump (backup-postgresql-m15.sh),
+#     apontando-o para a pasta de backups DIÁRIOS (.../backups/m15/daily);
+#   - o script gera o dump pg_dump --format=custom, valida com pg_restore
+#     --list e grava a evidência SHA-256 companheira;
+#   - em seguida (ExecStartPost) aplica a retenção rotativa de 30 dias SOMENTE
+#     na pasta daily, sem jamais tocar nos backups pré-deploy ou manuais.
+#
+# O QUE NÃO FAZ:
+#   - não cria um segundo mecanismo de dump;
+#   - não altera schema nem dados;
+#   - não remove backups de deploy (.../m15/<STAMP>/) nem manuais;
+#   - não grava segredo em ExecStart, Environment ou journal (a senha do banco
+#     vem da autenticação peer local do usuário postgres, nunca em texto).
+#
+# NoNewPrivileges NÃO é usado de propósito: o script oficial usa `sudo` (p.ex.
+# `sudo -u postgres pg_dump`), que é setuid; com NoNewPrivileges o systemd
+# bloquearia o setuid e o backup falharia.
+
+[Unit]
+Description=SoproLife — Backup automático do PostgreSQL M15 (diário)
+Documentation=file:/opt/soprolife/soprolife-site/painel-soprolife/docs/backup-automatico-postgres.md
+# Ordenação apenas (sem Requires): se a VPS nomear a unit do Postgres de outra
+# forma (ex.: postgresql@16-main.service), um Requires faria o backup FALHAR ao
+# iniciar. O próprio pg_dump já falha alto se o banco estiver fora do ar.
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=HOME=/root
+# Única exceção ao guarda de terminal interativo do script oficial — declarada
+# explicitamente, nunca o padrão.
+Environment=SOPROLIFE_BACKUP_ALLOW_NONINTERACTIVE=1
+WorkingDirectory=/opt/soprolife/soprolife-site
+ExecStart=/bin/bash /opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15/scripts/backup-postgresql-m15.sh /opt/soprolife/backups/m15/daily
+# Retenção: só roda se o dump acima tiver sucesso (semântica de ExecStartPost
+# em Type=oneshot). Poda exclusivamente .../m15/daily.
+ExecStartPost=/bin/bash /opt/soprolife/soprolife-site/painel-soprolife/nucleo-m15/scripts/backup-postgres-rotate.sh /opt/soprolife/backups/m15/daily 30
+StandardOutput=journal
+StandardError=journal
+# Um dump nunca pode ficar pendurado até o próximo disparo.
+TimeoutStartSec=1800
+# Journal limitado: falha repetida não inunda o log.
+LogRateLimitIntervalSec=60
+LogRateLimitBurst=200
+# Endurecimento compatível com sudo/pg_dump: /etc e /usr somente-leitura,
+# /opt gravável para escrever o dump.
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/soprolife/backups
+
+[Install]
+WantedBy=multi-user.target
