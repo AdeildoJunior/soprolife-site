@@ -26,17 +26,18 @@ class Search(StrictModel):
 
 
 @router.get('/resumo')
-def summary(response:Response,marca:Brand='soprolife',db:Session=Depends(get_db),user:User=Depends(get_current_user)):
+def summary(response:Response,marca:Brand='soprolife',operacional:bool=False,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     private(response)
-    return service.summary(db,user,marca)
+    return service.summary(db,user,marca,operacional)
 
 
 @router.get('/pendencias')
 def pending(response:Response,marca:Brand='soprolife',categoria:str|None=None,
             pagina:int=Query(1,ge=1,le=500),limite:int=Query(20,ge=1,le=50),
+            janela:Literal['hoje','atencao','proximos']|None=None,
             db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     private(response)
-    return service.pending(db,user,marca,categoria,pagina,limite)
+    return service.pending(db,user,marca,categoria,pagina,limite,janela)
 
 
 @router.post('/busca')

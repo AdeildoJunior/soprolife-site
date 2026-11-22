@@ -4,11 +4,10 @@
   const api=()=>window.SoproM15, gate=window.SoproBootGate, life=window.LifeCommandCenter;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const icon=name=>window.SoproIcons.svg(name);
-  const categoryIcons={hoje:'calendar',sem_laudo:'file',laudo:'activity',fiscal:'file',contato:'inbox',followup:'bell',agenda:'calendar',acerto:'partners',inconsistencia:'alert'};
-  const labels={hoje:'Exames de hoje',sem_laudo:'Realizados sem laudo',laudo:'Laudos pendentes',fiscal:'NFS-e pendentes',contato:'Contatos aguardando ação',followup:'Follow-ups vencidos / hoje',agenda:'Próximos 7 dias',acerto:'Acertos de parceiros',inconsistencia:'Informações a completar'};
+  const labels={hoje:'Exames de hoje',sem_laudo:'Realizados sem laudo',laudo:'Laudos pendentes',fiscal:'NFS-e pendentes',contato:'Contatos aguardando ação',followup:'Acompanhamentos',agenda:'Próximos 7 dias',acerto:'Acertos de parceiros',inconsistencia:'Informações a completar'};
   const snapshots=new Map(),inflight=new Map();
   let resultItems=[],searchEpoch=0,searchAbort=null,searchTimer=null;
-  let pendingPage=1,pendingCategory='',pendingEpoch=0,navigationEpoch=0;
+  let pendingEpoch=0,navigationEpoch=0;
   const brand=()=>life.getContext();
   const date=v=>v?new Date(v.length===10?v+'T12:00:00':v).toLocaleDateString('pt-BR'):'Sem data';
   const money=v=>v==null?'—':Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -21,38 +20,33 @@
     root.innerHTML=kind==='loading'?'<div class="cc-loading" role="status"><span>Carregando…</span><div class="cc-skeleton-grid">'+Array(6).fill('<i class="cc-skeleton"></i>').join('')+'</div></div>':
       '<div class="cc-state" role="status"><p>'+esc(message)+'</p>'+(kind==='error'?'<button type="button" data-cc-refresh>Tentar novamente</button>':'')+'</div>';
   }
-  function card(label,value,category,extra=''){
-    return '<button type="button" class="cc-stat" data-cc-category="'+esc(category)+'"><span class="cc-stat-heading"><i class="cc-stat-icon">'+icon(categoryIcons[category]||'chart')+'</i><span>'+esc(label)+'</span></span><strong>'+esc(count(value))+'</strong>'+extra+'</button>';
+  function card(label,value,category,window=''){
+    return '<button type="button" class="cc-stat" data-cc-category="'+esc(category)+'" data-cc-window="'+esc(window)+'"><strong>'+esc(count(value))+'</strong><span>'+esc(label)+'</span><b aria-hidden="true">'+icon('arrow')+'</b></button>';
   }
   function record(item,index,attr='data-cc-item'){
     return '<button type="button" class="cc-work-row" '+attr+'="'+index+'"><span><strong>'+esc(item.codigo)+'</strong><span>'+esc(item.titulo??item.rotulo)+'</span></span><span>'+esc(item.data?date(item.data):labels[item.categoria]||'Abrir registro')+' <b aria-hidden="true">'+icon('arrow')+'</b></span></button>';
   }
   function render(root,data){
-    const cap=data.capacidades,p=data.pendencias,nums=p.categorias,b=data.marca;
+    const cap=data.capacidades,p=data.pendencias,b=data.marca,groups=p.grupos;
     root.dataset.state='ready';root.setAttribute('aria-busy','false');root.classList.add('cc-home');
-    const finance=data.financeiro;
-    root.innerHTML='<div class="cc-heading"><div><p class="eyebrow">'+(b==='eeglife'?'EEGLife':'SoproLife')+' · operação</p><h2>O que precisa da sua atenção?</h2><p>Hoje, '+esc(date(data.periodo.hoje))+'</p></div></div>'+
+    const names={hoje:{followup:'Acompanhamentos para retomar',contato:'Contatos para retomar'},
+      atencao:{followup:'Acompanhamentos atrasados',sem_laudo:'Exames aguardando laudo',laudo:'Laudos pendentes',fiscal:'NFS-e pendentes',acerto:'Acertos pendentes',contato:'Contatos exigindo ação',inconsistencia:'Informações a completar'},
+      proximos:{agenda:'Compromissos nos próximos 7 dias',followup:'Acompanhamentos nos próximos 7 dias',contato:'Contatos nos próximos 7 dias'}};
+    function section(key,title){
+      const entries=Object.entries(names[key]).filter(([k])=>(groups[key][k]||0)>0);
+      const unavailable=key==='atencao'?p.indisponiveis.filter(k=>names[key][k]):[];
+      return '<section class="cc-block cc-operation" aria-labelledby="cc-'+key+'-'+b+'"><h3 id="cc-'+key+'-'+b+'">'+title+'</h3><div class="cc-operation-list">'+
+        (key==='hoje'&&data.hoje.exames!=null?card('Atendimentos de hoje',data.hoje.exames,'hoje'): '')+
+        entries.map(([k,label])=>card(label,groups[key][k],k,key)).join('')+
+        unavailable.map(k=>card(names[key][k],null,k,key)).join('')+'</div>'+
+        (!entries.length&&(key!=='hoje'||data.hoje.exames==null)&&!unavailable.length?'<p class="cc-empty">'+(key==='atencao'?'Nenhuma ação pendente nas fontes disponíveis.':key==='hoje'?'Nenhum item para hoje nas fontes disponíveis.':'Nenhum compromisso nos próximos 7 dias.')+'</p>':'')+'</section>';
+    }
+    root.innerHTML='<div class="cc-heading"><div><p class="eyebrow">'+(b==='eeglife'?'EEGLife':'SoproLife')+' · operação</p><h2>O que precisa da sua atenção agora?</h2><p>Hoje, '+esc(date(data.periodo.hoje))+'</p></div></div>'+
       '<div class="cc-actions">'+(cap.operacao?'<button type="button" class="cc-primary" data-cc-new="atendimento">'+icon('plus')+' Novo atendimento</button>':'')+
-      (cap.operacao&&b==='soprolife'?'<button type="button" data-cc-new="contato">'+icon('plus')+' Novo contato</button>':'')+
-      '<button type="button" data-cc-category="agenda">Ver agenda</button>'+
-      (cap.operacao?'<button type="button" data-cc-category="laudo">Ver laudos pendentes</button>':'')+
-      (cap.fiscal?'<button type="button" data-cc-category="fiscal">Ver NFS-e pendentes</button>':'')+
-      (cap.financeiro?'<button type="button" data-cc-section="financeiro">Ver financeiro</button>':'')+'</div>'+
-      '<section class="cc-block" aria-labelledby="ccToday-'+b+'"><h3 id="ccToday-'+b+'">Hoje e próximos passos</h3><div class="cc-stats">'+card('Exames de hoje',data.hoje.exames,'hoje')+
-      Object.entries(labels).filter(([k])=>k!=='hoje'&&k!=='inconsistencia'&&(k!=='fiscal'||cap.fiscal)&&(k!=='acerto'||cap.financeiro)&&(k!=='sem_laudo'||b==='soprolife'&&cap.operacao)&&(k!=='laudo'||cap.operacao||cap.clinico)&&(b==='soprolife'||!['contato','followup','acerto'].includes(k))).map(([k,label])=>card(label,p.indisponiveis.includes(k)?null:nums[k]||0,k,k==='fiscal'?'<small>Documentos já preparados</small>':'')).join('')+'</div></section>'+
-      '<section class="cc-block"><div class="cc-block-heading"><h3>Para fazer agora</h3><button type="button" data-cc-pending>Ver pendências ('+esc(p.total)+(p.completo?'':'+')+')</button></div>'+
-      (p.itens.length?'<div class="cc-work-list">'+p.itens.map((i,n)=>record(i,n)).join('')+'</div>':'<p class="cc-empty">Nenhuma pendência encontrada nas fontes disponíveis.</p>')+
-      (p.indisponiveis.length?'<p class="cc-note" role="status">Dados indisponíveis: '+p.indisponiveis.map(k=>esc(labels[k]||k)).join(', ')+'. O total não inclui essas fontes.</p>':'')+'</section>'+
-      '<section class="cc-block"><h3>Resumo do mês</h3><p class="cc-note">Desde '+esc(date(data.periodo.inicio))+' · competência do atendimento</p><div class="cc-month">'+
-      '<article class="cc-metric"><span>Exames realizados</span><strong>'+esc(count(data.mes.exames))+'</strong></article>'+
-      (b==='soprolife'?'<article class="cc-metric cc-cohort"><span>Contatos → Agendados → Realizados</span><div class="cc-cohort-bars">'+[['Contatos',data.mes.contatos],['Agendados',data.mes.agendados],['Realizados',data.mes.realizados]].map(([label,n])=>'<div><span>'+esc(label)+'</span><strong>'+esc(n)+'</strong><i aria-hidden="true" style="--cc-bar:'+Number(n)/Math.max(1,data.mes.contatos,data.mes.agendados,data.mes.realizados)*100+'%"></i></div>').join('')+'</div><small>Contatos iniciados no mês; etapas acumuladas.</small></article>':'')+
-      (finance?(b==='soprolife'?[['Receita bruta dos exames','bruto'],['Parcela econômica SoproLife','soprolife'],['Parcela dos parceiros','parceiros'],['Despesas registradas no razão','despesas'],['Resultado gerencial dos exames','resultado']]:[['Receita registrada EEG','bruto'],['Despesas registradas EEG','despesas'],['Resultado gerencial EEG','resultado']]).map(([label,key])=>'<article class="cc-metric" data-cc-financial><span>'+esc(label)+'</span><strong>'+esc(money(finance[key]))+'</strong>'+(finance[key]==null?'<small>Base a confirmar</small>':finance.parcial?.[key]?'<small>Parcial confirmado · '+esc(finance.cobertura_valores?.[key]?.com_dado??finance.cobertura.completos)+'/'+esc(finance.cobertura.total)+' exames</small>':'')+'</article>').join(''):'')+'</div>'+
-      (finance?'<p class="cc-note">'+esc(finance.nota)+(finance.cobertura?' Cobertura de custos: '+esc(finance.cobertura.completos)+' de '+esc(finance.cobertura.total)+' exames.':'')+'</p>':'')+'</section>'+
-      '<section class="cc-block"><h3>Alertas operacionais</h3>'+
-      (nums.inconsistencia?'<button type="button" data-cc-category="inconsistencia">'+esc(nums.inconsistencia)+' pendência(s) de informação operacional</button>':'<p class="cc-empty">Nenhuma inconsistência verificável nas fontes consultadas.</p>')+
-      (finance?.cobertura&&finance.cobertura.completos<finance.cobertura.total?'<p class="cc-note">Há exames com base de resultado incompleta. As parcelas conhecidas têm cobertura indicada; nenhum valor ausente foi estimado.</p>':'')+'</section>'+
-      '<p class="cc-asof">Consultado em '+esc(new Date(data.observado_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))+' · '+esc(data.escopo_fiscal)+'</p>';
-    root.querySelectorAll('[data-cc-item]').forEach(el=>el.onclick=()=>openTarget(p.itens[Number(el.dataset.ccItem)].destino));
+      (cap.operacao&&b==='soprolife'?'<button type="button" data-cc-new="contato">'+icon('plus')+' Novo contato</button>':'')+'</div>'+
+      '<div class="cc-operation-grid">'+section('hoje','Hoje')+section('atencao','Precisa de atenção')+section('proximos','Próximos')+'</div>'+
+      (p.indisponiveis.length?'<p class="cc-note" role="status">Parte das filas está indisponível. “—” indica dados não confirmados; o total de Pendências não inclui essas fontes.</p>':'')+
+      '<p class="cc-asof">Consultado às '+esc(new Date(data.observado_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))+'</p>';
     wire(root);
     updatePendingLabel(data);
   }
@@ -66,7 +60,7 @@
     if(inflight.has(b))return inflight.get(b);
     if(!force&&snapshots.has(b)&&Date.now()-Date.parse(snapshots.get(b).observado_em)<30000){show(snapshots.get(b));return Promise.resolve();}
     state(root,'loading');
-    const url=root?'/comando/resumo?marca='+b:'/comando/pendencias?marca='+b+'&limite=1';
+    const url=root?'/comando/resumo?marca='+b+'&operacional=true':'/comando/pendencias?marca='+b+'&limite=1';
     const promise=api().api(url,{signal:AbortSignal.timeout(20000)}).then(response=>{
       const data=root?response:{marca:b,pendencias:response,observado_em:new Date().toISOString()};
       if(gate.estado!=='ready')return;
@@ -75,7 +69,7 @@
     inflight.set(b,promise);return promise;
   }
   function wire(root){
-    root.querySelectorAll('[data-cc-category]').forEach(el=>el.onclick=()=>pending(el.dataset.ccCategory));
+    root.querySelectorAll('[data-cc-category]').forEach(el=>el.onclick=()=>pending(el.dataset.ccCategory,1,el.dataset.ccWindow||''));
     root.querySelectorAll('[data-cc-pending]').forEach(el=>el.onclick=()=>pending(''));
     root.querySelectorAll('[data-cc-refresh]').forEach(el=>el.onclick=()=>loadHome(brand(),true));
     root.querySelectorAll('[data-cc-new]').forEach(el=>el.onclick=async()=>{
@@ -87,28 +81,28 @@
     root.querySelectorAll('[data-cc-section]').forEach(el=>el.onclick=()=>brand()==='eeglife'?life.openEegModule(el.dataset.ccSection):gate.navegar(el.dataset.ccSection));
   }
   function announce(text){const box=document.getElementById('ccAnnouncement');if(box)box.textContent=text;}
-  async function pending(category='',page=1){
+  async function pending(category='',page=1,window=''){
     if(gate.somenteClinico&&brand()==='soprolife'){await gate.navegar('laudos-espirometria');return;}
-    pendingCategory=category;pendingPage=page;
     const host=document.getElementById('ccPendingPanel');host.hidden=false;
     state(host,'loading');host.scrollIntoView({block:'start'});
     const epoch=++pendingEpoch,b=brand();
     try{
-      const data=await api().api('/comando/pendencias?marca='+b+'&pagina='+page+(category?'&categoria='+encodeURIComponent(category):''));
+      const data=await api().api('/comando/pendencias?marca='+b+'&pagina='+page+(category?'&categoria='+encodeURIComponent(category):'')+(window?'&janela='+encodeURIComponent(window):''));
       if(epoch!==pendingEpoch||gate.estado!=='ready'||b!==brand())return;
       host.dataset.state=data.itens.length?'ready':'empty';host.setAttribute('aria-busy','false');
-      host.innerHTML='<div class="cc-block-heading"><h2>Pendências ('+esc(data.total)+')</h2><button type="button" data-cc-close-pending>Fechar</button></div>'+
-        '<label class="cc-filter">Categoria<select id="ccPendingCategory"><option value="">Todas as categorias</option>'+Object.entries(labels).filter(([k])=>data.categorias[k]||k===category).map(([k,label])=>'<option value="'+k+'"'+(k===category?' selected':'')+'>'+esc(label)+' ('+(data.categorias[k]??data.total)+')</option>').join('')+'</select></label>'+
-        (data.itens.length?'<div class="cc-work-list">'+data.itens.map((i,n)=>record(i,n,'data-cc-pending-item')).join('')+'</div>':'<p class="cc-empty">Nenhuma pendência nesta categoria.</p>')+
+      const categories=window?data.grupos[window]:data.categorias;
+      host.innerHTML='<div class="cc-block-heading"><h2>'+esc(({hoje:'Hoje',atencao:'Precisa de atenção',proximos:'Próximos'})[window]||'Pendências')+' ('+esc(data.total)+')</h2><button type="button" data-cc-close-pending>Fechar</button></div>'+
+        '<label class="cc-filter">Categoria<select id="ccPendingCategory"><option value="">Todas as categorias</option>'+Object.entries(labels).filter(([k])=>categories[k]||k===category).map(([k,label])=>'<option value="'+k+'"'+(k===category?' selected':'')+'>'+esc(label)+' ('+(categories[k]??data.total)+')</option>').join('')+'</select></label>'+
+        (data.itens.length?'<div class="cc-work-list">'+data.itens.map((i,n)=>record(i,n,'data-cc-pending-item')).join('')+'</div>':'<p class="cc-empty">'+(data.indisponiveis.includes(category)?'Fila indisponível no momento.':'Nenhum item nesta fila nas fontes disponíveis.')+'</p>')+
         '<div class="cc-pagination">'+(page>1?'<button type="button" data-cc-prev>Anterior</button>':'')+'<span>Página '+page+'</span>'+(data.tem_proxima?'<button type="button" data-cc-next>Próxima</button>':'')+'</div>';
-      host.querySelector('select').onchange=e=>pending(e.target.value);
+      host.querySelector('select').onchange=e=>pending(e.target.value,1,window);
       host.querySelector('[data-cc-close-pending]').onclick=()=>{host.hidden=true;};
-      host.querySelector('[data-cc-prev]')?.addEventListener('click',()=>pending(category,page-1));
-      host.querySelector('[data-cc-next]')?.addEventListener('click',()=>pending(category,page+1));
+      host.querySelector('[data-cc-prev]')?.addEventListener('click',()=>pending(category,page-1,window));
+      host.querySelector('[data-cc-next]')?.addEventListener('click',()=>pending(category,page+1,window));
       host.querySelectorAll('[data-cc-pending-item]').forEach(el=>el.onclick=()=>openTarget(data.itens[Number(el.dataset.ccPendingItem)].destino));
     }catch(error){if(epoch===pendingEpoch){
       state(host,error.status===403?'unauthorized':'error','Não foi possível carregar as pendências.');
-      host.querySelector('[data-cc-refresh]')?.addEventListener('click',()=>pending(category,page));
+      host.querySelector('[data-cc-refresh]')?.addEventListener('click',()=>pending(category,page,window));
       const close=document.createElement('button');close.type='button';close.textContent='Fechar';close.onclick=()=>{host.hidden=true;};host.append(close);
     }}
   }

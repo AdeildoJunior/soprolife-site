@@ -147,3 +147,41 @@ Validar usuários existentes com sessões temporárias revogadas, sem salvar fat
 fictícios e sem emitir NFS-e. Nenhuma publicação pode ser atestada sem SSH/preflight
 e health reais. Rollback de código/schema somente pelo runbook e backup verificado,
 sem reset destrutivo nem reinterpretação de histórico.
+
+
+## Simplificação da home operacional — 21/11/2026
+
+A home exibe somente Hoje, Precisa de atenção e Próximos, com números e links
+para `/comando/pendencias`. Cada link conserva categoria e janela na paginação.
+O endpoint existente aceita `janela=hoje|atencao|proximos`, aplicado à mesma
+projeção canônica e com as mesmas capacidades. Agenda de hoje usa a consulta
+exata já existente (sem data presumida, cancelados ou ausentes).
+
+Acompanhamentos pendentes com data nos próximos sete dias usam os mesmos
+vínculos, exclusão de controle por parceiro e bloqueios de contato. São contexto
+futuro e não entram no total global. Contatos só aparecem em Hoje/Próximos com
+data manual explícita; sem data, apenas estados abertos do funil já canônicos
+exigem ação. “Aguardando data” de acompanhamento não é pendência por si só.
+Datas de criação fiscal, competência de acerto e data de exame de um laudo não
+são tratadas como vencimentos. Fiscal/acertos consomem exclusivamente os itens
+já projetados: não se calcula elegibilidade nem obrigação nova.
+
+`/comando/resumo?operacional=true` evita coorte, lucro e resumo mensal. O contrato
+padrão preserva o resumo analítico para consumidores existentes. Uma chamada na
+abertura, sem nova fonte técnica ou dependência externa. A home não fabrica
+alerta técnico; diagnóstico permanece no Núcleo administrativo.
+
+`#ccLegacy` renderizava quatro gráficos (evolução, funil de clínicas, etapas de
+leads e pipeline B2B); navegação, briefings e ações antigos já eram templates
+inertes. Os quatro canvas e o listener de abertura foram removidos. A chamada
+`renderCharts` na inicialização compartilhada permanece para os módulos legados: `createChart`
+retorna sem canvas e `chartGradient` tem fallback. As suítes reais da home e de
+gráficos verificam a ausência dos quatro alvos e o funcionamento de Marketing,
+Leads, CRM, Pastore e Custos sem exceção. Templates aposentados seguem inertes.
+
+Testes de API comprovam agrupamentos, paginação, data exata, ausência de data,
+limites 7/8 dias, RBAC, não contatar/controle parceiro e identidade do total global.
+Browser real valida Chromium/Firefox, desktop/mobile, zoom, teclado, destinos,
+loading/erro, marcas, nenhuma carga legacy na abertura e conteúdo essencial no
+primeiro viewport desktop. Evidências operacionais e HEADs ficam no relatório
+externo `SIMPLIFICACAO_PAINEL_GERAL_20261121.md`.

@@ -298,11 +298,6 @@
       await window.SoproCommandCenter.ready;
       await window.SoproCommandCenter.route();
     }
-    document.getElementById("ccLegacy")?.addEventListener("toggle", async function (event) {
-      if (!event.target.open) return;
-      try { await gate.carregar("legacy"); await window.SoproLegacy.start(); }
-      catch (error) { event.target.open = false; }
-    });
     await Promise.all(Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
       .filter(function (link) { return new URL(link.href).origin === location.origin && !link.sheet; })
       .map(function (link) { return new Promise(function (resolve, reject) {

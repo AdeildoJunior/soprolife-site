@@ -108,7 +108,7 @@ def _report_items(db):
     return items
 
 
-def _sopro_items(db, cap, when):
+def _sopro_items(db, cap, when, include_upcoming=False):
     items, unavailable = [], []
     # Operational report queues require operacional in the existing API.
     if cap['operacao']:
@@ -138,16 +138,19 @@ def _sopro_items(db, cap, when):
                 person.nome_completo, lead.data_retomada_manual, pessoa=person.public_code))
         for fup, person in db.execute(select(Followup, Person).join(Person, Person.id == Followup.person_id).where(
                 Person.arquivado.is_not(True), Followup.status == 'pendente',
-                Followup.due_date <= when, Followup.controlado_por_parceiro.is_(False))):
+                Followup.due_date <= when + timedelta(days=7 if include_upcoming else 0),
+                Followup.controlado_por_parceiro.is_(False))):
             from ..routers.followups import _contact_person
             try:
                 contact = _contact_person(db, fup, person)
             except HTTPException:
+                if fup.due_date > when:
+                    continue
                 items.append(_item('inconsistencia', 'pessoa', person.id, person.public_code,
                     'Vínculo de contato precisa de conferência', pessoa=person.public_code))
                 continue
-            if contact.nao_contatar or followup.classify_queue(fup, person, when) not in (
-                    followup.FILA_ATRASADO, followup.FILA_HOJE):
+            if contact.nao_contatar or person.nao_contatar or (fup.due_date <= when and
+                    followup.classify_queue(fup, person, when) not in (followup.FILA_ATRASADO, followup.FILA_HOJE)):
                 continue
             items.append(_item('followup', 'pessoa', person.id, fup.public_code,
                 person.nome_completo, fup.due_date, pessoa=person.public_code, followup_id=fup.id))
@@ -197,13 +200,38 @@ def _eeg_items(db, cap, when, user):
     return items, []
 
 
-def pending(db, user, brand, category=None, page=1, limit=20):
+def _window(item, when):
+    # Dates on reports/fiscal/acertos describe the record, not a due date.
+    # Only explicit agenda / follow-up / manual contact dates schedule action.
+    category = item['categoria']
+    due = item['data'][:10] if item['data'] else None
+    if category in ('agenda', 'followup', 'contato') and due:
+        if due == when.isoformat():
+            return 'hoje'
+        if when.isoformat() < due <= (when + timedelta(days=7)).isoformat():
+            return 'proximos'
+        if due > when.isoformat():
+            return None
+    return 'atencao' if category != 'agenda' else None
+
+
+def pending(db, user, brand, category=None, page=1, limit=20, window=None):
     cap, when = capabilities(user, brand), today()
     if brand == 'soprolife' and not cap.get('leitura'):
         raise HTTPException(403, 'Use a fila clínica atribuída.')
-    items, unavailable = (_sopro_items(db, cap, when) if brand == 'soprolife'
+    items, unavailable = (_sopro_items(db, cap, when, include_upcoming=True) if brand == 'soprolife'
                           else _eeg_items(db, cap, when, user))
-    counts = Counter(i['categoria'] for i in items)
+    groups = {key: dict(Counter(i['categoria'] for i in items if _window(i, when) == key))
+              for key in ('hoje', 'atencao', 'proximos')}
+    # Upcoming follow-ups are navigation context, never added to global Pendências.
+    canonical = [i for i in items if not (i['categoria'] == 'followup' and i['data'][:10] > when.isoformat())]
+    counts = Counter(i['categoria'] for i in canonical)
+    if window:
+        if window not in groups:
+            raise HTTPException(422, 'Período inválido.')
+        items = [i for i in items if _window(i, when) == window]
+    else:
+        items = canonical
     if category == 'hoje':
         if brand == 'soprolife':
             items = [_item('hoje', 'exame', e.id, e.public_code, p.nome_completo, e.data_exame)
@@ -220,7 +248,8 @@ def pending(db, user, brand, category=None, page=1, limit=20):
     start = (page - 1) * limit
     return {'total': len(items), 'categorias': dict(counts), 'indisponiveis': unavailable,
             'itens': items[start:start + limit], 'pagina': page,
-            'tem_proxima': start + limit < len(items), 'completo': not unavailable}
+            'tem_proxima': start + limit < len(items), 'completo': not unavailable,
+            'grupos': groups}
 
 
 def _sum_known(rows, field):
@@ -265,13 +294,24 @@ def _finance(db, brand, start, end):
             'nota': 'Competência dos exames remuneráveis; resultado usa somente custos confirmados na projeção existente. Despesas vêm do razão.'}
 
 
-def summary(db, user, brand):
+def summary(db, user, brand, operational=False):
     cap, when = capabilities(user, brand), today()
     if brand == 'soprolife' and not cap.get('leitura'):
         raise HTTPException(403, 'Use a fila clínica atribuída.')
     start = when.replace(day=1)
     p = pending(db, user, brand, limit=6)
-    if brand == 'soprolife':
+    if operational:
+        if brand == 'soprolife':
+            daily = db.scalar(select(func.count()).select_from(_today_exams(when).subquery()))
+        elif user_effective_roles(user) & {ROLE_ADMIN, 'eeg_operador', 'eeg_tecnico', 'medical_eeg'}:
+            lo, hi = _day_bounds(when)
+            daily = db.scalar(select(func.count()).select_from(_eeg_scope(user).where(
+                EegExam.agendado_para >= lo, EegExam.agendado_para < hi,
+                EegExam.status != 'cancelado').subquery()))
+        else:
+            daily = None
+        month = None
+    elif brand == 'soprolife':
         base = _exam_base()
         daily = db.scalar(select(func.count()).select_from(_today_exams(when).subquery()))
         monthly = db.scalar(select(func.count()).select_from(base.where(
@@ -302,6 +342,6 @@ def summary(db, user, brand):
               'hoje': {'exames': daily}, 'mes': month, 'pendencias': p,
               'categorias': CATEGORIES,
               'escopo_fiscal': 'Documentos de produção já preparados; elegibilidade de novos exames permanece no módulo Fiscal.'}
-    if cap['financeiro']:
+    if cap['financeiro'] and not operational:
         result['financeiro'] = _finance(db, brand, start, when)
     return result

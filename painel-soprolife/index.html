@@ -19,7 +19,7 @@
        propósito — o style.css redefine .app-shell/.sidebar/.main/.topbar em
        mais de dez pontos, e esta folha precisa da palavra final no que toca. -->
   <link rel="stylesheet" href="./css/life-command-center.css?v=2026102911" />
-  <link rel="stylesheet" href="./css/command-home.css?v=2026111901" />
+  <link rel="stylesheet" href="./css/command-home.css?v=2026112101" />
   <link rel="stylesheet" href="./css/premium-ui.css?v=2026112001" />
   <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
   <script type="application/x-soprolife-module" data-cc-groups="legacy report-stats" src="./js/vendor/chart.umd.min.js"></script>
@@ -217,7 +217,7 @@
 
       <section id="overview" class="section active">
         <div id="ccHome" class="cc-home" data-state="loading" aria-busy="true"><p role="status">Carregando…</p></div>
-        <details id="ccLegacy" class="cc-legacy"><summary>Indicadores históricos e fontes</summary>
+        <!-- Blocos antigos permanecem inertes; a home usa somente #ccHome. -->
 
         <template id="ccRetiredOverviewNavigation">
         <!-- Banner de saúde operacional: só aparece com alerta CRÍTICO (M3) -->
@@ -294,42 +294,6 @@
         </nav>
 
         </template>
-        <div class="grid-two">
-          <article class="panel">
-            <div class="panel-header">
-              <h3>Evolução mensal</h3>
-              <span id="monthlyChartSubtitle">Leads x agendamentos</span>
-            </div>
-            <div class="chart-box"><canvas id="monthlyChart"></canvas></div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-header">
-              <h3>Funil de clínicas</h3>
-              <span>Prospecção B2B</span>
-            </div>
-            <div class="chart-box"><canvas id="funnelChart"></canvas></div>
-          </article>
-        </div>
-
-        <div class="grid-two">
-          <article class="panel">
-            <div class="panel-header">
-              <h3>Leads por etapa</h3>
-              <span>Distribuição no funil</span>
-            </div>
-            <div class="chart-box"><canvas id="leadsEtapaChart"></canvas></div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-header">
-              <h3>Clínicas B2B — pipeline</h3>
-              <span>Etapas de prospecção</span>
-            </div>
-            <div class="chart-box"><canvas id="crmEtapaChart"></canvas></div>
-          </article>
-        </div>
-
         <template id="ccRetiredOverviewActions">
         <div id="cardsGrid" class="cards-sections"></div>
 
@@ -422,7 +386,6 @@
         </article>
 
         </template>
-        </details>
 </section>
 
       <section id="central-cadastros" class="section">
@@ -1078,7 +1041,7 @@
   <link rel="stylesheet" href="./css/partnership-center.css?v=2026112001">
   <script type="application/x-soprolife-module" data-cc-groups="partnerships" src="./js/partnership-center.js?v=2026112002"></script>
   <script type="application/x-soprolife-module" data-cc-groups="crm" src="./js/crm-workspace.js?v=2026112002"></script>
-  <script type="application/x-soprolife-module" data-cc-groups="core" src="./js/command-center.js?v=2026112002"></script>
-  <script src="./js/boot-gate.js?v=2026112002" defer></script>
+  <script type="application/x-soprolife-module" data-cc-groups="core" src="./js/command-center.js?v=2026112101"></script>
+  <script src="./js/boot-gate.js?v=2026112101" defer></script>
 </body>
 </html>

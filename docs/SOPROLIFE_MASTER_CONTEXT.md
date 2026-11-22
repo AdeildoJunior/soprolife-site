@@ -9,7 +9,25 @@
 > Sem PII, senhas, tokens, IPs de tailnet ou identificadores privados. Use
 > placeholders (`<VPS_TAILSCALE_IP>`, `<TOKEN>`).
 
-Última atualização: 2026-11-20 (auditoria de vínculos históricos; base `7f7b6c3`).
+Última atualização: 2026-11-21 (home operacional; base `d22bdc7`).
+
+## Home operacional — 21/11/2026
+
+Painel Geral organiza **Hoje**, **Precisa de atenção** e **Próximos**, com
+contagens clicáveis para a fila existente. `/comando/resumo?operacional=true`
+reutiliza `/comando/pendencias`, sem calcular o BI mensal. Os parâmetros
+`janela=hoje|atencao|proximos` recortam os mesmos itens no servidor; próximos
+acompanhamentos (7 dias, com data explícita e guardas de contato) não inflam o
+contador global. O contrato padrão do resumo e a composição de Pendências
+permanecem disponíveis. Datas de laudos/notas/acertos não viram vencimentos.
+
+`#ccLegacy` e seus quatro canvas foram retirados após validar `renderCharts`,
+`createChart` e `chartGradient` sem DOM alvo. Os módulos de CRM/Leads/Marketing
+continuam lazy e seus gráficos próprios permanecem disponíveis. Templates
+legados já aposentados seguem inertes. Resumo do mês, valores históricos e
+detalhes técnicos não ocupam a home; diagnóstico continua no Núcleo.
+Sem tabela, migration, automação, dado de produção ou regra de negócio nova.
+Contrato e validação: [Centro de Comando 2](CENTRO_COMANDO_2.md).
 
 ## Auditoria de vínculos históricos de parceiros — 20/11/2026
 

@@ -40,6 +40,7 @@ with Session(get_engine()) as db:
  db.add(FinancialEntry(public_code='LAN-990001',tipo='receita',valor='123.45',spirometry_exam_id=e.id,data_competencia=today,data_competencia_precisao='dia',status='Recebido',forma_pagamento='Pix'))
  lead=Lead(public_code='LEA-990001',person_id=p.id,primeiro_contato_em=now,status_funil='NOVO_CONTATO');db.add(lead)
  db.add(Followup(public_code='FUP-990001',person_id=p.id,tipo='manual',due_date=today-timedelta(days=1)))
+ db.add_all([Followup(public_code='FUP-990002',person_id=p.id,tipo='pos_exame',due_date=today),Followup(public_code='FUP-990003',person_id=p.id,tipo='pos_consulta',due_date=today+timedelta(days=2)),Followup(public_code='FUP-990004',person_id=p.id,tipo='lead_sem_atendimento',due_date=None)])
  fiscal=FiscalDocument(spirometry_exam_id=e.id,environment='production',kind='single',state='blocked',created_by=admin.id,idempotency_key='synthetic-fiscal',idempotency_fingerprint='a'*64);db.add(fiscal)
  en=EegEnrollment(person_id=p.id);db.add(en);db.flush();eeg=EegExam(public_code='EEG-990001',enrollment_id=en.id,modalidade_codigo='eeg_rotina',status='agendado',agendado_para=now);db.add(eeg);db.flush()
  ef=FiscalDocument(eeg_exam_id=eeg.id,environment='production',kind='eeg',state='blocked',created_by=admin.id,idempotency_key='synthetic-eeg-fiscal',idempotency_fingerprint='b'*64);db.add(ef)
@@ -51,7 +52,7 @@ with Session(get_engine()) as db:
  const engines=process.env.CC2_ENGINE==='chromium'?[[chromium,'chromium']]:[[chromium,'chromium'],[firefox,'firefox']];
  for(const [engine,name] of engines){browser=await engine.launch({headless:true});
  for(const width of widths){
-  const context=await browser.newContext({locale:'pt-BR',viewport:{width,height:1000}}),page=await context.newPage(),errors=[],requests=[],searchRequests=[];
+  const context=await browser.newContext({locale:'pt-BR',viewport:{width,height:900}}),page=await context.newPage(),errors=[],requests=[],searchRequests=[];
   page.on('pageerror',e=>errors.push(e.message));
   page.on('request',r=>{requests.push(r.url());if(r.url().endsWith('/comando/busca'))searchRequests.push(r);});
   await context.addInitScript(observeAuthFrames);
@@ -95,7 +96,29 @@ with Session(get_engine()) as db:
   }
   const initial=await login('admin',true);
   assert.equal(await page.locator('#ccHome[data-state=ready]').count(),1);
-  assert(await page.locator('#ccHome [data-cc-financial]').count());
+  assert.equal(await page.locator('#ccHome [data-cc-financial],#ccLegacy,#overview canvas').count(),0);
+  assert.deepEqual(await page.locator('#ccHome h3').allTextContents(),['Hoje','Precisa de atenção','Próximos']);
+  const canonical=await page.evaluate(()=>window.SoproM15.api('/comando/pendencias'));
+  assert.equal(await page.locator('#ccPendingToggle').textContent(),'Pendências ('+canonical.total+')');
+  for(const window of ['hoje','atencao','proximos']){
+   const button=page.locator('#ccHome [data-cc-category="followup"][data-cc-window="'+window+'"]');
+   assert.equal(await button.locator('strong').textContent(),'1');
+   await button.click();await page.locator('#ccPendingPanel[data-state=ready]').waitFor();
+   assert.equal(await page.locator('#ccPendingPanel [data-cc-pending-item]').count(),1);
+   await page.locator('[data-cc-close-pending]').click();
+  }
+  if(width>=1024){
+   assert(await page.locator('#ccHome .cc-operation-grid').evaluate(e=>e.getBoundingClientRect().bottom<=innerHeight),'Essential home fits first desktop viewport');
+  }
+  const timing=await page.evaluate(()=>({projection:performance.getEntriesByType('resource').filter(r=>r.name.includes('/comando/resumo')).map(r=>Math.round(r.duration)),scripts:performance.getEntriesByType('resource').filter(r=>r.initiatorType==='script').length}));
+  console.log(name+' '+width+' home performance '+JSON.stringify(timing));
+  await page.locator('#ccHome [data-cc-new="atendimento"]').focus();
+  await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.dataset.ccNew),'contato');
+  if(width===1440){
+   await page.evaluate(()=>document.documentElement.style.zoom='2');
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2),false,'Home zoom 200%');
+   await page.evaluate(()=>document.documentElement.style.zoom='');
+  }
   assert(!initial.some(u=>/\/(app|central-cadastros|fiscal-command-center|profit-panel|funnel-panel|eeg-operacao|report-workflow)\.js/.test(u)),'Initial admin assets are lazy');
   assert.equal(initial.filter(u=>u.includes('/comando/resumo')).length,1,'Single home projection');
   assert(!(await page.locator('#ccHome').innerText()).includes('987,65'),'SoproLife excludes EEG money');
@@ -109,6 +132,7 @@ with Session(get_engine()) as db:
   assert(!new URL(searchRequests.at(-1).url()).search,'Search term never in URL');
   await page.locator('#ccGlobalSearch').press('ArrowDown');await page.keyboard.press('Enter');
   await page.locator('#ccSelectedRecord[data-record-id="'+ids.partner+'"]').waitFor();
+  await page.evaluate(()=>{renderCharts();renderOverviewExtraCharts();if(state.charts.monthly||state.charts.funnel||state.charts.leadsEtapa||state.charts.crmEtapa)throw Error('Removed home charts recreated');});
   await query('Norte');await page.locator('#ccSearchResults button').first().click();await page.locator('#ccSelectedRecord[data-record-id="'+ids.unit+'"]').waitFor();
   await query('ESP-990001');await page.locator('#ccSearchResults button').filter({hasText:'ESP-990001'}).first().click();
   await page.waitForFunction(()=>document.querySelector('#laudos-espirometria')?.classList.contains('active'));
@@ -128,7 +152,7 @@ with Session(get_engine()) as db:
   await page.evaluate(()=>window.LifeCommandCenter.setContext('eeglife'));
   await page.waitForFunction(()=>window.LifeCommandCenter.getContext()==='eeglife');
   await page.locator('[data-eeg-section=visao][data-state=ready]').waitFor();
-  const eegText=await page.locator('[data-eeg-section=visao]').innerText();assert(eegText.includes('987,65')&&!eegText.includes('123,45'));
+  const eegText=await page.locator('[data-eeg-section=visao]').innerText();assert(!eegText.includes('987,65')&&!eegText.includes('123,45'));assert.deepEqual(await page.locator('[data-eeg-section=visao] h3').allTextContents(),['Hoje','Precisa de atenção','Próximos']);
   if(process.env.CC2_SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.CC2_SCREENSHOT_DIR,`${name}-${width}-eeg.png`)});
   await query(ids.eegFiscal);await page.locator('#ccSearchResults button').first().click();await page.locator('[data-eeg-section=fiscal] #ccSelectedRecord[data-record-id="'+ids.eegFiscal+'"]').waitFor();
   await query('ESP-990001');assert.equal(await page.locator('#ccSearchResults button').count(),0);
@@ -152,6 +176,13 @@ with Session(get_engine()) as db:
   assert(!Object.hasOwn(payload,'financeiro'));
   assert.equal(await page.locator('#ccHome [data-cc-financial]').count(),0);
   await query('ESP-990001');assert(!(await page.locator('#ccSearchResults').innerText()).includes('NFS-e'));
+  const empty={...payload,hoje:{exames:0},pendencias:{...payload.pendencias,total:0,itens:[],categorias:{},grupos:{hoje:{},atencao:{},proximos:{}},indisponiveis:[],completo:true}};
+  await page.route('**/comando/resumo*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(empty)}));
+  await page.evaluate(()=>window.SoproCommandCenter.refresh());
+  assert.equal(await page.locator('#ccHome .cc-stat strong').textContent(),'0');
+  assert.equal(await page.locator('#ccHome .cc-empty').count(),2,'Empty home explains both queues');
+  assert.equal(await page.locator('#ccPendingToggle').textContent(),'Pendências (0)');
+  await page.unroute('**/comando/resumo*');
   await page.route('**/comando/resumo*',r=>r.fulfill({status:503,contentType:'application/json',body:'{}'}));
   await page.reload();await ready('operacional');assert.equal(await page.locator('#ccHome[data-state=error]').count(),1);assert.equal(await page.locator('#ccHome .cc-stat strong').count(),0);
   assert.deepEqual(errors,[],name+' '+width+' runtime errors');

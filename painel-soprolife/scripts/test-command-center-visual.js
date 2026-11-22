@@ -20,6 +20,11 @@ for (const [engine, launcher] of Object.entries({chromium,firefox})) {
   let html=fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link\b[^>]*>/g,'');
   html=html.replace('./assets/soprolife-logo.png', 'data:image/png;base64,'+fs.readFileSync(path.join(root,'assets/soprolife-logo.png')).toString('base64'));
   await page.setContent(html);
+  await page.evaluate(()=>{
+   const panel=document.createElement('div');panel.id='authorizedPanel';
+   panel.append(document.getElementById('authorizedPanelTemplate').content.cloneNode(true));
+   document.body.append(panel);document.getElementById('authShell').hidden=true;
+  });
   const original=fs.readFileSync(path.join(root,'index.html'),'utf8');
   for(const m of original.matchAll(/<link[^>]*rel="stylesheet"[^>]*href="\.\/([^"?]+)[^"]*"/g)) await page.addStyleTag({content:fs.readFileSync(path.join(root,m[1]),'utf8')});
   await page.addScriptTag({content:fs.readFileSync(path.join(root,'js/vendor/chart.umd.min.js'),'utf8')});
@@ -41,15 +46,12 @@ for (const [engine, launcher] of Object.entries({chromium,firefox})) {
    renderCustosInvestimentos();
    document.querySelector('#ci-resumo').hidden=true;
    document.querySelector('#ci-socios').hidden=false;
-   document.querySelector('#heroSourceLabel').textContent='Validação visual';
   });
   const originalData=await page.evaluate(()=>JSON.stringify(Object.values(state.charts).map(c=>c.data)));
-  const mensal=await page.evaluate(()=>({labels:state.charts.monthly.data.labels,n:(new Date().getFullYear()-2026)*12+new Date().getMonth()-4+1}));
-  assert.equal(mensal.labels[0],'Mai','evolução mensal começa em Mai/2026');
-  assert.equal(mensal.labels.length,mensal.n,'evolução mensal vai até o mês corrente, sem meses futuros');
-  assert(!['Jan','Fev','Mar','Abr'].some(m=>mensal.labels.includes(m)),'Jan–Abr/2026 fora da evolução mensal');
+  assert.equal(await page.locator('#overview canvas,#ccLegacy').count(),0,'Home sem gráficos históricos');
+  assert.equal(await page.evaluate(()=>Boolean(state.charts.monthly||state.charts.funnel||state.charts.leadsEtapa||state.charts.crmEtapa)),false,'renderCharts tolera DOM ausente');
   const results={engine,width,sections:[],errors};
-  for(const section of ['overview','leads','marketing','crm','parcerias-pastore','custos-investimentos']) {
+  for(const section of ['leads','marketing','crm','parcerias-pastore','custos-investimentos']) {
    await page.evaluate(section=>{document.querySelectorAll('.section').forEach(e=>e.classList.toggle('active',e.id===section));resizeCharts()},section);
    await page.waitForTimeout(350);
    results.sections.push(await page.evaluate(section=>({section,overflow:document.documentElement.scrollWidth>innerWidth+1,charts:[...document.querySelectorAll(`#${section} canvas`)].filter(e=>e.getClientRects().length).map(c=>{const r=c.getBoundingClientRect(),p=c.parentElement.getBoundingClientRect(),ch=Chart.getChart(c);return{id:c.id,w:r.width,h:r.height,parentH:p.height,spill:r.bottom>p.bottom+1,ratioError:ch?Math.abs(r.width/r.height-ch.width/ch.height):null}})}),section));
@@ -66,13 +68,13 @@ for (const [engine, launcher] of Object.entries({chromium,firefox})) {
   }
   assert.equal(await page.evaluate(()=>JSON.stringify(Object.values(state.charts).map(c=>c.data))),originalData,'trocar seção não altera dados');
   await page.evaluate(()=>{
-   document.querySelectorAll('.section').forEach(e=>e.classList.toggle('active',e.id==='overview'));
-   document.querySelector('.nav-hub-card').focus();
+   document.querySelectorAll('.section').forEach(e=>e.classList.toggle('active',e.id==='leads'));
+   document.querySelector('.nav-item').focus();
    resizeCharts();
   });
-  assert.equal(await page.locator('.nav-hub-card').first().evaluate(e=>getComputedStyle(e).outlineStyle),'solid','foco visível');
+  assert.equal(await page.locator('.nav-item').first().evaluate(e=>getComputedStyle(e).outlineStyle),'solid','foco visível');
   await page.keyboard.press('Tab');
-  assert.equal(await page.evaluate(()=>document.activeElement.classList.contains('nav-hub-card')),true,'ordem dos atalhos pelo teclado');
+  assert.equal(await page.evaluate(()=>document.activeElement.classList.contains('nav-item')),true,'ordem dos atalhos pelo teclado');
   if(width===1440) {
    await page.evaluate(()=>{document.documentElement.style.zoom='2';resizeCharts()});
    await page.waitForTimeout(350);

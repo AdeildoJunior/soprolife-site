@@ -7,3 +7,21 @@
 
 .cc-mobile-menu{display:contents}.cc-mobile-menu>summary{display:none}.cc-stat small{color:#687b92;font-size:.7rem;line-height:1.5}
 @media(max-width:820px){.cc-mobile-menu{display:block;width:100%}.cc-mobile-menu>summary{display:block;cursor:pointer;padding:14px;color:white;border:1px solid #ffffff22;border-radius:8px;margin-bottom:10px}.cc-mobile-menu:not([open])>.nav{display:none}.cc-mobile-menu.cc-clinical-menu>summary{display:none}}
+
+/* Home operacional: três filas curtas, com contagem e destino na mesma linha. */
+#authorizedPanel .cc-home .cc-heading{margin-bottom:14px}
+#authorizedPanel .cc-home .cc-heading h2{font-size:clamp(1.25rem,2vw,1.65rem)}
+#authorizedPanel .cc-home .cc-actions{margin-bottom:18px}
+.cc-operation-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr);gap:14px;align-items:start}
+#authorizedPanel .cc-operation{padding:18px;margin-bottom:0}
+#authorizedPanel .cc-operation h3{margin-bottom:12px}
+.cc-operation-list{display:grid;gap:8px}
+#authorizedPanel .cc-home .cc-operation .cc-stat{display:grid;grid-template-columns:minmax(2ch,max-content) minmax(0,1fr) 16px;align-items:center;gap:12px;padding:12px 10px;min-height:56px;text-align:left;width:100%;background:#f8fbfd}
+#authorizedPanel .cc-home .cc-operation .cc-stat strong{font-size:1.3rem;letter-spacing:-.02em;overflow-wrap:anywhere}
+#authorizedPanel .cc-home .cc-operation .cc-stat span{font-size:.8rem;line-height:1.4;overflow-wrap:anywhere}
+#authorizedPanel .cc-home .cc-operation .cc-stat b{display:flex;color:var(--teal-dark,#087b70)}
+#authorizedPanel .cc-home .cc-operation .cc-stat .sl-icon{width:16px;height:16px}
+.cc-operation .cc-empty{font-size:.82rem;margin:0;padding:4px 0}
+.cc-home .cc-asof{margin-top:12px}
+@media(min-width:821px) and (max-width:1100px){.cc-operation-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cc-operation:last-child{grid-column:1/-1}.cc-operation:last-child .cc-operation-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:820px){.cc-operation-grid{grid-template-columns:minmax(0,1fr);gap:12px}#authorizedPanel .cc-home .cc-heading h2{font-size:1.3rem}}

@@ -157,3 +157,50 @@ def test_partial_finance_explicit_coverage(client,auth,monkeypatch):
     assert d['bruto']=='123.45' and d['soprolife']=='86.42' and d['parceiros']=='37.03'
     assert d['parcial']['bruto'] and d['parcial']['resultado']
     assert d['cobertura_valores']['bruto']=={'com_dado':1,'total':2}
+
+
+def test_operational_windows_share_pending_source(client,auth,db,users,monkeypatch):
+    when=c.today();p=person(db)
+    for n,days in enumerate((-1,0,1,7,8)):
+        db.add(Followup(person_id=person(db,code=f'PES-94000{n}').id,public_code=f'FUP-92000{n}',tipo='manual',due_date=when+timedelta(days=days)))
+    db.add(Followup(person_id=p.id,public_code='FUP-920009',tipo='manual',due_date=None))
+    for n,days in enumerate((0,1,7,8)):
+        exam(db,p,f'ESP-92000{n}',status='Agendado',data_exame=when+timedelta(days=days),data_exame_precisao='dia')
+    exam(db,p,'ESP-920008',status='Aguardando',data_exame=when,data_exame_precisao='mes',data_exame_dia_assumido=True)
+    exam(db,p,'ESP-920009',status='Aguardando')
+    for n,days in enumerate((None,-1,0,1,8)):
+        db.add(Lead(person_id=p.id,public_code=f'LEA-92000{n}',primeiro_contato_em=datetime.now(timezone.utc),status_funil='AGUARDANDO_RETORNO',data_retomada_manual=when+timedelta(days=days) if days is not None else None))
+    db.commit()
+    def unexpected(*args,**kwargs):raise AssertionError('BI must not run on operational home')
+    monkeypatch.setattr(c,'_finance',unexpected);monkeypatch.setattr(c.funnel,'metrics',unexpected)
+    d=client.get('/api/v1/comando/resumo?operacional=true',headers=auth()).json()
+    p=d['pendencias'];full=client.get('/api/v1/comando/pendencias',headers=auth()).json()
+    assert p['total']==full['total']==10  # 2 due follow-ups + 3 agenda + 5 open contacts.
+    assert p['categorias']==full['categorias']
+    assert d['mes'] is None and 'financeiro' not in d and d['hoje']['exames']==1
+    assert p['grupos']=={'hoje':{'agenda':1,'contato':1,'followup':1},
+                         'atencao':{'contato':2,'followup':1},
+                         'proximos':{'agenda':2,'contato':1,'followup':2}}
+    for window,counts in p['grupos'].items():
+        for category,total in counts.items():
+            r=client.get(f'/api/v1/comando/pendencias?janela={window}&categoria={category}&limite=1',headers=auth()).json()
+            assert r['total']==total and len(r['itens'])==1
+            assert r['tem_proxima']==(total>1)
+    assert client.get('/api/v1/comando/pendencias?janela=invalid',headers=auth()).status_code==422
+    doctor,_=physician(db,users);db.commit()
+    headers={'Authorization':'Bearer '+issue_token(doctor.id,doctor.password_hash)}
+    assert client.get('/api/v1/comando/pendencias?janela=proximos',headers=headers).status_code==403
+
+
+def test_upcoming_followups_respect_existing_contact_guards(client,auth,db):
+    p=person(db,nao_contatar=True);p2=person(db,code='PES-920002')
+    for n,who,controlled in ((1,p,False),(2,p2,True)):
+        db.add(Followup(person_id=who.id,public_code=f'FUP-93000{n}',tipo='manual',due_date=c.today()+timedelta(days=1),controlado_por_parceiro=controlled))
+    # The patient's do-not-contact state still applies with a distinct guardian.
+    from app.models import PersonRelationship
+    guardian=person(db,code='PES-920003')
+    db.add(PersonRelationship(minor_person_id=p.id,guardian_person_id=guardian.id,relationship_type='mother',is_legal_guardian=True,active=True))
+    db.add(Followup(person_id=p.id,contact_person_id=guardian.id,public_code='FUP-930003',tipo='pos_exame',due_date=c.today()+timedelta(days=1)))
+    db.commit()
+    d=client.get('/api/v1/comando/resumo?operacional=true',headers=auth()).json()
+    assert not d['pendencias']['grupos']['proximos'] and d['pendencias']['total']==0
