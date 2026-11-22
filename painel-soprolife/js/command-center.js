@@ -5,7 +5,7 @@
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const icon=name=>window.SoproIcons.svg(name);
   const labels={hoje:'Exames de hoje',sem_laudo:'Realizados sem laudo',laudo:'Laudos pendentes',fiscal:'NFS-e pendentes',contato:'Contatos aguardando ação',followup:'Acompanhamentos',agenda:'Próximos 7 dias',acerto:'Acertos de parceiros',inconsistencia:'Informações a completar'};
-  const snapshots=new Map(),inflight=new Map();
+  const snapshots=new Map(),inflight=new Map(),recentSnapshots=new Map(),recentInflight=new Map();
   let resultItems=[],searchEpoch=0,searchAbort=null,searchTimer=null;
   let pendingEpoch=0,navigationEpoch=0;
   const brand=()=>life.getContext();
@@ -35,26 +35,80 @@
     function section(key,title){
       const entries=Object.entries(names[key]).filter(([k])=>(groups[key][k]||0)>0);
       const unavailable=key==='atencao'?p.indisponiveis.filter(k=>names[key][k]):[];
+      const hasToday=key==='hoje'&&Number(data.hoje.exames)>0;
       return '<section class="cc-block cc-operation" aria-labelledby="cc-'+key+'-'+b+'"><h3 id="cc-'+key+'-'+b+'">'+title+'</h3><div class="cc-operation-list">'+
-        (key==='hoje'&&data.hoje.exames!=null?card('Atendimentos de hoje',data.hoje.exames,'hoje'): '')+
+        (hasToday?card('Atendimentos de hoje',data.hoje.exames,'hoje'): '')+
         entries.map(([k,label])=>card(label,groups[key][k],k,key)).join('')+
         unavailable.map(k=>card(names[key][k],null,k,key)).join('')+'</div>'+
-        (!entries.length&&(key!=='hoje'||data.hoje.exames==null)&&!unavailable.length?'<p class="cc-empty">'+(key==='atencao'?'Nenhuma ação pendente nas fontes disponíveis.':key==='hoje'?'Nenhum item para hoje nas fontes disponíveis.':'Nenhum compromisso nos próximos 7 dias.')+'</p>':'')+'</section>';
+        (!entries.length&&!hasToday&&!unavailable.length?'<p class="cc-empty">'+(key==='atencao'?'Nenhuma ação pendente nas fontes disponíveis.':key==='hoje'?'Nenhum item para hoje nas fontes disponíveis.':'Nenhum compromisso nos próximos 7 dias.')+'</p>':'')+'</section>';
     }
     root.innerHTML='<div class="cc-heading"><div><p class="eyebrow">'+(b==='eeglife'?'EEGLife':'SoproLife')+' · operação</p><h2>O que precisa da sua atenção agora?</h2><p>Hoje, '+esc(date(data.periodo.hoje))+'</p></div></div>'+
       '<div class="cc-actions">'+(cap.operacao?'<button type="button" class="cc-primary" data-cc-new="atendimento">'+icon('plus')+' Novo atendimento</button>':'')+
       (cap.operacao&&b==='soprolife'?'<button type="button" data-cc-new="contato">'+icon('plus')+' Novo contato</button>':'')+'</div>'+
       '<div class="cc-operation-grid">'+section('hoje','Hoje')+section('atencao','Precisa de atenção')+section('proximos','Próximos')+'</div>'+
+      '<div data-cc-recent hidden></div>'+
       (p.indisponiveis.length?'<p class="cc-note" role="status">Parte das filas está indisponível. “—” indica dados não confirmados; o total de Pendências não inclui essas fontes.</p>':'')+
       '<p class="cc-asof">Consultado às '+esc(new Date(data.observado_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))+'</p>';
     wire(root);
     updatePendingLabel(data);
+    recentActivity(root,b);
+  }
+  // Existing gestor-only audit, filtered at source by exact business action + entity.
+  // These sources belong to SoproLife; no generic audit or EEG history is fetched.
+  const recentSources=[
+    {action:'espirometria.criada',entity:'spirometry_exams',label:'Atendimento registrado',kind:'exame',prefix:'Atendimento'},
+    {action:'laudo_assinado_e_liberado',entity:'report_documents',label:'Laudo liberado',kind:'laudo',prefix:'Laudo'},
+    {action:'parceria.movimento_registrado',entity:'partner_share_movements',prefix:'Acerto',section:'financeiro'}
+  ];
+  function recentActivity(root,b){
+    const slot=root.querySelector('[data-cc-recent]');
+    if(!slot||b!=='soprolife'||!api().can('gestor'))return;
+    const publish=items=>{
+      if(gate.estado!=='ready'||brand()!==b||!slot.isConnected||!api().can('gestor'))return;
+      slot.dataset.state=items===null?'unavailable':items.length?'ready':'empty';
+      if(!items?.length)return;
+      slot.innerHTML='<section class="cc-recent" aria-labelledby="ccRecentHeading"><h3 id="ccRecentHeading">Atividade recente</h3><p class="cc-note">Atendimentos, laudos e acertos</p><ol>'+items.map((item,n)=>
+        '<li><button type="button" data-cc-recent-item="'+n+'"><span>'+esc(item.label)+' <strong>'+esc(item.code)+'</strong></span><time datetime="'+esc(item.when)+'">'+esc(new Date(item.when).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}))+'</time></button></li>').join('')+'</ol></section>';
+      slot.hidden=false;
+      slot.querySelectorAll('[data-cc-recent-item]').forEach(el=>el.onclick=()=>{
+        const item=items[Number(el.dataset.ccRecentItem)];
+        if(item.section)gate.navegar(item.section).catch(()=>announce('Não foi possível abrir o módulo.'));
+        else openTarget(item.target);
+      });
+    };
+    const cached=recentSnapshots.get(b);
+    if(cached&&Date.now()-cached.at<30000){publish(cached.items);return;}
+    if(!recentInflight.has(b)){
+      const request=Promise.all(recentSources.map(async source=>{
+        const data=await api().api('/auditoria?pagina=1&tamanho=5&acao='+encodeURIComponent(source.action)+'&entidade='+source.entity,{signal:AbortSignal.timeout(8000)});
+        return (data.itens||[]).flatMap(row=>{
+          // Recheck even a filtered response. Never render raw audit details.
+          if(row.acao!==source.action||row.entidade!==source.entity||!/^[-a-f0-9]{36}$/.test(row.entidade_id||'')||!Number.isFinite(Date.parse(row.ts_utc)))return [];
+          const movement=row.detalhes?.tipo;
+          if(source.section&&!['acerto','regularizacao'].includes(movement))return [];
+          const code=row.detalhes?.public_code||row.detalhes?.exam_code;
+          return [{id:row.id,when:row.ts_utc,label:source.section?(movement==='acerto'?'Acerto de parceiro registrado':'Recebimento regularizado'):source.label,
+            code:/^ESP-[0-9]{1,8}$/.test(code||'')?code:source.prefix+' · '+row.entidade_id.slice(0,8),
+            section:source.section,target:{tipo:source.kind,id:row.entidade_id}}];
+        });
+      })).then(groups=>{
+        const seen=new Set();
+        const items=groups.flat().sort((a,b)=>Date.parse(b.when)-Date.parse(a.when)||Number(b.id)-Number(a.id)).filter(item=>{
+          if(seen.has(item.id))return false;seen.add(item.id);return true;
+        }).slice(0,5);
+        if(gate.estado==='ready')recentSnapshots.set(b,{at:Date.now(),items});
+        return items;
+      }).catch(()=>null).finally(()=>recentInflight.delete(b));
+      recentInflight.set(b,request);
+    }
+    recentInflight.get(b).then(publish);
   }
   function updatePendingLabel(data){
     const button=document.getElementById('ccPendingToggle');
     if(button&&data.marca===brand()){button.disabled=false;button.textContent='Pendências ('+data.pendencias.total+(data.pendencias.completo?'':'+')+')';}
   }
   function loadHome(b,force=false){
+    if(force)recentSnapshots.delete(b);
     const root=homeRoot(b);if(!root&&b==='soprolife')return Promise.resolve();
     const show=data=>root?render(root,data):updatePendingLabel(data);
     if(inflight.has(b))return inflight.get(b);

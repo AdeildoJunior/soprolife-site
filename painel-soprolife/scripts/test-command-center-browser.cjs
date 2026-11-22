@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.db import get_engine
-from app.models import User,Person,PersonContact,SpirometryExam,Partner,PartnerUnit,PhysicianProfile,ReportDocument,ReportAssignment,FinancialEntry,Lead,Followup,FiscalDocument,EegEnrollment,EegExam
+from app.models import User,Person,PersonContact,SpirometryExam,AuditLog,Partner,PartnerUnit,PhysicianProfile,ReportDocument,ReportAssignment,FinancialEntry,Lead,Followup,FiscalDocument,EegEnrollment,EegExam
 with Session(get_engine()) as db:
  admin=db.scalar(select(User).where(User.email=='admin@command.local')); doctor=db.scalar(select(User).where(User.email=='medico@command.local'))
 
@@ -45,6 +45,11 @@ with Session(get_engine()) as db:
  en=EegEnrollment(person_id=p.id);db.add(en);db.flush();eeg=EegExam(public_code='EEG-990001',enrollment_id=en.id,modalidade_codigo='eeg_rotina',status='agendado',agendado_para=now);db.add(eeg);db.flush()
  ef=FiscalDocument(eeg_exam_id=eeg.id,environment='production',kind='eeg',state='blocked',created_by=admin.id,idempotency_key='synthetic-eeg-fiscal',idempotency_fingerprint='b'*64);db.add(ef)
  db.add(FinancialEntry(public_code='LAN-990002',tipo='receita',categoria='EEG',valor='987.65',eeg_exam_id=eeg.id,data_competencia=today,status='Pendente'))
+ for n in range(6):
+  recent=SpirometryExam(public_code=f'ESP-99100{n}',person_id=p.id,status='Aguardando');db.add(recent);db.flush()
+  db.add(AuditLog(acao='espirometria.criada',entidade='spirometry_exams',entidade_id=recent.id,user_id=admin.id,ts_utc=now-timedelta(minutes=n),detalhes={'public_code':recent.public_code}))
+ for action in ('auth.login','sync.finalizada','deploy.concluido'):
+  db.add(AuditLog(acao=action,entidade='runtime',user_id=admin.id,ts_utc=now+timedelta(seconds=1),detalhes={}))
  db.commit();print(json.dumps({'person':p.id,'exam':e.id,'assigned':assigned.id,'doc':doc.id,'fiscal':fiscal.id,'partner':partner.id,'unit':unit.id,'lead':lead.id,'eeg':eeg.id,'eegFiscal':ef.id}))`],env));
  for(const [bin,args,cwd,e] of [[python,['-m','app.serve'],core,env],['python3',[path.join(root,'painel-soprolife/scripts/command-center-local-server.py')],root,{...env,SOPROLIFE_PANEL_HOST:'127.0.0.1',SOPROLIFE_PANEL_PORT:String(panelPort),SOPROLIFE_M15_UPSTREAM:`http://127.0.0.1:${apiPort}/api/v1`}]] )children.push(cp.spawn(bin,args,{cwd,env:e,stdio:'ignore'}));
  const base=`http://127.0.0.1:${panelPort}/painel-soprolife/`;await wait(async()=>(await fetch(base+'api/m15/health')).ok);
@@ -97,9 +102,18 @@ with Session(get_engine()) as db:
   const initial=await login('admin',true);
   assert.equal(await page.locator('#ccHome[data-state=ready]').count(),1);
   assert.equal(await page.locator('#ccHome [data-cc-financial],#ccLegacy,#overview canvas').count(),0);
-  assert.deepEqual(await page.locator('#ccHome h3').allTextContents(),['Hoje','Precisa de atenção','Próximos']);
+  assert.deepEqual(await page.locator('#ccHome .cc-operation h3').allTextContents(),['Hoje','Precisa de atenção','Próximos']);
   const canonical=await page.evaluate(()=>window.SoproM15.api('/comando/pendencias'));
   assert.equal(await page.locator('#ccPendingToggle').textContent(),'Pendências ('+canonical.total+')');
+  await page.locator('#ccHome [data-cc-recent][data-state=ready]').waitFor();
+  assert.equal(await page.locator('#ccHome [data-cc-recent-item]').count(),5,'At most five business events');
+  const activity=await page.locator('#ccHome .cc-recent').innerText();
+  assert(activity.includes('ESP-991000')&&!activity.includes('ESP-991005'));
+  assert(!/auth|login|sync|deploy|runtime|PostgreSQL/i.test(activity),'No technical activity');
+  const audits=requests.filter(u=>u.includes('/auditoria?'));
+  assert.equal(audits.length,3,'Only three bounded business sources');
+  for(const url of audits){const q=new URL(url).searchParams;assert.equal(q.get('tamanho'),'5');assert(q.get('acao')&&q.get('entidade'));}
+
   for(const window of ['hoje','atencao','proximos']){
    const button=page.locator('#ccHome [data-cc-category="followup"][data-cc-window="'+window+'"]');
    assert.equal(await button.locator('strong').textContent(),'1');
@@ -123,6 +137,57 @@ with Session(get_engine()) as db:
   assert.equal(initial.filter(u=>u.includes('/comando/resumo')).length,1,'Single home projection');
   assert(!(await page.locator('#ccHome').innerText()).includes('987,65'),'SoproLife excludes EEG money');
   if(process.env.CC2_SCREENSHOT_DIR){fs.mkdirSync(process.env.CC2_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.CC2_SCREENSHOT_DIR,`${name}-${width}-admin.png`)});}
+  if(width===1440){
+   const recentNow=Date.now();
+   await page.route('**/auditoria?*',r=>{
+    const action=new URL(r.request().url()).searchParams.get('acao');
+    const row=(id,entidade,entidade_id,minutes,detalhes)=>({id,acao:action,entidade,entidade_id,ts_utc:new Date(recentNow+minutes*60000).toISOString(),detalhes});
+    const itens=action==='espirometria.criada'?Array.from({length:5},(_,n)=>row(1000+n,'spirometry_exams',ids.exam,-n,{public_code:'ESP-990001'})):
+      action==='laudo_assinado_e_liberado'?[row(9000,'report_documents',ids.doc,2,{})]:
+      [row(9001,'partner_share_movements',ids.exam,1,{exam_code:'ESP-990001',tipo:'acerto'})];
+    return r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({itens})});
+   });
+   await page.evaluate(()=>window.SoproCommandCenter.refresh());
+   await page.locator('#ccHome [data-cc-recent][data-state=ready]').waitFor();
+   const merged=await page.locator('#ccHome [data-cc-recent-item]').allTextContents();
+   assert.equal(merged.length,5,'Merge three business sources before applying the five-item limit');
+   assert(merged[0].includes('Laudo liberado')&&merged[1].includes('Acerto de parceiro registrado'),'Newest events across sources come first');
+   await page.locator('#ccHome [data-cc-recent-item="1"]').click();
+   await page.waitForFunction(()=>document.querySelector('#financeiro')?.classList.contains('active'));
+   await page.evaluate(()=>window.SoproBootGate.navegar('overview'));
+   await page.locator('#ccHome [data-cc-recent][data-state=ready]').waitFor();
+   const openedRecent=page.waitForResponse(r=>r.url().endsWith('/laudos/'+ids.doc));
+   await page.locator('#ccHome [data-cc-recent-item="0"]').click();
+   assert.equal((await openedRecent).status(),200,'Recent report uses the secure existing record route');
+   await page.keyboard.press('Escape');
+   await page.evaluate(()=>window.SoproBootGate.navegar('overview'));
+   await page.locator('#ccHome [data-cc-recent][data-state=ready]').waitFor();
+   await page.unroute('**/auditoria?*');
+   // An incorrectly filtered response must still never expose technical events.
+   await page.route('**/auditoria?*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({itens:[{id:999,acao:'auth.login',entidade:'runtime',entidade_id:ids.exam,ts_utc:new Date().toISOString(),detalhes:{public_code:'ESP-990001'}}]})}));
+   await page.evaluate(()=>window.SoproCommandCenter.refresh());
+   await page.locator('#ccHome [data-cc-recent][data-state=empty]').waitFor({state:'attached'});
+   assert.equal(await page.locator('#ccHome .cc-recent').count(),0,'No placeholder for an empty business feed');
+   assert.equal(await page.locator('#ccPendingToggle').textContent(),'Pendências ('+canonical.total+')');
+   await page.unroute('**/auditoria?*');
+   await page.route('**/auditoria?*',r=>r.fulfill({status:503,body:'{}',contentType:'application/json'}));
+   await page.evaluate(()=>window.SoproCommandCenter.refresh());
+   await page.locator('#ccHome [data-cc-recent][data-state=unavailable]').waitFor({state:'attached'});
+   assert.equal(await page.locator('#ccHome .cc-recent').count(),0,'Unavailable secondary feed leaves home ready');
+   assert.equal(await page.locator('#ccHome[data-state=ready]').count(),1);
+   await page.unroute('**/auditoria?*');
+   await page.evaluate(()=>window.SoproCommandCenter.refresh());
+   await page.locator('#ccHome [data-cc-recent][data-state=ready]').waitFor();
+  }
+  const recentResolved=page.waitForResponse(r=>r.url().endsWith('/comando/registro')&&r.request().postDataJSON()?.tipo==='exame');
+  const recentLocated=page.waitForResponse(r=>{const u=new URL(r.url());return u.pathname.endsWith('/laudos/exames')&&u.searchParams.get('q')==='ESP-991000';});
+  await page.locator('#ccHome [data-cc-recent-item]').first().click();
+  const recentResponse=await recentResolved;assert.equal(recentResponse.status(),200);
+  assert.equal((await recentResponse.json()).destino.codigo,'ESP-991000');
+  assert.equal((await recentLocated).status(),200,'Recent attendance resolves and locates the exact existing record');
+  await page.waitForFunction(()=>document.querySelector('#laudos-espirometria')?.classList.contains('active'));
+  // Reset the module state before the independent existing search/navigation scenarios.
+  await page.goto(base);await ready('admin');
   await page.evaluate(()=>window.SoproCommandCenter.pending('hoje'));await page.locator('#ccPendingPanel[data-state=ready]').waitFor();assert.equal(await page.locator('#ccPendingPanel [data-cc-pending-item]').count(),3);await page.locator('[data-cc-close-pending]').click();
   const initialSearch=searchRequests.length;
   await page.locator('#ccGlobalSearch').fill('Mac');await page.locator('#ccGlobalSearch').fill('Macli');await page.locator('#ccGlobalSearch').fill('Maclin');
@@ -152,7 +217,7 @@ with Session(get_engine()) as db:
   await page.evaluate(()=>window.LifeCommandCenter.setContext('eeglife'));
   await page.waitForFunction(()=>window.LifeCommandCenter.getContext()==='eeglife');
   await page.locator('[data-eeg-section=visao][data-state=ready]').waitFor();
-  const eegText=await page.locator('[data-eeg-section=visao]').innerText();assert(!eegText.includes('987,65')&&!eegText.includes('123,45'));assert.deepEqual(await page.locator('[data-eeg-section=visao] h3').allTextContents(),['Hoje','Precisa de atenção','Próximos']);
+  const eegText=await page.locator('[data-eeg-section=visao]').innerText();assert(!eegText.includes('987,65')&&!eegText.includes('123,45'));assert.deepEqual(await page.locator('[data-eeg-section=visao] .cc-operation h3').allTextContents(),['Hoje','Precisa de atenção','Próximos']);
   if(process.env.CC2_SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.CC2_SCREENSHOT_DIR,`${name}-${width}-eeg.png`)});
   await query(ids.eegFiscal);await page.locator('#ccSearchResults button').first().click();await page.locator('[data-eeg-section=fiscal] #ccSelectedRecord[data-record-id="'+ids.eegFiscal+'"]').waitFor();
   await query('ESP-990001');assert.equal(await page.locator('#ccSearchResults button').count(),0);
@@ -171,7 +236,11 @@ with Session(get_engine()) as db:
   const denied=await page.evaluate(async id=>{try{await window.SoproM15.api('/comando/registro',{method:'POST',body:JSON.stringify({marca:'soprolife',tipo:'fiscal',id})});return 200;}catch(e){return e.status;}},ids.fiscal);
   assert([403,404].includes(denied));
   await page.evaluate(()=>window.SoproM15.logout());await page.locator('#loginForm').waitFor();
-  await login('operacional');
+  const operationalRequests=await login('operacional');
+  assert(!operationalRequests.some(u=>u.includes('/auditoria')),'Operational role never requests gestor audit');
+  assert.equal(await page.locator('#ccHome .cc-recent').count(),0);
+  const auditDenied=await page.evaluate(async()=>{try{await window.SoproM15.api('/auditoria?tamanho=5&acao=espirometria.criada&entidade=spirometry_exams');return 200;}catch(e){return e.status;}});
+  assert.equal(auditDenied,403,'Server preserves the gestor restriction');
   const payload=await page.evaluate(()=>window.SoproM15.api('/comando/resumo'));
   assert(!Object.hasOwn(payload,'financeiro'));
   assert.equal(await page.locator('#ccHome [data-cc-financial]').count(),0);
@@ -179,9 +248,20 @@ with Session(get_engine()) as db:
   const empty={...payload,hoje:{exames:0},pendencias:{...payload.pendencias,total:0,itens:[],categorias:{},grupos:{hoje:{},atencao:{},proximos:{}},indisponiveis:[],completo:true}};
   await page.route('**/comando/resumo*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(empty)}));
   await page.evaluate(()=>window.SoproCommandCenter.refresh());
-  assert.equal(await page.locator('#ccHome .cc-stat strong').textContent(),'0');
-  assert.equal(await page.locator('#ccHome .cc-empty').count(),2,'Empty home explains both queues');
+  assert.equal(await page.locator('#ccHome .cc-stat').count(),0,'Zero categories render no row');
+  assert.equal(await page.locator('#ccHome .cc-empty').count(),3,'Empty home explains three queues');
+  for(const block of await page.locator('#ccHome .cc-operation').all())assert(await block.evaluate(e=>e.getBoundingClientRect().height<160),'Empty block stays compact');
   assert.equal(await page.locator('#ccPendingToggle').textContent(),'Pendências (0)');
+  await page.unroute('**/comando/resumo*');
+  const mixed={...payload,hoje:{exames:0}};
+  await page.route('**/comando/resumo*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(mixed)}));
+  await page.evaluate(()=>window.SoproCommandCenter.refresh());
+  assert.equal(await page.locator('#ccHome [data-cc-category="hoje"]').count(),0);
+  await page.locator('#ccHome [data-cc-category="followup"][data-cc-window="hoje"]').click();
+  await page.locator('#ccPendingPanel[data-state=ready]').waitFor();
+  assert.equal(await page.locator('#ccPendingPanel [data-cc-pending-item]').count(),1);
+  await page.locator('[data-cc-close-pending]').click();
+  assert.equal(await page.locator('#ccPendingToggle').textContent(),'Pendências ('+payload.pendencias.total+')','Presentation never changes canonical total');
   await page.unroute('**/comando/resumo*');
   await page.route('**/comando/resumo*',r=>r.fulfill({status:503,contentType:'application/json',body:'{}'}));
   await page.reload();await ready('operacional');assert.equal(await page.locator('#ccHome[data-state=error]').count(),1);assert.equal(await page.locator('#ccHome .cc-stat strong').count(),0);
