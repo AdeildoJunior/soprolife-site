@@ -193,52 +193,41 @@ caso("nenhum formulário de cadastro foi introduzido no CRM",
      wsSrc.indexOf("window.SoproCentral.open(tab,") !== -1 &&
      !/api\("\/pessoas", \{\s*method: "POST"/.test(wsSrc));
 
-// ───────────── D) Automação CRM na sidebar ──────────────────────────────────
+// ───────────── D) Automação CRM retirada da sidebar (21/11/2026) ────────────
 console.log();
-console.log("D) Automação CRM: um único destino em Sistema");
+console.log("D) Automação CRM: módulo retirado do Centro de Comando");
 
 const navItens = [...indexSrc.matchAll(
   /<button class="nav-item"[^>]*data-section="([^"]+)"[^>]*>([\s\S]*?)<\/button>/g
 )].map((m) => ({ secao: m[1], rotulo: m[2].replace(/<[^>]*>/g, " ").trim() }));
 
-const automacaoCrm = navItens.filter((i) => i.secao === "automacoes-crm");
-caso("Automação CRM aparece exatamente UMA vez na sidebar",
-     automacaoCrm.length === 1, JSON.stringify(automacaoCrm));
-caso('o rótulo é exatamente "Automação CRM"',
-     automacaoCrm.length === 1 && automacaoCrm[0].rotulo === "Automação CRM",
-     automacaoCrm.map((i) => i.rotulo).join("|"));
-caso("existe a seção #automacoes-crm no HTML",
-     /<section class="section" id="automacoes-crm">/.test(indexSrc));
-caso("nenhum item de sidebar continua rotulado só 'Automações'",
-     !navItens.some((i) => i.rotulo === "Automações"));
-caso("a página técnica mais ampla foi preservada com rótulo próprio",
+caso("Automação CRM não aparece mais na sidebar",
+     !navItens.some((i) => i.secao === "automacoes-crm"),
+     JSON.stringify(navItens.filter((i) => i.secao === "automacoes-crm")));
+caso("a seção #automacoes-crm foi removida do HTML",
+     !/id="automacoes-crm"/.test(indexSrc));
+caso("não resta implementação da página de automação de CRM",
+     !/function renderCrmAutomacoes\(/.test(appSrc) &&
+     !/function renderAutomacaoCrmSection\(/.test(appSrc) &&
+     !/function renderAutomacaoCrmRegras\(/.test(appSrc));
+caso("a página técnica 'Fontes de dados' foi preservada",
      navItens.some((i) => i.secao === "automacoes" && i.rotulo === "Fontes de dados") &&
      /<section class="section" id="automacoes">/.test(indexSrc));
 caso("nenhum data-section de sidebar aponta duas vezes para o mesmo destino",
      new Set(navItens.map((i) => i.secao)).size === navItens.length,
      JSON.stringify(navItens.map((i) => i.secao)));
-caso("não existe segunda implementação de automação de CRM",
-     (appSrc.match(/function renderCrmAutomacoes\(/g) || []).length === 1);
-caso("a página de Automação CRM traz as regras exigidas",
-     ["Acompanhamento após atendimento", "Lembrete de contato a realizar",
-      "Reativação de paciente", "WhatsApp assistido"]
-       .every((t) => appSrc.indexOf(t) !== -1));
-caso("a página mostra o status do que está pendente de automação",
-     appSrc.indexOf("Pendências de automação agora") !== -1 &&
-     /m15\.api\("\/crm\/kpis"\)/.test(appSrc));
-caso("envio automático de WhatsApp continua DESLIGADO",
-     appSrc.indexOf("Envio automático DESLIGADO") !== -1 &&
-     appSrc.indexOf("Envio automático não é habilitado nesta etapa") !== -1);
-caso("a página não é mais subview (sem botão ← CRM)",
-     !/id="crmBackBtn"[\s\S]{0,600}renderCrmAutomacoes/.test(appSrc) &&
-     appSrc.indexOf("esta página é destino de sidebar, não subview") !== -1);
+caso("os contadores de contato seguem no CRM, agora clicáveis (sem perda)",
+     /c\.api\("\/crm\/kpis"\)/.test(wsSrc) &&
+     ["contatos_hoje", "contatos_atrasados", "proximos_7", "sem_telefone"]
+       .every((k) => wsSrc.indexOf(k) !== -1));
 
 // ───────────── E) aliases antigos ───────────────────────────────────────────
 console.log();
 console.log("E) Deep-links antigos resolvem com segurança");
 
-caso('a rota antiga "automacoes-crm" do CRM leva ao novo destino',
-     /case "automacoes-crm":[\s\S]{0,200}irParaSecao\("automacoes-crm"\)/.test(appSrc));
+caso('a rota antiga "automacoes-crm" não existe mais e cai no hub do CRM',
+     !/case "automacoes-crm":/.test(appSrc) &&
+     /default: renderCrmHub\(container\)/.test(appSrc));
 ["pacientes", "followup-detalhe", "acompanhamento-m15", "pacientes-acompanhamento"]
   .forEach((rota) => {
     caso(`rota antiga "${rota}" continua resolvendo`,

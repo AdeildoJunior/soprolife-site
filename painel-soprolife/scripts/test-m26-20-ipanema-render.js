@@ -36,7 +36,7 @@ function recortar(inicio, fim) {
 }
 
 const trechoIpanema = recortar("const MKT_IPANEMA_ND", "function renderMktAlerts()");
-const trechoEscape  = recortar("function escapeHtml(str)", "/* Automação CRM (M21)");
+const trechoEscape  = recortar("function escapeHtml(str)", "// ── Escrita operacional (M23)");
 const trechoTip     = recortar("function mktTipAttrs(tip, label, value)", "function renderMktKpiStripDemo()");
 
 caso("recorte de renderMktIpanema encontrado em app.js", Boolean(trechoIpanema));

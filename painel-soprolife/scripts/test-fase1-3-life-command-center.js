@@ -208,7 +208,7 @@ caso("a app-shell original segue dentro do contexto SoproLife",
 const SECOES_SOPRO = [
   "overview", "central-cadastros", "crm", "leads", "tarefas", "marketing",
   "financeiro", "fiscal", "parcerias", "custos-investimentos",
-  "documentos", "automacoes-crm", "automacoes", "lancamentos",
+  "documentos", "automacoes", "lancamentos",
 ];
 caso("todos os módulos da sidebar SoproLife continuam presentes",
      SECOES_SOPRO.every((s) => painelSopro.includes(`data-section="${s}"`)),

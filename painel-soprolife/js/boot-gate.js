@@ -207,7 +207,7 @@
   }
   var moduleQueue = Promise.resolve();
   var modulePromises = new Map();
-  var legacySections = ["crm","tarefas","marketing","financeiro","parcerias-pastore","custos-investimentos","documentos","automacoes-crm","automacoes","lancamentos"];
+  var legacySections = ["crm","tarefas","marketing","financeiro","parcerias-pastore","custos-investimentos","documentos","automacoes","lancamentos"];
   var groupsBySection = {
     "central-cadastros": ["central"], "laudos-espirometria": ["clinical"],
     "crm": ["legacy","crm"], "leads": ["leads"],

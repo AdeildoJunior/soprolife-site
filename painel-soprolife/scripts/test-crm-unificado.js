@@ -78,11 +78,14 @@ caso("state.followupPacientes deixou de existir no painel",
      appSrc.indexOf("state.followupPacientes") === -1);
 caso("nenhum módulo do CRM lê o JSON legado",
      wsSrc.indexOf("followup-pacientes.local.json") === -1);
-// M23 — antes bastava avisar que o arquivo era histórico. Agora o utilitário
-// legado é BLOQUEADO fail-closed, e a UI precisa dizer exatamente isso.
-caso("o aviso de automação diz que o utilitário legado está bloqueado",
-     appSrc.indexOf("Executar sem o escape explícito falha com exit 3") !== -1 &&
-     appSrc.indexOf("SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION=1") !== -1);
+// M23 — o utilitário legado de planilha é BLOQUEADO fail-closed. 21/11/2026:
+// a página "Automação CRM" (que só DOCUMENTAVA esse bloqueio) foi retirada; a
+// garantia real vive no próprio script, não na UI — e é isso que se verifica.
+const followupPy = fs.readFileSync(
+  path.join(RAIZ, "scripts", "generate-followup-pacientes.py"), "utf8");
+caso("o utilitário legado de planilha é bloqueado fail-closed no próprio script",
+     followupPy.indexOf("data_source_mode.block_legacy_sheets(") !== -1 &&
+     followupPy.indexOf("SOPROLIFE_ALLOW_LEGACY_SHEETS_MIGRATION") !== -1);
 caso("o script gerador continua existindo como evidência de migração",
      fs.existsSync(path.join(RAIZ, "scripts", "generate-followup-pacientes.py")));
 

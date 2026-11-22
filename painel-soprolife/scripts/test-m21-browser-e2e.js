@@ -504,21 +504,15 @@ async function main() {
       "Follow-ups concluídos no mês", "Pacientes reativados",
     ]) check(`CRM contém KPI: ${label}`, crmText.includes(label));
 
+    // Automação CRM foi retirada (21/11/2026): o destino e a seção não existem.
     const sidebarCount = await cdp.evaluate(
       "document.querySelectorAll('.sidebar .nav-item[data-section=\"automacoes-crm\"]').length"
     );
-    check("sidebar tem exatamente um destino Automação CRM", sidebarCount === 1);
-    await cdp.evaluate(
-      "document.querySelector('.sidebar .nav-item[data-section=\"automacoes-crm\"]').click()"
+    check("Automação CRM foi retirada da sidebar", sidebarCount === 0);
+    const temSecaoAuto = await cdp.evaluate(
+      "Boolean(document.querySelector('#automacoes-crm'))"
     );
-    await waitFor(
-      () => cdp.evaluate(
-        "document.querySelector('#automacoes-crm')?.classList.contains('active') && " +
-        "document.querySelector('#automacoes-crm')?.textContent.includes('Envio automático DESLIGADO')"
-      ),
-      "Automação CRM",
-    );
-    check("WhatsApp automático continua desligado", true);
+    check("seção #automacoes-crm não existe mais", temSecaoAuto === false);
 
     console.log("── Viewports e acessibilidade ──");
     await cdp.evaluate(
@@ -549,7 +543,7 @@ async function main() {
     const ax = (await cdp.send("Accessibility.getFullAXTree")).nodes || [];
     const axNames = new Set(ax.map((node) => node.name && node.name.value).filter(Boolean));
     check("árvore acessível nomeia CRM", axNames.has("CRM"));
-    check("árvore acessível nomeia Automação CRM", axNames.has("Automação CRM"));
+    check("árvore acessível não nomeia mais Automação CRM", !axNames.has("Automação CRM"));
     check("árvore acessível nomeia Total de pacientes",
           [...axNames].some((name) =>
             String(name).toLocaleLowerCase("pt-BR").includes("total de pacientes")

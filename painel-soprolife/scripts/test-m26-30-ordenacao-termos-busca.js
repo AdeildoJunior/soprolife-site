@@ -43,7 +43,7 @@ function recortar(inicio, fim) {
 }
 
 const trechos = {
-  escapeHtml: recortar("function escapeHtml(str)", "/* Automação CRM (M21)"),
+  escapeHtml: recortar("function escapeHtml(str)", "// ── Escrita operacional (M23)"),
   renderSeoList: recortar("function renderSeoList()",
                           "// ─── Marketing & SEO — dados reais"),
   tip: recortar("function mktTipAttrs(tip, label, value)",
