@@ -35,3 +35,45 @@
 .cc-recent strong{font-size:.75rem;font-weight:600;margin-left:6px;overflow-wrap:anywhere}
 .cc-recent time{font-size:.73rem;color:#687b92;white-space:nowrap}
 @media(max-width:600px){#authorizedPanel .cc-home .cc-recent button{align-items:flex-start;flex-direction:column;gap:6px}.cc-recent strong{display:block;margin:4px 0 0}}
+
+/* The SoproLife home shares its working width between queues, agenda and activity. */
+.cc-dashboard {container-type:inline-size}
+.cc-dash-head,.cc-dash-head>div,.cc-dash-actions {display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cc-dash-head {justify-content:space-between;margin-bottom:12px}
+.cc-dash-head h2 {font-size:1.25rem;letter-spacing:-.035em;margin:0}
+.cc-dash-head time,.cc-dashboard small {color:#536b80;font-size:.75rem}
+.cc-home .cc-dash-actions button {min-height:36px;padding:6px 11px;font-size:.8rem}
+.cc-tiles {display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+#authorizedPanel .cc-home .cc-tile {display:flex;flex-direction:row;align-items:center;gap:8px;padding:7px 12px;min-height:38px;background:white}
+#authorizedPanel .cc-tile strong {font-size:1.13rem;color:#086b66}
+#authorizedPanel .cc-tile span {font-size:.79rem;color:#28465b}
+.cc-dashboard .cc-charts {grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:start}
+.cc-dashboard .cc-charts:not(:has(.cc-recent)) {grid-template-columns:repeat(2,minmax(0,1fr))}
+.cc-chart,.cc-dashboard .cc-recent {margin:0;padding:13px;background:white;border:1px solid #dfe7ef;border-radius:12px;min-width:0}
+.cc-chart h3,.cc-dashboard .cc-recent h3 {margin:0 0 10px;font-size:.91rem;color:#193850}
+.cc-dashboard .cc-note {font-size:.73rem;margin:2px 0}
+.cc-chart .cc-empty {margin:0;padding:4px 0;font-size:.8rem}
+.cc-home .cc-bar {display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 8px;width:100%;min-height:36px;padding:4px 2px;border:0;border-radius:4px;text-align:left;font-size:.78rem}
+.cc-bar i {grid-column:1/-1;background:#edf2f5;height:5px;border-radius:4px}
+.cc-bar b,.cc-days b {display:block;border-radius:inherit;background:#16847d}
+.cc-bar b {height:100%}
+.cc-chart .cc-missing {font-size:.75rem;padding:4px;min-height:32px}
+.cc-days {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.cc-home .cc-days>* {display:grid;align-items:end;justify-items:center;grid-template-rows:19px 60px auto auto;gap:3px;padding:4px 0;border:0;border-radius:5px;font-size:.75rem;color:#52677d;background:transparent}
+.cc-home .cc-days button {background:#f0f8f7;color:#075f58}
+.cc-days i {display:flex;align-items:end;width:60%;height:100%;border-bottom:1px solid #a5c3c1}
+.cc-days b {width:100%;border-radius:3px 3px 0 0}
+.cc-chart h4 {margin:10px 0 0;font-size:.8rem}
+#authorizedPanel .cc-dashboard .cc-recent button {padding:5px 1px;min-height:36px;font-size:.76rem;gap:6px;align-items:center;flex-direction:row}
+.cc-dashboard .cc-recent strong {display:block;margin:2px 0 0}
+.cc-dashboard .cc-recent time {white-space:normal;text-align:right}
+@container (max-width:900px) {
+  .cc-dashboard .cc-charts {grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cc-charts>[data-cc-recent] {grid-column:1/-1}
+}
+@container (max-width:560px) {
+  .cc-dashboard .cc-charts,.cc-dashboard .cc-charts:not(:has(.cc-recent)) {grid-template-columns:minmax(0,1fr)}
+  .cc-dash-head {align-items:start}
+  .cc-home .cc-dash-actions button,#authorizedPanel .cc-home .cc-tile {min-height:44px}
+}
+.cc-home .cc-days button[aria-expanded="true"] {box-shadow:inset 0 0 0 2px #16847d}

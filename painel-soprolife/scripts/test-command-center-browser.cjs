@@ -25,7 +25,7 @@ with Session(get_engine()) as db:
  admin=db.scalar(select(User).where(User.email=='admin@command.local')); doctor=db.scalar(select(User).where(User.email=='medico@command.local'))
 
  for engine in ('chromium','firefox'):
-  for width in (1440,1024,800,390,720):
+  for width in (1440,1280,1024,800,390,720):
    db.add(User(email=f'{engine}-{width}-admin@command.local',nome='Admin Sintético Isolado',password_hash=admin.password_hash,roles=list(admin.roles)))
  now=datetime.now(timezone.utc);today=now.astimezone(ZoneInfo('America/Sao_Paulo')).date()
  p=Person(public_code='PES-990001',nome_completo='Paciente Sintético Comando',nome_normalizado='paciente sintetico comando',cpf='52998224725');p2=Person(public_code='PES-990002',nome_completo='Paciente Restrito Sintético',nome_normalizado='paciente restrito sintetico');db.add_all([p,p2]);db.flush()
@@ -53,11 +53,11 @@ with Session(get_engine()) as db:
  db.commit();print(json.dumps({'person':p.id,'exam':e.id,'assigned':assigned.id,'doc':doc.id,'fiscal':fiscal.id,'partner':partner.id,'unit':unit.id,'lead':lead.id,'eeg':eeg.id,'eegFiscal':ef.id}))`],env));
  for(const [bin,args,cwd,e] of [[python,['-m','app.serve'],core,env],['python3',[path.join(root,'painel-soprolife/scripts/command-center-local-server.py')],root,{...env,SOPROLIFE_PANEL_HOST:'127.0.0.1',SOPROLIFE_PANEL_PORT:String(panelPort),SOPROLIFE_M15_UPSTREAM:`http://127.0.0.1:${apiPort}/api/v1`}]] )children.push(cp.spawn(bin,args,{cwd,env:e,stdio:'ignore'}));
  const base=`http://127.0.0.1:${panelPort}/painel-soprolife/`;await wait(async()=>(await fetch(base+'api/m15/health')).ok);
- const widths=(process.env.CC2_WIDTHS||'1440,1024,800,390').split(',').map(Number);
+ const widths=(process.env.CC2_WIDTHS||'1440,1280,1024,390').split(',').map(Number);
  const engines=process.env.CC2_ENGINE==='chromium'?[[chromium,'chromium']]:[[chromium,'chromium'],[firefox,'firefox']];
  for(const [engine,name] of engines){browser=await engine.launch({headless:true});
  for(const width of widths){
-  const context=await browser.newContext({locale:'pt-BR',viewport:{width,height:900}}),page=await context.newPage(),errors=[],requests=[],searchRequests=[];
+  const context=await browser.newContext({locale:'pt-BR',viewport:{width,height:width===1280?800:900}}),page=await context.newPage(),errors=[],requests=[],searchRequests=[];
   page.on('pageerror',e=>errors.push(e.message));
   page.on('request',r=>{requests.push(r.url());if(r.url().endsWith('/comando/busca'))searchRequests.push(r);});
   await context.addInitScript(observeAuthFrames);
@@ -102,7 +102,7 @@ with Session(get_engine()) as db:
   const initial=await login('admin',true);
   assert.equal(await page.locator('#ccHome[data-state=ready]').count(),1);
   assert.equal(await page.locator('#ccHome [data-cc-financial],#ccLegacy,#overview canvas').count(),0);
-  assert.deepEqual(await page.locator('#ccHome .cc-operation h3').allTextContents(),['Hoje','Precisa de atenção','Próximos']);
+  assert.deepEqual(await page.locator('#ccHome .cc-chart h3').allTextContents(),['Precisa de atenção','Próximos 7 dias']);
   const canonical=await page.evaluate(()=>window.SoproM15.api('/comando/pendencias'));
   assert.equal(await page.locator('#ccPendingToggle').textContent(),'Pendências ('+canonical.total+')');
   await page.locator('#ccHome [data-cc-recent][data-state=ready]').waitFor();
@@ -114,16 +114,31 @@ with Session(get_engine()) as db:
   assert.equal(audits.length,3,'Only three bounded business sources');
   for(const url of audits){const q=new URL(url).searchParams;assert.equal(q.get('tamanho'),'5');assert(q.get('acao')&&q.get('entidade'));}
 
-  for(const window of ['hoje','atencao','proximos']){
-   const button=page.locator('#ccHome [data-cc-category="followup"][data-cc-window="'+window+'"]');
-   assert.equal(await button.locator('strong').textContent(),'1');
+  const week=page.locator('#ccHome .cc-days');
+  await week.waitFor();
+  assert.equal(await week.locator(':scope > *').count(),7);
+  assert.equal(await week.locator('button').count(),2);
+  const layout=await page.locator('.cc-charts').evaluate(el=>({columns:getComputedStyle(el).gridTemplateColumns.split(' ').length,bottom:Math.ceil(el.getBoundingClientRect().bottom+scrollY)}));
+  console.log(name+' '+width+' dashboard '+JSON.stringify(layout));
+  assert.equal(layout.columns,width>=1280?3:width>=800?2:1);
+  if(width>=1280)assert(layout.bottom<=(width===1280?800:900),'Full dashboard fits first viewport');
+  await week.locator('button').first().focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('[data-cc-day-list] [data-cc-item]').count(),1);
+  assert((await page.locator('[data-cc-day-list]').innerText()).includes('ESP-990002'));
+  for(const [selector,expected] of [
+    ['.cc-tile[data-cc-window="hoje"][data-cc-category="followup"]',1],
+    ['.cc-bar[data-cc-category="followup"]',1],
+    ['.cc-tile[data-cc-window="proximos"]',2]
+  ]){
+   const button=page.locator('#ccHome '+selector);
+   assert.equal(await button.locator('strong').textContent(),String(expected));
    await button.click();await page.locator('#ccPendingPanel[data-state=ready]').waitFor();
-   assert.equal(await page.locator('#ccPendingPanel [data-cc-pending-item]').count(),1);
+   assert.equal(await page.locator('#ccPendingPanel [data-cc-pending-item]').count(),expected);
    await page.locator('[data-cc-close-pending]').click();
   }
-  if(width>=1024){
-   assert(await page.locator('#ccHome .cc-operation-grid').evaluate(e=>e.getBoundingClientRect().bottom<=innerHeight),'Essential home fits first desktop viewport');
-  }
+  await week.locator('button').first().click();
+  assert.equal(await page.locator('[data-cc-day-list] button').count(),0);
   const timing=await page.evaluate(()=>({projection:performance.getEntriesByType('resource').filter(r=>r.name.includes('/comando/resumo')).map(r=>Math.round(r.duration)),scripts:performance.getEntriesByType('resource').filter(r=>r.initiatorType==='script').length}));
   console.log(name+' '+width+' home performance '+JSON.stringify(timing));
   await page.locator('#ccHome [data-cc-new="atendimento"]').focus();
@@ -138,6 +153,24 @@ with Session(get_engine()) as db:
   assert(!(await page.locator('#ccHome').innerText()).includes('987,65'),'SoproLife excludes EEG money');
   if(process.env.CC2_SCREENSHOT_DIR){fs.mkdirSync(process.env.CC2_SCREENSHOT_DIR,{recursive:true});await page.screenshot({path:path.join(process.env.CC2_SCREENSHOT_DIR,`${name}-${width}-admin.png`)});}
   if(width===1440){
+   for(const [action,form] of [['atendimento','cadFormAtend'],['contato','cadContato']]){
+    await page.locator('[data-cc-new="'+action+'"]').click();
+    await page.locator('#centralRoot #'+form).waitFor();
+    await page.evaluate(()=>window.SoproBootGate.navegar('overview'));
+   }
+   // A partial weekly response must never be plotted as a complete daily series.
+   const weeklyRoute='**/comando/pendencias?marca=soprolife&janela=proximos&limite=50';
+   await page.route(weeklyRoute,route=>route.fulfill({json:{tem_proxima:true,total:51,itens:[]}}));
+   const partial=page.waitForResponse(r=>r.url().endsWith(weeklyRoute.slice(2)));
+   await page.evaluate(()=>window.SoproCommandCenter.refresh());
+   await (await partial).finished();
+   await page.locator('[data-cc-week] .cc-bar[data-cc-category="agenda"]').click();
+   await page.locator('#ccPendingPanel[data-state=ready]').waitFor();
+   assert.equal(await page.locator('#ccPendingPanel [data-cc-pending-item]').count(),1);
+   assert.equal(await page.locator('.cc-days').count(),0);
+   await page.locator('[data-cc-close-pending]').click();
+   await page.unroute(weeklyRoute);
+   await page.locator('#ccHome [data-cc-recent][data-state=ready]').waitFor();
    const recentNow=Date.now();
    await page.route('**/auditoria?*',r=>{
     const action=new URL(r.request().url()).searchParams.get('acao');
@@ -249,8 +282,8 @@ with Session(get_engine()) as db:
   await page.route('**/comando/resumo*',r=>r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(empty)}));
   await page.evaluate(()=>window.SoproCommandCenter.refresh());
   assert.equal(await page.locator('#ccHome .cc-stat').count(),0,'Zero categories render no row');
-  assert.equal(await page.locator('#ccHome .cc-empty').count(),3,'Empty home explains three queues');
-  for(const block of await page.locator('#ccHome .cc-operation').all())assert(await block.evaluate(e=>e.getBoundingClientRect().height<160),'Empty block stays compact');
+  assert.equal(await page.locator('#ccHome .cc-empty').count(),2,'Empty chart panels explain available queues');
+  for(const block of await page.locator('#ccHome .cc-chart').all())assert(await block.evaluate(e=>e.getBoundingClientRect().height<160),'Empty block stays compact');
   assert.equal(await page.locator('#ccPendingToggle').textContent(),'Pendências (0)');
   await page.unroute('**/comando/resumo*');
   const mixed={...payload,hoje:{exames:0}};

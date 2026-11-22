@@ -26,12 +26,96 @@
   function record(item,index,attr='data-cc-item'){
     return '<button type="button" class="cc-work-row" '+attr+'="'+index+'"><span><strong>'+esc(item.codigo)+'</strong><span>'+esc(item.titulo??item.rotulo)+'</span></span><span>'+esc(item.data?date(item.data):labels[item.categoria]||'Abrir registro')+' <b aria-hidden="true">'+icon('arrow')+'</b></span></button>';
   }
+  function queueButton(category, period, contents, classes, label) {
+    return '<button type="button" class="'+classes+'" data-cc-category="'+esc(category)+'" data-cc-window="'+esc(period)+'" aria-label="'+esc(label)+'">'+contents+'</button>';
+  }
+
+  function bars(entries, period) {
+    const max = Math.max(1, ...entries.map(item=>item.value));
+    return entries.map(({category,label,value})=>queueButton(category,period,
+      '<span>'+esc(label)+'</span><strong>'+esc(value)+'</strong><i aria-hidden="true"><b style="width:'+100*value/max+'%"></b></i>',
+      'cc-bar',label+' · '+value)).join('');
+  }
+
+  function dashboard(root, data, names) {
+    const {pendencias:p, capacidades:cap} = data;
+    const short = {
+      hoje:{hoje:'Atendimentos hoje',followup:'Retomar hoje',contato:'Contatos hoje'},
+      atencao:{followup:'Atrasados',sem_laudo:'Sem laudo',laudo:'Laudos',fiscal:'NFS-e',acerto:'Acertos',contato:'Contatos',inconsistencia:'A completar'}
+    };
+    const entries = period=>Object.entries(names[period]).filter(([key])=>p.grupos[period][key]>0)
+      .map(([category,label])=>({category,label,value:p.grupos[period][category]}));
+    const today=entries('hoje'), attention=entries('atencao'), upcoming=entries('proximos');
+    if(data.hoje.exames>0) today.unshift({category:'hoje',label:'Atendimentos de hoje',value:data.hoje.exames});
+    const weekTotal=upcoming.reduce((n,item)=>n+item.value,0);
+    function tile(item,period) {
+      const label=short[period]?.[item.category]||item.label;
+      return queueButton(item.category,item.category==='hoje'?'':period,
+        '<strong>'+esc(item.value)+'</strong><span>'+esc(label)+'</span>', 'cc-tile cc-stat',item.label+' · '+item.value);
+    }
+    const tiles=today.map(item=>tile(item,'hoje')).concat(attention.map(item=>tile(item,'atencao')));
+    if(weekTotal) tiles.push(tile({category:'',label:'Próximos 7 dias',value:weekTotal},'proximos'));
+    const missing=p.indisponiveis.filter(key=>names.atencao[key]).map(key=>queueButton(key,'atencao',
+      esc(names.atencao[key])+' · Indisponível','cc-missing',names.atencao[key]+' · Indisponível')).join('');
+    root.innerHTML='<div class="cc-dashboard"><header class="cc-dash-head"><div><h2>Operação do dia</h2><time>'+esc(date(data.periodo.hoje))+'</time></div>'+
+      (cap.operacao?'<div class="cc-dash-actions"><button class="cc-primary" type="button" data-cc-new="atendimento">'+icon('plus')+' Novo atendimento</button><button type="button" data-cc-new="contato">'+icon('plus')+' Novo contato</button></div>':'')+'</header>'+
+      (tiles.length?'<div class="cc-tiles" aria-label="Filas operacionais">'+tiles.join('')+'</div>':'')+
+      '<div class="cc-operation-grid cc-charts"><section class="cc-chart"><h3>Precisa de atenção</h3>'+
+      (attention.length?bars(attention,'atencao'):'<p class="cc-empty">Nenhuma pendência confirmada.</p>')+missing+'</section>'+
+      '<section class="cc-chart"><h3>Próximos 7 dias</h3><div data-cc-week>'+
+      (upcoming.length?bars(upcoming,'proximos'):'<p class="cc-empty">Nenhum compromisso previsto.</p>')+
+      '</div></section><div data-cc-recent hidden></div></div>'+
+      (p.indisponiveis.length?'<p class="cc-note">O total de pendências considera as filas disponíveis.</p>':'')+'</div>';
+    wire(root);
+    updatePendingLabel(data);
+    recentActivity(root,data.marca);
+    if(weekTotal && weekTotal<=50) weeklyDates(root,data,weekTotal);
+  }
+
+  async function weeklyDates(root,data,expectedTotal) {
+    // One bounded page. Keep the summary by type if the weekly list is incomplete.
+    const slot=root.querySelector('[data-cc-week]');
+    try {
+      const week=await api().api('/comando/pendencias?marca=soprolife&janela=proximos&limite=50',{signal:AbortSignal.timeout(8000)});
+      if(!slot.isConnected||brand()!==data.marca||gate.estado!=='ready'||week.tem_proxima||week.total!==expectedTotal||week.total!==week.itens.length)return;
+      const days=new Map();
+      const start=Date.parse(data.periodo.hoje+'T00:00:00Z');
+      for(let offset=1;offset<=7;offset++){
+        const key=new Date(start+offset*86400000).toISOString().slice(0,10);
+        days.set(key,[]);
+      }
+      for(const item of week.itens){
+        const bucket=days.get(item.data?.slice(0,10));
+        if(!bucket)return;
+        bucket.push(item);
+      }
+      const max=Math.max(...Array.from(days.values(),items=>items.length));
+      const fmt=new Intl.DateTimeFormat('pt-BR',{weekday:'short',timeZone:'UTC'});
+      slot.innerHTML='<div class="cc-days">'+Array.from(days,([key,items])=>{
+        const label=fmt.format(new Date(key)).replace('.','');
+        const body='<strong>'+ (items.length||'') +'</strong><i aria-hidden="true"><b style="height:'+100*items.length/max+'%"></b></i><span>'+esc(label)+'</span><small>'+key.slice(-2)+'</small>';
+        return items.length?'<button type="button" data-cc-day="'+key+'" aria-expanded="false" aria-controls="ccDayQueue" aria-label="'+date(key)+' · '+items.length+(items.length===1?' compromisso':' compromissos')+'">'+body+'</button>':'<div aria-label="'+date(key)+' · sem compromissos">'+body+'</div>';
+      }).join('')+'</div><div id="ccDayQueue" data-cc-day-list></div>';
+      const list=slot.querySelector('[data-cc-day-list]');
+      slot.querySelectorAll('[data-cc-day]').forEach(button=>button.onclick=()=>{
+        const expanded=button.getAttribute('aria-expanded')==='true';
+        slot.querySelector('[aria-expanded="true"]')?.setAttribute('aria-expanded','false');
+        if(expanded){list.replaceChildren();return;}
+        button.setAttribute('aria-expanded','true');
+        const items=days.get(button.dataset.ccDay);
+        list.innerHTML='<h4>Fila de '+date(button.dataset.ccDay)+'</h4>'+items.map((item,n)=>record(item,n)).join('');
+        list.querySelectorAll('button').forEach((el,n)=>el.onclick=()=>openTarget(items[n].destino));
+        list.querySelector('button')?.focus();
+      });
+    } catch { /* The scoped summary remains available. */ }
+  }
   function render(root,data){
     const cap=data.capacidades,p=data.pendencias,b=data.marca,groups=p.grupos;
     root.dataset.state='ready';root.setAttribute('aria-busy','false');root.classList.add('cc-home');
     const names={hoje:{followup:'Acompanhamentos para retomar',contato:'Contatos para retomar'},
       atencao:{followup:'Acompanhamentos atrasados',sem_laudo:'Exames aguardando laudo',laudo:'Laudos pendentes',fiscal:'NFS-e pendentes',acerto:'Acertos pendentes',contato:'Contatos exigindo ação',inconsistencia:'Informações a completar'},
       proximos:{agenda:'Compromissos nos próximos 7 dias',followup:'Acompanhamentos nos próximos 7 dias',contato:'Contatos nos próximos 7 dias'}};
+    if(b==='soprolife'){dashboard(root,data,names);return;}
     function section(key,title){
       const entries=Object.entries(names[key]).filter(([k])=>(groups[key][k]||0)>0);
       const unavailable=key==='atencao'?p.indisponiveis.filter(k=>names[key][k]):[];
