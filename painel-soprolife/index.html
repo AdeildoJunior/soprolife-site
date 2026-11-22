@@ -130,11 +130,6 @@
           Leads e Agendamentos
         </button>
 
-        <button class="nav-item" data-section="tarefas">
-          <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7,9 9,11 13,7"/><rect x="2" y="2" width="14" height="14" rx="2"/></svg>
-          Tarefas
-        </button>
-
         <button class="nav-item" data-section="laudos-espirometria" data-report-entry hidden>
           <svg class="nav-icon" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><polyline points="11,2 11,7 16,7"/><path d="M5 11h2l1-2 2 4 1-2h2"/></svg>
           Laudos de espirometria
@@ -276,11 +271,6 @@
             <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="14" height="13" rx="2"/><path d="M2 9h14M6 2v4M12 2v4"/></svg></span>
             <strong>Leads e Agendamentos</strong>
             <span class="nav-hub-desc">Contatos antes do atendimento</span>
-          </button>
-          <button type="button" class="nav-hub-card" data-section="tarefas">
-            <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7,9 9,11 13,7"/><rect x="2" y="2" width="14" height="14" rx="2"/></svg></span>
-            <strong>Tarefas</strong>
-            <span class="nav-hub-desc">Rotina e pendências do dia</span>
           </button>
           <button type="button" class="nav-hub-card" data-section="laudos-espirometria" data-report-entry hidden>
             <span class="nav-hub-icon"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><polyline points="11,2 11,7 16,7"/><path d="M5 11h2l1-2 2 4 1-2h2"/></svg></span>
@@ -695,43 +685,6 @@
         </div>
         <div id="reportWorkflowRoot" class="report-workflow-root">
           <div class="report-state" role="status">Carregando o fluxo seguro de laudos…</div>
-        </div>
-      </section>
-
-
-      <section id="tarefas" class="section">
-        <div class="section-title">
-          <div>
-            <p class="eyebrow">Rotina operacional</p>
-            <h2>Tarefas e pendências</h2>
-          </div>
-          <span class="safe-label">Centro diário da SoproLife</span>
-        </div>
-
-        <div class="task-dashboard">
-          <article class="panel task-column-panel">
-            <div class="panel-header">
-              <h3>Hoje</h3>
-              <span>Ações do dia</span>
-            </div>
-            <div id="todayTasks" class="task-board-list"></div>
-          </article>
-
-          <article class="panel task-column-panel">
-            <div class="panel-header">
-              <h3>Esta semana</h3>
-              <span>Planejamento curto</span>
-            </div>
-            <div id="weekTasks" class="task-board-list"></div>
-          </article>
-
-          <article class="panel task-column-panel critical">
-            <div class="panel-header">
-              <h3>Pendências críticas</h3>
-              <span>Não deixar esfriar</span>
-            </div>
-            <div id="criticalTasks" class="task-board-list"></div>
-          </article>
         </div>
       </section>
 

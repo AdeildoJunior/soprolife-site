@@ -206,7 +206,7 @@ console.log("E) O painel SoproLife continua inteiro e no mesmo lugar");
 caso("a app-shell original segue dentro do contexto SoproLife",
      /<div class="app-shell">/.test(painelSopro) && painelSopro.includes('class="sidebar"'));
 const SECOES_SOPRO = [
-  "overview", "central-cadastros", "crm", "leads", "tarefas", "marketing",
+  "overview", "central-cadastros", "crm", "leads", "marketing",
   "financeiro", "fiscal", "parcerias", "custos-investimentos",
   "documentos", "automacoes", "lancamentos",
 ];

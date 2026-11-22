@@ -516,7 +516,6 @@ async function init() {
     renderMarketingSection();
     renderCharts();
     renderLeadsCharts();
-    renderTaskBoard();
     renderDocuments();
     renderDocumentosEquipamentos();
     renderFinance();
@@ -3975,36 +3974,6 @@ function updateLeadsFilterTip(el) {
 })();
 
 
-function renderTaskGroup(selector, tasks) {
-  const container = document.querySelector(selector);
-  if (!container) return;
-
-  container.innerHTML = tasks.map((task) => {
-    const priorityClass = task.prioridade === "Alta"
-      ? "danger"
-      : task.prioridade === "Média"
-        ? "medium"
-        : "";
-
-    return `
-      <article class="task-board-card">
-        <span class="task-dot ${priorityClass}"></span>
-        <div class="task-body">
-          <strong>${task.titulo}</strong>
-          <p><b>${task.area}</b> · ${task.status} · prioridade ${task.prioridade.toLowerCase()}</p>
-        </div>
-      </article>
-    `;
-  }).join("");
-}
-
-function renderTaskBoard() {
-  if (!state.tarefas) return;
-
-  renderTaskGroup("#todayTasks", state.tarefas.hoje);
-  renderTaskGroup("#weekTasks", state.tarefas.semana);
-  renderTaskGroup("#criticalTasks", state.tarefas.criticas);
-}
 
 
 function renderDocuments() {
