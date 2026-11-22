@@ -255,12 +255,18 @@
       if(selected)data.person_id=selected.id;else data.nova_pessoa=nova();
       var verify=selected?Promise.resolve({itens:[]}):post('/eeg/pessoas/verificar',data.nova_pessoa);
       verify.then(function(r){
-        if(r.itens.length&&!duplicates.querySelector('input:checked')){
+        // Só candidato forte (mesmo nome + nascimento) exige conferência. Telefone
+        // igual sozinho (responsável compartilhado entre filhos) é aviso, não trava.
+        if(r.bloqueia&&!duplicates.querySelector('input:checked')){
           duplicates.innerHTML='<p>Há cadastros semelhantes. Confira a identidade antes de prosseguir:</p>';
-          r.itens.forEach(function(p){var b=document.createElement('button');b.type='button';b.textContent='Selecionar '+p.public_code+' · '+p.nome_completo;b.onclick=function(){buscarPessoas(p.public_code,true).then(function(r){if(r.itens[0])selecionar(r.itens[0].pessoa);}).catch(function(e){error.textContent=mensagemErro(e);});};duplicates.appendChild(b);});
+          r.itens.filter(function(p){return p.forte;}).forEach(function(p){var b=document.createElement('button');b.type='button';b.textContent='Selecionar '+p.public_code+' · '+p.nome_completo;b.onclick=function(){buscarPessoas(p.public_code,true).then(function(r){if(r.itens[0])selecionar(r.itens[0].pessoa);}).catch(function(e){error.textContent=mensagemErro(e);});};duplicates.appendChild(b);});
           var l=document.createElement('label');l.className='eeg-at-confirm';l.innerHTML='<input type="checkbox"> Conferi os candidatos: é outra pessoa. Confirmar novo cadastro.';duplicates.appendChild(l);throw Error('Confira os cadastros semelhantes. CPF já existente não pode ser duplicado.');
         }
-        if(data.nova_pessoa)data.nova_pessoa.confirmar_nova_pessoa=!!r.itens.length;
+        if(r.itens.length&&!r.bloqueia){
+          var aviso=(r.itens.find(function(p){return p.aviso;})||{}).aviso||'Este telefone já está vinculado a outro paciente. Se for o telefone do responsável, você pode continuar.';
+          duplicates.innerHTML='<p class="eeg-nota">'+aviso+'</p>';
+        }
+        if(data.nova_pessoa)data.nova_pessoa.confirmar_nova_pessoa=!!r.bloqueia;
         return post('/eeg/atendimentos',data);
       }).then(function(exam){return (prefill&&prefill.leadId?post('/eeg/atividades/'+prefill.leadId+'/converter',{enrollment_id:exam.enrollment_id,exam_id:exam.id}):Promise.resolve()).then(function(){
         var success=f.querySelector('[data-at-success]');success.innerHTML='<strong>Atendimento EEG salvo · '+esc(exam.public_code)+'</strong><p>Paciente, vínculo e financeiro registrados. Nenhum laudo ou emissão fiscal foi gerado.</p><button type="button" data-at-another>Novo Atendimento EEG</button>';

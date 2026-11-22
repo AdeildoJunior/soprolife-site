@@ -929,6 +929,9 @@ class DuplicateCheck(StrictModel):
 
     nome_completo: str | None = Field(default=None, min_length=2, max_length=300)
     telefones: list[str] = Field(default_factory=list, max_length=5)
+    # Opcional: permite distinguir "duplicado forte" (mesmo nome + nascimento)
+    # de "aviso" (só telefone igual, comum entre irmãos no WhatsApp da mãe).
+    data_nascimento: date | None = None
 
 
 class PersonSearch(StrictModel):

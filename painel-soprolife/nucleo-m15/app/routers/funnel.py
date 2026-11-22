@@ -90,8 +90,9 @@ def resolve_person(db,payload,request,user):
         p=payload.pessoa
         recusar_cpf_ja_cadastrado(db,p.cpf)
         options=_candidatos_de_identidade(db,p)
-        if options and not payload.confirmar_duplicado:
-            raise HTTPException(status_code=409,detail={'codigo':'possivel_duplicado','mensagem':'Selecione o paciente existente ou confirme a criação.','candidatos':options})
+        bloqueantes=[c for c in options if c['forte']]
+        if bloqueantes and not payload.confirmar_duplicado:
+            raise HTTPException(status_code=409,detail={'codigo':'possivel_duplicado','mensagem':'Selecione o paciente existente ou confirme a criação.','candidatos':bloqueantes})
         person=build_person(db,nome_completo=p.nome_completo,cpf=p.cpf,data_nascimento=p.data_nascimento,sexo=p.sexo,observacao=p.observacao,contatos=p.contatos,consentimento_whatsapp=p.consentimento_whatsapp,registrado_por=user.id)
         registrar_identificacao_oficial(db,request,user,person,p)
     return person

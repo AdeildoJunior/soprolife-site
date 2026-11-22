@@ -59,7 +59,12 @@ from ..services.identificacao_assistida import (
     pessoa_minima,
     pessoa_por_cpf,
 )
-from ..services.identity import find_person_candidates, register_candidates
+from ..services.identity import (
+    descrever_candidatos,
+    find_person_candidates,
+    ha_bloqueante,
+    register_candidates,
+)
 from ..services.serpro_cpf import SerproCpfClient
 from ..services.person_registration import build_person
 from ..services.relationships import RelationshipError, create_relationship
@@ -187,24 +192,22 @@ def check_duplicates(
     _user: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
     """Pré-checagem de duplicados sem efeito colateral: nada é criado nem
-    registrado — apenas devolve candidatos para aviso na UI antes do cadastro."""
+    registrado — apenas devolve candidatos para aviso na UI antes do cadastro.
+
+    `bloqueia` separa o que exige decisão humana (mesmo nome + nascimento) do
+    que é só aviso informativo (telefone igual do responsável). Telefone igual
+    sozinho devolve candidato, mas com `forte=False` e `bloqueia=False`.
+    """
     phones = [p for p in (normalize_phone(t) for t in payload.telefones) if p]
-    candidates = find_person_candidates(
-        db, normalize_name(payload.nome_completo), phones
+    nome_normalizado = normalize_name(payload.nome_completo) if payload.nome_completo else None
+    candidates = find_person_candidates(db, nome_normalizado, phones)
+    descritos = descrever_candidatos(
+        candidates, nome_normalizado, payload.data_nascimento
     )
     return {
-        "total": len(candidates),
-        "candidatos": [
-            {
-                "id": person.id,
-                "public_code": person.public_code,
-                "nome_completo": person.nome_completo,
-                "data_nascimento": person.data_nascimento.isoformat()
-                if person.data_nascimento else None,
-                "motivo": motivo,
-            }
-            for person, motivo in candidates
-        ],
+        "total": len(descritos),
+        "bloqueia": ha_bloqueante(descritos),
+        "candidatos": descritos,
     }
 
 

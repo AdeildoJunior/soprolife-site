@@ -54,7 +54,11 @@ from ..services.eeg_modalidades import MODALIDADES, modalidade_ativa, obter
 from ..services.eeg_storage import eeg_report_storage_path, atomic_write_new_file
 from ..services.report_storage import read_and_validate_stored_pdf, ReportStorageError
 from ..services import eeg_results, patient_results
-from ..services.identity import find_person_candidates
+from ..services.identity import (
+    descrever_candidatos,
+    find_person_candidates,
+    ha_bloqueante,
+)
 from ..services.pdf_validation import InvalidPdfError, validate_pdf_bytes
 from ..services.person_registration import add_contact
 from ..services.idempotency import idempotent_create, payload_fingerprint
@@ -349,16 +353,20 @@ def verificar_duplicados_eeg(
     Mesma regra de deduplicação do cadastro corporativo. Serve para a tela
     oferecer "vincular esta pessoa" em vez de criar uma segunda.
     """
-    telefone = normalize_phone(payload.telefone) if payload.telefone else None
     candidatos = _candidatos(db, payload)
-    return {"itens": [
-        {"person_id": p.id, "public_code": p.public_code,
-         "nome_completo": p.nome_completo, "motivo": motivo,
-         # Já vinculada? A tela precisa saber se oferece vincular ou abrir.
-         "ja_vinculada": db.execute(
-             select(EegEnrollment).where(EegEnrollment.person_id == p.id)
-         ).scalars().first() is not None}
-        for p, motivo in candidatos
+    descritos = descrever_candidatos(
+        candidatos, normalize_name(payload.nome_completo), payload.data_nascimento
+    )
+    return {"bloqueia": ha_bloqueante(descritos), "itens": [
+        dict(
+            item,
+            person_id=item["id"],
+            # Já vinculada? A tela precisa saber se oferece vincular ou abrir.
+            ja_vinculada=db.execute(
+                select(EegEnrollment).where(EegEnrollment.person_id == item["id"])
+            ).scalars().first() is not None,
+        )
+        for item in descritos
     ]}
 
 
@@ -388,7 +396,10 @@ def _criar_pessoa_vinculo(payload, request, db, user):
     if payload.cpf:
         from .people import recusar_cpf_ja_cadastrado
         recusar_cpf_ja_cadastrado(db, payload.cpf)
-    if candidatos and not payload.confirmar_nova_pessoa:
+    # Telefone igual sozinho (responsável compartilhado entre filhos) não
+    # bloqueia: só candidato forte (mesmo nome + nascimento) exige confirmação.
+    descritos = descrever_candidatos(candidatos, nome_normalizado, payload.data_nascimento)
+    if ha_bloqueante(descritos) and not payload.confirmar_nova_pessoa:
         raise DomainError(
             409, "pessoa_possivelmente_existente",
             "Há pessoa com dados semelhantes no cadastro corporativo. "

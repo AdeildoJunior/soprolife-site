@@ -1427,11 +1427,11 @@
       dupAviso.hidden = false;
       dupAviso.innerHTML =
         `<strong>Possível duplicado (${candidatos.length}):</strong> já existe cadastro ` +
-        `parecido. Escolha um existente abaixo ou confirme a criação.` +
+        `com o mesmo nome e data de nascimento. Escolha um existente abaixo ou confirme a criação.` +
         candidatos.map((c) =>
           `<button type="button" class="cad-cand" data-dup="${esc(c.id)}">
              <strong>${esc(c.nome_completo)}</strong>
-             <span>${esc(c.public_code)}${c.data_nascimento ? " · nasc. " + fmtDate(c.data_nascimento) : ""} · motivo: ${esc(c.motivo === "telefone_igual" ? "telefone igual" : "nome igual")}</span>
+             <span>${esc(c.public_code)}${c.data_nascimento ? " · nasc. " + fmtDate(c.data_nascimento) : ""}</span>
            </button>`).join("") +
         `<button type="button" class="m15-btn m15-btn-sec" data-dup-confirmar>Criar mesmo assim</button>`;
       dupAviso.querySelectorAll("[data-dup]").forEach((btn) => {
@@ -1465,24 +1465,30 @@
 
       const dupAviso = root.querySelector("#" + prefix + "DupAviso");
       const preCheck = picker.dupConfirmado
-        ? Promise.resolve({ total: 0, candidatos: [] })
+        ? Promise.resolve({ total: 0, bloqueia: false, candidatos: [] })
         : api("/pessoas/verificar-duplicados", {
             method: "POST",
-            body: JSON.stringify({ nome_completo: nome, telefones: fone ? [fone] : [] }),
+            body: JSON.stringify({
+              nome_completo: nome,
+              telefones: fone ? [fone] : [],
+              // Nascimento distingue "duplicado forte" de telefone compartilhado.
+              data_nascimento: nasc || undefined,
+            }),
           });
 
       return preCheck.then((dup) => {
-        if (dup.total > 0) {
-          // aviso explícito: usar existente OU confirmar a criação
+        // Telefone igual sozinho (responsável compartilhado entre filhos) NÃO
+        // bloqueia: só candidato forte (mesmo nome + nascimento) exige decisão.
+        if (dup.bloqueia) {
           dupAviso.hidden = false;
+          const fortes = dup.candidatos.filter((c) => c.forte);
           dupAviso.innerHTML =
-            `<strong>Possível duplicado (${dup.total}):</strong> já existe cadastro com o mesmo ` +
-            `${dup.candidatos.some((c) => c.motivo === "telefone_igual") ? "telefone" : "nome"}. ` +
-            `Escolha um existente abaixo ou confirme a criação.` +
-            dup.candidatos.map((c) =>
+            `<strong>Possível duplicado (${fortes.length}):</strong> já existe cadastro com o mesmo ` +
+            `nome e data de nascimento. Escolha um existente abaixo ou confirme a criação.` +
+            fortes.map((c) =>
               `<button type="button" class="cad-cand" data-dup="${esc(c.id)}">
                  <strong>${esc(c.nome_completo)}</strong>
-                 <span>${esc(c.public_code)}${c.data_nascimento ? " · nasc. " + fmtDate(c.data_nascimento) : ""} · motivo: ${esc(c.motivo === "telefone_igual" ? "telefone igual" : "nome igual")}</span>
+                 <span>${esc(c.public_code)}${c.data_nascimento ? " · nasc. " + fmtDate(c.data_nascimento) : ""}</span>
                </button>`).join("") +
             `<button type="button" class="m15-btn m15-btn-sec" data-dup-confirmar>Criar mesmo assim</button>`;
           dupAviso.querySelectorAll("[data-dup]").forEach((btn) => {
@@ -1499,6 +1505,15 @@
             toast("Confirmação registrada — envie o formulário novamente para criar.");
           });
           throw new Error("Possível duplicado — escolha uma pessoa existente ou confirme a criação.");
+        }
+        // Aviso informativo (telefone compartilhado): mostra, mas segue criando.
+        if (dup.total > 0) {
+          const avisos = dup.candidatos
+            .map((c) => c.aviso).filter((a, i, arr) => a && arr.indexOf(a) === i);
+          dupAviso.hidden = false;
+          dupAviso.innerHTML =
+            `<strong>Aviso:</strong> ` +
+            esc(avisos[0] || "Este telefone já está vinculado a outro paciente. Se for o telefone do responsável, você pode continuar.");
         }
         return api("/pessoas", { method: "POST", body: JSON.stringify(payload) })
           .then((pessoa) => criarResponsavelSePreciso(root, prefix, picker, pessoa, nasc)

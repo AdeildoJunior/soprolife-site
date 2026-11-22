@@ -60,7 +60,7 @@ from ..services.followup import (
 from ..services.cpf import CPFInvalidoError
 from ..services.nfse_national.service_location import SUPPORTED_SERVICE_MUNICIPALITIES
 from .people import recusar_cpf_ja_cadastrado, registrar_identificacao_oficial
-from ..services.identity import find_person_candidates
+from ..services.identity import descrever_candidatos, find_person_candidates
 from ..services.idempotency import idempotent_create
 from ..services.person_registration import build_person, cadastro_pendencias
 from ..services.pastore import (
@@ -276,7 +276,8 @@ def create_attendance_with_new_person(
             # M68 — CPF igual é o mesmo paciente: nenhuma confirmação destrava.
             recusar_cpf_ja_cadastrado(_db, payload.pessoa.cpf)
             candidatos = _candidatos_de_identidade(_db, payload.pessoa)
-            if candidatos and not payload.confirmar_duplicado:
+            bloqueantes = [c for c in candidatos if c["forte"]]
+            if bloqueantes and not payload.confirmar_duplicado:
                 raise HTTPException(
                     status_code=409,
                     detail={
@@ -285,7 +286,9 @@ def create_attendance_with_new_person(
                             "Já existe cadastro parecido. Use o paciente "
                             "existente ou confirme a criação."
                         ),
-                        "candidatos": candidatos,
+                        # Só os bloqueantes (mesmo nome+nascimento): telefone
+                        # igual sozinho é aviso, não trava o cadastro.
+                        "candidatos": bloqueantes,
                     },
                 )
             pessoa = build_person(
@@ -320,7 +323,13 @@ def create_attendance_with_new_person(
 
 
 def _candidatos_de_identidade(db: Session, pessoa) -> list[dict]:
-    """Candidatos a duplicado — aviso para decisão humana, nunca fusão."""
+    """Candidatos a duplicado — aviso para decisão humana, nunca fusão.
+
+    Cada item traz `forte`: True quando é a mesma pessoa com força de bloqueio
+    (mesmo nome + nascimento coincidente), False quando é só aviso (ex.:
+    telefone igual do responsável compartilhado entre filhos). Quem bloqueia
+    olha para `forte`, não para a mera existência de candidato.
+    """
 
     telefones = [
         t for t in (
@@ -329,20 +338,11 @@ def _candidatos_de_identidade(db: Session, pessoa) -> list[dict]:
             if c.tipo in ("whatsapp", "telefone")
         ) if t
     ]
-    encontrados = find_person_candidates(
-        db, normalize_name(pessoa.nome_completo), telefones
+    nome_normalizado = normalize_name(pessoa.nome_completo)
+    encontrados = find_person_candidates(db, nome_normalizado, telefones)
+    return descrever_candidatos(
+        encontrados, nome_normalizado, pessoa.data_nascimento
     )
-    return [
-        {
-            "id": p.id,
-            "public_code": p.public_code,
-            "nome_completo": p.nome_completo,
-            "data_nascimento": p.data_nascimento.isoformat()
-            if p.data_nascimento else None,
-            "motivo": motivo,
-        }
-        for p, motivo in encontrados
-    ]
 
 
 def _create_attendance(
