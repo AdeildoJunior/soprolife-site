@@ -854,13 +854,36 @@
           { label: "Aguardando data", value: fila.totais.aguardando_data },
           { label: "Não contatar (ocultos)", value: fila.excluidos_nao_contatar },
         ]) + "</div>" +
-        '<div class="m15-aviso">Área técnica. A operação do dia a dia acontece em ' +
-        "<strong>CRM Pacientes e Acompanhamento</strong> (pacientes, contato e follow-up), " +
-        "<strong>Financeiro</strong> (lançamentos e conciliação) e <strong>Central de Cadastros</strong> " +
-        "(único lugar de cadastro novo). Aqui ficam apenas migração, auditoria, administração e " +
-        "diagnóstico. Registros de demonstração seguem marcados como “sintético”.</div>";
+        '<div class="m15-aviso">Área técnica: diagnóstico, integrações, sincronização, ' +
+        "saúde e auditoria. A operação do dia acontece em <strong>CRM</strong>, " +
+        "<strong>Leads</strong> e <strong>Financeiro</strong>.</div>" +
+        // Diagnóstico técnico consolidado (21/11/2026): integrações, runtime,
+        // última sincronização, saúde e auditoria — telas que saíram da sidebar.
+        '<div id="m15Diagnostico" class="m15-diagnostico"></div>';
+      montarDiagnosticoTecnico();
     });
   };
+
+  // Reaproveita os painéis técnicos do painel (clona #tmplDiagnosticoTecnico) e
+  // os preenche com os MESMOS renderizadores já provados, via a ponte
+  // window.SoproDiagnostico. Sem segunda implementação, sem fetch extra:
+  // o estado local (runtime, lançamentos, saúde, auditoria) já foi carregado
+  // pelo painel. Fail-soft em qualquer ausência.
+  function montarDiagnosticoTecnico() {
+    var host = document.getElementById("m15Diagnostico");
+    if (!host) return;
+    var tmpl = document.getElementById("tmplDiagnosticoTecnico");
+    if (!tmpl || !("content" in tmpl)) {
+      host.innerHTML =
+        '<div class="m15-aviso">Diagnóstico técnico indisponível neste ambiente.</div>';
+      return;
+    }
+    host.innerHTML = '<h3 class="m15-diag-titulo">Integrações, sincronização e saúde</h3>';
+    host.appendChild(tmpl.content.cloneNode(true));
+    if (typeof window.SoproDiagnostico === "function") {
+      try { window.SoproDiagnostico(); } catch (e) { /* fail-soft */ }
+    }
+  }
 
   // ---------------------------------------------------------------- pessoas
 

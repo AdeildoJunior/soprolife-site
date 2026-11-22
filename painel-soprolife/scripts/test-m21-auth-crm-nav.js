@@ -210,9 +210,19 @@ caso("não resta implementação da página de automação de CRM",
      !/function renderCrmAutomacoes\(/.test(appSrc) &&
      !/function renderAutomacaoCrmSection\(/.test(appSrc) &&
      !/function renderAutomacaoCrmRegras\(/.test(appSrc));
-caso("a página técnica 'Fontes de dados' foi preservada",
-     navItens.some((i) => i.secao === "automacoes" && i.rotulo === "Fontes de dados") &&
-     /<section class="section" id="automacoes">/.test(indexSrc));
+// 21/11/2026 — "Fontes de dados" e "Últimos lançamentos" saíram da sidebar e
+// foram consolidadas no Núcleo → "Diagnóstico técnico" (sem perda de capacidade).
+caso("'Fontes de dados' e 'Últimos lançamentos' saíram da sidebar",
+     !navItens.some((i) => i.secao === "automacoes" || i.secao === "lancamentos") &&
+     !/<section[^>]*id="(automacoes|lancamentos)"/.test(indexSrc));
+caso("os painéis técnicos vivem num template consolidado",
+     /<template id="tmplDiagnosticoTecnico">/.test(indexSrc) &&
+     ["runtimeStatus", "lancamentosTimeline", "saudePanel", "auditoriaPanel"]
+       .every((id) => indexSrc.indexOf(`id="${id}"`) !== -1));
+caso("o Núcleo clona o diagnóstico e o preenche pela ponte reutilizada",
+     /tmplDiagnosticoTecnico/.test(nucleoSrc) &&
+     /window\.SoproDiagnostico/.test(nucleoSrc) &&
+     /window\.SoproDiagnostico\s*=\s*function/.test(appSrc));
 caso("nenhum data-section de sidebar aponta duas vezes para o mesmo destino",
      new Set(navItens.map((i) => i.secao)).size === navItens.length,
      JSON.stringify(navItens.map((i) => i.secao)));

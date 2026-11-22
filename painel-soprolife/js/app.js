@@ -6316,3 +6316,19 @@ function renderLancamentos() {
     </div>`;
   }).join("");
 }
+
+
+// ── Consolidação técnica no Núcleo (Diagnóstico técnico) ─────────────────────
+// O Núcleo (m15-nucleo.js) clona o template #tmplDiagnosticoTecnico e chama esta
+// ponte para preencher os painéis com os MESMOS renderizadores já provados e o
+// MESMO estado local que o painel já carregou — sem fetch extra, sem segunda
+// implementação. renderAutomations() preenche o runtime status (os blocos de
+// demonstração não existem no template e são ignorados). Fail-soft: cada render
+// guarda DOM ausente.
+window.SoproDiagnostico = function renderDiagnosticoTecnico() {
+  try { renderAutomations(); } catch (e) { /* runtime status + demo (ignora) */ }
+  try { renderSaudeOperacional(); } catch (e) { /* saúde operacional */ }
+  try { renderAcoesOperacionais(); } catch (e) { /* ações operacionais */ }
+  try { renderAuditoria(); } catch (e) { /* trilha de auditoria */ }
+  try { renderLancamentos(); } catch (e) { /* última sync / registros / erros */ }
+};
