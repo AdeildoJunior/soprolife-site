@@ -280,7 +280,7 @@
     const toggle=document.getElementById('ccPendingToggle');
     if(gate.somenteClinico&&brand()==='soprolife'){toggle.disabled=false;toggle.textContent='Meus laudos';}
     toggle.onclick=()=>pending('');
-    document.addEventListener('click',e=>{if(!e.target.closest('.cc-search')){document.getElementById('ccSearchResults').hidden=true;input.setAttribute('aria-expanded','false');}});
+    document.addEventListener('click',e=>{if(!e.target.closest('.cc-search')){const results=document.getElementById('ccSearchResults');if(results)results.hidden=true;input.setAttribute('aria-expanded','false');}});
   }
   async function selectedRecord(target,host,details){
     document.getElementById('ccSelectedRecord')?.remove();

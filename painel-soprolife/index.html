@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/style.css?v=2026101101" />
+  <link rel="stylesheet" href="./css/style.css?v=2026112203" />
   <!-- CRM Pacientes e Acompanhamento (M19): workspace canônico único. -->
   <link rel="stylesheet" href="./css/crm-workspace.css?v=2026102802" />
   <!-- M24C — fila médica atribuída e fluxo clínico autenticado. -->
@@ -18,7 +18,7 @@
   <!-- Centro de Comando Life (Fase 1.3): casca multimarcas. Vem por último de
        propósito — o style.css redefine .app-shell/.sidebar/.main/.topbar em
        mais de dez pontos, e esta folha precisa da palavra final no que toca. -->
-  <link rel="stylesheet" href="./css/life-command-center.css?v=2026102911" />
+  <link rel="stylesheet" href="./css/life-command-center.css?v=2026112203" />
   <link rel="stylesheet" href="./css/command-home.css?v=2026112202" />
   <link rel="stylesheet" href="./css/premium-ui.css?v=2026112001" />
   <!-- Chart.js vendorizado localmente (4.4.4) para funcionar offline e sem depender de CDN externo -->
@@ -63,28 +63,35 @@
         </div>
         <button type="button" id="ccPendingToggle" disabled>Pendências</button>
       </div>
-      <nav class="life-switcher" aria-label="Contexto do Centro de Comando Life">
-        <div class="life-switcher-track" role="tablist" aria-label="Contexto ativo">
-          <button type="button" role="tab" class="life-tab" id="lifeTabSoproLife"
-                  data-life-context="soprolife" data-life-kind="marca"
-                  aria-controls="lifePanelSoproLife" aria-selected="true" aria-current="true" tabindex="0">
-            <span class="life-tab-dot" aria-hidden="true"></span>
-            <span class="life-tab-text">
-              <span class="life-tab-label">SoproLife</span>
-              <span class="life-tab-kind">marca</span>
-            </span>
-          </button>
-          <button type="button" role="tab" class="life-tab" id="lifeTabEegLife"
-                  data-life-context="eeglife" data-life-kind="marca"
-                  aria-controls="lifePanelEegLife" aria-selected="false" aria-current="false" tabindex="-1">
-            <span class="life-tab-dot" aria-hidden="true"></span>
-            <span class="life-tab-text">
-              <span class="life-tab-label">EEGLife</span>
-              <span class="life-tab-kind">marca</span>
-            </span>
-          </button>
-        </div>
-      </nav>
+      <div class="life-session-actions">
+        <nav class="life-switcher" aria-label="Contexto do Centro de Comando Life">
+          <div class="life-switcher-track" role="tablist" aria-label="Contexto ativo">
+            <button type="button" role="tab" class="life-tab" id="lifeTabSoproLife"
+                    data-life-context="soprolife" data-life-kind="marca"
+                    aria-controls="lifePanelSoproLife" aria-selected="true" aria-current="true" tabindex="0">
+              <span class="life-tab-dot" aria-hidden="true"></span>
+              <span class="life-tab-text">
+                <span class="life-tab-label">SoproLife</span>
+                <span class="life-tab-kind">marca</span>
+              </span>
+            </button>
+            <button type="button" role="tab" class="life-tab" id="lifeTabEegLife"
+                    data-life-context="eeglife" data-life-kind="marca"
+                    aria-controls="lifePanelEegLife" aria-selected="false" aria-current="false" tabindex="-1">
+              <span class="life-tab-dot" aria-hidden="true"></span>
+              <span class="life-tab-text">
+                <span class="life-tab-label">EEGLife</span>
+                <span class="life-tab-kind">marca</span>
+              </span>
+            </button>
+          </div>
+        </nav>
+        <button id="topbarSair" class="topbar-sair" type="button" hidden
+          title="Encerrar a sessão neste navegador">
+          <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h4"/><path d="M12 13l4-4-4-4"/><path d="M16 9H7"/></svg>
+          <span class="topbar-sair-texto">Sair</span>
+        </button>
+      </div>
     </div>
   </header>
   <p id="ccAnnouncement" class="cc-announcement" role="status" aria-live="polite"></p>
@@ -199,17 +206,6 @@
           <button id="refreshBtn" title="Recarrega esta página com os dados já sincronizados. Não busca dados novos nas fontes externas.">
             <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4v5h5"/><path d="M17 14v-5h-5"/><path d="M15.5 6.5A7 7 0 1 0 16 9"/></svg>
             Atualizar
-          </button>
-          <!-- M25.26 — sair deixou de morar só dentro do "Núcleo
-               administrativo". Quem opera precisa encerrar a sessão de onde
-               estiver, sem caçar a aba onde o botão estava escondido.
-               Fica oculto até existir sessão (quem decide é o núcleo, dono do
-               estado de autenticação) e usa o MESMO POST /auth/logout —
-               nenhum segundo contrato de autenticação foi criado. -->
-          <button id="topbarSair" class="topbar-sair" type="button" hidden
-            title="Encerrar a sessão neste navegador">
-            <svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h4"/><path d="M12 13l4-4-4-4"/><path d="M16 9H7"/></svg>
-            <span class="topbar-sair-texto">Sair</span>
           </button>
           <div class="topbar-avatar" title="Painel interno SoproLife">SL</div>
         </div>
@@ -1041,7 +1037,7 @@
   <link rel="stylesheet" href="./css/partnership-center.css?v=2026112001">
   <script type="application/x-soprolife-module" data-cc-groups="partnerships" src="./js/partnership-center.js?v=2026112002"></script>
   <script type="application/x-soprolife-module" data-cc-groups="crm" src="./js/crm-workspace.js?v=2026112002"></script>
-  <script type="application/x-soprolife-module" data-cc-groups="core" src="./js/command-center.js?v=2026112202"></script>
+  <script type="application/x-soprolife-module" data-cc-groups="core" src="./js/command-center.js?v=2026112203"></script>
   <script src="./js/boot-gate.js?v=2026112101" defer></script>
 </body>
 </html>

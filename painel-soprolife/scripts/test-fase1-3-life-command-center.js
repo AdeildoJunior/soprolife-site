@@ -215,7 +215,7 @@ caso("todos os módulos da sidebar SoproLife continuam presentes",
      SECOES_SOPRO.filter((s) => !painelSopro.includes(`data-section="${s}"`)).join(","));
 caso("a busca é global entre marcas e as ações do painel permanecem",
      indexHtml.includes('id="ccGlobalSearch"') && painelSopro.includes('id="refreshBtn"') &&
-     painelSopro.includes('id="topbarSair"'));
+     indexHtml.includes('id="topbarSair"') && !painelSopro.includes('id="topbarSair"'));
 caso("a identidade azul/teal do SoproLife não foi redesenhada",
      !/^\.sidebar\s*\{/m.test(lifeCss) && !/^\.topbar\s*\{/m.test(lifeCss) &&
      !/^\.app-shell\s*\{/m.test(lifeCss));
@@ -386,8 +386,8 @@ caso("transições respeitam prefers-reduced-motion",
 console.log();
 console.log("J) Responsividade declarada, sem largura fixa que estoure");
 
-caso("a barra deixa de ser fixa no celular",
-     /@media \(max-width: 820px\)[\s\S]{0,260}?\.life-masthead \{ position: static; \}/.test(lifeCss));
+caso("a barra mantém o Sair acessível durante a rolagem no celular",
+     !/\.life-masthead\s*\{[^}]*position:\s*static/.test(lifeCss));
 caso("os botões do seletor viram fluidos no celular",
      /@media \(max-width: 820px\)[\s\S]{0,700}?\.life-tab \{ flex: 1 1 0/.test(lifeCss));
 caso("o rótulo MARCA sai em 430px, mas a marca ativa continua dita",

@@ -99,7 +99,27 @@ with Session(get_engine()) as db:
    await page.waitForFunction(()=>['ready','empty','error'].includes(document.querySelector('#ccSearchResults')?.dataset.state));
    await page.locator('#ccSearchResults:not([hidden])').waitFor();
   }
+  const sair=page.locator('#lifeMasthead #topbarSair');
+  async function checkGlobalLogout(){
+   assert.equal(await page.locator('#topbarSair').count(),1);
+   assert(await sair.isVisible());
+   const visible=await sair.evaluate(button=>{
+    const r=button.getBoundingClientRect();
+    return r.top>=0 && r.right<=innerWidth+1 && r.bottom<=innerHeight &&
+      button.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));
+   });
+   assert(visible,'Global logout is visible and reachable');
+  }
+  async function logoutFromHeader(){
+   await checkGlobalLogout();
+   const response=page.waitForResponse(r=>r.url().endsWith('/auth/logout')&&r.request().method()==='POST');
+   await sair.click();
+   assert((await response).ok());
+   await page.locator('#loginForm').waitFor();
+   assert(!(await sair.isVisible()));
+  }
   const initial=await login('admin',true);
+  await checkGlobalLogout();
   assert.equal(await page.locator('#ccHome[data-state=ready]').count(),1);
   assert.equal(await page.locator('#ccHome [data-cc-financial],#ccLegacy,#overview canvas').count(),0);
   assert.deepEqual(await page.locator('#ccHome .cc-chart h3').allTextContents(),['Precisa de atenção','Próximos 7 dias']);
@@ -253,10 +273,10 @@ with Session(get_engine()) as db:
   const eegText=await page.locator('[data-eeg-section=visao]').innerText();assert(!eegText.includes('987,65')&&!eegText.includes('123,45'));assert.deepEqual(await page.locator('[data-eeg-section=visao] .cc-operation h3').allTextContents(),['Hoje','Precisa de atenção','Próximos']);
   if(process.env.CC2_SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.CC2_SCREENSHOT_DIR,`${name}-${width}-eeg.png`)});
   await query(ids.eegFiscal);await page.locator('#ccSearchResults button').first().click();await page.locator('[data-eeg-section=fiscal] #ccSelectedRecord[data-record-id="'+ids.eegFiscal+'"]').waitFor();
+  await checkGlobalLogout();
   await query('ESP-990001');assert.equal(await page.locator('#ccSearchResults button').count(),0);
   await page.reload();await ready('admin');assert.equal(await page.evaluate(()=>window.LifeCommandCenter.getContext()),'eeglife');
-  await page.evaluate(()=>window.LifeCommandCenter.setContext('soprolife'));
-  await page.evaluate(()=>window.SoproM15.logout());await page.locator('#loginForm').waitFor();
+  await logoutFromHeader();
   const doctorRequests=await login('medico');
   assert(!doctorRequests.some(u=>/\/(app|central-cadastros|fiscal-command-center|profit-panel|funnel-panel|eeg-operacao|partner-shares|pastore-settlement)\.js/.test(u)),'Doctor downloads no administrative modules');
   assert.equal(await page.locator('#overview,#financeiro,#fiscal,#central-cadastros').count(),0);
@@ -268,7 +288,7 @@ with Session(get_engine()) as db:
   if(process.env.CC2_SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.CC2_SCREENSHOT_DIR,`${name}-${width}-medico.png`)});
   const denied=await page.evaluate(async id=>{try{await window.SoproM15.api('/comando/registro',{method:'POST',body:JSON.stringify({marca:'soprolife',tipo:'fiscal',id})});return 200;}catch(e){return e.status;}},ids.fiscal);
   assert([403,404].includes(denied));
-  await page.evaluate(()=>window.SoproM15.logout());await page.locator('#loginForm').waitFor();
+  await logoutFromHeader();
   const operationalRequests=await login('operacional');
   assert(!operationalRequests.some(u=>u.includes('/auditoria')),'Operational role never requests gestor audit');
   assert.equal(await page.locator('#ccHome .cc-recent').count(),0);

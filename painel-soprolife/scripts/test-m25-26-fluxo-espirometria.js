@@ -188,10 +188,10 @@ caso("220 não está codificado como número no JavaScript",
 console.log();
 console.log("F) Sair visível no cabeçalho do Command Center");
 
-caso("o botão existe no cabeçalho, junto de busca/Atualizar/avatar",
-     /id="topbarSair"/.test(indexHtml) &&
-     indexHtml.indexOf('id="topbarSair"') > indexHtml.indexOf('id="refreshBtn"') &&
-     indexHtml.indexOf('id="topbarSair"') < indexHtml.indexOf('class="topbar-avatar"'));
+caso("o único Sair global fica ao lado do seletor, fora da navegação de marca",
+     (indexHtml.match(/id="topbarSair"/g) || []).length === 1 &&
+     /<nav class="life-switcher"[\s\S]*?<\/nav>\s*<button id="topbarSair"/.test(indexHtml) &&
+     indexHtml.indexOf('id="topbarSair"') < indexHtml.indexOf('id="lifePanelSoproLife"'));
 caso("nasce oculto e só aparece com sessão",
      /id="topbarSair"[\s\S]{0,220}?hidden/.test(indexHtml) &&
      /btn\.hidden = !\(state\.sessao \|\| state\.token\)/.test(nucleo));
@@ -306,7 +306,7 @@ console.log("I) Mobile 430 e desktop 1920");
 caso("o cabeçalho reflui em tela estreita sem estourar",
      /\.topbar \{[\s\S]{0,120}?flex-wrap: wrap/.test(styleCss));
 caso("\"Sair\" encolhe o espaçamento mas MANTÉM a palavra",
-     /@media \(max-width: 560px\)[\s\S]{0,260}?\.topbar-sair \{[\s\S]{0,120}?padding: 10px 12px/
+     /@media \(max-width: 560px\)[\s\S]{0,260}?\.topbar-sair:not\(\[hidden\]\) \{[\s\S]{0,120}?padding: 10px 12px/
        .test(styleCss) &&
      !/\.topbar-sair-texto \{[\s\S]{0,80}?display: none/.test(styleCss));
 caso("o balão de ajuda não vaza da viewport no celular",
