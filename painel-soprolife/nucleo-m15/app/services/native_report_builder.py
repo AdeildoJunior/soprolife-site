@@ -28,6 +28,7 @@ from ..models import (
     ReportDocument,
     SpirometryExam,
     equipamento_fonte_e_mir,
+    medico_solicitante_display,
 )
 from .cpf import formatar_cpf
 from .crm_display import format_crm_number
@@ -224,6 +225,7 @@ def build_native_content(
     signature_kind: str = SIGNATURE_KIND_INSTITUTIONAL,
     addenda: tuple[AddendumBlock, ...] = (),
     pilot_warning: str | None = None,
+    requesting_physician: str | None = None,
 ) -> NativeReportContent:
     """Conteúdo completo do laudo nativo, já no fuso de apresentação.
 
@@ -258,6 +260,7 @@ def build_native_content(
             # a decisão vive no domínio (equipamento_fonte_e_mir), nunca no
             # gerador de PDF, que continua puro.
             is_mir_equipment=equipamento_fonte_e_mir(exam.equipamento_fonte),
+            requesting_physician=requesting_physician,
         ),
         location=LocationBlock(
             name=location.name,

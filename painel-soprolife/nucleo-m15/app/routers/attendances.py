@@ -547,6 +547,8 @@ def _criar_exame(db: Session, person: Person, payload: AtendimentoCreate) -> Spi
             idempotency_fingerprint=fingerprint,
             observacao=bloco.observacao,
             equipamento_fonte=bloco.equipamento_fonte,
+            medico_solicitante_nome=bloco.medico_solicitante_nome,
+            medico_solicitante_crm=bloco.medico_solicitante_crm,
         )
         _apply_date(exam, "data_exame", bloco.data_exame, "Data do exame")
         exam = reuse_scheduled(db, exam, bloco.lead_id, bloco.continuar_sem_rastreamento)

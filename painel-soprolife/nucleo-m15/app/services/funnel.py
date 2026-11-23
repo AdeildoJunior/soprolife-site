@@ -246,4 +246,8 @@ def reuse_scheduled(db, new_exam, lead_id=None, skip=False):
         'status','broncodilatador','origem','responsavel','observacao','equipamento_fonte',
         'idempotency_key','idempotency_fingerprint'):
         setattr(exam,name,getattr(new_exam,name))
+    # Em branco no atendimento não apaga o solicitante já informado no agendamento.
+    if new_exam.medico_solicitante_nome:
+        exam.medico_solicitante_nome=new_exam.medico_solicitante_nome
+        exam.medico_solicitante_crm=new_exam.medico_solicitante_crm
     return exam

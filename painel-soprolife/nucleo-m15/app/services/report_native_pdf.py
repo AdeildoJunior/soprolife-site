@@ -252,6 +252,8 @@ class ExamBlock:
     # observação técnica de FET não é desenhada. O gerador nunca consulta o
     # banco nem adivinha o aparelho.
     is_mir_equipment: bool = False
+    # Linha pronta "Nome — CRM número"; vazia, nada é desenhado.
+    requesting_physician: str | None = None
 
 
 @dataclass(frozen=True)
@@ -783,6 +785,7 @@ class _Composer:
         self,
         left_fields: list[tuple[str, str]],
         right_fields: list[tuple[str, str]],
+        full_fields: list[tuple[str, str]] = (),
     ) -> None:
         """Bloco único de identificação, em duas colunas com rótulo em linha.
 
@@ -798,7 +801,9 @@ class _Composer:
         padding = 10.0
         column_width = (CONTENT_WIDTH - 3 * padding) / 2
 
-        def layout(fields: list[tuple[str, str]]) -> list[tuple[str, str, bool]]:
+        def layout(
+            fields: list[tuple[str, str]], width: float = column_width
+        ) -> list[tuple[str, str, bool]]:
             """Quebra cada campo em linhas prontas para desenhar.
 
             A primeira linha carrega o rótulo; as continuações entram
@@ -813,7 +818,7 @@ class _Composer:
                     value or "—",
                     font=FONT,
                     size=value_size,
-                    max_width=column_width - prefix_width,
+                    max_width=width - prefix_width,
                 )
                 rendered.append((prefix, wrapped[0], True))
                 for extra in wrapped[1:]:
@@ -823,7 +828,10 @@ class _Composer:
         left = layout(left_fields)
         right = layout(right_fields)
         line_height = 12.4
-        rows = max(len(left), len(right))
+        # Campos de largura total descem abaixo das duas colunas.
+        full = layout(full_fields, CONTENT_WIDTH - 2 * padding)
+        column_rows = max(len(left), len(right))
+        rows = column_rows + len(full)
         height = rows * line_height + 2 * padding
         self.ensure(height + 8)
 
@@ -833,9 +841,11 @@ class _Composer:
         c.setLineWidth(0.8)
         c.rect(MARGIN_X, top - height, CONTENT_WIDTH, height, stroke=1, fill=0)
 
-        for index, column in enumerate((left, right)):
+        for index, start_row, column in (
+            (0, 0, left), (1, 0, right), (0, column_rows, full)
+        ):
             x = MARGIN_X + padding + index * (column_width + padding)
-            text_y = top - padding - value_size
+            text_y = top - padding - value_size - start_row * line_height
             for prefix, value, is_first in column:
                 if is_first and prefix:
                     c.setFont(FONT_BOLD, label_size)
@@ -1577,7 +1587,10 @@ def build_native_report_pdf(content: NativeReportContent) -> bytes:
         ("Data", exam_date),
         ("Pós-BD", _post_bd_label(exam.has_post_bd)),
     ]
-    composer.draw_identification_table(patient_fields, exam_fields)
+    full_fields: list[tuple[str, str]] = []
+    if exam.requesting_physician:
+        full_fields.append(("Médico solicitante", exam.requesting_physician))
+    composer.draw_identification_table(patient_fields, exam_fields, full_fields)
 
     # Hierarquia tipográfica (M25.6). Antes tudo vivia entre 8.2 e 10pt, e
     # sem contraste de corpo a conclusão — o que a médica assina — pesava o

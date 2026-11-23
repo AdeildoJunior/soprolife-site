@@ -242,7 +242,39 @@ class LeadUpdate(StrictModel):
     observacao: str | None = Field(default=None, max_length=4000)
 
 
-class ExamCreate(StrictModel):
+class MedicoSolicitante(StrictModel):
+    """Médico que pediu o exame. Opcional; CRM só acompanha um nome."""
+
+    medico_solicitante_nome: str | None = Field(default=None, max_length=120)
+    medico_solicitante_crm: str | None = Field(default=None, max_length=20)
+
+    @field_validator("medico_solicitante_nome", "medico_solicitante_crm")
+    @classmethod
+    def _limpar_medico_solicitante(cls, v: str | None) -> str | None:
+        limpo = " ".join((v or "").split())
+        if any(unicodedata.category(c) == "Cc" for c in limpo):
+            raise ValueError("Médico solicitante contém caractere inválido.")
+        return limpo or None
+
+    @field_validator("medico_solicitante_crm")
+    @classmethod
+    def _crm_solicitante(cls, v: str | None) -> str | None:
+        # Como está no pedido: "5240927-9", "52.40927-9", "12345/RJ". O
+        # prefixo "CRM" é do laudo e não entra no valor.
+        if v is not None and not re.fullmatch(
+            r"[0-9][0-9.\-]*(?: ?[/\-]? ?[A-Za-z]{2})?", v
+        ):
+            raise ValueError("CRM do solicitante inválido. Informe só o número, ex.: 12345-6.")
+        return v
+
+    @model_validator(mode="after")
+    def _crm_exige_nome(self):
+        if self.medico_solicitante_crm and not self.medico_solicitante_nome:
+            raise ValueError("Informe o nome do médico solicitante junto do CRM.")
+        return self
+
+
+class ExamCreate(MedicoSolicitante):
     lead_id: str | None = None
     continuar_sem_rastreamento: bool = False
     person_id: str
@@ -641,7 +673,7 @@ CATEGORIA_CONSULTA = _CATEGORIA_CONSULTA
 CATEGORIA_REPASSE_MEDICO = _CATEGORIA_REPASSE_MEDICO
 
 
-class AtendimentoEspirometria(StrictModel):
+class AtendimentoEspirometria(MedicoSolicitante):
     lead_id: str | None = None
     continuar_sem_rastreamento: bool = False
     parceria_comercial: str | None = Field(default=None, min_length=1, max_length=40)

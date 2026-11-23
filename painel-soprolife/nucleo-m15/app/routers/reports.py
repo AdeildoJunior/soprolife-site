@@ -68,6 +68,7 @@ from ..models import (
     ReportTemplate,
     SpirometryExam,
     User,
+    medico_solicitante_display,
 )
 from ..normalize import (
     contains_clinical_info,
@@ -79,6 +80,7 @@ from ..schemas import (
     BatchDownloadRequest,
     ExamOperationalClosure,
     ExamOperationalReopen,
+    MedicoSolicitante,
     ExternalValidationRequest,
     SignatureBatchConfirmRequest,
     SignatureBatchDownloadRequest,
@@ -526,6 +528,7 @@ def _store_new_version(
     bronchodilator_text_snapshot: str | None = None,
     observations_snapshot: str | None = None,
     exam_has_post_bd_snapshot: bool | None = None,
+    medico_solicitante_snapshot: str | None = None,
     location_name_snapshot: str | None = None,
     location_address_snapshot: str | None = None,
     location_contact_snapshot: str | None = None,
@@ -683,6 +686,7 @@ def _store_new_version(
         bronchodilator_text_snapshot=bronchodilator_text_snapshot,
         observations_snapshot=observations_snapshot,
         exam_has_post_bd_snapshot=exam_has_post_bd_snapshot,
+        medico_solicitante_snapshot=medico_solicitante_snapshot,
         location_name_snapshot=location_name_snapshot,
         location_address_snapshot=location_address_snapshot,
         location_contact_snapshot=location_contact_snapshot,
@@ -1300,6 +1304,9 @@ def _technical_report_row(
                 "physician_profile_id": (
                     assignment.physician_profile_id if assignment else None
                 ),
+                # Edição pela operação; fora da fila da médica.
+                "medico_solicitante_nome": exam.medico_solicitante_nome,
+                "medico_solicitante_crm": exam.medico_solicitante_crm,
             }
         )
     return data
@@ -1714,6 +1721,70 @@ def _exam_by_code_or_404(db: Session, exam_code: str) -> SpirometryExam:
             404, "exame_nao_encontrado", "Exame não encontrado."
         )
     return exam
+
+
+@router.post("/exames/{exam_code}/medico-solicitante")
+def set_requesting_physician(
+    exam_code: str,
+    payload: MedicoSolicitante,
+    request: Request,
+    db: Session = Depends(get_db),
+    operator: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    """Grava, altera ou limpa (vazio) o médico solicitante de UM exame.
+
+    Rota própria, e não o PATCH do exame: aquele sincroniza follow-up,
+    funil e fechamento de parceria, e nada disso decorre deste dado. Só
+    vale antes da conclusão — um laudo concluído não é reescrito.
+    """
+
+    _require_reports_enabled()
+    exam = _exam_by_code_or_404(db, exam_code)
+    documentos = db.execute(
+        select(ReportDocument)
+        .where(
+            ReportDocument.spirometry_exam_id == exam.id,
+            ReportDocument.devolucao_cancelada_em.is_(None),
+        )
+        .with_for_update()
+    ).scalars().all()
+    if exam.encerramento_motivo is not None or (
+        documentos
+        and not any(
+            documento.status in {STATUS_ATRIBUIDO, STATUS_EM_ELABORACAO}
+            for documento in documentos
+        )
+    ):
+        raise ReportDomainError(
+            409,
+            "exame_ja_concluido",
+            "O laudo deste exame já foi concluído ou encerrado; o médico "
+            "solicitante não pode mais ser alterado.",
+        )
+    novo = (payload.medico_solicitante_nome, payload.medico_solicitante_crm)
+    alterado = novo != (exam.medico_solicitante_nome, exam.medico_solicitante_crm)
+    if alterado:
+        exam.medico_solicitante_nome, exam.medico_solicitante_crm = novo
+        audit(
+            db,
+            "exame_medico_solicitante_atualizado",
+            entidade="spirometry_exams",
+            entidade_id=exam.id,
+            user_id=operator.id,
+            request_id=_request_id(request),
+            detalhes={
+                "exam_code": exam.public_code,
+                "campos": ["medico_solicitante_nome", "medico_solicitante_crm"],
+            },
+        )
+    db.commit()
+    return {
+        "exam_code": exam.public_code,
+        "alterado": alterado,
+        "medico_solicitante_nome": exam.medico_solicitante_nome,
+        "medico_solicitante_crm": exam.medico_solicitante_crm,
+        "requesting_physician": _solicitante_do_exame(exam),
+    }
 
 
 @router.get("/exames/encerrados")
@@ -2768,6 +2839,7 @@ def get_report_document(
                 "exam_time": exam.hora_exame,
                 "post_bronchodilator": exam.broncodilatador,
                 "clinical_indication": exam.indicacao_clinica,
+                "requesting_physician": _solicitante_do_exame(exam),
             },
             # M25.3 — local de realização ESTRUTURADO (dado institucional da
             # clínica, nunca do paciente). Antes a tela mostrava apenas o
@@ -3416,6 +3488,7 @@ def finalize_review_for_signature(
         )
 
     exam, person, location = _document_context(db, document)
+    _recusar_previa_com_outro_solicitante(draft, exam)
     resolved_signature = _resolve_signature(db, profile.id)
     now = datetime.now(timezone.utc)
     version_number = _next_version_number(db, document.id)
@@ -3427,6 +3500,7 @@ def finalize_review_for_signature(
 
     content = build_native_content(
         db,
+        requesting_physician=_solicitante_do_exame(exam),
         document=document,
         exam=exam,
         person=person,
@@ -5461,6 +5535,7 @@ def report_cfm_compliance(
     )
     content = build_native_content(
         db,
+        requesting_physician=_solicitante_do_exame(exam),
         document=document,
         exam=exam,
         person=person,
@@ -5551,10 +5626,12 @@ def start_qualified_signature(
         )
 
     exam, person, location = _document_context(db, document)
+    _recusar_previa_com_outro_solicitante(draft, exam)
     resolved_signature = _resolve_signature(db, profile.id)
     now = datetime.now(timezone.utc)
     content = build_native_content(
         db,
+        requesting_physician=_solicitante_do_exame(exam),
         document=document,
         exam=exam,
         person=person,
@@ -6425,6 +6502,26 @@ def _conclusion_snapshot(
     return snapshot
 
 
+def _solicitante_do_exame(exam: SpirometryExam) -> str | None:
+    return medico_solicitante_display(
+        exam.medico_solicitante_nome, exam.medico_solicitante_crm
+    )
+
+
+def _recusar_previa_com_outro_solicitante(
+    draft: ReportDocumentVersion, exam: SpirometryExam
+) -> None:
+    """A médica nunca conclui um PDF diferente da prévia que conferiu."""
+
+    if draft.medico_solicitante_snapshot != _solicitante_do_exame(exam):
+        raise ReportDomainError(
+            409,
+            "previa_desatualizada",
+            "O médico solicitante mudou depois desta prévia; gere a prévia "
+            "novamente e confira antes de concluir.",
+        )
+
+
 def _publish_native_version(
     db: Session,
     *,
@@ -6454,7 +6551,7 @@ def _publish_native_version(
         created_by_user_id=created_by_user_id,
         interpretation_text_snapshot=final_text,
         **_physician_snapshot(profile, document),
-        **extra,
+        **{"medico_solicitante_snapshot": _solicitante_do_exame(exam), **extra},
     )
 
 
@@ -6597,6 +6694,7 @@ def compose_native_report_preview(
     version_number = _next_version_number(db, document.id)
     content = build_native_content(
         db,
+        requesting_physician=_solicitante_do_exame(exam),
         document=document,
         exam=exam,
         person=person,
@@ -6745,6 +6843,7 @@ def sign_and_release_report(
         )
 
     exam, person, location = _document_context(db, document)
+    _recusar_previa_com_outro_solicitante(draft, exam)
     resolved_signature = _resolve_signature(db, profile.id)
     now = datetime.now(timezone.utc)
     version_number = _next_version_number(db, document.id)
@@ -6752,6 +6851,7 @@ def sign_and_release_report(
 
     content = build_native_content(
         db,
+        requesting_physician=_solicitante_do_exame(exam),
         document=document,
         exam=exam,
         person=person,
@@ -6978,6 +7078,7 @@ def add_report_addendum(
     )
     content = build_native_content(
         db,
+        requesting_physician=released_version.medico_solicitante_snapshot,
         document=document,
         exam=exam,
         person=person,
@@ -7017,32 +7118,37 @@ def add_report_addendum(
                 final_text=(
                     released_version.interpretation_text_snapshot or ""
                 ),
-                extra=_conclusion_snapshot(
-                    conclusion_code=released_version.conclusion_code_snapshot,
-                    conclusion_text=released_version.conclusion_text_snapshot,
-                    bronchodilator_code=(
-                        released_version.bronchodilator_code_snapshot
+                extra={
+                    "medico_solicitante_snapshot": (
+                        released_version.medico_solicitante_snapshot
                     ),
-                    bronchodilator_text=(
-                        released_version.bronchodilator_text_snapshot or ""
+                    **_conclusion_snapshot(
+                        conclusion_code=released_version.conclusion_code_snapshot,
+                        conclusion_text=released_version.conclusion_text_snapshot,
+                        bronchodilator_code=(
+                            released_version.bronchodilator_code_snapshot
+                        ),
+                        bronchodilator_text=(
+                            released_version.bronchodilator_text_snapshot or ""
+                        ),
+                        observations=released_version.observations_snapshot,
+                        exam=exam,
+                        location=location,
+                        validation_code=document.validation_code,
+                        released_at=document.released_at,
+                        signature_asset_id=(
+                            resolved_signature.asset.id
+                            if resolved_signature
+                            else None
+                        ),
+                        signature_asset_sha256=(
+                            resolved_signature.asset.sha256
+                            if resolved_signature
+                            else None
+                        ),
+                        addendum_sequence=next_sequence,
                     ),
-                    observations=released_version.observations_snapshot,
-                    exam=exam,
-                    location=location,
-                    validation_code=document.validation_code,
-                    released_at=document.released_at,
-                    signature_asset_id=(
-                        resolved_signature.asset.id
-                        if resolved_signature
-                        else None
-                    ),
-                    signature_asset_sha256=(
-                        resolved_signature.asset.sha256
-                        if resolved_signature
-                        else None
-                    ),
-                    addendum_sequence=next_sequence,
-                ),
+                },
             )
             addendum = ReportAddendum(
                 report_document_id=document.id,

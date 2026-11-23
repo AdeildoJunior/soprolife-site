@@ -411,6 +411,14 @@ def equipamento_fonte_e_mir(valor: str | None) -> bool:
     return valor == EQUIPAMENTO_FONTE_MIR_SPIROBANK_SMART_II
 
 
+def medico_solicitante_display(nome: str | None, crm: str | None) -> str | None:
+    """Linha única "Nome — CRM número" do laudo; `None` quando não informado."""
+
+    if not nome:
+        return None
+    return f"{nome} — CRM {crm}" if crm else nome
+
+
 class SpirometryExam(Base, TimestampMixin, LegacyMixin):
     __tablename__ = "spirometry_exams"
     id: Mapped[str] = mapped_column(String(UUID_LEN), primary_key=True, default=new_uuid)
@@ -453,6 +461,10 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
     # Opcional por construção: obrigar quebraria os fluxos legados (13 exames
     # em produção vieram de importação sem modalidade; o mesmo vale aqui).
     equipamento_fonte: Mapped[str | None] = mapped_column(String(40))
+    # Médico solicitante: dado DESTE exame, opcional, sem valor padrão e
+    # nunca inferido. Vazio, a linha não existe no laudo.
+    medico_solicitante_nome: Mapped[str | None] = mapped_column(String(120))
+    medico_solicitante_crm: Mapped[str | None] = mapped_column(String(20))
     # M26.36 — RETESTE DE CONTROLE, sem cobrança e sem repasse.
     #
     # Declaração do operador sobre o ATO: este exame foi refeito para
@@ -519,6 +531,10 @@ class SpirometryExam(Base, TimestampMixin, LegacyMixin):
             "equipamento_fonte IS NULL OR equipamento_fonte IN "
             "('MIR_SPIROBANK_SMART_II','KOKO','OUTRO')",
             name="spirometry_equipamento_fonte_valido",
+        ),
+        CheckConstraint(
+            "medico_solicitante_crm IS NULL OR medico_solicitante_nome IS NOT NULL",
+            name="medico_solicitante_crm_exige_nome",
         ),
     )
 
@@ -2104,6 +2120,8 @@ class ReportDocumentVersion(Base):
     bronchodilator_text_snapshot: Mapped[str | None] = mapped_column(Text)
     observations_snapshot: Mapped[str | None] = mapped_column(Text)
     exam_has_post_bd_snapshot: Mapped[bool | None] = mapped_column(Boolean)
+    # Linha do médico solicitante como impressa nesta versão.
+    medico_solicitante_snapshot: Mapped[str | None] = mapped_column(String(160))
     # Local de realização estruturado (app/services/report_locations.py).
     location_name_snapshot: Mapped[str | None] = mapped_column(String(240))
     location_address_snapshot: Mapped[str | None] = mapped_column(String(300))

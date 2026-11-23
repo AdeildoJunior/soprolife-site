@@ -2026,6 +2026,10 @@
               ? esc(exam.clinical_indication)
               : `<em class="report-empty-value">não informada</em>`
           }</span>
+          ${exam.requesting_physician
+            ? `<span class="report-context-meta">Médico solicitante: ${
+                 esc(exam.requesting_physician)
+               }</span>` : ""}
         </article>
         <article class="report-context-card">
           <h4>Local de realização</h4>
@@ -2860,6 +2864,26 @@
         <div class="report-operation-list">${rows}</div>
         ${renderSupersededHistory()}
         ${renderClosedExams()}
+        ${selected && ["atribuido", "em_elaboracao"].includes(selected.status) ? `
+          <form id="reportRequestingPhysicianForm" class="report-reassign-form">
+            <h4>Médico solicitante — ${esc(patientName(selected))}</h4>
+            <p class="report-help">Opcional e só deste exame
+              (${esc(selected.exam_code)}). Em branco, não aparece no laudo.</p>
+            <input type="hidden" name="exam_code" value="${esc(selected.exam_code)}">
+            <label for="reportRequestingName">Nome
+              <input id="reportRequestingName" name="medico_solicitante_nome"
+                maxlength="120" autocomplete="off"
+                value="${esc(selected.medico_solicitante_nome || "")}">
+            </label>
+            <label for="reportRequestingCrm">CRM
+              <input id="reportRequestingCrm" name="medico_solicitante_crm"
+                maxlength="20" autocomplete="off"
+                value="${esc(selected.medico_solicitante_crm || "")}">
+            </label>
+            <button class="m15-btn" type="submit"${
+              state.busy ? " disabled" : ""
+            }>Salvar médico solicitante</button>
+          </form>` : ""}
         ${selected && selected.status === "atribuido" ? `
           <form id="reportReassignForm" class="report-reassign-form">
             <h4>Reatribuir antes do primeiro rascunho</h4>
@@ -4948,6 +4972,34 @@
     }
   }
 
+  async function saveRequestingPhysician(form) {
+    const codigo = form.elements.exam_code.value;
+    const payload = {
+      medico_solicitante_nome: form.elements.medico_solicitante_nome.value.trim(),
+      medico_solicitante_crm: form.elements.medico_solicitante_crm.value.trim(),
+    };
+    state.busy = true;
+    announce("Salvando médico solicitante…", "");
+    try {
+      const salvo = await client().api(
+        `/laudos/exames/${encodeURIComponent(codigo)}/medico-solicitante`,
+        { method: "POST", body: JSON.stringify(payload) }
+      );
+      announce(
+        salvo.requesting_physician
+          ? `${codigo} — médico solicitante: ${salvo.requesting_physician}.`
+          : `${codigo} sem médico solicitante.`,
+        "ok"
+      );
+      await loadAuthenticatedData();
+    } catch (error) {
+      announce(readableError(error), "erro");
+    } finally {
+      state.busy = false;
+      render();
+    }
+  }
+
   // ------------------------------- M25.24 — encerrar e reabrir um exame
 
   async function closeExamAsHistorical(form) {
@@ -5710,6 +5762,8 @@
       publishAddendum(event.target);
     } else if (event.target.id === "reportReassignForm") {
       reassign(event.target);
+    } else if (event.target.id === "reportRequestingPhysicianForm") {
+      saveRequestingPhysician(event.target);
     } else if (event.target.id === "reportReplaceOriginalPdfForm") {
       replaceOriginalPdf(event.target);
     } else if (event.target.id === "reportPhysicianAdminForm") {

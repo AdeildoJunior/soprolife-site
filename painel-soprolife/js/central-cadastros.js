@@ -729,6 +729,8 @@
     "espirometria.status": "esp_status",
     "espirometria.municipio_atendimento_ibge": "esp_municipio",
     "espirometria.equipamento_fonte": "esp_equipamento",
+    "espirometria.medico_solicitante_nome": "esp_solicitante_nome",
+    "espirometria.medico_solicitante_crm": "esp_solicitante_crm",
     "consulta.data_consulta": "con_data",
     "consulta.status": "con_status",
     "consulta.profissional": "con_profissional",
@@ -1902,6 +1904,9 @@
         ${fld("Técnico / responsável", inp("esp_responsavel", "Adeildo", 'list="cadResp"'), 4)}
         ${fld("Próximo acompanhamento", dateInp("esp_followup", ""),
           { span: 4, help: "Sugestão: seis meses depois, na primeira segunda-feira. Você pode alterar." })}
+        ${fld("Médico solicitante (opcional)", inp("esp_solicitante_nome", "", 'maxlength="120"'),
+          { span: 4, help: "Aparece no laudo somente quando preenchido." })}
+        ${fld("CRM do solicitante", inp("esp_solicitante_crm", "", 'maxlength="20"'), 4)}
         ${fld("Observações do exame", inp("esp_observacao", ""), 12)}
       </div>`;
 
@@ -2396,6 +2401,7 @@
           // Primeira troca: transportar os dados do MESMO exame, inclusive BD.
           // Ao voltar, restaurar o rascunho daquela modalidade sem sobrescrevê-lo.
           const comuns = new Set(["esp_data", "esp_status", "esp_bd", "esp_equipamento",
+            "esp_solicitante_nome", "esp_solicitante_crm",
             "esp_municipio", "esp_responsavel", "esp_followup", "esp_observacao",
             "esp_valor", "esp_pgto_status", "esp_pgto_data", "esp_pgto_forma"]);
           const rascunho = rascunhosEsp.get(variante) ||
@@ -2636,6 +2642,8 @@
     // Em branco = não informado (NULL): nunca assumido. Só MIR Spirobank
     // Smart II faz o laudo imprimir a observação técnica de FET.
     setIf(bloco, "equipamento_fonte", val(form, "esp_equipamento"));
+    setIf(bloco, "medico_solicitante_nome", val(form, "esp_solicitante_nome"));
+    setIf(bloco, "medico_solicitante_crm", val(form, "esp_solicitante_crm"));
     setIf(bloco, "responsavel", val(form, "esp_responsavel"));
     setIf(bloco, "observacao", val(form, "esp_observacao"));
     setIf(bloco, "proximo_followup", val(form, "esp_followup"));

@@ -542,6 +542,13 @@ e auditoria; reagendar continua pelo serviço de contato, sem emissão fiscal.
   assinatura, separada da conclusão médica. O PDF técnico do equipamento é o
   "documento 1", intocado, baixado separadamente. Migration `d7b2f3a9c1e0`
   aditiva sobre `a291029eeg01`; nenhuma versão histórica é regenerada.
+- **Médico solicitante (23/11/2026):** `medico_solicitante_nome/_crm`, opcional
+  e por exame, sem padrão nem backfill (migration `e231126msol`). Cadastro do
+  atendimento ou Laudos → Acompanhamento operacional
+  (`POST /laudos/exames/{ESP}/medico-solicitante`, operacional+, só antes da
+  conclusão, sem tocar follow-up/financeiro). Sai no PDF quando preenchido; a
+  versão congela `medico_solicitante_snapshot` e mudança após a prévia exige
+  nova prévia.
 - **Laudo:** gerado pelo núcleo (`report_native_pdf.py`), conclusão da médica,
   selo "Assinatura digital" institucional; rótulo ICP-Brasil só com prova
   criptográfica.

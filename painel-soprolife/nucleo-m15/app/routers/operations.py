@@ -260,6 +260,8 @@ def create_exam(
             idempotency_fingerprint=fingerprint,
             observacao=payload.observacao,
             equipamento_fonte=payload.equipamento_fonte,
+            medico_solicitante_nome=payload.medico_solicitante_nome,
+            medico_solicitante_crm=payload.medico_solicitante_crm,
         )
         _apply_date(exam, "data_exame", payload.data_exame)
         exam = reuse_scheduled(db, exam, payload.lead_id, payload.continuar_sem_rastreamento)
