@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from ..audit import audit
 from ..db import get_db
 from ..ids import allocate_public_code
-from ..models import Followup, Interaction, Person, PersonContact, User
+from ..models import Followup, Interaction, Person, User
 from ..pagination import PageParams, paginate
 from ..schemas import (
     FollowupComplete,
@@ -26,6 +26,7 @@ from ..schemas import (
 )
 from ..security import ROLE_LEITURA, ROLE_OPERACIONAL, require_role
 from ..serializers import ser_followup, ser_interaction
+from ..services import crm as csvc
 from ..services import followup as fsvc
 from ..services.relationships import legal_contact_relationship
 
@@ -305,25 +306,16 @@ def whatsapp_url(
                                 "bloqueado (fail-closed).",
                     "consentimento": consent},
         )
-    contact = db.execute(
-        select(PersonContact).where(
-            PersonContact.person_id == contact_person.id,
-            PersonContact.tipo.in_(["whatsapp", "telefone"]),
-            PersonContact.ativo == True,  # noqa: E712
-            PersonContact.nao_discavel == False,  # noqa: E712
-        ).order_by(PersonContact.principal.desc())
-    ).scalars().first()
+    contact = csvc.dialable_contact(db, contact_person.id)
     if not contact or not contact.valor_normalizado:
         raise HTTPException(status_code=422, detail="Pessoa sem telefone discável cadastrado.")
-    message = fsvc.default_message(contact_person.nome_completo, fup.tipo)
+    template, exam_confirmed = csvc.followup_template(db, fup)
     return {
+        **csvc.whatsapp_preview(db, person.id, contact_person, contact, template,
+                                 exam_confirmed=exam_confirmed),
         "followup_id": fup.id,
-        "url": fsvc.build_whatsapp_url(contact.valor_normalizado, message),
-        "mensagem_sugerida": message,
         "consentimento_whatsapp": consent,
         "aviso_consentimento": False,
-        "envio_automatico": False,
-        "instrucao": "Revise a mensagem, envie manualmente e confirme para registrar.",
     }
 
 

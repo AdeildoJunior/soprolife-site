@@ -276,7 +276,7 @@ def test_whatsapp_de_paciente_exige_modelo_valido(client, auth, paciente):
 
 
 @pytest.mark.parametrize(
-    "template", ["pos_exame", "resultado_exame", "pos_consulta", "reativacao", "geral"]
+    "template", [*csvc.TEMPLATES, *csvc.TEMPLATE_ALIASES]
 )
 def test_todos_os_modelos_de_mensagem_geram_previa(client, auth, paciente, template):
     resp = client.get(
@@ -286,7 +286,9 @@ def test_todos_os_modelos_de_mensagem_geram_previa(client, auth, paciente, templ
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["envio_automatico"] is False
-    assert data["mensagem_sugerida"].startswith("Olá Paciente")
+    assert data["template"] == csvc.TEMPLATE_ALIASES.get(template, template)
+    assert data["mensagem_sugerida"] == data["modelos"][data["template"]]
+    assert data["mensagem_sugerida"].startswith(("Olá Paciente", "Olá, Paciente!"))
     assert data["url"].startswith("https://wa.me/")
     assert data["contato"]["telefone_mascarado"].endswith(TEST_PHONE_NORM[-4:])
 
@@ -813,3 +815,61 @@ def test_mascara_de_telefone_nunca_vaza_digitos_do_meio():
     assert csvc.mask_phone("5521988887766") == "•••••••••7766"
     assert csvc.mask_phone(None) is None
     assert csvc.mask_phone("12") == "••"
+
+
+@pytest.mark.parametrize(
+    ("origem", "modelo"), [
+        ("exame_realizado", "pos_exame"),
+        ("exame_agendado", "agendamento_espirometria"),
+        ("consulta", "telemedicina"),
+        ("lead", "agendamento_espirometria"),
+        ("sem_origem", "personalizada"),
+    ],
+)
+def test_previa_escolhe_modelo_pela_origem(client, auth, db, origem, modelo):
+    from app.models import Lead
+
+    pessoa = _criar_pessoa(client, auth, "Paciente Modelo Teste")
+    pid = pessoa["id"]
+    origem_entidade = origem_id = None
+    if origem.startswith("exame_"):
+        status = "Realizado" if origem == "exame_realizado" else "Aguardando"
+        origem_entidade = "spirometry_exams"
+        origem_id = _criar_exame(client, auth, pid, today_local(), status)["id"]
+    elif origem == "consulta":
+        origem_entidade = "consultations"
+        origem_id = _criar_consulta(client, auth, pid, today_local(), "Agendada")["id"]
+    elif origem == "lead":
+        lead = Lead(public_code="LED-000909", person_id=pid, servico_interesse="espirometria")
+        db.add(lead)
+        db.flush()
+        origem_entidade, origem_id = "leads", lead.id
+    followup = Followup(
+        public_code="FUP-000909", person_id=pid, tipo="manual",
+        origem_entidade=origem_entidade, origem_id=origem_id,
+    )
+    db.add(followup)
+    db.commit()
+    response = client.get(
+        f"/api/v1/followups/{followup.id}/whatsapp-url", headers=auth("operacional")
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["template"] == modelo
+    assert result["mensagem_sugerida"] == result["modelos"][modelo]
+    assert set(result["modelos"]) == set(csvc.TEMPLATES)
+    assert ("após sua espirometria" in result["modelos"]["pos_exame"]) == (origem == "exame_realizado")
+
+
+def test_previa_em_telefone_compartilhado_usa_msg_neutra_em_todos_modelos(client, auth, paciente):
+    _criar_pessoa(client, auth, "Outro Titular do Número")
+    response = client.get(
+        f"/api/v1/crm/pacientes/{paciente['pessoa']['id']}/whatsapp-url?template=semestral",
+        headers=auth("operacional"),
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["contato"]["telefone_compartilhado"] is True
+    assert len(set(result["modelos"].values())) == 1
+    assert "confirmar se estou falando com Paciente" in result["mensagem_sugerida"]
+    assert "espirometria" not in result["mensagem_sugerida"]

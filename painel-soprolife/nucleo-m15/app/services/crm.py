@@ -30,6 +30,7 @@ from ..models import (
     Interaction,
     Lead,
     Partner,
+    PartnerReferral,
     Person,
     PersonContact,
     PersonRelationship,
@@ -38,7 +39,7 @@ from ..models import (
 from ..status_display import exam_status_display, is_exam_performed_status
 from ..dates import add_months
 from .relationships import legal_contact_relationship
-from .followup import today_local, whatsapp_consent_status
+from .followup import build_whatsapp_url, today_local, whatsapp_consent_status
 from .crm_schedule import project_followups, contact_situation, next_contact_date
 
 # Janela usada para classificar "paciente reativado": um atendimento novo
@@ -126,12 +127,36 @@ RESULTADO_LABELS = {
 
 # Modelos de mensagem do WhatsApp (M19 §9).
 TEMPLATES = {
-    "pos_exame": "Acompanhamento de espirometria (6 meses)",
-    "resultado_exame": "Retorno de resultado de exame",
-    "pos_consulta": "Acompanhamento de consulta",
-    "reativacao": "Reativação de paciente",
-    "geral": "Contato operacional geral",
+    "semestral": "Acompanhamento semestral",
+    "agendamento_espirometria": "Agendamento de espirometria",
+    "telemedicina": "Consulta por telemedicina",
+    "pos_exame": "Acompanhamento pós-exame",
+    "personalizada": "Mensagem personalizada",
 }
+TEMPLATE_ALIASES = {
+    "resultado_exame": "pos_exame",
+    "pos_consulta": "telemedicina",
+    "reativacao": "semestral",
+    "geral": "personalizada",
+}
+
+MENSAGEM_SEMESTRAL = """Olá, {primeiro_nome}! Tudo bem? 😊
+
+Aqui é da SoproLife — Diagnósticos e Soluções em Saúde.
+
+Estamos entrando em contato para saber como está sua saúde respiratória e lembrar da importância do acompanhamento da função pulmonar.
+
+Caso esteja na época de atualizar sua espirometria, podemos ajudá-lo com o agendamento.
+
+Também contamos com atendimento médico por telemedicina, caso precise de avaliação ou orientação médica.
+
+Gostaria de consultar nossos horários e locais de atendimento?
+
+Estamos à disposição! 💙
+🌐 soprolife.com.br
+
+Caso prefira não receber nossos lembretes, basta nos informar."""
+
 
 
 # --------------------------------------------------------------- utilitários
@@ -988,30 +1013,82 @@ def build_indicators(
 
 # ------------------------------------------------------------------ mensagens
 
-def template_message(nome: str, template: str) -> str:
-    primeiro = (nome or "").split(" ")[0]
-    base = f"Olá {primeiro}, aqui é da SoproLife."
-    if template == "pos_exame":
-        return (
-            f"{base} Faz cerca de 6 meses desde a sua espirometria. "
-            "Podemos conversar sobre o acompanhamento?"
-        )
-    if template == "resultado_exame":
-        return (
-            f"{base} Estamos com o resultado do seu exame disponível. "
-            "Podemos combinar o melhor momento para conversar sobre ele?"
-        )
-    if template == "pos_consulta":
-        return (
-            f"{base} Faz cerca de 6 meses desde a sua consulta. "
-            "Que tal agendarmos o seu retorno?"
-        )
-    if template == "reativacao":
-        return (
-            f"{base} Faz um tempo desde o seu último atendimento conosco. "
-            "Podemos retomar o seu acompanhamento respiratório?"
-        )
-    return f"{base} Podemos falar sobre o seu atendimento?"
+def confirmed_exam(exam: SpirometryExam | None, person_id: str) -> bool:
+    return (
+        exam is not None and exam.person_id == person_id
+        and exam.data_exame is not None and exam.data_exame <= today_local()
+        and (is_exam_performed_status(exam.status) or exam.status in {"Laudo Liberado", "Liberado"})
+    )
+
+
+def followup_template(db: Session, fup: Followup) -> tuple[str, bool]:
+    if fup.origem_entidade == "spirometry_exams":
+        exam = db.get(SpirometryExam, fup.origem_id) if fup.origem_id else None
+        if confirmed_exam(exam, fup.person_id):
+            return "pos_exame", True
+        if exam and exam.person_id == fup.person_id and exam.status in {"Aguardando", "Remarcado"}:
+            return "agendamento_espirometria", False
+    if fup.origem_entidade == "consultations":
+        consultation = db.get(Consultation, fup.origem_id) if fup.origem_id else None
+        if consultation and consultation.person_id == fup.person_id and consultation.modalidade == "teleconsulta":
+            return "telemedicina", False
+    if fup.origem_entidade in {"leads", "partner_referrals"} and fup.origem_id:
+        if fup.origem_entidade == "leads":
+            origin = db.get(Lead, fup.origem_id)
+            service = origin.servico_interesse if origin else None
+        else:
+            origin = db.get(PartnerReferral, fup.origem_id)
+            service = origin.servico_solicitado if origin else None
+        if origin and origin.person_id == fup.person_id and service == "espirometria":
+            return "agendamento_espirometria", False
+    return "personalizada", False
+
+
+def whatsapp_preview(
+    db: Session, person_id: str, recipient: Person, contact: PersonContact,
+    template: str, *, exam_confirmed: bool = False,
+) -> dict:
+    shared = db.scalar(select(PersonContact.id).where(
+        PersonContact.person_id != recipient.id,
+        PersonContact.tipo.in_(["telefone", "whatsapp"]),
+        PersonContact.ativo.is_(True),
+        PersonContact.valor_normalizado == contact.valor_normalizado,
+    ).limit(1)) is not None
+    guardian = recipient.id != person_id
+    first_name = next(iter(recipient.nome_completo.split()), "")
+    greeting = f"Olá {first_name}, aqui é da SoproLife." if first_name else "Olá, aqui é da SoproLife."
+    neutral = f"{greeting} Podemos falar com você por este número?"
+    if shared or guardian:
+        # Primeiro contato só confirma a identidade, sem mencionar exames ou
+        # o paciente vinculado ao responsável.
+        identity = f"Você poderia confirmar se estou falando com {first_name}?" if first_name else "Com quem estou falando?"
+        messages = dict.fromkeys(TEMPLATES, f"Olá, aqui é da SoproLife. {identity}")
+    else:
+        messages = {
+            "semestral": MENSAGEM_SEMESTRAL.format(primeiro_nome=first_name),
+            "agendamento_espirometria": f"{greeting} Gostaria de consultar horários e locais para agendar uma espirometria?",
+            "telemedicina": f"{greeting} Podemos ajudar a agendar uma consulta por telemedicina. Gostaria de consultar os horários?",
+            "pos_exame": (
+                f"{greeting} Podemos conversar sobre o acompanhamento após sua espirometria?"
+                if exam_confirmed else neutral
+            ),
+            "personalizada": neutral,
+        }
+    message = messages[template]
+    return {
+        "template": template,
+        "modelos": messages,
+        "url": build_whatsapp_url(contact.valor_normalizado, message),
+        "mensagem_sugerida": message,
+        "contato": {
+            "person_id": recipient.id, "public_code": recipient.public_code,
+            "nome_completo": recipient.nome_completo, "eh_responsavel": guardian,
+            "telefone_mascarado": mask_phone(contact.valor_normalizado),
+            "telefone_compartilhado": shared,
+        },
+        "envio_automatico": False,
+        "instrucao": "Revise a mensagem, envie manualmente e confirme para registrar.",
+    }
 
 
 def money_str(value: Decimal | None) -> str | None:

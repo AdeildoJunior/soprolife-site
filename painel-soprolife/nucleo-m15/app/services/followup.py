@@ -226,22 +226,6 @@ def build_whatsapp_url(phone_normalized: str, message: str) -> str:
     return f"https://wa.me/{phone_normalized}?text={quote(message)}"
 
 
-def default_message(person_nome: str, contexto: str | None = None) -> str:
-    primeiro_nome = person_nome.split(" ")[0] if person_nome else ""
-    base = f"Olá {primeiro_nome}, aqui é da SoproLife."
-    if contexto == "pos_exame":
-        return (
-            f"{base} Faz cerca de 6 meses desde a sua espirometria. "
-            "Podemos conversar sobre o acompanhamento?"
-        )
-    if contexto == "pos_consulta":
-        return (
-            f"{base} Faz cerca de 6 meses desde a sua consulta. "
-            "Que tal agendarmos o seu retorno?"
-        )
-    return f"{base} Podemos falar sobre o seu atendimento?"
-
-
 def complete_followup(
     db: Session,
     fup: Followup,

@@ -215,7 +215,7 @@ def timeline(
 @router.get("/pacientes/{person_id}/whatsapp-url")
 def whatsapp_url_paciente(
     person_id: str,
-    template: str = Query("geral"),
+    template: str = Query("personalizada"),
     db: Session = Depends(get_db),
     _user: User = Depends(require_role(ROLE_OPERACIONAL)),
 ):
@@ -225,6 +225,7 @@ def whatsapp_url_paciente(
     pessoa contactável, registro real e telefone discável. Abrir a URL NUNCA
     conclui nada — o resultado é registrado em /crm/contatos.
     """
+    template = csvc.TEMPLATE_ALIASES.get(template, template)
     if template not in csvc.TEMPLATES:
         raise HTTPException(status_code=422, detail="Modelo de mensagem inválido.")
     person = db.get(Person, person_id)
@@ -254,21 +255,11 @@ def whatsapp_url_paciente(
     contact = csvc.dialable_contact(db, contato_pessoa.id)
     if not contact or not contact.valor_normalizado:
         raise HTTPException(status_code=422, detail="Pessoa sem telefone discável cadastrado.")
-    mensagem = csvc.template_message(contato_pessoa.nome_completo, template)
+    exams = db.scalars(select(SpirometryExam).where(SpirometryExam.person_id == person.id))
     return {
+        **csvc.whatsapp_preview(db, person.id, contato_pessoa, contact, template,
+                                 exam_confirmed=any(csvc.confirmed_exam(e, person.id) for e in exams)),
         "person_id": person.id,
-        "template": template,
-        "url": fsvc.build_whatsapp_url(contact.valor_normalizado, mensagem),
-        "mensagem_sugerida": mensagem,
-        "contato": {
-            "person_id": contato_pessoa.id,
-            "public_code": contato_pessoa.public_code,
-            "nome_completo": contato_pessoa.nome_completo,
-            "eh_responsavel": contato_pessoa.id != person.id,
-            "telefone_mascarado": csvc.mask_phone(contact.valor_normalizado),
-        },
-        "envio_automatico": False,
-        "instrucao": "Revise a mensagem, envie manualmente e registre o resultado.",
     }
 
 
@@ -287,10 +278,11 @@ def whatsapp_semestral(
     phone = csvc.dialable_contact(db, recipient["person_id"], valid_number=True)
     if not phone:
         raise HTTPException(status_code=409, detail="Telefone indisponível.")
-    message = fsvc.default_message(recipient["nome_completo"], "pos_exame")
-    return {"url": fsvc.build_whatsapp_url(phone.valor_normalizado, message),
-            "mensagem_sugerida": message, "envio_automatico": False,
-            "contato": recipient, "followup_id": row["followup_id"]}
+    return {
+        **csvc.whatsapp_preview(db, person_id, db.get(Person, recipient["person_id"]),
+                                 phone, "semestral", exam_confirmed=True),
+        "followup_id": row["followup_id"],
+    }
 
 
 @router.get("/contatos-a-realizar")

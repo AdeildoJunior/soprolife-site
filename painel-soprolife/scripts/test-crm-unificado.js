@@ -165,13 +165,13 @@ caso("existe prévia editável antes de abrir",
      wsSrc.indexOf("<textarea") !== -1);
 caso("a prévia mostra quem será contatado e se é paciente ou responsável",
      wsSrc.indexOf("crm-ws-tag-resp") !== -1 &&
-     wsSrc.indexOf("responsável legal, não o paciente") !== -1 &&
-     wsSrc.indexOf("o próprio paciente") !== -1);
+     wsSrc.indexOf("responsável legal") !== -1 &&
+     wsSrc.indexOf("crm-ws-tag-pac") !== -1 &&
+     wsSrc.indexOf("telefone_mascarado") !== -1);
 caso("abrir o WhatsApp NÃO conclui o acompanhamento",
-     wsSrc.indexOf("Abrir o WhatsApp <strong>não</strong> conclui o acompanhamento") !== -1 &&
      wsSrc.indexOf("/concluir") === -1);
 caso("depois de abrir, o operador é levado a escolher o resultado",
-     /window\.open\(final[\s\S]{0,200}modalResultado\(id\)/.test(wsSrc));
+     /window\.open\([\s\S]{0,200}modalResultado\(id\)/.test(wsSrc));
 caso("todo resultado passa pelo endpoint auditável /crm/contatos",
      (wsSrc.match(/api\("\/crm\/contatos"/g) || []).length >= 2);
 

@@ -776,66 +776,63 @@
     }).join("");
   }
 
-  function previaWhatsapp(fonte, id, templateInicial) {
-    var c = cli();
-    if (fonte === "semestral") return c.api("/crm/semestral/" + encodeURIComponent(id) + "/whatsapp-url");
-    var url = fonte === "followup"
-      ? "/followups/" + encodeURIComponent(id) + "/whatsapp-url"
-      : "/crm/pacientes/" + encodeURIComponent(id) + "/whatsapp-url?template=" +
-        encodeURIComponent(templateInicial || "geral");
-    return c.api(url);
+  function previaWhatsapp(fonte, id) {
+    var caminho = fonte === "followup" ? "/followups/" :
+      fonte === "semestral" ? "/crm/semestral/" : "/crm/pacientes/";
+    return cli().api(caminho + encodeURIComponent(id) + "/whatsapp-url");
   }
 
   function modalWhatsapp(fonte, id) {
-    previaWhatsapp(fonte, id, "geral").then(function (resp) {
-      var contato = resp.contato || {};
-      var quemHtml = fonte === "followup"
-        ? '<p class="m15-muted">Confirme com quem você vai falar antes de abrir o WhatsApp.</p>'
-        : '<p class="crm-ws-modal-quem"><strong>' + esc(contato.nome_completo || "") + "</strong>" +
-          (contato.eh_responsavel
-            ? '<span class="crm-ws-tag-resp">responsável legal, não o paciente</span>'
-            : '<span class="crm-ws-tag-pac">o próprio paciente</span>') +
-          '<br><span class="crm-ws-tel">' + esc(contato.telefone_mascarado || "") + "</span></p>";
-
-      var seletor = fonte !== "pessoa" ? "" :
-        '<label class="crm-ws-filtro crm-ws-modal-campo"><span>Modelo de mensagem</span>' +
-        '<select id="crmWsWaTpl">' + templatesOptions("geral") + "</select></label>";
-
+    previaWhatsapp(fonte, id).then(function (resp) {
+      var contato = resp.contato;
+      var instrucao = contato.telefone_compartilhado || contato.eh_responsavel
+        ? '<p class="m15-muted">Use a primeira mensagem para confirmar quem respondeu. Aguarde a confirmação antes de mencionar exames ou informações de saúde.</p>'
+        : "";
       abrirModal(
         "<h3>Prévia da mensagem de WhatsApp</h3>" +
-        quemHtml +
-        seletor +
+        '<p class="crm-ws-modal-quem"><strong>' + esc(contato.nome_completo) + "</strong>" +
+        (contato.eh_responsavel
+          ? '<span class="crm-ws-tag-resp">responsável legal</span>'
+          : '<span class="crm-ws-tag-pac">paciente</span>') +
+        '<br><span class="crm-ws-tel">' + esc(contato.telefone_mascarado) + "</span>" +
+        (contato.telefone_compartilhado ? ' · Telefone compartilhado' : "") + "</p>" +
+        instrucao +
+        '<label class="crm-ws-filtro crm-ws-modal-campo"><span>Modelo de mensagem</span>' +
+        '<select id="crmWsWaTpl">' + templatesOptions(resp.template) + "</select></label>" +
         '<label class="crm-ws-modal-campo"><span>Mensagem (edite antes de enviar)</span>' +
-        '<textarea id="crmWsWaMsg" rows="5">' + esc(resp.mensagem_sugerida || "") +
-        "</textarea></label>" +
-        '<p class="m15-muted">Abrir o WhatsApp <strong>não</strong> conclui o acompanhamento. ' +
-        "Depois de enviar, registre o resultado.</p>" +
+        '<textarea id="crmWsWaMsg" rows="7"></textarea></label>' +
+        '<label><input type="checkbox" id="crmWsWaConfirmar"> Conferi o destinatário e o telefone no cadastro</label>' +
+        '<p class="m15-muted">Depois de enviar pelo WhatsApp, registre o resultado do contato.</p>' +
         '<div class="m15-modal-actions">' +
         '<button type="button" class="m15-btn m15-btn-sec" data-crm-ws-fechar>Cancelar</button>' +
-        '<button type="button" class="m15-btn m15-btn-wa" id="crmWsWaAbrir">Abrir WhatsApp</button>' +
+        '<button type="button" class="m15-btn m15-btn-wa" id="crmWsWaAbrir" disabled>Abrir WhatsApp</button>' +
         "</div>",
         function (overlay, fechar) {
-          var msgEl = overlay.querySelector("#crmWsWaMsg");
-          var estado = { url: resp.url, base: resp.mensagem_sugerida || "" };
-          var tpl = overlay.querySelector("#crmWsWaTpl");
-          if (tpl) {
-            tpl.addEventListener("change", function () {
-              previaWhatsapp(fonte, id, tpl.value).then(function (r2) {
-                estado.url = r2.url;
-                estado.base = r2.mensagem_sugerida || "";
-                msgEl.value = estado.base;
-              }).catch(function (err) { toast(err.message || String(err), "erro"); });
-            });
+          var msg = overlay.querySelector("#crmWsWaMsg");
+          var seletor = overlay.querySelector("#crmWsWaTpl");
+          var confirmar = overlay.querySelector("#crmWsWaConfirmar");
+          var abrir = overlay.querySelector("#crmWsWaAbrir");
+          var rascunhos = Object.assign({}, resp.modelos);
+          var atual = resp.template;
+          msg.value = rascunhos[atual];
+
+          function atualizarBotao() {
+            abrir.disabled = !confirmar.checked || !msg.value.trim();
           }
-          overlay.querySelector("#crmWsWaAbrir").addEventListener("click", function () {
-            // A URL da API já traz a mensagem sugerida; se o operador editou,
-            // reescreve só o parâmetro de texto — o telefone nunca é remontado
-            // aqui no cliente.
-            var final = estado.url;
-            if (msgEl.value !== estado.base) {
-              final = estado.url.split("?")[0] + "?text=" + encodeURIComponent(msgEl.value);
-            }
-            window.open(final, "_blank", "noopener,noreferrer");
+
+          seletor.addEventListener("change", function () {
+            rascunhos[atual] = msg.value;
+            atual = seletor.value;
+            msg.value = rascunhos[atual];
+            atualizarBotao();
+          });
+          msg.addEventListener("input", atualizarBotao);
+          confirmar.addEventListener("change", atualizarBotao);
+          abrir.addEventListener("click", function () {
+            if (abrir.disabled) return;
+            var url = new URL(resp.url);
+            url.searchParams.set("text", msg.value);
+            window.open(url.toString(), "_blank", "noopener,noreferrer");
             fechar();
             if (fonte === "followup") modalResultado(id);
             else if (fonte === "semestral") modalResultado(resp.followup_id, id);

@@ -202,7 +202,7 @@ def test_semestral_uses_latest_exam_and_rechecks_permission(client, auth, db, mo
     url = f"/api/v1/crm/semestral/{p.id}/whatsapp-url"
     response = client.get(url, headers=auth("operacional"))
     assert response.status_code == 200
-    assert not response.json()["envio_automatico"] and "6 meses" in response.json()["mensagem_sugerida"]
+    assert not response.json()["envio_automatico"] and "Caso esteja na época" in response.json()["mensagem_sugerida"]
     f = fup(db, p, e=latest)
     db.commit()
     assert [r["followup_id"] for r in crm.semestral_rows(db)] == [f.id]
