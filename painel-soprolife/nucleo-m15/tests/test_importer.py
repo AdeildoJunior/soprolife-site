@@ -110,7 +110,7 @@ def test_pacientes_depois_espirometrias_vincula_por_alias(db):
     fup = db.execute(select(Followup).where(
         Followup.origem_id == exam.id, Followup.tipo == "pos_exame"
     )).scalar_one()
-    assert fup.due_date.isoformat() == "2026-07-10"  # 10/01/2026 + 6 meses
+    assert fup.due_date.isoformat() == "2026-07-13"  # primeira segunda após 10/07
 
 
 def test_candidato_identidade_sem_fusao(db):

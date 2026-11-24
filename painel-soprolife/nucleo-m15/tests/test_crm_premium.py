@@ -180,3 +180,33 @@ def test_latest_exam_and_interaction_sorts_are_server_side(client, auth, db):
         r = client.post('/api/v1/crm/pacientes/busca',headers=auth('leitura'),json={'ordenar_por':sort,'tamanho':1})
         assert r.status_code == 200
         assert r.json()['itens'][0]['public_code'] == expected
+
+
+def test_semestral_uses_latest_exam_and_rechecks_permission(client, auth, db, monkeypatch):
+    from app.models import Consent
+    monkeypatch.setattr(crm, "today_local", lambda: date(2026, 11, 24))
+    p = person(db)
+    exam(db, p, day=date(2026, 1, 1))
+    latest = exam(db, p, "ESP-000002", date(2026, 5, 24))
+    latest.status = "Exame realizado"
+    db.add(PersonContact(person_id=p.id, tipo="whatsapp", valor="teste",
+                         valor_normalizado="5521999990001"))
+    db.add(Consent(person_id=p.id, canal="whatsapp", status="concedido"))
+    db.commit()
+    assert crm.semestral_rows(db) == []
+    latest.data_exame = date(2026, 5, 23)
+    db.commit()
+    rows = crm.semestral_rows(db)
+    assert len(rows) == 1 and rows[0]["followup_id"] is None
+    assert rows[0]["origem"]["public_code"] == latest.public_code
+    url = f"/api/v1/crm/semestral/{p.id}/whatsapp-url"
+    response = client.get(url, headers=auth("operacional"))
+    assert response.status_code == 200
+    assert not response.json()["envio_automatico"] and "6 meses" in response.json()["mensagem_sugerida"]
+    f = fup(db, p, e=latest)
+    db.commit()
+    assert [r["followup_id"] for r in crm.semestral_rows(db)] == [f.id]
+    db.add(Consent(person_id=p.id, canal="whatsapp", status="revogado"))
+    db.commit()
+    assert crm.semestral_rows(db) == []
+    assert client.get(url, headers=auth("operacional")).status_code == 409

@@ -32,6 +32,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..services.crm_schedule import next_contact_date
 from ..dates import parse_incomplete_date
 from ..domain import pcmso_violation
 from ..ids import allocate_public_code, new_uuid
@@ -545,7 +546,7 @@ def _handle_espirometria(ctx: _Ctx, row: dict, import_row_id: str | None):
         person = ctx.db.get(Person, person_id)
         _fup, motivo = schedule_followup(
             ctx.db, person, "pos_exame", "spirometry_exams", exam.id,
-            due=due_after_attendance(exam.data_exame),
+            due=next_contact_date(exam.data_exame),
         )
         if motivo == "criado":
             ctx.followups_created += 1

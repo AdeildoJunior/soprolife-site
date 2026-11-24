@@ -146,7 +146,7 @@ def buscar_pacientes(
     if payload.fila:
         if payload.fila not in csvc.FILAS:
             raise HTTPException(status_code=422, detail="Fila inválida.")
-        queue = csvc.build_queue_rows(db)
+        queue = csvc.semestral_rows(db) if payload.fila == "semestral" else csvc.build_queue_rows(db)
         na_fila = {
             item["paciente"]["person_id"]
             for item in queue if payload.fila in item["filas"]
@@ -274,6 +274,25 @@ def whatsapp_url_paciente(
 
 # ------------------------------------------------------- contatos a realizar
 
+@router.get("/semestral/{person_id}/whatsapp-url")
+def whatsapp_semestral(
+    person_id: str, db: Session = Depends(get_db),
+    _user: User = Depends(require_role(ROLE_OPERACIONAL)),
+):
+    rows = csvc.semestral_rows(db, person_id)
+    if not rows:
+        raise HTTPException(status_code=409, detail="Paciente fora da fila semestral.")
+    row = rows[0]
+    recipient = row["contato"]
+    phone = csvc.dialable_contact(db, recipient["person_id"], valid_number=True)
+    if not phone:
+        raise HTTPException(status_code=409, detail="Telefone indisponível.")
+    message = fsvc.default_message(recipient["nome_completo"], "pos_exame")
+    return {"url": fsvc.build_whatsapp_url(phone.valor_normalizado, message),
+            "mensagem_sugerida": message, "envio_automatico": False,
+            "contato": recipient, "followup_id": row["followup_id"]}
+
+
 @router.get("/contatos-a-realizar")
 def contatos_a_realizar(
     fila: str | None = Query(None),
@@ -282,7 +301,11 @@ def contatos_a_realizar(
 ):
     rows = csvc.build_queue_rows(db)
     totais = {f: sum(1 for r in rows if f in r["filas"]) for f in csvc.FILAS}
-    if fila:
+    semestral = csvc.semestral_rows(db)
+    totais["semestral"] = len(semestral)
+    if fila == "semestral":
+        rows = semestral
+    elif fila:
         if fila not in csvc.FILAS:
             raise HTTPException(status_code=422, detail="Fila inválida.")
         rows = [r for r in rows if fila in r["filas"]]

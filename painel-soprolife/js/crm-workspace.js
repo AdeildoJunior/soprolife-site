@@ -478,25 +478,32 @@
           var origem = it.origem
             ? codigo(it.origem.entidade === "consultations" ? "Consulta" : "Espirometria",
                      it.origem.public_code) +
-              '<div class="crm-ws-sub">' + esc(fmtDate(it.origem.data)) + "</div>"
+              '<div class="crm-ws-sub">' + esc(it.origem.periodo || fmtDate(it.origem.data)) + "</div>"
             : '<span class="crm-ws-muted">—</span>';
           var acoes = [];
           if (it.contato.telefone_utilizavel && !it.controlado_por_parceiro &&
               it.filas.indexOf("nao_contatar") === -1) {
+            var alvo = state.filaAtiva === "semestral"
+              ? 'data-crm-ws-wa-semestral="' + esc(it.paciente.person_id)
+              : 'data-crm-ws-wa-followup="' + esc(it.followup_id);
             acoes.push('<button type="button" class="m15-btn m15-btn-wa crm-ws-mini" ' +
-              'data-crm-ws-wa-followup="' + esc(it.followup_id) + '">WhatsApp</button>');
+              alvo + '">WhatsApp</button>');
           }
-          acoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
+          if (it.followup_id) {
+            acoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
             'data-crm-ws-resultado="' + esc(it.followup_id) + '">Registrar resultado</button>');
-          acoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
-            'data-crm-ws-reagendar="' + esc(it.followup_id) + '">Reagendar</button>');
+            acoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
+              'data-crm-ws-reagendar="' + esc(it.followup_id) + '">Reagendar</button>');
+          } else {
+            acoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" data-crm-ws-resultado-pessoa="' + esc(it.paciente.person_id) + '">Registrar resultado</button>');
+          }
           acoes.push('<button type="button" class="m15-btn m15-btn-sec crm-ws-mini" ' +
             'data-crm-ws-timeline="' + esc(it.paciente.person_id) + '">Histórico</button>');
           return "<tr>" +
             '<td data-label="Paciente">' +
             codigo("Paciente", it.paciente.public_code, { copiar: true }) +
             '<div class="crm-ws-nome">' + esc(it.paciente.nome_completo) + "</div>" +
-            codigo("Follow-up", it.followup_public_code) + "</td>" +
+            (it.followup_public_code ? codigo("Follow-up", it.followup_public_code) : "") + "</td>" +
             '<td data-label="Contato">' + contatoHtml(it.contato) + "</td>" +
             '<td data-label="Motivo">' + esc(it.motivo) +
             (it.controlado_por_parceiro
@@ -771,6 +778,7 @@
 
   function previaWhatsapp(fonte, id, templateInicial) {
     var c = cli();
+    if (fonte === "semestral") return c.api("/crm/semestral/" + encodeURIComponent(id) + "/whatsapp-url");
     var url = fonte === "followup"
       ? "/followups/" + encodeURIComponent(id) + "/whatsapp-url"
       : "/crm/pacientes/" + encodeURIComponent(id) + "/whatsapp-url?template=" +
@@ -789,7 +797,7 @@
             : '<span class="crm-ws-tag-pac">o próprio paciente</span>') +
           '<br><span class="crm-ws-tel">' + esc(contato.telefone_mascarado || "") + "</span></p>";
 
-      var seletor = fonte === "followup" ? "" :
+      var seletor = fonte !== "pessoa" ? "" :
         '<label class="crm-ws-filtro crm-ws-modal-campo"><span>Modelo de mensagem</span>' +
         '<select id="crmWsWaTpl">' + templatesOptions("geral") + "</select></label>";
 
@@ -830,6 +838,7 @@
             window.open(final, "_blank", "noopener,noreferrer");
             fechar();
             if (fonte === "followup") modalResultado(id);
+            else if (fonte === "semestral") modalResultado(resp.followup_id, id);
             else toast("Registre o resultado do contato quando terminar.");
           });
         }
@@ -1101,6 +1110,16 @@
       });
     }
 
+    container.querySelectorAll("[data-crm-ws-wa-semestral]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        modalWhatsapp("semestral", b.getAttribute("data-crm-ws-wa-semestral"));
+      });
+    });
+    container.querySelectorAll("[data-crm-ws-resultado-pessoa]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        modalResultado(null, b.getAttribute("data-crm-ws-resultado-pessoa"));
+      });
+    });
     container.querySelectorAll("[data-crm-ws-wa-followup]").forEach(function (b) {
       b.addEventListener("click", function () {
         modalWhatsapp("followup", b.getAttribute("data-crm-ws-wa-followup"));

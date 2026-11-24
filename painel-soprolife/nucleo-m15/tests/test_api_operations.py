@@ -36,7 +36,7 @@ def test_exame_realizado_agenda_followup_6_meses(client, auth, person):
     ).json()["itens"]
     assert len(fups) == 1
     assert fups[0]["tipo"] == "pos_exame"
-    assert fups[0]["due_date"] == add_months(date(2026, 1, 10), 6).isoformat()
+    assert fups[0]["due_date"] == "2026-07-13"
 
 
 def test_exame_aguardando_nao_agenda_followup(client, auth, person):

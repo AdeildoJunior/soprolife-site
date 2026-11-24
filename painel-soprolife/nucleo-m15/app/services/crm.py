@@ -35,9 +35,11 @@ from ..models import (
     PersonRelationship,
     SpirometryExam,
 )
-from ..status_display import exam_status_display
-from .followup import today_local
-from .crm_schedule import project_followups, contact_situation
+from ..status_display import exam_status_display, is_exam_performed_status
+from ..dates import add_months
+from .relationships import legal_contact_relationship
+from .followup import today_local, whatsapp_consent_status
+from .crm_schedule import project_followups, contact_situation, next_contact_date
 
 # Janela usada para classificar "paciente reativado": um atendimento novo
 # depois de um intervalo longo sem qualquer atendimento.
@@ -78,6 +80,7 @@ FILA_NAO_CONTATAR = "nao_contatar"
 FILAS = [
     FILA_HOJE,
     FILA_ATRASADOS,
+    "semestral",
     FILA_7,
     FILA_30,
     FILA_SEM_TELEFONE,
@@ -89,6 +92,7 @@ FILAS = [
 FILA_LABELS = {
     FILA_HOJE: "Hoje",
     FILA_ATRASADOS: "Atrasados",
+    "semestral": "Último exame há mais de 6 meses",
     FILA_7: "Próximos 7 dias",
     FILA_30: "Próximos 30 dias",
     FILA_SEM_TELEFONE: "Sem telefone",
@@ -146,9 +150,9 @@ def mask_phone(valor_normalizado: str | None) -> str | None:
     return "•" * (len(digits) - 4) + digits[-4:]
 
 
-def dialable_contact(db: Session, person_id: str) -> PersonContact | None:
+def dialable_contact(db: Session, person_id: str, *, valid_number: bool = False) -> PersonContact | None:
     """Mesmo critério do WhatsApp assistido: ativo, discável, whatsapp/telefone."""
-    return db.execute(
+    contacts = db.scalars(
         select(PersonContact)
         .where(
             PersonContact.person_id == person_id,
@@ -156,8 +160,13 @@ def dialable_contact(db: Session, person_id: str) -> PersonContact | None:
             PersonContact.ativo.is_(True),
             PersonContact.nao_discavel.is_(False),
         )
-        .order_by(PersonContact.principal.desc())
-    ).scalars().first()
+        .order_by(PersonContact.principal.desc(), PersonContact.id)
+    )
+    for contact in contacts:
+        number = contact.valor_normalizado or ""
+        if not valid_number or (number.isascii() and number.isdigit() and 8 <= len(number) <= 15):
+            return contact
+    return None
 
 
 def guardian_of(db: Session, minor_person_id: str) -> Person | None:
@@ -439,6 +448,93 @@ def patient_summary(rows):
 
 # ------------------------------------------------------ filas / contatos a fazer
 
+def latest_possible_exam_day(exam):
+    day = exam.data_exame
+    if day is None:
+        return date.max
+    if exam.data_exame_precisao == "ano":
+        return day.replace(month=12, day=31)
+    if exam.data_exame_precisao == "mes":
+        return add_months(day.replace(day=1), 1) - timedelta(days=1)
+    if exam.data_exame_dia_assumido or exam.data_exame_precisao not in (None, "dia"):
+        return date.max
+    return day
+
+
+def semestral_rows(db: Session, person_id: str | None = None) -> list[dict]:
+    today = today_local()
+    exams = select(SpirometryExam)
+    followups = select(Followup)
+    if person_id:
+        exams = exams.where(SpirometryExam.person_id == person_id)
+        followups = followups.where(Followup.person_id == person_id)
+    latest = {}
+    for exam in db.scalars(exams):
+        if is_exam_performed_status(exam.status) or exam.status in {"Laudo Liberado", "Liberado"}:
+            if exam.data_exame and exam.data_exame > today:
+                continue
+            previous = latest.get(exam.person_id)
+            if previous is None or (latest_possible_exam_day(exam), exam.public_code) > (
+                latest_possible_exam_day(previous), previous.public_code
+            ):
+                latest[exam.person_id] = exam
+
+    by_person = {}
+    for fup in db.scalars(followups):
+        by_person.setdefault(fup.person_id, []).append(fup)
+    result = []
+    for pid, exam in latest.items():
+        last_day = latest_possible_exam_day(exam)
+        if last_day >= today or add_months(last_day, 6) >= today:
+            continue
+        person = db.get(Person, pid)
+        history = by_person.get(pid, [])
+        linked = [f for f in history if f.origem_entidade == "spirometry_exams"
+                  and f.origem_id == exam.id and f.tipo == "pos_exame"]
+        pending = [f for f in linked if f.status == "pendente"]
+        fup = pending[0] if pending else None
+        if linked and not fup:
+            continue
+        if any(f.controlado_por_parceiro for f in history
+               if f.status == "pendente" or f in linked):
+            continue
+        if any(f.status == "pendente" and f.due_date_manual and f.due_date
+               and f.due_date > today for f in history):
+            continue
+        guardian = guardian_of(db, pid)
+        recipient = guardian or person
+        if fup and fup.contact_person_id and fup.contact_person_id != pid:
+            if not legal_contact_relationship(db, pid, fup.contact_person_id):
+                continue
+            recipient = db.get(Person, fup.contact_person_id)
+        if any(p.arquivado or p.nao_contatar or p.legacy_source == "seed_demo"
+               or whatsapp_consent_status(db, p.id) != "concedido" for p in (person, recipient)):
+            continue
+        phone = dialable_contact(db, recipient.id, valid_number=True)
+        if not phone:
+            continue
+        exact = exam.data_exame_precisao in (None, "dia")
+        due = next_contact_date(exam.data_exame) if exact else None
+        if fup and fup.due_date_manual:
+            due = fup.due_date
+        result.append({
+            "filas": ["semestral"], "followup_id": fup.id if fup else None,
+            "followup_public_code": fup.public_code if fup else None,
+            "paciente": {"person_id": pid, "public_code": person.public_code,
+                         "nome_completo": person.nome_completo},
+            "contato": {"person_id": recipient.id, "public_code": recipient.public_code,
+                        "nome_completo": recipient.nome_completo, "eh_responsavel": recipient.id != pid,
+                        "telefone_utilizavel": True, "telefone_mascarado": mask_phone(phone.valor_normalizado)},
+            "origem": {"entidade": "spirometry_exams", "public_code": exam.public_code,
+                       "data": exam.data_exame.isoformat() if exact else None,
+                       "periodo": exam.data_exame_original if not exact else None},
+            "motivo": "pos_exame", "due_date": due.isoformat() if due else None,
+            "tentativas": fup.tentativas if fup else 0, "controlado_por_parceiro": False,
+            "status_apresentacao": contact_situation(due, today),
+        })
+    return sorted(result, key=lambda row: (row["due_date"] or "9999", row["paciente"]["public_code"]))
+
+
 def build_queue_rows(db: Session) -> list[dict]:
     """Linhas de "contatos a realizar" — uma por follow-up relevante."""
     today = today_local()
@@ -463,8 +559,9 @@ def build_queue_rows(db: Session) -> list[dict]:
 
     out: list[dict] = []
     people_by_id = {person.id: person for _, person in rows}
-    projected = project_followups([fup for fup, _ in rows],
-        db.scalars(select(SpirometryExam)).all(), today)
+    exams = db.scalars(select(SpirometryExam)).all()
+    followups = [fup for fup, _ in rows]
+    projected = project_followups(followups, exams, today)
     for fup in projected:
         person = people_by_id[fup.person_id]
         if person.arquivado:

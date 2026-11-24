@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..services.crm_schedule import next_contact_date
 from ..audit import audit
 from ..services.funnel import attach_exam, sync_exam, reuse_scheduled
 from ..services import partner_shares
@@ -54,7 +55,6 @@ from ..schemas import (
 from ..security import ROLE_LEITURA, ROLE_OPERACIONAL, require_role
 from ..serializers import ser_consultation, ser_exam
 from ..services.followup import (
-    due_after_attendance,
     sync_followup_for_origin,
 )
 from ..services.cpf import CPFInvalidoError
@@ -718,7 +718,7 @@ def _followup_exame(
         due = bloco.proximo_followup
         ativo = True
     elif ativo:
-        due = due_after_attendance(exam.data_exame)
+        due = next_contact_date(exam.data_exame)
     fup, motivo = sync_followup_for_origin(
         db, person, "pos_exame", "spirometry_exams", exam.id,
         due=due, active=ativo, responsavel=exam.responsavel,

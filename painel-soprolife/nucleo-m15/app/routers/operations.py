@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..services.crm_schedule import next_contact_date
 from ..audit import audit
 from ..services.funnel import attach_exam, sync_exam, reuse_scheduled
 from ..dates import parse_incomplete_date
@@ -333,7 +334,7 @@ def _sync_exam_followup(db: Session, person: Person, exam: SpirometryExam) -> di
     active = exam.status in ("Realizado", "Laudo Liberado") and exam.data_exame is not None
     fup, motivo = sync_followup_for_origin(
         db, person, "pos_exame", "spirometry_exams", exam.id,
-        due=due_after_attendance(exam.data_exame) if active else None,
+        due=next_contact_date(exam.data_exame) if active else None,
         active=active,
         responsavel=exam.responsavel,
         partner_id=exam.partner_id,

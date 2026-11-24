@@ -216,7 +216,7 @@ def test_fila_atrasados_e_seis_meses_exatos(client, auth, db, paciente):
         year=exame_data.year + (exame_data.month + 6 - 1) // 12,
         month=(exame_data.month + 6 - 1) % 12 + 1,
     )
-    assert fup["due_date"] == esperado
+    assert fup["due_date"] == esperado + timedelta(days=(-esperado.weekday()) % 7)
 
     resp = client.get(
         "/api/v1/crm/contatos-a-realizar?fila=atrasados", headers=auth("leitura")
@@ -235,7 +235,7 @@ def test_todas_as_filas_exigidas_existem(client, auth, paciente):
     ).json()["totais"]
     assert set(totais) == {
         "hoje", "atrasados", "proximos_7", "proximos_30", "sem_telefone",
-        "reagendados", "nao_responderam", "nao_contatar",
+        "reagendados", "nao_responderam", "nao_contatar", "semestral",
     }
 
 
@@ -739,7 +739,7 @@ def test_config_traz_vocabulario_completo(client, auth):
     assert data["meses_followup"] == 6
     assert len(data["resultados_contato"]) == 5
     assert len(data["templates_whatsapp"]) == 5
-    assert len(data["filas"]) == 8
+    assert len(data["filas"]) == 9
     assert data["pode_ver_financeiro"] is False
 
 

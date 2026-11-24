@@ -2646,7 +2646,9 @@
     setIf(bloco, "medico_solicitante_crm", val(form, "esp_solicitante_crm"));
     setIf(bloco, "responsavel", val(form, "esp_responsavel"));
     setIf(bloco, "observacao", val(form, "esp_observacao"));
-    setIf(bloco, "proximo_followup", val(form, "esp_followup"));
+    if (form.elements.esp_followup?.dataset.cadManual === "1") {
+      setIf(bloco, "proximo_followup", val(form, "esp_followup"));
+    }
     // M32 — em branco significa "não informado": nunca assumido como Rio.
     setIf(bloco, "municipio_atendimento_ibge", val(form, "esp_municipio"));
     if (tipo === TIPO_PASTORE) {

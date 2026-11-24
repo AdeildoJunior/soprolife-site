@@ -307,7 +307,7 @@ def test_mudar_data_do_exame_recalcula_vencimento(client, auth, person):
         f"/api/v1/followups?person_id={person['id']}&tipo=pos_exame",
         headers=auth("leitura"),
     ).json()["itens"][0]
-    assert fup["due_date"] == add_months(date(2026, 1, 10), 6).isoformat()
+    assert fup["due_date"] == "2026-07-13"
     exam_id = client.get(
         f"/api/v1/espirometrias?person_id={person['id']}", headers=auth("leitura")
     ).json()["itens"][0]["id"]
@@ -320,5 +320,5 @@ def test_mudar_data_do_exame_recalcula_vencimento(client, auth, person):
         f"/api/v1/followups?person_id={person['id']}&tipo=pos_exame",
         headers=auth("leitura"),
     ).json()["itens"][0]
-    assert fup2["due_date"] == add_months(date(2026, 2, 20), 6).isoformat()
+    assert fup2["due_date"] == "2026-08-24"
     assert fup2["id"] == fup["id"]  # mesmo registro, recalculado
